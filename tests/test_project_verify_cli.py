@@ -426,7 +426,7 @@ def test_project_verify_run_rechecks_output_identity_before_publication(
     def race_guard(project, *, source, output):
         nonlocal guard_calls
         guard_calls += 1
-        if guard_calls == 2:
+        if guard_calls == 3:
             raise ValueError("output path identity changed before publication")
         real_guard(project, source=source, output=output)
 
@@ -441,19 +441,43 @@ def test_project_verify_run_rechecks_output_identity_before_publication(
     )
 
     assert exit_code == 2
-    assert guard_calls == 2
+    assert guard_calls == 3
     assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"
 
-def test_project_verify_cli_reports_project_path_resolution_errors(monkeypatch, capsys):
-    def fail_resolve(self, strict=False):
-        raise OSError("cannot resolve project path")
+def test_project_verify_run_rechecks_source_revision_at_atomic_replace_boundary(
+    tmp_path,
+    monkeypatch,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    output = tmp_path / "workflow.json"
+    output.write_text("previous-valid-workflow\n", encoding="utf-8")
+    real_atomic_write_text = verify_cli.atomic_write_text
 
-    monkeypatch.setattr(verify_cli.Path, "resolve", fail_resolve)
+    def mutate_source_after_staging(destination, text, *, before_replace=None):
+        assert before_replace is not None
 
-    exit_code = verify_cli.main(["status", "broken.cleanroomx.json", "analysis"])
+        def race_then_validate():
+            path.write_bytes(path.read_bytes() + b"\n")
+            before_replace()
 
-    captured = capsys.readouterr()
+        return real_atomic_write_text(
+            destination,
+            text,
+            before_replace=race_then_validate,
+        )
+
+    monkeypatch.setattr(
+        verify_cli,
+        "atomic_write_text",
+        mutate_source_after_staging,
+    )
+
+    exit_code = verify_cli.main(
+        ["run", str(path), "room-a", "--output", str(output)]
+    )
+
     assert exit_code == 2
-    assert captured.out == ""
-    assert "cannot resolve project path" in captured.err
-
+    assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"

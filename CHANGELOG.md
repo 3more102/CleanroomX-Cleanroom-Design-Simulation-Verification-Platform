@@ -3,7 +3,7 @@
 ## Unreleased Release 3 — canonical per-record verification currency context — 2026-10-01
 
 - Moves retained-record current/historical/not-in-current-project context into the canonical verification-currency module instead of keeping that rule inside the desktop UI.
-- Adds explicit per-record `current_context` to verification-history CLI list output and a separate top-level context for `show` while leaving the persisted record JSON unchanged.
+- Adds explicit per-record `current_context` to verification-history CLI list output and a separate top-level context for `show` while leaving the persisted record JSON unchanged; the additive inspection payload change is versioned as schema v2.
 - Reuses the same canonical context helper in the desktop history dialog and adds regression coverage for current, historical, and removed-analysis records.
 
 

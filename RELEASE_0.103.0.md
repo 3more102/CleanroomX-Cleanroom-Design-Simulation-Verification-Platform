@@ -8,13 +8,13 @@ CleanroomX v0.103.0 is the Release 3 verification, traceability, and evidence-in
 
 Release 3 includes:
 
-- first-class persisted project requirements and explicit requirement-to-analysis evidence mappings;
+- first-class persisted project requirements, explicit requirement-to-analysis evidence mappings, and fail-closed persisted evidence-authority decisions for ambiguous bindings;
 - canonical requirements verification with deterministic engineering-unit conversion provenance;
 - immutable, tamper-evident project verification history with present-currency assessment;
 - ProofGraph projection, retained canonical evidence, cross-artifact integrity validation, and explicit evidence-precedence/conflict assessment;
 - project-native verification, dossier, requirements-traceability, diagnostics, and verification-history operator surfaces;
 - fail-closed external analysis-plugin trust controls;
-- protected project-batch output publication that refuses to overwrite the source project, same-file aliases, or declared file-backed engineering dependencies;
+- protected project-batch output publication that refuses to overwrite the source project, same-file aliases, or declared file-backed engineering dependencies, binds guard and execution to one loaded revision, and revalidates source/output identities immediately before publication;
 - Python 3.11, 3.12, and 3.13 release gating plus Windows PowerShell/CMD launcher smoke.
 
 ## Verified functional baseline
@@ -34,7 +34,7 @@ Result:
 - Python 3.13: 1662 passed, 4 skipped
 - Windows launcher smoke: success
 
-Subsequent merged Release 3 work adds ProofGraph evidence precedence/conflict assessment and CI hardening. The final v0.103.0 release candidate also carries protected project-batch output publication and synchronized 0.103.0 package/runtime/demo identity.
+Subsequent Release 3 work adds ProofGraph evidence precedence/conflict assessment and CI hardening. The final v0.103.0 release candidate also consolidates persisted explicit evidence-authority decisions, the full protected project-batch publication race closure, and synchronized 0.103.0 package/runtime/demo identity. The PR #707 CI result above is therefore a verified functional baseline, not exact-head release evidence for the final candidate; the final candidate must pass its own complete exact-head CI gate.
 
 ## Final release authority
 

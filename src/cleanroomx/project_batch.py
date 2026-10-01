@@ -20,6 +20,10 @@ from .project import (
     load_project_document_with_revision,
     project_file_revision_matches,
 )
+from .project_diagnostics_cli import (
+    _assert_output_is_distinct_from_dependencies,
+    _assert_output_is_distinct_from_source,
+)
 
 PROJECT_BATCH_SCHEMA = "cleanroomx.project-batch-run"
 PROJECT_BATCH_SCHEMA_VERSION = 2
@@ -402,14 +406,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    source = Path(args.project).expanduser().resolve(strict=False)
     try:
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file
             else None
         )
+        if args.output:
+            project, _revision = load_project_document_with_revision(source)
+            _assert_output_is_distinct_from_source(source, args.output)
+            _assert_output_is_distinct_from_dependencies(
+                project,
+                base_dir=source.parent,
+                output=args.output,
+            )
         batch = run_project_file(
-            args.project,
+            source,
             analysis_ids=args.analysis_ids,
             fail_fast=args.fail_fast,
             cancel_requested=(

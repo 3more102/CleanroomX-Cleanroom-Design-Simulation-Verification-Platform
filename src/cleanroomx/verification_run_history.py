@@ -107,9 +107,11 @@ _RECORD_FIELDS = frozenset(
     }
 )
 
+_OPTIONAL_RECORD_FIELDS = frozenset({"external_dependencies"})
+
 
 def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
-    return {
+    body = {
         "project_source_revision": record["project_source_revision"],
         "analysis_id": record["analysis_id"],
         "analysis_kind": record["analysis_kind"],
@@ -127,6 +129,75 @@ def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
         "runtime_environment": copy.deepcopy(record["runtime_environment"]),
         "code_revision": copy.deepcopy(record["code_revision"]),
     }
+    if "external_dependencies" in record:
+        body["external_dependencies"] = copy.deepcopy(record["external_dependencies"])
+    return body
+
+
+def _validate_external_dependencies(value: Any) -> None:
+    if not isinstance(value, list):
+        raise VerificationRunHistoryIntegrityError(
+            "verification_run.external_dependencies must be an array"
+        )
+    required = {
+        "field",
+        "declared_path",
+        "sha256_before",
+        "sha256_after",
+        "size_bytes_before",
+        "size_bytes_after",
+        "mtime_ns_before",
+        "mtime_ns_after",
+        "execution_snapshot_sha256",
+        "execution_snapshot_size_bytes",
+        "stable_during_run",
+    }
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or set(item) != required:
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.external_dependencies[{index}] is invalid"
+            )
+        _nonempty(item["field"], f"verification_run.external_dependencies[{index}].field")
+        _nonempty(
+            item["declared_path"],
+            f"verification_run.external_dependencies[{index}].declared_path",
+        )
+        for field_name in (
+            "sha256_before",
+            "sha256_after",
+            "execution_snapshot_sha256",
+        ):
+            _sha(
+                item[field_name],
+                f"verification_run.external_dependencies[{index}].{field_name}",
+            )
+        for field_name in (
+            "size_bytes_before",
+            "size_bytes_after",
+            "execution_snapshot_size_bytes",
+            "mtime_ns_before",
+            "mtime_ns_after",
+        ):
+            field_value = item[field_name]
+            if type(field_value) is not int or field_value < 0:
+                raise VerificationRunHistoryIntegrityError(
+                    f"verification_run.external_dependencies[{index}].{field_name} "
+                    "must be a non-negative integer"
+                )
+        if item["stable_during_run"] is not True:
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.external_dependencies[{index}] must be stable during run"
+            )
+        if (
+            item["sha256_before"] != item["sha256_after"]
+            or item["sha256_before"] != item["execution_snapshot_sha256"]
+            or item["size_bytes_before"] != item["size_bytes_after"]
+            or item["size_bytes_before"] != item["execution_snapshot_size_bytes"]
+        ):
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.external_dependencies[{index}] has inconsistent "
+                "execution fingerprints"
+            )
 
 
 def _record_sha256(record: dict[str, Any]) -> str:
@@ -140,7 +211,7 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
         raise VerificationRunHistoryIntegrityError(
             "every verification run history record must be an object"
         )
-    unknown = sorted(set(record) - _RECORD_FIELDS)
+    unknown = sorted(set(record) - (_RECORD_FIELDS | _OPTIONAL_RECORD_FIELDS))
     missing = sorted(_RECORD_FIELDS - set(record))
     if unknown or missing:
         details = []
@@ -295,6 +366,9 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
     )
     _sha(verifier["source_sha256"], "verifier_implementation.source_sha256")
 
+    if "external_dependencies" in record:
+        _validate_external_dependencies(record["external_dependencies"])
+
     if not isinstance(record["runtime_environment"], dict):
         raise VerificationRunHistoryIntegrityError(
             "verification_run.runtime_environment must be an object"
@@ -438,7 +512,7 @@ def append_project_verification_run_record(
     )
     sequence = records[-1]["sequence"] + 1 if records else 1
 
-    forbidden = _RECORD_FIELDS & set(body)
+    forbidden = (_RECORD_FIELDS | _OPTIONAL_RECORD_FIELDS) & set(body)
     forbidden -= {
         "project_source_revision",
         "analysis_id",
@@ -460,6 +534,7 @@ def append_project_verification_run_record(
         "runtime_environment",
         "code_revision",
         "verification_identity_sha256",
+        "external_dependencies",
     }
     if forbidden:
         raise VerificationRunHistoryIntegrityError(
@@ -473,9 +548,17 @@ def append_project_verification_run_record(
         "previous_record_sha256",
         "record_sha256",
     }
-    if set(body) != required_body_fields:
+    allowed_body_fields = required_body_fields | _OPTIONAL_RECORD_FIELDS
+    missing_body_fields = sorted(required_body_fields - set(body))
+    unsupported_body_fields = sorted(set(body) - allowed_body_fields)
+    if missing_body_fields or unsupported_body_fields:
+        details = []
+        if missing_body_fields:
+            details.append("missing: " + ", ".join(missing_body_fields))
+        if unsupported_body_fields:
+            details.append("unsupported: " + ", ".join(unsupported_body_fields))
         raise VerificationRunHistoryIntegrityError(
-            "verification run body does not contain the exact persisted evidence fields"
+            "verification run body fields are invalid (" + "; ".join(details) + ")"
         )
 
     record = {

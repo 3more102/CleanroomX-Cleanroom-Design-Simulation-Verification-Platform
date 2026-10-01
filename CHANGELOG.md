@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01
+
+- Adds an explicit strongest-first evidence-kind/source precedence policy over existing ProofGraph evidence without mutating or deleting historical records.
+- Resolves a claim only when policy precedence produces one unique preferred item; equally preferred disagreements fail closed as explicit conflicts.
+- Keeps equal preferred claims coequal when value and unit match, and deliberately performs no hidden unit conversion, timestamp freshness inference, confidence weighting, or solver recomputation.
+- Adds deterministic report schema `cleanroomx.proofgraph-evidence-precedence` v1 with candidate, preferred, shadowed, selected, and conflict evidence identity.
+- Marks the report machine-readably as `decision_scope=assessment_only` and `changes_canonical_verification=false` so precedence inspection cannot be mistaken for canonical requirement-verdict authority.
+- Adds regression coverage for precedence selection, source tie-breaking, equal-value peers, fail-closed value/unit conflicts, deterministic ordering, subject isolation, and graph immutability.
+
 ## Unreleased Release 3 — verification-history current-context hardening — 2026-10-01
 
 - Reuses the canonical verification-currency record-context helper in the desktop Verification History surface instead of maintaining duplicate GUI logic.

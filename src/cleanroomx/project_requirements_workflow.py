@@ -30,6 +30,7 @@ from .project_requirements import (
     ProjectRequirements,
     project_requirements_from_dict,
 )
+from .proofgraph_io import proofgraph_from_dict
 from .proofgraph_project_requirements import (
     proofgraphs_from_project_requirements_verification,
 )
@@ -150,6 +151,7 @@ class ProjectRequirementsWorkflowRun:
     mappings_sha256: str
     mapping_ids: tuple[str, ...]
     run_bundle: dict[str, Any]
+    evidence: tuple[dict[str, Any], ...]
     verification: dict[str, Any]
     proofgraphs: tuple[dict[str, Any], ...]
     workflow_sha256: str
@@ -172,6 +174,7 @@ class ProjectRequirementsWorkflowRun:
             "requirements_sha256": self.requirements_sha256,
             "mappings_sha256": self.mappings_sha256,
             "run": copy.deepcopy(self.run_bundle),
+            "evidence": copy.deepcopy(list(self.evidence)),
             "verification": copy.deepcopy(self.verification),
             "proofgraphs": copy.deepcopy(list(self.proofgraphs)),
             "workflow_sha256": self.workflow_sha256,
@@ -248,7 +251,24 @@ def run_project_requirements_workflow(
         current_analysis_input=copy.deepcopy(analysis.input),
         base_dir=source.parent,
     )
+    evidence_documents = tuple(
+        item.to_dict()
+        for item in sorted(
+            bindings,
+            key=lambda item: (
+                item.requirement_id,
+                "" if item.subject_ref is None else item.subject_ref,
+                item.id,
+            ),
+        )
+    )
     verification = verify_project_requirements(requirements, bindings)
+    if verification["evidence_sha256"] != _canonical_sha256(
+        list(evidence_documents)
+    ):
+        raise ProjectRequirementsWorkflowError(
+            "canonical verification evidence digest disagrees with bound evidence"
+        )
     proofgraphs = proofgraphs_from_project_requirements_verification(
         requirements,
         bindings,
@@ -281,7 +301,144 @@ def run_project_requirements_workflow(
         mappings_sha256=mappings_registry.sha256,
         mapping_ids=tuple(item.id for item in persisted_mappings),
         run_bundle=copy.deepcopy(run_bundle),
+        evidence=copy.deepcopy(evidence_documents),
         verification=copy.deepcopy(verification),
         proofgraphs=copy.deepcopy(proofgraph_documents),
         workflow_sha256=workflow_sha256,
     )
+
+def verify_project_requirements_workflow_run(
+    workflow: ProjectRequirementsWorkflowRun,
+) -> dict[str, Any]:
+    """Verify the integrity-linked components of one workflow result."""
+    if not isinstance(workflow, ProjectRequirementsWorkflowRun):
+        raise TypeError("workflow must be a ProjectRequirementsWorkflowRun")
+
+    source_revision = _require_source_revision(
+        ProjectFileRevision(
+            path=workflow.source_path,
+            exists=True,
+            size=None,
+            mtime_ns=None,
+            sha256=workflow.source_revision,
+        )
+    )
+    verified_run = verify_analysis_run_bundle(copy.deepcopy(workflow.run_bundle))
+    bundle_sha256 = verified_run.get("bundle_sha256")
+    if not isinstance(bundle_sha256, str):
+        raise ProjectRequirementsWorkflowError(
+            "workflow analysis bundle is missing verified integrity identity"
+        )
+    if verified_run.get("project_source_revision") != source_revision:
+        raise ProjectRequirementsWorkflowError(
+            "workflow analysis bundle project revision does not match workflow source"
+        )
+
+    evidence_documents = copy.deepcopy(list(workflow.evidence))
+    try:
+        evidence_sha256 = _canonical_sha256(evidence_documents)
+    except (TypeError, ValueError) as exc:
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence is not strict canonical JSON"
+        ) from exc
+    verification = copy.deepcopy(workflow.verification)
+    if not isinstance(verification, dict):
+        raise ProjectRequirementsWorkflowError(
+            "workflow verification must be an object"
+        )
+    if verification.get("requirements_sha256") != workflow.requirements_sha256:
+        raise ProjectRequirementsWorkflowError(
+            "workflow requirements digest disagrees with canonical verification"
+        )
+    if verification.get("evidence_sha256") != evidence_sha256:
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence digest disagrees with canonical verification"
+        )
+    verification_sha256 = verification.get("verification_sha256")
+    unsigned_verification = {
+        key: value
+        for key, value in verification.items()
+        if key != "verification_sha256"
+    }
+    if (
+        not isinstance(verification_sha256, str)
+        or verification_sha256 != _canonical_sha256(unsigned_verification)
+    ):
+        raise ProjectRequirementsWorkflowError(
+            "workflow canonical verification digest is invalid"
+        )
+
+    mapping_ids = tuple(workflow.mapping_ids)
+    if len(mapping_ids) != len(set(mapping_ids)):
+        raise ProjectRequirementsWorkflowError(
+            "workflow mapping ids contain duplicates"
+        )
+    evidence_ids: list[str] = []
+    for index, evidence in enumerate(evidence_documents):
+        if not isinstance(evidence, dict):
+            raise ProjectRequirementsWorkflowError(
+                f"workflow evidence[{index}] must be an object"
+            )
+        evidence_id = evidence.get("id")
+        if not isinstance(evidence_id, str) or not evidence_id:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow evidence[{index}].id must be a non-empty string"
+            )
+        evidence_ids.append(evidence_id)
+        if evidence.get("source_revision") != bundle_sha256:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow evidence {evidence_id!r} is not bound to the verified analysis bundle"
+            )
+        if evidence.get("project_revision") != source_revision:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow evidence {evidence_id!r} project revision does not match workflow source"
+            )
+        locator = evidence.get("evidence_locator")
+        if not isinstance(locator, str) or not locator.startswith("/result/"):
+            raise ProjectRequirementsWorkflowError(
+                f"workflow evidence {evidence_id!r} lacks an exact result locator"
+            )
+    if sorted(evidence_ids) != sorted(mapping_ids):
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence identities do not match active persisted mapping identities"
+        )
+
+    proofgraph_sha256: list[str] = []
+    for document in workflow.proofgraphs:
+        if not isinstance(document, dict):
+            raise ProjectRequirementsWorkflowError(
+                "workflow ProofGraph documents must be objects"
+            )
+        try:
+            graph = proofgraph_from_dict(copy.deepcopy(document))
+        except ValueError as exc:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph integrity validation failed: {exc}"
+            ) from exc
+        proofgraph_sha256.append(graph.to_dict()["graph_sha256"])
+
+    identity = {
+        "source_revision": source_revision,
+        "analysis_id": workflow.analysis_id,
+        "analysis_kind": workflow.analysis_kind,
+        "requirements_sha256": workflow.requirements_sha256,
+        "mappings_sha256": workflow.mappings_sha256,
+        "mapping_ids": list(mapping_ids),
+        "run_bundle_sha256": bundle_sha256,
+        "verification_sha256": verification_sha256,
+        "proofgraph_sha256": proofgraph_sha256,
+    }
+    expected_workflow_sha256 = _canonical_sha256(identity)
+    if workflow.workflow_sha256 != expected_workflow_sha256:
+        raise ProjectRequirementsWorkflowError(
+            "workflow identity digest does not match its verified components"
+        )
+    return {
+        "project_source_revision": source_revision,
+        "analysis_bundle_sha256": bundle_sha256,
+        "evidence_sha256": evidence_sha256,
+        "verification_sha256": verification_sha256,
+        "proofgraph_sha256": tuple(proofgraph_sha256),
+        "workflow_sha256": expected_workflow_sha256,
+    }
+

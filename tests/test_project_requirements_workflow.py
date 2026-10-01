@@ -25,6 +25,7 @@ from cleanroomx.project_requirements_workflow import (
     PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA,
     ProjectRequirementsWorkflowError,
     run_project_requirements_workflow,
+    verify_project_requirements_workflow_run,
 )
 
 
@@ -155,6 +156,10 @@ def test_project_native_workflow_executes_persisted_mapping_end_to_end(tmp_path)
 
     assert payload["schema"] == PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA
     assert result.mapping_ids == ("MAP-ACH",)
+    assert result.evidence[0]["evidence_locator"] == "/result/ach"
+    assert result.evidence[0]["project_revision"] == result.source_revision
+    verified_workflow = verify_project_requirements_workflow_run(result)
+    assert verified_workflow["workflow_sha256"] == result.workflow_sha256
     assert result.verification["verified"] is True
     assert result.verification["status"] == "pass"
     assert result.verification["findings"][0]["actual"] == 25.0
@@ -295,3 +300,20 @@ def test_project_native_workflow_rejects_project_change_during_execution(
         match="project source changed during analysis execution",
     ):
         run_project_requirements_workflow(path, "room-a")
+
+def test_project_native_workflow_component_verifier_rejects_tampered_evidence(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.evidence[0]["value"] = 999.0
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="evidence digest disagrees",
+    ):
+        verify_project_requirements_workflow_run(result)
+

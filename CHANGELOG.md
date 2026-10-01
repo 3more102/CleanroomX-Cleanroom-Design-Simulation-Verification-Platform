@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — persisted canonical verification runs — 2026-10-01
+
+- Adds a bounded integrity-chained project verification history separate from solver analysis run history.
+- Persists exact source-project revision, immutable analysis bundle identity, analysis input identity, normalized requirements/mappings digests, exact evidence locators, canonical evidence, full canonical verification findings/completeness, ProofGraph identities, verifier implementation identity, CleanroomX version, runtime environment, and code revision provenance.
+- Adds a deterministic verification engineering identity that excludes wall-clock completion time and ledger position while the storage record remains independently chain-hashed.
+- Persists only when the saved project still matches the exact revision used by the workflow and saves through the existing optimistic guarded project-write boundary.
+- Re-runs the canonical requirements verifier and ProofGraph projection before persistence; historical verification records are append-only and never silently rebound to a newer project revision.
+- Validates the verification ledger during canonical project load/save and fails closed on evidence, digest, identity, or chain tampering.
+
+
 ## Unreleased Release 3 — project-native requirements execution — 2026-10-01
 
 - Adds a direct saved-project orchestration path from one selected project analysis through immutable execution, persisted explicit evidence mappings, canonical requirements verification, and ProofGraph.

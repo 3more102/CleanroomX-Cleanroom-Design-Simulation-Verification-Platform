@@ -1,11 +1,20 @@
 # Changelog
 
-## v0.103.0 — Release 3 verification and assurance closure — 2026-10-01
+## CleanroomX v0.103.0 — Release 3 — 2026-10-01
 
-- Promotes the completed Release 3 requirements, evidence, verification-history, ProofGraph, traceability, unit-conversion, plugin-trust, and operator-surface work to the stable `v0.103.0` release line.
-- Release 3 functional closure was merged through PR #707 after exact-head CI run #2229 / `36875375370` succeeded on Python 3.11, 3.12, and 3.13 plus Windows launcher smoke.
-- The complete suite on that exact PR head reported **1662 passed, 4 skipped** on each supported Python version.
-- Preserves project schema version 1 and does not intentionally change solver equations, numerical tolerances, unit conventions, or configured engineering acceptance semantics.
+Release 3 promotes the requirements, evidence, verification, assurance, traceability,
+and operator hardening line on top of v0.102.1.
+
+- Promotes the completed Release 3 requirements, evidence, verification-history,
+  ProofGraph, traceability, canonical unit conversion, plugin trust, and operator surfaces
+  to the stable `v0.103.0` release line.
+- Release 3 functional closure was merged through PR #707 after exact-head CI run
+  #2229 / `36875375370` succeeded on Python 3.11, 3.12, and 3.13 plus Windows launcher smoke.
+- The complete suite on that exact PR head reported **1662 passed, 4 skipped** on each
+  supported Python version.
+- Project schema remains version 1. No validated solver equation, numerical tolerance,
+  unit convention, or configured engineering acceptance semantic is intentionally changed
+  by the release-identity closure.
 
 ## v0.103.0 Release 3 — verification-history current-context hardening — 2026-10-01
 

@@ -53,6 +53,41 @@ therefore should never be renamed after projects use them. `api_version` must
 be a real integer value; boolean aliases such as `True` are rejected even
 though Python normally compares `True == 1`.
 
+## Operator trust policy
+
+CleanroomX applies the installed-plugin trust decision **before** calling an entry
+point's `load()` method. Set `CLEANROOMX_PLUGIN_MODE` before starting the
+application:
+
+- `disabled` (default) blocks every external analysis plugin before import;
+- `trusted` explicitly opts in to the historical behavior and loads valid
+  installed plugins after the normal deterministic metadata checks;
+- `allowlist` loads only distributions named in `CLEANROOMX_PLUGIN_ALLOWLIST`.
+
+The allowlist is a comma-separated sequence of distribution names with optional
+exact version pins, for example:
+
+```text
+CLEANROOMX_PLUGIN_MODE=allowlist
+CLEANROOMX_PLUGIN_ALLOWLIST=cleanroomx-pressure-pack==2.4.1,company-hvac-checks
+```
+
+Distribution names are compared using packaging-style case-insensitive
+normalization where `-`, `_`, and `.` separators are equivalent. An exact
+version pin requires readable installed-version metadata and an exact string
+match. Missing distribution identity, a version mismatch, malformed allowlist
+syntax, or an invalid trust mode fails closed and the affected external plugin
+is not imported. An empty allowlist intentionally permits no external plugins.
+
+The effective policy, normalized allowlist, and any configuration error are
+included in `cleanroomx-gui --check` registry diagnostics. Policy is evaluated
+once when `cleanroomx.application` is imported, so restart CleanroomX after
+changing the environment.
+
+This control is an execution gate, not a sandbox, signature system, publisher
+authentication mechanism, or package-integrity verifier. An allowed plugin still
+executes as ordinary Python with the privileges of the CleanroomX process.
+
 ## Discovery and failure behavior
 
 Discovery runs once when `cleanroomx.application` is imported. Restart

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — desktop verification-history canonical currency helper — 2026-10-01
+
+- Removes the desktop verification-history view's duplicate record-currency implementation and reuses the canonical verification-currency helper already used by the Release 3 CLI.
+- Gives the desktop the canonical fail-closed analysis-identity guard, so current-project currency cannot be projected onto retained evidence from another analysis.
+- Preserves requirements traceability and changes no solver equation, requirement criterion, persisted verification record, ledger hash, dependency fingerprint, or project schema.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

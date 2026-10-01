@@ -11,6 +11,7 @@ The backend path is:
 → `Immutable Analysis Run`
 → `Persisted Project Requirements`
 → `Persisted Explicit Evidence Mappings`
+→ `Optional Persisted Evidence Authority`
 → `Canonical Requirements Verification`
 → `ProofGraph`
 
@@ -28,7 +29,8 @@ The workflow:
 3. loads the canonical `project.metadata.requirements` registry;
 4. loads the canonical
    `project.metadata.requirement_evidence_mappings` registry;
-5. selects only active mappings explicitly assigned to that analysis;
+5. selects only active mappings explicitly assigned to that analysis and any
+   explicit authority decisions attached to ambiguous bindings in that analysis;
 6. checks the project file still matches the revision that was loaded;
 7. executes the analysis with that exact project SHA-256 bound into immutable
    application execution provenance;
@@ -38,7 +40,8 @@ The workflow:
     model without inferring semantics;
 11. derives evidence freshness from the exact analysis input and external
     dependencies;
-12. invokes the existing canonical project requirements verifier;
+12. invokes the existing canonical project requirements verifier with the
+    persisted authority decisions, when present;
 13. retains the complete canonical requirements snapshot, including its
     self-verifying SHA-256, as part of the workflow evidence boundary;
 14. projects the canonical findings and verdicts into the existing ProofGraph
@@ -53,6 +56,10 @@ No project verification result is issued when:
 - the requested analysis ID does not exist;
 - the selected analysis has no active persisted mappings;
 - a persisted mapping disagrees with the selected analysis kind;
+- multiple active mappings target one requirement/subject without one explicit
+  authority decision selecting an active mapping from the same analysis;
+- an authority decision is unnecessary, duplicated, references an unknown or
+  inactive mapping, targets an invalid requirement/scope, or spans analyses;
 - the project source changes between the loaded revision and analysis start;
 - the project source changes during the analysis;
 - the immutable analysis run is not bound to the loaded project SHA-256;
@@ -81,7 +88,8 @@ Each workflow result exposes a deterministic `workflow_sha256` derived from:
 - exact source-project SHA-256;
 - selected analysis identity and kind;
 - normalized requirements digest;
-- normalized persisted mappings digest;
+- normalized persisted mappings digest, including any explicit authority
+  decisions;
 - exact active mapping IDs;
 - immutable run-bundle digest;
 - canonical verification digest;

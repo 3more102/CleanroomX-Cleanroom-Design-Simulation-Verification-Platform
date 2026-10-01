@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — truthful current dependency currency explanation — 2026-10-01
+
+- Corrects the canonical verification-currency explanation for file-backed analyses whose persisted dependency fingerprints still match current content.
+- Keeps the existing fail-closed current/stale/unverifiable state semantics unchanged while ensuring operator-facing provenance text never claims that verified file-backed analyses have no external dependencies.
+
+
 ## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
 
 - Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.

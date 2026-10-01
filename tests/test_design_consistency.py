@@ -31,6 +31,8 @@ def test_design_consistency_reference_case_is_complete_pass() -> None:
 
     assert result["status"] == "pass"
     assert result["complete"] is True
+    assert result["verified"] is True
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert result["summary"] == {
         "finding_count": 8,
@@ -67,6 +69,8 @@ def test_sensible_load_mismatch_fails_with_exact_delta() -> None:
 
     assert result["status"] == "fail"
     assert result["complete"] is True
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is False
     assert result["passed"] is False
     assert finding["status"] == "fail"
     assert finding["expected"] == 8800.0
@@ -94,6 +98,8 @@ def test_missing_requirements_ach_is_not_promoted_to_pass() -> None:
 
     assert result["status"] == "pass_with_unchecked"
     assert result["complete"] is False
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert _finding(result, "requirements.minimum_ach")["status"] == "not_checked"
     assert _finding(result, "requirements.ach_based_supply_airflow")["status"] == "not_checked"

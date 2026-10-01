@@ -326,11 +326,17 @@ def analyze_pressure_design_consistency(
         for room in study.requirements.rooms
     )
 
+    complete = bool(findings) and counts["not_checked"] == 0
+    no_failures_detected = counts["fail"] == 0
+    verified = complete and status == "pass"
+
     return {
         "study": study.name,
         "status": status,
-        "complete": bool(findings) and counts["not_checked"] == 0,
-        "passed": counts["fail"] == 0,
+        "complete": complete,
+        "verified": verified,
+        "no_failures_detected": no_failures_detected,
+        "passed": no_failures_detected,
         "summary": {
             "finding_count": len(findings),
             "pass_count": counts["pass"],

@@ -49,17 +49,29 @@ class ProjectVerificationReport:
         )
 
     @property
-    def passed(self) -> bool:
-        """Compatibility boolean: true when no configured check failed."""
-        return all(report.passed for report in self.room_reports) and all(
+    def no_failures_detected(self) -> bool:
+        """True when no room or pressure-cascade finding recorded a failure."""
+        return all(report.no_failures_detected for report in self.room_reports) and all(
             finding.status != "fail" for finding in self.pressure_cascade_findings
         )
+
+    @property
+    def verified(self) -> bool:
+        """True only for a complete project verification with an aggregate pass."""
+        return self.complete and self.status == "pass"
+
+    @property
+    def passed(self) -> bool:
+        """Compatibility alias for no_failures_detected."""
+        return self.no_failures_detected
 
     def to_dict(self) -> dict:
         return {
             "project": self.project,
             "status": self.status,
             "complete": self.complete,
+            "verified": self.verified,
+            "no_failures_detected": self.no_failures_detected,
             "passed": self.passed,
             "rooms": [report.to_dict() for report in self.room_reports],
             "pressure_cascade": [asdict(finding) for finding in self.pressure_cascade_findings],

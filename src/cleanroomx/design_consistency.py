@@ -482,13 +482,16 @@ def analyze_design_consistency(study: DesignConsistencyStudy) -> dict:
         finding["status"] for finding in findings
     )
     complete = bool(findings) and counts["not_checked"] == 0
-    passed = counts["fail"] == 0
+    no_failures_detected = counts["fail"] == 0
+    verified = complete and aggregate_status == "pass"
 
     return {
         "study": study.name,
         "status": aggregate_status,
         "complete": complete,
-        "passed": passed,
+        "verified": verified,
+        "no_failures_detected": no_failures_detected,
+        "passed": no_failures_detected,
         "summary": {
             "finding_count": len(findings),
             "pass_count": counts["pass"],

@@ -450,11 +450,17 @@ def analyze_compliance_check(check: ComplianceCheck) -> dict:
     else:
         status = "pass"
 
+    complete = not_checked_count == 0
+    no_failures_detected = fail_count == 0
+    verified = complete and status == "pass"
+
     return {
         "name": check.name,
         "status": status,
-        "complete": not_checked_count == 0,
-        "passed": fail_count == 0,
+        "complete": complete,
+        "verified": verified,
+        "no_failures_detected": no_failures_detected,
+        "passed": no_failures_detected,
         "rule_pack": {
             "schema": RULE_PACK_SCHEMA,
             "schema_version": RULE_PACK_SCHEMA_VERSION,

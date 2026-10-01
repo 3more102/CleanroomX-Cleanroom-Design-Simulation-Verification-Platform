@@ -58,6 +58,8 @@ def test_snapshot_is_deterministic_and_self_verifying(
     assert len(first["snapshot_sha256"]) == 64
     assert len(first["source"]["sha256"]) == 64
     assert len(first["analysis"]["result_sha256"]) == 64
+    assert first["analysis"]["result"]["verified"] is True
+    assert first["analysis"]["result"]["no_failures_detected"] is True
     assert (
         first["analysis"]["traceability_sha256"]
         == first["analysis"]["result"]["traceability_sha256"]
@@ -86,6 +88,8 @@ def test_snapshot_binds_optional_pressure_assurance_evidence(
     result = snapshot["analysis"]["result"]
 
     assert result["status"] == "pass"
+    assert result["verified"] is True
+    assert result["no_failures_detected"] is True
     assert result["summary"]["component_count"] == 3
     assert result["traceability"][1]["component"] == "pressure_design_consistency"
     assert len(result["traceability"][1]["result_sha256"]) == 64

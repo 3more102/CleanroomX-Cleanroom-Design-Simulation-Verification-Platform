@@ -48,10 +48,14 @@ def test_room_report_distinguishes_no_failure_from_complete_pass():
     )
 
     assert report.passed is True
+    assert report.no_failures_detected is True
+    assert report.verified is False
     assert report.status == "pass_with_unchecked"
     assert report.complete is False
     payload = report.to_dict()
     assert payload["passed"] is True
+    assert payload["no_failures_detected"] is True
+    assert payload["verified"] is False
     assert payload["status"] == "pass_with_unchecked"
     assert payload["complete"] is False
 
@@ -85,6 +89,8 @@ def test_failure_remains_failure_even_when_other_checks_are_unchecked():
     )
 
     assert report.passed is False
+    assert report.no_failures_detected is False
+    assert report.verified is False
     assert report.status == "fail"
     assert report.complete is False
 
@@ -137,6 +143,8 @@ def test_fully_checked_room_reports_complete_pass():
     )
 
     assert report.passed is True
+    assert report.no_failures_detected is True
+    assert report.verified is True
     assert report.status == "pass"
     assert report.complete is True
 
@@ -180,6 +188,8 @@ def test_project_report_propagates_unchecked_pressure_cascade():
     report = verify_project(project)
 
     assert report.passed is True
+    assert report.no_failures_detected is True
+    assert report.verified is False
     assert report.status == "pass_with_unchecked"
     assert report.complete is False
     assert report.to_dict()["status"] == "pass_with_unchecked"
@@ -200,5 +210,7 @@ def test_application_surfaces_aggregate_verification_status():
     assert run.status == "not_checked"
     assert run.result["status"] == "not_checked"
     assert run.result["complete"] is False
+    assert run.result["verified"] is False
+    assert run.result["no_failures_detected"] is True
     assert run.result["passed"] is True
     assert "Status: **not_checked**" in run.markdown

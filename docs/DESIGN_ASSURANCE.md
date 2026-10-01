@@ -30,7 +30,7 @@ The matrix preserves the complete component results and adds only an aggregate v
 - `pass_with_unchecked` when no component fails but unresolved evidence remains;
 - `pass` only when every component is complete and passes.
 
-The historical `passed` boolean remains a no-failure predicate, while `complete` indicates whether every included finding was evaluated.
+The historical `passed` boolean remains a backward-compatible no-failure predicate, while `complete` indicates whether every included finding was evaluated. `no_failures_detected` exposes that no-failure meaning explicitly. `verified` is stricter and is true only when the matrix is complete and its aggregate status is `pass`; unresolved `not_checked` evidence therefore cannot be represented as fully verified.
 
 ## Traceability
 

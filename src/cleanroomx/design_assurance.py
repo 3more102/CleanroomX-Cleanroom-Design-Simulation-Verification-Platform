@@ -198,6 +198,8 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
             "name": design_result["study"],
             "status": design_result["status"],
             "complete": design_result["complete"],
+            "verified": design_result["verified"],
+            "no_failures_detected": design_result["no_failures_detected"],
             "source": "CleanroomX canonical design-consistency analysis",
             "result_sha256": _canonical_sha256(design_result),
         }
@@ -209,6 +211,8 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
                 "name": pressure_result["study"],
                 "status": pressure_result["status"],
                 "complete": pressure_result["complete"],
+                "verified": pressure_result["verified"],
+                "no_failures_detected": pressure_result["no_failures_detected"],
                 "source": (
                     "CleanroomX canonical pressure-design-consistency analysis"
                 ),
@@ -222,6 +226,8 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
                 "name": result["name"],
                 "status": result["status"],
                 "complete": result["complete"],
+                "verified": result["verified"],
+                "no_failures_detected": result["no_failures_detected"],
                 "rule_pack": copy.deepcopy(result["rule_pack"]),
                 "evidence_sha256": result["evidence_sha256"],
                 "result_sha256": _canonical_sha256(result),
@@ -259,11 +265,16 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
             "rule packs are complete."
         )
 
+    no_failures_detected = fail_count == 0
+    verified = complete and status == "pass"
+
     return {
         "study": study.name,
         "status": status,
         "complete": complete,
-        "passed": fail_count == 0,
+        "verified": verified,
+        "no_failures_detected": no_failures_detected,
+        "passed": no_failures_detected,
         "summary": {
             "component_count": (
                 1

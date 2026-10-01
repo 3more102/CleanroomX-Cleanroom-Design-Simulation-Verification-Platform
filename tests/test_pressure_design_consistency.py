@@ -60,6 +60,8 @@ def test_exact_explicit_mapping_passes() -> None:
 
     assert result["status"] == "pass"
     assert result["complete"] is True
+    assert result["verified"] is True
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert result["summary"]["pass_count"] == 1
     assert result["findings"][0]["expected"] == pytest.approx(2.0)
@@ -134,6 +136,8 @@ def test_pressure_difference_outside_tolerance_fails() -> None:
 
     finding = result["findings"][0]
     assert result["status"] == "fail"
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is False
     assert result["passed"] is False
     assert finding["status"] == "fail"
     assert finding["delta"] == pytest.approx(-1.0)
@@ -163,6 +167,8 @@ def test_configured_target_may_be_explicitly_left_unmapped() -> None:
 
     assert result["status"] == "not_checked"
     assert result["complete"] is False
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
 
 

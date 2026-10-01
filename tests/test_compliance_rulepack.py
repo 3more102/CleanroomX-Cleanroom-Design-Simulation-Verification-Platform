@@ -69,6 +69,8 @@ def test_reference_case_passes_and_preserves_rule_pack_digest() -> None:
 
     assert result["status"] == "pass"
     assert result["complete"] is True
+    assert result["verified"] is True
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert result["summary"] == {
         "rule_count": 3,
@@ -102,6 +104,9 @@ def test_missing_evidence_is_not_promoted_to_pass() -> None:
 
     assert result["status"] == "pass_with_unchecked"
     assert result["complete"] is False
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is True
+    assert result["passed"] is True
     finding = next(item for item in result["findings"] if item["id"] == "ach")
     assert finding["status"] == "not_checked"
     assert finding["evidence_present"] is False
@@ -115,6 +120,8 @@ def test_numeric_failure_retains_delta() -> None:
 
     finding = next(item for item in result["findings"] if item["id"] == "temperature")
     assert result["status"] == "fail"
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is False
     assert result["passed"] is False
     assert finding["status"] == "fail"
     assert finding["delta"] == 2.5

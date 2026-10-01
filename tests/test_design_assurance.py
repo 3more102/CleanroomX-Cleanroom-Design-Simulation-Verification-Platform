@@ -38,6 +38,8 @@ def test_reference_case_passes_and_preserves_component_traceability() -> None:
 
     assert result["status"] == "pass"
     assert result["complete"] is True
+    assert result["verified"] is True
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert result["summary"]["component_count"] == 2
     assert result["summary"]["compliance_check_count"] == 1
@@ -83,6 +85,8 @@ def test_pressure_failure_dominates_assurance_status() -> None:
     assert result["components"]["pressure_design_consistency"]["status"] == "fail"
     assert result["components"]["compliance_checks"][0]["status"] == "pass"
     assert result["status"] == "fail"
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is False
     assert result["passed"] is False
 
 
@@ -136,6 +140,8 @@ def test_missing_compliance_evidence_remains_visible_as_unchecked() -> None:
 
     assert result["status"] == "pass_with_unchecked"
     assert result["complete"] is False
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert result["summary"]["not_checked_count"] >= 1
 
@@ -151,6 +157,8 @@ def test_all_unchecked_components_aggregate_to_not_checked() -> None:
 
     assert result["status"] == "not_checked"
     assert result["complete"] is False
+    assert result["verified"] is False
+    assert result["no_failures_detected"] is True
     assert result["passed"] is True
     assert result["summary"]["pass_count"] == 0
     assert result["summary"]["fail_count"] == 0

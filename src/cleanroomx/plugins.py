@@ -131,7 +131,7 @@ def _parse_plugin_allowlist(value: str) -> tuple[PluginTrustRule, ...]:
         item = raw_item.strip()
         if not item:
             raise ValueError(f"{PLUGIN_ALLOWLIST_ENV} contains an empty entry")
-        if item.count("==") > 1 or ("=" in item and "==" not in item):
+        if item.count("=") not in {0, 2} or ("=" in item and "==" not in item):
             raise ValueError(
                 f"{PLUGIN_ALLOWLIST_ENV} entries must be NAME or NAME==VERSION"
             )

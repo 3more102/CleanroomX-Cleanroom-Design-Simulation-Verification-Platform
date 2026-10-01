@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — desktop project requirements verification — 2026-10-01
+
+- Adds **Analysis → Verify Project Requirements** for read-only execution of the canonical saved-project requirements workflow.
+- Adds **Analysis → Verify & Persist Project Requirements** for guarded persistence of PASS, FAIL, or incomplete canonical verification evidence.
+- Adds **Analysis → Verification History...** with validated retained-ledger review and complete record inspection.
+- Blocks desktop verification for unsaved projects, unsaved edits, unavailable saved-revision identity, or external on-disk changes.
+- Reloads the committed project after verification persistence so desktop state, project revision identity, autosave, and history views remain synchronized with disk.
+
 ## Unreleased Release 3 — verification currency — 2026-10-01
 
 - Adds a deterministic, fail-closed assessment of whether retained canonical project-requirements verification still matches the current analysis input, requirements, mappings, and active mapping identities.

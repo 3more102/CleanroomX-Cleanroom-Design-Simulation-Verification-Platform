@@ -93,3 +93,14 @@ traceability. SHA-256 chaining is not a digital signature. A user with permissio
 to rewrite the project file can recompute hashes. CleanroomX verification evidence
 does not replace commissioning, TAB, CFD validation, independent review,
 regulatory approval, or cleanroom certification.
+
+
+## Desktop history review
+
+Use **Analysis → Verification History...** to review the validated retained
+project-verification ledger. The desktop history view shows sequence, completion
+time, analysis identity, verification status, verified state, engineering
+identity digest, and the complete canonical record JSON.
+
+The dialog validates the ledger before display and refuses to present modified or
+invalid history as trusted evidence.

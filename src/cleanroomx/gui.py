@@ -69,6 +69,10 @@ from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
 )
+from .project_requirements_workflow import run_project_requirements_workflow
+from .project_verification_persistence import (
+    persist_project_requirements_workflow_run,
+)
 from .project_revisions import restore_project_revision, scan_project_revisions
 from .recovery_ui import RecoveryCenter
 from .revision_ui import ProjectRevisionCenter
@@ -79,6 +83,11 @@ from .run_history import (
     build_run_history_evidence,
     run_history_records,
     validate_run_history,
+)
+from .verification_run_history import (
+    VerificationRunHistoryIntegrityError,
+    validate_project_verification_run_history,
+    verification_run_history_records,
 )
 from .strict_json import strict_json_loads as _strict_json_loads
 from .spatial import (
@@ -322,6 +331,117 @@ class RunHistoryDialog(tk.Toplevel):
         self.detail.configure(state="disabled")
 
 
+class VerificationHistoryDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc, metadata: dict):
+        super().__init__(parent)
+        self.title("Project Verification History")
+        self.geometry("1240x700")
+        self.minsize(940, 540)
+        self.transient(parent)
+
+        summary = validate_project_verification_run_history(metadata)
+        self.records = verification_run_history_records(metadata)
+        ttk.Label(
+            self,
+            text=(
+                f"Verified retained verification chain — {summary['record_count']} record(s). "
+                "Hashes provide tamper evidence, not signer authentication."
+            ),
+        ).pack(fill="x", padx=10, pady=(10, 6))
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        list_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(list_frame, weight=1)
+        body.add(detail_frame, weight=2)
+
+        self.tree = ttk.Treeview(
+            list_frame,
+            columns=("time", "analysis", "kind", "status", "verified", "identity"),
+            show="tree headings",
+            height=10,
+        )
+        self.tree.heading("#0", text="#")
+        self.tree.heading("time", text="Completed UTC")
+        self.tree.heading("analysis", text="Analysis")
+        self.tree.heading("kind", text="Kind")
+        self.tree.heading("status", text="Status")
+        self.tree.heading("verified", text="Verified")
+        self.tree.heading("identity", text="Verification identity")
+        self.tree.column("#0", width=55, stretch=False)
+        self.tree.column("time", width=185, stretch=False)
+        self.tree.column("analysis", width=220)
+        self.tree.column("kind", width=180)
+        self.tree.column("status", width=100, stretch=False)
+        self.tree.column("verified", width=80, stretch=False)
+        self.tree.column("identity", width=175, stretch=False)
+
+        list_scroll = ttk.Scrollbar(
+            list_frame,
+            orient="vertical",
+            command=self.tree.yview,
+        )
+        self.tree.configure(yscrollcommand=list_scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        list_scroll.pack(side="right", fill="y")
+
+        self.detail = tk.Text(detail_frame, wrap="none")
+        detail_scroll = ttk.Scrollbar(
+            detail_frame,
+            orient="vertical",
+            command=self.detail.yview,
+        )
+        self.detail.configure(yscrollcommand=detail_scroll.set)
+        self.detail.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+
+        for record in reversed(self.records):
+            verification = record["verification"]
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(record["sequence"]),
+                text=str(record["sequence"]),
+                values=(
+                    record["completed_at_utc"],
+                    record["analysis_name"],
+                    record["analysis_kind"],
+                    verification["status"],
+                    "yes" if verification["verified"] else "no",
+                    record["verification_identity_sha256"][:16] + "…",
+                ),
+            )
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children[0])
+            self.tree.focus(children[0])
+            self._show_selected()
+
+    def _show_selected(self, event=None) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        sequence = int(selection[0])
+        record = next(
+            item for item in self.records if item["sequence"] == sequence
+        )
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        self.detail.insert(
+            "1.0",
+            json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
+        )
+        self.detail.configure(state="disabled")
+
+
 class IfcReimportPlanDialog(tk.Toplevel):
     """Read-only review of the deterministic IFC re-import plan."""
 
@@ -527,6 +647,18 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Run History...", command=self.show_run_history)
+        analysis_menu.add_command(
+            label="Verify Project Requirements",
+            command=self.run_project_requirements_verification,
+        )
+        analysis_menu.add_command(
+            label="Verify & Persist Project Requirements",
+            command=self.persist_project_requirements_verification,
+        )
+        analysis_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         self.edit_menu = tk.Menu(menubar, tearoff=False)
@@ -1085,6 +1217,259 @@ class CleanroomXApp:
             )
             return False
         RunHistoryDialog(self.root, self.project.metadata)
+        return True
+
+    def show_verification_history(self) -> bool:
+        try:
+            summary = validate_project_verification_run_history(
+                self.project.metadata
+            )
+        except VerificationRunHistoryIntegrityError as exc:
+            self.status_var.set("Verification history integrity check failed")
+            messagebox.showerror(
+                "Verification history integrity failure",
+                (
+                    "CleanroomX found invalid or modified project-verification "
+                    "evidence and did not rewrite it.\n\n"
+                    f"{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+        if summary["record_count"] == 0:
+            messagebox.showinfo(
+                "Project Verification History",
+                "No persisted project requirements verification records exist yet.",
+                parent=self.root,
+            )
+            return False
+        VerificationHistoryDialog(self.root, self.project.metadata)
+        return True
+
+    def _project_verification_target(
+        self,
+    ) -> tuple[Path, AnalysisDocument] | None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run first.",
+                parent=self.root,
+            )
+            return None
+        if self.project_path is None:
+            self.status_var.set(
+                "Save the project before running project requirements verification."
+            )
+            messagebox.showinfo(
+                "Save project first",
+                (
+                    "Project requirements verification is bound to exact saved "
+                    "project bytes. Save the project first."
+                ),
+                parent=self.root,
+            )
+            return None
+        if self._has_unsaved_changes():
+            self.status_var.set(
+                "Save project changes before running requirements verification."
+            )
+            messagebox.showinfo(
+                "Save project changes first",
+                (
+                    "The project has unsaved changes. Save them before verification "
+                    "so the run can be bound to the exact source-project SHA-256."
+                ),
+                parent=self.root,
+            )
+            return None
+
+        analysis = self._current_analysis() or self._editor_analysis()
+        if analysis is None:
+            messagebox.showinfo(
+                "Select analysis",
+                "Select the analysis whose mapped project requirements should be verified.",
+                parent=self.root,
+            )
+            return None
+
+        expected_revision = getattr(self, "_project_file_revision", None)
+        if expected_revision is None:
+            self.status_var.set("Saved project revision identity is unavailable.")
+            messagebox.showerror(
+                "Verification blocked",
+                (
+                    "CleanroomX cannot prove which saved project revision is open. "
+                    "Save or reopen the project, then retry verification."
+                ),
+                parent=self.root,
+            )
+            return None
+        try:
+            current_revision = capture_project_file_revision(self.project_path)
+        except OSError as exc:
+            self.status_var.set("Verification blocked")
+            messagebox.showerror(
+                "Verification blocked",
+                str(exc),
+                parent=self.root,
+            )
+            return None
+        if not project_file_revision_matches(
+            expected_revision,
+            current_revision,
+        ):
+            self.status_var.set("Verification blocked: project changed on disk")
+            messagebox.showerror(
+                "Verification blocked",
+                (
+                    "The saved project changed on disk after it was opened or saved. "
+                    "Reload or save the intended revision before verification."
+                ),
+                parent=self.root,
+            )
+            return None
+        return self.project_path, analysis
+
+    @staticmethod
+    def _project_verification_summary_text(workflow) -> str:
+        verification = workflow.verification
+        summary = verification.get("summary", {})
+        return (
+            f"Analysis: {workflow.analysis_name}\n"
+            f"Status: {verification.get('status')}\n"
+            f"Complete: {verification.get('complete')}\n"
+            f"Verified: {verification.get('verified')}\n"
+            f"Pass findings: {summary.get('pass_count', 0)}\n"
+            f"Fail findings: {summary.get('fail_count', 0)}\n"
+            f"Not checked: {summary.get('not_checked_count', 0)}\n\n"
+            f"Source project SHA-256: {workflow.source_revision}\n"
+            f"Verification SHA-256: {verification.get('verification_sha256')}\n"
+            f"Workflow SHA-256: {workflow.workflow_sha256}"
+        )
+
+    def run_project_requirements_verification(self) -> bool:
+        target = self._project_verification_target()
+        if target is None:
+            return False
+        project_path, analysis = target
+        try:
+            workflow = run_project_requirements_workflow(
+                project_path,
+                analysis.id,
+            )
+        except Exception as exc:
+            self.status_var.set("Project requirements verification failed")
+            messagebox.showerror(
+                "Project requirements verification failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        message = self._project_verification_summary_text(workflow)
+        if workflow.verification.get("verified") is True:
+            self.status_var.set(
+                f"Project requirements verified — {analysis.name}"
+            )
+            messagebox.showinfo(
+                "Project requirements verified",
+                message,
+                parent=self.root,
+            )
+        else:
+            self.status_var.set(
+                f"Project requirements require attention — {analysis.name}"
+            )
+            messagebox.showwarning(
+                "Project requirements require attention",
+                message,
+                parent=self.root,
+            )
+        return True
+
+    def persist_project_requirements_verification(self) -> bool:
+        target = self._project_verification_target()
+        if target is None:
+            return False
+        project_path, analysis = target
+        try:
+            workflow = run_project_requirements_workflow(
+                project_path,
+                analysis.id,
+            )
+            persisted = persist_project_requirements_workflow_run(
+                project_path,
+                workflow,
+            )
+        except ProjectSaveDurabilityError as exc:
+            try:
+                self.load_project_path(project_path)
+            except Exception:
+                pass
+            self.status_var.set(
+                "Verification bytes committed; save durability not confirmed"
+            )
+            messagebox.showwarning(
+                "Verification save durability not confirmed",
+                (
+                    "CleanroomX wrote and verified the project bytes containing the "
+                    "verification record, but filesystem directory durability could "
+                    "not be confirmed.\n\n"
+                    f"Committed project SHA-256: {exc.committed_revision.sha256}"
+                ),
+                parent=self.root,
+            )
+            return False
+        except Exception as exc:
+            self.status_var.set("Project verification persistence failed")
+            messagebox.showerror(
+                "Project verification persistence failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        try:
+            self.load_project_path(project_path)
+        except Exception as exc:
+            self.status_var.set("Verification persisted; project reload failed")
+            messagebox.showerror(
+                "Verification persisted; reload failed",
+                (
+                    f"The verification record was committed, but the project could "
+                    f"not be reloaded into the desktop session.\n\n{exc}\n\n"
+                    f"Record SHA-256: {persisted.record['record_sha256']}"
+                ),
+                parent=self.root,
+            )
+            return False
+
+        record = persisted.record
+        message = (
+            self._project_verification_summary_text(workflow)
+            + "\n\n"
+            + f"Persisted sequence: {record['sequence']}\n"
+            + f"Record SHA-256: {record['record_sha256']}\n"
+            + "The record remains historical evidence for the source revision above."
+        )
+        if workflow.verification.get("verified") is True:
+            self.status_var.set(
+                f"Project verification persisted — {analysis.name}"
+            )
+            messagebox.showinfo(
+                "Project verification persisted",
+                message,
+                parent=self.root,
+            )
+        else:
+            self.status_var.set(
+                f"Adverse/incomplete verification persisted — {analysis.name}"
+            )
+            messagebox.showwarning(
+                "Verification evidence persisted",
+                message,
+                parent=self.root,
+            )
         return True
 
     def _on_input_modified(self, event=None) -> None:

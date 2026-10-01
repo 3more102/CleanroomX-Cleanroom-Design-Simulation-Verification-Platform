@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — verification currency — 2026-10-01
+
+- Adds a deterministic, fail-closed assessment of whether retained canonical project-requirements verification still matches the current analysis input, requirements, mappings, and active mapping identities.
+- Exposes the canonical analysis-input SHA-256 and declared external-dependency introspection already used by execution provenance.
+- Reports matching file-backed verification as `dependency_freshness_unverifiable` under schema-v1 rather than assuming external files are unchanged.
+- Integrates verification currency into project diagnostics, verification-history inspection, and the project-native engineering dossier.
+- Adds actionable stale/unverifiable diagnostics without changing solver equations, numerical tolerances, requirement verdict semantics, or persisted verification history.
+
+
 ## Unreleased Release 3 — project-native engineering dossier — 2026-10-01
 
 - Adds a deterministic project-native dossier that projects canonical analysis definitions, first-class requirements, explicit requirement-evidence mappings, retained immutable analysis runs, persisted canonical verification runs, and project diagnostics into one evidence artifact.

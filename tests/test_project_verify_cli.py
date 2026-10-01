@@ -426,7 +426,7 @@ def test_project_verify_run_rechecks_output_identity_before_publication(
     def race_guard(project, *, source, output):
         nonlocal guard_calls
         guard_calls += 1
-        if guard_calls == 2:
+        if guard_calls == 3:
             raise ValueError("output path identity changed before publication")
         real_guard(project, source=source, output=output)
 
@@ -441,6 +441,6 @@ def test_project_verify_run_rechecks_output_identity_before_publication(
     )
 
     assert exit_code == 2
-    assert guard_calls == 2
+    assert guard_calls == 3
     assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"
 

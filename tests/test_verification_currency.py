@@ -319,6 +319,8 @@ def test_verification_currency_proves_current_file_backed_verification(
     assert item["external_dependency_count"] == 2
     assert item["mismatch_reasons"] == []
     assert item["latest_record"]["external_dependencies_recorded"] is True
+    assert "content fingerprints" in item["explanation"]
+    assert "no file-backed" not in item["explanation"]
     assert result["summary"]["current_count"] == 1
 
     dependency = tmp_path / "consistency_hvac_demo.json"

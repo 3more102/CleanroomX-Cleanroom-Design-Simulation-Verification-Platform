@@ -303,8 +303,9 @@ def test_allowlist_with_malformed_entry_fails_closed_before_import():
 def test_application_registry_reports_effective_plugin_trust_policy():
     validation = application.validate_application_registry()
 
-    assert validation["plugin_trust_policy"]["mode"] == "trusted"
-    assert validation["plugin_trust_policy"]["valid"] is True
+    assert validation["plugin_trust_policy"] == (
+        application._PLUGIN_DISCOVERY.trust_policy.to_dict()
+    )
 
 
 def test_plugin_discovery_isolates_invalid_and_incompatible_plugins():

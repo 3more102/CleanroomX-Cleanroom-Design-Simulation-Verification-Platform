@@ -1,10 +1,58 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import json
 import math
+from pathlib import Path
 from typing import Any
 
 from .strict_json import StrictJSONError
+
+
+ProtectedPath = tuple[str, str | Path]
+
+
+def _paths_alias(protected: str | Path, output: str | Path) -> bool:
+    """Return whether an output destination refers to one protected input."""
+    protected_candidate = Path(protected).expanduser()
+    destination = Path(output).expanduser()
+    try:
+        protected_resolved = protected_candidate.resolve(strict=False)
+        destination_resolved = destination.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise OSError(
+            f"could not verify output path identity: {destination}"
+        ) from exc
+
+    if destination_resolved == protected_resolved:
+        return True
+
+    try:
+        if not destination.exists() or not protected_candidate.exists():
+            return False
+        return destination.samefile(protected_candidate)
+    except FileNotFoundError:
+        # A path that disappears during the identity check cannot still be the
+        # existing protected file. Resolved-path equality was checked above.
+        return False
+    except OSError as exc:
+        raise OSError(
+            "could not verify output path against protected input: "
+            f"{destination}"
+        ) from exc
+
+
+def assert_output_is_distinct_from_paths(
+    output: str | Path,
+    protected_paths: Iterable[ProtectedPath],
+) -> None:
+    """Fail closed when an output could replace a protected engineering input."""
+    for label, protected in protected_paths:
+        if _paths_alias(protected, output):
+            protected_path = Path(protected).expanduser().resolve(strict=False)
+            raise ValueError(
+                f"output path must be different from {label}: {protected_path}"
+            )
 
 
 def _clone_cli_json_value(

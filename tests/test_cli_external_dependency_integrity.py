@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 import cleanroomx.application as application_module
+import cleanroomx.cli_output as cli_output_module
 from cleanroomx.consistency_cli import main as consistency_main
 from cleanroomx.dossier_cli import main as dossier_main
 
@@ -201,3 +202,165 @@ def test_dossier_cli_preserves_json_result_contract(monkeypatch, tmp_path, capsy
     assert code in {0, 2}
     assert "executive_summary" in payload
     assert "source_files" in payload
+
+
+def test_consistency_cli_rejects_output_that_aliases_engineering_input(
+    monkeypatch, tmp_path, capsys
+):
+    verification = _copy_example(tmp_path, "facility_project.json")
+    hvac = _copy_example(tmp_path, "consistency_hvac_demo.json")
+    original = verification.read_bytes()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-consistency",
+            str(verification),
+            str(hvac),
+            "--format",
+            "json",
+            "--output",
+            str(verification),
+        ],
+    )
+
+    assert consistency_main() == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "output path must be different" in captured.err
+    assert verification.read_bytes() == original
+
+
+def test_dossier_cli_rejects_output_that_aliases_manifest(
+    monkeypatch, tmp_path, capsys
+):
+    verification = _copy_example(tmp_path, "facility_project.json")
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Protected manifest dossier",
+                "verification_project": verification.name,
+            }
+        ),
+        encoding="utf-8",
+    )
+    original = manifest.read_bytes()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-dossier",
+            str(manifest),
+            "--format",
+            "json",
+            "--output",
+            str(manifest),
+        ],
+    )
+
+    assert dossier_main() == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "output path must be different from dossier manifest" in captured.err
+    assert manifest.read_bytes() == original
+
+
+def test_consistency_cli_rechecks_output_identity_at_atomic_replace(
+    monkeypatch, tmp_path, capsys
+):
+    verification = _copy_example(tmp_path, "facility_project.json")
+    hvac = _copy_example(tmp_path, "consistency_hvac_demo.json")
+    output = tmp_path / "consistency.json"
+    previous = b'{"status": "previous"}\n'
+    output.write_bytes(previous)
+
+    original_paths_alias = cli_output_module._paths_alias
+    calls = 0
+
+    def alias_only_at_publication(protected, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            return True
+        return original_paths_alias(protected, destination)
+
+    monkeypatch.setattr(
+        cli_output_module,
+        "_paths_alias",
+        alias_only_at_publication,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-consistency",
+            str(verification),
+            str(hvac),
+            "--format",
+            "json",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert consistency_main() == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "output path must be different" in captured.err
+    assert calls >= 3
+    assert output.read_bytes() == previous
+
+
+def test_dossier_cli_rechecks_output_identity_at_atomic_replace(
+    monkeypatch, tmp_path, capsys
+):
+    verification = _copy_example(tmp_path, "facility_project.json")
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Publication-race dossier",
+                "verification_project": verification.name,
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "dossier-output.json"
+    previous = b'{"dossier": "previous"}\n'
+    output.write_bytes(previous)
+
+    original_paths_alias = cli_output_module._paths_alias
+    calls = 0
+
+    def alias_only_at_publication(protected, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            return True
+        return original_paths_alias(protected, destination)
+
+    monkeypatch.setattr(
+        cli_output_module,
+        "_paths_alias",
+        alias_only_at_publication,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-dossier",
+            str(manifest),
+            "--format",
+            "json",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert dossier_main() == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "output path must be different" in captured.err
+    assert calls >= 3
+    assert output.read_bytes() == previous

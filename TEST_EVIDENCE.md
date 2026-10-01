@@ -1,4 +1,23 @@
-# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
+# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
+
+## Verified Release 3 code baseline
+
+Validation date: 2026-10-01
+
+- PR **#707 — Release 3 final closure restack on current main**
+  - exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`
+  - CI run id `36875375370`: **success**
+  - Python 3.11 complete suite: **1662 passed, 4 skipped**
+  - Python 3.12 complete suite: **1662 passed, 4 skipped**
+  - Python 3.13 complete suite: **1662 passed, 4 skipped**
+  - Windows PowerShell/CMD launcher smoke: **success**
+  - merged main baseline: `165b0c61f776270f58e8b691171181d694857570`
+
+The v0.103.0 release-identity change is intentionally non-engineering: package/runtime/demo identity, release documentation, CI identity assertion, and immutable-current-main release publishing. The release PR must itself pass the same exact-head CI gate before merge. No solver equation, numerical tolerance, requirement criterion, project schema version, or historical verification semantic is changed by the release identity promotion.
+
+## Historical v0.102.1 and earlier evidence
+
+### CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline
 

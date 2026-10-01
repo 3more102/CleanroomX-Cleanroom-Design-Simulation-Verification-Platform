@@ -72,6 +72,30 @@ The strict-JSON response separates two independent facts:
 for CI/release gating without silently treating a historical PASS as proof of a
 later edited project.
 
+## Gate every configured analysis in the saved project
+
+```text
+cleanroomx-project-verify status-project project.cleanroomx.json
+```
+
+This command performs one stable, read-only verification-currency inspection and
+gates every analysis that currently has active requirement-evidence mappings.
+Analyses with no active mappings remain explicit `not_configured` entries in the
+currency payload and are not promoted into the configured gate set.
+
+The project-wide gate succeeds only when:
+
+- at least one analysis is configured for project-requirements verification;
+- every configured analysis has a latest retained verification record;
+- every configured latest record is `current` against the saved engineering
+  configuration and external dependency content; and
+- every configured latest record is a canonical verified PASS.
+
+The strict-JSON output uses schema
+`cleanroomx.project-verification-project-status` and includes the complete
+canonical currency assessment plus a compact per-analysis gate summary. A project
+with zero configured analyses fails closed rather than reporting an empty success.
+
 ## Exit codes
 
 For `run` and `persist`:
@@ -88,6 +112,14 @@ For `status`:
 - `1`: evidence is stale, dependency freshness is unverifiable, no verification
   is retained/configured, or the current retained verification is not a verified
   PASS;
+- `2`: operational/integrity failure or the project changes during inspection.
+
+For `status-project`:
+
+- `0`: at least one analysis is configured and every configured analysis has a
+  latest verification that is both `current` and a verified PASS;
+- `1`: no analyses are configured, or at least one configured analysis is stale,
+  dependency-freshness-unverifiable, not yet verified, or not a verified PASS;
 - `2`: operational/integrity failure or the project changes during inspection.
 
 A non-PASS verification can still be persisted. This is intentional: failed or

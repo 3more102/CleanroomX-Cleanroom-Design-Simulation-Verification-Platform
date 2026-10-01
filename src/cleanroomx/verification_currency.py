@@ -254,6 +254,65 @@ def _analysis_currency(
     }
 
 
+def verification_history_record_currency_context(
+    record: dict[str, Any],
+    current_assessment: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Project current verification currency onto one immutable history record.
+
+    Historical verification evidence is never rewritten. Only the latest retained
+    record for an analysis may inherit the canonical current-project assessment.
+    Older records are explicitly historical, while records whose analysis no longer
+    exists in the current project are explicitly orphaned from current applicability.
+    """
+    if not isinstance(record, dict):
+        raise TypeError("verification history record must be a dictionary")
+
+    record_analysis_id = record.get("analysis_id")
+    if not isinstance(record_analysis_id, str) or not record_analysis_id:
+        raise ValueError("verification history record requires a non-empty analysis_id")
+
+    if current_assessment is None:
+        return {
+            "state": "not_in_current_project",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "The analysis referenced by this retained verification record is "
+                "not present in the current project."
+            ),
+        }
+
+    if not isinstance(current_assessment, dict):
+        raise TypeError("verification currency assessment must be a dictionary")
+
+    assessment_analysis_id = current_assessment.get("analysis_id")
+    if assessment_analysis_id != record_analysis_id:
+        raise ValueError(
+            "verification history record analysis id does not match current "
+            "verification-currency assessment"
+        )
+
+    latest_record = current_assessment.get("latest_record")
+    if (
+        not isinstance(latest_record, dict)
+        or latest_record.get("sequence") != record.get("sequence")
+    ):
+        return {
+            "state": "historical",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "A newer retained verification record exists for this analysis. "
+                "Current verification currency applies only to the latest retained "
+                "record."
+            ),
+        }
+    return copy.deepcopy(current_assessment)
+
+
 def assess_project_verification_currency(
     project: ProjectDocument,
     *,

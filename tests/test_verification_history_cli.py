@@ -214,6 +214,10 @@ def test_verification_history_cli_shows_full_record(tmp_path, capsys):
     assert payload["record"] == persisted.record
     assert payload["record"]["evidence"][0]["evidence_locator"] == "/result/ach"
     assert payload["record"]["verification"]["verified"] is True
+    assert payload["record"]["proofgraphs"] == persisted.record["proofgraphs"]
+    assert payload["record"]["proofgraph_sha256"] == [
+        document["graph_sha256"] for document in payload["record"]["proofgraphs"]
+    ]
     assert payload["record_currency"]["state"] == "current"
     assert payload["record_currency"]["current"] is True
 

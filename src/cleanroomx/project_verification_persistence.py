@@ -291,9 +291,11 @@ def persist_project_requirements_workflow_run(
             "workflow execution provenance lacks stable external dependency evidence"
         )
 
-    proofgraph_sha256 = sorted(
-        document["graph_sha256"] for document in canonical_graphs
+    proofgraphs = sorted(
+        (copy.deepcopy(document) for document in canonical_graphs),
+        key=lambda document: document["graph_sha256"],
     )
+    proofgraph_sha256 = [document["graph_sha256"] for document in proofgraphs]
     body: dict[str, Any] = {
         "project_source_revision": workflow.source_revision,
         "analysis_id": workflow.analysis_id,
@@ -309,6 +311,7 @@ def persist_project_requirements_workflow_run(
         "verification_sha256": canonical_verification["verification_sha256"],
         "verification": copy.deepcopy(canonical_verification),
         "proofgraph_sha256": proofgraph_sha256,
+        "proofgraphs": proofgraphs,
         "workflow_sha256": verified_workflow["workflow_sha256"],
         "verifier_implementation": _verifier_implementation_identity(),
         "cleanroomx_version": cleanroomx_version,

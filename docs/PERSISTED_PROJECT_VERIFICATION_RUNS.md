@@ -34,6 +34,7 @@ Every verification record preserves:
 - evidence SHA-256;
 - full canonical verification output, findings and completeness state;
 - canonical verification SHA-256;
+- the exact canonical ProofGraph document for each projected graph;
 - ProofGraph SHA-256 identity for each projected graph;
 - project-native workflow SHA-256;
 - verifier module, qualified function name and verifier-source SHA-256;
@@ -105,9 +106,18 @@ A later project edit produces a new project revision. A later verification run
 is therefore bound to that new source revision and becomes a new ledger record.
 
 Project loading and saving validate the verification ledger at the canonical
-project boundary. Tampered record content, evidence digests, verification
-digests, engineering identities, record hashes or chain links cause project
-validation to fail closed.
+project boundary. New records also validate every retained ProofGraph through
+the strict ProofGraph parser, require canonical serialization, and require the
+retained graph documents to match the persisted sorted ProofGraph digest list.
+Tampered record content, evidence digests, verification digests, ProofGraph
+documents/digests, engineering identities, record hashes or chain links cause
+project validation to fail closed.
+
+Schema-v1 records created before canonical ProofGraph document retention may
+contain only `proofgraph_sha256`. Those legacy digest-only records remain
+readable and integrity-checked. New records additionally retain `proofgraphs`
+so the historical requirement/evidence/verdict graph can be inspected without
+reconstructing it from later project state or later verifier code.
 
 
 ## Operator CLI

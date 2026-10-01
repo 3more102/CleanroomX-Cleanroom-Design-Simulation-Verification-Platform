@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — self-contained persisted ProofGraph evidence — 2026-10-01
+
+- Persists the exact canonical ProofGraph documents alongside their SHA-256 identities in new project-verification ledger records.
+- Validates every retained ProofGraph through the strict parser, requires canonical serialization, and requires document identities to match the persisted sorted digest set.
+- Keeps the engineering verification identity bound through the existing ProofGraph digests, so retaining the graph bodies does not redefine historical engineering identity semantics.
+- Preserves backward compatibility for schema-v1 legacy verification records that contain only ProofGraph digests.
+- Makes new historical verification records self-contained for later requirement/evidence/verdict graph inspection without changing solver equations, requirement comparison semantics, or ProofGraph schema.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

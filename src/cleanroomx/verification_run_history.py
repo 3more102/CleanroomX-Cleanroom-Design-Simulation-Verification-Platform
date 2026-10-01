@@ -6,6 +6,8 @@ from hashlib import sha256
 import json
 from typing import Any
 
+from .proofgraph_io import proofgraph_from_dict
+
 
 VERIFICATION_RUN_HISTORY_METADATA_KEY = "cleanroomx.project_verification_run_history"
 VERIFICATION_RUN_HISTORY_SCHEMA = "cleanroomx.project-verification-run-history"
@@ -107,7 +109,7 @@ _RECORD_FIELDS = frozenset(
     }
 )
 
-_OPTIONAL_RECORD_FIELDS = frozenset({"external_dependencies"})
+_OPTIONAL_RECORD_FIELDS = frozenset({"external_dependencies", "proofgraphs"})
 
 
 def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
@@ -352,6 +354,38 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
             "verification_run.proofgraph_sha256 must be unique and sorted"
         )
 
+    if "proofgraphs" in record:
+        proofgraphs = record["proofgraphs"]
+        if not isinstance(proofgraphs, list) or not proofgraphs:
+            raise VerificationRunHistoryIntegrityError(
+                "verification_run.proofgraphs must be a non-empty array"
+            )
+        proofgraph_document_sha256: list[str] = []
+        for index, document in enumerate(proofgraphs):
+            if not isinstance(document, dict):
+                raise VerificationRunHistoryIntegrityError(
+                    f"verification_run.proofgraphs[{index}] must be an object"
+                )
+            try:
+                canonical_document = proofgraph_from_dict(
+                    copy.deepcopy(document)
+                ).to_dict()
+            except ValueError as exc:
+                raise VerificationRunHistoryIntegrityError(
+                    f"verification_run.proofgraphs[{index}] is invalid: {exc}"
+                ) from exc
+            if _canonical_bytes(document) != _canonical_bytes(canonical_document):
+                raise VerificationRunHistoryIntegrityError(
+                    f"verification_run.proofgraphs[{index}] must use canonical "
+                    "ProofGraph serialization"
+                )
+            proofgraph_document_sha256.append(canonical_document["graph_sha256"])
+        if proofgraph_document_sha256 != proofgraph_sha256:
+            raise VerificationRunHistoryIntegrityError(
+                "verification ProofGraph documents do not match persisted "
+                "ProofGraph digests"
+            )
+
     verifier = record["verifier_implementation"]
     if not isinstance(verifier, dict) or set(verifier) != {
         "module",
@@ -539,6 +573,7 @@ def append_project_verification_run_record(
         "code_revision",
         "verification_identity_sha256",
         "external_dependencies",
+        "proofgraphs",
     }
     if forbidden:
         raise VerificationRunHistoryIntegrityError(

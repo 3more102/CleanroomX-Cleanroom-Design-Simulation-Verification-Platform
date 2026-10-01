@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — default-deny external plugin trust policy — 2026-10-01
+
+- Adds a pre-import trust gate for installed analysis plugins with `disabled`, `allowlist`, and `trusted` modes.
+- Defaults application startup to `disabled`; legacy implicit external-plugin loading now requires explicit `CLEANROOMX_PLUGIN_MODE=trusted` or a distribution allowlist.
+- Allows canonicalized distribution-name allowlisting with optional exact version pins and blocks disallowed or identity-missing entry points before `entry_point.load()`.
+- Invalid trust configuration fails closed to disabled external loading; effective policy and blocked reasons are exposed through registry and `cleanroomx-gui --check` diagnostics.
+- This is execution control only, not sandboxing, publisher authentication, signing, or package authenticity; built-in analyses and plugin API v1 remain unchanged.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

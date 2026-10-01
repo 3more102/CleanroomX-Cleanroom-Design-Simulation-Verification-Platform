@@ -385,3 +385,55 @@ def test_workflow_verifier_rejects_resealed_proofgraph_evidence_projection(
     ):
         verify_project_requirements_workflow_run(result)
 
+def test_workflow_verifier_rejects_resealed_proofgraph_evidence_omission(
+    tmp_path,
+):
+    project = _project()
+    mappings = project.metadata[
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    ]["mappings"]
+    second_mapping = copy.deepcopy(mappings[0])
+    second_mapping["id"] = "MAP-ACH-SECOND"
+    mappings.append(second_mapping)
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        project,
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    document = result.proofgraphs[0]
+
+    assert {item["id"] for item in document["evidence"]} == {
+        "MAP-ACH",
+        "MAP-ACH-SECOND",
+    }
+    assert set(document["findings"][0]["evidence_ids"]) == {
+        "MAP-ACH",
+        "MAP-ACH-SECOND",
+    }
+
+    document["evidence"] = [
+        item
+        for item in document["evidence"]
+        if item["id"] != "MAP-ACH-SECOND"
+    ]
+    for check in document["checks"]:
+        check["evidence_ids"] = [
+            evidence_id
+            for evidence_id in check["evidence_ids"]
+            if evidence_id != "MAP-ACH-SECOND"
+        ]
+    for finding in document["findings"]:
+        finding["evidence_ids"] = [
+            evidence_id
+            for evidence_id in finding["evidence_ids"]
+            if evidence_id != "MAP-ACH-SECOND"
+        ]
+
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="evidence identities disagree with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)
+

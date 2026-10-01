@@ -43,6 +43,21 @@ def test_subfreezing_saturated_air_dew_point_matches_dry_bulb() -> None:
     assert dew_point_c(state) == pytest.approx(-20.0, abs=1e-9)
 
 
+def test_zero_c_saturated_air_dew_point_matches_dry_bulb() -> None:
+    state = AirState(0.0, 100.0, 101.325)
+    assert dew_point_c(state) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_dew_point_fails_closed_inside_zero_c_phase_switch_pressure_gap() -> None:
+    # At 0 C the ASHRAE phase convention switches from the ice-Ih
+    # sublimation curve to the liquid-water saturation curve. A narrow interval
+    # of vapor pressures therefore has no root on the implemented piecewise
+    # saturation function and must not be reported as a converged bisection.
+    state = AirState(0.0, 99.995, 101.325)
+    with pytest.raises(ValueError, match="phase-switch pressure gap"):
+        dew_point_c(state)
+
+
 def test_ultradry_state_fails_when_dew_point_leaves_supported_inversion() -> None:
     state = AirState(60.0, 1e-12, 101.325)
     with pytest.raises(ValueError, match="below -100 C"):

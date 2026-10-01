@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from hashlib import sha256
 import json
 
 import pytest
@@ -34,6 +35,7 @@ from cleanroomx.verification_run_history import (
     VERIFICATION_RUN_HISTORY_METADATA_KEY,
     validate_project_verification_run_history,
     verification_run_history_records,
+    verification_run_identity_sha256,
 )
 
 
@@ -156,6 +158,8 @@ def test_persisted_verification_run_preserves_canonical_engineering_evidence(tmp
     assert persisted.record["evidence"][0]["evidence_locator"] == "/result/ach"
     assert persisted.record["verification"]["verified"] is True
     assert persisted.record["verification"]["status"] == "pass"
+    assert persisted.record["record_schema_version"] == 2
+    assert persisted.record["external_dependencies"] == []
     assert persisted.record["verification_identity_sha256"]
     assert persisted.record["record_sha256"]
     assert (
@@ -166,8 +170,71 @@ def test_persisted_verification_run_preserves_canonical_engineering_evidence(tmp
     loaded = load_project_document(path)
     summary = validate_project_verification_run_history(loaded.metadata)
     records = verification_run_history_records(loaded.metadata)
+    history = loaded.metadata[VERIFICATION_RUN_HISTORY_METADATA_KEY]
+    assert history["schema_version"] == 2
     assert summary["record_count"] == 1
     assert records == [persisted.record]
+
+
+def test_legacy_v1_verification_history_upgrades_without_rewriting_records(tmp_path):
+    path = save_project_document(
+        tmp_path / "legacy.cleanroomx.json",
+        _project(),
+    )
+    workflow = run_project_requirements_workflow(path, "room-a")
+    persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T07:30:00Z",
+    )
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    history = raw["project"]["metadata"][VERIFICATION_RUN_HISTORY_METADATA_KEY]
+    legacy_record = history["records"][0]
+    legacy_record.pop("record_schema_version")
+    legacy_record.pop("external_dependencies")
+    legacy_record["verification_identity_sha256"] = verification_run_identity_sha256(
+        legacy_record
+    )
+    unsigned = {
+        key: value
+        for key, value in legacy_record.items()
+        if key != "record_sha256"
+    }
+    legacy_record["record_sha256"] = sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    history["schema_version"] = 1
+    path.write_text(
+        json.dumps(raw, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded_legacy = load_project_document(path)
+    before = verification_run_history_records(loaded_legacy.metadata)
+    assert before == [legacy_record]
+
+    next_workflow = run_project_requirements_workflow(path, "room-a")
+    persist_project_requirements_workflow_run(
+        path,
+        next_workflow,
+        completed_at_utc="2026-10-01T07:31:00Z",
+    )
+
+    upgraded = load_project_document(path)
+    upgraded_history = upgraded.metadata[VERIFICATION_RUN_HISTORY_METADATA_KEY]
+    records = verification_run_history_records(upgraded.metadata)
+    assert upgraded_history["schema_version"] == 2
+    assert records[0] == legacy_record
+    assert records[1]["record_schema_version"] == 2
+    assert records[1]["external_dependencies"] == []
+    assert records[1]["previous_record_sha256"] == legacy_record["record_sha256"]
 
 
 def test_persisted_verification_history_chains_across_project_revisions(tmp_path):

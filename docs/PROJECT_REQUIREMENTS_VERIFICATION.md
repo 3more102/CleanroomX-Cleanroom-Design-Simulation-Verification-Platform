@@ -68,7 +68,7 @@ A PASS requires all of the following:
 
 - requirement lifecycle status is explicitly `approved`;
 - requirement applicability is explicitly `applicable`;
-- exactly one authoritative evidence binding exists for the requirement/entity;
+- either exactly one evidence binding exists for the requirement/entity, or an explicit evidence-authority decision selects one candidate from an otherwise ambiguous binding;
 - evidence freshness is explicitly `current`;
 - every `required_evidence` kind is present;
 - units agree exactly;
@@ -76,6 +76,19 @@ A PASS requires all of the following:
 
 The engine never chooses silently between multiple evidence values for one
 requirement/entity binding. Ambiguity is `invalid`.
+
+An optional `RequirementEvidenceAuthority` decision can resolve that ambiguity
+only by naming the exact requirement/entity binding, one already-bound evidence
+ID, and a non-empty rationale. The decision is rejected if the binding is not
+actually ambiguous, if the selected evidence is absent, if the requirement or
+subject is invalid, or if two authority decisions target the same binding.
+
+Authority does not delete or rewrite competing evidence. The selected
+`evidence_id` drives the comparison, while `evidence_ids` keeps every candidate
+in deterministic order and `evidence_authority` records the explicit decision.
+The complete authority document receives its own SHA-256 and participates in the
+verification SHA-256. Omitting authority preserves the previous fail-closed
+ambiguous-binding behavior and result shape.
 
 Stale evidence is surfaced as `stale` and is not used to issue PASS or FAIL.
 Unknown freshness and missing required evidence are `incomplete`.

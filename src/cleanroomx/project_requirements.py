@@ -48,15 +48,15 @@ def _finite(value: Any, field_name: str) -> float:
         raise ProjectRequirementsFormatError(
             f"{field_name} must be a finite number"
         )
-    return result
+    # Canonicalize signed zero so equivalent engineering values hash identically.
+    return 0.0 if result == 0.0 else result
 
 
 def _criterion_target(value: Any, field_name: str) -> Any:
     if value is None or isinstance(value, (str, bool)):
         return copy.deepcopy(value)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        _finite(value, field_name)
-        return copy.deepcopy(value)
+        return _finite(value, field_name)
     raise ProjectRequirementsFormatError(
         f"{field_name} must be null, text, boolean, or a finite number"
     )

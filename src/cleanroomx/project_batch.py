@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import sys
-from typing import Sequence
+from typing import Callable, Sequence
 
 from . import __version__
 from .application import run_analysis
@@ -22,7 +22,7 @@ from .project import (
 )
 
 PROJECT_BATCH_SCHEMA = "cleanroomx.project-batch-run"
-PROJECT_BATCH_SCHEMA_VERSION = 1
+PROJECT_BATCH_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,9 @@ class ProjectBatchRun:
     source_change_stage: str | None = None
     source_change_analysis_id: str | None = None
     source_check_error: str | None = None
+    cancelled: bool = False
+    cancellation_stage: str | None = None
+    cancellation_analysis_id: str | None = None
 
     @property
     def completed_count(self) -> int:
@@ -103,6 +106,9 @@ class ProjectBatchRun:
                 "source_change_stage": self.source_change_stage,
                 "source_change_analysis_id": self.source_change_analysis_id,
                 "source_check_error": self.source_check_error,
+                "cancelled": self.cancelled,
+                "cancellation_stage": self.cancellation_stage,
+                "cancellation_analysis_id": self.cancellation_analysis_id,
             },
             "analyses": [item.to_dict() for item in self.outcomes],
         }
@@ -151,12 +157,15 @@ def run_project_file(
     *,
     analysis_ids: Sequence[str] | None = None,
     fail_fast: bool = False,
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> ProjectBatchRun:
     """Execute project analyses against one stable in-memory project revision.
 
     The project file is never modified. The source revision is checked before
     every scheduled analysis and again after each completed/failed analysis.
-    If the source changes, no further analyses are scheduled.
+    If the source changes, no further analyses are scheduled. An optional
+    cooperative cancellation callback is checked only between analyses, never
+    from inside an active solver call.
     """
 
     source = Path(path).expanduser().resolve(strict=False)
@@ -170,6 +179,9 @@ def run_project_file(
     change_stage: str | None = None
     change_analysis_id: str | None = None
     source_check_error: str | None = None
+    cancelled = False
+    cancellation_stage: str | None = None
+    cancellation_analysis_id: str | None = None
 
     for analysis in selected:
         matches, check_error = _source_revision_state(source, revision)
@@ -178,6 +190,12 @@ def run_project_file(
             change_stage = "before-analysis"
             change_analysis_id = analysis.id
             source_check_error = check_error
+            break
+
+        if cancel_requested is not None and cancel_requested():
+            cancelled = True
+            cancellation_stage = "before-analysis"
+            cancellation_analysis_id = analysis.id
             break
 
         failed = False
@@ -219,6 +237,12 @@ def run_project_file(
             source_check_error = check_error
             break
 
+        if cancel_requested is not None and cancel_requested():
+            cancelled = True
+            cancellation_stage = "after-analysis"
+            cancellation_analysis_id = analysis.id
+            break
+
         if failed and fail_fast:
             break
 
@@ -233,6 +257,9 @@ def run_project_file(
         source_change_stage=change_stage,
         source_change_analysis_id=change_analysis_id,
         source_check_error=source_check_error,
+        cancelled=cancelled,
+        cancellation_stage=cancellation_stage,
+        cancellation_analysis_id=cancellation_analysis_id,
     )
 
 
@@ -248,6 +275,7 @@ def render_project_batch_markdown(batch: ProjectBatchRun) -> str:
         f"- Execution errors: {batch.error_count}",
         "- Source stable during run: "
         + ("yes" if batch.source_stable_during_run else "no"),
+        "- Cancelled: " + ("yes" if batch.cancelled else "no"),
     ]
     if not batch.source_stable_during_run:
         lines.append(
@@ -261,6 +289,16 @@ def render_project_batch_markdown(batch: ProjectBatchRun) -> str:
         )
         if batch.source_check_error:
             lines.append(f"- Source-check error: {markdown_text(batch.source_check_error)}")
+    if batch.cancelled:
+        lines.append(
+            "- Cancellation boundary: "
+            + markdown_text(batch.cancellation_stage or "unknown")
+            + (
+                f" at analysis {markdown_text(batch.cancellation_analysis_id)}"
+                if batch.cancellation_analysis_id
+                else ""
+            )
+        )
 
     lines.extend(["", "## Analysis outcomes", ""])
     if not batch.outcomes:
@@ -300,6 +338,8 @@ def project_batch_exit_code(batch: ProjectBatchRun) -> int:
         return 3
     if batch.error_count:
         return 2
+    if batch.cancelled:
+        return 4
     return 0
 
 
@@ -340,6 +380,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stop scheduling analyses after the first execution error",
     )
     parser.add_argument(
+        "--cancel-file",
+        help=(
+            "Cooperatively stop scheduling new analyses when this path exists; "
+            "checked only between analyses"
+        ),
+    )
+    parser.add_argument(
         "--format",
         choices=("json", "markdown"),
         default="json",
@@ -356,10 +403,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        cancel_file = (
+            Path(args.cancel_file).expanduser().resolve(strict=False)
+            if args.cancel_file
+            else None
+        )
         batch = run_project_file(
             args.project,
             analysis_ids=args.analysis_ids,
             fail_fast=args.fail_fast,
+            cancel_requested=(
+                (lambda: cancel_file.exists()) if cancel_file is not None else None
+            ),
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:

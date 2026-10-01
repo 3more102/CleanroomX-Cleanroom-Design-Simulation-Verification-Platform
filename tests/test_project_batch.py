@@ -270,6 +270,39 @@ def test_project_batch_cli_writes_strict_json_atomically(tmp_path):
     json.dumps(payload, allow_nan=False)
 
 
+def test_project_batch_cli_uses_same_loaded_revision_for_guard_and_execution(
+    tmp_path, monkeypatch
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    output_path = tmp_path / "batch-result.json"
+    original_loader = project_batch.load_project_document_with_revision
+    load_count = 0
+
+    def load_once(path):
+        nonlocal load_count
+        load_count += 1
+        if load_count > 1:
+            raise AssertionError(
+                "CLI reloaded the project after validating protected output paths"
+            )
+        return original_loader(path)
+
+    monkeypatch.setattr(
+        project_batch,
+        "load_project_document_with_revision",
+        load_once,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 0
+    assert load_count == 1
+    assert output_path.is_file()
+
+
 def test_project_batch_cli_refuses_project_source_as_output(tmp_path, capsys):
     project_path = save_project_document(
         tmp_path / "batch.cleanroomx.json",

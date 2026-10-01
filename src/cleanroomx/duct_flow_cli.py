@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import dumps_strict_json
-from .project import atomic_write_text
+from .cli_output import CLIOutputError, dumps_strict_json, write_cli_output
 from .duct_flow import solve_parallel_branch_flows
 from .duct_flow_io import load_parallel_flow_network
 from .duct_flow_report import markdown_parallel_flow_report
@@ -39,7 +38,15 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.network,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-duct-flow: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0

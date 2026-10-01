@@ -69,12 +69,18 @@ record is retained, the state is `not_verified`. Analyses without active mapping
 are `not_configured`.
 
 New verification records retain the stable external engineering dependency
-fingerprints captured by execution provenance. When a project base directory is
-available, those files are re-fingerprinted and the verification is reported as
-`current` only if the retained SHA-256 and byte size still match.
+fingerprints captured by execution provenance. Resolvable dependency files are
+re-fingerprinted and the verification is reported as `current` only if the
+retained SHA-256 and byte size still match. A proven content mismatch is
+`stale`.
+
+Missing, unreadable, unstable, malformed, or unresolved dependency evidence is
+reported as `dependency_freshness_unverifiable`; lack of readable evidence is
+not treated as proof that content changed. Relative paths require the saved
+project base directory, while absolute paths can be checked directly.
 
 Legacy verification records created before dependency-fingerprint persistence
-remain valid. If such a record is otherwise configuration-identical, it is
+remain valid. If such a record is otherwise configuration-identical, it is also
 reported as `dependency_freshness_unverifiable` rather than assumed current.
 
 ## Project diagnostics integration

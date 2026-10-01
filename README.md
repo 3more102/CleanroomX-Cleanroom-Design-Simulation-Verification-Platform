@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -71,6 +71,11 @@ Spatial and engineering data remain deliberately separated.
 - Immutable run snapshots and execution provenance.
 - Deterministic project batch execution.
 - Project-wide read-only design/model diagnostics with spatial, synchronization, input-validity, and stale-evidence checks.
+- First-class project requirements and explicit requirement-to-analysis evidence mappings.
+- Canonical requirements verification with deterministic unit conversion and fail-closed ambiguous-evidence handling.
+- Tamper-evident persisted verification history with current/stale/dependency-freshness currency assessment.
+- ProofGraph projection for requirements, commissioning, qualification, and retained verification evidence with cross-artifact integrity checks.
+- Project-native dossier, verification, verification-history, and requirements-traceability CLI/desktop review surfaces.
 - Portable project bundles and engineering reports.
 - Deterministic self-verifying design-assurance snapshots that bind exact source bytes, normalized results, optional pressure-design evidence, and traceability digests.
 - SHA-256 based numerical/provenance evidence for supported solver workflows.
@@ -155,23 +160,11 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0** release line is gated by the repository CI matrix on Python **3.11 / 3.12 / 3.13** plus Windows launcher smoke.
 
-Recorded release evidence includes:
+The functional Release 3 closure at PR #707 head `875408729ec3587d96f4c86f77b14de80b6548be` passed CI run **#2229 / 36875375370**, including the focused Release 3 requirements/verification gate, the complete test suite, clean-wheel build/install checks, installed CLI checks, the Linux Tk/Xvfb desktop smoke on Python 3.13, and Windows PowerShell/CMD launcher smoke.
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
-- Windows PowerShell and CMD launcher smoke tests;
-- clean wheel build/install checks;
-- installed Tk GUI smoke testing;
-- synchronized 2D/3D spatial regression coverage;
-- autosave completion-race regression coverage;
-- solver/provenance compatibility gates.
-
-The exact release evidence is preserved in:
-
-- [VALIDATION.txt](VALIDATION.txt)
-- [TEST_EVIDENCE.md](TEST_EVIDENCE.md)
-- [CHANGELOG.md](CHANGELOG.md)
+The immutable `v0.103.0` tag and GitHub Release may be published only from the exact current `main` commit after that commit itself completes CI successfully. Historical v0.102.1 validation, rollback, and test-evidence records remain preserved in `VALIDATION.txt`, `TEST_EVIDENCE.md`, and `ROLLBACK.md`.
 
 ## Engineering boundary
 

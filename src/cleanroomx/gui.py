@@ -69,6 +69,10 @@ from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
 )
+from .project_requirement_evidence_mappings import (
+    ProjectRequirementEvidenceMappingsFormatError,
+)
+from .project_requirements import ProjectRequirementsFormatError
 from .project_requirements_workflow import run_project_requirements_workflow
 from .project_verification_persistence import (
     persist_project_requirements_workflow_run,
@@ -83,6 +87,9 @@ from .run_history import (
     build_run_history_evidence,
     run_history_records,
     validate_run_history,
+)
+from .requirements_traceability import (
+    build_project_requirements_traceability_snapshot,
 )
 from .verification_currency import assess_project_verification_currency
 from .verification_run_history import (
@@ -366,6 +373,163 @@ class RunHistoryDialog(tk.Toplevel):
             json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
         )
         self.detail.configure(state="disabled")
+
+
+class RequirementsTraceabilityDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc, snapshot: dict):
+        super().__init__(parent)
+        self.title("Project Requirements Traceability")
+        self.geometry("1480x760")
+        self.minsize(1080, 560)
+        self.transient(parent)
+
+        counts = snapshot["counts"]
+        ttk.Label(
+            self,
+            text=(
+                f"Requirements: {counts['requirements']} in "
+                f"{counts['requirement_sets']} set(s) — mappings: "
+                f"{counts['mappings']} "
+                f"({counts['active_mappings']} active, "
+                f"{counts['historical_mappings']} historical)."
+            ),
+        ).pack(fill="x", padx=10, pady=(10, 3))
+        ttk.Label(
+            self,
+            text=(
+                "Requirements SHA-256: "
+                f"{snapshot['requirements_sha256']}    Mappings SHA-256: "
+                f"{snapshot['mappings_sha256']}"
+            ),
+        ).pack(fill="x", padx=10, pady=(0, 8))
+
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+
+        requirements_frame = ttk.Frame(notebook)
+        mappings_frame = ttk.Frame(notebook)
+        notebook.add(requirements_frame, text="Requirements")
+        notebook.add(mappings_frame, text="Evidence mappings")
+
+        requirement_columns = (
+            "set",
+            "id",
+            "title",
+            "status",
+            "applicability",
+            "scope",
+            "criterion",
+        )
+        requirement_tree = ttk.Treeview(
+            requirements_frame,
+            columns=requirement_columns,
+            show="headings",
+        )
+        requirement_headings = {
+            "set": "Set",
+            "id": "Requirement",
+            "title": "Title",
+            "status": "Status",
+            "applicability": "Applicability",
+            "scope": "Scope",
+            "criterion": "Criterion",
+        }
+        for column, heading in requirement_headings.items():
+            requirement_tree.heading(column, text=heading)
+            requirement_tree.column(
+                column,
+                width=180 if column in {"title", "criterion"} else 130,
+                stretch=True,
+            )
+        requirement_scroll = ttk.Scrollbar(
+            requirements_frame,
+            orient="vertical",
+            command=requirement_tree.yview,
+        )
+        requirement_tree.configure(yscrollcommand=requirement_scroll.set)
+        requirement_tree.pack(side="left", fill="both", expand=True)
+        requirement_scroll.pack(side="right", fill="y")
+
+        for row in snapshot["requirements"]:
+            requirement_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["set_id"],
+                    row["id"],
+                    row["title"],
+                    row["status"],
+                    row["applicability"],
+                    ", ".join(row["scope"]) or "project",
+                    json.dumps(
+                        row["criterion"],
+                        sort_keys=True,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+
+        mapping_columns = (
+            "id",
+            "status",
+            "requirement",
+            "analysis",
+            "analysis_state",
+            "subject",
+            "property",
+            "result",
+        )
+        mapping_tree = ttk.Treeview(
+            mappings_frame,
+            columns=mapping_columns,
+            show="headings",
+        )
+        mapping_headings = {
+            "id": "Mapping",
+            "status": "Status",
+            "requirement": "Requirement",
+            "analysis": "Analysis",
+            "analysis_state": "Current analysis state",
+            "subject": "Subject",
+            "property": "Property",
+            "result": "Result locator",
+        }
+        for column, heading in mapping_headings.items():
+            mapping_tree.heading(column, text=heading)
+            mapping_tree.column(
+                column,
+                width=180 if column in {"analysis_state", "result"} else 140,
+                stretch=True,
+            )
+        mapping_scroll = ttk.Scrollbar(
+            mappings_frame,
+            orient="vertical",
+            command=mapping_tree.yview,
+        )
+        mapping_tree.configure(yscrollcommand=mapping_scroll.set)
+        mapping_tree.pack(side="left", fill="both", expand=True)
+        mapping_scroll.pack(side="right", fill="y")
+
+        for row in snapshot["mappings"]:
+            mapping_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["id"],
+                    row["status"],
+                    row["requirement_id"],
+                    f"{row['analysis_id']} ({row['expected_analysis_kind']})",
+                    row["analysis_state"],
+                    row["subject_ref"] or "project",
+                    row["property_name"],
+                    row["result_locator"],
+                ),
+            )
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
 
 
 class VerificationHistoryDialog(tk.Toplevel):
@@ -728,6 +892,10 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Run History...", command=self.show_run_history)
+        analysis_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
         analysis_menu.add_command(
             label="Verify Project Requirements",
             command=self.run_project_requirements_verification,
@@ -1298,6 +1466,40 @@ class CleanroomXApp:
             )
             return False
         RunHistoryDialog(self.root, self.project.metadata)
+        return True
+
+    def show_requirements_traceability(self) -> bool:
+        try:
+            snapshot = build_project_requirements_traceability_snapshot(
+                self.project.metadata,
+                self.project.analyses,
+            )
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ) as exc:
+            self.status_var.set("Requirements traceability validation failed")
+            messagebox.showerror(
+                "Requirements traceability validation failure",
+                (
+                    "CleanroomX found invalid project requirements or evidence "
+                    "mappings and did not reinterpret them.\n\n"
+                    f"{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+
+        counts = snapshot["counts"]
+        if counts["requirements"] == 0 and counts["mappings"] == 0:
+            messagebox.showinfo(
+                "Project Requirements Traceability",
+                "No project requirements or requirement evidence mappings exist yet.",
+                parent=self.root,
+            )
+            return False
+
+        RequirementsTraceabilityDialog(self.root, snapshot)
         return True
 
     def show_verification_history(self) -> bool:

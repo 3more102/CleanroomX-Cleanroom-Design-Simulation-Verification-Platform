@@ -47,9 +47,13 @@ The pressure loss of such a branch is already negligible at the solved state. Cl
 
 The near-zero comparison and every Reynolds/friction update use the full-precision solved edge airflow from the inner loop calculation. The six-decimal edge airflow shown in the public loop result is presentation only and is never fed back into the variable-friction iteration.
 
-## Laminar boundary
+## Friction-regime boundaries
 
-The existing friction model uses 64/Re for circular laminar ducts and Colebrook for Re >= 2300. Automatic laminar friction for noncircular ducts remains unsupported. If an iterated rectangular edge enters that unsupported regime, the solver stops with an explicit validation error rather than silently applying a circular correlation.
+Automatic friction uses `64/Re` only for circular laminar ducts with `Re < 2000`, and Colebrook only for turbulent flow with `Re > 4000`. For `2000 <= Re <= 4000`, the automatic resolver fails closed instead of treating transitional flow as fully turbulent or inventing an interpolation. Supply an explicit project-qualified Darcy factor if that regime must be analyzed.
+
+Automatic laminar friction for noncircular ducts remains unsupported. If an iterated automatic-friction edge enters either the transition region or unsupported noncircular laminar flow, the solver stops with an explicit validation error rather than silently changing correlations.
+
+These regime limits follow NASA Kennedy Space Center `KSC-STD-Z-0017 Rev A`, section 7.4.1, which gives circular-pipe laminar friction for `Re < 2000` and the Colebrook equation for the turbulent region at `Re > 4000`.
 
 ## Run
 

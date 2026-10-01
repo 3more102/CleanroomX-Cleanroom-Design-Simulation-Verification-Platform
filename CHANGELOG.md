@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — shared verification-history currency context — 2026-10-01
+
+- Centralizes retained-record current-project context in the canonical verification-currency module so operator surfaces share one rule.
+- Adds derived `current_assessment` beside verification-history CLI list/show evidence without modifying persisted historical records.
+- Labels older retained records `historical` and records for removed analyses `not_in_current_project`, matching the desktop verification-history semantics.
+- Keeps current/stale/dependency-freshness-unverifiable assessment restricted to the latest retained record and changes no solver, requirement-verdict, ledger, or project-schema semantics.
+
+
 ## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
 
 - Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.

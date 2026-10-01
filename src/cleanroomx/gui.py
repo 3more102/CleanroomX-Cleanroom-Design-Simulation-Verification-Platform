@@ -84,7 +84,10 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
-from .verification_currency import assess_project_verification_currency
+from .verification_currency import (
+    assess_project_verification_currency,
+    verification_history_record_currency_context,
+)
 from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
@@ -130,42 +133,6 @@ def unit_hint(path: str) -> str:
     if key.endswith("_1_h") or key == "ach":
         return "1/h"
     return ""
-
-
-def verification_history_record_currency_context(
-    record: dict,
-    current_assessment: dict | None,
-) -> dict:
-    """Return current-project context without rewriting historical evidence."""
-    if current_assessment is None:
-        return {
-            "state": "not_in_current_project",
-            "current": False,
-            "complete": True,
-            "mismatch_reasons": [],
-            "explanation": (
-                "The analysis referenced by this retained verification record is "
-                "not present in the current project."
-            ),
-        }
-
-    latest_record = current_assessment.get("latest_record")
-    if (
-        not isinstance(latest_record, dict)
-        or latest_record.get("sequence") != record.get("sequence")
-    ):
-        return {
-            "state": "historical",
-            "current": False,
-            "complete": True,
-            "mismatch_reasons": [],
-            "explanation": (
-                "A newer retained verification record exists for this analysis. "
-                "Current verification currency applies only to the latest retained "
-                "record."
-            ),
-        }
-    return copy.deepcopy(current_assessment)
 
 
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:

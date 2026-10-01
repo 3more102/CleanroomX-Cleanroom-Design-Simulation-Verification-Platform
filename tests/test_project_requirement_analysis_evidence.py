@@ -44,6 +44,7 @@ def _run_bundle(
     result: dict,
     *,
     external_dependencies_stable: bool = True,
+    project_source_revision: str | None = None,
 ) -> dict:
     payload = {"room": "ROOM-A"}
     provenance = {
@@ -51,6 +52,7 @@ def _run_bundle(
         "schema_version": 1,
         "analysis_kind": "room_verification",
         "cleanroomx_version": __version__,
+        "project_source_revision": project_source_revision,
         "input_canonicalization": "json-sort-keys-compact-utf8-v1",
         "input_sha256": _canonical_sha256(payload),
         "external_dependency_count": 0,
@@ -185,6 +187,39 @@ def test_analysis_run_binding_derives_current_evidence_and_exact_locator() -> No
         "room_verification:/result/rooms/0/ach"
     )
     assert evidence.source_revision == bundle["integrity"]["sha256"]
+
+
+def test_analysis_run_binding_uses_integrity_bound_project_revision() -> None:
+    bundle = _run_bundle(
+        {"rooms": [{"name": "ROOM-A", "ach": 20.0}]},
+        project_source_revision=SOURCE_PROJECT_REVISION,
+    )
+
+    evidence = bind_analysis_run_requirement_evidence(
+        bundle,
+        [_mapping()],
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
+    )[0]
+
+    assert evidence.project_revision == SOURCE_PROJECT_REVISION
+
+
+def test_analysis_run_binding_rejects_project_revision_mismatch() -> None:
+    bundle = _run_bundle(
+        {"rooms": [{"name": "ROOM-A", "ach": 20.0}]},
+        project_source_revision=SOURCE_PROJECT_REVISION,
+    )
+
+    with pytest.raises(
+        AnalysisRequirementEvidenceError,
+        match="disagrees with the project revision",
+    ):
+        bind_analysis_run_requirement_evidence(
+            bundle,
+            [_mapping()],
+            source_project_revision="b" * 64,
+            current_analysis_input=CURRENT_ANALYSIS_INPUT,
+        )
 
 
 def test_analysis_run_binding_marks_changed_analysis_input_stale() -> None:

@@ -426,8 +426,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = Path(args.project).expanduser().resolve(strict=False)
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file

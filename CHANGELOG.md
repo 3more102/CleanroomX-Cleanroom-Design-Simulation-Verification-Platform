@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — consolidated verification currency operator surfaces — 2026-10-01
+
+- Centralizes retained verification-record current-project context and reuses it across desktop and CLI history inspection.
+- Upgrades verification-history inspection output to schema version 2 with explicit per-record current, historical, and removed-analysis context while preserving immutable evidence.
+- Keeps current/stale/dependency-freshness-unverifiable state restricted to the latest retained record and adds a fail-closed analysis-identity guard.
+- Builds on the diagnostics currency reporting and truthful file-backed dependency explanation already merged to main; no solver equations, numerical tolerances, requirement criteria, persisted ledger hashes, or project schema are changed.
+
+
 ## Unreleased Release 3 — diagnostics verification currency context — 2026-10-01
 
 - Adds an explicit **Current verification currency** section to project-diagnostics Markdown output.

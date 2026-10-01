@@ -221,6 +221,27 @@ def test_verification_history_cli_marks_only_latest_record_current(tmp_path, cap
     assert payload["records"][1]["current_currency"]["current"] is True
 
 
+def test_verification_history_cli_labels_removed_analysis_records(tmp_path, capsys):
+    path, _ = _persist_one(tmp_path)
+    project = load_project_document(path)
+    project.analyses = []
+    project.active_analysis_id = None
+    project.metadata.pop(
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
+        None,
+    )
+    save_project_document(path, project)
+
+    exit_code = verification_history_main(["list", str(path)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["records"][0]["current_currency"]["state"] == (
+        "not_in_current_project"
+    )
+    assert payload["records"][0]["current_currency"]["current"] is False
+
+
 def test_verification_history_cli_rejects_missing_sequence(tmp_path, capsys):
     path, _ = _persist_one(tmp_path)
 

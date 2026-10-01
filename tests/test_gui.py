@@ -2062,7 +2062,7 @@ def test_gui_verification_history_empty_is_reported(monkeypatch):
         )
     ]
 
-def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
+def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_boundary(
     monkeypatch,
     tmp_path,
 ):
@@ -2075,7 +2075,7 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
 
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",
-        ProjectDocument(name="GUI output identity race"),
+        ProjectDocument(name="GUI source revision race"),
     )
     revision = capture_project_file_revision(project_path)
     destination = tmp_path / "project.dossier.json"
@@ -2091,20 +2091,28 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
     app._editor_analysis = lambda: None
     app._sync_metadata = lambda: None
     app._has_unsaved_changes = lambda: False
-    real_guard = gui_module._assert_project_output_is_safe
+    real_guard = gui_module._assert_project_publication_safe
     guard_calls = 0
 
-    def race_guard(project, *, source, output):
+    def race_guard(project, *, source, revision, output):
         nonlocal guard_calls
         guard_calls += 1
-        if guard_calls == 3:
-            raise ValueError("output path identity changed before publication")
-        real_guard(project, source=source, output=output)
+        if guard_calls == 2:
+            project_path.write_text(
+                project_path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        real_guard(
+            project,
+            source=source,
+            revision=revision,
+            output=output,
+        )
 
     errors = []
     monkeypatch.setattr(
         gui_module,
-        "_assert_project_output_is_safe",
+        "_assert_project_publication_safe",
         race_guard,
     )
     monkeypatch.setattr(
@@ -2120,9 +2128,9 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
 
     app.export_project_engineering_dossier()
 
-    assert guard_calls == 3
+    assert guard_calls == 2
     assert destination.read_text(encoding="utf-8") == "previous-valid-report\n"
     assert errors
     assert errors[-1][0] == "Project dossier export failed"
-    assert "identity changed" in errors[-1][1]
+    assert "project source changed before report publication" in errors[-1][1]
 

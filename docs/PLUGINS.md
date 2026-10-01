@@ -84,8 +84,8 @@ CleanroomX can apply an operator-controlled trust gate before an installed
 analysis entry point is imported. The policy is selected with
 `CLEANROOMX_PLUGIN_MODE`:
 
-- `trusted` is the default and preserves the existing installed-plugin behavior;
-- `disabled` blocks every external analysis entry point before import;
+- `disabled` is the default and blocks every external analysis entry point before import;
+- `trusted` is an explicit compatibility opt-in that preserves the historical installed-plugin behavior;
 - `allowlist` imports only distributions named by
   `CLEANROOMX_PLUGIN_ALLOWLIST`.
 

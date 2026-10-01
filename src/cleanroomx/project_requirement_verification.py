@@ -7,6 +7,10 @@ import json
 import math
 from typing import Any, Iterable
 
+from .engineering_units import (
+    EngineeringUnitConversionError,
+    convert_engineering_value,
+)
 from .project_requirements import ProjectRequirement, ProjectRequirements
 from .verification import aggregate_verification_status
 
@@ -168,6 +172,54 @@ class RequirementEvidence:
         }
 
 
+@dataclass(frozen=True, kw_only=True)
+class RequirementEvidenceAuthority:
+    requirement_id: str
+    evidence_id: str
+    authority_source: str
+    decision_reference: str
+    decision_revision: str
+    rationale: str
+    subject_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in (
+            "requirement_id",
+            "evidence_id",
+            "authority_source",
+            "decision_reference",
+            "decision_revision",
+            "rationale",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                _nonempty(
+                    getattr(self, name),
+                    f"requirement_evidence_authority.{name}",
+                ),
+            )
+        object.__setattr__(
+            self,
+            "subject_ref",
+            _optional_text(
+                self.subject_ref,
+                "requirement_evidence_authority.subject_ref",
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "requirement_id": self.requirement_id,
+            "subject_ref": self.subject_ref,
+            "evidence_id": self.evidence_id,
+            "authority_source": self.authority_source,
+            "decision_reference": self.decision_reference,
+            "decision_revision": self.decision_revision,
+            "rationale": self.rationale,
+        }
+
+
 def _criterion(requirement: ProjectRequirement) -> dict[str, Any] | None:
     tolerance = requirement.tolerance if requirement.tolerance is not None else 0.0
     if requirement.target is not None:
@@ -295,18 +347,6 @@ def _evaluate(
             ),
             evidence=evidence,
         )
-    if evidence.unit != requirement.unit:
-        return _unresolved(
-            requirement,
-            subject_ref,
-            state="invalid",
-            explanation=(
-                "Evidence unit does not exactly match the requirement unit; "
-                "no implicit conversion was performed."
-            ),
-            evidence=evidence,
-        )
-
     if evidence.value is None:
         return _unresolved(
             requirement,
@@ -319,7 +359,9 @@ def _evaluate(
     operator = criterion["operator"]
     expected = criterion["expected"]
     tolerance = float(criterion["tolerance"])
-    actual = evidence.value
+    raw_actual = evidence.value
+    comparison_actual = raw_actual
+    conversion_details: dict[str, Any] | None = None
     delta: float | None = None
 
     if operator == "equals" and isinstance(expected, (str, bool)):
@@ -331,10 +373,57 @@ def _evaluate(
                 explanation="A non-numeric equality requirement cannot use numeric tolerance.",
                 evidence=evidence,
             )
-        passed = _json_equal(actual, expected)
+        if evidence.unit != requirement.unit:
+            return _unresolved(
+                requirement,
+                subject_ref,
+                state="invalid",
+                explanation=(
+                    "Non-numeric equality evidence units must match exactly; "
+                    "numeric unit conversion is not applicable."
+                ),
+                evidence=evidence,
+            )
+        passed = _json_equal(raw_actual, expected)
     else:
+        if evidence.unit != requirement.unit:
+            if evidence.unit is None or requirement.unit is None:
+                return _unresolved(
+                    requirement,
+                    subject_ref,
+                    state="invalid",
+                    explanation=(
+                        "Evidence and requirement units differ, and conversion "
+                        "between a named unit and an unset unit is not defined."
+                    ),
+                    evidence=evidence,
+                )
+            try:
+                conversion = convert_engineering_value(
+                    raw_actual,
+                    source_unit=evidence.unit,
+                    target_unit=requirement.unit,
+                )
+            except EngineeringUnitConversionError as exc:
+                return _unresolved(
+                    requirement,
+                    subject_ref,
+                    state="invalid",
+                    explanation=(
+                        "Evidence unit does not exactly match the requirement unit; "
+                        "no implicit conversion was performed because the canonical "
+                        f"unit authority rejected the conversion: {exc}."
+                    ),
+                    evidence=evidence,
+                )
+            comparison_actual = conversion.output_value
+            conversion_details = conversion.to_dict()
+
         try:
-            actual_number = _finite(actual, "requirement evidence actual")
+            actual_number = _finite(
+                comparison_actual,
+                "requirement evidence actual",
+            )
         except ValueError:
             return _unresolved(
                 requirement,
@@ -377,7 +466,7 @@ def _evaluate(
             "status": "pass" if passed else "fail",
             "state": "pass" if passed else "fail",
             "included": True,
-            "actual": copy.deepcopy(actual),
+            "actual": copy.deepcopy(comparison_actual),
             "delta": delta,
             "evidence_id": evidence.id,
             "evidence_ids": [evidence.id],
@@ -388,18 +477,40 @@ def _evaluate(
             "freshness": evidence.freshness,
             "evidence_kinds": list(evidence.evidence_kinds),
             "explanation": (
-                "Current evidence satisfies the explicit requirement criterion."
-                if passed
-                else "Current evidence does not satisfy the explicit requirement criterion."
+                (
+                    "Current evidence satisfies the explicit requirement criterion "
+                    "after canonical unit conversion."
+                )
+                if passed and conversion_details is not None
+                else (
+                    "Current evidence does not satisfy the explicit requirement "
+                    "criterion after canonical unit conversion."
+                )
+                if conversion_details is not None
+                else (
+                    "Current evidence satisfies the explicit requirement criterion."
+                    if passed
+                    else "Current evidence does not satisfy the explicit requirement criterion."
+                )
             ),
         }
     )
+    if conversion_details is not None:
+        finding.update(
+            {
+                "evidence_actual": copy.deepcopy(raw_actual),
+                "evidence_unit": evidence.unit,
+                "unit_conversion": conversion_details,
+            }
+        )
     return finding
 
 
 def verify_project_requirements(
     requirements: ProjectRequirements,
     evidence: Iterable[RequirementEvidence],
+    *,
+    evidence_authority: Iterable[RequirementEvidenceAuthority] = (),
 ) -> dict[str, Any]:
     if not isinstance(requirements, ProjectRequirements):
         raise TypeError("requirements must be a ProjectRequirements value")
@@ -417,6 +528,50 @@ def verify_project_requirements(
     evidence_ids = [item.id for item in evidence_list]
     if len(evidence_ids) != len(set(evidence_ids)):
         raise ValueError("requirement evidence contains duplicate ids")
+
+    authority_list = tuple(evidence_authority)
+    if not all(
+        isinstance(item, RequirementEvidenceAuthority)
+        for item in authority_list
+    ):
+        raise TypeError(
+            "evidence_authority must contain RequirementEvidenceAuthority values"
+        )
+    authority_by_binding: dict[
+        tuple[str, str | None], RequirementEvidenceAuthority
+    ] = {}
+    for item in authority_list:
+        requirement = requirements_by_id.get(item.requirement_id)
+        if requirement is None:
+            raise ValueError(
+                f"evidence authority references unknown requirement "
+                f"{item.requirement_id!r}"
+            )
+        if (
+            requirement.status != "approved"
+            or requirement.applicability != "applicable"
+        ):
+            raise ValueError(
+                "evidence authority may target only approved, applicable requirements"
+            )
+        if requirement.scope:
+            if item.subject_ref not in requirement.scope:
+                raise ValueError(
+                    f"evidence authority subject {item.subject_ref!r} is outside "
+                    f"requirement {requirement.id!r} scope"
+                )
+        elif item.subject_ref is not None:
+            raise ValueError(
+                f"evidence authority supplies subject {item.subject_ref!r} for "
+                f"project-scope requirement {requirement.id!r}"
+            )
+        key = (item.requirement_id, item.subject_ref)
+        if key in authority_by_binding:
+            raise ValueError(
+                "multiple evidence authority records target the same "
+                "requirement/entity binding"
+            )
+        authority_by_binding[key] = item
 
     evidence_by_binding: dict[
         tuple[str, str | None], list[RequirementEvidence]
@@ -443,6 +598,20 @@ def verify_project_requirements(
             (item.requirement_id, item.subject_ref),
             [],
         ).append(item)
+
+    for key, authority in authority_by_binding.items():
+        bound = sorted(evidence_by_binding.get(key, []), key=lambda item: item.id)
+        if len(bound) < 2:
+            raise ValueError(
+                "evidence authority must resolve a requirement/entity binding "
+                "with multiple evidence records"
+            )
+        candidate_ids = {item.id for item in bound}
+        if authority.evidence_id not in candidate_ids:
+            raise ValueError(
+                f"authoritative evidence {authority.evidence_id!r} is not bound "
+                f"to requirement/entity {key!r}"
+            )
 
     findings: list[dict[str, Any]] = []
     for requirement in sorted(requirement_list, key=lambda item: item.id):
@@ -516,18 +685,28 @@ def verify_project_requirements(
                 )
                 continue
             if len(bound) > 1:
-                findings.append(
-                    _unresolved(
-                        requirement,
-                        subject_ref,
-                        state="invalid",
-                        explanation=(
-                            "Multiple evidence records are bound to the same "
-                            "requirement/entity; the authoritative value is ambiguous."
-                        ),
-                        evidence_ids=[item.id for item in bound],
+                authority = authority_by_binding.get((requirement.id, subject_ref))
+                if authority is None:
+                    findings.append(
+                        _unresolved(
+                            requirement,
+                            subject_ref,
+                            state="invalid",
+                            explanation=(
+                                "Multiple evidence records are bound to the same "
+                                "requirement/entity; the authoritative value is ambiguous."
+                            ),
+                            evidence_ids=[item.id for item in bound],
+                        )
                     )
+                    continue
+                selected = next(
+                    item for item in bound if item.id == authority.evidence_id
                 )
+                finding = _evaluate(requirement, subject_ref, selected)
+                finding["candidate_evidence_ids"] = [item.id for item in bound]
+                finding["evidence_authority"] = authority.to_dict()
+                findings.append(finding)
                 continue
             findings.append(_evaluate(requirement, subject_ref, bound[0]))
 
@@ -549,6 +728,17 @@ def verify_project_requirements(
                 item.requirement_id,
                 "" if item.subject_ref is None else item.subject_ref,
                 item.id,
+            ),
+        )
+    ]
+    authority_document = [
+        item.to_dict()
+        for item in sorted(
+            authority_list,
+            key=lambda item: (
+                item.requirement_id,
+                "" if item.subject_ref is None else item.subject_ref,
+                item.evidence_id,
             ),
         )
     ]
@@ -579,4 +769,7 @@ def verify_project_requirements(
         },
         "findings": findings,
     }
+    if authority_document:
+        body["evidence_authority"] = authority_document
+        body["evidence_authority_sha256"] = _canonical_sha256(authority_document)
     return {**body, "verification_sha256": _canonical_sha256(body)}

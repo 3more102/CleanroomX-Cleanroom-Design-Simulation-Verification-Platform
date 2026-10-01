@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — unified verification-history current assessment — 2026-10-01
+
+- Centralizes retained verification-record current-project context in the canonical verification-currency module and reuses it in desktop and CLI history inspection.
+- Upgrades `cleanroomx-verification-history` inspection output to schema version 2 with one consistent `current_assessment` field for list rows and show output.
+- Labels older retained evidence `historical`, labels evidence for removed analyses `not_in_current_project`, and rejects record/assessment analysis-identity mismatches fail-closed.
+- Preserves immutable historical records, the file-backed dependency explanation fix, the diagnostics currency surface, and the persisted-verification status gate; no solver equations, numerical tolerances, requirement criteria, ledger hashes, or project schema are changed.
+
+
 ## Unreleased Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.

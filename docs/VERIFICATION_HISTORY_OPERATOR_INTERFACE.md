@@ -112,8 +112,15 @@ regulatory approval, or cleanroom certification.
 Use **Analysis → Verification History...** to review the validated retained
 project-verification ledger. The desktop history view shows sequence, completion
 time, analysis identity, immutable historical verification status, current
-verification currency, verified state, engineering identity digest, and the
-complete canonical record JSON.
+verification currency, verified state, and engineering identity digest.
+
+The **Requirement Evidence** tab expands every retained canonical finding into a
+read-only requirement → evidence → verdict view. It shows subject scope, explicit
+criterion, retained actual value/unit, evidence freshness, evidence source, and
+the exact result locator captured by the immutable analysis binding. A finding
+with no bound evidence remains explicit instead of being presented as a
+successful check. The **Canonical Record** tab preserves the complete validated
+record JSON for audit review.
 
 Current verification currency is attached only to the latest retained record for
 each analysis. Older retained records are labeled `historical` rather than being

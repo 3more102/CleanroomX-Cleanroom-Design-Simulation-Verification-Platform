@@ -6,7 +6,7 @@
 - Keeps ambiguity fail-closed: multiple active mappings for one binding are accepted only when they belong to the same analysis and a validated authority decision selects one active mapping; unnecessary, duplicate, cross-analysis, unknown, or out-of-scope decisions are rejected.
 - Carries the same authority decision through project-native execution, canonical verification replay, ProofGraph projection, guarded verification-history persistence, and read-only requirements traceability.
 - Retains every candidate evidence record while the canonical finding and ProofGraph check use only the explicitly selected mapping; authority provenance remains hash-bound by both the mapping-registry digest and canonical verification digest.
-- Preserves the previous registry/result shape and digest when no authority decision is configured and changes no solver equation, engineering unit conversion, requirement criterion, or project schema version.
+- Preserves the previous registry/result shape and digest when no authority decision is configured; authority-bearing mapping registries use an explicit metadata sub-schema v2 while legacy no-authority registries remain canonical v1. No solver equation, engineering unit conversion, requirement criterion, or top-level project schema version changes.
 
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 

@@ -1,10 +1,26 @@
 # Changelog
 
+## Unreleased Release 3 — protected report publication identity recheck — 2026-10-01
+
+- Rechecks project-source and declared file-backed dependency path identity immediately before publishing project diagnostics, engineering dossier, requirements traceability, and canonical verification artifacts.
+- Applies the same protected-output boundary to desktop project-dossier export so a pathname identity change after the initial save-dialog validation fails closed before the atomic writer runs.
+- Retains the existing revision-stability checks and atomic writer; this hardening closes the remaining time-of-check/time-of-use gap in project-facing report publication without changing engineering calculations or verdict semantics.
+- Adds focused regressions proving a second publication-time guard runs and that an existing valid output is preserved when the recheck fails.
+
+## Unreleased Release 3 — persisted project evidence authority — 2026-10-01
+
+- Extends the canonical `project.metadata.requirement_evidence_mappings` registry with optional explicit evidence-authority decisions that select one already-mapped evidence identity for an otherwise ambiguous requirement/subject binding.
+- Keeps ambiguity fail-closed: multiple active mappings for one binding are accepted only when they belong to the same analysis and a validated authority decision selects one active mapping; unnecessary, duplicate, cross-analysis, unknown, or out-of-scope decisions are rejected.
+- Carries the same authority decision through project-native execution, canonical verification replay, ProofGraph projection, guarded verification-history persistence, and read-only requirements traceability.
+- Retains every candidate evidence record while the canonical finding and ProofGraph check use only the explicitly selected mapping; authority provenance remains hash-bound by both the mapping-registry digest and canonical verification digest.
+- Preserves the previous registry/result shape and digest when no authority decision is configured; authority-bearing mapping registries use an explicit metadata sub-schema v2 while legacy no-authority registries remain canonical v1. No solver equation, engineering unit conversion, requirement criterion, or top-level project schema version changes.
+
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.
 - Reuses the canonical project/dependency path-identity guard already used by other project-facing operator surfaces.
-- Adds focused regressions for direct source overwrite, same-file alias overwrite, and external dependency overwrite.
+- Revalidates source revision and protected output identities immediately before atomic publication, closing the post-analysis publication race.
+- Adds focused regressions for direct source overwrite, same-file aliases, external dependency overwrite, single-revision guard/execution binding, path-resolution failures, and pre-publication source/dependency alias mutation.
 - Changes no solver equation, numerical tolerance, analysis input, project schema, project-batch schema, or execution-order semantics.
 
 ## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01

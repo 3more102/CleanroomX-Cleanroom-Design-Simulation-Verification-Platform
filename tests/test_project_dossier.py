@@ -354,3 +354,38 @@ def test_project_dossier_cli_discards_output_if_source_changes(tmp_path, monkeyp
 
     assert exit_code == 2
     assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
+
+def test_project_dossier_cli_rechecks_output_identity_before_publication(
+    tmp_path,
+    monkeypatch,
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Output identity race"),
+    )
+    output_path = tmp_path / "dossier.json"
+    output_path.write_text("previous-valid-report\n", encoding="utf-8")
+    real_guard = dossier_cli._assert_project_output_is_safe
+    guard_calls = 0
+
+    def race_guard(project, *, source, output):
+        nonlocal guard_calls
+        guard_calls += 1
+        if guard_calls == 3:
+            raise ValueError("output path identity changed before publication")
+        real_guard(project, source=source, output=output)
+
+    monkeypatch.setattr(
+        dossier_cli,
+        "_assert_project_output_is_safe",
+        race_guard,
+    )
+
+    exit_code = dossier_cli.main(
+        [str(project_path), "--output", str(output_path)]
+    )
+
+    assert exit_code == 2
+    assert guard_calls == 3
+    assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
+

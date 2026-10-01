@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — persisted verification dependency fingerprints — 2026-10-01
+
+- Persists stable external engineering dependency fingerprints from execution provenance into new project-verification ledger records.
+- Extends verification engineering identity to bind retained dependency fingerprints while remaining backward-compatible with legacy records that omit the optional field.
+- Rechecks file-backed dependency SHA-256 and byte size during verification-currency assessment when the project base directory is known.
+- Allows matching file-backed verification to be proven current; changed or unavailable dependencies make verification stale, while legacy records remain explicitly freshness-unverifiable.
+- Reuses the existing immutable dependency-snapshot/provenance authority and does not change solver equations, requirement comparison semantics, or project file schema.
+
+
 ## Unreleased Release 3 — desktop project requirements verification — 2026-10-01
 
 - Adds **Analysis → Verify Project Requirements** for read-only execution of the canonical saved-project requirements workflow.

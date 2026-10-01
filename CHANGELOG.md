@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — diagnostics verification currency context — 2026-10-01
+
+- Adds an explicit **Current verification currency** section to project-diagnostics Markdown output.
+- Keeps immutable historical verification status separate from current/stale/dependency-freshness-unverifiable/not-verified/not-configured state.
+- Shows per-analysis mismatch reasons and the latest retained verification sequence without rewriting historical evidence.
+- Reuses the canonical verification-currency authority and changes no solver equations, requirement verdict semantics, persisted records, or project schema.
+
+
 ## Unreleased Release 3 — truthful current dependency currency explanation — 2026-10-01
 
 - Corrects the canonical verification-currency explanation for file-backed analyses whose persisted dependency fingerprints still match current content.

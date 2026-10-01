@@ -2,7 +2,7 @@
 
 ## Release scope
 
-CleanroomX v0.102.1 (Release 2 + final synchronized spatial production closure) is a Python 3.11+ engineering screening, simulation, verification, uncertainty/provenance, HVAC, fan/network, qualification, and reporting platform. The desktop application is an operator shell over the same backend modules used by the command-line tools. Release 2 consolidates durable project lifecycle, verified persistence/recovery/history, bounded undo-redo, plugin execution, immutable analysis evidence, dependency freshness, portable bundles/reports, deterministic project batch automation, strict engineering JSON ingestion, and final precision/numerical-integrity hardening without duplicating or changing validated solver equations in the GUI.
+CleanroomX v0.103.0 closes Release 3 requirements, evidence, verification-history, and ProofGraph traceability on top of the Release 2 durable project lifecycle and synchronized spatial production baseline. It is a Python 3.11+ engineering screening, simulation, verification, uncertainty/provenance, HVAC, fan/network, qualification, and reporting platform. The desktop application is an operator shell over the same backend modules used by the command-line tools. Release 3 adds first-class project requirements, explicit immutable evidence binding, canonical unit-aware requirement verification, retained canonical verification history and currency, ProofGraph cross-artifact integrity/authority/precedence, operator traceability surfaces, plugin trust gating, and project-batch safety hardening without changing validated solver equations, numerical tolerances, or configured requirement criteria.
 
 ## Unreleased next-level design foundation
 

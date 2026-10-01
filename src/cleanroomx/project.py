@@ -22,6 +22,11 @@ from .project_requirements import (
     ProjectRequirementsFormatError,
     normalize_project_requirements_metadata,
 )
+from .project_requirement_evidence_mappings import (
+    ProjectRequirementEvidenceMappingsFormatError,
+    normalize_project_requirement_evidence_mappings_metadata,
+    validate_project_requirement_evidence_mappings,
+)
 from .run_history import RunHistoryIntegrityError, validate_run_history
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
@@ -205,6 +210,18 @@ class ProjectDocument:
         except ProjectRequirementsFormatError as exc:
             raise ProjectFormatError(
                 f"invalid project requirements metadata: {exc}"
+            ) from exc
+        try:
+            metadata = normalize_project_requirement_evidence_mappings_metadata(
+                metadata
+            )
+            validate_project_requirement_evidence_mappings(
+                metadata,
+                self.analyses,
+            )
+        except ProjectRequirementEvidenceMappingsFormatError as exc:
+            raise ProjectFormatError(
+                f"invalid project requirement evidence mappings: {exc}"
             ) from exc
         project_block = _merge_extra_fields(
             self.project_extra_fields,
@@ -527,6 +544,14 @@ def project_from_dict_with_migration_info(
             f"invalid project requirements metadata: {exc}"
         ) from exc
     try:
+        metadata = normalize_project_requirement_evidence_mappings_metadata(
+            metadata
+        )
+    except ProjectRequirementEvidenceMappingsFormatError as exc:
+        raise ProjectFormatError(
+            f"invalid project requirement evidence mappings: {exc}"
+        ) from exc
+    try:
         validate_project_spatial_metadata(metadata)
     except SpatialLayoutFormatError as exc:
         raise ProjectFormatError(f"invalid project spatial metadata: {exc}") from exc
@@ -543,6 +568,12 @@ def project_from_dict_with_migration_info(
     ids = [item.id for item in analyses]
     if len(ids) != len(set(ids)):
         raise ProjectFormatError("analysis ids must be unique")
+    try:
+        validate_project_requirement_evidence_mappings(metadata, analyses)
+    except ProjectRequirementEvidenceMappingsFormatError as exc:
+        raise ProjectFormatError(
+            f"invalid project requirement evidence mappings: {exc}"
+        ) from exc
 
     active = data.get("active_analysis_id")
     if active is not None:

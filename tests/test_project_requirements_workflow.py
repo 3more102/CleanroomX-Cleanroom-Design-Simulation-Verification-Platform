@@ -437,3 +437,22 @@ def test_workflow_verifier_rejects_resealed_proofgraph_evidence_omission(
     ):
         verify_project_requirements_workflow_run(result)
 
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_source_findings(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    finding = result.proofgraphs[0]["verification_runs"][0]["metadata"][
+        "source_findings"
+    ][0]
+    finding["included"] = not finding["included"]
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="source findings disagree with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — fail-closed external plugin trust policy — 2026-10-01
+
+- Adds a pre-import operator trust gate for installed analysis plugins while preserving the existing built-in registry and plugin API v1.
+- Defaults external plugin loading to `disabled`; operators may explicitly opt into legacy `trusted` loading or a distribution allowlist through process environment configuration.
+- Allows exact distribution-version pins and canonicalizes package-name separators/case before comparison.
+- Blocks non-allowlisted or identity-missing plugins before `entry_point.load()`, and fails closed to external-plugin disablement when configuration is absent, malformed, or invalid.
+- Exposes the effective trust policy and blocked-plugin reasons through existing application/GUI diagnostics; this remains execution control rather than package signing, publisher authentication, or sandboxing.
+
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

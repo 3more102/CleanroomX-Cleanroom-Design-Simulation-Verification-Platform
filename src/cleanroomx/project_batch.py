@@ -431,6 +431,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
+            output_project, output_revision = load_project_document_with_revision(source)
+            if (
+                output_revision.size != batch.source_size_bytes
+                or output_revision.sha256 != batch.source_sha256
+            ):
+                raise ValueError(
+                    "project file changed after batch execution; report was discarded"
+                )
+            _assert_output_is_distinct_from_source(source, args.output)
+            _assert_output_is_distinct_from_dependencies(
+                output_project,
+                base_dir=source.parent,
+                output=args.output,
+            )
             atomic_write_text(args.output, text)
         else:
             sys.stdout.write(text)

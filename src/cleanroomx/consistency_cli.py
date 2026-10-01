@@ -8,9 +8,12 @@ import sys
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
+    _resolve_relative,
+    analysis_external_dependency_references,
     run_analysis,
 )
-from .project import atomic_write_text
+from .cli_output import assert_output_is_distinct_from_paths
+from .persistence import atomic_write_text
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,8 +63,29 @@ def main() -> int:
         "room_airflow_abs_tolerance_m3_h": args.airflow_tolerance_m3_h,
         "require_same_room_set": args.require_same_room_set,
     }
+    base_dir = Path.cwd()
+    protected_output_paths = tuple(
+        (
+            f"consistency input {field!r}",
+            _resolve_relative(base_dir, declared_path),
+        )
+        for field, declared_path in analysis_external_dependency_references(
+            "consistency",
+            payload,
+        )
+    )
+    if args.output:
+        try:
+            assert_output_is_distinct_from_paths(
+                args.output,
+                protected_output_paths,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"cleanroomx-consistency: output safety error: {exc}", file=sys.stderr)
+            return 3
+
     try:
-        run = run_analysis("consistency", payload, base_dir=Path.cwd())
+        run = run_analysis("consistency", payload, base_dir=base_dir)
     except (ExternalDependencyChangedError, ExternalDependencySnapshotError) as exc:
         print(f"cleanroomx-consistency: {exc}", file=sys.stderr)
         return 3
@@ -69,7 +93,18 @@ def main() -> int:
     result = run.result
     text = json.dumps(result, indent=2) if args.format == "json" else run.markdown
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=lambda: assert_output_is_distinct_from_paths(
+                    args.output,
+                    protected_output_paths,
+                ),
+            )
+        except (OSError, ValueError) as exc:
+            print(f"cleanroomx-consistency: output safety error: {exc}", file=sys.stderr)
+            return 3
     else:
         print(text)
     return 2 if result["status"] == "fail" else 0

@@ -201,7 +201,7 @@ def proofgraphs_from_project_requirements_verification(
                         ProvenanceRecord(
                             id=f"provenance:project-requirements:{binding.id}",
                             source_id=source_id,
-                            origin=binding.property_name,
+                            origin=binding.evidence_locator or binding.property_name,
                             cleanroomx_entity_id=binding.subject_ref,
                             originating_calculation=binding.calculation_source,
                             method="project_requirement_verification_binding",

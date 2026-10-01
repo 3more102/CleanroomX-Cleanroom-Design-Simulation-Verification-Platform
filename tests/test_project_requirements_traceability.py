@@ -13,6 +13,7 @@ from cleanroomx.project_requirement_evidence_mappings import (
     ProjectRequirementEvidenceMapping,
     ProjectRequirementEvidenceMappings,
 )
+from cleanroomx.project_requirement_verification import RequirementEvidenceAuthority
 from cleanroomx.project_requirements import (
     PROJECT_REQUIREMENTS_METADATA_KEY,
     ProjectRequirement,
@@ -115,6 +116,7 @@ def test_traceability_projects_canonical_requirements_and_mappings():
         "mapping_count": 1,
         "active_mapping_count": 1,
         "active_mapped_requirement_count": 1,
+        "evidence_authority_count": 0,
         "historical_reference_count": 0,
     }
     assert result["registries"]["requirements_sha256"] == project.metadata[
@@ -139,6 +141,69 @@ def test_traceability_projects_canonical_requirements_and_mappings():
         "kind": "room_verification",
     }
     json.dumps(result, allow_nan=False)
+
+
+def test_traceability_exposes_explicit_evidence_authority():
+    project = _project()
+    original = project.metadata[
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    ]
+    original_mapping = ProjectRequirementEvidenceMapping(
+        id="MAP-ACH",
+        requirement_id="REQ-ACH",
+        analysis_id="room-a",
+        expected_analysis_kind="room_verification",
+        subject_ref="ROOM-A",
+        property_name="air_change_rate",
+        result_path=("ach",),
+        unit="1/h",
+        evidence_kinds=("calculation",),
+        status="active",
+    )
+    alternate_mapping = ProjectRequirementEvidenceMapping(
+        id="MAP-ACH-ALT",
+        requirement_id="REQ-ACH",
+        analysis_id="room-a",
+        expected_analysis_kind="room_verification",
+        subject_ref="ROOM-A",
+        property_name="air_change_rate",
+        result_path=("ach",),
+        unit="1/h",
+        evidence_kinds=("calculation",),
+        status="active",
+    )
+    registry = ProjectRequirementEvidenceMappings(
+        mappings=(original_mapping, alternate_mapping),
+        evidence_authority=(
+            RequirementEvidenceAuthority(
+                requirement_id="REQ-ACH",
+                subject_ref="ROOM-A",
+                evidence_id="MAP-ACH",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
+                rationale="Approved calculation evidence selection.",
+            ),
+        ),
+    )
+    project.metadata[PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY] = (
+        registry.to_dict()
+    )
+
+    result = build_project_requirements_traceability(project)
+    authority = result["evidence_authority"][0]
+
+    assert original["mappings_sha256"] != registry.sha256
+    assert result["summary"]["evidence_authority_count"] == 1
+    assert authority["analysis_id"] == "room-a"
+    assert authority["evidence_id"] == "MAP-ACH"
+    assert authority["candidate_mapping_ids"] == ["MAP-ACH", "MAP-ACH-ALT"]
+    assert authority["decision_reference"] == "DEC-REQ-AUTH"
+
+    report = markdown_project_requirements_traceability(result)
+    assert "Explicit evidence authority" in report
+    assert "DEC-REQ-AUTH" in report
+    assert "MAP-ACH-ALT" in report
 
 
 def test_traceability_preserves_historical_kind_mismatch_without_rebinding():

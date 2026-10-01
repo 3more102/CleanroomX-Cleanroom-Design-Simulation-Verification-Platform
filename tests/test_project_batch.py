@@ -409,6 +409,44 @@ def test_project_batch_cli_rechecks_output_alias_before_publication(
     assert "output path must be different from the project source" in capsys.readouterr().err
 
 
+def test_project_batch_cli_rechecks_output_alias_at_atomic_replace_boundary(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    output_path = tmp_path / "batch-result.json"
+    before = project_path.read_bytes()
+    real_atomic_write_text = project_batch.atomic_write_text
+
+    def create_alias_after_staging(path, text, *, before_replace=None):
+        assert before_replace is not None
+
+        def race_then_validate():
+            output_path.hardlink_to(project_path)
+            before_replace()
+
+        return real_atomic_write_text(
+            path,
+            text,
+            before_replace=race_then_validate,
+        )
+
+    monkeypatch.setattr(
+        project_batch,
+        "atomic_write_text",
+        create_alias_after_staging,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 2
+    assert project_path.read_bytes() == before
+    assert output_path.read_bytes() == before
+    assert "output path must be different from the project source" in capsys.readouterr().err
+
+
 def test_project_batch_cli_rechecks_dependency_alias_before_publication(
     tmp_path, monkeypatch
 ):

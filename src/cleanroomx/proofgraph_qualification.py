@@ -80,7 +80,7 @@ def _commissioning_evidence(
         unit=item.unit,
         source_id=source.id,
         version=version,
-        timestamp=item.provenance.date if item.provenance is not None else None,
+        timestamp=(item.provenance.date or None) if item.provenance is not None else None,
         subject_ref=subject_ref,
         provenance=(
             ProvenanceRecord(

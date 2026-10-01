@@ -235,7 +235,7 @@ def test_project_engineering_dossier_marks_historical_pass_stale_after_edit(tmp_
     markdown = markdown_project_engineering_dossier(dossier)
     assert "Historical status" in markdown
     assert "Current currency" in markdown
-    assert "stale (analysis_input_changed)" in markdown
+    assert r"stale (analysis\_input\_changed)" in markdown
 
 
 def test_project_engineering_dossier_markdown_verifies_digest(tmp_path):

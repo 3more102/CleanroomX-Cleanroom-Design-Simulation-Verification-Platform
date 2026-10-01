@@ -111,8 +111,21 @@ regulatory approval, or cleanroom certification.
 
 Use **Analysis → Verification History...** to review the validated retained
 project-verification ledger. The desktop history view shows sequence, completion
-time, analysis identity, verification status, verified state, engineering
-identity digest, and the complete canonical record JSON.
+time, analysis identity, immutable historical verification status, current
+verification currency, verified state, engineering identity digest, and the
+complete canonical record JSON.
+
+Current verification currency is attached only to the latest retained record for
+each analysis. Older retained records are labeled `historical` rather than being
+presented as current. Records for analyses that are no longer present in the
+current project are labeled `not_in_current_project`.
+
+For the latest record, the desktop reuses the canonical verification-currency
+assessment, including file-backed dependency checks against the saved-project
+base directory. Proven configuration or dependency-content changes are shown as
+`stale`; unresolved dependency freshness remains
+`dependency_freshness_unverifiable`.
 
 The dialog validates the ledger before display and refuses to present modified or
-invalid history as trusted evidence.
+invalid history as trusted evidence. It does not rewrite any historical record or
+historical verdict.

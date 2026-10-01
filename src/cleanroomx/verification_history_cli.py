@@ -23,7 +23,7 @@ from .verification_currency import (
 
 
 VERIFICATION_HISTORY_INSPECTION_SCHEMA = "cleanroomx.verification-history-inspection"
-VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION = 1
+VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION = 2
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,7 +89,7 @@ def _compact_record(
             "verified": verification["verified"],
             "summary": copy.deepcopy(verification["summary"]),
         },
-        "currency_context": verification_history_record_currency_context(
+        "current_currency": verification_history_record_currency_context(
             record,
             current_assessment,
         ),
@@ -207,7 +207,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 },
                 "history": history_summary,
                 "currency": currency,
-                "record_currency_context": (
+                "record_currency": (
                     verification_history_record_currency_context(
                         record,
                         currency_by_analysis.get(record["analysis_id"]),

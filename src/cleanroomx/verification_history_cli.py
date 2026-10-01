@@ -74,7 +74,7 @@ def _strict_json_clone(value: Any) -> Any:
 
 def _compact_record(
     record: dict[str, Any],
-    current_assessment: dict[str, Any] | None,
+    current_currency: dict[str, Any] | None,
 ) -> dict[str, Any]:
     verification = record["verification"]
     return {
@@ -89,9 +89,9 @@ def _compact_record(
             "verified": verification["verified"],
             "summary": copy.deepcopy(verification["summary"]),
         },
-        "current_assessment": verification_history_record_currency_context(
+        "current_currency": verification_history_record_currency_context(
             record,
-            current_assessment,
+            current_currency,
         ),
         "project_source_revision": record["project_source_revision"],
         "analysis_bundle_sha256": record["analysis_bundle_sha256"],

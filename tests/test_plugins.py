@@ -9,7 +9,9 @@ from cleanroomx.plugins import (
     PLUGIN_API_VERSION,
     AnalysisPlugin,
     PluginOrigin,
+    PluginTrustPolicy,
     discover_analysis_plugins,
+    plugin_trust_policy_from_environment,
 )
 
 
@@ -34,8 +36,10 @@ class _FakeEntryPoint:
         self._loaded = loaded
         self.dist = distribution
         self._load_error = load_error
+        self.load_count = 0
 
     def load(self):
+        self.load_count += 1
         if self._load_error is not None:
             raise self._load_error
         return self._loaded
@@ -107,6 +111,200 @@ def test_plugin_discovery_is_deterministic_and_retains_distribution_identity():
     assert alpha.origin.entry_point_value == "pkg.a:registration"
     assert alpha.origin.distribution_name == "pkg-a"
     assert alpha.origin.distribution_version == "1.4"
+
+
+def test_plugin_trust_policy_defaults_to_trusted():
+    policy = plugin_trust_policy_from_environment({})
+
+    assert policy == PluginTrustPolicy(mode="trusted")
+    assert policy.to_dict() == {
+        "mode": "trusted",
+        "valid": True,
+        "allowlist": [],
+        "error": None,
+    }
+
+
+def test_plugin_trust_policy_disabled_blocks_before_import():
+    point = _FakeEntryPoint(
+        "blocked",
+        "pkg.blocked:registration",
+        _plugin("blocked"),
+        distribution=_FakeDistribution("pkg-blocked", "1.0"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=PluginTrustPolicy(mode="disabled"),
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert len(discovery.issues) == 1
+    assert "loading is disabled" in discovery.issues[0].error
+
+
+def test_plugin_trust_allowlist_canonicalizes_name_and_honors_exact_version_pin():
+    point = _FakeEntryPoint(
+        "allowed",
+        "pkg.allowed:registration",
+        _plugin("allowed_plugin"),
+        distribution=_FakeDistribution("CleanRoomX.Example_Plugin", "2.4.1"),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            "CLEANROOMX_PLUGIN_MODE": "allowlist",
+            "CLEANROOMX_PLUGIN_ALLOWLIST": "cleanroomx-example-plugin==2.4.1",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert [item.plugin.key for item in discovery.plugins] == ["allowed_plugin"]
+    assert discovery.issues == ()
+    assert point.load_count == 1
+    assert discovery.trust_policy.to_dict()["allowlist"] == [
+        {
+            "distribution_name": "cleanroomx-example-plugin",
+            "version": "2.4.1",
+        }
+    ]
+
+
+def test_plugin_trust_allowlist_blocks_non_allowlisted_distribution_before_import():
+    point = _FakeEntryPoint(
+        "blocked",
+        "pkg.blocked:registration",
+        _plugin("blocked"),
+        distribution=_FakeDistribution("pkg-blocked", "1.0"),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            "CLEANROOMX_PLUGIN_MODE": "allowlist",
+            "CLEANROOMX_PLUGIN_ALLOWLIST": "pkg-approved",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert "is not allowed" in discovery.issues[0].error
+
+
+def test_plugin_trust_allowlist_blocks_version_mismatch_before_import():
+    point = _FakeEntryPoint(
+        "blocked-version",
+        "pkg.blocked:registration",
+        _plugin("blocked_version"),
+        distribution=_FakeDistribution("pkg-approved", "1.9"),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            "CLEANROOMX_PLUGIN_MODE": "allowlist",
+            "CLEANROOMX_PLUGIN_ALLOWLIST": "pkg-approved==2.0",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert "does not match required" in discovery.issues[0].error
+
+
+def test_plugin_trust_allowlist_blocks_missing_distribution_identity_before_import():
+    point = _FakeEntryPoint(
+        "missing-dist",
+        "pkg.missing:registration",
+        _plugin("missing_dist"),
+        distribution=None,
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            "CLEANROOMX_PLUGIN_MODE": "allowlist",
+            "CLEANROOMX_PLUGIN_ALLOWLIST": "pkg-missing",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert "distribution identity is unavailable" in discovery.issues[0].error
+
+
+def test_invalid_plugin_trust_configuration_fails_closed_before_import():
+    point = _FakeEntryPoint(
+        "invalid-policy",
+        "pkg.invalid:registration",
+        _plugin("invalid_policy"),
+        distribution=_FakeDistribution("pkg-invalid", "1.0"),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {"CLEANROOMX_PLUGIN_MODE": "unexpected"}
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert policy.valid is False
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert "plugin trust policy invalid" in discovery.issues[0].error
+
+
+def test_allowlist_with_malformed_entry_fails_closed_before_import():
+    point = _FakeEntryPoint(
+        "invalid-allowlist",
+        "pkg.invalid_allowlist:registration",
+        _plugin("invalid_allowlist"),
+        distribution=_FakeDistribution("pkg-invalid-allowlist", "1.0"),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            "CLEANROOMX_PLUGIN_MODE": "allowlist",
+            "CLEANROOMX_PLUGIN_ALLOWLIST": "pkg-a,,pkg-b",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert policy.valid is False
+    assert point.load_count == 0
+    assert discovery.plugins == ()
+    assert "empty entry" in discovery.issues[0].error
+
+
+def test_application_registry_reports_effective_plugin_trust_policy():
+    validation = application.validate_application_registry()
+
+    assert validation["plugin_trust_policy"]["mode"] == "trusted"
+    assert validation["plugin_trust_policy"]["valid"] is True
 
 
 def test_plugin_discovery_isolates_invalid_and_incompatible_plugins():

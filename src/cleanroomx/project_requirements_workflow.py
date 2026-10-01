@@ -393,6 +393,17 @@ def _expected_proofgraph_evidence(
     return expected_source, expected_evidence
 
 
+def _proofgraph_status_from_source(
+    source_state: str,
+    source_status: str,
+) -> str:
+    if source_status in {"pass", "fail"}:
+        return source_status
+    if source_state in {"not_checked", "inactive", "not_applicable"}:
+        return "not_checked"
+    return "unknown"
+
+
 def _verify_workflow_proofgraph_projection(
     graph,
     *,
@@ -406,8 +417,34 @@ def _verify_workflow_proofgraph_projection(
         raise ProjectRequirementsWorkflowError(
             "workflow ProofGraph must contain exactly one project-requirements verification run"
         )
+
+    canonical_findings = verification.get("findings")
+    if not isinstance(canonical_findings, list):
+        raise ProjectRequirementsWorkflowError(
+            "workflow canonical verification findings must be a list"
+        )
+    if any(not isinstance(finding, dict) for finding in canonical_findings):
+        raise ProjectRequirementsWorkflowError(
+            "workflow canonical verification findings must contain objects"
+        )
+
+    graph_requirement_ids = {
+        requirement.id for requirement in graph.requirement_set.requirements
+    }
+    canonical_graph_findings = sorted(
+        (
+            copy.deepcopy(finding)
+            for finding in canonical_findings
+            if finding.get("requirement_id") in graph_requirement_ids
+        ),
+        key=_source_finding_sort_key,
+    )
+    expected_source_findings = [
+        _source_finding_projection(finding)
+        for finding in canonical_graph_findings
+    ]
+
     run = graph.verification_runs[0]
-    metadata = run.metadata
     expected_metadata = {
         "adapter": "project_requirements_verification",
         "project_verification_status": verification.get("status"),
@@ -419,77 +456,105 @@ def _verify_workflow_proofgraph_projection(
         "requirements_sha256": requirements_sha256,
         "evidence_sha256": evidence_sha256,
         "verification_sha256": verification_sha256,
+        "source_findings": expected_source_findings,
     }
-    for key, expected in expected_metadata.items():
-        if metadata.get(key) != expected:
+    if run.metadata != expected_metadata:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph verification metadata disagrees with canonical verification"
+        )
+
+    findings_by_requirement: dict[str, list[dict[str, Any]]] = {}
+    for finding in canonical_graph_findings:
+        requirement_id = finding.get("requirement_id")
+        if isinstance(requirement_id, str):
+            findings_by_requirement.setdefault(requirement_id, []).append(finding)
+
+    for requirement in graph.requirement_set.requirements:
+        source_findings = findings_by_requirement.get(requirement.id, [])
+        if not source_findings:
             raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph metadata {key!r} disagrees with canonical verification"
+                f"workflow ProofGraph requirement {requirement.id!r} has no canonical finding"
             )
-
-    graph_requirement_ids = {
-        requirement.id for requirement in graph.requirement_set.requirements
-    }
-    canonical_findings = verification.get("findings")
-    if not isinstance(canonical_findings, list):
-        raise ProjectRequirementsWorkflowError(
-            "workflow canonical verification findings must be a list"
-        )
-    canonical_graph_findings = sorted(
-        (
-            copy.deepcopy(finding)
-            for finding in canonical_findings
-            if (
-                isinstance(finding, dict)
-                and finding.get("requirement_id") in graph_requirement_ids
+        first = source_findings[0]
+        expected_scope = tuple(
+            sorted(
+                {
+                    finding.get("subject_ref")
+                    for finding in source_findings
+                    if finding.get("subject_ref") is not None
+                }
             )
-        ),
-        key=_source_finding_sort_key,
-    )
-    expected_source_findings = [
-        _source_finding_projection(finding)
-        for finding in canonical_graph_findings
-    ]
-    actual_source_findings = metadata.get("source_findings")
-    if not isinstance(actual_source_findings, list):
-        raise ProjectRequirementsWorkflowError(
-            "workflow ProofGraph source-findings metadata is missing"
         )
-    normalized_actual_findings = sorted(
-        (
-            _source_finding_projection(finding)
-            for finding in actual_source_findings
-            if isinstance(finding, dict)
-        ),
-        key=_source_finding_sort_key,
-    )
-    if (
-        len(normalized_actual_findings) != len(actual_source_findings)
-        or normalized_actual_findings != expected_source_findings
-    ):
-        raise ProjectRequirementsWorkflowError(
-            "workflow ProofGraph source findings disagree with canonical verification"
-        )
-
-    expected_graph_evidence_ids: set[str] = set()
-    checks_by_id = {item.id: item for item in graph.checks}
-    findings_by_id = {item.id: item for item in graph.findings}
-    verdicts_by_id = {item.id: item for item in graph.verdicts}
-    for source_finding in canonical_graph_findings:
-        raw_evidence_ids = source_finding.get("evidence_ids")
+        if tuple(requirement.scope) != expected_scope:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph requirement {requirement.id!r} scope disagrees with canonical verification"
+            )
         if (
-            not isinstance(raw_evidence_ids, list)
-            or any(
-                not isinstance(evidence_id, str) or not evidence_id
-                for evidence_id in raw_evidence_ids
-            )
-            or len(raw_evidence_ids) != len(set(raw_evidence_ids))
+            requirement.title != first.get("requirement_title")
+            or requirement.source != first.get("source")
+            or requirement.reference != first.get("reference")
         ):
             raise ProjectRequirementsWorkflowError(
-                "workflow canonical verification finding evidence identities are invalid"
+                f"workflow ProofGraph requirement {requirement.id!r} identity disagrees with canonical verification"
             )
-        expected_evidence_ids = tuple(raw_evidence_ids)
-        expected_graph_evidence_ids.update(expected_evidence_ids)
+        criteria = requirement.criteria
+        expected_criteria_fields = {
+            "discipline": first.get("discipline"),
+            "category": first.get("category"),
+            "source_revision": first.get("source_revision"),
+            "unit": first.get("unit"),
+            "criterion": copy.deepcopy(first.get("criterion")),
+            "lifecycle_status": first.get("requirement_status"),
+            "required_evidence": copy.deepcopy(first.get("required_evidence", [])),
+        }
+        for key, expected in expected_criteria_fields.items():
+            if criteria.get(key) != expected:
+                raise ProjectRequirementsWorkflowError(
+                    f"workflow ProofGraph requirement {requirement.id!r} field {key!r} disagrees with canonical verification"
+                )
 
+    expected_evidence_ids = sorted(
+        evidence_id
+        for evidence_id, evidence in evidence_by_id.items()
+        if evidence.get("requirement_id") in graph_requirement_ids
+    )
+    actual_evidence_ids = sorted(item.id for item in graph.evidence)
+    if actual_evidence_ids != expected_evidence_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph evidence identities disagree with bound workflow evidence"
+        )
+
+    expected_sources: dict[str, dict[str, Any]] = {}
+    expected_evidence: dict[str, dict[str, Any]] = {}
+    for evidence_id in expected_evidence_ids:
+        source, projected = _expected_proofgraph_evidence(
+            evidence_by_id[evidence_id]
+        )
+        expected_sources[source["id"]] = source
+        expected_evidence[evidence_id] = projected
+
+    actual_evidence = {
+        item.id: item.to_dict()
+        for item in graph.evidence
+    }
+    if actual_evidence != expected_evidence:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph evidence projection disagrees with bound workflow evidence"
+        )
+
+    actual_sources = {
+        source.id: source.to_dict()
+        for source in graph.evidence_sources
+    }
+    if actual_sources != expected_sources:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph evidence sources disagree with bound workflow evidence"
+        )
+
+    expected_checks: list[dict[str, Any]] = []
+    expected_findings: list[dict[str, Any]] = []
+    expected_verdicts: list[dict[str, Any]] = []
+    for source_finding in canonical_graph_findings:
         requirement_id = source_finding.get("requirement_id")
         subject_ref = source_finding.get("subject_ref")
         binding_identity = _canonical_sha256(
@@ -501,75 +566,107 @@ def _verify_workflow_proofgraph_projection(
         check_id = f"check:project-requirement:{binding_identity}"
         finding_id = f"finding:project-requirement:{binding_identity}"
         verdict_id = f"verdict:project-requirement:{binding_identity}"
-        check = checks_by_id.get(check_id)
-        finding = findings_by_id.get(finding_id)
-        verdict = verdicts_by_id.get(verdict_id)
-        if check is None or finding is None or verdict is None:
-            raise ProjectRequirementsWorkflowError(
-                "workflow ProofGraph requirement projection is incomplete"
-            )
-        if tuple(check.evidence_ids) != expected_evidence_ids:
-            raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph check {check_id!r} evidence identities disagree with canonical verification"
-            )
-        if tuple(finding.evidence_ids) != expected_evidence_ids:
-            raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph finding {finding_id!r} evidence identities disagree with canonical verification"
-            )
+        finding_evidence_ids = [
+            evidence_id
+            for evidence_id in source_finding.get("evidence_ids", [])
+            if evidence_id in expected_evidence
+        ]
 
-        expected_status = _expected_proofgraph_status(source_finding)
-        expected_reason = (
-            f"Canonical project-requirement state {source_finding.get('state')!r}: "
+        required = source_finding.get("required_evidence", [])
+        required_kinds: list[str] = []
+        if (
+            isinstance(required, list)
+            and required
+            and all(kind in EVIDENCE_KINDS for kind in required)
+        ):
+            represented = {
+                expected_evidence[evidence_id]["kind"]
+                for evidence_id in finding_evidence_ids
+            }
+            if set(required).issubset(represented):
+                required_kinds = list(required)
+
+        graph_status = _proofgraph_status_from_source(
+            source_finding.get("state"),
+            source_finding.get("status"),
+        )
+        reason = (
+            f"Canonical project-requirement state "
+            f"{source_finding.get('state')!r}: "
             f"{source_finding.get('explanation')}"
         )
-        if (
-            finding.status != expected_status
-            or finding.evidence_present != bool(expected_evidence_ids)
-            or finding.expected != source_finding.get("criterion")
-            or finding.actual != source_finding.get("actual")
-            or finding.unit != source_finding.get("unit")
-            or finding.delta != source_finding.get("delta")
-            or finding.reason != expected_reason
-        ):
-            raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph finding {finding_id!r} disagrees with canonical verification"
-            )
-        if verdict.status != expected_status or verdict.reason != expected_reason:
-            raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph verdict {verdict_id!r} disagrees with canonical verification"
-            )
-
-    actual_graph_evidence_ids = {item.id for item in graph.evidence}
-    if actual_graph_evidence_ids != expected_graph_evidence_ids:
-        raise ProjectRequirementsWorkflowError(
-            "workflow ProofGraph evidence identities disagree with canonical verification findings"
+        expected_checks.append(
+            {
+                "id": check_id,
+                "requirement_id": requirement_id,
+                "evidence_ids": finding_evidence_ids,
+                "required_evidence_kinds": required_kinds,
+            }
+        )
+        expected_findings.append(
+            {
+                "id": finding_id,
+                "check_id": check_id,
+                "requirement_id": requirement_id,
+                "status": graph_status,
+                "reason": reason,
+                "evidence_ids": finding_evidence_ids,
+                "evidence_present": bool(finding_evidence_ids),
+                "expected": copy.deepcopy(source_finding.get("criterion")),
+                "actual": copy.deepcopy(source_finding.get("actual")),
+                "unit": source_finding.get("unit"),
+                "delta": source_finding.get("delta"),
+            }
+        )
+        expected_verdicts.append(
+            {
+                "id": verdict_id,
+                "requirement_id": requirement_id,
+                "status": graph_status,
+                "finding_ids": [finding_id],
+                "reason": reason,
+                "confidence": None,
+            }
         )
 
-    expected_sources: dict[str, dict[str, Any]] = {}
-    expected_evidence: dict[str, dict[str, Any]] = {}
-    for item in graph.evidence:
-        bound = evidence_by_id.get(item.id)
-        if bound is None:
-            raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph evidence {item.id!r} is not present in workflow evidence"
-            )
-        source, projected = _expected_proofgraph_evidence(bound)
-        expected_sources[source["id"]] = source
-        expected_evidence[item.id] = projected
-        if item.to_dict() != projected:
-            raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph evidence {item.id!r} disagrees with bound workflow evidence"
-            )
+    if [item.to_dict() for item in graph.checks] != expected_checks:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph checks disagree with canonical verification"
+        )
+    if [item.to_dict() for item in graph.findings] != expected_findings:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph findings disagree with canonical verification"
+        )
+    if [item.to_dict() for item in graph.verdicts] != expected_verdicts:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph verdicts disagree with canonical verification"
+        )
+    if graph.corrective_actions:
+        raise ProjectRequirementsWorkflowError(
+            "workflow project-requirements ProofGraph must not contain corrective actions"
+        )
 
-    actual_sources = {
-        source.id: source.to_dict()
-        for source in graph.evidence_sources
+    input_sha256 = _canonical_sha256(
+        {
+            "requirements_sha256": requirements_sha256,
+            "evidence_sha256": evidence_sha256,
+            "verification_sha256": verification_sha256,
+            "requirement_set_id": graph.requirement_set.id,
+        }
+    )
+    expected_run = {
+        "id": f"verification:project-requirements:{input_sha256}",
+        "requirement_set_id": graph.requirement_set.id,
+        "check_ids": [item["id"] for item in expected_checks],
+        "verdict_ids": [item["id"] for item in expected_verdicts],
+        "timestamp": None,
+        "input_sha256": input_sha256,
+        "metadata": expected_metadata,
     }
-    if actual_sources != expected_sources:
+    if run.to_dict() != expected_run:
         raise ProjectRequirementsWorkflowError(
-            "workflow ProofGraph evidence sources disagree with bound workflow evidence"
+            "workflow ProofGraph verification run disagrees with canonical projection"
         )
-
 
 def verify_project_requirements_workflow_run(
     workflow: ProjectRequirementsWorkflowRun,
@@ -675,6 +772,25 @@ def verify_project_requirements_workflow_run(
         for evidence in evidence_documents
     }
 
+    canonical_findings = verification.get("findings")
+    if not isinstance(canonical_findings, list):
+        raise ProjectRequirementsWorkflowError(
+            "workflow canonical verification findings must be a list"
+        )
+    canonical_requirement_ids: set[str] = set()
+    for index, finding in enumerate(canonical_findings):
+        if not isinstance(finding, dict):
+            raise ProjectRequirementsWorkflowError(
+                f"workflow canonical verification finding[{index}] must be an object"
+            )
+        requirement_id = finding.get("requirement_id")
+        if not isinstance(requirement_id, str) or not requirement_id:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow canonical verification finding[{index}] has invalid requirement identity"
+            )
+        canonical_requirement_ids.add(requirement_id)
+
+    proofgraph_requirement_ids: list[str] = []
     proofgraph_sha256: list[str] = []
     for document in workflow.proofgraphs:
         if not isinstance(document, dict):
@@ -695,7 +811,19 @@ def verify_project_requirements_workflow_run(
             evidence_sha256=evidence_sha256,
             verification_sha256=verification_sha256,
         )
+        proofgraph_requirement_ids.extend(
+            requirement.id for requirement in graph.requirement_set.requirements
+        )
         proofgraph_sha256.append(graph.to_dict()["graph_sha256"])
+
+    if len(proofgraph_requirement_ids) != len(set(proofgraph_requirement_ids)):
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraphs contain duplicate requirement identities"
+        )
+    if set(proofgraph_requirement_ids) != canonical_requirement_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph requirement coverage disagrees with canonical verification"
+        )
 
     identity = {
         "source_revision": source_revision,

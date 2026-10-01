@@ -290,6 +290,15 @@ def _evaluate(
             evidence=evidence,
         )
 
+    if evidence.value is None:
+        return _unresolved(
+            requirement,
+            subject_ref,
+            state="incomplete",
+            explanation="Bound evidence does not contain an engineering value.",
+            evidence=evidence,
+        )
+
     operator = criterion["operator"]
     expected = criterion["expected"]
     tolerance = float(criterion["tolerance"])

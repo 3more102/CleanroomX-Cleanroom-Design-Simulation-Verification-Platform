@@ -49,13 +49,46 @@ The JSON response contains:
 - complete persisted verification record;
 - committed post-persistence project revision.
 
+## Check persisted verification status without re-running analysis
+
+```text
+cleanroomx-project-verify status project.cleanroomx.json room-a
+```
+
+This command does not execute the analysis and does not mutate the project. It
+loads the canonical verification-currency assessment for the selected analysis,
+rechecks file-backed dependency fingerprints against the saved-project directory,
+and confirms that the project file remained byte-for-byte stable during the
+inspection.
+
+The strict-JSON response separates two independent facts:
+
+- `currency.state`: whether the latest retained verification still matches the
+  current engineering configuration and dependency content;
+- `gate.verified_pass`: whether that same latest retained record is a canonical
+  verified PASS.
+
+`gate.accepted` is true only when both are true. This makes the command suitable
+for CI/release gating without silently treating a historical PASS as proof of a
+later edited project.
+
 ## Exit codes
+
+For `run` and `persist`:
 
 - `0`: canonical verification is complete and verified PASS;
 - `1`: the workflow executed successfully, but the canonical result is not a
   verified PASS (for example FAIL or incomplete/not-checked);
 - `2`: operational/integrity failure, invalid project metadata, missing mapping,
   changed source revision, unsafe output path, or persistence failure.
+
+For `status`:
+
+- `0`: the latest retained verification is both `current` and a verified PASS;
+- `1`: evidence is stale, dependency freshness is unverifiable, no verification
+  is retained/configured, or the current retained verification is not a verified
+  PASS;
+- `2`: operational/integrity failure or the project changes during inspection.
 
 A non-PASS verification can still be persisted. This is intentional: failed or
 incomplete engineering verification is audit evidence and must not disappear

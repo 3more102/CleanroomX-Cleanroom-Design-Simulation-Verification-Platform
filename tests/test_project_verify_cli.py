@@ -280,3 +280,133 @@ def test_project_verify_run_discards_output_if_project_changes_after_workflow(
 
     assert exit_code == 2
     assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"
+
+def test_project_verify_status_accepts_only_current_verified_persisted_evidence(
+    tmp_path,
+    capsys,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    exit_code = verify_cli.main(["status", str(path), "room-a"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 0
+    assert payload["schema"] == "cleanroomx.project-verification-status"
+    assert payload["source"]["stable_during_inspection"] is True
+    assert payload["currency"]["state"] == "current"
+    assert payload["currency"]["latest_record"]["verified"] is True
+    assert payload["gate"] == {
+        "accepted": True,
+        "current": True,
+        "verified_pass": True,
+    }
+
+
+def test_project_verify_status_rejects_stale_persisted_evidence(tmp_path, capsys):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    project = load_project_document(path)
+    project.analyses[0].input["min_ach"] = 25.0
+    save_project_document(path, project)
+
+    exit_code = verify_cli.main(["status", str(path), "room-a"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["state"] == "stale"
+    assert "analysis_input_changed" in payload["currency"]["mismatch_reasons"]
+    assert payload["gate"]["current"] is False
+    assert payload["gate"]["verified_pass"] is True
+    assert payload["gate"]["accepted"] is False
+
+
+def test_project_verify_status_rejects_current_failed_verification(tmp_path, capsys):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(minimum_ach=30.0),
+    )
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 1
+    capsys.readouterr()
+
+    exit_code = verify_cli.main(["status", str(path), "room-a"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["state"] == "current"
+    assert payload["currency"]["latest_record"]["verified"] is False
+    assert payload["gate"] == {
+        "accepted": False,
+        "current": True,
+        "verified_pass": False,
+    }
+
+
+def test_project_verify_status_rejects_missing_persisted_verification(tmp_path, capsys):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+
+    exit_code = verify_cli.main(["status", str(path), "room-a"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["state"] == "not_verified"
+    assert payload["gate"] == {
+        "accepted": False,
+        "current": False,
+        "verified_pass": False,
+    }
+
+
+def test_project_verify_status_discards_result_if_project_changes_during_inspection(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    real_assess = verify_cli.assess_project_verification_currency
+
+    def mutate_after_assessment(project, *, base_dir=None):
+        result = real_assess(project, base_dir=base_dir)
+        path.write_text(
+            path.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        verify_cli,
+        "assess_project_verification_currency",
+        mutate_after_assessment,
+    )
+
+    exit_code = verify_cli.main(["status", str(path), "room-a"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "project changed during verification-status inspection" in captured.err
+

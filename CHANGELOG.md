@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — persisted verification status gate — 2026-10-01
+
+- Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.
+- Returns exit code 0 only when the latest retained verification is both current against the present engineering configuration/dependency content and a canonical verified PASS.
+- Separates verification currency from the historical verdict in strict JSON so a current FAIL and a stale historical PASS both fail closed for automation.
+- Rechecks project-file stability across inspection and reuses the existing verification-currency/dependency-fingerprint authority without re-running solvers or mutating evidence.
+
 ## Unreleased Release 3 — diagnostics verification currency context — 2026-10-01
 
 - Adds an explicit **Current verification currency** section to project-diagnostics Markdown output.

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — verification-history current-context hardening — 2026-10-01
+
+- Reuses the canonical verification-currency record-context helper in the desktop Verification History surface instead of maintaining duplicate GUI logic.
+- Validates retained-record and current-assessment input types and requires a non-empty stable analysis identity before projecting current context.
+- Extends focused regressions for historical/latest/orphaned record context, defensive-copy behavior, malformed inputs, and identity mismatch.
+- Changes no solver equation, numerical tolerance, requirement criterion, persisted verification record, ledger hash, dependency fingerprint, CLI schema, or project schema.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

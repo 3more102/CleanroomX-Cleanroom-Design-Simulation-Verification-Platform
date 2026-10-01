@@ -6,10 +6,14 @@ import pytest
 
 import cleanroomx.application as application
 from cleanroomx.plugins import (
+    PLUGIN_ALLOWLIST_ENV,
     PLUGIN_API_VERSION,
+    PLUGIN_MODE_ENV,
     AnalysisPlugin,
     PluginOrigin,
+    PluginTrustPolicy,
     discover_analysis_plugins,
+    plugin_trust_policy_from_environment,
 )
 
 
@@ -34,8 +38,10 @@ class _FakeEntryPoint:
         self._loaded = loaded
         self.dist = distribution
         self._load_error = load_error
+        self.load_count = 0
 
     def load(self):
+        self.load_count += 1
         if self._load_error is not None:
             raise self._load_error
         return self._loaded
@@ -225,6 +231,143 @@ def test_plugin_key_rejects_silent_whitespace_normalization():
     assert discovery.plugins == ()
     assert len(discovery.issues) == 1
     assert "leading or trailing whitespace" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_disabled_blocks_before_import():
+    point = _FakeEntryPoint(
+        "blocked",
+        "pkg.blocked:registration",
+        _plugin("blocked_plugin"),
+        distribution=_FakeDistribution("pkg-blocked", "1.0"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=PluginTrustPolicy(mode="disabled"),
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert discovery.trust_policy.mode == "disabled"
+    assert len(discovery.issues) == 1
+    assert "blocked by disabled plugin trust policy" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_allowlist_checks_distribution_before_import():
+    allowed = _FakeEntryPoint(
+        "allowed",
+        "pkg.allowed:registration",
+        _plugin("allowed_plugin"),
+        distribution=_FakeDistribution("CleanroomX_Allowed", "2.4.1"),
+    )
+    blocked = _FakeEntryPoint(
+        "blocked",
+        "pkg.blocked:registration",
+        _plugin("blocked_plugin"),
+        distribution=_FakeDistribution("cleanroomx-blocked", "9.9"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[blocked, allowed],
+        trust_policy=PluginTrustPolicy(
+            mode="allowlist",
+            allowlist=("cleanroomx-allowed==2.4.1",),
+        ),
+    )
+
+    assert [item.plugin.key for item in discovery.plugins] == ["allowed_plugin"]
+    assert allowed.load_count == 1
+    assert blocked.load_count == 0
+    assert discovery.trust_policy.allowlist == ("cleanroomx-allowed==2.4.1",)
+    assert len(discovery.issues) == 1
+    assert "not in the configured allowlist" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_allowlist_can_pin_or_float_distribution_version():
+    current = _FakeEntryPoint(
+        "current",
+        "pkg.current:registration",
+        _plugin("current_plugin"),
+        distribution=_FakeDistribution("pkg.current", "3.0"),
+    )
+    wrong_version = _FakeEntryPoint(
+        "old",
+        "pkg.old:registration",
+        _plugin("old_plugin"),
+        distribution=_FakeDistribution("pkg-pinned", "1.9"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[wrong_version, current],
+        trust_policy=PluginTrustPolicy(
+            mode="allowlist",
+            allowlist=("PKG_CURRENT", "pkg-pinned==2.0"),
+        ),
+    )
+
+    assert [item.plugin.key for item in discovery.plugins] == ["current_plugin"]
+    assert current.load_count == 1
+    assert wrong_version.load_count == 0
+    assert discovery.trust_policy.allowlist == ("pkg-current", "pkg-pinned==2.0")
+
+
+def test_plugin_trust_policy_allowlist_rejects_missing_distribution_identity():
+    point = _FakeEntryPoint(
+        "unknown-origin",
+        "pkg.unknown:registration",
+        _plugin("unknown_plugin"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=PluginTrustPolicy(
+            mode="allowlist",
+            allowlist=("pkg-unknown",),
+        ),
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_count == 0
+    assert "distribution identity is unavailable" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_environment_defaults_to_disabled():
+    policy = plugin_trust_policy_from_environment({})
+
+    assert policy.mode == "disabled"
+    assert policy.allowlist == ()
+    assert policy.configuration_error is None
+
+
+def test_plugin_trust_policy_environment_invalid_configuration_fails_closed():
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_MODE_ENV: "allow-sometimes",
+            PLUGIN_ALLOWLIST_ENV: "pkg-one",
+        }
+    )
+
+    assert policy.mode == "disabled"
+    assert policy.allowlist == ()
+    assert policy.configuration_error is not None
+    assert "invalid external-plugin trust configuration" in policy.configuration_error
+
+
+def test_plugin_trust_policy_environment_normalizes_allowlist():
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_MODE_ENV: " ALLOWLIST ",
+            PLUGIN_ALLOWLIST_ENV: "Pkg.One==1.0, other_pkg ",
+        }
+    )
+
+    assert policy.mode == "allowlist"
+    assert policy.allowlist == ("other-pkg", "pkg-one==1.0")
+    assert policy.configuration_error is None
 
 
 def test_plugin_discovery_disables_builtin_collision():

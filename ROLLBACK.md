@@ -1,5 +1,11 @@
 # Rollback Procedure
 
+## v0.103.0 Release 3 anchor
+
+The immutable `v0.103.0` tag is created only by the release workflow after the repository CI succeeds for a SHA that still equals current `main`. Use that tag as the primary Release 3 rollback anchor after publication. Project schema remains version 1, historical verification records remain backward-readable, and rollback should use normal revert/review/CI rather than rewriting shared history.
+
+The Release 3 code line includes the verified #707 requirements/verification closure, subsequent ProofGraph evidence-precedence and CI-hardening merges, and the protected project-batch output guard. The exact tagged commit's successful current-main CI is the final release authority.
+
 ## Code rollback
 
 For the shared repository, prefer a Git revert of the release-changing commit or merge rather than rewriting shared history.

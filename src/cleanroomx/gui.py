@@ -70,15 +70,11 @@ from .project_dossier import (
     markdown_project_engineering_dossier,
 )
 from .project_requirement_evidence_mappings import (
-    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     ProjectRequirementEvidenceMappingsFormatError,
-    project_requirement_evidence_mappings_from_dict,
-    validate_project_requirement_evidence_mappings,
 )
-from .project_requirements import (
-    PROJECT_REQUIREMENTS_METADATA_KEY,
-    ProjectRequirementsFormatError,
-    project_requirements_from_dict,
+from .project_requirements import ProjectRequirementsFormatError
+from .project_requirements_traceability import (
+    build_project_requirements_traceability,
 )
 from .project_requirements_workflow import run_project_requirements_workflow
 from .project_verification_persistence import (
@@ -95,7 +91,10 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
-from .verification_currency import assess_project_verification_currency
+from .verification_currency import (
+    assess_project_verification_currency,
+    verification_history_record_currency_context,
+)
 from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
@@ -143,224 +142,127 @@ def unit_hint(path: str) -> str:
     return ""
 
 
-def verification_history_record_currency_context(
-    record: dict,
-    current_assessment: dict | None,
-) -> dict:
-    """Return current-project context without rewriting historical evidence."""
-    if current_assessment is None:
-        return {
-            "state": "not_in_current_project",
-            "current": False,
-            "complete": True,
-            "mismatch_reasons": [],
-            "explanation": (
-                "The analysis referenced by this retained verification record is "
-                "not present in the current project."
-            ),
-        }
-
-    latest_record = current_assessment.get("latest_record")
-    if (
-        not isinstance(latest_record, dict)
-        or latest_record.get("sequence") != record.get("sequence")
-    ):
-        return {
-            "state": "historical",
-            "current": False,
-            "complete": True,
-            "mismatch_reasons": [],
-            "explanation": (
-                "A newer retained verification record exists for this analysis. "
-                "Current verification currency applies only to the latest retained "
-                "record."
-            ),
-        }
-    return copy.deepcopy(current_assessment)
-
-
-def _requirement_criterion_text(requirement) -> str:
+def _requirement_criterion_text(criterion: dict) -> str:
     parts: list[str] = []
-    if requirement.target is not None:
+    target = criterion.get("target")
+    if target is not None:
         parts.append(
             "target="
             + json.dumps(
-                requirement.target,
+                target,
                 ensure_ascii=False,
                 allow_nan=False,
                 separators=(",", ":"),
             )
         )
-    if requirement.minimum is not None:
-        parts.append(f"minimum={requirement.minimum:g}")
-    if requirement.maximum is not None:
-        parts.append(f"maximum={requirement.maximum:g}")
-    if requirement.tolerance is not None:
-        parts.append(f"tolerance={requirement.tolerance:g}")
-    if requirement.unit is not None:
-        parts.append(f"unit={requirement.unit}")
+    minimum = criterion.get("minimum")
+    if minimum is not None:
+        parts.append(f"minimum={minimum:g}")
+    maximum = criterion.get("maximum")
+    if maximum is not None:
+        parts.append(f"maximum={maximum:g}")
+    tolerance = criterion.get("tolerance")
+    if tolerance is not None:
+        parts.append(f"tolerance={tolerance:g}")
+    unit = criterion.get("unit")
+    if unit is not None:
+        parts.append(f"unit={unit}")
     return ", ".join(parts) if parts else "no explicit acceptance criterion"
 
 
 def project_requirement_traceability_snapshot(
     project: ProjectDocument,
 ) -> dict:
-    """Build a read-only desktop view from the canonical persisted registries."""
-    metadata = project.metadata
+    """Adapt the canonical project traceability projection for the desktop view."""
+    traceability = build_project_requirements_traceability(project)
+    summary = traceability["summary"]
+    registries = traceability["registries"]
 
-    requirements_registry = None
-    raw_requirements = metadata.get(PROJECT_REQUIREMENTS_METADATA_KEY)
-    if raw_requirements is not None:
-        requirements_registry = project_requirements_from_dict(raw_requirements)
-
-    mappings_registry = None
-    raw_mappings = metadata.get(
-        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
-    )
-    if raw_mappings is not None:
-        mappings_registry = project_requirement_evidence_mappings_from_dict(
-            raw_mappings
-        )
-        validate_project_requirement_evidence_mappings(
-            metadata,
-            project.analyses,
-        )
-
-    requirement_rows: list[dict] = []
-    requirement_by_id = {}
-    if requirements_registry is not None:
-        for requirement_set in requirements_registry.sets:
-            for requirement in requirement_set.requirements:
-                requirement_by_id[requirement.id] = requirement
-                requirement_rows.append(
-                    {
-                        "id": requirement.id,
-                        "title": requirement.title,
-                        "set_id": requirement_set.id,
-                        "set_title": requirement_set.title,
-                        "status": requirement.status,
-                        "applicability": requirement.applicability,
-                        "scope": list(requirement.scope),
-                        "criterion": _requirement_criterion_text(requirement),
-                        "source": requirement.source,
-                        "source_revision": requirement.source_revision,
-                        "detail": {
-                            "requirement_set": {
-                                "id": requirement_set.id,
-                                "title": requirement_set.title,
-                                "description": requirement_set.description,
-                                "source": requirement_set.source,
-                                "source_revision": requirement_set.source_revision,
-                            },
-                            "requirement": requirement.to_dict(),
-                        },
-                    }
-                )
-
-    analysis_by_id = {analysis.id: analysis for analysis in project.analyses}
-    mapping_rows: list[dict] = []
-    if mappings_registry is not None:
-        for mapping in mappings_registry.mappings:
-            requirement = requirement_by_id.get(mapping.requirement_id)
-            analysis = analysis_by_id.get(mapping.analysis_id)
-            if analysis is None:
-                analysis_reference_state = "missing"
-            elif analysis.kind != mapping.expected_analysis_kind:
-                analysis_reference_state = "kind_mismatch"
-            else:
-                analysis_reference_state = "resolved"
-            reference_state = (
-                "resolved"
-                if (
-                    requirement is not None
-                    and analysis_reference_state == "resolved"
-                )
-                else "historical_reference"
-            )
-            mapping_rows.append(
-                {
-                    "id": mapping.id,
-                    "requirement_id": mapping.requirement_id,
-                    "requirement_title": (
-                        requirement.title
-                        if requirement is not None
-                        else mapping.requirement_id
-                    ),
-                    "analysis_id": mapping.analysis_id,
-                    "analysis_name": (
-                        analysis.name
-                        if analysis_reference_state == "resolved"
-                        else mapping.analysis_id
-                    ),
-                    "expected_analysis_kind": mapping.expected_analysis_kind,
-                    "subject_ref": mapping.subject_ref,
-                    "property_name": mapping.property_name,
-                    "result_path": list(mapping.result_path),
-                    "status": mapping.status,
-                    "reference_state": reference_state,
-                    "detail": {
-                        "mapping": mapping.to_dict(),
-                        "reference_state": reference_state,
-                        "analysis_reference_state": analysis_reference_state,
-                        "resolved_requirement": (
-                            requirement.to_dict()
-                            if requirement is not None
-                            else None
-                        ),
-                        "resolved_analysis": (
-                            {
-                                "id": analysis.id,
-                                "name": analysis.name,
-                                "kind": analysis.kind,
-                            }
-                            if analysis_reference_state == "resolved"
-                            else None
-                        ),
-                        "current_analysis_candidate": (
-                            {
-                                "id": analysis.id,
-                                "name": analysis.name,
-                                "kind": analysis.kind,
-                            }
-                            if analysis is not None
-                            else None
-                        ),
-                    },
-                }
-            )
-
-    active_mapping_count = sum(
-        1 for item in mapping_rows if item["status"] == "active"
-    )
-    mapped_requirement_ids = {
-        item["requirement_id"]
-        for item in mapping_rows
-        if item["status"] == "active"
+    requirement_by_id = {
+        requirement["id"]: requirement
+        for requirement in traceability["requirements"]
     }
+    requirement_rows = []
+    for requirement in traceability["requirements"]:
+        requirement_set = requirement["set"]
+        requirement_rows.append(
+            {
+                "id": requirement["id"],
+                "title": requirement["title"],
+                "set_id": requirement_set["id"],
+                "set_title": requirement_set["title"],
+                "status": requirement["status"],
+                "applicability": requirement["applicability"],
+                "scope": list(requirement["scope"]),
+                "criterion": _requirement_criterion_text(
+                    requirement["criterion"]
+                ),
+                "source": requirement["source"],
+                "source_revision": requirement["source_revision"],
+                "detail": {
+                    "requirement_set": copy.deepcopy(requirement_set),
+                    "requirement": copy.deepcopy(requirement),
+                },
+            }
+        )
+
+    mapping_rows = []
+    for mapping in traceability["mappings"]:
+        resolved_analysis = mapping["resolved_analysis"]
+        mapping_rows.append(
+            {
+                "id": mapping["id"],
+                "requirement_id": mapping["requirement_id"],
+                "requirement_title": (
+                    mapping["requirement_title"]
+                    if mapping["requirement_title"] is not None
+                    else mapping["requirement_id"]
+                ),
+                "analysis_id": mapping["analysis_id"],
+                "analysis_name": (
+                    resolved_analysis["name"]
+                    if resolved_analysis is not None
+                    else mapping["analysis_id"]
+                ),
+                "expected_analysis_kind": mapping["expected_analysis_kind"],
+                "subject_ref": mapping["subject_ref"],
+                "property_name": mapping["property_name"],
+                "result_path": list(mapping["result_path"]),
+                "status": mapping["status"],
+                "reference_state": mapping["reference_state"],
+                "detail": {
+                    "mapping": copy.deepcopy(mapping),
+                    "reference_state": mapping["reference_state"],
+                    "analysis_reference_state": mapping[
+                        "analysis_reference_state"
+                    ],
+                    "requirement_reference_state": mapping[
+                        "requirement_reference_state"
+                    ],
+                    "resolved_requirement": copy.deepcopy(
+                        requirement_by_id.get(mapping["requirement_id"])
+                    ),
+                    "resolved_analysis": copy.deepcopy(resolved_analysis),
+                    "current_analysis_candidate": copy.deepcopy(
+                        mapping["current_analysis_candidate"]
+                    ),
+                },
+            }
+        )
+
     return {
-        "requirements_sha256": (
-            requirements_registry.sha256
-            if requirements_registry is not None
-            else None
-        ),
-        "mappings_sha256": (
-            mappings_registry.sha256
-            if mappings_registry is not None
-            else None
-        ),
-        "requirement_set_count": (
-            len(requirements_registry.sets)
-            if requirements_registry is not None
-            else 0
-        ),
-        "requirement_count": len(requirement_rows),
-        "mapping_count": len(mapping_rows),
-        "active_mapping_count": active_mapping_count,
-        "active_mapped_requirement_count": len(mapped_requirement_ids),
+        "requirement_set_count": summary["requirement_set_count"],
+        "requirement_count": summary["requirement_count"],
+        "mapping_count": summary["mapping_count"],
+        "active_mapping_count": summary["active_mapping_count"],
+        "active_mapped_requirement_count": summary[
+            "active_mapped_requirement_count"
+        ],
+        "requirements_sha256": registries["requirements_sha256"],
+        "mappings_sha256": registries["mappings_sha256"],
         "requirements": requirement_rows,
         "mappings": mapping_rows,
     }
-
 
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []

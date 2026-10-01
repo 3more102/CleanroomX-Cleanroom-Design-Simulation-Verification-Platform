@@ -6,6 +6,8 @@ from hashlib import sha256
 import json
 from typing import Any
 
+from .proofgraph_io import proofgraph_from_dict
+
 
 VERIFICATION_RUN_HISTORY_METADATA_KEY = "cleanroomx.project_verification_run_history"
 VERIFICATION_RUN_HISTORY_SCHEMA = "cleanroomx.project-verification-run-history"
@@ -107,7 +109,7 @@ _RECORD_FIELDS = frozenset(
     }
 )
 
-_OPTIONAL_RECORD_FIELDS = frozenset({"external_dependencies"})
+_OPTIONAL_RECORD_FIELDS = frozenset({"external_dependencies", "proofgraphs"})
 
 
 def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +204,46 @@ def _validate_external_dependencies(value: Any) -> None:
                 f"verification_run.external_dependencies[{index}] has inconsistent "
                 "execution fingerprints"
             )
+
+
+def _validate_proofgraphs(
+    value: Any,
+    expected_sha256: list[str],
+) -> None:
+    if not isinstance(value, list) or not value:
+        raise VerificationRunHistoryIntegrityError(
+            "verification_run.proofgraphs must be a non-empty array"
+        )
+
+    digests: list[str] = []
+    for index, document in enumerate(value):
+        if not isinstance(document, dict):
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.proofgraphs[{index}] must be an object"
+            )
+        try:
+            graph = proofgraph_from_dict(copy.deepcopy(document))
+        except (TypeError, ValueError) as exc:
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.proofgraphs[{index}] is invalid: {exc}"
+            ) from exc
+        canonical = graph.to_dict()
+        if _canonical_bytes(canonical) != _canonical_bytes(document):
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.proofgraphs[{index}] is not canonical"
+            )
+        digest = canonical.get("graph_sha256")
+        _sha(digest, f"verification_run.proofgraphs[{index}].graph_sha256")
+        digests.append(digest)
+
+    if digests != sorted(set(digests)):
+        raise VerificationRunHistoryIntegrityError(
+            "verification_run.proofgraphs must be unique and sorted by graph_sha256"
+        )
+    if digests != expected_sha256:
+        raise VerificationRunHistoryIntegrityError(
+            "verification_run.proofgraphs do not match proofgraph_sha256"
+        )
 
 
 def _record_sha256(record: dict[str, Any]) -> str:
@@ -351,6 +393,8 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
         raise VerificationRunHistoryIntegrityError(
             "verification_run.proofgraph_sha256 must be unique and sorted"
         )
+    if "proofgraphs" in record:
+        _validate_proofgraphs(record["proofgraphs"], proofgraph_sha256)
 
     verifier = record["verifier_implementation"]
     if not isinstance(verifier, dict) or set(verifier) != {
@@ -539,6 +583,7 @@ def append_project_verification_run_record(
         "code_revision",
         "verification_identity_sha256",
         "external_dependencies",
+        "proofgraphs",
     }
     if forbidden:
         raise VerificationRunHistoryIntegrityError(
@@ -584,6 +629,11 @@ def append_project_verification_run_record(
     while len(records) > 1 and len(_canonical_bytes(history)) > max_bytes:
         removed = records.pop(0)
         history["anchor_record_sha256"] = removed["record_sha256"]
+
+    if len(_canonical_bytes(history)) > max_bytes:
+        raise VerificationRunHistoryIntegrityError(
+            "verification run history latest record exceeds max_bytes"
+        )
 
     candidate = copy.deepcopy(metadata)
     candidate[VERIFICATION_RUN_HISTORY_METADATA_KEY] = history

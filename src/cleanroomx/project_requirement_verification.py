@@ -172,6 +172,54 @@ class RequirementEvidence:
         }
 
 
+@dataclass(frozen=True, kw_only=True)
+class RequirementEvidenceAuthority:
+    requirement_id: str
+    evidence_id: str
+    authority_source: str
+    decision_reference: str
+    decision_revision: str
+    rationale: str
+    subject_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in (
+            "requirement_id",
+            "evidence_id",
+            "authority_source",
+            "decision_reference",
+            "decision_revision",
+            "rationale",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                _nonempty(
+                    getattr(self, name),
+                    f"requirement_evidence_authority.{name}",
+                ),
+            )
+        object.__setattr__(
+            self,
+            "subject_ref",
+            _optional_text(
+                self.subject_ref,
+                "requirement_evidence_authority.subject_ref",
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "requirement_id": self.requirement_id,
+            "subject_ref": self.subject_ref,
+            "evidence_id": self.evidence_id,
+            "authority_source": self.authority_source,
+            "decision_reference": self.decision_reference,
+            "decision_revision": self.decision_revision,
+            "rationale": self.rationale,
+        }
+
+
 def _criterion(requirement: ProjectRequirement) -> dict[str, Any] | None:
     tolerance = requirement.tolerance if requirement.tolerance is not None else 0.0
     if requirement.target is not None:
@@ -363,8 +411,8 @@ def _evaluate(
                     state="invalid",
                     explanation=(
                         "Evidence unit does not exactly match the requirement unit; "
-                        "no implicit conversion was performed. "
-                        f"Canonical unit authority rejected the conversion: {exc}."
+                        "no implicit conversion was performed because the canonical "
+                        f"unit authority rejected the conversion: {exc}."
                     ),
                     evidence=evidence,
                 )
@@ -461,6 +509,8 @@ def _evaluate(
 def verify_project_requirements(
     requirements: ProjectRequirements,
     evidence: Iterable[RequirementEvidence],
+    *,
+    evidence_authority: Iterable[RequirementEvidenceAuthority] = (),
 ) -> dict[str, Any]:
     if not isinstance(requirements, ProjectRequirements):
         raise TypeError("requirements must be a ProjectRequirements value")
@@ -478,6 +528,50 @@ def verify_project_requirements(
     evidence_ids = [item.id for item in evidence_list]
     if len(evidence_ids) != len(set(evidence_ids)):
         raise ValueError("requirement evidence contains duplicate ids")
+
+    authority_list = tuple(evidence_authority)
+    if not all(
+        isinstance(item, RequirementEvidenceAuthority)
+        for item in authority_list
+    ):
+        raise TypeError(
+            "evidence_authority must contain RequirementEvidenceAuthority values"
+        )
+    authority_by_binding: dict[
+        tuple[str, str | None], RequirementEvidenceAuthority
+    ] = {}
+    for item in authority_list:
+        requirement = requirements_by_id.get(item.requirement_id)
+        if requirement is None:
+            raise ValueError(
+                f"evidence authority references unknown requirement "
+                f"{item.requirement_id!r}"
+            )
+        if (
+            requirement.status != "approved"
+            or requirement.applicability != "applicable"
+        ):
+            raise ValueError(
+                "evidence authority may target only approved, applicable requirements"
+            )
+        if requirement.scope:
+            if item.subject_ref not in requirement.scope:
+                raise ValueError(
+                    f"evidence authority subject {item.subject_ref!r} is outside "
+                    f"requirement {requirement.id!r} scope"
+                )
+        elif item.subject_ref is not None:
+            raise ValueError(
+                f"evidence authority supplies subject {item.subject_ref!r} for "
+                f"project-scope requirement {requirement.id!r}"
+            )
+        key = (item.requirement_id, item.subject_ref)
+        if key in authority_by_binding:
+            raise ValueError(
+                "multiple evidence authority records target the same "
+                "requirement/entity binding"
+            )
+        authority_by_binding[key] = item
 
     evidence_by_binding: dict[
         tuple[str, str | None], list[RequirementEvidence]
@@ -504,6 +598,20 @@ def verify_project_requirements(
             (item.requirement_id, item.subject_ref),
             [],
         ).append(item)
+
+    for key, authority in authority_by_binding.items():
+        bound = sorted(evidence_by_binding.get(key, []), key=lambda item: item.id)
+        if len(bound) < 2:
+            raise ValueError(
+                "evidence authority must resolve a requirement/entity binding "
+                "with multiple evidence records"
+            )
+        candidate_ids = {item.id for item in bound}
+        if authority.evidence_id not in candidate_ids:
+            raise ValueError(
+                f"authoritative evidence {authority.evidence_id!r} is not bound "
+                f"to requirement/entity {key!r}"
+            )
 
     findings: list[dict[str, Any]] = []
     for requirement in sorted(requirement_list, key=lambda item: item.id):
@@ -577,18 +685,28 @@ def verify_project_requirements(
                 )
                 continue
             if len(bound) > 1:
-                findings.append(
-                    _unresolved(
-                        requirement,
-                        subject_ref,
-                        state="invalid",
-                        explanation=(
-                            "Multiple evidence records are bound to the same "
-                            "requirement/entity; the authoritative value is ambiguous."
-                        ),
-                        evidence_ids=[item.id for item in bound],
+                authority = authority_by_binding.get((requirement.id, subject_ref))
+                if authority is None:
+                    findings.append(
+                        _unresolved(
+                            requirement,
+                            subject_ref,
+                            state="invalid",
+                            explanation=(
+                                "Multiple evidence records are bound to the same "
+                                "requirement/entity; the authoritative value is ambiguous."
+                            ),
+                            evidence_ids=[item.id for item in bound],
+                        )
                     )
+                    continue
+                selected = next(
+                    item for item in bound if item.id == authority.evidence_id
                 )
+                finding = _evaluate(requirement, subject_ref, selected)
+                finding["candidate_evidence_ids"] = [item.id for item in bound]
+                finding["evidence_authority"] = authority.to_dict()
+                findings.append(finding)
                 continue
             findings.append(_evaluate(requirement, subject_ref, bound[0]))
 
@@ -610,6 +728,17 @@ def verify_project_requirements(
                 item.requirement_id,
                 "" if item.subject_ref is None else item.subject_ref,
                 item.id,
+            ),
+        )
+    ]
+    authority_document = [
+        item.to_dict()
+        for item in sorted(
+            authority_list,
+            key=lambda item: (
+                item.requirement_id,
+                "" if item.subject_ref is None else item.subject_ref,
+                item.evidence_id,
             ),
         )
     ]
@@ -640,4 +769,7 @@ def verify_project_requirements(
         },
         "findings": findings,
     }
+    if authority_document:
+        body["evidence_authority"] = authority_document
+        body["evidence_authority_sha256"] = _canonical_sha256(authority_document)
     return {**body, "verification_sha256": _canonical_sha256(body)}

@@ -103,6 +103,24 @@ retained as explicit `inactive` findings but excluded from the active comparison
 set. Evidence IDs are unique across the complete verification input so one audit
 identity cannot resolve to multiple records.
 
+## Canonical engineering unit conversion
+
+When bound evidence and the persisted requirement use different units, the
+canonical verifier may convert the evidence only through the closed
+`engineering_units` authority. Unit spellings are exact and case-sensitive;
+unknown aliases are never guessed.
+
+The current authority covers explicit pressure, volumetric-flow, rate, power,
+length, mass-flow, and Celsius/Kelvin temperature units. Engineering families
+are intentionally stricter than dimensional similarity, so `Hz` is not
+interchangeable with an air-change rate such as `1/h`.
+
+Conversion occurs only for present finite numeric evidence. Missing values remain
+`incomplete`; named-unit versus unitless mismatches, unsupported spellings,
+non-numeric/non-finite values, and cross-family conversions remain `invalid`.
+The requirement's persisted absolute tolerance is applied after conversion in
+the requirement unit.
+
 ## Truth states
 
 Per-finding engineering state is richer than the existing aggregate verification
@@ -145,7 +163,7 @@ Evidence input order does not change the verification result or digest.
 This slice establishes canonical comparison semantics and evidence binding. It
 does not yet:
 
-- convert units;
+- infer or guess unsupported unit aliases;
 - select solver outputs automatically;
 - infer requirement-to-analysis mappings;
 - generate ProofGraph records automatically;

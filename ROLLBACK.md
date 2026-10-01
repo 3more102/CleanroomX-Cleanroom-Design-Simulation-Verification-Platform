@@ -77,3 +77,14 @@ merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
+## v0.103.0 Release 3 production closure anchor
+
+The pre-release current-main anchor is `3b6db4093df79523159fe1b623fa99851900bc02`
+(PR #711 merged after its exact-head CI passed). The final release candidate also
+includes the project-batch protected-output hardening carried on top of that
+anchor.
+
+Publish `v0.103.0` only from successful CI for the exact current-main SHA.
+The published tag is the authoritative release commit and must never be moved.
+Rollback is by revert plus the full release CI gate, never by rewriting a
+published tag or historical verification evidence.

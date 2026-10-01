@@ -3,7 +3,8 @@
 ## Unreleased Release 3 — canonical project requirements verification — 2026-10-01
 
 - Adds the first canonical requirements -> evidence -> verdict engine over the persisted project requirements registry.
-- Requires explicit applicability, one unambiguous evidence binding per requirement/entity, current freshness, required evidence kinds, exact unit agreement, and an explicit acceptance criterion before a PASS can be issued.
+- Requires an approved active requirement, explicit applicability, one unambiguous evidence binding per requirement/entity, current freshness, required evidence kinds, exact unit agreement, and an explicit acceptance criterion before a PASS can be issued.
+- Treats draft requirements as incomplete, superseded/withdrawn requirements as explicit inactive records, and duplicate evidence IDs as invalid audit identity rather than silently selecting or aliasing evidence.
 - Reuses the established CleanroomX aggregate truth model while surfacing richer per-finding states for stale, incomplete, invalid, and not-applicable evidence.
 - Adds deterministic requirements/evidence/result SHA-256 identities and order-independent evidence normalization.
 - Adds fail-closed regressions for tolerance boundaries, missing/stale evidence, unit mismatch, ambiguous bindings, unresolved applicability, absent criteria, project-scope binding, and numeric canonicalization.

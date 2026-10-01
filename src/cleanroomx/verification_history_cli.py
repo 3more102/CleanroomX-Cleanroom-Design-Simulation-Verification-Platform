@@ -89,7 +89,7 @@ def _compact_record(
             "verified": verification["verified"],
             "summary": copy.deepcopy(verification["summary"]),
         },
-        "current_assessment": verification_history_record_currency_context(
+        "current_currency": verification_history_record_currency_context(
             record,
             current_assessment,
         ),

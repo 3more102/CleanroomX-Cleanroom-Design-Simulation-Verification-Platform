@@ -72,6 +72,35 @@ The strict-JSON response separates two independent facts:
 for CI/release gating without silently treating a historical PASS as proof of a
 later edited project.
 
+### Gate the complete configured verification set
+
+```text
+cleanroomx-project-verify status project.cleanroomx.json --all
+```
+
+The `--all` form evaluates the same canonical verification-currency assessment
+for the whole saved project without re-running analyses. Analyses with no active
+requirement-evidence mapping and no retained verification are reported as
+`not_configured` and do not create a false requirement to verify unrelated
+project analyses.
+
+The project-wide gate passes only when at least one analysis is configured and
+every configured analysis has both:
+
+- `currency.state == "current"`;
+- a latest retained canonical verification with `verified == true`.
+
+The strict-JSON `gate` object also reports configured, accepted, and rejected
+analysis counts plus stable `accepted_analysis_ids` / `rejected_analysis_ids`
+lists. CI can therefore identify the exact failing project analyses without
+re-deriving scope from the complete currency payload.
+
+This is deliberately fail-closed: a configured analysis that is stale,
+dependency-freshness-unverifiable, not yet verified, or currently verified as
+FAIL/incomplete causes the complete-project gate to fail. Historical orphaned
+records remain visible in the currency payload but are not silently rebound to a
+current analysis.
+
 ## Exit codes
 
 For `run` and `persist`:
@@ -84,11 +113,14 @@ For `run` and `persist`:
 
 For `status`:
 
-- `0`: the latest retained verification is both `current` and a verified PASS;
-- `1`: evidence is stale, dependency freshness is unverifiable, no verification
-  is retained/configured, or the current retained verification is not a verified
-  PASS;
-- `2`: operational/integrity failure or the project changes during inspection.
+- `0`: the selected latest retained verification is both `current` and a verified
+  PASS; with `--all`, at least one analysis is configured and every configured
+  analysis meets that condition;
+- `1`: evidence is stale, dependency freshness is unverifiable, no required
+  verification is retained, the retained verification is not a verified PASS,
+  or `--all` finds no configured analyses;
+- `2`: operational/integrity failure, invalid `status` argument combination,
+  or the project changes during inspection.
 
 A non-PASS verification can still be persisted. This is intentional: failed or
 incomplete engineering verification is audit evidence and must not disappear

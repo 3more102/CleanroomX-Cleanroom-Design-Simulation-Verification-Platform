@@ -61,6 +61,24 @@ A non-PASS verification can still be persisted. This is intentional: failed or
 incomplete engineering verification is audit evidence and must not disappear
 merely because the verdict is adverse.
 
+## Desktop workflow
+
+The desktop **Analysis** menu exposes the same canonical authorities:
+
+- **Verify Project Requirements** runs the saved-project workflow read-only for
+  the selected analysis.
+- **Verify & Persist Project Requirements** runs the same workflow and appends
+  the result to the guarded verification ledger.
+- **Verification History...** opens the validated retained ledger and allows
+  inspection of each complete persisted record.
+
+Desktop verification requires a saved project with no unsaved edits and refuses
+to run if the on-disk project revision no longer matches the revision currently
+open in the application.
+
+A valid FAIL or incomplete result is still persistable and is shown as requiring
+attention rather than being discarded.
+
 ## Engineering boundary
 
 This operator command does not infer requirements, units, evidence semantics, or

@@ -1,8 +1,26 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.102.1
-Validation date: 2026-09-25
+Release: CleanroomX v0.103.0
+Validation date: 2026-10-01
+
+RELEASE 3 v0.103.0 VERIFICATION AND ASSURANCE CLOSURE
+Base current-main before final release identity:
+3b6db4093df79523159fe1b623fa99851900bc02
+
+Merged Release 3 closure evidence includes:
+- PR #707 merge 165b0c61f776270f58e8b691171181d694857570
+- PR #709 merge bb9208c2f11e20e1163992f4c8bca00a27bcb63b; exact-head CI #2233 PASS
+- PR #711 merge 3b6db4093df79523159fe1b623fa99851900bc02; exact-head CI #2235 PASS
+- final project-batch protected-output hardening carried by the v0.103.0 release candidate
+
+RELEASE GATE - exact v0.103.0 pull-request head must pass Python 3.11/3.12/3.13 CI and Windows launcher smoke before merge.
+RELEASE GATE - the immutable publisher tags only a successful CI commit that is still the current main head.
+PASS - project batch output cannot alias the project source, an existing same-file alias, or a declared file-backed engineering dependency.
+PASS - project batch output guarding and batch execution use the same already-loaded project revision.
+PASS - Release 3 retained verification, traceability, ProofGraph integrity, evidence authority, engineering-unit conversion, and plugin trust features remain behind canonical validation boundaries.
+PASS - project schema remains cleanroomx.project version 1.
+PASS - release identity changes no solver equation or numerical tolerance.
 
 FINAL v0.102.1 SPATIAL PRODUCTION BASELINE
 PR #467 — Close final CleanroomX spatial production gaps

@@ -6,6 +6,7 @@ import pytest
 
 from cleanroomx.project_requirement_verification import (
     RequirementEvidence,
+    RequirementEvidenceAuthority,
     verify_project_requirements,
 )
 from cleanroomx.project_requirements import (
@@ -500,3 +501,334 @@ def test_equivalent_numeric_evidence_spelling_has_same_digest() -> None:
     float_result = verify_project_requirements(requirements, [floating])
 
     assert integer_result == float_result
+
+
+def test_explicit_evidence_authority_resolves_conflict_without_deleting_candidates() -> None:
+    requirements = _registry(_requirement())
+    passing = _evidence(evidence_id="E-PASS", value=21.0)
+    failing = _evidence(evidence_id="E-FAIL", value=19.0)
+    authority = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-PASS",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
+        rationale="Approved calculation is the project decision basis.",
+    )
+
+    result = verify_project_requirements(
+        requirements,
+        [failing, passing],
+        evidence_authority=[authority],
+    )
+
+    assert result["status"] == "pass"
+    assert result["verified"] is True
+    finding = result["findings"][0]
+    assert finding["evidence_id"] == "E-PASS"
+    assert finding["evidence_ids"] == ["E-PASS"]
+    assert finding["candidate_evidence_ids"] == ["E-FAIL", "E-PASS"]
+    assert finding["evidence_authority"] == authority.to_dict()
+    assert result["evidence_authority"] == [authority.to_dict()]
+    assert len(result["evidence_authority_sha256"]) == 64
+    assert finding["evidence_authority"]["authority_source"] == "Project verification authority"
+    assert finding["evidence_authority"]["decision_reference"] == "DEC-REQ-AUTH"
+    assert finding["evidence_authority"]["decision_revision"] == "Rev 1"
+
+
+def test_evidence_authority_identity_is_required_and_hash_bound() -> None:
+    requirements = _registry(_requirement())
+    evidence = [
+        _evidence(evidence_id="E-1", value=21.0),
+        _evidence(evidence_id="E-2", value=19.0),
+    ]
+    baseline = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-001",
+        decision_revision="Rev 1",
+        rationale="Approved calculation is the project decision basis.",
+    )
+    revised = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-001",
+        decision_revision="Rev 2",
+        rationale="Approved calculation is the project decision basis.",
+    )
+
+    baseline_result = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[baseline],
+    )
+    revised_result = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[revised],
+    )
+
+    assert baseline_result["evidence_authority_sha256"] != revised_result["evidence_authority_sha256"]
+    assert baseline_result["verification_sha256"] != revised_result["verification_sha256"]
+    assert baseline_result["evidence_authority"][0]["decision_revision"] == "Rev 1"
+
+    with pytest.raises(TypeError):
+        RequirementEvidenceAuthority(
+            requirement_id="REQ-ACH",
+            subject_ref="ROOM-A",
+            evidence_id="E-1",
+            rationale="Missing decision identity must not be accepted.",
+        )
+
+    with pytest.raises(ValueError, match="authority_source"):
+        RequirementEvidenceAuthority(
+            requirement_id="REQ-ACH",
+            subject_ref="ROOM-A",
+            evidence_id="E-1",
+            authority_source=" ",
+            decision_reference="DEC-REQ-001",
+            decision_revision="Rev 1",
+            rationale="Blank authority source must fail closed.",
+        )
+
+
+def test_evidence_authority_can_select_a_failure_over_a_passing_candidate() -> None:
+    requirements = _registry(_requirement())
+    passing = _evidence(evidence_id="E-PASS", value=21.0)
+    failing = _evidence(evidence_id="E-FAIL", value=19.0)
+
+    result = verify_project_requirements(
+        requirements,
+        [passing, failing],
+        evidence_authority=[
+            RequirementEvidenceAuthority(
+                requirement_id="REQ-ACH",
+                subject_ref="ROOM-A",
+                evidence_id="E-FAIL",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
+                rationale="Signed-off calculation supersedes the exploratory run.",
+            )
+        ],
+    )
+
+    assert result["status"] == "fail"
+    assert result["verified"] is False
+    assert result["findings"][0]["evidence_id"] == "E-FAIL"
+    assert result["findings"][0]["actual"] == pytest.approx(19.0)
+
+
+def test_evidence_authority_is_order_independent_and_digest_stable() -> None:
+    requirements = _registry(
+        _requirement("REQ-ACH", scope=["ROOM-A"]),
+        _requirement("REQ-ACH-B", scope=["ROOM-B"]),
+    )
+    evidence = [
+        _evidence(evidence_id="E-A-OLD", value=19.0),
+        _evidence(evidence_id="E-A-APPROVED", value=21.0),
+        _evidence(
+            evidence_id="E-B-OLD",
+            requirement_id="REQ-ACH-B",
+            subject_ref="ROOM-B",
+            value=19.0,
+        ),
+        _evidence(
+            evidence_id="E-B-APPROVED",
+            requirement_id="REQ-ACH-B",
+            subject_ref="ROOM-B",
+            value=22.0,
+        ),
+    ]
+    authority = [
+        RequirementEvidenceAuthority(
+            requirement_id="REQ-ACH-B",
+            subject_ref="ROOM-B",
+            evidence_id="E-B-APPROVED",
+            authority_source="Project verification authority",
+            decision_reference="DEC-REQ-AUTH",
+            decision_revision="Rev 1",
+            rationale="Approved ROOM-B calculation.",
+        ),
+        RequirementEvidenceAuthority(
+            requirement_id="REQ-ACH",
+            subject_ref="ROOM-A",
+            evidence_id="E-A-APPROVED",
+            authority_source="Project verification authority",
+            decision_reference="DEC-REQ-AUTH",
+            decision_revision="Rev 1",
+            rationale="Approved ROOM-A calculation.",
+        ),
+    ]
+
+    forward = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=authority,
+    )
+    reverse = verify_project_requirements(
+        requirements,
+        list(reversed(evidence)),
+        evidence_authority=list(reversed(authority)),
+    )
+
+    assert forward == reverse
+    assert forward["verified"] is True
+
+
+def test_evidence_authority_rejects_stale_or_mismatched_policy() -> None:
+    requirements = _registry(_requirement())
+    evidence = [
+        _evidence(evidence_id="E-1"),
+        _evidence(evidence_id="E-2"),
+    ]
+
+    with pytest.raises(ValueError, match="is not bound"):
+        verify_project_requirements(
+            requirements,
+            evidence,
+            evidence_authority=[
+                RequirementEvidenceAuthority(
+                    requirement_id="REQ-ACH",
+                    subject_ref="ROOM-A",
+                    evidence_id="E-MISSING",
+                    authority_source="Project verification authority",
+                    decision_reference="DEC-REQ-AUTH",
+                    decision_revision="Rev 1",
+                    rationale="Stale operator selection.",
+                )
+            ],
+        )
+
+    with pytest.raises(ValueError, match="multiple evidence records"):
+        verify_project_requirements(
+            requirements,
+            [_evidence(evidence_id="E-ONLY")],
+            evidence_authority=[
+                RequirementEvidenceAuthority(
+                    requirement_id="REQ-ACH",
+                    subject_ref="ROOM-A",
+                    evidence_id="E-ONLY",
+                    authority_source="Project verification authority",
+                    decision_reference="DEC-REQ-AUTH",
+                    decision_revision="Rev 1",
+                    rationale="Unnecessary selection.",
+                )
+            ],
+        )
+
+
+def test_duplicate_evidence_authority_for_one_binding_is_rejected() -> None:
+    requirements = _registry(_requirement())
+    evidence = [
+        _evidence(evidence_id="E-1"),
+        _evidence(evidence_id="E-2"),
+    ]
+    first = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
+        rationale="First decision.",
+    )
+    second = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-2",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
+        rationale="Conflicting decision.",
+    )
+
+    with pytest.raises(ValueError, match="same requirement/entity binding"):
+        verify_project_requirements(
+            requirements,
+            evidence,
+            evidence_authority=[first, second],
+        )
+
+
+def test_evidence_authority_rejects_inactive_or_unresolved_requirement() -> None:
+    evidence = [
+        _evidence(evidence_id="E-1"),
+        _evidence(evidence_id="E-2"),
+    ]
+    authority = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
+        rationale="Operator decision must not activate an unresolved requirement.",
+    )
+
+    for requirement in (
+        _requirement(status="draft"),
+        _requirement(status="superseded"),
+        _requirement(status="withdrawn"),
+        _requirement(applicability="not_applicable"),
+        _requirement(applicability="unknown"),
+        _requirement(applicability="conditional"),
+    ):
+        with pytest.raises(
+            ValueError,
+            match="approved, applicable requirements",
+        ):
+            verify_project_requirements(
+                _registry(requirement),
+                evidence,
+                evidence_authority=[authority],
+            )
+
+
+def test_evidence_authority_digest_changes_when_rationale_changes() -> None:
+    requirements = _registry(_requirement())
+    evidence = [
+        _evidence(evidence_id="E-1", value=21.0),
+        _evidence(evidence_id="E-2", value=19.0),
+    ]
+
+    first = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[
+            RequirementEvidenceAuthority(
+                requirement_id="REQ-ACH",
+                subject_ref="ROOM-A",
+                evidence_id="E-1",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
+                rationale="Approved design calculation.",
+            )
+        ],
+    )
+    second = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[
+            RequirementEvidenceAuthority(
+                requirement_id="REQ-ACH",
+                subject_ref="ROOM-A",
+                evidence_id="E-1",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
+                rationale="Approved commissioning decision basis.",
+            )
+        ],
+    )
+
+    assert first["status"] == second["status"] == "pass"
+    assert first["findings"][0]["evidence_id"] == second["findings"][0]["evidence_id"] == "E-1"
+    assert first["evidence_authority_sha256"] != second["evidence_authority_sha256"]
+    assert first["verification_sha256"] != second["verification_sha256"]

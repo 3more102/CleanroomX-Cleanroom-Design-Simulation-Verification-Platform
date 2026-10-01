@@ -24,8 +24,8 @@ from cleanroomx.proofgraph import (
 
 
 SOURCE_PROJECT_REVISION = "a" * 64
-CURRENT_PROJECT_REVISION = "a" * 64
-CHANGED_PROJECT_REVISION = "b" * 64
+CURRENT_ANALYSIS_INPUT = {"room": "ROOM-A"}
+CHANGED_ANALYSIS_INPUT = {"room": "ROOM-B"}
 
 
 def _canonical_sha256(payload: dict) -> str:
@@ -136,7 +136,7 @@ def test_analysis_run_binding_derives_current_evidence_and_exact_locator() -> No
         bundle,
         [_mapping()],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )
 
     assert len(bindings) == 1
@@ -152,7 +152,7 @@ def test_analysis_run_binding_derives_current_evidence_and_exact_locator() -> No
     assert evidence.source_revision == bundle["integrity"]["sha256"]
 
 
-def test_analysis_run_binding_marks_changed_project_revision_stale() -> None:
+def test_analysis_run_binding_marks_changed_analysis_input_stale() -> None:
     bundle = _run_bundle({"rooms": [{"ach": 20.0}]})
 
     result = verify_project_requirements_from_analysis_run(
@@ -160,7 +160,7 @@ def test_analysis_run_binding_marks_changed_project_revision_stale() -> None:
         bundle,
         [_mapping()],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CHANGED_PROJECT_REVISION,
+        current_analysis_input=CHANGED_ANALYSIS_INPUT,
     )
 
     assert result["verified"] is False
@@ -168,7 +168,7 @@ def test_analysis_run_binding_marks_changed_project_revision_stale() -> None:
     assert result["findings"][0]["status"] == "not_checked"
 
 
-def test_analysis_run_binding_requires_current_revision_to_assert_freshness() -> None:
+def test_analysis_run_binding_requires_current_input_to_assert_freshness() -> None:
     bundle = _run_bundle({"rooms": [{"ach": 20.0}]})
 
     result = verify_project_requirements_from_analysis_run(
@@ -176,7 +176,7 @@ def test_analysis_run_binding_requires_current_revision_to_assert_freshness() ->
         bundle,
         [_mapping()],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=None,
+        current_analysis_input=None,
     )
 
     assert result["verified"] is False
@@ -195,7 +195,7 @@ def test_unstable_external_dependency_cannot_be_current_evidence() -> None:
         bundle,
         [_mapping()],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )
 
     assert result["verified"] is False
@@ -210,7 +210,7 @@ def test_missing_result_path_becomes_incomplete_evidence_not_pass() -> None:
         bundle,
         [_mapping()],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )
 
     assert result["status"] == "not_checked"
@@ -230,7 +230,7 @@ def test_non_scalar_result_mapping_is_rejected() -> None:
             bundle,
             [_mapping()],
             source_project_revision=SOURCE_PROJECT_REVISION,
-            current_project_revision=CURRENT_PROJECT_REVISION,
+            current_analysis_input=CURRENT_ANALYSIS_INPUT,
         )
 
 
@@ -243,7 +243,7 @@ def test_tampered_analysis_run_bundle_is_rejected_before_binding() -> None:
             bundle,
             [_mapping()],
             source_project_revision=SOURCE_PROJECT_REVISION,
-            current_project_revision=CURRENT_PROJECT_REVISION,
+            current_analysis_input=CURRENT_ANALYSIS_INPUT,
         )
 
 
@@ -258,7 +258,7 @@ def test_duplicate_mapping_ids_are_rejected() -> None:
             bundle,
             [_mapping(), _mapping()],
             source_project_revision=SOURCE_PROJECT_REVISION,
-            current_project_revision=CURRENT_PROJECT_REVISION,
+            current_analysis_input=CURRENT_ANALYSIS_INPUT,
         )
 
 
@@ -278,13 +278,13 @@ def test_mapping_order_does_not_change_binding_order_or_identity() -> None:
         bundle,
         [first, second],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )
     reverse = bind_analysis_run_requirement_evidence(
         bundle,
         [second, first],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )
 
     assert forward == reverse
@@ -299,7 +299,7 @@ def test_locator_uses_json_pointer_escaping_for_traceability() -> None:
         bundle,
         [mapping],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )[0]
 
     assert evidence.evidence_locator == "/result/a~1b~0c"
@@ -313,7 +313,7 @@ def test_analysis_run_can_flow_directly_to_verified_proofgraph() -> None:
         bundle,
         [_mapping()],
         source_project_revision=SOURCE_PROJECT_REVISION,
-        current_project_revision=CURRENT_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
     )[0]
 
     assert graph.findings[0].status == "pass"
@@ -323,6 +323,35 @@ def test_analysis_run_can_flow_directly_to_verified_proofgraph() -> None:
     )
     assert graph.evidence[0].version == SOURCE_PROJECT_REVISION
     assert graph.verification_runs[0].metadata["project_verified"] is True
+
+
+def test_unrelated_project_revision_change_does_not_stale_matching_analysis_input() -> None:
+    bundle = _run_bundle({"rooms": [{"ach": 20.0}]})
+
+    evidence = bind_analysis_run_requirement_evidence(
+        bundle,
+        [_mapping()],
+        source_project_revision=SOURCE_PROJECT_REVISION,
+        current_analysis_input=CURRENT_ANALYSIS_INPUT,
+    )[0]
+
+    assert evidence.freshness == "current"
+    assert evidence.project_revision == SOURCE_PROJECT_REVISION
+
+
+def test_current_analysis_input_must_be_object_or_null() -> None:
+    bundle = _run_bundle({"rooms": [{"ach": 20.0}]})
+
+    with pytest.raises(
+        AnalysisRequirementEvidenceError,
+        match="current_analysis_input must be a JSON object or null",
+    ):
+        bind_analysis_run_requirement_evidence(
+            bundle,
+            [_mapping()],
+            source_project_revision=SOURCE_PROJECT_REVISION,
+            current_analysis_input=[],
+        )
 
 
 def test_invalid_project_revision_identity_is_rejected() -> None:
@@ -336,5 +365,5 @@ def test_invalid_project_revision_identity_is_rejected() -> None:
             bundle,
             [_mapping()],
             source_project_revision="not-a-digest",
-            current_project_revision=CURRENT_PROJECT_REVISION,
+            current_analysis_input=CURRENT_ANALYSIS_INPUT,
         )

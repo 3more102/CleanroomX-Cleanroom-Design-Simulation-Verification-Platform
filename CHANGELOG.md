@@ -4,8 +4,17 @@
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.
 - Reuses the canonical project/dependency path-identity guard already used by other project-facing operator surfaces.
-- Adds focused regressions for direct source overwrite, same-file alias overwrite, and external dependency overwrite.
+- Binds output validation and execution to one loaded project revision, then revalidates source revision and protected output identities immediately before atomic publication.
+- Adds regressions for direct source overwrite, same-file aliases, external dependency overwrite, single-revision execution binding, source mutation, and pre-publication alias mutation.
 - Changes no solver equation, numerical tolerance, analysis input, project schema, project-batch schema, or execution-order semantics.
+
+## Unreleased Release 3 — persisted project evidence authority — 2026-10-01
+
+- Extends the canonical `project.metadata.requirement_evidence_mappings` registry with optional explicit evidence-authority decisions selecting one already-mapped evidence identity for an otherwise ambiguous requirement/subject binding.
+- Keeps ambiguity fail-closed: competing active mappings are accepted only when they belong to the same analysis and a validated authority decision selects one active candidate.
+- Carries the same authority through project-native execution, canonical verification replay, ProofGraph projection, guarded verification-history persistence, and read-only requirements traceability.
+- Retains every candidate evidence record while canonical findings and ProofGraph checks reference only the explicitly selected mapping; authority provenance remains hash-bound.
+- Preserves the previous registry/result shape and digest when no authority is configured and changes no solver equation, unit conversion, requirement criterion, or project schema version.
 
 ## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01
 

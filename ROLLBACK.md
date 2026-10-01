@@ -1,4 +1,11 @@
-# Rollback Procedure
+# Rollback
+
+## v0.103.0 Release 3 closure anchor
+
+The verified functional Release 3 baseline merged through PR #707 at `165b0c61f776270f58e8b691171181d694857570`, with exact tested PR head `875408729ec3587d96f4c86f77b14de80b6548be` and successful CI #2229 / `36875375370` (**1662 passed, 4 skipped** on Python 3.11/3.12/3.13).
+
+The immutable `v0.103.0` tag is published only by the release workflow after successful CI for a SHA that still equals current `main`. Once published, use that tag as the primary Release 3 rollback anchor. The project schema remains version 1 and historical verification records remain backward-readable.
+ Procedure
 
 ## Code rollback
 

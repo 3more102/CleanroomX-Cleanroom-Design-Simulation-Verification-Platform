@@ -410,3 +410,83 @@ def test_project_verify_status_discards_result_if_project_changes_during_inspect
     assert captured.out == ""
     assert "project changed during verification-status inspection" in captured.err
 
+def test_project_verify_status_without_analysis_id_accepts_configured_project(
+    tmp_path,
+    capsys,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    exit_code = verify_cli.main(["status", str(path)])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 0
+    assert payload["schema"] == "cleanroomx.project-verification-status-aggregate"
+    assert payload["currency"]["summary"]["configured_analysis_count"] == 1
+    assert payload["gate"] == {
+        "configured_analysis_count": 1,
+        "accepted_analysis_count": 1,
+        "rejected_analysis_count": 0,
+        "accepted_analysis_ids": ["room-a"],
+        "rejected_analysis_ids": [],
+        "all_configured_analyses_current_verified_pass": True,
+        "accepted": True,
+    }
+
+
+def test_project_verify_status_without_analysis_id_rejects_stale_project(
+    tmp_path,
+    capsys,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    project = load_project_document(path)
+    project.analyses[0].input["min_ach"] = 25.0
+    save_project_document(path, project)
+
+    exit_code = verify_cli.main(["status", str(path)])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["analyses"][0]["state"] == "stale"
+    assert payload["gate"]["accepted_analysis_ids"] == []
+    assert payload["gate"]["rejected_analysis_ids"] == ["room-a"]
+    assert payload["gate"]["accepted"] is False
+
+
+def test_project_verify_status_without_analysis_id_fails_closed_when_unconfigured(
+    tmp_path,
+    capsys,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(include_mappings=False),
+    )
+
+    exit_code = verify_cli.main(["status", str(path)])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["summary"]["configured_analysis_count"] == 0
+    assert payload["currency"]["summary"]["not_configured_count"] == 1
+    assert payload["gate"]["configured_analysis_count"] == 0
+    assert payload["gate"]["accepted_analysis_ids"] == []
+    assert payload["gate"]["rejected_analysis_ids"] == []
+    assert payload["gate"]["all_configured_analyses_current_verified_pass"] is False
+    assert payload["gate"]["accepted"] is False
+

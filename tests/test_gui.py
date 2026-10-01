@@ -913,13 +913,16 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     target = tmp_path / "result.json"
     calls = []
 
+    def record_atomic_write(path, content, *, before_replace=None):
+        calls.append((Path(path), content, before_replace))
+
     monkeypatch.setattr(
         gui_module,
         "atomic_write_text",
-        lambda path, content: calls.append((Path(path), content)),
+        record_atomic_write,
     )
     assert app._write_export_file(str(target), "payload", label="Result") is True
-    assert calls == [(target, "payload")]
+    assert calls == [(target, "payload", None)]
     assert "Exported result" in app.status_var.value
 
     captured = {}

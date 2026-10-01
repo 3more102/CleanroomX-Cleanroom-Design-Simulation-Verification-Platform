@@ -385,3 +385,21 @@ def test_workflow_verifier_rejects_resealed_proofgraph_evidence_projection(
     ):
         verify_project_requirements_workflow_run(result)
 
+
+def test_workflow_verifier_rejects_resealed_proofgraph_finding_projection(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["findings"][0]["actual"] = 999.0
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="workflow ProofGraph finding .* disagrees with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)
+

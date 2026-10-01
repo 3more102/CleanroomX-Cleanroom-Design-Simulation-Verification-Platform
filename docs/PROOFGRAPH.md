@@ -119,7 +119,16 @@ ProofGraph assumption.
 The deterministic report schema is
 `cleanroomx.proofgraph-evidence-precedence` version 1 and includes the complete
 candidate set, preferred set, shadowed evidence IDs, conflict state, and the
-selected evidence ID when one policy-authoritative claim exists.
+selected evidence ID when one assessment-preferred claim exists. The report
+declares `decision_scope=assessment_only` and
+`changes_canonical_verification=false`.
+
+This layer is not a second requirements-verification authority. A
+`selected_evidence_id` is only the preferred claim inside this read-only
+assessment; it does not authorize a requirement/entity binding, rewrite a
+ComplianceFinding or ComplianceVerdict, or change canonical project verification.
+Any evidence authority used to issue a project requirement verdict must remain an
+explicit input to the canonical project requirements verifier.
 
 ## Compliance states
 

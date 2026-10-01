@@ -61,10 +61,7 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
-from .project_diagnostics_cli import (
-    _assert_output_is_distinct_from_dependencies,
-    _assert_output_is_distinct_from_source,
-)
+from .project_diagnostics_cli import _assert_project_output_is_safe
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -3347,10 +3344,9 @@ class CleanroomXApp:
             return
 
         try:
-            _assert_output_is_distinct_from_source(self.project_path, path)
-            _assert_output_is_distinct_from_dependencies(
+            _assert_project_output_is_safe(
                 self.project,
-                base_dir=self.project_path.parent,
+                source=self.project_path,
                 output=path,
             )
             dossier = build_project_engineering_dossier(
@@ -3380,6 +3376,11 @@ class CleanroomXApp:
                 raise RuntimeError(
                     "project file changed during dossier generation; export was discarded"
                 )
+            _assert_project_output_is_safe(
+                self.project,
+                source=self.project_path,
+                output=path,
+            )
         except Exception as exc:
             self.status_var.set("Project dossier export failed")
             messagebox.showerror(

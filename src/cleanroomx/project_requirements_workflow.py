@@ -434,9 +434,9 @@ def _verify_workflow_proofgraph_projection(
         raise ProjectRequirementsWorkflowError(
             "workflow canonical verification findings must be a list"
         )
-    expected_source_findings = sorted(
+    expected_canonical_findings = sorted(
         (
-            _source_finding_projection(finding)
+            copy.deepcopy(finding)
             for finding in canonical_findings
             if (
                 isinstance(finding, dict)
@@ -445,6 +445,10 @@ def _verify_workflow_proofgraph_projection(
         ),
         key=_source_finding_sort_key,
     )
+    expected_source_findings = [
+        _source_finding_projection(finding)
+        for finding in expected_canonical_findings
+    ]
     actual_source_findings = metadata.get("source_findings")
     if not isinstance(actual_source_findings, list):
         raise ProjectRequirementsWorkflowError(
@@ -470,7 +474,7 @@ def _verify_workflow_proofgraph_projection(
     checks_by_id = {item.id: item for item in graph.checks}
     findings_by_id = {item.id: item for item in graph.findings}
     verdicts_by_id = {item.id: item for item in graph.verdicts}
-    for source_finding in expected_source_findings:
+    for source_finding in expected_canonical_findings:
         raw_evidence_ids = source_finding.get("evidence_ids")
         if (
             not isinstance(raw_evidence_ids, list)

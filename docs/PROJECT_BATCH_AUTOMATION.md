@@ -58,7 +58,7 @@ The runner:
 - isolates an ordinary analysis exception into that analysis's outcome and continues unless `--fail-fast` is requested;
 - never writes back to the project file.
 
-The batch report preserves each completed `AnalysisRun`, including its existing application execution provenance and canonical input SHA-256.
+The batch report preserves each completed `AnalysisRun`, including its application execution provenance and canonical input SHA-256. Each completed run is also integrity-bound to the exact source project SHA-256 captured by the batch before execution, so downstream requirements/ProofGraph evidence can recover project revision provenance from the verified run bundle rather than trusting a free-form caller value.
 
 ## Exit codes
 

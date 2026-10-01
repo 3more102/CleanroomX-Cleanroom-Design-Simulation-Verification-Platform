@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -155,23 +155,17 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0** Release 3 closure is gated across Python **3.11 / 3.12 / 3.13** plus Windows PowerShell/CMD launcher smoke.
 
-Recorded release evidence includes:
+The release gate includes:
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
-- Windows PowerShell and CMD launcher smoke tests;
-- clean wheel build/install checks;
-- installed Tk GUI smoke testing;
-- synchronized 2D/3D spatial regression coverage;
-- autosave completion-race regression coverage;
-- solver/provenance compatibility gates.
+- focused Release 3 requirements, verification, traceability, and operator-surface regressions;
+- the complete test suite on every supported Python version;
+- clean wheel build/install and installed CLI checks;
+- installed Tk GUI and spatial-editing smoke on Python 3.13;
+- Release 2 performance evidence and retained solver/provenance compatibility gates.
 
-The exact release evidence is preserved in:
-
-- [VALIDATION.txt](VALIDATION.txt)
-- [TEST_EVIDENCE.md](TEST_EVIDENCE.md)
-- [CHANGELOG.md](CHANGELOG.md)
+Historical **v0.102.1** spatial-closure evidence remains preserved in [VALIDATION.txt](VALIDATION.txt) and [TEST_EVIDENCE.md](TEST_EVIDENCE.md); Release 3 changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Engineering boundary
 
@@ -198,4 +192,4 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Release
 
-**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+**Latest stable:** [CleanroomX v0.103.0](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)

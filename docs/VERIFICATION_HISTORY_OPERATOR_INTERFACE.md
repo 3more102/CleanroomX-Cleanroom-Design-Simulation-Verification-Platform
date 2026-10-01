@@ -22,7 +22,7 @@ Optional stable-analysis filter:
 cleanroomx-verification-history list project.cleanroomx.json --analysis-id room-a
 ```
 
-The list output is strict JSON and contains:
+The list output uses `cleanroomx.verification-history-inspection` schema version 2 and contains:
 
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;

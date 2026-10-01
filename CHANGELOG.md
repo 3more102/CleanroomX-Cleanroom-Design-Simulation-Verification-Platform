@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — protected report publication identity recheck — 2026-10-01
+
+- Rechecks project-source and declared file-backed dependency path identity immediately before publishing project diagnostics, engineering dossier, requirements traceability, and canonical verification artifacts.
+- Applies the same protected-output boundary to desktop project-dossier export so a pathname identity change after the initial save-dialog validation fails closed before the atomic writer runs.
+- Retains the existing revision-stability checks and atomic writer; this hardening closes the remaining time-of-check/time-of-use gap in project-facing report publication without changing engineering calculations or verdict semantics.
+- Adds focused regressions proving a second publication-time guard runs and that an existing valid output is preserved when the recheck fails.
+
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.

@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -155,15 +155,16 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0** release closure was validated across Python **3.11 / 3.12 / 3.13**.
 
 Recorded release evidence includes:
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
+- complete test suite success on Python **3.11 / 3.12 / 3.13** for the exact PR #707 head in CI **#2229**;
 - Windows PowerShell and CMD launcher smoke tests;
 - clean wheel build/install checks;
 - installed Tk GUI smoke testing;
 - synchronized 2D/3D spatial regression coverage;
+- Release 3 requirements, evidence, verification, ProofGraph, traceability, verification-history, and plugin-trust regression gates;
 - autosave completion-race regression coverage;
 - solver/provenance compatibility gates.
 
@@ -198,4 +199,4 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Release
 
-**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+**Latest stable:** [CleanroomX v0.103.0](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)

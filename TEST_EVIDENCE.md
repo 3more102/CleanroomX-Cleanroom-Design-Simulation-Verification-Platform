@@ -1,4 +1,25 @@
-# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
+# CleanroomX Test Evidence
+
+## CleanroomX v0.103.0 Release 3 Closure
+
+Validation date: 2026-10-01
+
+- PR **#707 — Release 3 final closure restack on current main**
+  - exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`
+  - CI **#2229** / id `36875375370`: **success**
+  - merged functional Release 3 main commit: `165b0c61f776270f58e8b691171181d694857570`
+- Python **3.11** complete suite: **1662 passed, 4 skipped**
+- Python **3.12** complete suite: **1662 passed, 4 skipped**
+- Python **3.13** complete suite: **1662 passed, 4 skipped**
+- Focused Release 3 requirements/verification gate: **pass**
+- Wheel build/install and representative CLI smoke: **pass** on all supported Python versions
+- Windows PowerShell/CMD checkout launcher smoke: **pass**
+- Python 3.13 performance evidence: **pass**
+- Python 3.13 installed Tk/Xvfb desktop GUI smoke and real-widget spatial editing: **pass**
+
+The final Release 3 tree adds project-owned requirements/evidence traceability, verification-history current-context hardening and evidence drill-down, explicit auditable evidence authority, retained canonical ProofGraph documents with cross-artifact integrity checks, canonical engineering-unit conversion, fail-closed external plugin trust policy, ProofGraph adapters for qualification/recovery evidence, and cooperative project-batch cancellation. The release-identity closure changes no solver equation, numerical tolerance, project schema version, or configured engineering acceptance criterion.
+
+## Historical v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline
 

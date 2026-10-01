@@ -9,7 +9,8 @@ from typing import Any
 
 VERIFICATION_RUN_HISTORY_METADATA_KEY = "cleanroomx.project_verification_run_history"
 VERIFICATION_RUN_HISTORY_SCHEMA = "cleanroomx.project-verification-run-history"
-VERIFICATION_RUN_HISTORY_SCHEMA_VERSION = 1
+VERIFICATION_RUN_HISTORY_SCHEMA_VERSION = 2
+_VERIFICATION_RUN_HISTORY_SCHEMA_VERSION_V1 = 1
 VERIFICATION_RUN_RECORD_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
 DEFAULT_VERIFICATION_RUN_HISTORY_LIMIT = 50
 DEFAULT_VERIFICATION_RUN_HISTORY_MAX_BYTES = 16 * 1024 * 1024
@@ -78,7 +79,7 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-_RECORD_FIELDS = frozenset(
+_RECORD_FIELDS_V1 = frozenset(
     {
         "sequence",
         "completed_at_utc",
@@ -106,10 +107,82 @@ _RECORD_FIELDS = frozenset(
         "record_sha256",
     }
 )
+_RECORD_FIELDS_V2 = _RECORD_FIELDS_V1 | frozenset(
+    {"record_schema_version", "external_dependencies"}
+)
+
+
+def _record_schema_version(record: dict[str, Any]) -> int:
+    fields = set(record)
+    if fields == _RECORD_FIELDS_V1:
+        return 1
+    if fields == _RECORD_FIELDS_V2 and record.get("record_schema_version") == 2:
+        return 2
+
+    expected = (
+        _RECORD_FIELDS_V2
+        if "record_schema_version" in record or "external_dependencies" in record
+        else _RECORD_FIELDS_V1
+    )
+    unknown = sorted(fields - expected)
+    missing = sorted(expected - fields)
+    details = []
+    if unknown:
+        details.append("unsupported: " + ", ".join(unknown))
+    if missing:
+        details.append("missing: " + ", ".join(missing))
+    if fields == _RECORD_FIELDS_V2 and record.get("record_schema_version") != 2:
+        details.append("record_schema_version must be 2")
+    raise VerificationRunHistoryIntegrityError(
+        "verification run record fields are invalid (" + "; ".join(details) + ")"
+    )
+
+
+def _validate_external_dependencies(record: dict[str, Any]) -> None:
+    dependencies = record["external_dependencies"]
+    if not isinstance(dependencies, list):
+        raise VerificationRunHistoryIntegrityError(
+            "verification_run.external_dependencies must be an array"
+        )
+    identities: list[tuple[str, str]] = []
+    for index, item in enumerate(dependencies):
+        if not isinstance(item, dict) or set(item) != {
+            "field",
+            "declared_path",
+            "sha256",
+            "size_bytes",
+        }:
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.external_dependencies[{index}] is invalid"
+            )
+        field = _nonempty(
+            item["field"],
+            f"verification_run.external_dependencies[{index}].field",
+        )
+        declared_path = _nonempty(
+            item["declared_path"],
+            f"verification_run.external_dependencies[{index}].declared_path",
+        )
+        _sha(
+            item["sha256"],
+            f"verification_run.external_dependencies[{index}].sha256",
+        )
+        size_bytes = item["size_bytes"]
+        if type(size_bytes) is not int or size_bytes < 0:
+            raise VerificationRunHistoryIntegrityError(
+                f"verification_run.external_dependencies[{index}].size_bytes "
+                "must be a non-negative integer"
+            )
+        identities.append((field, declared_path))
+    if identities != sorted(set(identities)):
+        raise VerificationRunHistoryIntegrityError(
+            "verification_run.external_dependencies must be unique and sorted "
+            "by field/path identity"
+        )
 
 
 def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
-    return {
+    body = {
         "project_source_revision": record["project_source_revision"],
         "analysis_id": record["analysis_id"],
         "analysis_kind": record["analysis_kind"],
@@ -127,6 +200,12 @@ def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
         "runtime_environment": copy.deepcopy(record["runtime_environment"]),
         "code_revision": copy.deepcopy(record["code_revision"]),
     }
+    if _record_schema_version(record) == 2:
+        body["record_schema_version"] = 2
+        body["external_dependencies"] = copy.deepcopy(
+            record["external_dependencies"]
+        )
+    return body
 
 
 def _record_sha256(record: dict[str, Any]) -> str:
@@ -140,17 +219,7 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
         raise VerificationRunHistoryIntegrityError(
             "every verification run history record must be an object"
         )
-    unknown = sorted(set(record) - _RECORD_FIELDS)
-    missing = sorted(_RECORD_FIELDS - set(record))
-    if unknown or missing:
-        details = []
-        if unknown:
-            details.append("unsupported: " + ", ".join(unknown))
-        if missing:
-            details.append("missing: " + ", ".join(missing))
-        raise VerificationRunHistoryIntegrityError(
-            "verification run record fields are invalid (" + "; ".join(details) + ")"
-        )
+    record_schema_version = _record_schema_version(record)
 
     sequence = record["sequence"]
     if type(sequence) is not int or sequence < 1:
@@ -304,6 +373,9 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
             "verification_run.code_revision must be an object"
         )
 
+    if record_schema_version == 2:
+        _validate_external_dependencies(record)
+
     if (
         _sha256_json(_verification_identity_body(record))
         != record["verification_identity_sha256"]
@@ -352,7 +424,11 @@ def validate_project_verification_run_history(
         raise VerificationRunHistoryIntegrityError(
             f"verification run history schema must be {VERIFICATION_RUN_HISTORY_SCHEMA!r}"
         )
-    if raw.get("schema_version") != VERIFICATION_RUN_HISTORY_SCHEMA_VERSION:
+    history_schema_version = raw.get("schema_version")
+    if history_schema_version not in {
+        _VERIFICATION_RUN_HISTORY_SCHEMA_VERSION_V1,
+        VERIFICATION_RUN_HISTORY_SCHEMA_VERSION,
+    }:
         raise VerificationRunHistoryIntegrityError(
             "unsupported verification run history schema version"
         )
@@ -378,7 +454,19 @@ def validate_project_verification_run_history(
 
     previous = anchor
     prior_sequence: int | None = None
+    seen_v2_record = False
     for record in records:
+        record_schema_version = _record_schema_version(record)
+        if history_schema_version == 1 and record_schema_version != 1:
+            raise VerificationRunHistoryIntegrityError(
+                "schema-v1 verification history cannot contain v2 records"
+            )
+        if record_schema_version == 2:
+            seen_v2_record = True
+        elif seen_v2_record:
+            raise VerificationRunHistoryIntegrityError(
+                "legacy v1 verification records cannot follow v2 records"
+            )
         _validate_record(record, expected_previous=previous)
         sequence = record["sequence"]
         if prior_sequence is not None and sequence != prior_sequence + 1:
@@ -438,45 +526,43 @@ def append_project_verification_run_record(
     )
     sequence = records[-1]["sequence"] + 1 if records else 1
 
-    forbidden = _RECORD_FIELDS & set(body)
-    forbidden -= {
-        "project_source_revision",
-        "analysis_id",
-        "analysis_name",
-        "analysis_kind",
-        "analysis_bundle_sha256",
-        "analysis_input_sha256",
-        "requirements_sha256",
-        "mappings_sha256",
-        "mapping_ids",
-        "evidence_sha256",
-        "evidence",
-        "verification_sha256",
-        "verification",
-        "proofgraph_sha256",
-        "workflow_sha256",
-        "verifier_implementation",
-        "cleanroomx_version",
-        "runtime_environment",
-        "code_revision",
-        "verification_identity_sha256",
+    if body.get("record_schema_version") == 2:
+        body_record_fields = _RECORD_FIELDS_V2
+        body_record_schema_version = 2
+    elif "record_schema_version" not in body and "external_dependencies" not in body:
+        body_record_fields = _RECORD_FIELDS_V1
+        body_record_schema_version = 1
+    else:
+        raise VerificationRunHistoryIntegrityError(
+            "verification run body record schema is invalid"
+        )
+
+    ledger_owned_fields = {
+        "sequence",
+        "completed_at_utc",
+        "previous_record_sha256",
+        "record_sha256",
     }
+    forbidden = ledger_owned_fields & set(body)
     if forbidden:
         raise VerificationRunHistoryIntegrityError(
             "verification run body contains ledger-owned field(s): "
             + ", ".join(sorted(forbidden))
         )
 
-    required_body_fields = _RECORD_FIELDS - {
-        "sequence",
-        "completed_at_utc",
-        "previous_record_sha256",
-        "record_sha256",
-    }
+    required_body_fields = body_record_fields - ledger_owned_fields
     if set(body) != required_body_fields:
         raise VerificationRunHistoryIntegrityError(
             "verification run body does not contain the exact persisted evidence fields"
         )
+
+    if history["schema_version"] == 1 and body_record_schema_version == 2:
+        history["schema_version"] = VERIFICATION_RUN_HISTORY_SCHEMA_VERSION
+    elif history["schema_version"] == 2 and body_record_schema_version == 1:
+        if any(_record_schema_version(item) == 2 for item in records):
+            raise VerificationRunHistoryIntegrityError(
+                "cannot append a legacy v1 verification record after v2 records"
+            )
 
     record = {
         "sequence": sequence,
@@ -506,7 +592,15 @@ def append_project_verification_run_record(
 
 
 def verification_run_identity_sha256(body: dict[str, Any]) -> str:
-    required = _RECORD_FIELDS - {
+    if body.get("record_schema_version") == 2:
+        record_fields = _RECORD_FIELDS_V2
+    elif "record_schema_version" not in body and "external_dependencies" not in body:
+        record_fields = _RECORD_FIELDS_V1
+    else:
+        raise VerificationRunHistoryIntegrityError(
+            "verification identity body record schema is invalid"
+        )
+    required = record_fields - {
         "sequence",
         "completed_at_utc",
         "previous_record_sha256",

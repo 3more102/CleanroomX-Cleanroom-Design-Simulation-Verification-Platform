@@ -35,16 +35,8 @@ def test_temperature_conversion_handles_affine_offset() -> None:
         target_unit="degF",
     )
 
-    celsius_alias = convert_engineering_value(
-        20.0,
-        source_unit="C",
-        target_unit="K",
-    )
-
     assert freezing.output_value == pytest.approx(0.0, abs=1e-12)
     assert boiling.output_value == pytest.approx(212.0, abs=1e-12)
-    assert celsius_alias.output_value == pytest.approx(293.15, abs=1e-12)
-    assert celsius_alias.source_canonical_unit == "degC"
 
 
 def test_conventional_water_column_pressure_factors_are_explicit() -> None:

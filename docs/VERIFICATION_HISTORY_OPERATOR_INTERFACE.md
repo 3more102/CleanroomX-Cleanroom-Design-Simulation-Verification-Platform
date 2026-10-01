@@ -27,7 +27,7 @@ The list output is strict JSON using inspection schema version 2 and contains:
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
 - compact per-record immutable verification status;
-- a per-record `current_assessment` that labels the latest applicable record with
+- a per-record `current_currency` that labels the latest applicable record with
   canonical current/stale/unverifiable state, older records as `historical`, and
   records for removed analyses as `not_in_current_project`;
 - the complete fail-closed project verification-currency assessment against the

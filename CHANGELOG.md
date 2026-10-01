@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — consolidated trust and evidence hardening — 2026-10-01
+
+- Makes external analysis-plugin loading fail closed by default, with explicit trusted/allowlist policy, canonicalized distribution identity, optional exact version pins, and rejection before plugin import.
+- Retains canonical ProofGraph documents alongside persisted verification-history digests, revalidates retained payload integrity, preserves legacy digest-only records, and enforces the configured history byte budget.
+- Hardens project requirements workflow projection by cross-checking ProofGraph requirements, evidence, findings, and verification-run metadata against the exact canonical workflow artifacts and rejecting resealed cross-artifact tampering.
+- Consolidates already-green PR work from #684, #683, and #687 onto the current mainline without changing solver equations, numerical tolerances, acceptance criteria, project schema, or certification semantics.
+
 ## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
 
 - Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.

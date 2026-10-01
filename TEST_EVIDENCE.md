@@ -1,3 +1,23 @@
+# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
+
+## Verified Release 3 functional baseline
+
+Validation date: 2026-10-01
+
+- PR **#707 — Release 3 final closure restack on current main**
+  - exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`
+  - CI run id `36875375370`: **success**
+  - Python 3.11 complete suite: **1662 passed, 4 skipped**
+  - Python 3.12 complete suite: **1662 passed, 4 skipped**
+  - Python 3.13 complete suite: **1662 passed, 4 skipped**
+  - Windows PowerShell/CMD launcher smoke: **success**
+
+Release 3 subsequently added the merged ProofGraph evidence-precedence/conflict assessment and CI Node-24 hardening, and the final release candidate includes project-batch protected-output hardening plus the v0.103.0 package/runtime/demo identity. The final release commit is not identified by a pre-written SHA: it is the successful CI SHA that is still the exact current `main` commit when the guarded publisher runs.
+
+The release-identity closure changes no solver equation, numerical tolerance, requirement criterion, project schema version, or historical verification verdict semantic.
+
+## Historical v0.102.1 and earlier evidence
+
 # CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — desktop requirement evidence drill-down — 2026-10-01
+
+- Adds a structured read-only **Requirement Evidence** view inside **Analysis → Verification History...**.
+- Projects each retained canonical finding as requirement → bound evidence → historical verdict without recomputing the verdict against current project state.
+- Shows subject scope, explicit criterion, retained actual value/unit, evidence freshness, source, and exact result locator while preserving the complete canonical record in a separate tab.
+- Uses the already integrity-validated persisted verification record and changes no solver equation, acceptance criterion, persisted verification schema, historical verdict, or project schema.
+
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

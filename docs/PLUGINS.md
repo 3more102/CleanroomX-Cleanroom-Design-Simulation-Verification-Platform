@@ -56,7 +56,38 @@ though Python normally compares `True == 1`.
 ## Discovery and failure behavior
 
 Discovery runs once when `cleanroomx.application` is imported. Restart
-CleanroomX after installing, removing, or upgrading a plugin.
+CleanroomX after installing, removing, upgrading, or changing trust settings for
+a plugin.
+
+### Pre-import trust policy
+
+External plugins can be gated before CleanroomX calls the entry point's
+`load()` method:
+
+- `CLEANROOMX_PLUGIN_MODE=trusted` (default) preserves the existing behavior
+  for installed plugins.
+- `CLEANROOMX_PLUGIN_MODE=disabled` blocks every external analysis plugin.
+- `CLEANROOMX_PLUGIN_MODE=allowlist` loads only distributions named in
+  `CLEANROOMX_PLUGIN_ALLOWLIST`.
+
+The allowlist is a comma-separated set of distribution names with optional exact
+version pins, for example:
+
+```text
+CLEANROOMX_PLUGIN_MODE=allowlist
+CLEANROOMX_PLUGIN_ALLOWLIST=cleanroomx-acme==2.4.1,cleanroomx-reviewed
+```
+
+Distribution names are canonicalized for case and `-` / `_` / `.`
+separator equivalence. Exact version pins are compared as installed version
+strings. In allowlist mode, missing distribution identity, a missing/mismatched
+pinned version, conflicting allowlist rules, malformed configuration, or an
+unknown trust mode fails closed for external plugins. Blocked entry points are
+reported as deterministic plugin issues and are not imported by CleanroomX.
+
+`cleanroomx-gui --check` exposes the effective trust policy through application
+registry diagnostics. These controls are execution policy, not package signing,
+publisher authentication, dependency isolation, or a Python sandbox.
 
 CleanroomX sorts entry points deterministically before discovery. A plugin is
 disabled when it:

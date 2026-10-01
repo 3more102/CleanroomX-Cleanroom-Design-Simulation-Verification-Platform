@@ -17,6 +17,7 @@ from .proofgraph_ifc import (
     proofgraph_with_ifc_design_evidence,
 )
 from .proofgraph_evidence_policy import (
+    EVIDENCE_PRECEDENCE_DECISION_SCOPE,
     EVIDENCE_PRECEDENCE_SCHEMA,
     EVIDENCE_PRECEDENCE_SCHEMA_VERSION,
     EvidencePrecedencePolicy,
@@ -49,6 +50,7 @@ from .proofgraph_models import (
 __all__ = [
     "PROOFGRAPH_SCHEMA",
     "PROOFGRAPH_SCHEMA_VERSION",
+    "EVIDENCE_PRECEDENCE_DECISION_SCOPE",
     "EVIDENCE_PRECEDENCE_SCHEMA",
     "EVIDENCE_PRECEDENCE_SCHEMA_VERSION",
     "CalculationEvidence",

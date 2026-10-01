@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Iterable
+from typing import Any, Iterable
 
+from .project_requirement_analysis_evidence import (
+    AnalysisRequirementEvidenceMapping,
+    bind_analysis_run_requirement_evidence,
+)
 from .project_requirement_verification import (
     RequirementEvidence,
     verify_project_requirements,
@@ -362,3 +366,24 @@ def proofgraphs_from_project_requirements_verification(
         )
 
     return tuple(graphs)
+
+
+def proofgraphs_from_project_requirements_analysis_run(
+    requirements: ProjectRequirements,
+    run_bundle: dict[str, Any],
+    mappings: Iterable[AnalysisRequirementEvidenceMapping],
+    *,
+    source_project_revision: str,
+    current_project_revision: str | None,
+) -> tuple[ProofGraph, ...]:
+    """Bind one immutable analysis run and project it into canonical ProofGraphs."""
+    bindings = bind_analysis_run_requirement_evidence(
+        run_bundle,
+        mappings,
+        source_project_revision=source_project_revision,
+        current_project_revision=current_project_revision,
+    )
+    return proofgraphs_from_project_requirements_verification(
+        requirements,
+        bindings,
+    )

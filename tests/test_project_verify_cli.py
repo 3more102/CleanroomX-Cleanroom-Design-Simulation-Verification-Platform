@@ -444,3 +444,40 @@ def test_project_verify_run_rechecks_output_identity_before_publication(
     assert guard_calls == 3
     assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"
 
+def test_project_verify_run_rechecks_source_revision_at_atomic_replace_boundary(
+    tmp_path,
+    monkeypatch,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    output = tmp_path / "workflow.json"
+    output.write_text("previous-valid-workflow\n", encoding="utf-8")
+    real_atomic_write_text = verify_cli.atomic_write_text
+
+    def mutate_source_after_staging(destination, text, *, before_replace=None):
+        assert before_replace is not None
+
+        def race_then_validate():
+            path.write_bytes(path.read_bytes() + b"\n")
+            before_replace()
+
+        return real_atomic_write_text(
+            destination,
+            text,
+            before_replace=race_then_validate,
+        )
+
+    monkeypatch.setattr(
+        verify_cli,
+        "atomic_write_text",
+        mutate_source_after_staging,
+    )
+
+    exit_code = verify_cli.main(
+        ["run", str(path), "room-a", "--output", str(output)]
+    )
+
+    assert exit_code == 2
+    assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"

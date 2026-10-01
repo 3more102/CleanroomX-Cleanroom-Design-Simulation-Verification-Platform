@@ -30,6 +30,16 @@ cleanroomx-project-dossier project.cleanroomx.json --output dossier.json
 Successful JSON output uses schema
 `cleanroomx.project-engineering-dossier`, version 1.
 
+## Desktop workflow
+
+Use **File → Export Project Engineering Dossier...** after saving the project.
+The desktop exporter refuses unsaved changes because the dossier must be bound to
+exact on-disk project bytes. It also refuses export if the saved project changed
+externally after it was opened or last saved.
+
+Choose a `.json` destination for the complete machine-readable evidence artifact
+or a `.md` destination for the review-oriented Markdown projection.
+
 ## Exact project binding
 
 The dossier records `source_project_revision`, the SHA-256 of the exact saved

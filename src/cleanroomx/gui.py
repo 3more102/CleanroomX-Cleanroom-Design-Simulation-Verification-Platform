@@ -51,6 +51,7 @@ from .project import (
     load_project_document,
     load_project_document_with_revision_info,
     new_project,
+    project_file_revision_matches,
     project_from_dict,
     save_project_document,
     save_project_document_guarded,
@@ -59,6 +60,14 @@ from .project_history import ProjectEditHistory, ProjectHistoryState
 from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
+)
+from .project_diagnostics_cli import (
+    _assert_output_is_distinct_from_dependencies,
+    _assert_output_is_distinct_from_source,
+)
+from .project_dossier import (
+    build_project_engineering_dossier,
+    markdown_project_engineering_dossier,
 )
 from .project_revisions import restore_project_revision, scan_project_revisions
 from .recovery_ui import RecoveryCenter
@@ -490,6 +499,10 @@ class CleanroomXApp:
         file_menu.add_command(
             label="Export Portable Project Bundle...",
             command=self.export_portable_project_bundle,
+        )
+        file_menu.add_command(
+            label="Export Project Engineering Dossier...",
+            command=self.export_project_engineering_dossier,
         )
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         file_menu.add_separator()
@@ -2214,6 +2227,140 @@ class CleanroomXApp:
                 f"Created {Path(path).name}.\n\n"
                 f"Dependencies packaged: {report['dependency_count']}\n"
                 f"Bundle SHA-256: {report['bundle_sha256']}"
+            ),
+            parent=self.root,
+        )
+
+    def export_project_engineering_dossier(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run first.",
+                parent=self.root,
+            )
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot export project dossier",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        if self.project_path is None:
+            self.status_var.set("Save the project before exporting a project dossier.")
+            messagebox.showinfo(
+                "Save project first",
+                (
+                    "The project-native dossier must be bound to exact saved project "
+                    "bytes. Save the project first, then export the dossier."
+                ),
+                parent=self.root,
+            )
+            return
+        if self._has_unsaved_changes():
+            self.status_var.set("Save project changes before exporting a project dossier.")
+            messagebox.showinfo(
+                "Save project changes first",
+                (
+                    "The project has unsaved changes. Save them before exporting so "
+                    "the dossier can record the exact source-project SHA-256."
+                ),
+                parent=self.root,
+            )
+            return
+
+        try:
+            revision_before = capture_project_file_revision(self.project_path)
+            expected_revision = getattr(self, "_project_file_revision", None)
+            if (
+                expected_revision is not None
+                and not project_file_revision_matches(
+                    expected_revision,
+                    revision_before,
+                )
+            ):
+                raise RuntimeError(
+                    "project file changed on disk after it was opened or saved"
+                )
+        except Exception as exc:
+            self.status_var.set("Project dossier export blocked")
+            messagebox.showerror(
+                "Project dossier export blocked",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX project engineering dossier",
+            initialfile=f"{self.project_path.stem}.dossier.json",
+            defaultextension=".json",
+            filetypes=[
+                ("CleanroomX dossier JSON", "*.json"),
+                ("Markdown report", "*.md"),
+            ],
+        )
+        if not path:
+            return
+
+        try:
+            _assert_output_is_distinct_from_source(self.project_path, path)
+            _assert_output_is_distinct_from_dependencies(
+                self.project,
+                base_dir=self.project_path.parent,
+                output=path,
+            )
+            dossier = build_project_engineering_dossier(
+                self.project,
+                source_project_revision=revision_before.sha256,
+                base_dir=self.project_path.parent,
+            )
+            destination = Path(path)
+            if destination.suffix.lower() in {".md", ".markdown"}:
+                content = markdown_project_engineering_dossier(dossier)
+                label = "Project dossier"
+            else:
+                content = (
+                    json.dumps(
+                        dossier,
+                        indent=2,
+                        sort_keys=True,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    )
+                    + "\n"
+                )
+                label = "Project dossier"
+
+            revision_after = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(revision_before, revision_after):
+                raise RuntimeError(
+                    "project file changed during dossier generation; export was discarded"
+                )
+        except Exception as exc:
+            self.status_var.set("Project dossier export failed")
+            messagebox.showerror(
+                "Project dossier export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        if not self._write_export_file(path, content, label=label):
+            return
+        messagebox.showinfo(
+            "Project dossier exported",
+            (
+                f"Created {Path(path).name}.\n\n"
+                f"Source project SHA-256: {dossier['source_project_revision']}\n"
+                f"Dossier SHA-256: {dossier['dossier_sha256']}"
             ),
             parent=self.root,
         )

@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    capture_project_file_revision,
+    load_project_document,
+    save_project_document,
+)
 from cleanroomx.run_history import (
     RUN_HISTORY_METADATA_KEY,
     append_run_history_record,
@@ -1286,3 +1292,193 @@ def test_spatial_sync_ambiguity_is_reported_without_mutating_analysis(monkeypatc
     assert warnings[0][0] == "Cannot synchronize geometry"
     assert "duplicate room name" in warnings[0][1]
     assert "blocked" in app.status_var.value.lower()
+
+
+
+def test_gui_project_dossier_export_requires_saved_clean_project(monkeypatch, tmp_path):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(name="Unsaved dossier")
+    app.project_path = None
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    dialog_calls = []
+    info_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: dialog_calls.append(kwargs) or "",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: info_calls.append((title, message)),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert dialog_calls == []
+    assert info_calls
+    assert info_calls[0][0] == "Save project first"
+    assert "exact saved project bytes" in info_calls[0][1]
+
+
+def test_gui_project_dossier_export_refuses_unsaved_edits(monkeypatch, tmp_path):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Dirty dossier"),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: True
+
+    dialog_calls = []
+    info_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: dialog_calls.append(kwargs) or "",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: info_calls.append((title, message)),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert dialog_calls == []
+    assert info_calls
+    assert info_calls[0][0] == "Save project changes first"
+    assert "unsaved changes" in info_calls[0][1].lower()
+
+
+def test_gui_project_dossier_export_writes_revision_bound_json(monkeypatch, tmp_path):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="GUI dossier"),
+    )
+    revision = capture_project_file_revision(project_path)
+    destination = tmp_path / "project.dossier.json"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+    app._write_export_file = CleanroomXApp._write_export_file.__get__(
+        app,
+        CleanroomXApp,
+    )
+
+    info_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: info_calls.append((title, message)),
+    )
+
+    app.export_project_engineering_dossier()
+
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    assert payload["schema"] == "cleanroomx.project-engineering-dossier"
+    assert payload["source_project_revision"] == revision.sha256
+    assert len(payload["dossier_sha256"]) == 64
+    assert "Exported project dossier" in app.status_var.value
+    assert info_calls[-1][0] == "Project dossier exported"
+    assert payload["dossier_sha256"] in info_calls[-1][1]
+
+
+def test_gui_project_dossier_export_rejects_external_project_change(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="External change"),
+    )
+    revision = capture_project_file_revision(project_path)
+    project_path.write_text(
+        project_path.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(name="External change")
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    dialog_calls = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: dialog_calls.append(kwargs) or "",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert dialog_calls == []
+    assert errors
+    assert errors[0][0] == "Project dossier export blocked"
+    assert "changed on disk" in errors[0][1]

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — desktop project dossier export — 2026-10-01
+
+- Adds **File → Export Project Engineering Dossier...** to the desktop application.
+- Requires an explicitly saved, clean project so the exported artifact is bound to exact source bytes rather than unsaved editor state.
+- Refuses externally changed source projects and protects both the project source and registered external engineering dependencies from report overwrite.
+- Supports complete strict-JSON dossier export and review-oriented Markdown export while preserving the existing canonical dossier SHA-256.
+
+
 ## Unreleased Release 3 — project-native engineering dossier — 2026-10-01
 
 - Adds a deterministic project-native dossier that projects canonical analysis definitions, first-class requirements, explicit requirement-evidence mappings, retained immutable analysis runs, persisted canonical verification runs, and project diagnostics into one evidence artifact.

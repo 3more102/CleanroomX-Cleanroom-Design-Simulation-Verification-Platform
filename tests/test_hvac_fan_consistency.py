@@ -7,6 +7,13 @@ import pytest
 from cleanroomx.consistency import analyze_hvac_fan_airflow_consistency
 from cleanroomx.dossier import build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
+from cleanroomx.fan_curve import (
+    FanCurve,
+    FanCurvePoint,
+    FanOperatingPointStudy,
+    SystemCurve,
+    solve_fan_operating_point,
+)
 from cleanroomx.hvac import analyze_hvac_project
 from cleanroomx.hvac_io import hvac_project_from_dict
 
@@ -65,6 +72,62 @@ def test_hvac_fan_airflow_consistency_uses_unrounded_source_project() -> None:
     assert result["status"] == "pass"
     assert result["mismatch_count"] == 0
     assert result["hvac_governing_airflow_m3_h"] == 1000.0004
+    assert result["study_airflow_checks"][0]["absolute_difference_m3_h"] == 0.00015
+
+
+def test_hvac_fan_consistency_uses_unrounded_standalone_fan_root() -> None:
+    project = hvac_project_from_dict(
+        {
+            "name": "Cross-study fan precision",
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 1000.0004,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+    presented_hvac = analyze_hvac_project(project)
+
+    exact_airflow = 1000.00055
+    system = SystemCurve(
+        "Precision system",
+        fixed_pressure_pa=50.0,
+        resistance_pa_per_m3_s_squared=100.0,
+    )
+    exact_pressure = system.pressure_at(exact_airflow)
+    study = FanOperatingPointStudy(
+        "Precision fan",
+        FanCurve(
+            "Precision curve",
+            (
+                FanCurvePoint(0.0, 100.0),
+                FanCurvePoint(exact_airflow, exact_pressure),
+                FanCurvePoint(2000.0, 20.0),
+            ),
+        ),
+        system,
+    )
+    presented_fan = solve_fan_operating_point(study)
+    assert presented_fan["operating_point"]["airflow_m3_h"] == 1000.001
+
+    result = analyze_hvac_fan_airflow_consistency(
+        presented_hvac,
+        hvac_project=project,
+        fan_operating_points=[presented_fan],
+        fan_operating_point_studies=[study],
+        airflow_abs_tolerance_m3_h=0.0002,
+    )
+
+    assert result["status"] == "pass"
+    assert result["mismatch_count"] == 0
+    assert result["study_airflow_checks"][0]["fan_operating_airflow_m3_h"] == 1000.00055
     assert result["study_airflow_checks"][0]["absolute_difference_m3_h"] == 0.00015
 
 

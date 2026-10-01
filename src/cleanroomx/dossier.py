@@ -826,14 +826,13 @@ def build_dossier(manifest_path: str | Path) -> dict:
         )
 
     fan_operating_points: list[dict] = []
+    fan_operating_point_studies = []
     for item in data.get("fan_operating_point_studies", []):
         source = _source_record("fan_operating_point_study", item, manifest_dir)
         source_records.append(source)
-        fan_operating_points.append(
-            solve_fan_operating_point(
-                load_fan_operating_point_study(source["_resolved_path"])
-            )
-        )
+        study = load_fan_operating_point_study(source["_resolved_path"])
+        fan_operating_point_studies.append(study)
+        fan_operating_points.append(solve_fan_operating_point(study))
 
     fan_system_uncertainty: list[dict] = []
     for item in data.get("fan_system_uncertainty_analyses", []):
@@ -1037,6 +1036,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
             hvac,
             hvac_project=hvac_project,
             fan_operating_points=fan_operating_points,
+            fan_operating_point_studies=fan_operating_point_studies,
             fan_duct_networks=fan_duct_networks,
             fan_parallel_networks=fan_parallel_networks,
             fan_loop_networks=fan_loop_networks,

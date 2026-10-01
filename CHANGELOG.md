@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased cross-study numerical integrity — full-precision standalone fan consistency — 2026-09-30
+
+- Recomputes dossier-owned standalone fan/system operating points through the canonical full-precision solver state when evaluating HVAC/fan airflow consistency.
+- Prevents the public three-decimal fan operating airflow from changing a fine user-supplied tolerance-boundary match/mismatch decision while preserving the public fan result schema.
+- Adds a regression where the canonical fan root is 1000.00055 m³/h but the displayed value is 1000.001 m³/h, proving the consistency verdict follows engineering state rather than presentation rounding.
+
 ## Unreleased damper numerical integrity — full-precision redistribution metrics — 2026-09-30
 
 - Computes damper-case edge airflow deltas and percent changes from canonical full-precision loop-network state instead of subtracting rounded public edge flows.

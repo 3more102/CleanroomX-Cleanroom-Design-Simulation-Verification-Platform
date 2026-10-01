@@ -362,6 +362,55 @@ def project_requirement_traceability_snapshot(
     }
 
 
+def verification_history_requirement_rows(record: dict) -> list[dict]:
+    """Project one validated retained record into read-only drill-down rows."""
+    verification = record.get("verification")
+    evidence = record.get("evidence")
+    if not isinstance(verification, dict) or not isinstance(evidence, list):
+        return []
+    findings = verification.get("findings")
+    if not isinstance(findings, list):
+        return []
+
+    evidence_by_id = {
+        item["id"]: item
+        for item in evidence
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and item["id"]
+    }
+    rows: list[dict] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        raw_evidence_ids = finding.get("evidence_ids", [])
+        evidence_ids = (
+            tuple(item for item in raw_evidence_ids if isinstance(item, str))
+            if isinstance(raw_evidence_ids, list)
+            else ()
+        )
+        rows.append(
+            {
+                "requirement_id": str(finding.get("requirement_id", "")),
+                "subject_ref": copy.deepcopy(finding.get("subject_ref")),
+                "status": str(finding.get("status", "")),
+                "state": str(finding.get("state", "")),
+                "criterion": copy.deepcopy(finding.get("criterion")),
+                "actual": copy.deepcopy(finding.get("actual")),
+                "unit": copy.deepcopy(finding.get("unit")),
+                "included": bool(finding.get("included", False)),
+                "explanation": str(finding.get("explanation", "")),
+                "evidence_ids": evidence_ids,
+                "evidence": tuple(
+                    copy.deepcopy(evidence_by_id[evidence_id])
+                    for evidence_id in evidence_ids
+                    if evidence_id in evidence_by_id
+                ),
+            }
+        )
+    return rows
+
+
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
     if isinstance(value, dict):
@@ -572,8 +621,8 @@ class VerificationHistoryDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1400x720")
-        self.minsize(1040, 560)
+        self.geometry("1460x780")
+        self.minsize(1080, 600)
         self.transient(parent)
 
         metadata = project.metadata
@@ -651,15 +700,97 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         list_scroll.pack(side="right", fill="y")
 
-        self.detail = tk.Text(detail_frame, wrap="none")
-        detail_scroll = ttk.Scrollbar(
-            detail_frame,
+        detail_tabs = ttk.Notebook(detail_frame)
+        detail_tabs.pack(fill="both", expand=True)
+
+        evidence_tab = ttk.Frame(detail_tabs)
+        record_tab = ttk.Frame(detail_tabs)
+        detail_tabs.add(evidence_tab, text="Requirement Evidence")
+        detail_tabs.add(record_tab, text="Canonical Record")
+
+        ttk.Label(
+            evidence_tab,
+            text=(
+                "Read-only historical requirement → evidence → verdict projection. "
+                "No verdict is recomputed from current project state."
+            ),
+        ).pack(fill="x", padx=8, pady=(8, 4))
+
+        evidence_frame = ttk.Frame(evidence_tab)
+        evidence_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.requirement_tree = ttk.Treeview(
+            evidence_frame,
+            columns=(
+                "subject",
+                "verdict",
+                "state",
+                "criterion",
+                "actual",
+                "unit",
+                "freshness",
+                "source",
+            ),
+            show="tree headings",
+        )
+        self.requirement_tree.heading("#0", text="Requirement / Evidence")
+        self.requirement_tree.heading("subject", text="Subject")
+        self.requirement_tree.heading("verdict", text="Verdict")
+        self.requirement_tree.heading("state", text="State")
+        self.requirement_tree.heading("criterion", text="Criterion")
+        self.requirement_tree.heading("actual", text="Actual")
+        self.requirement_tree.heading("unit", text="Unit")
+        self.requirement_tree.heading("freshness", text="Freshness")
+        self.requirement_tree.heading("source", text="Evidence source / locator")
+        self.requirement_tree.column("#0", width=210)
+        self.requirement_tree.column("subject", width=120, stretch=False)
+        self.requirement_tree.column("verdict", width=85, stretch=False)
+        self.requirement_tree.column("state", width=105, stretch=False)
+        self.requirement_tree.column("criterion", width=230)
+        self.requirement_tree.column("actual", width=150)
+        self.requirement_tree.column("unit", width=80, stretch=False)
+        self.requirement_tree.column("freshness", width=105, stretch=False)
+        self.requirement_tree.column("source", width=330)
+
+        evidence_scroll_y = ttk.Scrollbar(
+            evidence_frame,
+            orient="vertical",
+            command=self.requirement_tree.yview,
+        )
+        evidence_scroll_x = ttk.Scrollbar(
+            evidence_frame,
+            orient="horizontal",
+            command=self.requirement_tree.xview,
+        )
+        self.requirement_tree.configure(
+            yscrollcommand=evidence_scroll_y.set,
+            xscrollcommand=evidence_scroll_x.set,
+        )
+        self.requirement_tree.grid(row=0, column=0, sticky="nsew")
+        evidence_scroll_y.grid(row=0, column=1, sticky="ns")
+        evidence_scroll_x.grid(row=1, column=0, sticky="ew")
+        evidence_frame.rowconfigure(0, weight=1)
+        evidence_frame.columnconfigure(0, weight=1)
+
+        self.detail = tk.Text(record_tab, wrap="none")
+        detail_scroll_y = ttk.Scrollbar(
+            record_tab,
             orient="vertical",
             command=self.detail.yview,
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        detail_scroll_x = ttk.Scrollbar(
+            record_tab,
+            orient="horizontal",
+            command=self.detail.xview,
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        record_tab.rowconfigure(0, weight=1)
+        record_tab.columnconfigure(0, weight=1)
 
         for record in reversed(self.records):
             verification = record["verification"]
@@ -700,6 +831,17 @@ class VerificationHistoryDialog(tk.Toplevel):
             self.tree.focus(children[0])
             self._show_selected()
 
+    @staticmethod
+    def _display_value(value) -> str:
+        if value is None:
+            return ""
+        return json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -708,6 +850,85 @@ class VerificationHistoryDialog(tk.Toplevel):
         record = next(
             item for item in self.records if item["sequence"] == sequence
         )
+
+        for item in self.requirement_tree.get_children():
+            self.requirement_tree.delete(item)
+        for index, row in enumerate(verification_history_requirement_rows(record)):
+            parent_id = f"finding:{index}"
+            subject = row["subject_ref"] if row["subject_ref"] is not None else "project"
+            self.requirement_tree.insert(
+                "",
+                "end",
+                iid=parent_id,
+                text=row["requirement_id"],
+                open=True,
+                values=(
+                    subject,
+                    row["status"],
+                    row["state"],
+                    self._display_value(row["criterion"]),
+                    self._display_value(row["actual"]),
+                    row["unit"] or "",
+                    "",
+                    row["explanation"],
+                ),
+            )
+            retained_by_id = {
+                item.get("id"): item
+                for item in row["evidence"]
+                if isinstance(item, dict)
+            }
+            if not row["evidence_ids"]:
+                self.requirement_tree.insert(
+                    parent_id,
+                    "end",
+                    text="No bound evidence",
+                    values=("", "", "", "", "", "", "", ""),
+                )
+                continue
+            for evidence_index, evidence_id in enumerate(row["evidence_ids"]):
+                evidence = retained_by_id.get(evidence_id)
+                if evidence is None:
+                    self.requirement_tree.insert(
+                        parent_id,
+                        "end",
+                        iid=f"{parent_id}:missing:{evidence_index}",
+                        text=evidence_id,
+                        values=(
+                            "",
+                            "",
+                            "missing",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "Referenced evidence is not retained in this record.",
+                        ),
+                    )
+                    continue
+                source = str(evidence.get("source", ""))
+                locator = str(evidence.get("evidence_locator", ""))
+                source_locator = source
+                if locator:
+                    source_locator += (" · " if source_locator else "") + locator
+                evidence_subject = evidence.get("subject_ref")
+                self.requirement_tree.insert(
+                    parent_id,
+                    "end",
+                    iid=f"{parent_id}:evidence:{evidence_index}",
+                    text=evidence_id,
+                    values=(
+                        evidence_subject if evidence_subject is not None else "project",
+                        "",
+                        "",
+                        "",
+                        self._display_value(evidence.get("value")),
+                        evidence.get("unit") or "",
+                        evidence.get("freshness") or "",
+                        source_locator,
+                    ),
+                )
+
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         self.detail.insert(

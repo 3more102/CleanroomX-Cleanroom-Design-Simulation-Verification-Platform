@@ -1681,6 +1681,68 @@ def test_gui_project_requirements_verification_persists_adverse_evidence(
     assert "Adverse/incomplete verification persisted" in app.status_var.value
 
 
+def test_verification_history_currency_context_applies_only_to_latest_record():
+    latest_record = {
+        "sequence": 9,
+        "analysis_id": "room-a",
+    }
+    current_assessment = {
+        "analysis_id": "room-a",
+        "state": "stale",
+        "current": False,
+        "complete": True,
+        "mismatch_reasons": ["analysis_input_changed"],
+        "latest_record": {"sequence": 9},
+    }
+
+    latest_context = gui_module.verification_history_record_currency_context(
+        latest_record,
+        current_assessment,
+    )
+    assert latest_context == current_assessment
+    assert latest_context is not current_assessment
+
+    historical_context = gui_module.verification_history_record_currency_context(
+        {"sequence": 8, "analysis_id": "room-a"},
+        current_assessment,
+    )
+    assert historical_context["state"] == "historical"
+    assert historical_context["current"] is False
+    assert historical_context["mismatch_reasons"] == []
+
+    removed_context = gui_module.verification_history_record_currency_context(
+        {"sequence": 3, "analysis_id": "removed-analysis"},
+        None,
+    )
+    assert removed_context["state"] == "not_in_current_project"
+    assert removed_context["current"] is False
+
+
+def test_gui_verification_history_passes_project_and_base_dir_to_dialog(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="Verification history")
+    base_dir = Path("/tmp/cleanroomx-verification-history")
+    app._base_dir = lambda: base_dir
+
+    captured = []
+    monkeypatch.setattr(
+        gui_module,
+        "validate_project_verification_run_history",
+        lambda metadata: {"record_count": 2},
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "VerificationHistoryDialog",
+        lambda parent, project, *, base_dir=None: captured.append(
+            (parent, project, base_dir)
+        ),
+    )
+
+    assert app.show_verification_history() is True
+    assert captured == [(app.root, app.project, base_dir)]
+
+
 def test_gui_verification_history_empty_is_reported(monkeypatch):
     class Status:
         def __init__(self):

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
+
+- Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.
+- Applies canonical current/stale/dependency-freshness-unverifiable state only to each analysis's latest retained record; older rows are explicitly labeled `historical`.
+- Labels retained records for analyses no longer present in the current project as `not_in_current_project` instead of implying current applicability.
+- Reuses saved-project base-directory dependency checks and changes no solver equations, requirement verdicts, persisted verification records, or project schema.
+
+
 ## Unreleased Release 3 — dossier verification currency context — 2026-10-01
 
 - Separates each project-dossier latest retained verification's historical PASS/FAIL status from its present verification-currency assessment.

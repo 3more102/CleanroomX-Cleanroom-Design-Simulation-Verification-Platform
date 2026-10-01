@@ -104,6 +104,7 @@ class RequirementEvidence:
     subject_ref: str | None = None
     unit: str | None = None
     calculation_source: str | None = None
+    evidence_locator: str | None = None
     project_revision: str | None = None
     evidence_kinds: tuple[str, ...] = ()
     freshness: str = "unknown"
@@ -115,7 +116,13 @@ class RequirementEvidence:
                 name,
                 _nonempty(getattr(self, name), f"requirement_evidence.{name}"),
             )
-        for name in ("subject_ref", "unit", "calculation_source", "project_revision"):
+        for name in (
+            "subject_ref",
+            "unit",
+            "calculation_source",
+            "evidence_locator",
+            "project_revision",
+        ):
             object.__setattr__(
                 self,
                 name,
@@ -154,6 +161,7 @@ class RequirementEvidence:
             "source": self.source,
             "source_revision": self.source_revision,
             "calculation_source": self.calculation_source,
+            "evidence_locator": self.evidence_locator,
             "project_revision": self.project_revision,
             "evidence_kinds": list(self.evidence_kinds),
             "freshness": self.freshness,

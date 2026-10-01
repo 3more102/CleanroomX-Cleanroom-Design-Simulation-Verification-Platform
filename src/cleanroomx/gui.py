@@ -84,6 +84,7 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
+from .verification_currency import assess_project_verification_currency
 from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
@@ -129,6 +130,42 @@ def unit_hint(path: str) -> str:
     if key.endswith("_1_h") or key == "ach":
         return "1/h"
     return ""
+
+
+def verification_history_record_currency_context(
+    record: dict,
+    current_assessment: dict | None,
+) -> dict:
+    """Return current-project context without rewriting historical evidence."""
+    if current_assessment is None:
+        return {
+            "state": "not_in_current_project",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "The analysis referenced by this retained verification record is "
+                "not present in the current project."
+            ),
+        }
+
+    latest_record = current_assessment.get("latest_record")
+    if (
+        not isinstance(latest_record, dict)
+        or latest_record.get("sequence") != record.get("sequence")
+    ):
+        return {
+            "state": "historical",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "A newer retained verification record exists for this analysis. "
+                "Current verification currency applies only to the latest retained "
+                "record."
+            ),
+        }
+    return copy.deepcopy(current_assessment)
 
 
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
@@ -332,22 +369,45 @@ class RunHistoryDialog(tk.Toplevel):
 
 
 class VerificationHistoryDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Misc, metadata: dict):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        project: ProjectDocument,
+        *,
+        base_dir: str | Path | None = None,
+    ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1240x700")
-        self.minsize(940, 540)
+        self.geometry("1400x720")
+        self.minsize(1040, 560)
         self.transient(parent)
 
+        metadata = project.metadata
         summary = validate_project_verification_run_history(metadata)
         self.records = verification_run_history_records(metadata)
+        currency = assess_project_verification_currency(
+            project,
+            base_dir=base_dir,
+        )
+        self.currency_by_analysis = {
+            item["analysis_id"]: item
+            for item in currency.get("analyses", [])
+        }
         ttk.Label(
             self,
             text=(
                 f"Verified retained verification chain — {summary['record_count']} record(s). "
                 "Hashes provide tamper evidence, not signer authentication."
             ),
-        ).pack(fill="x", padx=10, pady=(10, 6))
+        ).pack(fill="x", padx=10, pady=(10, 3))
+        ttk.Label(
+            self,
+            text=(
+                "Historical status is immutable evidence. Current currency is shown "
+                "only for each analysis's latest retained record; older records are "
+                "labeled historical."
+            ),
+        ).pack(fill="x", padx=10, pady=(0, 6))
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -359,7 +419,15 @@ class VerificationHistoryDialog(tk.Toplevel):
 
         self.tree = ttk.Treeview(
             list_frame,
-            columns=("time", "analysis", "kind", "status", "verified", "identity"),
+            columns=(
+                "time",
+                "analysis",
+                "kind",
+                "status",
+                "currency",
+                "verified",
+                "identity",
+            ),
             show="tree headings",
             height=10,
         )
@@ -367,14 +435,16 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.tree.heading("time", text="Completed UTC")
         self.tree.heading("analysis", text="Analysis")
         self.tree.heading("kind", text="Kind")
-        self.tree.heading("status", text="Status")
+        self.tree.heading("status", text="Historical status")
+        self.tree.heading("currency", text="Current currency")
         self.tree.heading("verified", text="Verified")
         self.tree.heading("identity", text="Verification identity")
         self.tree.column("#0", width=55, stretch=False)
         self.tree.column("time", width=185, stretch=False)
-        self.tree.column("analysis", width=220)
-        self.tree.column("kind", width=180)
-        self.tree.column("status", width=100, stretch=False)
+        self.tree.column("analysis", width=210)
+        self.tree.column("kind", width=165)
+        self.tree.column("status", width=115, stretch=False)
+        self.tree.column("currency", width=245, stretch=False)
         self.tree.column("verified", width=80, stretch=False)
         self.tree.column("identity", width=175, stretch=False)
 
@@ -399,6 +469,16 @@ class VerificationHistoryDialog(tk.Toplevel):
 
         for record in reversed(self.records):
             verification = record["verification"]
+            context = verification_history_record_currency_context(
+                record,
+                self.currency_by_analysis.get(record["analysis_id"]),
+            )
+            currency_text = str(context["state"])
+            mismatch_reasons = context.get("mismatch_reasons", [])
+            if mismatch_reasons:
+                currency_text += " (" + ", ".join(
+                    str(reason) for reason in mismatch_reasons
+                ) + ")"
             self.tree.insert(
                 "",
                 "end",
@@ -409,6 +489,7 @@ class VerificationHistoryDialog(tk.Toplevel):
                     record["analysis_name"],
                     record["analysis_kind"],
                     verification["status"],
+                    currency_text,
                     "yes" if verification["verified"] else "no",
                     record["verification_identity_sha256"][:16] + "…",
                 ),
@@ -1243,7 +1324,11 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return False
-        VerificationHistoryDialog(self.root, self.project.metadata)
+        VerificationHistoryDialog(
+            self.root,
+            self.project,
+            base_dir=self._base_dir(),
+        )
         return True
 
     def _project_verification_target(

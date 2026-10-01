@@ -146,6 +146,7 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["schema"] == VERIFICATION_HISTORY_INSPECTION_SCHEMA
+    assert payload["schema_version"] == 2
     assert payload["history"]["record_count"] == 1
     assert payload["selection"] == {
         "analysis_id": None,
@@ -156,6 +157,8 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     assert record["analysis_id"] == "room-a"
     assert record["verification"]["status"] == "pass"
     assert record["verification"]["verified"] is True
+    assert record["current_project_context"]["state"] == "current"
+    assert record["current_project_context"]["current"] is True
     assert record["record_sha256"] == persisted.record["record_sha256"]
     assert payload["source"]["stable_during_inspection"] is True
     assert len(payload["source"]["sha256"]) == 64
@@ -188,6 +191,8 @@ def test_verification_history_cli_shows_full_record(tmp_path, capsys):
     assert payload["record"] == persisted.record
     assert payload["record"]["evidence"][0]["evidence_locator"] == "/result/ach"
     assert payload["record"]["verification"]["verified"] is True
+    assert payload["current_project_context"]["state"] == "current"
+    assert payload["current_project_context"]["current"] is True
 
 
 def test_verification_history_cli_rejects_missing_sequence(tmp_path, capsys):

@@ -6,6 +6,7 @@ from typing import Any
 from .application import (
     analysis_external_dependency_references,
     analysis_input_sha256,
+    external_dependency_fingerprints_current,
 )
 from .project import ProjectDocument
 from .project_requirement_evidence_mappings import (
@@ -58,6 +59,7 @@ def _analysis_currency(
     latest_record: dict[str, Any] | None,
     requirements_sha256: str | None,
     mappings,
+    base_dir=None,
 ) -> dict[str, Any]:
     active_mapping_ids = (
         sorted(
@@ -133,6 +135,7 @@ def _analysis_currency(
             "verification_identity_sha256"
         ],
         "record_sha256": latest_record["record_sha256"],
+        "external_dependencies_recorded": "external_dependencies" in latest_record,
     }
 
     mismatch_reasons: list[str] = []
@@ -162,18 +165,71 @@ def _analysis_currency(
         }
 
     if dependencies:
-        return {
-            **base,
-            "latest_record": record_summary,
-            "state": _UNVERIFIABLE,
-            "current": False,
-            "complete": False,
-            "explanation": (
-                "Project configuration matches the latest retained verification, "
-                "but that verification record does not retain external dependency "
-                "fingerprints needed to prove the referenced files are unchanged."
-            ),
-        }
+        recorded_dependencies = latest_record.get("external_dependencies")
+        if not isinstance(recorded_dependencies, list):
+            return {
+                **base,
+                "latest_record": record_summary,
+                "state": _UNVERIFIABLE,
+                "current": False,
+                "complete": False,
+                "explanation": (
+                    "Project configuration matches the latest retained verification, "
+                    "but this legacy verification record does not retain external "
+                    "dependency fingerprints."
+                ),
+            }
+
+        expected_references = [
+            (item.get("field"), item.get("declared_path"))
+            for item in recorded_dependencies
+            if isinstance(item, dict)
+        ]
+        if expected_references != list(dependencies):
+            return {
+                **base,
+                "latest_record": record_summary,
+                "mismatch_reasons": ["external_dependency_set_changed"],
+                "state": _STALE,
+                "current": False,
+                "complete": True,
+                "explanation": (
+                    "The persisted dependency identity set does not match the "
+                    "current file-backed analysis dependency declarations."
+                ),
+            }
+
+        if base_dir is None:
+            return {
+                **base,
+                "latest_record": record_summary,
+                "state": _UNVERIFIABLE,
+                "current": False,
+                "complete": False,
+                "explanation": (
+                    "Dependency fingerprints are retained, but no project base "
+                    "directory was supplied for content freshness checks."
+                ),
+            }
+
+        if not external_dependency_fingerprints_current(
+            recorded_dependencies,
+            base_dir=base_dir,
+        ):
+            return {
+                **base,
+                "latest_record": record_summary,
+                "mismatch_reasons": [
+                    "external_dependency_content_changed_or_unavailable"
+                ],
+                "state": _STALE,
+                "current": False,
+                "complete": True,
+                "explanation": (
+                    "The current file-backed dependency content does not match "
+                    "the fingerprints retained by the latest verification."
+                ),
+            }
 
     return {
         **base,
@@ -191,12 +247,14 @@ def _analysis_currency(
 
 def assess_project_verification_currency(
     project: ProjectDocument,
+    *,
+    base_dir=None,
 ) -> dict[str, Any]:
     """Assess whether retained project-verification evidence matches current state.
 
-    This is deliberately fail-closed. A matching configuration with file-backed
-    dependencies is not called current because persisted verification records do
-    not retain dependency fingerprints in schema version 1.
+    This is deliberately fail-closed. File-backed verification is current only
+    when persisted dependency fingerprints are present and the current files can
+    be content-checked from the supplied project base directory.
     """
     if not isinstance(project, ProjectDocument):
         raise TypeError("verification currency requires a ProjectDocument")
@@ -212,6 +270,7 @@ def assess_project_verification_currency(
             latest_record=latest.get(analysis.id),
             requirements_sha256=requirements_sha256,
             mappings=mappings,
+            base_dir=base_dir,
         )
         for analysis in sorted(project.analyses, key=lambda item: item.id)
     ]
@@ -262,9 +321,12 @@ def assess_project_verification_currency(
                 "a certification decision."
             ),
             (
-                "Schema-v1 persisted verification records do not retain external "
-                "dependency fingerprints, so file-backed dependency freshness is "
-                "reported as unverifiable rather than assumed current."
+                "Legacy persisted verification records without external dependency "
+                "fingerprints remain unverifiable rather than being assumed current."
+            ),
+            (
+                "File-backed dependency freshness requires a project base directory "
+                "so declared relative paths can be content-fingerprinted."
             ),
         ],
     }

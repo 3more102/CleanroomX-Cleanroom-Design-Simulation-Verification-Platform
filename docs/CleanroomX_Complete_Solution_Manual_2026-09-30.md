@@ -1,6 +1,6 @@
 ---
 revision: 2.1
-stable: v0.102.1
+stable: v0.103.0
 baseline: Stable release baseline; development-preview features explicitly labeled
 date: 1 October 2026
 ---
@@ -15,7 +15,7 @@ date: 1 October 2026
 | Issue date | 1 October 2026 |
 | Document class | Controlled engineering operating reference |
 | Approval record | Maintained by the adopting organization's document-control process |
-| Stable software baseline | v0.102.1 |
+| Stable software baseline | v0.103.0 |
 | Stable release validation | 1008 passing tests on Python 3.11, 3.12 and 3.13 at the final deterministic-spatial-drag release gate |
 | Project schema | `cleanroomx.project`, schema version 1 |
 | Base package dependencies | None required by the package metadata |
@@ -148,7 +148,7 @@ The v0.102.1 release evidence records **1008 passing tests** on each supported P
 
 ## 3.2 Development preview isolation
 
-Current `main` contains additional unreleased engineering/evidence work beyond v0.102.1. Examples documented on `main` include ProofGraph foundations, pressure-design evidence integrations, additional evidence adapters, room pressure/leakage network work, and design-foundation/assurance enhancements.
+Release 3 / v0.103.0 incorporates the previously previewed engineering/evidence foundation, including ProofGraph, project requirements traceability, verification-history currency, explicit evidence authority, plugin trust controls, and design-assurance enhancements.
 
 These features may be technically valuable, but they must be labeled **DEVELOPMENT PREVIEW** until incorporated into a released or internally qualified baseline.
 
@@ -254,7 +254,7 @@ A typical structure is:
 {
   "schema": "cleanroomx.project",
   "schema_version": 1,
-  "application_version": "0.102.1",
+  "application_version": "0.103.0",
   "project": {
     "name": "Facility A - Cleanroom Upgrade",
     "metadata": {}

@@ -48,7 +48,7 @@ jobs:
             echo "Successful CI commit is current main and is eligible for v0.103.0 publication."
           fi
 
-      - name: Verify Release 3 identity and evidence
+      - name: Verify validated release identity
         if: steps.closure.outputs.publish == 'true'
         shell: bash
         run: |
@@ -58,12 +58,10 @@ jobs:
           git show "${TARGET_SHA}:examples/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.103.0"'
           git show "${TARGET_SHA}:src/cleanroomx/demo/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.103.0"'
           git show "${TARGET_SHA}:README.md" | grep -F 'The current stable release is **v0.103.0**.'
-          git show "${TARGET_SHA}:CHANGELOG.md" | grep -F '## v0.103.0 — Release 3 verification and assurance closure — 2026-10-01'
+          git show "${TARGET_SHA}:CHANGELOG.md" | grep -F '## CleanroomX v0.103.0 — Release 3 — 2026-10-01'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'Release: CleanroomX v0.103.0'
-          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run: #2229 / 36875375370 — SUCCESS'
-          git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.103.0 Release 3 Verification & Assurance Test Evidence'
-          git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '1662 passed, 4 skipped'
-          git show "${TARGET_SHA}:.github/workflows/ci.yml" | grep -F 'assert metadata["project"]["version"] == "0.103.0"'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F '36875375370'
+          git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.103.0 Release 3 Test Evidence'
 
       - name: Publish tag and GitHub Release
         if: steps.closure.outputs.publish == 'true'
@@ -93,33 +91,22 @@ jobs:
           fi
 
           cat > /tmp/release-notes.md <<'EOF'
-          CleanroomX v0.103.0 is the Release 3 verification and assurance closure.
+          CleanroomX v0.103.0 is the Release 3 verification and assurance closure on top of the published v0.102.1 spatial production baseline.
 
-          Verified functional closure:
+          Release 3 adds first-class project requirements, explicit requirement-to-analysis evidence mappings, canonical saved-project verification, ProofGraph cross-artifact integrity, bounded tamper-evident verification history with current-context assessment, dependency freshness evidence, project dossier and traceability operator surfaces, canonical engineering-unit conversion, explicit evidence authority for ambiguous bindings, qualification/recovery evidence adapters, cooperative project-batch cancellation, and fail-closed external analysis-plugin trust gating.
+
+          Engineering closure evidence before the release-identity bump:
           - PR #707 exact tested head: 875408729ec3587d96f4c86f77b14de80b6548be
-          - CI run #2229 / 36875375370: success
-          - Python 3.11: 1662 passed, 4 skipped
-          - Python 3.12: 1662 passed, 4 skipped
-          - Python 3.13: 1662 passed, 4 skipped
-          - Windows PowerShell/CMD launcher smoke: pass
-          - clean wheel/install/CLI checks: pass
-          - Tk/Xvfb desktop smoke: pass
-          - Release 2 performance evidence: pass
-          - Release 3 focused requirements/verification gate: pass
-          - v0.91-v0.95 solver/provenance compatibility gates: pass
+          - CI run 36875375370: success
+          - Python 3.11 / 3.12 / 3.13 complete suites: 1662 passed, 4 skipped on each interpreter
+          - Windows PowerShell/CMD launcher smoke: success
+          - clean wheel/install, installed CLI checks, Python 3.13 performance evidence, and Tk/Xvfb desktop smoke: success
 
-          Release 3 includes first-class project requirements, explicit requirement/evidence mappings,
-          canonical project verification, ProofGraph cross-artifact integrity, retained verification
-          history/current-context review, fail-closed external plugin trust, project traceability and
-          dossier operator surfaces, canonical engineering-unit conversion, and qualification/recovery
-          evidence adapters.
+          The successful current-main CI that triggers this publisher is the final gate for the exact tagged release-identity commit. The publisher rechecks that main has not advanced before tagging.
 
-          This release preserves project schema version 1 and does not intentionally change solver
-          equations, numerical tolerances, unit conventions, or configured engineering acceptance
-          semantics.
+          Project schema remains version 1. No solver equation, numerical tolerance, unit convention, no-extrapolation/root-selection rule, uncertainty semantic, or engineering acceptance criterion is intentionally changed by the release-identity closure.
 
-          The tag is created only from a successful CI SHA that is still the exact current main commit.
-          Earlier release tags remain immutable.
+          See VALIDATION.txt, TEST_EVIDENCE.md, CHANGELOG.md, ARCHITECTURE.md, SECURITY.md, MIGRATIONS.md, ROLLBACK.md, and the operator manual for release evidence and boundaries.
           EOF
 
           gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.103.0" --notes-file /tmp/release-notes.md

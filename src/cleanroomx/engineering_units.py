@@ -62,8 +62,8 @@ _KPA = _definition("kPa", "pressure", 1_000.0)
 _BAR = _definition("bar", "pressure", 100_000.0)
 _MBAR = _definition("mbar", "pressure", 100.0)
 _PSI = _definition("psi", "pressure", 6_894.757293168)
-# NIST SP 811 conventional water-column definitions. These tokens do not
-# represent temperature-specific water-column variants.
+# NIST pressure-conversion guidance uses the conventional water-column
+# factors below. These tokens do not represent temperature-specific variants.
 _IN_H2O = _definition("inH2O", "pressure", 249.0889)
 _MM_H2O = _definition("mmH2O", "pressure", 9.80665)
 
@@ -107,7 +107,7 @@ _FT_MIN = _definition("ft/min", "velocity", 0.00508)
 _W = _definition("W", "power", 1.0)
 _KW = _definition("kW", "power", 1_000.0)
 # Unqualified Btu/h is defined here as International Table Btu per hour.
-# NIST SP 811: 1 Btu_IT = 1.05505585262 kJ exactly.
+# The International Table Btu is 1055.05585262 J.
 _BTU_H = _definition("Btu/h", "power", 1_055.055_852_62 / 3_600.0)
 
 _KG_S = _definition("kg/s", "mass_flow", 1.0)

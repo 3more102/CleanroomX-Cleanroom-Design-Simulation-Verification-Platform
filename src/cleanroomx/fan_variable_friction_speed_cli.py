@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output
 from .fan_variable_friction_speed import (
     analyze_fan_variable_friction_speed_study,
 )
@@ -45,7 +45,11 @@ def main() -> int:
         else markdown_fan_variable_friction_speed_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.study,),
+        )
     else:
         print(text)
     return 0 if result["status"] == "screening_complete" else 2

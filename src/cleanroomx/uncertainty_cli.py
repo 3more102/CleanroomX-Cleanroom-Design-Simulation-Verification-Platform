@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
-from .cli_output import atomic_write_cli_output
+from .strict_json import StrictJSONError
+from .cli_output import atomic_write_cli_output, dumps_strict_json
 from .uncertainty import analyze_room_uncertainty
 from .uncertainty_io import load_uncertain_room
 from .uncertainty_report import markdown_uncertainty_report
@@ -23,11 +24,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     result = analyze_room_uncertainty(load_uncertain_room(args.room))
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_uncertainty_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_uncertainty_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-uncertainty: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if args.output:
         atomic_write_cli_output(
             args.output,

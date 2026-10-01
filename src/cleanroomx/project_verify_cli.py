@@ -66,7 +66,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     status_parser.add_argument("project", help="CleanroomX project file")
-    status_parser.add_argument("analysis_id", help="Stable project analysis id")
+    status_parser.add_argument(
+        "analysis_id",
+        nargs="?",
+        help="Stable project analysis id (omit when using --all)",
+    )
+    status_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_analyses",
+        help=(
+            "Gate the complete project verification set instead of one analysis. "
+            "The gate passes only when at least one analysis is configured and "
+            "every configured/currently retained verification is current and a "
+            "verified PASS."
+        ),
+    )
     return parser
 
 
@@ -95,6 +110,28 @@ def _status_exit_code(assessment: dict[str, Any]) -> int:
         and latest_record.get("verified") is True
     )
     return 0 if assessment.get("state") == "current" and verified_pass else 1
+
+
+def _project_status_gate(currency: dict[str, Any]) -> dict[str, Any]:
+    configured = [
+        item
+        for item in currency["analyses"]
+        if item["state"] != "not_configured"
+    ]
+    all_current = bool(configured) and all(
+        item["state"] == "current" for item in configured
+    )
+    all_verified_pass = bool(configured) and all(
+        isinstance(item.get("latest_record"), dict)
+        and item["latest_record"].get("verified") is True
+        for item in configured
+    )
+    return {
+        "configured_analysis_count": len(configured),
+        "all_current": all_current,
+        "all_verified_pass": all_verified_pass,
+        "accepted": all_current and all_verified_pass,
+    }
 
 
 def _status_payload(
@@ -131,6 +168,29 @@ def _status_payload(
     }
 
 
+def _project_status_payload(
+    source: Path,
+    project,
+    revision,
+    currency: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema": "cleanroomx.project-verification-status-set",
+        "schema_version": 1,
+        "source": {
+            "path": str(source),
+            "size_bytes": revision.size,
+            "sha256": revision.sha256,
+            "stable_during_inspection": True,
+        },
+        "project": {
+            "name": project.name,
+        },
+        "currency": currency,
+        "gate": _project_status_gate(currency),
+    }
+
+
 def _write_run_output(
     source: Path,
     workflow: ProjectRequirementsWorkflowRun,
@@ -162,40 +222,56 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = Path(args.project).expanduser().resolve(strict=False)
     try:
         if args.command == "status":
+            if args.all_analyses and args.analysis_id is not None:
+                raise ValueError("status accepts either an analysis_id or --all, not both")
+            if not args.all_analyses and args.analysis_id is None:
+                raise ValueError("status requires an analysis_id or --all")
+
             project, revision_before = load_project_document_with_revision(source)
             currency = assess_project_verification_currency(
                 project,
                 base_dir=source.parent,
             )
-            assessment = next(
-                (
-                    item
-                    for item in currency["analyses"]
-                    if item["analysis_id"] == args.analysis_id
-                ),
-                None,
-            )
-            if assessment is None:
-                raise ValueError(
-                    f"analysis {args.analysis_id!r} is not present in the current project"
+
+            if args.all_analyses:
+                payload = _project_status_payload(
+                    source,
+                    project,
+                    revision_before,
+                    currency,
                 )
+                exit_code = 0 if payload["gate"]["accepted"] else 1
+            else:
+                assessment = next(
+                    (
+                        item
+                        for item in currency["analyses"]
+                        if item["analysis_id"] == args.analysis_id
+                    ),
+                    None,
+                )
+                if assessment is None:
+                    raise ValueError(
+                        f"analysis {args.analysis_id!r} is not present in the current project"
+                    )
+                payload = _status_payload(
+                    source,
+                    project,
+                    revision_before,
+                    assessment,
+                )
+                exit_code = _status_exit_code(assessment)
+
             revision_after = capture_project_file_revision(source)
             if not project_file_revision_matches(revision_before, revision_after):
                 raise RuntimeError(
                     "project changed during verification-status inspection; "
                     "status result was discarded"
                 )
-            sys.stdout.write(
-                _strict_json_text(
-                    _status_payload(
-                        source,
-                        project,
-                        revision_after,
-                        assessment,
-                    )
-                )
-            )
-            return _status_exit_code(assessment)
+            payload["source"]["size_bytes"] = revision_after.size
+            payload["source"]["sha256"] = revision_after.sha256
+            sys.stdout.write(_strict_json_text(payload))
+            return exit_code
 
         workflow = run_project_requirements_workflow(
             source,

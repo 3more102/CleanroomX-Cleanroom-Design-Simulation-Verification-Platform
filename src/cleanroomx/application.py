@@ -1117,19 +1117,27 @@ def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bo
     return recorded_sha256 == current_sha256
 
 
-def external_dependency_fingerprints_current(
+def external_dependency_fingerprints_state(
     dependencies: list[dict],
     *,
     base_dir=None,
-) -> bool:
-    """Return whether persisted dependency fingerprints still match by content."""
+) -> str:
+    """Classify persisted dependency fingerprints as current/changed/unverifiable.
+
+    A definite content mismatch is `changed`. Missing, unstable, malformed, or
+    unresolvable dependencies are `unverifiable`; they are not treated as proof
+    that content changed.
+    """
     if not isinstance(dependencies, list):
-        return False
+        return "unverifiable"
 
     base = Path(base_dir) if base_dir is not None else None
+    changed = False
+    unverifiable = False
     for dependency in dependencies:
         if not isinstance(dependency, dict):
-            return False
+            unverifiable = True
+            continue
         declared_path = dependency.get("declared_path")
         expected_sha256 = dependency.get("sha256_after")
         expected_size = dependency.get("size_bytes_after")
@@ -1144,18 +1152,44 @@ def external_dependency_fingerprints_current(
             or expected_size < 0
             or dependency.get("stable_during_run") is not True
         ):
-            return False
+            unverifiable = True
+            continue
+
+        expanded = Path(declared_path).expanduser()
+        if base is None and not expanded.is_absolute():
+            unverifiable = True
+            continue
         try:
             current = _stable_file_fingerprint(_resolve_relative(base, declared_path))
         except (OSError, RuntimeError, ValueError):
-            return False
+            unverifiable = True
+            continue
         if (
             current["sha256"] != expected_sha256
             or current["size_bytes"] != expected_size
         ):
-            return False
-    return True
+            changed = True
 
+    if changed:
+        return "changed"
+    if unverifiable:
+        return "unverifiable"
+    return "current"
+
+
+def external_dependency_fingerprints_current(
+    dependencies: list[dict],
+    *,
+    base_dir=None,
+) -> bool:
+    """Return whether persisted dependency fingerprints still match by content."""
+    return (
+        external_dependency_fingerprints_state(
+            dependencies,
+            base_dir=base_dir,
+        )
+        == "current"
+    )
 
 def analysis_run_external_dependencies_current(
     run: AnalysisRun,

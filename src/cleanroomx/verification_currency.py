@@ -6,7 +6,7 @@ from typing import Any
 from .application import (
     analysis_external_dependency_references,
     analysis_input_sha256,
-    external_dependency_fingerprints_current,
+    external_dependency_fingerprints_state,
 )
 from .project import ProjectDocument
 from .project_requirement_evidence_mappings import (
@@ -199,7 +199,24 @@ def _analysis_currency(
                 ),
             }
 
-        if base_dir is None:
+        dependency_state = external_dependency_fingerprints_state(
+            recorded_dependencies,
+            base_dir=base_dir,
+        )
+        if dependency_state == "changed":
+            return {
+                **base,
+                "latest_record": record_summary,
+                "mismatch_reasons": ["external_dependency_content_changed"],
+                "state": _STALE,
+                "current": False,
+                "complete": True,
+                "explanation": (
+                    "At least one current file-backed dependency has a proven "
+                    "content mismatch against the latest verification fingerprint."
+                ),
+            }
+        if dependency_state == "unverifiable":
             return {
                 **base,
                 "latest_record": record_summary,
@@ -207,27 +224,9 @@ def _analysis_currency(
                 "current": False,
                 "complete": False,
                 "explanation": (
-                    "Dependency fingerprints are retained, but no project base "
-                    "directory was supplied for content freshness checks."
-                ),
-            }
-
-        if not external_dependency_fingerprints_current(
-            recorded_dependencies,
-            base_dir=base_dir,
-        ):
-            return {
-                **base,
-                "latest_record": record_summary,
-                "mismatch_reasons": [
-                    "external_dependency_content_changed_or_unavailable"
-                ],
-                "state": _STALE,
-                "current": False,
-                "complete": True,
-                "explanation": (
-                    "The current file-backed dependency content does not match "
-                    "the fingerprints retained by the latest verification."
+                    "Dependency fingerprints are retained, but one or more current "
+                    "dependency files are unavailable, unstable, malformed, or "
+                    "cannot be resolved safely from the supplied project context."
                 ),
             }
 

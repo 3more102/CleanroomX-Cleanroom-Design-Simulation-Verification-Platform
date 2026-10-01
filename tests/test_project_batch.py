@@ -140,9 +140,20 @@ def test_project_batch_stops_scheduling_when_source_changes_mid_run(tmp_path, mo
     original_run_analysis = project_batch.run_analysis
     mutated = False
 
-    def run_and_modify_source(kind, payload, *, base_dir=None):
+    def run_and_modify_source(
+        kind,
+        payload,
+        *,
+        base_dir=None,
+        project_source_revision=None,
+    ):
         nonlocal mutated
-        result = original_run_analysis(kind, payload, base_dir=base_dir)
+        result = original_run_analysis(
+            kind,
+            payload,
+            base_dir=base_dir,
+            project_source_revision=project_source_revision,
+        )
         if not mutated:
             mutated = True
             path.write_text(path.read_text(encoding="utf-8") + " ", encoding="utf-8")
@@ -158,6 +169,17 @@ def test_project_batch_stops_scheduling_when_source_changes_mid_run(tmp_path, mo
     assert batch.attempted_count == 1
     assert batch.completed_count == 1
     assert project_batch_exit_code(batch) == 3
+
+
+def test_project_batch_binds_completed_run_to_exact_source_revision(tmp_path):
+    path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
+
+    batch = run_project_file(path, analysis_ids=["room-a"])
+
+    run = batch.outcomes[0].run
+    assert run is not None
+    provenance = run["diagnostics"]["application_execution_provenance"]
+    assert provenance["project_source_revision"] == batch.source_sha256
 
 
 def test_project_batch_cli_writes_strict_json_atomically(tmp_path):

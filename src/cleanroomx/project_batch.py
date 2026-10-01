@@ -186,6 +186,7 @@ def run_project_file(
                 analysis.kind,
                 copy.deepcopy(analysis.input),
                 base_dir=source.parent,
+                project_source_revision=revision.sha256,
             )
         except Exception as exc:  # per-analysis execution boundary
             failed = True

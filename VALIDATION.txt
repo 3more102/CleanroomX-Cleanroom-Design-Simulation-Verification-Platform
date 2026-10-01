@@ -1,6 +1,45 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
+Release: CleanroomX v0.103.0
+Validation date: 2026-10-01
+
+RELEASE 3 FINAL CODE BASELINE
+PR #707 — Release 3 final closure restack on current main
+Exact tested PR head:
+875408729ec3587d96f4c86f77b14de80b6548be
+CI run id:
+36875375370
+conclusion SUCCESS
+Python 3.11 complete suite: 1662 passed, 4 skipped
+Python 3.12 complete suite: 1662 passed, 4 skipped
+Python 3.13 complete suite: 1662 passed, 4 skipped
+Windows PowerShell/CMD launcher smoke: SUCCESS
+Merged main code baseline:
+165b0c61f776270f58e8b691171181d694857570
+
+PASS - Release 3 requirements/verification regression gate
+PASS - complete Python 3.11/3.12/3.13 suite
+PASS - clean wheel build/install and installed operator-surface checks
+PASS - Windows launcher smoke
+PASS - fail-closed external plugin trust gate
+PASS - explicit evidence authority with retained competing evidence
+PASS - canonical requirement unit-conversion provenance
+PASS - retained ProofGraph evidence and cross-artifact integrity validation
+PASS - project requirements traceability CLI and desktop projection
+PASS - verification-history current-context and requirement-evidence drill-down
+PASS - solver equations/tolerances and project schema version intentionally unchanged
+
+Release publication rule:
+publish v0.103.0 only from a successful CI workflow whose head SHA is still
+the exact current main SHA; never move an existing release tag.
+
+HISTORICAL VALIDATION BASELINES
+===============================
+
+CLEANROOMX RELEASE VALIDATION
+=============================
+
 Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 

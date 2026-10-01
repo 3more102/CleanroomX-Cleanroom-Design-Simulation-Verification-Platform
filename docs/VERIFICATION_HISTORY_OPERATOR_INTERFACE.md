@@ -22,12 +22,13 @@ Optional stable-analysis filter:
 cleanroomx-verification-history list project.cleanroomx.json --analysis-id room-a
 ```
 
-The list output is strict JSON and contains:
+The list output is strict JSON using inspection schema version 2 and contains:
 
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
-- compact per-record verification status;
-- fail-closed verification-currency assessment against the current project configuration and retained dependency fingerprints;
+- compact per-record immutable verification status;
+- per-record `current_currency` context that labels only the latest retained record for each current analysis with its canonical current/stale/unverifiable state, labels older records `historical`, and labels records for removed analyses `not_in_current_project`;
+- fail-closed project-wide verification-currency assessment against the current project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -42,7 +43,8 @@ cleanroomx-verification-history show project.cleanroomx.json --sequence 12
 
 This returns the complete canonical persisted record, including exact evidence
 locators, canonical findings, ProofGraph identities, runtime/code provenance, and
-the chained record hash.
+the chained record hash. The persisted record remains immutable historical evidence;
+current-project interpretation is returned separately as `record_currency`.
 
 ## Stable-read boundary
 
@@ -52,7 +54,10 @@ file revision before and after inspection and emits nothing if the file changes
 during the operation.
 
 The command is read-only. It does not rewrite the project, recompute historical
-verdicts, or silently bind old evidence to current project state.
+verdicts, or silently bind old evidence to current project state. The CLI and
+desktop reuse the same canonical record-currency context helper so
+`historical`, `not_in_current_project`, and latest-record semantics cannot drift
+independently.
 
 ## Verification currency
 

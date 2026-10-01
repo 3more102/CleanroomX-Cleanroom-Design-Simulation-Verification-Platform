@@ -66,6 +66,7 @@ The runner:
 - isolates an ordinary analysis exception into that analysis's outcome and continues unless `--fail-fast` is requested;
 - optionally checks a caller-provided cancellation callback, or CLI `--cancel-file`, only between analyses;
 - records whether cancellation happened before or after an analysis and the associated analysis id;
+- when `--output` is used, revalidates the exact loaded source revision plus source/dependency output identity inside the durable writer's `before_replace` hook, after staging and immediately before atomic publication;
 - never writes back to the project file.
 
 The batch report preserves each completed `AnalysisRun`, including its application execution provenance and canonical input SHA-256. Each completed run is also integrity-bound to the exact source project SHA-256 captured by the batch before execution, so downstream requirements/ProofGraph evidence can recover project revision provenance from the verified run bundle rather than trusting a free-form caller value.

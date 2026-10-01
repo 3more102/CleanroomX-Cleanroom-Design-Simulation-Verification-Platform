@@ -22,7 +22,7 @@ jobs:
       TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Check out exact successful CI commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 pinned 2026-10-01
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}

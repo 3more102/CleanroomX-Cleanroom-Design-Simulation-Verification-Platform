@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — CI supply-chain hardening — 2026-10-01
+
+- Pins every third-party GitHub Action used by the repository workflows to a reviewed immutable commit SHA while retaining human-readable upstream version comments.
+- Covers Linux/Python CI, Windows launcher smoke, solution-manual publication, and all immutable v0.100.0 through v0.102.1 release publishers.
+- The pinned SHAs were verified against the official `actions/checkout` and `actions/setup-python` repositories; no engineering model, solver, project schema, evidence semantic, or acceptance criterion is changed.
+
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.

@@ -1,3 +1,24 @@
+# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
+
+Validation date: 2026-10-01
+
+## Final release gate
+
+- Final integration/release PR: **#731**.
+- Merge authority: successful CI for the exact current PR head on Python 3.11, Python 3.12, Python 3.13, plus Windows launcher smoke.
+- Publication authority: successful CI for the exact current `main` SHA after merge; the v0.103.0 publisher rejects stale-main runs and never moves an existing tag.
+- The release identity change is non-numerical: no solver equation, numerical tolerance, requirement criterion, project schema version, or historical verification semantic is intentionally changed.
+
+## Historical Release 3 baseline evidence
+
+- PR #707 exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`.
+- CI run `36875375370`: success.
+- Complete suite: **1662 passed, 4 skipped** on Python 3.11 / 3.12 / 3.13.
+- Windows PowerShell/CMD launcher smoke: success.
+- This baseline predates the final #731 hardening and is retained as historical evidence only.
+
+## Historical v0.102.1 and earlier evidence
+
 # CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline

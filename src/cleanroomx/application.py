@@ -268,6 +268,19 @@ def verify_analysis_run_bundle(document: dict) -> dict:
     if provenance.get("input_sha256") != input_sha256:
         raise ValueError("run bundle input snapshot does not match execution provenance")
 
+    project_source_revision = provenance.get("project_source_revision")
+    if project_source_revision is not None and (
+        not isinstance(project_source_revision, str)
+        or len(project_source_revision) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in project_source_revision
+        )
+    ):
+        raise ValueError(
+            "run bundle project source revision must be a lowercase SHA-256 digest"
+        )
+
     dependency_count = provenance.get("external_dependency_count")
     dependencies = provenance.get("external_dependencies")
     if not isinstance(dependency_count, int) or dependency_count < 0:
@@ -283,6 +296,7 @@ def verify_analysis_run_bundle(document: dict) -> dict:
         "analysis_kind": kind,
         "input_sha256": input_sha256,
         "bundle_sha256": actual_digest,
+        "project_source_revision": project_source_revision,
         "external_dependency_count": dependency_count,
         "external_dependencies_stable": provenance.get("external_dependencies_stable"),
     }
@@ -1433,6 +1447,7 @@ def _application_execution_provenance(
     dependencies_after: list[dict],
     code_before: dict,
     code_after: dict,
+    project_source_revision: str | None,
 ) -> dict:
     if len(dependencies_before) != len(dependencies_after):
         raise RuntimeError("external dependency set changed during analysis execution")
@@ -1483,11 +1498,24 @@ def _application_execution_provenance(
         and code_before["source_file_count"] == code_after["source_file_count"]
     )
 
+    if project_source_revision is not None and (
+        not isinstance(project_source_revision, str)
+        or len(project_source_revision) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in project_source_revision
+        )
+    ):
+        raise ValueError(
+            "project_source_revision must be a lowercase SHA-256 digest"
+        )
+
     return {
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
+        "project_source_revision": project_source_revision,
         "implementation": implementation,
         "execution_binding": _analysis_binding_provenance(kind),
         "runtime_environment": _runtime_environment_provenance(),
@@ -1670,7 +1698,13 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
         temp_path.unlink(missing_ok=True)
 
 
-def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
+def run_analysis(
+    kind: str,
+    payload: dict,
+    *,
+    base_dir=None,
+    project_source_revision: str | None = None,
+) -> AnalysisRun:
     code_before = _capture_runtime_code_fingerprint()
     prepared = _prepare_analysis_input(kind, payload, base_dir=base_dir)
     spec = ANALYSIS_SPECS[kind]
@@ -1741,6 +1775,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         dependencies_after,
         code_before,
         code_after,
+        project_source_revision,
     )
     if not provenance["code_revision"]["stable_during_run"]:
         raise RuntimeCodeChangedError(code_before, code_after)

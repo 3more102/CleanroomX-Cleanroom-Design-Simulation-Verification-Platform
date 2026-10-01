@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .application import verify_analysis_run_bundle
+from .application import (
+    analysis_external_dependency_references,
+    verify_analysis_run_bundle,
+)
 from .project import (
     ProjectFileRevision,
     load_project_document_with_revision_info,
@@ -111,6 +114,82 @@ def _evidence_from_dict(data: Any, index: int) -> RequirementEvidence:
         raise ProjectVerificationPersistenceError(
             f"workflow evidence[{index}] is invalid: {exc}"
         ) from exc
+
+
+def _external_dependency_fingerprints(
+    provenance: dict[str, Any],
+    *,
+    analysis_kind: str,
+    analysis_input: dict[str, Any],
+) -> list[dict[str, Any]]:
+    references = analysis_external_dependency_references(
+        analysis_kind,
+        analysis_input,
+    )
+    raw = provenance.get("external_dependencies")
+    if not isinstance(raw, list) or len(raw) != len(references):
+        raise ProjectVerificationPersistenceError(
+            "workflow execution provenance external dependencies are incomplete"
+        )
+    if provenance.get("external_dependency_count") != len(references):
+        raise ProjectVerificationPersistenceError(
+            "workflow execution provenance dependency count is inconsistent"
+        )
+    if references and provenance.get("external_dependencies_stable") is not True:
+        raise ProjectVerificationPersistenceError(
+            "workflow execution provenance reports unstable external dependencies"
+        )
+
+    normalized: list[dict[str, Any]] = []
+    for index, ((field, declared_path), item) in enumerate(zip(references, raw)):
+        if not isinstance(item, dict):
+            raise ProjectVerificationPersistenceError(
+                f"workflow external dependency[{index}] is invalid"
+            )
+        if item.get("field") != field or item.get("declared_path") != declared_path:
+            raise ProjectVerificationPersistenceError(
+                "workflow external dependency identity does not match analysis input"
+            )
+        if item.get("stable_during_run") is not True:
+            raise ProjectVerificationPersistenceError(
+                f"workflow external dependency {field!r} was unstable during execution"
+            )
+
+        digest = item.get("execution_snapshot_sha256")
+        size_bytes = item.get("execution_snapshot_size_bytes")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest)
+        ):
+            raise ProjectVerificationPersistenceError(
+                f"workflow external dependency {field!r} lacks a valid content digest"
+            )
+        if type(size_bytes) is not int or size_bytes < 0:
+            raise ProjectVerificationPersistenceError(
+                f"workflow external dependency {field!r} lacks a valid byte size"
+            )
+        if (
+            item.get("sha256_before") != digest
+            or item.get("sha256_after") != digest
+            or item.get("size_bytes_before") != size_bytes
+            or item.get("size_bytes_after") != size_bytes
+        ):
+            raise ProjectVerificationPersistenceError(
+                f"workflow external dependency {field!r} content identity is inconsistent"
+            )
+        normalized.append(
+            {
+                "field": field,
+                "declared_path": declared_path,
+                "sha256": digest,
+                "size_bytes": size_bytes,
+            }
+        )
+    return sorted(
+        normalized,
+        key=lambda item: (item["field"], item["declared_path"]),
+    )
 
 
 def _verifier_implementation_identity() -> dict[str, str]:
@@ -285,7 +364,14 @@ def persist_project_requirements_workflow_run(
     proofgraph_sha256 = sorted(
         document["graph_sha256"] for document in canonical_graphs
     )
+    external_dependencies = _external_dependency_fingerprints(
+        provenance,
+        analysis_kind=analysis.kind,
+        analysis_input=analysis.input,
+    )
     body: dict[str, Any] = {
+        "record_schema_version": 2,
+        "external_dependencies": external_dependencies,
         "project_source_revision": workflow.source_revision,
         "analysis_id": workflow.analysis_id,
         "analysis_name": workflow.analysis_name,

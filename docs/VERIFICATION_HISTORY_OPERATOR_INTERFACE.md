@@ -22,12 +22,16 @@ Optional stable-analysis filter:
 cleanroomx-verification-history list project.cleanroomx.json --analysis-id room-a
 ```
 
-The list output is strict JSON and contains:
+The list output is strict JSON using inspection schema version 2 and contains:
 
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
-- compact per-record verification status;
-- fail-closed verification-currency assessment against the current project configuration and retained dependency fingerprints;
+- compact per-record immutable verification status;
+- a per-record `current_assessment` that labels the latest applicable record with
+  canonical current/stale/unverifiable state, older records as `historical`, and
+  records for removed analyses as `not_in_current_project`;
+- the complete fail-closed project verification-currency assessment against the
+  current project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -42,7 +46,9 @@ cleanroomx-verification-history show project.cleanroomx.json --sequence 12
 
 This returns the complete canonical persisted record, including exact evidence
 locators, canonical findings, ProofGraph identities, runtime/code provenance, and
-the chained record hash.
+the chained record hash. The response also includes `record_currency`, derived
+from the same shared row-context authority used by the desktop history view. The
+historical record itself is not modified.
 
 ## Stable-read boundary
 
@@ -57,7 +63,9 @@ verdicts, or silently bind old evidence to current project state.
 ## Verification currency
 
 The operator output also assesses each current analysis against its latest retained
-verification record.
+verification record. Per-record CLI context and desktop row context are derived
+from the same shared helper so historical/current labeling cannot diverge between
+operator surfaces.
 
 A record is reported as `current` only when its analysis kind, canonical input
 SHA-256, requirements SHA-256, mappings SHA-256, and active mapping identities all

@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -74,6 +74,16 @@ Spatial and engineering data remain deliberately separated.
 - Portable project bundles and engineering reports.
 - Deterministic self-verifying design-assurance snapshots that bind exact source bytes, normalized results, optional pressure-design evidence, and traceability digests.
 - SHA-256 based numerical/provenance evidence for supported solver workflows.
+
+### Release 3 requirements, evidence, and ProofGraph
+
+- First-class persisted project requirements with lifecycle, applicability, scope, and explicit criteria.
+- Explicit requirement-to-analysis evidence mappings bound to immutable completed-run evidence.
+- Canonical unit-aware requirement verification with retained raw and converted evidence.
+- Persisted canonical verification history with dependency-aware current/stale/unverifiable currency.
+- ProofGraph projection with cross-artifact integrity checks, explicit evidence authority, and deterministic precedence/conflict assessment.
+- Desktop and CLI operator surfaces for traceability, verification, verification history, dossiers, and evidence drill-down.
+- External plugin trust gating, cooperative project-batch cancellation, and protected output paths that cannot overwrite project sources or declared engineering dependencies.
 
 ## Quick start
 
@@ -155,20 +165,13 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0** release is gated by the repository CI on the exact current-`main` commit across Python **3.11 / 3.12 / 3.13**, Windows launcher smoke, clean-wheel installation, installed CLI checks, Release 2 compatibility/consolidation gates, Release 3 requirements/verification regressions, and the installed Tk GUI smoke.
 
-Recorded release evidence includes:
+The publisher refuses to tag a successful CI commit if `main` has advanced, so the immutable release tag is bound to the exact successful current-`main` revision.
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
-- Windows PowerShell and CMD launcher smoke tests;
-- clean wheel build/install checks;
-- installed Tk GUI smoke testing;
-- synchronized 2D/3D spatial regression coverage;
-- autosave completion-race regression coverage;
-- solver/provenance compatibility gates.
+Release scope and historical evidence are preserved in:
 
-The exact release evidence is preserved in:
-
+- [RELEASE_0_103_0.md](RELEASE_0_103_0.md)
 - [VALIDATION.txt](VALIDATION.txt)
 - [TEST_EVIDENCE.md](TEST_EVIDENCE.md)
 - [CHANGELOG.md](CHANGELOG.md)
@@ -198,4 +201,4 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Release
 
-**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+**Latest stable:** [CleanroomX v0.103.0](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)

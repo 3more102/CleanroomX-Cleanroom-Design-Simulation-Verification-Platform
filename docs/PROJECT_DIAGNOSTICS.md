@@ -29,9 +29,21 @@ The checker composes existing CleanroomX authorities rather than introducing par
 - **Engineering synchronization** evaluates the explicitly persisted spatial synchronization authority and reports geometry-newer, engineering-newer, conflicting, unmapped, missing-analysis, and unsupported-contract states.
 - **Run-history freshness** reuses application provenance hashes and external-dependency fingerprints. Retained evidence is current only when the analysis kind/input match and every recorded file-backed dependency still matches by content.
 - **Traceability hygiene** distinguishes analyses that have never been run from analyses whose retained evidence no longer matches current inputs, and identifies run-history evidence for removed analyses.
+- **Verification currency** reuses the canonical requirements-verification currency authority to distinguish current, stale, dependency-freshness-unverifiable, not-verified, and not-configured analyses, while keeping historical verdicts immutable.
 - **Analysis naming** reports duplicate display names as an ambiguity warning while stable analysis IDs remain authoritative.
 
 The checker does not mutate the project, execute engineering solvers, or add project-schema fields.
+
+## Historical status versus current currency
+
+Persisted verification records are historical evidence. Their PASS/FAIL status is never rewritten when the project changes.
+
+The Markdown diagnostics report therefore presents two separate views:
+
+- **Persisted verification evidence** shows the immutable retained status and sequence.
+- **Current verification currency** shows whether each current analysis still matches the latest retained analysis input, requirements, mappings, active mapping identities, and file-backed dependency fingerprints.
+
+A historical PASS with stale or dependency-freshness-unverifiable current currency must not be interpreted as proof of the edited/current project state. Re-run and persist canonical project requirements verification when current auditable evidence is required.
 
 ## Severity and exit codes
 

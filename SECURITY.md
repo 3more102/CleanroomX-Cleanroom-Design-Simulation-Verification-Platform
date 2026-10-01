@@ -17,8 +17,8 @@ the affected extension instead of terminating built-in application startup.
 `KeyboardInterrupt` remains an operator cancellation signal and is not
 swallowed by discovery.
 
-Operators can additionally set `CLEANROOMX_PLUGIN_MODE=disabled` to prevent all
-external plugin entry points from being imported, or use
+External plugin loading is disabled by default. Operators can explicitly set
+`CLEANROOMX_PLUGIN_MODE=trusted` for legacy trust-all-installed behavior, or use
 `CLEANROOMX_PLUGIN_MODE=allowlist` with a comma-separated
 `CLEANROOMX_PLUGIN_ALLOWLIST` of distribution names and optional exact version
 pins. Allowlist decisions are made from installed distribution metadata before

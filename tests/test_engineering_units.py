@@ -50,6 +50,14 @@ def test_non_finite_and_boolean_values_are_rejected() -> None:
         convert_engineering_value(True, "Pa", "kPa")
 
 
+def test_unrepresentable_integer_fails_with_authority_error() -> None:
+    with pytest.raises(
+        EngineeringUnitConversionError,
+        match="representable as a finite number",
+    ):
+        convert_engineering_value(10**400, "Pa", "kPa")
+
+
 def test_registry_surface_is_deterministic_and_family_query_is_exact() -> None:
     units = supported_engineering_units()
     assert units == tuple(sorted(units))

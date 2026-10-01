@@ -1,5 +1,9 @@
 # Rollback Procedure
 
+## v0.103.0 Release 3 production closure anchor
+
+The final Release 3 engineering code baseline before release-identity closure is `165b0c61f776270f58e8b691171181d694857570` (merged PR #707). PR #707 exact head `875408729ec3587d96f4c86f77b14de80b6548be` passed CI #2229 / `36875375370` across Python 3.11/3.12/3.13 and Windows launcher smoke. The immutable `v0.103.0` tag is published only from a successful CI SHA that still equals current `main`; rollback should use normal revert/CI flow and must not move published release tags.
+
 ## Code rollback
 
 For the shared repository, prefer a Git revert of the release-changing commit or merge rather than rewriting shared history.

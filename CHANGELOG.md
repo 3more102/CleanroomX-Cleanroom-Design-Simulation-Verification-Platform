@@ -2,7 +2,7 @@
 
 ## Unreleased Release 3 — fail-closed external plugin trust policy — 2026-10-01
 
-- Adds a pre-import operator trust gate for installed analysis plugins with backward-compatible `trusted` default plus explicit `disabled` and distribution `allowlist` modes.
+- Adds a default-deny pre-import operator trust gate for installed analysis plugins: `disabled` is the secure default, while `trusted` is an explicit compatibility opt-in and `allowlist` permits named distributions.
 - Supports canonicalized distribution-name matching and optional exact `NAME==VERSION` pins through `CLEANROOMX_PLUGIN_ALLOWLIST`.
 - Fails closed before `entry_point.load()` for invalid policy configuration, missing allowlist identity, non-allowlisted distributions, and pinned-version mismatch.
 - Exposes the effective policy and configuration diagnostics through the existing application registry / `cleanroomx-gui --check` surface without changing plugin API v1 or built-in analysis behavior.

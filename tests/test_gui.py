@@ -2091,25 +2091,20 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
     app._editor_analysis = lambda: None
     app._sync_metadata = lambda: None
     app._has_unsaved_changes = lambda: False
-    writes = []
-    app._write_export_file = (
-        lambda path, content, *, label: writes.append((path, content, label)) or True
-    )
-
-    real_guard = gui_module._assert_project_output_is_safe
+    real_guard = gui_module._assert_project_publication_safe
     guard_calls = 0
 
-    def race_guard(project, *, source, output):
+    def race_guard(project, *, source, revision, output):
         nonlocal guard_calls
         guard_calls += 1
         if guard_calls == 2:
             raise ValueError("output path identity changed before publication")
-        real_guard(project, source=source, output=output)
+        real_guard(project, source=source, revision=revision, output=output)
 
     errors = []
     monkeypatch.setattr(
         gui_module,
-        "_assert_project_output_is_safe",
+        "_assert_project_publication_safe",
         race_guard,
     )
     monkeypatch.setattr(
@@ -2126,9 +2121,75 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
     app.export_project_engineering_dossier()
 
     assert guard_calls == 2
-    assert writes == []
     assert destination.read_text(encoding="utf-8") == "previous-valid-report\n"
     assert errors
     assert errors[-1][0] == "Project dossier export failed"
     assert "identity changed" in errors[-1][1]
 
+
+
+
+def test_gui_project_dossier_export_rejects_source_mutation_at_atomic_replace(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="GUI source publication race"),
+    )
+    revision = capture_project_file_revision(project_path)
+    destination = tmp_path / "project.dossier.json"
+    destination.write_text("previous-valid-report\n", encoding="utf-8")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    real_atomic_write_text = gui_module.atomic_write_text
+
+    def mutate_source_after_staging(path, text, *, before_replace=None):
+        assert before_replace is not None
+
+        def mutate_then_validate():
+            project_path.write_bytes(project_path.read_bytes() + b"\n")
+            before_replace()
+
+        return real_atomic_write_text(
+            path,
+            text,
+            before_replace=mutate_then_validate,
+        )
+
+    errors = []
+    monkeypatch.setattr(gui_module, "atomic_write_text", mutate_source_after_staging)
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert destination.read_text(encoding="utf-8") == "previous-valid-report\n"
+    assert errors
+    assert errors[-1][0] == "Project dossier export failed"
+    assert "project source changed before report publication" in errors[-1][1]

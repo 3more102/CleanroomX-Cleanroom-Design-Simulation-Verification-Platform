@@ -132,6 +132,26 @@ def _assert_project_output_is_safe(
     )
 
 
+def _assert_project_publication_safe(
+    project,
+    *,
+    source: Path,
+    revision,
+    output: str | Path,
+) -> None:
+    """Reject publication if source revision or protected output identity changed."""
+    current = capture_project_file_revision(source)
+    if not project_file_revision_matches(revision, current):
+        raise RuntimeError(
+            "project source changed before report publication; output was discarded"
+        )
+    _assert_project_output_is_safe(
+        project,
+        source=source,
+        output=output,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source = Path(args.project).expanduser().resolve(strict=False)
@@ -163,17 +183,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             else markdown_project_diagnostics_report(result)
         )
         if args.output:
-            _assert_project_output_is_safe(
+            _assert_project_publication_safe(
                 project,
                 source=source,
+                revision=revision_before,
                 output=args.output,
             )
             atomic_write_text(
                 args.output,
                 text,
-                before_replace=lambda: _assert_project_output_is_safe(
+                before_replace=lambda: _assert_project_publication_safe(
                     project,
                     source=source,
+                    revision=revision_before,
                     output=args.output,
                 ),
             )

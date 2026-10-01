@@ -12,7 +12,10 @@ from .project import (
     load_project_document_with_revision,
     project_file_revision_matches,
 )
-from .project_diagnostics_cli import _assert_project_output_is_safe
+from .project_diagnostics_cli import (
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
+)
 from .project_requirements_workflow import (
     ProjectRequirementsWorkflowRun,
     run_project_requirements_workflow,
@@ -150,17 +153,19 @@ def _write_run_output(
         raise RuntimeError(
             "project changed during verification artifact publication; output was discarded"
         )
-    _assert_project_output_is_safe(
+    _assert_project_publication_safe(
         project,
         source=source,
+        revision=revision_before,
         output=output,
     )
     atomic_write_text(
         output,
         text,
-        before_replace=lambda: _assert_project_output_is_safe(
+        before_replace=lambda: _assert_project_publication_safe(
             project,
             source=source,
+            revision=revision_before,
             output=output,
         ),
     )

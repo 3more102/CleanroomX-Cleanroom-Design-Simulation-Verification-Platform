@@ -365,19 +365,19 @@ def test_project_dossier_cli_rechecks_output_identity_before_publication(
     )
     output_path = tmp_path / "dossier.json"
     output_path.write_text("previous-valid-report\n", encoding="utf-8")
-    real_guard = dossier_cli._assert_project_output_is_safe
+    real_guard = dossier_cli._assert_project_publication_safe
     guard_calls = 0
 
-    def race_guard(project, *, source, output):
+    def race_guard(project, *, source, revision, output):
         nonlocal guard_calls
         guard_calls += 1
-        if guard_calls == 3:
+        if guard_calls == 2:
             raise ValueError("output path identity changed before publication")
-        real_guard(project, source=source, output=output)
+        real_guard(project, source=source, revision=revision, output=output)
 
     monkeypatch.setattr(
         dossier_cli,
-        "_assert_project_output_is_safe",
+        "_assert_project_publication_safe",
         race_guard,
     )
 
@@ -389,3 +389,39 @@ def test_project_dossier_cli_rechecks_output_identity_before_publication(
     assert guard_calls == 3
     assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
 
+
+
+
+def test_project_dossier_cli_rejects_source_mutation_at_atomic_replace(tmp_path, monkeypatch, capsys):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Source publication race"),
+    )
+    output_path = tmp_path / "publication.json"
+    output_path.write_text("previous-valid-report\n", encoding="utf-8")
+    real_atomic_write_text = dossier_cli.atomic_write_text
+
+    def mutate_source_after_staging(path, text, *, before_replace=None):
+        assert before_replace is not None
+
+        def mutate_then_validate():
+            project_path.write_bytes(project_path.read_bytes() + b"\n")
+            before_replace()
+
+        return real_atomic_write_text(
+            path,
+            text,
+            before_replace=mutate_then_validate,
+        )
+
+    monkeypatch.setattr(
+        dossier_cli,
+        "atomic_write_text",
+        mutate_source_after_staging,
+    )
+
+    exit_code = dossier_cli.main([str(project_path), "--output", str(output_path)])
+
+    assert exit_code == 2
+    assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
+    assert "project source changed before report publication" in capsys.readouterr().err

@@ -2,9 +2,9 @@
 
 ## Unreleased Release 3 — protected report publication identity recheck — 2026-10-01
 
-- Rechecks project-source and declared file-backed dependency path identity immediately before publishing project diagnostics, engineering dossier, requirements traceability, and canonical verification artifacts.
+- Rechecks the exact loaded project-source revision plus source/dependency path identity immediately before publishing project diagnostics, engineering dossier, requirements traceability, and canonical verification artifacts.
 - Applies the same protected-output boundary to desktop project-dossier export so a pathname identity change after the initial save-dialog validation fails closed before the atomic writer runs.
-- Repeats the protected-output identity validation at the atomic writer's pre-replace callback boundary while retaining existing project-revision stability checks.
+- Repeats both project-revision and protected-output identity validation at the atomic writer's pre-replace callback boundary, closing the post-generation source-mutation window.
 - Adds focused regressions proving late identity races fail closed and an existing valid output is preserved.
 - Changes no solver equation, numerical tolerance, convergence rule, requirement criterion, project schema, persisted verification semantic, or report schema.
 

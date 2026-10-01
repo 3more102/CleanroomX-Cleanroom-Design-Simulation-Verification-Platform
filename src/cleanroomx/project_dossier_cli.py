@@ -12,7 +12,10 @@ from .project import (
     load_project_document_with_revision,
     project_file_revision_matches,
 )
-from .project_diagnostics_cli import _assert_project_output_is_safe
+from .project_diagnostics_cli import (
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
+)
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -79,17 +82,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         if args.output:
-            _assert_project_output_is_safe(
+            _assert_project_publication_safe(
                 project,
                 source=source,
+                revision=revision_before,
                 output=args.output,
             )
             atomic_write_text(
                 args.output,
                 text,
-                before_replace=lambda: _assert_project_output_is_safe(
+                before_replace=lambda: _assert_project_publication_safe(
                     project,
                     source=source,
+                    revision=revision_before,
                     output=args.output,
                 ),
             )

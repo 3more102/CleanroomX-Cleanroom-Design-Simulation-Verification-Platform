@@ -58,6 +58,15 @@ def test_qualification_measurement_maps_to_commissioning_and_calculation_evidenc
         "upper": 15.0,
     }
     assert document["findings"][0]["delta"] == 3.0
+    assert document["requirement_set"]["requirements"][0]["criteria"]["property"] == (
+        "qualification_interval"
+    )
+    interval = next(
+        item
+        for item in document["evidence"]
+        if item["property_name"] == "qualification_interval"
+    )
+    assert interval["value"] == {"lower": 13.0, "upper": 15.0}
     assert set(document["checks"][0]["required_evidence_kinds"]) == {
         "commissioning",
         "calculation",

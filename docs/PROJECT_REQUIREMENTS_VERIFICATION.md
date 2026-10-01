@@ -53,27 +53,34 @@ For text/boolean equality, a non-zero numeric tolerance is invalid.
 
 ## Units
 
-Release 3 now routes numeric requirement comparisons through the centralized,
-fail-closed engineering unit authority when evidence and requirement units use
-different exact spellings.
+Release 3 routes numeric requirement comparisons through one centralized,
+fail-closed engineering-unit authority whenever evidence and requirement units
+use different explicitly registered spellings.
 
-The authority allows only explicitly registered conversions inside one semantic
-engineering family. Current families include pressure (`Pa`/`kPa`),
-volumetric flow (`m3/s`, `m3/h`, `L/s`), generic rates
-(`1/s`, `1/min`, `1/h`), power, length, mass flow, and temperature
-(`C`/`K`). Conversion uses full floating-point precision and does not round
-for comparison.
+The registry is semantic, not merely dimensional. Current cleanroom/HVAC
+families cover pressure, volumetric flow, inverse-time rates/ACH, temperature,
+length, area, volume, velocity, power, mass flow, and humidity ratio. Common
+explicit spellings such as `m3/s`/`m³/s`, `1/h`/`ACH`, and
+`C`/`degC`/`°C` share canonical identities. Celsius/Fahrenheit/Kelvin
+conversion is affine and is evaluated at full floating-point precision without
+rounding before comparison.
 
-The registry is intentionally stricter than dimensional analysis. `Hz` is a
-frequency family and is not silently treated as an air-change rate, even though
-both reduce dimensionally to inverse time. Unknown aliases and cross-family
-conversions fail closed as `invalid`; the verifier does not guess spellings,
-engineering intent, or unitless semantics.
+The authority intentionally keeps semantically distinct quantities separate.
+For example, `Hz` is a frequency family and is not interchangeable with
+`1/h`/ACH even though both reduce dimensionally to inverse time. Unknown
+spellings, named-unit versus unitless mismatches, and cross-family conversions
+fail closed as `invalid`; the verifier never guesses engineering intent.
 
-When conversion succeeds, `actual` is expressed in the requirement unit before
-criterion evaluation, so the persisted requirement tolerance remains in its
-declared unit. The original evidence value and unit remain bound by evidence ID
-and included in the evidence digest.
+When conversion succeeds, `actual` and `delta` are expressed in the persisted
+requirement unit before the requirement's absolute tolerance is applied. The
+finding also retains `evidence_actual` and `evidence_unit` and records a
+`unit_conversion` object containing the exact source/target spellings,
+canonical units, semantic family, scale, offset, input value, and converted
+output value. The original evidence document remains unchanged and stays bound
+by evidence ID and digest.
+
+Exact-unit comparisons retain the pre-conversion finding shape, preserving the
+existing canonical result for projects that already use identical units.
 
 ## Evidence completeness and freshness
 
@@ -84,7 +91,7 @@ A PASS requires all of the following:
 - exactly one authoritative evidence binding exists for the requirement/entity;
 - evidence freshness is explicitly `current`;
 - every `required_evidence` kind is present;
-- units agree exactly;
+- evidence units match exactly or have an explicit compatible canonical conversion;
 - the explicit criterion evaluates successfully.
 
 The engine never chooses silently between multiple evidence values for one

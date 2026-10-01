@@ -1717,6 +1717,12 @@ def test_verification_history_currency_context_applies_only_to_latest_record():
     assert removed_context["state"] == "not_in_current_project"
     assert removed_context["current"] is False
 
+    with pytest.raises(ValueError, match="analysis does not match retained record"):
+        gui_module.verification_history_record_currency_context(
+            {"sequence": 9, "analysis_id": "room-b"},
+            current_assessment,
+        )
+
 
 def test_gui_verification_history_passes_project_and_base_dir_to_dialog(monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)

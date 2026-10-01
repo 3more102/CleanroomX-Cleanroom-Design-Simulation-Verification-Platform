@@ -47,9 +47,10 @@ jobs:
               echo "Immutable tag ${TAG} already exists at ${existing_sha}; refusing to move it." >&2
               exit 1
             fi
-            echo "publish=false" >> "${GITHUB_OUTPUT}"
-            echo "Immutable tag ${TAG} already exists at the qualified commit; no publication work is required."
-            exit 0
+            echo "create_tag=false" >> "${GITHUB_OUTPUT}"
+            echo "Immutable tag ${TAG} already exists at the qualified commit; release publication may resume idempotently."
+          else
+            echo "create_tag=true" >> "${GITHUB_OUTPUT}"
           fi
 
           echo "publish=true" >> "${GITHUB_OUTPUT}"
@@ -73,16 +74,31 @@ jobs:
           set -euo pipefail
           current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           test "${current_main_sha}" = "${TARGET_SHA}"
-          ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1
+          if [ "${{ steps.closure.outputs.create_tag }}" = "true" ]; then
+            ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1
+          else
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${existing_sha}" = "${TARGET_SHA}"
+          fi
 
       - name: Create immutable tag and GitHub Release
         if: steps.closure.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/tags/${TAG}" \
-            -f sha="${TARGET_SHA}" >/dev/null
+          if [ "${{ steps.closure.outputs.create_tag }}" = "true" ]; then
+            if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${TAG}" \
+              -f sha="${TARGET_SHA}" >/dev/null; then
+              existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+              test "${existing_sha}" = "${TARGET_SHA}"
+            fi
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG} already exists; publication is complete."
+            exit 0
+          fi
 
           cat > /tmp/release-notes.md <<'EOF'
           CleanroomX v0.103.0 is the Release 3 production closure.

@@ -3,9 +3,9 @@
 ## Unreleased Release 3 — explicit evidence authority — 2026-10-01
 
 - Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.
-- Requires the exact requirement ID, subject, selected already-bound evidence ID, and a non-empty rationale; stale, mismatched, duplicate, or unnecessary authority decisions are rejected.
+- Requires the exact requirement ID, subject, selected already-bound evidence ID, authority source/issuer, decision reference, decision revision, and a non-empty rationale; stale, mismatched, duplicate, provenance-incomplete, or unnecessary authority decisions are rejected.
 - Retains every competing evidence record in the canonical evidence collection and finding candidate list while evaluating only the explicitly selected authority.
-- Hash-binds the normalized authority document to the verification result without changing legacy result shape or digest when no authority policy is supplied.
+- Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
 - Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
 
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01

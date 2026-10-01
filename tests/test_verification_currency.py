@@ -158,6 +158,9 @@ def test_verification_currency_reports_current_for_matching_inline_analysis(tmp_
     assert item["current"] is True
     assert item["mismatch_reasons"] == []
     assert item["external_dependency_count"] == 0
+    assert "declares no file-backed external engineering dependencies" in item[
+        "explanation"
+    ]
     assert item["latest_record"]["verified"] is True
 
 
@@ -319,6 +322,10 @@ def test_verification_currency_proves_current_file_backed_verification(
     assert item["external_dependency_count"] == 2
     assert item["mismatch_reasons"] == []
     assert item["latest_record"]["external_dependencies_recorded"] is True
+    assert "every retained external dependency fingerprint matches" in item[
+        "explanation"
+    ]
+    assert "declares no file-backed" not in item["explanation"]
     assert result["summary"]["current_count"] == 1
 
     dependency = tmp_path / "consistency_hvac_demo.json"

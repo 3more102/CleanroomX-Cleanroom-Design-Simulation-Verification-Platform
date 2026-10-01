@@ -155,7 +155,15 @@ def _write_run_output(
         source=source,
         output=output,
     )
-    atomic_write_text(output, text)
+    atomic_write_text(
+        output,
+        text,
+        before_replace=lambda: _assert_project_output_is_safe(
+            project,
+            source=source,
+            output=output,
+        ),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

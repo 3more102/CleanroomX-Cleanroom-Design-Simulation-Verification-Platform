@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+from .cli_output import CLIOutputError, write_cli_output
 import json
 
-from .project import atomic_write_text
 from .psychrometric_uncertainty import analyze_psychrometric_uncertainty
 from .psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from .psychrometric_uncertainty_report import (
@@ -40,7 +42,15 @@ def main() -> int:
     )
 
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.file,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-psychrometric-uncertainty: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0

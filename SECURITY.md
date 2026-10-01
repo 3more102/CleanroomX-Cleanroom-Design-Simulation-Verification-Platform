@@ -10,11 +10,21 @@ Desktop project and analysis inputs use strict JSON. Project loading rejects mal
 
 Application workflow bindings are fixed in `src/cleanroomx/application.py`. The v0.100 registry check rejects duplicate workflow keys, requires parser/runner targets for ordinary workflows, preserves explicit custom adapters for consistency and dossier, and verifies that every declared target resolves to a callable. Project files select a declared analysis kind rather than arbitrary Python modules or function names.
 
-Installed analysis plugins remain trusted executable Python packages, but plugin
-discovery is fail-isolated: malformed identity metadata, import/factory
-exceptions, and plugin-triggered `SystemExit` disable the affected extension
-instead of terminating built-in application startup. `KeyboardInterrupt`
-remains an operator cancellation signal and is not swallowed by discovery.
+Installed analysis plugins remain executable Python packages rather than a
+sandbox boundary. External plugin loading is disabled by default. Operators may
+explicitly set `CLEANROOMX_PLUGIN_MODE=trusted` for the historical trust-all-
+installed behavior, or use `CLEANROOMX_PLUGIN_MODE=allowlist` with
+`CLEANROOMX_PLUGIN_ALLOWLIST` to permit named distributions with optional exact
+version pins. Denied plugins are rejected before `entry_point.load()`; malformed
+policy configuration, missing allowlist identity, and version mismatch fail
+closed. This trust gate is execution control, not package signing, publisher
+authentication, or proof of package authenticity.
+
+For plugins that pass the trust gate, discovery remains fail-isolated: malformed
+identity metadata, import/factory exceptions, and plugin-triggered `SystemExit`
+disable the affected extension instead of terminating built-in application
+startup. `KeyboardInterrupt` remains an operator cancellation signal and is not
+swallowed by discovery.
 
 ## File access
 

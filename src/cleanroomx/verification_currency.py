@@ -254,6 +254,47 @@ def _analysis_currency(
     }
 
 
+def verification_history_record_currency_context(
+    record: dict[str, Any],
+    current_assessment: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Project current verification currency onto one immutable history record."""
+    if current_assessment is None:
+        return {
+            "state": "not_in_current_project",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "The analysis referenced by this retained verification record is "
+                "not present in the current project."
+            ),
+        }
+
+    if current_assessment.get("analysis_id") != record.get("analysis_id"):
+        raise ValueError(
+            "verification currency assessment analysis does not match retained record"
+        )
+
+    latest_record = current_assessment.get("latest_record")
+    if (
+        not isinstance(latest_record, dict)
+        or latest_record.get("sequence") != record.get("sequence")
+    ):
+        return {
+            "state": "historical",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "A newer retained verification record exists for this analysis. "
+                "Current verification currency applies only to the latest retained "
+                "record."
+            ),
+        }
+    return copy.deepcopy(current_assessment)
+
+
 def assess_project_verification_currency(
     project: ProjectDocument,
     *,

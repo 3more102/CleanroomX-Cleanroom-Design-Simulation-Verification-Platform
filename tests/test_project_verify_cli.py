@@ -481,3 +481,22 @@ def test_project_verify_run_rechecks_source_revision_at_atomic_replace_boundary(
 
     assert exit_code == 2
     assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"
+
+def test_project_verify_cli_reports_project_path_resolution_errors(
+    monkeypatch,
+    capsys,
+):
+    def fail_resolve(self, strict=False):
+        raise OSError("cannot resolve project path")
+
+    monkeypatch.setattr(verify_cli.Path, "resolve", fail_resolve)
+
+    exit_code = verify_cli.main(
+        ["status", "broken.cleanroomx.json", "room-a"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "cannot resolve project path" in captured.err
+

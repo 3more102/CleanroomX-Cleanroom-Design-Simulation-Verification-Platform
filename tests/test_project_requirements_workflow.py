@@ -155,6 +155,12 @@ def test_project_native_workflow_executes_persisted_mapping_end_to_end(tmp_path)
     payload = result.to_dict()
 
     assert payload["schema"] == PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA
+    assert (
+        payload["schema_version"]
+        == workflow_module.PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA_VERSION
+    )
+    assert payload["requirements"] == result.requirements
+    assert result.requirements["requirements_sha256"] == result.requirements_sha256
     assert result.mapping_ids == ("MAP-ACH",)
     assert result.evidence[0]["evidence_locator"] == "/result/ach"
     assert result.evidence[0]["project_revision"] == result.source_revision
@@ -329,6 +335,55 @@ def _reseal_workflow_after_proofgraph_edit(workflow) -> None:
         "workflow_sha256",
         workflow_module._canonical_sha256(identity),
     )
+
+
+def test_workflow_verifier_rejects_tampered_requirements_snapshot(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.requirements["sets"][0]["title"] = "Tampered URS"
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="workflow requirements snapshot is invalid",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_requirement_set_metadata(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["requirement_set"]["title"] = "Tampered URS"
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="requirement set 'urs-main' disagrees with canonical requirements snapshot",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_requirement_criteria_metadata(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["requirement_set"]["requirements"][0]["criteria"][
+        "assumptions"
+    ] = ["tampered assumption"]
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="requirement set 'urs-main' disagrees with canonical requirements snapshot",
+    ):
+        verify_project_requirements_workflow_run(result)
 
 
 def test_project_native_workflow_component_verifier_rejects_tampered_evidence(

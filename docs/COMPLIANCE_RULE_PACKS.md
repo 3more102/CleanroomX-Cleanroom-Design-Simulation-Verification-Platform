@@ -46,6 +46,14 @@ Aggregate status is:
 
 Each finding retains rule identity, evidence path, operator, expected value, actual value, delta where meaningful, unit, tolerance, source, and reference. Digests use CleanroomX deterministic strict-JSON serialization (sorted keys, UTF-8, compact separators, and no NaN/Infinity) before SHA-256 hashing.
 
+Result truth flags deliberately separate two different statements:
+
+- `no_failures_detected` is true when no evaluated rule recorded a failure, even if required evidence is still `not_checked`;
+- `verified` is true only when the check is complete and the aggregate status is `pass`;
+- the historical `passed` field remains a compatibility alias for `no_failures_detected`.
+
+Therefore `passed: true` alone must not be interpreted as full requirement verification. Automation that requires completed verification should require `verified: true`.
+
 ## Regulatory boundary
 
 A CleanroomX rule-pack result evaluates only the supplied evidence against the supplied criteria. It is not by itself a regulatory approval, cleanroom certification, commissioning/TAB acceptance, or proof that the supplied pack completely represents an external standard.

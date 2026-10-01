@@ -203,6 +203,7 @@ def build_project_engineering_dossier(
             ),
             "records": verification_records,
         },
+        "verification_currency": copy.deepcopy(diagnostics["verification_currency"]),
         "project_diagnostics": diagnostics,
         "engineering_boundary": {
             "historical_verification_is_current_certification": False,
@@ -249,6 +250,7 @@ def markdown_project_engineering_dossier(dossier: dict[str, Any]) -> str:
     run_history = dossier["analysis_run_history"]["integrity"]
     verification_history = dossier["verification_run_history"]
     verification_integrity = verification_history["integrity"]
+    verification_currency = dossier["verification_currency"]
     diagnostics = dossier["project_diagnostics"]["summary"]
 
     lines = [
@@ -267,6 +269,9 @@ def markdown_project_engineering_dossier(dossier: dict[str, Any]) -> str:
         f"- Requirement mappings: **{mappings['mapping_count']}**",
         f"- Retained analysis runs: **{run_history['record_count']}**",
         f"- Retained verification runs: **{verification_integrity['record_count']}**",
+        f"- Current configured verifications: **{verification_currency['summary']['current_count']}**",
+        f"- Stale verifications: **{verification_currency['summary']['stale_count']}**",
+        f"- Dependency freshness unverifiable: **{verification_currency['summary']['dependency_freshness_unverifiable_count']}**",
         "",
         "## Diagnostics",
         "",

@@ -7,6 +7,10 @@ import json
 import math
 from typing import Any, Iterable
 
+from .engineering_units import (
+    EngineeringUnitConversionError,
+    convert_engineering_value,
+)
 from .project_requirements import ProjectRequirement, ProjectRequirements
 from .verification import aggregate_verification_status
 
@@ -295,17 +299,38 @@ def _evaluate(
             ),
             evidence=evidence,
         )
+    actual_for_comparison = evidence.value
+    unit_converted = False
     if evidence.unit != requirement.unit:
-        return _unresolved(
-            requirement,
-            subject_ref,
-            state="invalid",
-            explanation=(
-                "Evidence unit does not exactly match the requirement unit; "
-                "no implicit conversion was performed."
-            ),
-            evidence=evidence,
-        )
+        if evidence.unit is None or requirement.unit is None:
+            return _unresolved(
+                requirement,
+                subject_ref,
+                state="invalid",
+                explanation=(
+                    "Evidence unit does not exactly match the requirement unit; "
+                    "no implicit conversion was performed because one side is unitless."
+                ),
+                evidence=evidence,
+            )
+        try:
+            actual_for_comparison = convert_engineering_value(
+                evidence.value,
+                evidence.unit,
+                requirement.unit,
+            )
+        except EngineeringUnitConversionError as exc:
+            return _unresolved(
+                requirement,
+                subject_ref,
+                state="invalid",
+                explanation=(
+                    "Evidence unit does not exactly match the requirement unit; "
+                    f"no implicit conversion was performed: {exc}."
+                ),
+                evidence=evidence,
+            )
+        unit_converted = True
 
     if evidence.value is None:
         return _unresolved(
@@ -319,7 +344,7 @@ def _evaluate(
     operator = criterion["operator"]
     expected = criterion["expected"]
     tolerance = float(criterion["tolerance"])
-    actual = evidence.value
+    actual = actual_for_comparison
     delta: float | None = None
 
     if operator == "equals" and isinstance(expected, (str, bool)):
@@ -388,9 +413,23 @@ def _evaluate(
             "freshness": evidence.freshness,
             "evidence_kinds": list(evidence.evidence_kinds),
             "explanation": (
-                "Current evidence satisfies the explicit requirement criterion."
-                if passed
-                else "Current evidence does not satisfy the explicit requirement criterion."
+                (
+                    "Current evidence was converted from "
+                    f"{evidence.unit!r} to {requirement.unit!r} by the canonical "
+                    "engineering unit authority and satisfies the explicit requirement criterion."
+                )
+                if unit_converted and passed
+                else (
+                    "Current evidence was converted from "
+                    f"{evidence.unit!r} to {requirement.unit!r} by the canonical "
+                    "engineering unit authority and does not satisfy the explicit requirement criterion."
+                )
+                if unit_converted
+                else (
+                    "Current evidence satisfies the explicit requirement criterion."
+                    if passed
+                    else "Current evidence does not satisfy the explicit requirement criterion."
+                )
             ),
         }
     )

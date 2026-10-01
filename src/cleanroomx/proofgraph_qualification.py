@@ -218,7 +218,7 @@ def proofgraph_from_qualification_uncertainty(
                 reference=check.requirement.reference or spec.name,
                 scope=(subject_ref,),
                 criteria={
-                    "property": "observed_value",
+                    "property": "qualification_interval",
                     "operator": (
                         "complete_interval_meets_minimum"
                         if check.requirement.kind == "minimum"

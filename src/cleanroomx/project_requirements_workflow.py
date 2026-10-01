@@ -470,7 +470,11 @@ def _verify_workflow_proofgraph_projection(
             "workflow ProofGraph source findings disagree with canonical verification"
         )
 
-    expected_graph_evidence_ids: set[str] = set()
+    expected_graph_evidence_ids = {
+        evidence_id
+        for evidence_id, evidence in evidence_by_id.items()
+        if evidence.get("requirement_id") in graph_requirement_ids
+    }
     checks_by_id = {item.id: item for item in graph.checks}
     findings_by_id = {item.id: item for item in graph.findings}
     verdicts_by_id = {item.id: item for item in graph.verdicts}
@@ -488,7 +492,6 @@ def _verify_workflow_proofgraph_projection(
                 "workflow canonical verification finding evidence identities are invalid"
             )
         expected_evidence_ids = tuple(raw_evidence_ids)
-        expected_graph_evidence_ids.update(expected_evidence_ids)
 
         requirement_id = source_finding.get("requirement_id")
         subject_ref = source_finding.get("subject_ref")
@@ -542,7 +545,7 @@ def _verify_workflow_proofgraph_projection(
     actual_graph_evidence_ids = {item.id for item in graph.evidence}
     if actual_graph_evidence_ids != expected_graph_evidence_ids:
         raise ProjectRequirementsWorkflowError(
-            "workflow ProofGraph evidence identities disagree with canonical verification findings"
+            "workflow ProofGraph evidence identities disagree with bound workflow evidence"
         )
 
     expected_sources: dict[str, dict[str, Any]] = {}

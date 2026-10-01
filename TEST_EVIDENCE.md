@@ -1,3 +1,32 @@
+# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
+
+## Verified Release 3 baseline
+
+Validation date: 2026-10-01
+
+Release 3 functional closure is merged through PR **#707 — Release 3 final closure restack on current main**.
+
+- functional PR head: `875408729ec3587d96f4c86f77b14de80b6548be`
+- pull-request merge ref exercised by GitHub Actions: `14ae0c8c97af4f1a8b55233e746b7d50225cfd92`
+- PR CI run id: `36875375370` — **success**
+- merged `main` commit: `165b0c61f776270f58e8b691171181d694857570`
+- Python 3.11 complete suite: **1662 passed, 4 skipped**
+- Python 3.12 complete suite: **1662 passed, 4 skipped**
+- Python 3.13 complete suite: **1662 passed, 4 skipped**
+- Release 3 requirements/verification focused gate: **143 passed**
+- Release 2 consolidation compatibility gate: **166 passed**
+- spatial design focused gate: **96 passed**
+- project diagnostics focused gate: **16 passed**
+- Windows PowerShell/CMD launcher smoke: **success**
+- clean-wheel installation and installed CLI checks: **success**
+- Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+
+The validated Release 3 tree includes canonical requirements/evidence traceability, engineering-unit conversion, explicit evidence authority, ProofGraph history retention and cross-artifact integrity, verification currency, fail-closed external plugin trust, cooperative batch cancellation, headless project traceability, and desktop requirement/evidence/history review. The release identity closure does not intentionally change solver equations, numerical tolerances, project schema version 1, or configured engineering acceptance criteria.
+
+The immutable v0.103.0 publisher runs only after successful current-main CI and refuses to publish a stale successful SHA. The published tag therefore remains the authoritative exact release commit.
+
+---
+
 # CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline

@@ -1482,3 +1482,229 @@ def test_gui_project_dossier_export_rejects_external_project_change(
     assert errors
     assert errors[0][0] == "Project dossier export blocked"
     assert "changed on disk" in errors[0][1]
+
+
+
+def test_gui_project_requirements_verification_reports_verified_pass(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="GUI verification",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    class Workflow:
+        analysis_name = "Room A verification"
+        source_revision = revision.sha256
+        workflow_sha256 = "a" * 64
+        verification = {
+            "status": "pass",
+            "complete": True,
+            "verified": True,
+            "verification_sha256": "b" * 64,
+            "summary": {
+                "pass_count": 1,
+                "fail_count": 0,
+                "not_checked_count": 0,
+            },
+        }
+
+    calls = []
+    infos = []
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda path, analysis_id: calls.append((Path(path), analysis_id)) or Workflow(),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: infos.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app.run_project_requirements_verification() is True
+
+    assert calls == [(project_path, "room-a")]
+    assert errors == []
+    assert warnings == []
+    assert infos[-1][0] == "Project requirements verified"
+    assert "Verification SHA-256" in infos[-1][1]
+    assert "Project requirements verified" in app.status_var.value
+
+
+def test_gui_project_requirements_verification_persists_adverse_evidence(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="GUI verification persistence",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    class Workflow:
+        analysis_name = "Room A verification"
+        source_revision = revision.sha256
+        workflow_sha256 = "c" * 64
+        verification = {
+            "status": "fail",
+            "complete": True,
+            "verified": False,
+            "verification_sha256": "d" * 64,
+            "summary": {
+                "pass_count": 0,
+                "fail_count": 1,
+                "not_checked_count": 0,
+            },
+        }
+
+    class Persisted:
+        record = {
+            "sequence": 7,
+            "record_sha256": "e" * 64,
+        }
+
+    workflow = Workflow()
+    persist_calls = []
+    reloads = []
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda path, analysis_id: workflow,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "persist_project_requirements_workflow_run",
+        lambda path, value: (
+            persist_calls.append((Path(path), value))
+            or Persisted()
+        ),
+    )
+    app.load_project_path = lambda path: reloads.append(Path(path))
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: None,
+    )
+
+    assert app.persist_project_requirements_verification() is True
+
+    assert persist_calls == [(project_path, workflow)]
+    assert reloads == [project_path]
+    assert errors == []
+    assert warnings[-1][0] == "Verification evidence persisted"
+    assert "Persisted sequence: 7" in warnings[-1][1]
+    assert "Adverse/incomplete verification persisted" in app.status_var.value
+
+
+def test_gui_verification_history_empty_is_reported(monkeypatch):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="No verification history")
+    app.status_var = Status()
+
+    infos = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: infos.append((title, message)),
+    )
+
+    assert app.show_verification_history() is False
+    assert infos == [
+        (
+            "Project Verification History",
+            "No persisted project requirements verification records exist yet.",
+        )
+    ]

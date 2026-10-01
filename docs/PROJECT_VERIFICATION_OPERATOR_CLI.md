@@ -61,6 +61,19 @@ rechecks file-backed dependency fingerprints against the saved-project directory
 and confirms that the project file remained byte-for-byte stable during the
 inspection.
 
+To gate every analysis that currently has active requirement-evidence mappings,
+omit the analysis ID:
+
+```text
+cleanroomx-project-verify status project.cleanroomx.json
+```
+
+The aggregate command succeeds only when at least one analysis is configured and
+every configured analysis is both current and backed by a canonical verified
+PASS. Analyses with no active requirement-evidence mappings remain visible in the
+canonical currency summary but are not silently treated as configured evidence.
+A project with zero configured analyses fails closed.
+
 The strict-JSON response separates two independent facts:
 
 - `currency.state`: whether the latest retained verification still matches the
@@ -84,10 +97,13 @@ For `run` and `persist`:
 
 For `status`:
 
-- `0`: the latest retained verification is both `current` and a verified PASS;
-- `1`: evidence is stale, dependency freshness is unverifiable, no verification
-  is retained/configured, or the current retained verification is not a verified
-  PASS;
+- with an analysis ID, `0` means that analysis's latest retained verification is
+  both `current` and a verified PASS;
+- without an analysis ID, `0` means at least one analysis is configured and
+  every configured analysis is current and a verified PASS;
+- `1`: the selected/aggregate gate is not accepted because evidence is stale,
+  dependency freshness is unverifiable, verification is missing/adverse, or no
+  analyses are configured;
 - `2`: operational/integrity failure or the project changes during inspection.
 
 A non-PASS verification can still be persisted. This is intentional: failed or

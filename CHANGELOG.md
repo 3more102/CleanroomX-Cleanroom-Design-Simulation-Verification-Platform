@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — explicit evidence authority — 2026-10-01
+
+- Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.
+- Requires the exact requirement ID, subject, selected already-bound evidence ID, authority source/issuer, decision reference, decision revision, and a non-empty rationale; stale, mismatched, duplicate, provenance-incomplete, or unnecessary authority decisions are rejected.
+- Retains every competing evidence record in the canonical evidence collection and finding candidate list while evaluating only the explicitly selected authority.
+- Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
+- Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
+
 ## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
 
 - Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.
@@ -7,42 +15,6 @@
 - Retains raw evidence value/unit alongside converted findings and records the exact source/target canonical units, scale, offset, and engineering dimension used.
 - Fails closed for unsupported unit spellings, incompatible dimensions, named-unit versus unitless mismatches, and non-numeric criteria with differing units.
 - Preserves the legacy exact-unit finding shape and changes no solver equations, requirement criteria, persisted project schema, or historical verification records.
-
-## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
-
-- Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.
-- Verifies ProofGraph source-finding metadata against the canonical verification findings for the graph's requirement set.
-- Verifies projected ProofGraph evidence and evidence sources against the exact bound workflow evidence, including value, unit, source revision, project revision, subject, locator provenance, calculation source, and evidence kind.
-- Adds regressions that deliberately reseal both `graph_sha256` and `workflow_sha256` after tampering, proving cross-artifact inconsistencies still fail closed.
-- Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
-
-## Unreleased Release 3 — external plugin trust gate — 2026-10-01
-
-- Adds operator-controlled `trusted`, `disabled`, and `allowlist` modes for installed analysis plugins, with external plugins disabled by default until an operator explicitly opts in.
-- Applies deny decisions before `entry_point.load()`, so blocked external plugins are not imported through the CleanroomX plugin entry point.
-- Supports canonicalized distribution-name allowlisting with optional exact version pins and fails closed on invalid configuration, missing distribution identity, or pin mismatch.
-- Exposes the effective trust policy in application-registry diagnostics while preserving plugin API v1, built-in analyses, solver equations, engineering tolerances, and project schema.
-
-## Unreleased Release 3 — retained canonical ProofGraph verification evidence — 2026-10-01
-
-- New persisted project-verification records retain the complete canonical ProofGraph documents alongside their existing SHA-256 identities.
-- Ledger validation reparses each retained graph, requires canonical serialization, unique digest ordering, and exact agreement with `proofgraph_sha256`; legacy hash-only schema-v1 records remain readable.
-- The configured verification-history byte budget now fails closed when the newest record alone exceeds it instead of silently retaining an oversized record.
-- No solver equation, requirement comparison, ProofGraph verdict rule, or historical verification identity semantic is changed.
-
-## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
-
-- Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.
-- Represents measured qualification inputs as commissioning evidence and canonical conservative intervals/differential-pressure intervals as calculation evidence with explicit upstream lineage.
-- Preserves canonical PASS/FAIL/INDETERMINATE only when the measurements needed by the check carry source provenance; missing provenance fails closed to UNKNOWN while retaining the numerical result in verification-run metadata.
-- Adds deterministic round-trip regression coverage and changes no configured limits, solver equations, project schema, or certification claims.
-
-## Unreleased Release 3 — cooperative project batch cancellation — 2026-10-01
-
-- Adds cooperative cancellation to `cleanroomx.project_batch.run_project_file()` through an optional caller callback checked only between analyses.
-- Adds `cleanroomx-project-run --cancel-file PATH` so external automation can request a clean stop by creating a sentinel file without interrupting an active solver call.
-- Records cancellation state, boundary, and associated analysis id in schema-v2 strict-JSON and Markdown batch reports; exit code 4 distinguishes clean cancellation when no execution error or source-integrity failure takes precedence.
-- Preserves deterministic project order, exact source-revision checks, completed-run provenance, solver behavior, engineering tolerances, and project schema.
 
 ## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
 

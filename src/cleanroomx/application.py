@@ -570,6 +570,11 @@ def plugin_discovery_issues() -> tuple[dict, ...]:
     return tuple(issue.to_dict() for issue in _PLUGIN_DISCOVERY.issues)
 
 
+def plugin_trust_policy() -> dict:
+    """Return the effective pre-import external-plugin execution policy."""
+    return _PLUGIN_DISCOVERY.policy.to_dict()
+
+
 def _load_callable(target: BindingTarget) -> Callable[..., Any]:
     if callable(target):
         return target
@@ -663,6 +668,7 @@ def validate_application_registry() -> dict:
         "plugin_analysis_count": len(_PLUGIN_ANALYSES),
         "plugin_issue_count": len(issues),
         "plugin_issues": list(issues),
+        "plugin_trust_policy": plugin_trust_policy(),
         "callable_target_count": callable_target_count,
         "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
         "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),

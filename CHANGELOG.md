@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased Release 3 — truthful current dependency currency explanation — 2026-10-01
+## Unreleased Release 3 — verification-history CLI record currency — 2026-10-01
 
-- Corrects the canonical verification-currency explanation for file-backed analyses whose persisted dependency fingerprints still match current content.
-- Keeps the existing fail-closed current/stale/unverifiable state semantics unchanged while ensuring operator-facing provenance text never claims that verified file-backed analyses have no external dependencies.
+- Bumps the read-only verification-history inspection schema to version 2 and attaches a separate `current_currency` context to each compact listed record.
+- Returns `record_currency` beside, not inside, the complete persisted record from `show`, preserving immutable historical evidence.
+- Labels older retained records `historical` and removed-analysis records `not_in_current_project`; only each current analysis's latest retained record receives canonical current/stale/dependency-freshness-unverifiable assessment.
+- Reuses the same canonical record-context helper in CLI and desktop without changing solver equations, requirements verdicts, persisted ledger hashes, or project schema.
 
 
 ## Unreleased Release 3 — desktop verification history currency context — 2026-10-01

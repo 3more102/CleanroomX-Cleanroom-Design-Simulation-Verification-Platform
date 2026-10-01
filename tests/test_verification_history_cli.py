@@ -189,6 +189,10 @@ def test_verification_history_cli_labels_removed_analysis_records(tmp_path, caps
     project = load_project_document(path)
     project.analyses = []
     project.active_analysis_id = None
+    project.metadata.pop(
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
+        None,
+    )
     save_project_document(path, project)
 
     exit_code = verification_history_main(["list", str(path)])

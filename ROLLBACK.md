@@ -76,18 +76,3 @@ merged as `54fc239853cf4a2ab92b7686169e07acab34b8dd`), and PR #487 (tested head
 merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
-
-
-
-## v0.103.0 Release 3 verification and assurance anchor
-
-The Release 3 functional closure is merged at `165b0c61f776270f58e8b691171181d694857570`.
-Its exact tested PR #707 head `875408729ec3587d96f4c86f77b14de80b6548be`
-passed CI run #2229 / `36875375370` on Python 3.11, 3.12, and 3.13 with
-**1662 passed, 4 skipped** per interpreter plus Windows launcher smoke, clean-wheel
-installation, installed CLI checks, Tk/Xvfb desktop smoke, Release 2 performance
-evidence, Release 3 focused gates, and v0.91-v0.95 compatibility gates.
-
-The immutable `v0.103.0` tag and GitHub Release are published only after the
-release-identity closure is merged and CI succeeds for that exact current-main SHA.
-Do not move earlier release tags. Roll back through normal revert and CI flow.

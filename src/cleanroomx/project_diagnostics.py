@@ -612,7 +612,10 @@ def analyze_project_diagnostics(
     layout = normalize_layout(layout_value) if isinstance(layout_value, dict) else None
 
     verification_history = _verification_history_summary(project)
-    verification_currency = assess_project_verification_currency(project)
+    verification_currency = assess_project_verification_currency(
+        project,
+        base_dir=base,
+    )
 
     issues: list[dict[str, Any]] = []
     if layout is not None:

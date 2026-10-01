@@ -19,7 +19,7 @@ jobs:
       TARGET_SHA: 30c43983d87d6e6de2fe81c6f38610c238b1a5f4
     steps:
       - name: Check out repository history
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 pinned 2026-10-01
         with:
           fetch-depth: 0
 

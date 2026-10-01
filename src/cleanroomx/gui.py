@@ -70,15 +70,11 @@ from .project_dossier import (
     markdown_project_engineering_dossier,
 )
 from .project_requirement_evidence_mappings import (
-    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     ProjectRequirementEvidenceMappingsFormatError,
-    project_requirement_evidence_mappings_from_dict,
-    validate_project_requirement_evidence_mappings,
 )
-from .project_requirements import (
-    PROJECT_REQUIREMENTS_METADATA_KEY,
-    ProjectRequirementsFormatError,
-    project_requirements_from_dict,
+from .project_requirements import ProjectRequirementsFormatError
+from .project_requirements_traceability import (
+    build_project_requirements_traceability,
 )
 from .project_requirements_workflow import run_project_requirements_workflow
 from .project_verification_persistence import (
@@ -95,7 +91,10 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
-from .verification_currency import assess_project_verification_currency
+from .verification_currency import (
+    assess_project_verification_currency,
+    verification_history_record_currency_context,
+)
 from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
@@ -143,224 +142,176 @@ def unit_hint(path: str) -> str:
     return ""
 
 
-def verification_history_record_currency_context(
-    record: dict,
-    current_assessment: dict | None,
-) -> dict:
-    """Return current-project context without rewriting historical evidence."""
-    if current_assessment is None:
-        return {
-            "state": "not_in_current_project",
-            "current": False,
-            "complete": True,
-            "mismatch_reasons": [],
-            "explanation": (
-                "The analysis referenced by this retained verification record is "
-                "not present in the current project."
-            ),
-        }
+def verification_history_requirement_rows(record: dict) -> list[dict]:
+    """Project one validated retained record into read-only drill-down rows."""
+    verification = record.get("verification")
+    evidence = record.get("evidence")
+    if not isinstance(verification, dict) or not isinstance(evidence, list):
+        return []
+    findings = verification.get("findings")
+    if not isinstance(findings, list):
+        return []
 
-    latest_record = current_assessment.get("latest_record")
-    if (
-        not isinstance(latest_record, dict)
-        or latest_record.get("sequence") != record.get("sequence")
-    ):
-        return {
-            "state": "historical",
-            "current": False,
-            "complete": True,
-            "mismatch_reasons": [],
-            "explanation": (
-                "A newer retained verification record exists for this analysis. "
-                "Current verification currency applies only to the latest retained "
-                "record."
-            ),
-        }
-    return copy.deepcopy(current_assessment)
+    evidence_by_id = {
+        item["id"]: item
+        for item in evidence
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and item["id"]
+    }
+    rows: list[dict] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        raw_evidence_ids = finding.get("evidence_ids", [])
+        evidence_ids = (
+            tuple(item for item in raw_evidence_ids if isinstance(item, str))
+            if isinstance(raw_evidence_ids, list)
+            else ()
+        )
+        rows.append(
+            {
+                "requirement_id": str(finding.get("requirement_id", "")),
+                "subject_ref": copy.deepcopy(finding.get("subject_ref")),
+                "status": str(finding.get("status", "")),
+                "state": str(finding.get("state", "")),
+                "criterion": copy.deepcopy(finding.get("criterion")),
+                "actual": copy.deepcopy(finding.get("actual")),
+                "unit": copy.deepcopy(finding.get("unit")),
+                "included": bool(finding.get("included", False)),
+                "explanation": str(finding.get("explanation", "")),
+                "evidence_ids": evidence_ids,
+                "evidence": tuple(
+                    copy.deepcopy(evidence_by_id[evidence_id])
+                    for evidence_id in evidence_ids
+                    if evidence_id in evidence_by_id
+                ),
+            }
+        )
+    return rows
 
 
-def _requirement_criterion_text(requirement) -> str:
+def _requirement_criterion_text(criterion: dict) -> str:
     parts: list[str] = []
-    if requirement.target is not None:
+    target = criterion.get("target")
+    if target is not None:
         parts.append(
             "target="
             + json.dumps(
-                requirement.target,
+                target,
                 ensure_ascii=False,
                 allow_nan=False,
                 separators=(",", ":"),
             )
         )
-    if requirement.minimum is not None:
-        parts.append(f"minimum={requirement.minimum:g}")
-    if requirement.maximum is not None:
-        parts.append(f"maximum={requirement.maximum:g}")
-    if requirement.tolerance is not None:
-        parts.append(f"tolerance={requirement.tolerance:g}")
-    if requirement.unit is not None:
-        parts.append(f"unit={requirement.unit}")
+    minimum = criterion.get("minimum")
+    if minimum is not None:
+        parts.append(f"minimum={minimum:g}")
+    maximum = criterion.get("maximum")
+    if maximum is not None:
+        parts.append(f"maximum={maximum:g}")
+    tolerance = criterion.get("tolerance")
+    if tolerance is not None:
+        parts.append(f"tolerance={tolerance:g}")
+    unit = criterion.get("unit")
+    if unit is not None:
+        parts.append(f"unit={unit}")
     return ", ".join(parts) if parts else "no explicit acceptance criterion"
 
 
 def project_requirement_traceability_snapshot(
     project: ProjectDocument,
 ) -> dict:
-    """Build a read-only desktop view from the canonical persisted registries."""
-    metadata = project.metadata
+    """Adapt the canonical project traceability projection for the desktop view."""
+    traceability = build_project_requirements_traceability(project)
+    summary = traceability["summary"]
+    registries = traceability["registries"]
 
-    requirements_registry = None
-    raw_requirements = metadata.get(PROJECT_REQUIREMENTS_METADATA_KEY)
-    if raw_requirements is not None:
-        requirements_registry = project_requirements_from_dict(raw_requirements)
-
-    mappings_registry = None
-    raw_mappings = metadata.get(
-        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
-    )
-    if raw_mappings is not None:
-        mappings_registry = project_requirement_evidence_mappings_from_dict(
-            raw_mappings
-        )
-        validate_project_requirement_evidence_mappings(
-            metadata,
-            project.analyses,
-        )
-
-    requirement_rows: list[dict] = []
-    requirement_by_id = {}
-    if requirements_registry is not None:
-        for requirement_set in requirements_registry.sets:
-            for requirement in requirement_set.requirements:
-                requirement_by_id[requirement.id] = requirement
-                requirement_rows.append(
-                    {
-                        "id": requirement.id,
-                        "title": requirement.title,
-                        "set_id": requirement_set.id,
-                        "set_title": requirement_set.title,
-                        "status": requirement.status,
-                        "applicability": requirement.applicability,
-                        "scope": list(requirement.scope),
-                        "criterion": _requirement_criterion_text(requirement),
-                        "source": requirement.source,
-                        "source_revision": requirement.source_revision,
-                        "detail": {
-                            "requirement_set": {
-                                "id": requirement_set.id,
-                                "title": requirement_set.title,
-                                "description": requirement_set.description,
-                                "source": requirement_set.source,
-                                "source_revision": requirement_set.source_revision,
-                            },
-                            "requirement": requirement.to_dict(),
-                        },
-                    }
-                )
-
-    analysis_by_id = {analysis.id: analysis for analysis in project.analyses}
-    mapping_rows: list[dict] = []
-    if mappings_registry is not None:
-        for mapping in mappings_registry.mappings:
-            requirement = requirement_by_id.get(mapping.requirement_id)
-            analysis = analysis_by_id.get(mapping.analysis_id)
-            if analysis is None:
-                analysis_reference_state = "missing"
-            elif analysis.kind != mapping.expected_analysis_kind:
-                analysis_reference_state = "kind_mismatch"
-            else:
-                analysis_reference_state = "resolved"
-            reference_state = (
-                "resolved"
-                if (
-                    requirement is not None
-                    and analysis_reference_state == "resolved"
-                )
-                else "historical_reference"
-            )
-            mapping_rows.append(
-                {
-                    "id": mapping.id,
-                    "requirement_id": mapping.requirement_id,
-                    "requirement_title": (
-                        requirement.title
-                        if requirement is not None
-                        else mapping.requirement_id
-                    ),
-                    "analysis_id": mapping.analysis_id,
-                    "analysis_name": (
-                        analysis.name
-                        if analysis_reference_state == "resolved"
-                        else mapping.analysis_id
-                    ),
-                    "expected_analysis_kind": mapping.expected_analysis_kind,
-                    "subject_ref": mapping.subject_ref,
-                    "property_name": mapping.property_name,
-                    "result_path": list(mapping.result_path),
-                    "status": mapping.status,
-                    "reference_state": reference_state,
-                    "detail": {
-                        "mapping": mapping.to_dict(),
-                        "reference_state": reference_state,
-                        "analysis_reference_state": analysis_reference_state,
-                        "resolved_requirement": (
-                            requirement.to_dict()
-                            if requirement is not None
-                            else None
-                        ),
-                        "resolved_analysis": (
-                            {
-                                "id": analysis.id,
-                                "name": analysis.name,
-                                "kind": analysis.kind,
-                            }
-                            if analysis_reference_state == "resolved"
-                            else None
-                        ),
-                        "current_analysis_candidate": (
-                            {
-                                "id": analysis.id,
-                                "name": analysis.name,
-                                "kind": analysis.kind,
-                            }
-                            if analysis is not None
-                            else None
-                        ),
-                    },
-                }
-            )
-
-    active_mapping_count = sum(
-        1 for item in mapping_rows if item["status"] == "active"
-    )
-    mapped_requirement_ids = {
-        item["requirement_id"]
-        for item in mapping_rows
-        if item["status"] == "active"
+    requirement_by_id = {
+        requirement["id"]: requirement
+        for requirement in traceability["requirements"]
     }
+    requirement_rows = []
+    for requirement in traceability["requirements"]:
+        requirement_set = requirement["set"]
+        requirement_rows.append(
+            {
+                "id": requirement["id"],
+                "title": requirement["title"],
+                "set_id": requirement_set["id"],
+                "set_title": requirement_set["title"],
+                "status": requirement["status"],
+                "applicability": requirement["applicability"],
+                "scope": list(requirement["scope"]),
+                "criterion": _requirement_criterion_text(
+                    requirement["criterion"]
+                ),
+                "source": requirement["source"],
+                "source_revision": requirement["source_revision"],
+                "detail": {
+                    "requirement_set": copy.deepcopy(requirement_set),
+                    "requirement": copy.deepcopy(requirement),
+                },
+            }
+        )
+
+    mapping_rows = []
+    for mapping in traceability["mappings"]:
+        resolved_analysis = mapping["resolved_analysis"]
+        mapping_rows.append(
+            {
+                "id": mapping["id"],
+                "requirement_id": mapping["requirement_id"],
+                "requirement_title": (
+                    mapping["requirement_title"]
+                    if mapping["requirement_title"] is not None
+                    else mapping["requirement_id"]
+                ),
+                "analysis_id": mapping["analysis_id"],
+                "analysis_name": (
+                    resolved_analysis["name"]
+                    if resolved_analysis is not None
+                    else mapping["analysis_id"]
+                ),
+                "expected_analysis_kind": mapping["expected_analysis_kind"],
+                "subject_ref": mapping["subject_ref"],
+                "property_name": mapping["property_name"],
+                "result_path": list(mapping["result_path"]),
+                "status": mapping["status"],
+                "reference_state": mapping["reference_state"],
+                "detail": {
+                    "mapping": copy.deepcopy(mapping),
+                    "reference_state": mapping["reference_state"],
+                    "analysis_reference_state": mapping[
+                        "analysis_reference_state"
+                    ],
+                    "requirement_reference_state": mapping[
+                        "requirement_reference_state"
+                    ],
+                    "resolved_requirement": copy.deepcopy(
+                        requirement_by_id.get(mapping["requirement_id"])
+                    ),
+                    "resolved_analysis": copy.deepcopy(resolved_analysis),
+                    "current_analysis_candidate": copy.deepcopy(
+                        mapping["current_analysis_candidate"]
+                    ),
+                },
+            }
+        )
+
     return {
-        "requirements_sha256": (
-            requirements_registry.sha256
-            if requirements_registry is not None
-            else None
-        ),
-        "mappings_sha256": (
-            mappings_registry.sha256
-            if mappings_registry is not None
-            else None
-        ),
-        "requirement_set_count": (
-            len(requirements_registry.sets)
-            if requirements_registry is not None
-            else 0
-        ),
-        "requirement_count": len(requirement_rows),
-        "mapping_count": len(mapping_rows),
-        "active_mapping_count": active_mapping_count,
-        "active_mapped_requirement_count": len(mapped_requirement_ids),
+        "requirement_set_count": summary["requirement_set_count"],
+        "requirement_count": summary["requirement_count"],
+        "mapping_count": summary["mapping_count"],
+        "active_mapping_count": summary["active_mapping_count"],
+        "active_mapped_requirement_count": summary[
+            "active_mapped_requirement_count"
+        ],
+        "requirements_sha256": registries["requirements_sha256"],
+        "mappings_sha256": registries["mappings_sha256"],
         "requirements": requirement_rows,
         "mappings": mapping_rows,
     }
-
 
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
@@ -553,6 +504,85 @@ class RunHistoryDialog(tk.Toplevel):
         record = next(
             item for item in self.records if item["sequence"] == sequence
         )
+
+        for item in self.requirement_tree.get_children():
+            self.requirement_tree.delete(item)
+        for index, row in enumerate(verification_history_requirement_rows(record)):
+            parent_id = f"finding:{index}"
+            subject = row["subject_ref"] if row["subject_ref"] is not None else "project"
+            self.requirement_tree.insert(
+                "",
+                "end",
+                iid=parent_id,
+                text=row["requirement_id"],
+                open=True,
+                values=(
+                    subject,
+                    row["status"],
+                    row["state"],
+                    self._display_value(row["criterion"]),
+                    self._display_value(row["actual"]),
+                    row["unit"] or "",
+                    "",
+                    row["explanation"],
+                ),
+            )
+            retained_by_id = {
+                item.get("id"): item
+                for item in row["evidence"]
+                if isinstance(item, dict)
+            }
+            if not row["evidence_ids"]:
+                self.requirement_tree.insert(
+                    parent_id,
+                    "end",
+                    text="No bound evidence",
+                    values=("", "", "", "", "", "", "", ""),
+                )
+                continue
+            for evidence_index, evidence_id in enumerate(row["evidence_ids"]):
+                evidence = retained_by_id.get(evidence_id)
+                if evidence is None:
+                    self.requirement_tree.insert(
+                        parent_id,
+                        "end",
+                        iid=f"{parent_id}:missing:{evidence_index}",
+                        text=evidence_id,
+                        values=(
+                            "",
+                            "",
+                            "missing",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "Referenced evidence is not retained in this record.",
+                        ),
+                    )
+                    continue
+                source = str(evidence.get("source", ""))
+                locator = str(evidence.get("evidence_locator", ""))
+                source_locator = source
+                if locator:
+                    source_locator += (" · " if source_locator else "") + locator
+                evidence_subject = evidence.get("subject_ref")
+                self.requirement_tree.insert(
+                    parent_id,
+                    "end",
+                    iid=f"{parent_id}:evidence:{evidence_index}",
+                    text=evidence_id,
+                    values=(
+                        evidence_subject if evidence_subject is not None else "project",
+                        "",
+                        "",
+                        "",
+                        self._display_value(evidence.get("value")),
+                        evidence.get("unit") or "",
+                        evidence.get("freshness") or "",
+                        source_locator,
+                    ),
+                )
+
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         self.detail.insert(
@@ -572,8 +602,8 @@ class VerificationHistoryDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1400x720")
-        self.minsize(1040, 560)
+        self.geometry("1460x780")
+        self.minsize(1080, 600)
         self.transient(parent)
 
         metadata = project.metadata
@@ -651,15 +681,97 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         list_scroll.pack(side="right", fill="y")
 
-        self.detail = tk.Text(detail_frame, wrap="none")
-        detail_scroll = ttk.Scrollbar(
-            detail_frame,
+        detail_tabs = ttk.Notebook(detail_frame)
+        detail_tabs.pack(fill="both", expand=True)
+
+        evidence_tab = ttk.Frame(detail_tabs)
+        record_tab = ttk.Frame(detail_tabs)
+        detail_tabs.add(evidence_tab, text="Requirement Evidence")
+        detail_tabs.add(record_tab, text="Canonical Record")
+
+        ttk.Label(
+            evidence_tab,
+            text=(
+                "Read-only historical requirement → evidence → verdict projection. "
+                "No verdict is recomputed from current project state."
+            ),
+        ).pack(fill="x", padx=8, pady=(8, 4))
+
+        evidence_frame = ttk.Frame(evidence_tab)
+        evidence_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.requirement_tree = ttk.Treeview(
+            evidence_frame,
+            columns=(
+                "subject",
+                "verdict",
+                "state",
+                "criterion",
+                "actual",
+                "unit",
+                "freshness",
+                "source",
+            ),
+            show="tree headings",
+        )
+        self.requirement_tree.heading("#0", text="Requirement / Evidence")
+        self.requirement_tree.heading("subject", text="Subject")
+        self.requirement_tree.heading("verdict", text="Verdict")
+        self.requirement_tree.heading("state", text="State")
+        self.requirement_tree.heading("criterion", text="Criterion")
+        self.requirement_tree.heading("actual", text="Actual")
+        self.requirement_tree.heading("unit", text="Unit")
+        self.requirement_tree.heading("freshness", text="Freshness")
+        self.requirement_tree.heading("source", text="Evidence source / locator")
+        self.requirement_tree.column("#0", width=210)
+        self.requirement_tree.column("subject", width=120, stretch=False)
+        self.requirement_tree.column("verdict", width=85, stretch=False)
+        self.requirement_tree.column("state", width=105, stretch=False)
+        self.requirement_tree.column("criterion", width=230)
+        self.requirement_tree.column("actual", width=150)
+        self.requirement_tree.column("unit", width=80, stretch=False)
+        self.requirement_tree.column("freshness", width=105, stretch=False)
+        self.requirement_tree.column("source", width=330)
+
+        evidence_scroll_y = ttk.Scrollbar(
+            evidence_frame,
+            orient="vertical",
+            command=self.requirement_tree.yview,
+        )
+        evidence_scroll_x = ttk.Scrollbar(
+            evidence_frame,
+            orient="horizontal",
+            command=self.requirement_tree.xview,
+        )
+        self.requirement_tree.configure(
+            yscrollcommand=evidence_scroll_y.set,
+            xscrollcommand=evidence_scroll_x.set,
+        )
+        self.requirement_tree.grid(row=0, column=0, sticky="nsew")
+        evidence_scroll_y.grid(row=0, column=1, sticky="ns")
+        evidence_scroll_x.grid(row=1, column=0, sticky="ew")
+        evidence_frame.rowconfigure(0, weight=1)
+        evidence_frame.columnconfigure(0, weight=1)
+
+        self.detail = tk.Text(record_tab, wrap="none")
+        detail_scroll_y = ttk.Scrollbar(
+            record_tab,
             orient="vertical",
             command=self.detail.yview,
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        detail_scroll_x = ttk.Scrollbar(
+            record_tab,
+            orient="horizontal",
+            command=self.detail.xview,
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        record_tab.rowconfigure(0, weight=1)
+        record_tab.columnconfigure(0, weight=1)
 
         for record in reversed(self.records):
             verification = record["verification"]
@@ -699,6 +811,17 @@ class VerificationHistoryDialog(tk.Toplevel):
             self.tree.selection_set(children[0])
             self.tree.focus(children[0])
             self._show_selected()
+
+    @staticmethod
+    def _display_value(value) -> str:
+        if value is None:
+            return ""
+        return json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
 
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()

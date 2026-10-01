@@ -74,16 +74,18 @@ PASS. Analyses with no active requirement-evidence mappings remain visible in th
 canonical currency summary but are not silently treated as configured evidence.
 A project with zero configured analyses fails closed.
 
-The strict-JSON response separates two independent facts:
+For a selected analysis, the strict-JSON response separates two independent
+facts:
 
 - `currency.state`: whether the latest retained verification still matches the
   current engineering configuration and dependency content;
 - `gate.verified_pass`: whether that same latest retained record is a canonical
   verified PASS.
 
-`gate.accepted` is true only when both are true. This makes the command suitable
-for CI/release gating without silently treating a historical PASS as proof of a
-later edited project.
+For aggregate inspection, the response retains the complete canonical
+`currency` assessment and adds accepted/rejected configured-analysis IDs plus
+counts under `gate`. `gate.accepted` is true only when the selected analysis,
+or every configured analysis in aggregate mode, satisfies the fail-closed gate.
 
 ## Exit codes
 

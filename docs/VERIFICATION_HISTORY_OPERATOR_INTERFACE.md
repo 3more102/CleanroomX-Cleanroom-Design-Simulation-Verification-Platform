@@ -63,9 +63,9 @@ verdicts, or silently bind old evidence to current project state.
 ## Verification currency
 
 The operator output also assesses each current analysis against its latest retained
-verification record. Per-record CLI context is derived from the canonical
-verification-currency record-context helper so current, historical, and removed-
-analysis states are explicit in machine-readable output.
+verification record. Per-record CLI and desktop context is derived from the same
+canonical verification-currency record-context helper so current, historical, and
+removed-analysis states cannot drift between operator surfaces.
 
 A record is reported as `current` only when its analysis kind, canonical input
 SHA-256, requirements SHA-256, mappings SHA-256, and active mapping identities all

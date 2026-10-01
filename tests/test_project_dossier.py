@@ -199,6 +199,8 @@ def test_project_engineering_dossier_preserves_canonical_verification_evidence(t
     assert history["records"][0]["evidence"][0]["evidence_locator"] == "/result/ach"
     assert history["latest_by_analysis"][0]["status"] == "pass"
     assert history["latest_by_analysis"][0]["verified"] is True
+    assert history["latest_by_analysis"][0]["current_assessment"]["state"] == "current"
+    assert history["latest_by_analysis"][0]["current_assessment"]["current"] is True
     assert (
         history["latest_by_analysis"][0]["project_source_revision"]
         == persisted.record["project_source_revision"]
@@ -210,6 +212,30 @@ def test_project_engineering_dossier_preserves_canonical_verification_evidence(t
         ]
         is False
     )
+
+
+def test_project_engineering_dossier_marks_historical_pass_stale_after_edit(tmp_path):
+    _path, project, _revision, _persisted = _persisted_project(tmp_path)
+    project.analyses[0].input["supply_airflow_m3_h"] += 1.0
+
+    dossier = build_project_engineering_dossier(
+        project,
+        source_project_revision="b" * 64,
+        base_dir=tmp_path,
+    )
+
+    latest = dossier["verification_run_history"]["latest_by_analysis"][0]
+    assert latest["status"] == "pass"
+    assert latest["verified"] is True
+    assessment = latest["current_assessment"]
+    assert assessment["state"] == "stale"
+    assert assessment["current"] is False
+    assert "analysis_input_changed" in assessment["mismatch_reasons"]
+
+    markdown = markdown_project_engineering_dossier(dossier)
+    assert "Historical status" in markdown
+    assert "Current currency" in markdown
+    assert r"stale (analysis\_input\_changed)" in markdown
 
 
 def test_project_engineering_dossier_markdown_verifies_digest(tmp_path):
@@ -225,6 +251,9 @@ def test_project_engineering_dossier_markdown_verifies_digest(tmp_path):
     assert "# CleanroomX Project Engineering Dossier" in markdown
     assert "Latest retained verification by analysis" in markdown
     assert "Room A verification" in markdown
+    assert "Historical status" in markdown
+    assert "Current currency" in markdown
+    assert "| Room A verification | 1 | pass | current |" in markdown
     assert dossier["dossier_sha256"] in markdown
 
     tampered = copy.deepcopy(dossier)

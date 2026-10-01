@@ -119,7 +119,12 @@ def _analysis_definitions(project: ProjectDocument) -> list[dict[str, Any]]:
 
 def _latest_verification_summaries(
     records: list[dict[str, Any]],
+    verification_currency: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    currency_by_analysis = {
+        item["analysis_id"]: item
+        for item in verification_currency.get("analyses", [])
+    }
     latest_by_analysis: dict[str, dict[str, Any]] = {}
     for record in records:
         latest_by_analysis[record["analysis_id"]] = record
@@ -144,6 +149,9 @@ def _latest_verification_summaries(
                     "verification_identity_sha256"
                 ],
                 "record_sha256": record["record_sha256"],
+                "current_assessment": copy.deepcopy(
+                    currency_by_analysis.get(analysis_id)
+                ),
             }
         )
     return output
@@ -199,7 +207,8 @@ def build_project_engineering_dossier(
         "verification_run_history": {
             "integrity": verification_integrity,
             "latest_by_analysis": _latest_verification_summaries(
-                verification_records
+                verification_records,
+                diagnostics["verification_currency"],
             ),
             "records": verification_records,
         },
@@ -288,17 +297,27 @@ def markdown_project_engineering_dossier(dossier: dict[str, Any]) -> str:
     if latest:
         lines.extend(
             [
-                "| Analysis | Sequence | Status | Complete | Verified | Completed | Verification identity |",
-                "|---|---:|---|---|---|---|---|",
+                "| Analysis | Sequence | Historical status | Current currency | Complete | Verified | Completed | Verification identity |",
+                "|---|---:|---|---|---|---|---|---|",
             ]
         )
         for item in latest:
+            assessment = item.get("current_assessment")
+            currency_text = "not_in_current_project"
+            if assessment is not None:
+                currency_text = str(assessment["state"])
+                mismatch_reasons = assessment.get("mismatch_reasons", [])
+                if mismatch_reasons:
+                    currency_text += " (" + ", ".join(
+                        str(reason) for reason in mismatch_reasons
+                    ) + ")"
             lines.append(
-                "| {analysis} | {sequence} | {status} | {complete} | {verified} | "
-                "{completed} | {identity} |".format(
+                "| {analysis} | {sequence} | {status} | {currency} | {complete} | "
+                "{verified} | {completed} | {identity} |".format(
                     analysis=markdown_text(item["analysis_name"]),
                     sequence=item["sequence"],
                     status=markdown_text(item["status"]),
+                    currency=markdown_text(currency_text),
                     complete=markdown_text(item["complete"]),
                     verified=markdown_text(item["verified"]),
                     completed=markdown_text(item["completed_at_utc"]),
@@ -347,7 +366,9 @@ def markdown_project_engineering_dossier(dossier: dict[str, Any]) -> str:
             (
                 "Persisted verification records are historical evidence. Their recorded "
                 "project-source revisions remain authoritative for what was verified; this "
-                "dossier does not silently reinterpret them as verification of later edits."
+                "dossier does not silently reinterpret them as verification of later edits. "
+                "The current-currency column is a separate assessment of whether the latest "
+                "retained record still matches the present engineering configuration."
             ),
             "",
             (

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — dossier verification currency context — 2026-10-01
+
+- Separates each project-dossier latest retained verification's historical PASS/FAIL status from its present verification-currency assessment.
+- Attaches the canonical current/stale/dependency-freshness-unverifiable assessment to the corresponding retained record summary without rewriting historical evidence.
+- Shows current currency and explicit mismatch reasons in the review-oriented Markdown table so a historical PASS cannot be mistaken for proof of the current edited configuration.
+- Reuses the existing verification-currency authority and changes no solver equations, requirements comparison semantics, persisted ledger records, or project schema.
+
+
 ## Unreleased Release 3 — persisted verification dependency fingerprints — 2026-10-01
 
 - Persists stable external engineering dependency fingerprints from execution provenance into new project-verification ledger records.

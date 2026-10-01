@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
+
+- Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.
+- Reuses the canonical registry parsers and active-mapping cross-validation; retained disabled/superseded references remain historical and are not silently rebound when analysis identity or kind no longer matches.
+- Binds every report to one stable saved-project revision and protects both the project source and declared file-backed engineering dependencies from output overwrite.
+- Changes no solver equation, numerical tolerance, requirement acceptance criterion, verification verdict, persisted registry, or project schema.
+
 ## Unreleased Release 3 — explicit evidence authority — 2026-10-01
 
 - Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.

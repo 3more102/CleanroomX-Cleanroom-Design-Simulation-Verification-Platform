@@ -199,6 +199,12 @@ class ProjectRequirement:
             raise ProjectRequirementsFormatError(
                 "requirement.minimum must be <= requirement.maximum"
             )
+        if self.target is not None and (
+            self.minimum is not None or self.maximum is not None
+        ):
+            raise ProjectRequirementsFormatError(
+                "requirement.target cannot be combined with minimum or maximum"
+            )
         if self.tolerance is not None:
             tolerance = _finite(self.tolerance, "requirement.tolerance")
             if tolerance < 0:

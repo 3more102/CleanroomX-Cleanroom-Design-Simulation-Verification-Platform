@@ -4,7 +4,7 @@
 
 - Adds a strict, versioned project-owned requirements registry under `project.metadata.requirements` without changing the existing project schema version.
 - Captures stable requirement identity, discipline/category, versioned source/reference, unit/criteria/tolerance, applicability, entity scope, verification method, required evidence, lifecycle status, assumptions, and notes.
-- Enforces project-wide unique requirement IDs, finite numeric criteria, ordered bounds, non-negative tolerances, strict unknown-field rejection, and explicit applicability/lifecycle vocabularies.
+- Enforces project-wide unique requirement IDs, finite numeric criteria, ordered bounds, non-negative tolerances, unambiguous target-vs-bound criteria, strict unknown-field rejection, and explicit applicability/lifecycle vocabularies.
 - Canonicalizes requirement sets and requirements by stable ID and binds the normalized registry to a deterministic SHA-256 digest; supplied digest mismatches fail closed on project load/save.
 - Keeps existing design-requirements, solver, compliance, and ProofGraph calculation semantics unchanged; the persisted registry is the Release 3 project authority for later requirements -> evidence -> verdict integration.
 

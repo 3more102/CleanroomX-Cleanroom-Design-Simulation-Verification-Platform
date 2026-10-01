@@ -162,6 +162,22 @@ def test_project_rejects_inverted_requirement_bounds() -> None:
         ).to_dict()
 
 
+def test_project_rejects_ambiguous_target_and_bounds() -> None:
+    registry = _registry()
+    requirement = registry["sets"][0]["requirements"][0]
+    requirement["target"] = 24.0
+    requirement["minimum"] = 20.0
+
+    with pytest.raises(
+        ProjectFormatError,
+        match="target cannot be combined with minimum or maximum",
+    ):
+        ProjectDocument(
+            name="Ambiguous criterion",
+            metadata={"requirements": registry},
+        ).to_dict()
+
+
 def test_project_rejects_negative_requirement_tolerance() -> None:
     registry = _registry()
     registry["sets"][0]["requirements"][0]["tolerance"] = -0.1

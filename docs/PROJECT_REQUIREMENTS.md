@@ -43,7 +43,7 @@ Each requirement carries explicit engineering identity and source context:
 - assumptions
 - notes
 
-Numeric bounds must be finite and `minimum <= maximum`. Requirement IDs are unique across the complete project, not only inside one requirement set.
+Numeric bounds must be finite and `minimum <= maximum`. A direct `target` cannot be combined with `minimum` or `maximum`; this prevents the later verifier from guessing between equality and bound semantics. Requirement IDs are unique across the complete project, not only inside one requirement set.
 
 ## Fail-closed semantics
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 consolidation — verification-history operator hardening — 2026-10-01
+
+- Consolidates the canonical per-record verification-currency helper across CLI and desktop surfaces with fail-closed record/assessment type and stable analysis-ID validation.
+- Adds a read-only **Requirement Evidence** tab to **Analysis → Verification History...**, projecting retained requirement → evidence → historical verdict relationships without recomputing historical outcomes from current project state.
+- Keeps missing or unretained evidence explicit, preserves the complete canonical record in a separate audit tab, and adds focused regression coverage for malformed inputs, cross-analysis rejection, projection isolation, and defensive-copy behavior.
+- Changes no solver equation, numerical tolerance, requirement criterion, persisted verification record, ledger identity, dependency fingerprint, or project schema.
+
 ## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
 
 - Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.

@@ -80,8 +80,9 @@ requirement/entity binding. Ambiguity is `invalid`.
 An optional `RequirementEvidenceAuthority` decision can resolve that ambiguity
 only by naming the exact requirement/entity binding, one already-bound evidence
 ID, and a non-empty rationale. The decision is rejected if the binding is not
-actually ambiguous, if the selected evidence is absent, if the requirement or
-subject is invalid, or if two authority decisions target the same binding.
+actually ambiguous, if the selected evidence is absent, if the requirement is
+not both approved and applicable, if the subject is invalid, or if two authority
+decisions target the same binding.
 
 Authority does not delete or rewrite competing evidence. The selected
 `evidence_id` drives the comparison, while `evidence_ids` keeps every candidate

@@ -475,6 +475,9 @@ def _verify_workflow_proofgraph_projection(
         for evidence_id, evidence in evidence_by_id.items()
         if evidence.get("requirement_id") in graph_requirement_ids
     }
+    expected_check_ids: set[str] = set()
+    expected_finding_ids: set[str] = set()
+    expected_verdict_ids: set[str] = set()
     checks_by_id = {item.id: item for item in graph.checks}
     findings_by_id = {item.id: item for item in graph.findings}
     verdicts_by_id = {item.id: item for item in graph.verdicts}
@@ -504,6 +507,9 @@ def _verify_workflow_proofgraph_projection(
         check_id = f"check:project-requirement:{binding_identity}"
         finding_id = f"finding:project-requirement:{binding_identity}"
         verdict_id = f"verdict:project-requirement:{binding_identity}"
+        expected_check_ids.add(check_id)
+        expected_finding_ids.add(finding_id)
+        expected_verdict_ids.add(verdict_id)
         check = checks_by_id.get(check_id)
         finding = findings_by_id.get(finding_id)
         verdict = verdicts_by_id.get(verdict_id)
@@ -511,13 +517,20 @@ def _verify_workflow_proofgraph_projection(
             raise ProjectRequirementsWorkflowError(
                 "workflow ProofGraph requirement projection is incomplete"
             )
-        if tuple(check.evidence_ids) != expected_evidence_ids:
+        if (
+            check.requirement_id != requirement_id
+            or tuple(check.evidence_ids) != expected_evidence_ids
+        ):
             raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph check {check_id!r} evidence identities disagree with canonical verification"
+                f"workflow ProofGraph check {check_id!r} disagrees with canonical verification"
             )
-        if tuple(finding.evidence_ids) != expected_evidence_ids:
+        if (
+            finding.requirement_id != requirement_id
+            or finding.check_id != check_id
+            or tuple(finding.evidence_ids) != expected_evidence_ids
+        ):
             raise ProjectRequirementsWorkflowError(
-                f"workflow ProofGraph finding {finding_id!r} evidence identities disagree with canonical verification"
+                f"workflow ProofGraph finding {finding_id!r} linkage disagrees with canonical verification"
             )
 
         expected_status = _expected_proofgraph_status(source_finding)
@@ -537,10 +550,36 @@ def _verify_workflow_proofgraph_projection(
             raise ProjectRequirementsWorkflowError(
                 f"workflow ProofGraph finding {finding_id!r} disagrees with canonical verification"
             )
-        if verdict.status != expected_status or verdict.reason != expected_reason:
+        if (
+            verdict.requirement_id != requirement_id
+            or tuple(verdict.finding_ids) != (finding_id,)
+            or verdict.status != expected_status
+            or verdict.reason != expected_reason
+        ):
             raise ProjectRequirementsWorkflowError(
                 f"workflow ProofGraph verdict {verdict_id!r} disagrees with canonical verification"
             )
+
+    if set(checks_by_id) != expected_check_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph checks disagree with canonical verification projection"
+        )
+    if set(findings_by_id) != expected_finding_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph findings disagree with canonical verification projection"
+        )
+    if set(verdicts_by_id) != expected_verdict_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph verdicts disagree with canonical verification projection"
+        )
+    if set(run.check_ids) != expected_check_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph verification-run checks disagree with canonical projection"
+        )
+    if set(run.verdict_ids) != expected_verdict_ids:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph verification-run verdicts disagree with canonical projection"
+        )
 
     actual_graph_evidence_ids = {item.id for item in graph.evidence}
     if actual_graph_evidence_ids != expected_graph_evidence_ids:

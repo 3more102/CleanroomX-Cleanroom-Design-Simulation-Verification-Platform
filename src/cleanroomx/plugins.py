@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import metadata
+import os
 import re
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 
 PLUGIN_API_VERSION = 1
 PLUGIN_ENTRY_POINT_GROUP = "cleanroomx.analysis_plugins"
 _PLUGIN_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_PLUGIN_DISTRIBUTION_RE = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+)
+PLUGIN_MODE_ENV = "CLEANROOMX_PLUGIN_MODE"
+PLUGIN_ALLOWLIST_ENV = "CLEANROOMX_PLUGIN_ALLOWLIST"
+_PLUGIN_MODES = frozenset({"trusted", "disabled", "allowlist"})
 
 
 @dataclass(frozen=True)
@@ -63,9 +70,26 @@ class PluginIssue:
 
 
 @dataclass(frozen=True)
+class PluginTrustPolicy:
+    """Pre-import policy for installed third-party analysis entry points."""
+
+    mode: str = "trusted"
+    allowlist: tuple[str, ...] = ()
+    configuration_error: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "mode": self.mode,
+            "allowlist": list(self.allowlist),
+            "configuration_error": self.configuration_error,
+        }
+
+
+@dataclass(frozen=True)
 class PluginDiscovery:
     plugins: tuple[DiscoveredAnalysisPlugin, ...]
     issues: tuple[PluginIssue, ...]
+    trust_policy: PluginTrustPolicy = PluginTrustPolicy()
 
 
 def _nonempty_text(value: Any, field_name: str) -> str:
@@ -117,6 +141,127 @@ def _optional_origin_text(value: Any) -> str | None:
 def _plugin_error_text(exc: BaseException) -> str:
     message = _safe_diagnostic_text(exc, fallback="<unprintable error>")
     return f"{type(exc).__name__}: {message}"
+
+
+def _canonical_distribution_name(value: str) -> str:
+    text = value.strip()
+    if not text or _PLUGIN_DISTRIBUTION_RE.fullmatch(text) is None:
+        raise ValueError(f"invalid plugin distribution name {value!r}")
+    return re.sub(r"[-_.]+", "-", text).lower()
+
+
+def _normalize_allowlist_spec(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("plugin allowlist entries must be strings")
+    text = value.strip()
+    if not text:
+        raise ValueError("plugin allowlist entries must not be empty")
+    if text.count("==") > 1:
+        raise ValueError(f"invalid plugin allowlist entry {value!r}")
+    if "==" in text:
+        name, version = text.split("==", 1)
+        name = _canonical_distribution_name(name)
+        version = version.strip()
+        if not version:
+            raise ValueError(f"plugin allowlist version pin is empty in {value!r}")
+        return f"{name}=={version}"
+    return _canonical_distribution_name(text)
+
+
+def _validated_plugin_trust_policy(policy: PluginTrustPolicy) -> PluginTrustPolicy:
+    if not isinstance(policy, PluginTrustPolicy):
+        raise TypeError("plugin trust policy must be PluginTrustPolicy")
+    if not isinstance(policy.mode, str):
+        raise TypeError("plugin trust policy mode must be a string")
+    mode = policy.mode.strip().lower()
+    if mode not in _PLUGIN_MODES:
+        raise ValueError(
+            f"plugin trust policy mode must be one of {sorted(_PLUGIN_MODES)!r}"
+        )
+    normalized = tuple(
+        sorted({_normalize_allowlist_spec(item) for item in policy.allowlist})
+    )
+    return PluginTrustPolicy(
+        mode=mode,
+        allowlist=normalized,
+        configuration_error=policy.configuration_error,
+    )
+
+
+def plugin_trust_policy_from_environment(
+    environ: Mapping[str, str] | None = None,
+) -> PluginTrustPolicy:
+    """Build a fail-closed external-plugin policy from process environment."""
+
+    source = os.environ if environ is None else environ
+    raw_mode = source.get(PLUGIN_MODE_ENV, "disabled")
+    raw_allowlist = source.get(PLUGIN_ALLOWLIST_ENV, "")
+    try:
+        if not isinstance(raw_allowlist, str):
+            raise TypeError(f"{PLUGIN_ALLOWLIST_ENV} must be a string")
+        if raw_allowlist.strip():
+            parts = tuple(raw_allowlist.split(","))
+            if any(not part.strip() for part in parts):
+                raise ValueError(
+                    f"{PLUGIN_ALLOWLIST_ENV} contains an empty allowlist entry"
+                )
+        else:
+            parts = ()
+        return _validated_plugin_trust_policy(
+            PluginTrustPolicy(mode=raw_mode, allowlist=parts)
+        )
+    except (TypeError, ValueError) as exc:
+        return PluginTrustPolicy(
+            mode="disabled",
+            allowlist=(),
+            configuration_error=(
+                "invalid external-plugin trust configuration; plugin loading "
+                f"disabled: {exc}"
+            ),
+        )
+
+
+def _policy_allows_origin(
+    origin: PluginOrigin,
+    policy: PluginTrustPolicy,
+) -> bool:
+    if policy.mode == "trusted":
+        return True
+    if policy.mode == "disabled":
+        return False
+    if origin.distribution_name is None:
+        return False
+    try:
+        distribution_name = _canonical_distribution_name(origin.distribution_name)
+    except ValueError:
+        return False
+    for spec in policy.allowlist:
+        if "==" in spec:
+            allowed_name, allowed_version = spec.split("==", 1)
+        else:
+            allowed_name, allowed_version = spec, None
+        if distribution_name != allowed_name:
+            continue
+        if allowed_version is None or origin.distribution_version == allowed_version:
+            return True
+    return False
+
+
+def _policy_block_reason(
+    origin: PluginOrigin | None,
+    policy: PluginTrustPolicy,
+) -> str:
+    if policy.mode == "disabled":
+        return "external plugin blocked by disabled plugin trust policy"
+    if origin is None or origin.distribution_name is None:
+        return (
+            "external plugin blocked by allowlist policy because distribution "
+            "identity is unavailable"
+        )
+    identity = origin.distribution_name
+    if origin.distribution_version is not None:
+        identity += f"=={origin.distribution_version}"
+    return f"external plugin distribution {identity!r} is not in the configured allowlist"
 
 
 def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
@@ -219,6 +364,7 @@ def discover_analysis_plugins(
     builtin_keys: Iterable[str],
     *,
     entry_points: Iterable[Any] | None = None,
+    trust_policy: PluginTrustPolicy | None = None,
 ) -> PluginDiscovery:
     """Discover valid analysis plugins without allowing registry shadowing.
 
@@ -227,6 +373,9 @@ def discover_analysis_plugins(
     contender for that key instead of selecting one by environment ordering.
     """
     builtins = frozenset(str(key) for key in builtin_keys)
+    policy = _validated_plugin_trust_policy(
+        PluginTrustPolicy() if trust_policy is None else trust_policy
+    )
     points = tuple(entry_points) if entry_points is not None else _installed_entry_points()
     points = tuple(
         sorted(
@@ -240,11 +389,51 @@ def discover_analysis_plugins(
 
     candidates: list[DiscoveredAnalysisPlugin] = []
     issues: list[PluginIssue] = []
+    if policy.configuration_error is not None:
+        issues.append(
+            PluginIssue(
+                entry_point_name="<policy>",
+                entry_point_value=PLUGIN_MODE_ENV,
+                error=policy.configuration_error,
+            )
+        )
+
     for point in points:
         issue_name = _safe_entry_point_text(point, "name")
         issue_value = _safe_entry_point_text(point, "value")
+        if policy.mode == "disabled":
+            issues.append(
+                PluginIssue(
+                    entry_point_name=issue_name,
+                    entry_point_value=issue_value,
+                    error=_policy_block_reason(None, policy),
+                )
+            )
+            continue
+
         try:
             origin = _origin(point)
+        except (Exception, SystemExit) as exc:
+            issues.append(
+                PluginIssue(
+                    entry_point_name=issue_name,
+                    entry_point_value=issue_value,
+                    error=_plugin_error_text(exc),
+                )
+            )
+            continue
+
+        if not _policy_allows_origin(origin, policy):
+            issues.append(
+                PluginIssue(
+                    entry_point_name=origin.entry_point_name,
+                    entry_point_value=origin.entry_point_value,
+                    error=_policy_block_reason(origin, policy),
+                )
+            )
+            continue
+
+        try:
             plugin = validate_analysis_plugin(_load_registration(point))
         except (Exception, SystemExit) as exc:
             issues.append(
@@ -294,4 +483,8 @@ def discover_analysis_plugins(
             item.error,
         )
     )
-    return PluginDiscovery(plugins=tuple(accepted), issues=tuple(issues))
+    return PluginDiscovery(
+        plugins=tuple(accepted),
+        issues=tuple(issues),
+        trust_policy=policy,
+    )

@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 
+import cleanroomx.project_requirements_traceability_cli as traceability_cli
+
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
@@ -310,3 +312,34 @@ def test_traceability_cli_refuses_to_overwrite_project(tmp_path, capsys):
     assert exit_code == 2
     assert captured.out == ""
     assert "output path must be different from the project source" in captured.err
+
+def test_traceability_cli_rechecks_output_identity_before_publication(
+    tmp_path,
+    monkeypatch,
+):
+    path = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    output = tmp_path / "traceability.json"
+    output.write_text("previous-valid-report\n", encoding="utf-8")
+    real_guard = traceability_cli._assert_project_output_is_safe
+    guard_calls = 0
+
+    def race_guard(project, *, source, output):
+        nonlocal guard_calls
+        guard_calls += 1
+        if guard_calls == 2:
+            raise ValueError("output path identity changed before publication")
+        real_guard(project, source=source, output=output)
+
+    monkeypatch.setattr(
+        traceability_cli,
+        "_assert_project_output_is_safe",
+        race_guard,
+    )
+
+    exit_code = traceability_cli.main(
+        [str(path), "--output", str(output)]
+    )
+
+    assert exit_code == 2
+    assert guard_calls == 2
+    assert output.read_text(encoding="utf-8") == "previous-valid-report\n"

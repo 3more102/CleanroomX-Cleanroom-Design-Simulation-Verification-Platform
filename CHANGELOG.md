@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — project-native requirements execution — 2026-10-01
+
+- Adds a direct saved-project orchestration path from one selected project analysis through immutable execution, persisted explicit evidence mappings, canonical requirements verification, and ProofGraph.
+- Binds every workflow run to the exact loaded project SHA-256 and rechecks the source before and after analysis execution; source mutation prevents verification output.
+- Consumes the canonical persisted requirements and requirement-evidence mapping registries instead of requiring transient caller assembly.
+- Preserves the existing requirements verifier as the only comparison authority and the existing ProofGraph adapter as a projection of canonical findings.
+- Keeps missing mapped results fail-closed as incomplete/not-checked evidence rather than PASS.
+- Adds a deterministic workflow identity derived from project revision, normalized requirements/mappings, immutable run identity, canonical verification identity, and ProofGraph identity.
+
+
 ## Unreleased Release 3 — persisted requirement evidence mappings — 2026-10-01
 
 - Adds a strict, versioned project-owned requirement-to-analysis evidence mapping registry under `project.metadata.requirement_evidence_mappings`.

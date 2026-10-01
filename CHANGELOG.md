@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — immutable analysis evidence binding — 2026-10-01
+
+- Connects integrity-verified immutable CleanroomX analysis-run bundles to the canonical project requirements verifier through explicit result mappings.
+- Derives requirement-evidence freshness from source/current project SHA-256 identity and the run's verified external-dependency stability record instead of accepting a free-form current/stale assertion.
+- Adds exact escaped result locators to canonical requirement evidence and carries those locators into ProofGraph provenance.
+- Rejects tampered run bundles, invalid project revision identities, duplicate mapping IDs, and non-scalar mapped results; missing result paths remain explicit incomplete evidence rather than PASS.
+- Adds a direct immutable-analysis -> requirement verification -> ProofGraph workflow without duplicating comparison semantics.
+- Adds regressions for current/stale/unknown freshness, unstable dependencies, integrity tampering, missing/non-scalar results, deterministic mapping order, locator escaping, and end-to-end ProofGraph provenance.
+
 ## Unreleased Release 3 — project requirements to ProofGraph — 2026-10-01
 
 - Adds a deterministic adapter from the canonical project requirements verifier into the existing ProofGraph schema instead of creating a parallel evidence or comparison model.

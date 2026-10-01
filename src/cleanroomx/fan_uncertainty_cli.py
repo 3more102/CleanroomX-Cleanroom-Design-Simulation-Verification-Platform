@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
-from .cli_output import atomic_write_cli_output
+from .strict_json import StrictJSONError
+from .cli_output import atomic_write_cli_output, dumps_strict_json
 from .fan_uncertainty import analyze_fan_system_uncertainty
 from .fan_uncertainty_io import load_fan_system_uncertainty
 from .fan_uncertainty_report import markdown_fan_system_uncertainty_report
@@ -27,11 +28,18 @@ def main() -> int:
     result = analyze_fan_system_uncertainty(
         load_fan_system_uncertainty(args.study)
     )
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_fan_system_uncertainty_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_fan_system_uncertainty_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-fan-uncertainty: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if args.output:
         atomic_write_cli_output(
             args.output,

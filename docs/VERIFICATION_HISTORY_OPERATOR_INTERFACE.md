@@ -22,12 +22,21 @@ Optional stable-analysis filter:
 cleanroomx-verification-history list project.cleanroomx.json --analysis-id room-a
 ```
 
+The list output uses inspection schema v2. It keeps the canonical project-wide
+currency assessment and also attaches a `current_project_context` object to each
+compact retained record so operators cannot mistake an older historical PASS for
+current evidence.
+
 The list output is strict JSON and contains:
 
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
 - compact per-record verification status;
-- fail-closed verification-currency assessment against the current project configuration and retained dependency fingerprints;
+- per-record `current_project_context`: canonical current currency for the latest
+  retained record, `historical` for older records, or
+  `not_in_current_project` for removed analyses;
+- fail-closed project-wide verification-currency assessment against the current
+  project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -42,7 +51,9 @@ cleanroomx-verification-history show project.cleanroomx.json --sequence 12
 
 This returns the complete canonical persisted record, including exact evidence
 locators, canonical findings, ProofGraph identities, runtime/code provenance, and
-the chained record hash.
+the chained record hash. The persisted `record` object remains byte-semantically
+unchanged; its present applicability is reported separately in the sibling
+`current_project_context` field.
 
 ## Stable-read boundary
 

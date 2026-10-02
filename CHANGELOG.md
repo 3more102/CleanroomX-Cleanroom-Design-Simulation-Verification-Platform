@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — psychrometric dew-point domain and phase-boundary hardening — 2026-10-02
+
+- Adds direct regressions against the official IAPWS R14-08 230 K sublimation-pressure verification point and IAPWS-IF97 Region 4 300 K saturation-pressure verification point.
+- Splits ice and liquid saturation-pressure helpers so dew-point inversion brackets exactly one continuous phase curve.
+- Fails explicitly when water-vapor pressure lies in the narrow 0 °C pressure gap between the selected IAPWS ice and liquid equilibrium curves instead of silently returning a non-root near 0 °C.
+- Replaces the arbitrary -100 °C dew-point inversion cutoff with the published IAPWS R14-08(2011) ice-Ih sublimation-pressure lower validity limit of 50 K (-223.15 °C), while failing closed below that domain.
+- Adds regression coverage for an ultra-dry state whose dew point is below -100 °C but remains inside the IAPWS domain.
+- Preserves the merged ASHRAE/IAPWS saturation equations, AirState dry-bulb operating range, humidity-ratio/enthalpy/specific-volume equations, and ordinary dew-point results.
+
 ## Unreleased — CI supply-chain hardening — 2026-10-01
 
 - Pins every third-party GitHub Action used by the repository workflows to a reviewed immutable commit SHA while retaining human-readable upstream version comments.

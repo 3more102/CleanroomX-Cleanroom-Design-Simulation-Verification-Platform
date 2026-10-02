@@ -7,26 +7,32 @@ from .numeric import finite_float, nonnegative_float
 
 MOLECULAR_MASS_RATIO_WATER_TO_DRY_AIR = 0.621945
 DRY_AIR_GAS_CONSTANT_KJ_KG_K = 0.287042
+IAPWS_SUBLIMATION_MIN_TEMPERATURE_K = 50.0
+IAPWS_SUBLIMATION_MIN_TEMPERATURE_C = (
+    IAPWS_SUBLIMATION_MIN_TEMPERATURE_K - 273.15
+)
 
 
-def _saturation_vapor_pressure_iapws_kpa(temperature_c: float) -> float:
-    """Return saturation pressure in kPa using the ASHRAE/IAPWS phase model."""
+def _ice_sublimation_pressure_iapws_kpa(temperature_c: float) -> float:
+    """Return IAPWS R14-08 ice-Ih sublimation pressure in kPa."""
     temperature_k = temperature_c + 273.15
+    if temperature_k < IAPWS_SUBLIMATION_MIN_TEMPERATURE_K:
+        raise ValueError(
+            "IAPWS sublimation-pressure correlation is valid only at or above 50 K"
+        )
+    theta = temperature_k / 273.16
+    coefficients = (-21.2144006, 27.3203819, -6.10598130)
+    exponents = (0.00333333333, 1.20666667, 1.70333333)
+    ln_pressure_ratio = sum(
+        coefficient * (theta**exponent - 1.0)
+        for coefficient, exponent in zip(coefficients, exponents)
+    ) / theta
+    return 0.611657 * math.exp(ln_pressure_ratio)
 
-    if temperature_c < 0.0:
-        # IAPWS R14-08(2011), ice-Ih sublimation curve as reproduced by
-        # ASHRAE Handbook—Fundamentals 2025, Chapter 1.
-        theta = temperature_k / 273.16
-        coefficients = (-21.2144006, 27.3203819, -6.10598130)
-        exponents = (0.00333333333, 1.20666667, 1.70333333)
-        ln_pressure_ratio = sum(
-            coefficient * (theta**exponent - 1.0)
-            for coefficient, exponent in zip(coefficients, exponents)
-        ) / theta
-        return 0.611657 * math.exp(ln_pressure_ratio)
 
-    # IAPWS-IF97 Region 4 saturation-pressure equation, as reproduced by
-    # ASHRAE Handbook—Fundamentals 2025, Chapter 1.
+def _liquid_saturation_pressure_iapws_kpa(temperature_c: float) -> float:
+    """Return IAPWS-IF97 Region 4 liquid saturation pressure in kPa."""
+    temperature_k = temperature_c + 273.15
     n1 = 0.11670521452767e4
     n2 = -0.72421316703206e6
     n3 = -0.17073846940092e2
@@ -49,6 +55,13 @@ def _saturation_vapor_pressure_iapws_kpa(temperature_c: float) -> float:
         2.0 * c / (-b + math.sqrt(discriminant))
     ) ** 4
     return pressure_mpa * 1000.0
+
+
+def _saturation_vapor_pressure_iapws_kpa(temperature_c: float) -> float:
+    """Return saturation pressure in kPa using the ASHRAE/IAPWS phase model."""
+    if temperature_c < 0.0:
+        return _ice_sublimation_pressure_iapws_kpa(temperature_c)
+    return _liquid_saturation_pressure_iapws_kpa(temperature_c)
 
 
 def saturation_vapor_pressure_kpa(dry_bulb_c: float) -> float:
@@ -104,20 +117,43 @@ def moist_air_cp_kj_kg_da_k(state: AirState) -> float:
 def dew_point_c(state: AirState) -> float:
     """Solve dew point from the same phase-aware saturation model."""
     target_pressure_kpa = vapor_pressure_kpa(state)
-    lower_c = -100.0
-    upper_c = state.dry_bulb_c
+    lower_limit_c = IAPWS_SUBLIMATION_MIN_TEMPERATURE_C
+    lower_limit_pressure_kpa = _ice_sublimation_pressure_iapws_kpa(
+        lower_limit_c
+    )
 
-    if target_pressure_kpa < _saturation_vapor_pressure_iapws_kpa(lower_c):
+    if target_pressure_kpa < lower_limit_pressure_kpa:
         raise ValueError(
-            "dew point is below -100 C, outside the supported IAPWS inversion range"
+            "dew point is below the IAPWS R14 sublimation-pressure domain "
+            "(50 K / -223.15 C)"
         )
 
-    # Relative humidity is constrained to <= 100%, so dew point cannot exceed
-    # dry-bulb temperature under this model. Bisection is deterministic and
-    # avoids mixing a separate dew-point approximation with the saturation model.
+    ice_boundary_pressure_kpa = _ice_sublimation_pressure_iapws_kpa(0.0)
+    liquid_boundary_pressure_kpa = _liquid_saturation_pressure_iapws_kpa(0.0)
+    if (
+        ice_boundary_pressure_kpa
+        < target_pressure_kpa
+        < liquid_boundary_pressure_kpa
+    ):
+        raise ValueError(
+            "dew point is indeterminate in the 0 C phase-boundary pressure gap "
+            "between the IAPWS ice and liquid saturation curves"
+        )
+
+    # Select one continuous phase curve before bisection. This prevents the
+    # discontinuity at 0 C from being mistaken for a valid root.
+    if target_pressure_kpa <= ice_boundary_pressure_kpa:
+        lower_c = lower_limit_c
+        upper_c = min(state.dry_bulb_c, 0.0)
+        pressure_at = _ice_sublimation_pressure_iapws_kpa
+    else:
+        lower_c = 0.0
+        upper_c = state.dry_bulb_c
+        pressure_at = _liquid_saturation_pressure_iapws_kpa
+
     for _ in range(100):
         midpoint_c = 0.5 * (lower_c + upper_c)
-        midpoint_pressure_kpa = _saturation_vapor_pressure_iapws_kpa(midpoint_c)
+        midpoint_pressure_kpa = pressure_at(midpoint_c)
         if midpoint_pressure_kpa < target_pressure_kpa:
             lower_c = midpoint_c
         else:

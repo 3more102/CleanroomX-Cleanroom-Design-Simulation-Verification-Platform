@@ -26,7 +26,9 @@ Saturation vapor pressure is phase-aware and follows the reference formulations 
 - below 0 °C: IAPWS R14-08(2011) ice-Ih sublimation-pressure correlation;
 - at and above 0 °C: IAPWS-IF97 Region 4 liquid-water saturation-pressure equation.
 
-The `AirState` model remains intentionally limited to -45 to 60 °C. Dew point is solved deterministically by inverting the same phase-aware saturation-pressure model, rather than mixing a separate Magnus approximation into the result. If the implied dew point is below -100 °C, CleanroomX fails explicitly because that is outside the supported inversion range.
+The `AirState` dry-bulb model remains intentionally limited to -45 to 60 °C. Dew point is solved deterministically by inverting the same phase-aware saturation-pressure model, rather than mixing a separate Magnus approximation into the result. The inversion selects one continuous phase curve before bisection so the 0 °C phase switch cannot be mistaken for a numerical root. The IAPWS ice and liquid equilibrium curves have a narrow pressure gap at that switch; if an input falls inside that gap, CleanroomX reports the dew point as indeterminate instead of returning a plausible-looking 0 °C value. For subfreezing inversion, the lower fail-closed boundary is the published IAPWS R14-08(2011) sublimation-pressure validity limit of 50 K (-223.15 °C); implied dew points below that domain are rejected rather than extrapolated.
+
+Reference regressions include the IAPWS R14-08 computer-verification point at 230 K and the IAPWS-IF97 Region 4 computer-verification point at 300 K, in addition to the ASHRAE saturation-pressure table checks.
 
 The humidity-ratio molecular-mass coefficient is 0.621945. Approximate moist-air enthalpy is:
 

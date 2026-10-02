@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded direct dossier source fingerprinting — 2026-10-02
+
+- Applies the canonical 64 MiB strict-JSON ceiling to the direct dossier source SHA-256 helper, matching the already-bounded private snapshot path used by normal dossier builds.
+- Removes the remaining internal bypass that could hash an oversized dossier JSON source without the parser-aligned byte ceiling when the source-record helper is called without a snapshot pool.
+- Preserves dossier schema, source identity, solver behavior, requirement criteria, verification verdicts, and release identity.
+- Adds focused regression coverage proving the direct source fingerprint carries the strict-JSON byte ceiling.
+
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
 
 - Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.

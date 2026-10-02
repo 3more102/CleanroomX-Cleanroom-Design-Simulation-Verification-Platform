@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import (
@@ -902,98 +903,146 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
         ).resolve()
 
 
-def test_import_input_json_rejects_oversize_source_without_mutating_analysis(
-    tmp_path, monkeypatch
-):
-    import_path = tmp_path / "oversize.json"
-    import_path.write_text('{"value":"too-large"}', encoding="utf-8")
-    analysis = AnalysisDocument(
-        id="room",
-        name="Room",
-        kind="room_verification",
-        input={"original": True},
-    )
+def test_import_input_json_uses_canonical_bounded_file_reader(tmp_path, monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_dir = tmp_path / "project"
+    import_dir = tmp_path / "import"
+    project_dir.mkdir()
+    import_dir.mkdir()
+    import_path = import_dir / "room.json"
+    import_path.write_text('{"ignored": true}', encoding="utf-8")
+    analysis = AnalysisDocument(id="r", name="Room", kind="room_verification", input={})
 
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
     app._running = False
     app.project = ProjectDocument(
-        name="Demo", analyses=[analysis], active_analysis_id="room"
+        name="Demo", analyses=[analysis], active_analysis_id="r"
     )
-    app.project_path = tmp_path / "project.cleanroomx.json"
+    app.project_path = project_dir / "project.cleanroomx.json"
+    app.status_var = Status()
     app._current_analysis = lambda: analysis
+    app._invalidate_last_run_for = lambda analysis_id: None
+    app._load_analysis_into_editor = lambda item: None
+    app._update_title = lambda: None
 
-    captured = {}
-    monkeypatch.setattr(gui_module, "STRICT_JSON_FILE_MAX_BYTES", 8)
+    calls = []
     monkeypatch.setattr(
         gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
     )
     monkeypatch.setattr(
-        gui_module.messagebox,
-        "showerror",
-        lambda title, message, parent=None: captured.update(
-            {"title": title, "message": message, "parent": parent}
-        ),
+        gui_module,
+        "_load_strict_json",
+        lambda path: calls.append(Path(path)) or {"name": "Imported room"},
     )
 
     app.import_input_json()
 
-    assert analysis.input == {"original": True}
-    assert captured["title"] == "Import failed"
-    assert "exceeds maximum supported JSON size" in captured["message"]
-    assert captured["parent"] is app.root
+    assert calls == [import_path]
+    assert analysis.input == {"name": "Imported room"}
+    assert app.status_var.value == f"Imported {import_path.name}"
 
 
-def test_import_input_json_rejects_path_identity_change_without_mutating_analysis(
-    tmp_path, monkeypatch
+def test_import_input_json_rejects_oversized_source_before_project_mutation(
+    tmp_path,
+    monkeypatch,
 ):
-    import_path = tmp_path / "input.json"
-    replacement = tmp_path / "replacement.json"
-    import_path.write_text('{"value":1}', encoding="utf-8")
-    replacement.write_text('{"value":2}', encoding="utf-8")
+    import_path = tmp_path / "oversized.json"
+    import_path.write_text('{"sentinel": 12345}', encoding="utf-8")
     analysis = AnalysisDocument(
-        id="room",
+        id="a",
         name="Room",
         kind="room_verification",
-        input={"original": True},
+        input={"original": 1},
     )
-
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
     app._running = False
     app.project = ProjectDocument(
-        name="Demo", analyses=[analysis], active_analysis_id="room"
+        name="Demo", analyses=[analysis], active_analysis_id="a"
     )
-    app.project_path = tmp_path / "project.cleanroomx.json"
     app._current_analysis = lambda: analysis
+    app._perform_project_edit = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("oversized import must fail before project mutation")
+    )
+    errors = []
 
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(import_path),
+    )
+    monkeypatch.setattr(strict_json_module, "STRICT_JSON_FILE_MAX_BYTES", 8)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+
+    app.import_input_json()
+
+    assert analysis.input == {"original": 1}
+    assert errors
+    assert errors[-1][0] == "Import failed"
+    assert "exceeds maximum supported JSON size" in errors[-1][1]
+    assert errors[-1][2] is app.root
+
+
+def test_import_input_json_rejects_live_path_identity_change_before_project_mutation(
+    tmp_path,
+    monkeypatch,
+):
+    import_path = tmp_path / "input.json"
+    replacement_path = tmp_path / "replacement.json"
+    import_path.write_text('{"revision": 1}', encoding="utf-8")
+    replacement_path.write_text('{"revision": 2}', encoding="utf-8")
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input={"original": 1},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app._current_analysis = lambda: analysis
+    app._perform_project_edit = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("unstable import must fail before project mutation")
+    )
+    errors = []
     real_stat = Path.stat
-    replacement_stat = real_stat(replacement)
+    replacement_stat = real_stat(replacement_path)
 
-    def report_replacement_identity(self, *args, **kwargs):
+    def report_replacement_identity(self: Path, *args, **kwargs):
         if self == import_path:
             return replacement_stat
         return real_stat(self, *args, **kwargs)
 
-    captured = {}
-    monkeypatch.setattr(Path, "stat", report_replacement_identity)
     monkeypatch.setattr(
-        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(import_path),
     )
+    monkeypatch.setattr(Path, "stat", report_replacement_identity)
     monkeypatch.setattr(
         gui_module.messagebox,
         "showerror",
-        lambda title, message, parent=None: captured.update(
-            {"title": title, "message": message, "parent": parent}
-        ),
+        lambda title, message, parent=None: errors.append((title, message, parent)),
     )
 
     app.import_input_json()
 
-    assert analysis.input == {"original": True}
-    assert captured["title"] == "Import failed"
-    assert "changed while reading JSON input" in captured["message"]
-    assert captured["parent"] is app.root
+    assert analysis.input == {"original": 1}
+    assert errors
+    assert errors[-1][0] == "Import failed"
+    assert "changed while reading JSON input" in errors[-1][1]
+    assert errors[-1][2] is app.root
 
 
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):

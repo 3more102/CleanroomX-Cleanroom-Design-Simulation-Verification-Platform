@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — development package identity — 2026-10-02
+
+- Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.
+- Keeps `pyproject.toml` and `cleanroomx.__version__` synchronized and removes active CI/GUI checks that treated moving `main` as exactly `0.102.1`.
+- Requires a numeric PEP 440-style `.devN` development identity in both focused regression coverage and the installed-wheel CI smoke.
+- Leaves historical v0.102.1 release evidence, tagged demo fixtures, validation documents, and release publisher checks unchanged.
+- Changes no solver equation, engineering tolerance, project schema, acceptance criterion, or historical release tag.
+
 ## Unreleased Release 3 — psychrometric dew-point domain and phase-boundary hardening — 2026-10-02
 
 - Adds direct regressions against the official IAPWS R14-08 230 K sublimation-pressure verification point and IAPWS-IF97 Region 4 300 K saturation-pressure verification point.

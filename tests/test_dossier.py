@@ -1,4 +1,8 @@
+from contextlib import ExitStack
 import hashlib
+from pathlib import Path
+
+import cleanroomx.dossier as dossier_module
 
 from cleanroomx.dossier import _source_record, build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
@@ -95,6 +99,58 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
     expected = hashlib.sha256(source.read_bytes()).hexdigest()
     assert record["sha256"] == expected
     assert record["path"] == "input.json"
+
+
+def test_source_record_snapshot_binds_digest_to_private_exact_bytes(tmp_path) -> None:
+    source = tmp_path / "input.json"
+    original = b'{"demo": true}\n'
+    source.write_bytes(original)
+
+    with ExitStack() as snapshots:
+        record = _source_record(
+            "demo",
+            "input.json",
+            tmp_path,
+            snapshot_stack=snapshots,
+        )
+        snapshot = Path(record["_resolved_path"])
+        source.write_bytes(b'{"demo": false}\n')
+
+        assert snapshot != source
+        assert snapshot.read_bytes() == original
+        assert record["sha256"] == hashlib.sha256(original).hexdigest()
+
+    assert not snapshot.exists()
+
+
+def test_build_dossier_routes_sources_through_private_snapshot_pool(monkeypatch) -> None:
+    original_source_record = dossier_module._source_record
+    snapshot_paths: list[Path] = []
+
+    def guarded_source_record(
+        kind,
+        supplied_path,
+        manifest_dir,
+        *,
+        snapshot_stack=None,
+    ):
+        assert snapshot_stack is not None
+        record = original_source_record(
+            kind,
+            supplied_path,
+            manifest_dir,
+            snapshot_stack=snapshot_stack,
+        )
+        snapshot_paths.append(Path(record["_resolved_path"]))
+        return record
+
+    monkeypatch.setattr(dossier_module, "_source_record", guarded_source_record)
+
+    result = dossier_module.build_dossier("examples/dossier_demo.json")
+
+    assert result["source_files"]
+    assert snapshot_paths
+    assert all(not path.exists() for path in snapshot_paths)
 
 
 def test_repository_demo_builds_end_to_end() -> None:

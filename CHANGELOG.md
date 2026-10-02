@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded bundle extraction live recheck — 2026-10-02
+
+- Bounds the final live-source archive fingerprint performed before portable-bundle extraction publication to the existing archive-size ceiling.
+- Prevents a bundle path replaced or grown after exact-snapshot verification from triggering an unbounded final SHA-256 read before the extraction change check fails closed.
+- Preserves the exact verified snapshot used for extraction, bundle schema, manifest semantics, transactional publication, project loading, solver behavior, requirement criteria, verification verdicts, and release identity.
+- Adds focused regression coverage proving the final live archive recheck carries the canonical bound.
+
 ## Unreleased Release 3 — bounded portable bundle export fingerprinting — 2026-10-02
 
 - Applies the existing portable-bundle dependency and archive byte ceilings directly to stable SHA-256 reads during export, not only to pre-read metadata checks.

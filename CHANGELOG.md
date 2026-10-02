@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — ProofGraph pass-verdict support integrity — 2026-10-02
+
+- Rejects a `pass` verdict when any of its referenced findings is `fail`, `warning`, `unknown`, `indeterminate`, or `not_checked`, closing the multi-finding bypass of the existing single-finding status guard.
+- Enforces the same invariant in direct graph construction and serialized graph ingestion, including payloads with recomputed valid SHA-256 digests.
+- Preserves valid all-pass multi-finding verdicts, the existing single-finding guard, non-pass aggregation policies, graph schema, solver equations, and project requirement criteria.
+- Adds regressions covering every non-pass status, both finding-reference orders, direct construction, digest recomputation, and valid multi-finding roundtrips.
+
 ## Unreleased Release 3 — bounded runtime source fingerprinting — 2026-10-02
 
 - Caps each Python source file included in execution-provenance fingerprinting at 16 MiB and the complete CleanroomX Python source tree at 128 MiB before any source content is opened.

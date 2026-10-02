@@ -796,6 +796,17 @@ class ProofGraph:
                     f"verdict {verdict.id!r} status {verdict.status!r} does not "
                     f"match its single finding status {referenced_findings[0].status!r}"
                 )
+            if verdict.status == "pass":
+                nonpassing = sorted(
+                    finding.id
+                    for finding in referenced_findings
+                    if finding.status != "pass"
+                )
+                if nonpassing:
+                    raise ValueError(
+                        f"pass verdict {verdict.id!r} references non-pass findings: "
+                        + ", ".join(nonpassing)
+                    )
 
         for action in self.corrective_actions:
             if action.requirement_id not in requirement_ids:

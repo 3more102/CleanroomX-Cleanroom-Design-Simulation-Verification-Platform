@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
+
+- Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.
+- Prevents a replaced or growing source archive from forcing an unbounded fingerprint read before staged extraction publication is rejected.
+- Extends the existing extraction race regression to prove the final live-source fingerprint carries the hard archive-size ceiling.
+- Changes no bundle schema, project schema, solver equation, engineering tolerance, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — bounded portable bundle export fingerprinting — 2026-10-02
 
 - Applies the existing portable-bundle dependency and archive byte ceilings directly to stable SHA-256 reads during export, not only to pre-read metadata checks.

@@ -133,9 +133,15 @@ def test_strict_file_snapshot_returns_the_exact_parsed_bytes(tmp_path: Path) -> 
     assert snapshot.mtime_ns == source.stat().st_mtime_ns
 
 
+@pytest.mark.parametrize(
+    "loader",
+    [load_strict_json, load_strict_json_with_snapshot],
+    ids=["value", "snapshot"],
+)
 def test_strict_file_loader_rejects_path_identity_change_after_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    loader: Callable[[str | Path], object],
 ) -> None:
     source = tmp_path / "input.json"
     replacement = tmp_path / "replacement.json"
@@ -152,7 +158,7 @@ def test_strict_file_loader_rejects_path_identity_change_after_read(
     monkeypatch.setattr(Path, "stat", report_replacement_identity)
 
     with pytest.raises(StrictJSONError, match="changed while reading JSON input"):
-        load_strict_json(source)
+        loader(source)
 
 
 def test_strict_file_loader_rejects_path_disappearance_after_read(

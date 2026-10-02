@@ -90,6 +90,39 @@ def test_quarantine_rollback_never_overwrites_repopulated_recovery_path(
     assert list(quarantine_dir.glob("*.quarantined.manifest.json")) == []
 
 
+
+def test_quarantine_rollback_is_no_clobber_if_path_repopulates_at_restore(
+    tmp_path, monkeypatch
+):
+    artifact = tmp_path / "broken.recovery.json"
+    suspect = b"suspect recovery bytes"
+    newer = b"newer recovery bytes"
+    artifact.write_bytes(suspect)
+
+    def fail_manifest_write(_path, _text):
+        raise OSError("manifest write blocked")
+
+    real_link = autosave_module.os.link
+
+    def repopulate_then_link(source, target):
+        artifact.write_bytes(newer)
+        return real_link(source, target)
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", fail_manifest_write)
+    monkeypatch.setattr(autosave_module.os, "link", repopulate_then_link)
+
+    with pytest.raises(OSError, match="preserving the quarantined artifact"):
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=tmp_path,
+            reason="parse failure",
+        )
+
+    assert artifact.read_bytes() == newer
+    quarantined = list((tmp_path / "quarantine").glob("*.quarantined"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == suspect
+
 def test_quarantine_refuses_valid_legacy_recovery(tmp_path):
     artifact = tmp_path / "valid.recovery.json"
     artifact.write_text(

@@ -272,7 +272,10 @@ def _verify_file_payload(
     expected_size = len(payload)
     expected_sha256 = sha256(payload).hexdigest()
     try:
-        stat_result, actual_sha256 = _stable_file_sha256(path)
+        stat_result, actual_sha256 = _stable_file_sha256(
+            path,
+            max_bytes=expected_size,
+        )
     except OSError as exc:
         raise AtomicWriteVerificationError(
             path,
@@ -383,7 +386,10 @@ def _verify_file_digest(
     committed: bool,
 ) -> None:
     try:
-        stat_result, actual_sha256 = stable_file_sha256(path)
+        stat_result, actual_sha256 = stable_file_sha256(
+            path,
+            max_bytes=expected_size,
+        )
     except OSError as exc:
         raise AtomicWriteVerificationError(
             path,

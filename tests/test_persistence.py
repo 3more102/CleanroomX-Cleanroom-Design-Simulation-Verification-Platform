@@ -323,7 +323,7 @@ def test_atomic_publish_rechecks_use_captured_stage_size_bound(
     atomic_publish_staged_file(target, staged)
 
     assert observed == [
-        (staged, None),
+        (staged, len(payload)),
         (staged, len(payload)),
         (target, len(payload)),
     ]

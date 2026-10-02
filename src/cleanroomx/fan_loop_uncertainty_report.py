@@ -12,9 +12,9 @@ def markdown_fan_loop_network_uncertainty_report(result: dict) -> str:
         f"# CleanroomX Fan/Loop-Network Uncertainty Report — {markdown_text(result['analysis'])}",
         "",
         f"- Status: **{result['status'].upper()}**",
-        f"- Fan curve: **{result['fan_curve']}**",
-        f"- Fan discharge node: **{result['fan_discharge_node']}**",
-        f"- Fan suction node: **{result['fan_suction_node']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
+        f"- Fan discharge node: **{markdown_text(result['fan_discharge_node'])}**",
+        f"- Fan suction node: **{markdown_text(result['fan_suction_node'])}**",
         f"- Solved corners: **{result['solved_corner_count']}/{result['corner_count']}**",
         "",
         "## Input intervals",
@@ -30,7 +30,7 @@ def markdown_fan_loop_network_uncertainty_report(result: dict) -> str:
         "edge_resistance_pa_per_m3_s_squared"
     ].items():
         lines.append(
-            f"- Edge `{name}` resistance: **{interval['lower']} to "
+            f"- Edge `{markdown_text(name)}` resistance: **{interval['lower']} to "
             f"{interval['upper']} Pa/(m³/s)²** "
             f"(nominal {interval['nominal']})"
         )

@@ -193,7 +193,7 @@ def test_revision_loader_enforces_project_byte_ceiling_on_exact_snapshot(
     source.write_bytes(b"x" * 65)
     monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
 
-    with pytest.raises(ProjectFormatError, match="exceeds maximum supported JSON size"):
+    with pytest.raises(ProjectFormatError, match="exceeds maximum supported size"):
         load_project_document_with_revision_info(source)
 
 

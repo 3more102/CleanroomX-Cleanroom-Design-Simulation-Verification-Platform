@@ -21,6 +21,7 @@ from .input_contracts import (
     validate_consistency_input_contract,
     validate_dossier_input_contract,
 )
+from .persistence import stable_file_sha256
 from .plugins import (
     PLUGIN_API_VERSION,
     PluginOrigin,
@@ -1307,45 +1308,20 @@ def analysis_run_is_current(
     )
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 _DEPENDENCY_FINGERPRINT_ATTEMPTS = 3
 
 
 def _stable_file_fingerprint(path: Path) -> dict:
-    """Capture one stable content revision without accepting a torn read."""
-    last_before = None
-    last_after = None
-    for _ in range(_DEPENDENCY_FINGERPRINT_ATTEMPTS):
-        before = path.stat()
-        digest = _sha256_file(path)
-        after = path.stat()
-        last_before = before
-        last_after = after
-        if (
-            before.st_dev == after.st_dev
-            and before.st_ino == after.st_ino
-            and before.st_size == after.st_size
-            and before.st_mtime_ns == after.st_mtime_ns
-        ):
-            return {
-                "size_bytes": after.st_size,
-                "mtime_ns": after.st_mtime_ns,
-                "sha256": digest,
-            }
-    assert last_before is not None and last_after is not None
-    raise RuntimeError(
-        "file changed while its revision fingerprint was being captured "
-        f"(size {last_before.st_size}->{last_after.st_size}, "
-        f"mtime_ns {last_before.st_mtime_ns}->{last_after.st_mtime_ns})"
+    """Capture one stable content revision through the shared file-read authority."""
+    metadata, digest = stable_file_sha256(
+        path,
+        attempts=_DEPENDENCY_FINGERPRINT_ATTEMPTS,
     )
-
+    return {
+        "size_bytes": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+        "sha256": digest,
+    }
 
 def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str, str]]:
     references: list[tuple[str, str]] = []

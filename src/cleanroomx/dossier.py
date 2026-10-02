@@ -675,7 +675,10 @@ def summarize_dossier_components(
 
 
 def _sha256(path: Path) -> str:
-    _metadata, digest = stable_file_sha256(path)
+    _metadata, digest = stable_file_sha256(
+        path,
+        max_bytes=STRICT_JSON_FILE_MAX_BYTES,
+    )
     return digest
 
 

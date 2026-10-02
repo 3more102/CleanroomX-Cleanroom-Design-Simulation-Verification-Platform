@@ -1323,6 +1323,7 @@ def _stable_file_fingerprint(path: Path) -> dict:
         "sha256": digest,
     }
 
+
 def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str, str]]:
     references: list[tuple[str, str]] = []
     if kind == "consistency":

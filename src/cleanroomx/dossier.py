@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .input_contracts import validate_dossier_input_contract
 from .persistence import stable_file_sha256, stable_file_snapshot
@@ -710,7 +710,10 @@ def _clean_source(record: dict) -> dict:
     return {key: value for key, value in record.items() if not key.startswith("_")}
 
 
-def build_dossier(manifest_path: str | Path) -> dict:
+def _build_dossier_with_source_record(
+    manifest_path: str | Path,
+    source_record: Callable[[str, str, Path], dict],
+) -> dict:
     from .consistency import (
         analyze_hvac_fan_airflow_consistency,
         analyze_project_consistency,
@@ -774,6 +777,369 @@ def build_dossier(manifest_path: str | Path) -> dict:
         raise ValueError("dossier name cannot be empty")
 
     manifest_dir = manifest_path.resolve().parent
+    source_records: list[dict] = []
+
+    verification = None
+    verification_project = None
+    verification_path = data.get("verification_project")
+    if verification_path is not None:
+        source = source_record("verification_project", verification_path, manifest_dir)
+        source_records.append(source)
+        verification_project = load_project(source["_resolved_path"])
+        verification = verify_project(verification_project).to_dict()
+
+    hvac = None
+    hvac_project = None
+    hvac_path = data.get("hvac_project")
+    if hvac_path is not None:
+        source = source_record("hvac_project", hvac_path, manifest_dir)
+        source_records.append(source)
+        hvac_project = load_hvac_project(source["_resolved_path"])
+        hvac = analyze_hvac_project(hvac_project)
+
+    recovery: list[dict] = []
+    for item in data.get("recovery_tests", []):
+        source = source_record("recovery_test", item, manifest_dir)
+        source_records.append(source)
+        recovery.append(analyze_recovery_test(load_recovery_test(source["_resolved_path"])))
+
+    qualification: list[dict] = []
+    for item in data.get("qualification_analyses", []):
+        source = source_record("qualification_analysis", item, manifest_dir)
+        source_records.append(source)
+        qualification.append(
+            analyze_qualification_uncertainty(
+                load_qualification_uncertainty(source["_resolved_path"])
+            )
+        )
+
+    uncertainty: list[dict] = []
+    for item in data.get("uncertainty_rooms", []):
+        source = source_record("uncertainty_room", item, manifest_dir)
+        source_records.append(source)
+        uncertainty.append(
+            analyze_room_uncertainty(load_uncertain_room(source["_resolved_path"]))
+        )
+
+    thermal_uncertainty: list[dict] = []
+    for item in data.get("thermal_uncertainty_analyses", []):
+        source = source_record("thermal_uncertainty_analysis", item, manifest_dir)
+        source_records.append(source)
+        thermal_uncertainty.append(
+            analyze_thermal_uncertainty(load_thermal_uncertainty(source["_resolved_path"]))
+        )
+
+    psychrometric_uncertainty: list[dict] = []
+    for item in data.get("psychrometric_uncertainty_analyses", []):
+        source = source_record(
+            "psychrometric_uncertainty_analysis", item, manifest_dir
+        )
+        source_records.append(source)
+        psychrometric_uncertainty.append(
+            analyze_psychrometric_uncertainty(
+                load_psychrometric_uncertainty(source["_resolved_path"])
+            )
+        )
+
+    fan_operating_points: list[dict] = []
+    fan_operating_point_studies = []
+    for item in data.get("fan_operating_point_studies", []):
+        source = source_record("fan_operating_point_study", item, manifest_dir)
+        source_records.append(source)
+        study = load_fan_operating_point_study(source["_resolved_path"])
+        fan_operating_point_studies.append(study)
+        fan_operating_points.append(solve_fan_operating_point(study))
+
+    fan_system_uncertainty: list[dict] = []
+    for item in data.get("fan_system_uncertainty_analyses", []):
+        source = source_record(
+            "fan_system_uncertainty_analysis", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_system_uncertainty.append(
+            analyze_fan_system_uncertainty(
+                load_fan_system_uncertainty(source["_resolved_path"])
+            )
+        )
+
+    fan_duct_networks: list[dict] = []
+    for item in data.get("fan_duct_network_studies", []):
+        source = source_record("fan_duct_network_study", item, manifest_dir)
+        source_records.append(source)
+        fan_duct_networks.append(
+            analyze_fan_duct_network(
+                load_fan_duct_network_study(source["_resolved_path"])
+            )
+        )
+
+    fan_parallel_networks: list[dict] = []
+    for item in data.get("fan_parallel_network_studies", []):
+        source = source_record("fan_parallel_network_study", item, manifest_dir)
+        source_records.append(source)
+        fan_parallel_networks.append(
+            solve_fan_driven_parallel_network(
+                load_fan_driven_parallel_network_study(source["_resolved_path"])
+            )
+        )
+
+    fan_loop_networks: list[dict] = []
+    for item in data.get("fan_loop_network_studies", []):
+        source = source_record("fan_loop_network_study", item, manifest_dir)
+        source_records.append(source)
+        fan_loop_networks.append(
+            solve_fan_loop_network(load_fan_loop_network_study(source["_resolved_path"]))
+        )
+
+    fan_loop_uncertainty: list[dict] = []
+    for item in data.get("fan_loop_uncertainty_analyses", []):
+        source = source_record(
+            "fan_loop_uncertainty_analysis", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_loop_uncertainty.append(
+            analyze_fan_loop_network_uncertainty(
+                load_fan_loop_network_uncertainty(source["_resolved_path"])
+            )
+        )
+
+    fan_loop_speed_studies: list[dict] = []
+    for item in data.get("fan_loop_speed_studies", []):
+        source = source_record("fan_loop_speed_study", item, manifest_dir)
+        source_records.append(source)
+        fan_loop_speed_studies.append(
+            analyze_fan_loop_speed_study(
+                load_fan_loop_speed_study(source["_resolved_path"])
+            )
+        )
+
+    fan_variable_friction_loops: list[dict] = []
+    for item in data.get("fan_variable_friction_loop_studies", []):
+        source = source_record(
+            "fan_variable_friction_loop_study", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_variable_friction_loops.append(
+            solve_fan_variable_friction_loop(
+                load_fan_variable_friction_loop_study(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
+    fan_variable_friction_speed_studies: list[dict] = []
+    for item in data.get("fan_variable_friction_speed_studies", []):
+        source = source_record(
+            "fan_variable_friction_speed_study", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_variable_friction_speed_studies.append(
+            analyze_fan_variable_friction_speed_study(
+                load_fan_variable_friction_speed_study(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
+    fan_variable_friction_uncertainty: list[dict] = []
+    for item in data.get(
+        "fan_variable_friction_uncertainty_analyses", []
+    ):
+        source = source_record(
+            "fan_variable_friction_uncertainty_analysis",
+            item,
+            manifest_dir,
+        )
+        source_records.append(source)
+        fan_variable_friction_uncertainty.append(
+            analyze_fan_variable_friction_loop_uncertainty(
+                load_fan_variable_friction_loop_uncertainty(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
+    damper_studies: list[dict] = []
+    for item in data.get("damper_studies", []):
+        source = source_record("damper_study", item, manifest_dir)
+        source_records.append(source)
+        damper_studies.append(
+            solve_loop_damper_study(load_loop_damper_study(source["_resolved_path"]))
+        )
+
+    fan_speed_studies: list[dict] = []
+    for item in data.get("fan_speed_studies", []):
+        source = source_record("fan_speed_study", item, manifest_dir)
+        source_records.append(source)
+        fan_speed_studies.append(
+            analyze_fan_speed_study(
+                load_fan_speed_study(source["_resolved_path"])
+            )
+        )
+
+    if not source_records:
+        raise ValueError("dossier must reference at least one analysis input file")
+
+    consistency = None
+    consistency_block = data.get("consistency_checks", {})
+    if not isinstance(consistency_block, dict):
+        raise ValueError("consistency_checks must be an object when provided")
+    consistency_config = consistency_block.get("verification_hvac_airflow")
+    if consistency_config is not None:
+        if not isinstance(consistency_config, dict):
+            raise ValueError(
+                "verification_hvac_airflow consistency configuration must be an object"
+            )
+        if verification_project is None or hvac_project is None:
+            raise ValueError(
+                "verification_hvac_airflow consistency requires both "
+                "verification_project and hvac_project"
+            )
+        allowed_keys = {
+            "room_airflow_abs_tolerance_m3_h",
+            "require_same_room_set",
+        }
+        unknown_keys = set(consistency_config) - allowed_keys
+        if unknown_keys:
+            raise ValueError(
+                "unsupported verification_hvac_airflow option(s): "
+                + ", ".join(sorted(unknown_keys))
+            )
+        consistency = analyze_project_consistency(
+            verification_project,
+            hvac_project,
+            room_airflow_abs_tolerance_m3_h=consistency_config.get(
+                "room_airflow_abs_tolerance_m3_h", 0.0
+            ),
+            require_same_room_set=consistency_config.get(
+                "require_same_room_set", False
+            ),
+        )
+
+    fan_airflow_consistency = None
+    fan_airflow_config = consistency_block.get("hvac_fan_operating_airflow")
+    if fan_airflow_config is not None:
+        if not isinstance(fan_airflow_config, dict):
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency configuration must be an object"
+            )
+        if hvac is None:
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency requires hvac_project"
+            )
+        if not (
+            fan_operating_points
+            or fan_duct_networks
+            or fan_parallel_networks
+            or fan_loop_networks
+            or fan_speed_studies
+            or fan_loop_speed_studies
+            or fan_variable_friction_loops
+            or fan_variable_friction_speed_studies
+            or fan_variable_friction_uncertainty
+        ):
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency requires at least one "
+                "fan operating-point or fan-speed study"
+            )
+        allowed_keys = {"airflow_abs_tolerance_m3_h"}
+        unknown_keys = set(fan_airflow_config) - allowed_keys
+        if unknown_keys:
+            raise ValueError(
+                "unsupported hvac_fan_operating_airflow option(s): "
+                + ", ".join(sorted(unknown_keys))
+            )
+        fan_airflow_consistency = analyze_hvac_fan_airflow_consistency(
+            hvac,
+            hvac_project=hvac_project,
+            fan_operating_points=fan_operating_points,
+            fan_operating_point_studies=fan_operating_point_studies,
+            fan_duct_networks=fan_duct_networks,
+            fan_parallel_networks=fan_parallel_networks,
+            fan_loop_networks=fan_loop_networks,
+            fan_speed_studies=fan_speed_studies,
+            fan_loop_speed_studies=fan_loop_speed_studies,
+            fan_variable_friction_loops=fan_variable_friction_loops,
+            fan_variable_friction_speed_studies=(
+                fan_variable_friction_speed_studies
+            ),
+            fan_variable_friction_uncertainty_analyses=(
+                fan_variable_friction_uncertainty
+            ),
+            airflow_abs_tolerance_m3_h=fan_airflow_config.get(
+                "airflow_abs_tolerance_m3_h", 0.0
+            ),
+        )
+
+    summary = summarize_dossier_components(
+        verification=verification,
+        hvac=hvac,
+        recovery=recovery,
+        uncertainty=uncertainty,
+        qualification=qualification,
+        thermal_uncertainty=thermal_uncertainty,
+        psychrometric_uncertainty=psychrometric_uncertainty,
+        fan_operating_points=fan_operating_points,
+        fan_system_uncertainty=fan_system_uncertainty,
+        fan_duct_networks=fan_duct_networks,
+        fan_parallel_networks=fan_parallel_networks,
+        fan_loop_networks=fan_loop_networks,
+        fan_loop_uncertainty=fan_loop_uncertainty,
+        damper_studies=damper_studies,
+        fan_speed_studies=fan_speed_studies,
+        fan_loop_speed_studies=fan_loop_speed_studies,
+        fan_variable_friction_loops=fan_variable_friction_loops,
+        fan_variable_friction_speed_studies=(
+            fan_variable_friction_speed_studies
+        ),
+        fan_variable_friction_uncertainty=(
+            fan_variable_friction_uncertainty
+        ),
+        consistency=consistency,
+        fan_airflow_consistency=fan_airflow_consistency,
+    )
+    return {
+        "dossier": name,
+        "metadata": {
+            "project_reference": data.get("project_reference"),
+            "revision": data.get("revision"),
+            "prepared_by": data.get("prepared_by"),
+            "notes": data.get("notes"),
+        },
+        "executive_summary": summary,
+        "source_files": [_clean_source(item) for item in source_records],
+        "verification": verification,
+        "hvac": hvac,
+        "recovery_tests": recovery,
+        "qualification_analyses": qualification,
+        "uncertainty_rooms": uncertainty,
+        "thermal_uncertainty_analyses": thermal_uncertainty,
+        "psychrometric_uncertainty_analyses": psychrometric_uncertainty,
+        "fan_operating_point_studies": fan_operating_points,
+        "fan_system_uncertainty_analyses": fan_system_uncertainty,
+        "fan_duct_network_studies": fan_duct_networks,
+        "fan_parallel_network_studies": fan_parallel_networks,
+        "fan_loop_network_studies": fan_loop_networks,
+        "fan_loop_uncertainty_analyses": fan_loop_uncertainty,
+        "damper_studies": damper_studies,
+        "fan_speed_studies": fan_speed_studies,
+        "fan_loop_speed_studies": fan_loop_speed_studies,
+        "fan_variable_friction_loop_studies": (
+            fan_variable_friction_loops
+        ),
+        "fan_variable_friction_speed_studies": (
+            fan_variable_friction_speed_studies
+        ),
+        "fan_variable_friction_uncertainty_analyses": (
+            fan_variable_friction_uncertainty
+        ),
+        "consistency_checks": {
+            "verification_hvac_airflow": consistency,
+            "hvac_fan_operating_airflow": fan_airflow_consistency,
+        },
+    }
+
+
+def build_dossier(manifest_path: str | Path) -> dict:
     with ExitStack() as source_snapshots:
         def source_record(kind: str, supplied_path: str, manifest_dir: Path) -> dict:
             return _source_record(
@@ -783,363 +1149,4 @@ def build_dossier(manifest_path: str | Path) -> dict:
                 snapshot_stack=source_snapshots,
             )
 
-        source_records: list[dict] = []
-
-        verification = None
-        verification_project = None
-        verification_path = data.get("verification_project")
-        if verification_path is not None:
-            source = source_record("verification_project", verification_path, manifest_dir)
-            source_records.append(source)
-            verification_project = load_project(source["_resolved_path"])
-            verification = verify_project(verification_project).to_dict()
-
-        hvac = None
-        hvac_project = None
-        hvac_path = data.get("hvac_project")
-        if hvac_path is not None:
-            source = source_record("hvac_project", hvac_path, manifest_dir)
-            source_records.append(source)
-            hvac_project = load_hvac_project(source["_resolved_path"])
-            hvac = analyze_hvac_project(hvac_project)
-
-        recovery: list[dict] = []
-        for item in data.get("recovery_tests", []):
-            source = source_record("recovery_test", item, manifest_dir)
-            source_records.append(source)
-            recovery.append(analyze_recovery_test(load_recovery_test(source["_resolved_path"])))
-
-        qualification: list[dict] = []
-        for item in data.get("qualification_analyses", []):
-            source = source_record("qualification_analysis", item, manifest_dir)
-            source_records.append(source)
-            qualification.append(
-                analyze_qualification_uncertainty(
-                    load_qualification_uncertainty(source["_resolved_path"])
-                )
-            )
-
-        uncertainty: list[dict] = []
-        for item in data.get("uncertainty_rooms", []):
-            source = source_record("uncertainty_room", item, manifest_dir)
-            source_records.append(source)
-            uncertainty.append(
-                analyze_room_uncertainty(load_uncertain_room(source["_resolved_path"]))
-            )
-
-        thermal_uncertainty: list[dict] = []
-        for item in data.get("thermal_uncertainty_analyses", []):
-            source = source_record("thermal_uncertainty_analysis", item, manifest_dir)
-            source_records.append(source)
-            thermal_uncertainty.append(
-                analyze_thermal_uncertainty(load_thermal_uncertainty(source["_resolved_path"]))
-            )
-
-        psychrometric_uncertainty: list[dict] = []
-        for item in data.get("psychrometric_uncertainty_analyses", []):
-            source = source_record(
-                "psychrometric_uncertainty_analysis", item, manifest_dir
-            )
-            source_records.append(source)
-            psychrometric_uncertainty.append(
-                analyze_psychrometric_uncertainty(
-                    load_psychrometric_uncertainty(source["_resolved_path"])
-                )
-            )
-
-        fan_operating_points: list[dict] = []
-        fan_operating_point_studies = []
-        for item in data.get("fan_operating_point_studies", []):
-            source = source_record("fan_operating_point_study", item, manifest_dir)
-            source_records.append(source)
-            study = load_fan_operating_point_study(source["_resolved_path"])
-            fan_operating_point_studies.append(study)
-            fan_operating_points.append(solve_fan_operating_point(study))
-
-        fan_system_uncertainty: list[dict] = []
-        for item in data.get("fan_system_uncertainty_analyses", []):
-            source = source_record(
-                "fan_system_uncertainty_analysis", item, manifest_dir
-            )
-            source_records.append(source)
-            fan_system_uncertainty.append(
-                analyze_fan_system_uncertainty(
-                    load_fan_system_uncertainty(source["_resolved_path"])
-                )
-            )
-
-        fan_duct_networks: list[dict] = []
-        for item in data.get("fan_duct_network_studies", []):
-            source = source_record("fan_duct_network_study", item, manifest_dir)
-            source_records.append(source)
-            fan_duct_networks.append(
-                analyze_fan_duct_network(
-                    load_fan_duct_network_study(source["_resolved_path"])
-                )
-            )
-
-        fan_parallel_networks: list[dict] = []
-        for item in data.get("fan_parallel_network_studies", []):
-            source = source_record("fan_parallel_network_study", item, manifest_dir)
-            source_records.append(source)
-            fan_parallel_networks.append(
-                solve_fan_driven_parallel_network(
-                    load_fan_driven_parallel_network_study(source["_resolved_path"])
-                )
-            )
-
-        fan_loop_networks: list[dict] = []
-        for item in data.get("fan_loop_network_studies", []):
-            source = source_record("fan_loop_network_study", item, manifest_dir)
-            source_records.append(source)
-            fan_loop_networks.append(
-                solve_fan_loop_network(load_fan_loop_network_study(source["_resolved_path"]))
-            )
-
-        fan_loop_uncertainty: list[dict] = []
-        for item in data.get("fan_loop_uncertainty_analyses", []):
-            source = source_record(
-                "fan_loop_uncertainty_analysis", item, manifest_dir
-            )
-            source_records.append(source)
-            fan_loop_uncertainty.append(
-                analyze_fan_loop_network_uncertainty(
-                    load_fan_loop_network_uncertainty(source["_resolved_path"])
-                )
-            )
-
-        fan_loop_speed_studies: list[dict] = []
-        for item in data.get("fan_loop_speed_studies", []):
-            source = source_record("fan_loop_speed_study", item, manifest_dir)
-            source_records.append(source)
-            fan_loop_speed_studies.append(
-                analyze_fan_loop_speed_study(
-                    load_fan_loop_speed_study(source["_resolved_path"])
-                )
-            )
-
-        fan_variable_friction_loops: list[dict] = []
-        for item in data.get("fan_variable_friction_loop_studies", []):
-            source = source_record(
-                "fan_variable_friction_loop_study", item, manifest_dir
-            )
-            source_records.append(source)
-            fan_variable_friction_loops.append(
-                solve_fan_variable_friction_loop(
-                    load_fan_variable_friction_loop_study(
-                        source["_resolved_path"]
-                    )
-                )
-            )
-
-        fan_variable_friction_speed_studies: list[dict] = []
-        for item in data.get("fan_variable_friction_speed_studies", []):
-            source = source_record(
-                "fan_variable_friction_speed_study", item, manifest_dir
-            )
-            source_records.append(source)
-            fan_variable_friction_speed_studies.append(
-                analyze_fan_variable_friction_speed_study(
-                    load_fan_variable_friction_speed_study(
-                        source["_resolved_path"]
-                    )
-                )
-            )
-
-        fan_variable_friction_uncertainty: list[dict] = []
-        for item in data.get(
-            "fan_variable_friction_uncertainty_analyses", []
-        ):
-            source = source_record(
-                "fan_variable_friction_uncertainty_analysis",
-                item,
-                manifest_dir,
-            )
-            source_records.append(source)
-            fan_variable_friction_uncertainty.append(
-                analyze_fan_variable_friction_loop_uncertainty(
-                    load_fan_variable_friction_loop_uncertainty(
-                        source["_resolved_path"]
-                    )
-                )
-            )
-
-        damper_studies: list[dict] = []
-        for item in data.get("damper_studies", []):
-            source = source_record("damper_study", item, manifest_dir)
-            source_records.append(source)
-            damper_studies.append(
-                solve_loop_damper_study(load_loop_damper_study(source["_resolved_path"]))
-            )
-
-        fan_speed_studies: list[dict] = []
-        for item in data.get("fan_speed_studies", []):
-            source = source_record("fan_speed_study", item, manifest_dir)
-            source_records.append(source)
-            fan_speed_studies.append(
-                analyze_fan_speed_study(
-                    load_fan_speed_study(source["_resolved_path"])
-                )
-            )
-
-        if not source_records:
-            raise ValueError("dossier must reference at least one analysis input file")
-
-        consistency = None
-        consistency_block = data.get("consistency_checks", {})
-        if not isinstance(consistency_block, dict):
-            raise ValueError("consistency_checks must be an object when provided")
-        consistency_config = consistency_block.get("verification_hvac_airflow")
-        if consistency_config is not None:
-            if not isinstance(consistency_config, dict):
-                raise ValueError(
-                    "verification_hvac_airflow consistency configuration must be an object"
-                )
-            if verification_project is None or hvac_project is None:
-                raise ValueError(
-                    "verification_hvac_airflow consistency requires both "
-                    "verification_project and hvac_project"
-                )
-            allowed_keys = {
-                "room_airflow_abs_tolerance_m3_h",
-                "require_same_room_set",
-            }
-            unknown_keys = set(consistency_config) - allowed_keys
-            if unknown_keys:
-                raise ValueError(
-                    "unsupported verification_hvac_airflow option(s): "
-                    + ", ".join(sorted(unknown_keys))
-                )
-            consistency = analyze_project_consistency(
-                verification_project,
-                hvac_project,
-                room_airflow_abs_tolerance_m3_h=consistency_config.get(
-                    "room_airflow_abs_tolerance_m3_h", 0.0
-                ),
-                require_same_room_set=consistency_config.get(
-                    "require_same_room_set", False
-                ),
-            )
-
-        fan_airflow_consistency = None
-        fan_airflow_config = consistency_block.get("hvac_fan_operating_airflow")
-        if fan_airflow_config is not None:
-            if not isinstance(fan_airflow_config, dict):
-                raise ValueError(
-                    "hvac_fan_operating_airflow consistency configuration must be an object"
-                )
-            if hvac is None:
-                raise ValueError(
-                    "hvac_fan_operating_airflow consistency requires hvac_project"
-                )
-            if not (
-                fan_operating_points
-                or fan_duct_networks
-                or fan_parallel_networks
-                or fan_loop_networks
-                or fan_speed_studies
-                or fan_loop_speed_studies
-                or fan_variable_friction_loops
-                or fan_variable_friction_speed_studies
-                or fan_variable_friction_uncertainty
-            ):
-                raise ValueError(
-                    "hvac_fan_operating_airflow consistency requires at least one "
-                    "fan operating-point or fan-speed study"
-                )
-            allowed_keys = {"airflow_abs_tolerance_m3_h"}
-            unknown_keys = set(fan_airflow_config) - allowed_keys
-            if unknown_keys:
-                raise ValueError(
-                    "unsupported hvac_fan_operating_airflow option(s): "
-                    + ", ".join(sorted(unknown_keys))
-                )
-            fan_airflow_consistency = analyze_hvac_fan_airflow_consistency(
-                hvac,
-                hvac_project=hvac_project,
-                fan_operating_points=fan_operating_points,
-                fan_operating_point_studies=fan_operating_point_studies,
-                fan_duct_networks=fan_duct_networks,
-                fan_parallel_networks=fan_parallel_networks,
-                fan_loop_networks=fan_loop_networks,
-                fan_speed_studies=fan_speed_studies,
-                fan_loop_speed_studies=fan_loop_speed_studies,
-                fan_variable_friction_loops=fan_variable_friction_loops,
-                fan_variable_friction_speed_studies=(
-                    fan_variable_friction_speed_studies
-                ),
-                fan_variable_friction_uncertainty_analyses=(
-                    fan_variable_friction_uncertainty
-                ),
-                airflow_abs_tolerance_m3_h=fan_airflow_config.get(
-                    "airflow_abs_tolerance_m3_h", 0.0
-                ),
-            )
-
-        summary = summarize_dossier_components(
-            verification=verification,
-            hvac=hvac,
-            recovery=recovery,
-            uncertainty=uncertainty,
-            qualification=qualification,
-            thermal_uncertainty=thermal_uncertainty,
-            psychrometric_uncertainty=psychrometric_uncertainty,
-            fan_operating_points=fan_operating_points,
-            fan_system_uncertainty=fan_system_uncertainty,
-            fan_duct_networks=fan_duct_networks,
-            fan_parallel_networks=fan_parallel_networks,
-            fan_loop_networks=fan_loop_networks,
-            fan_loop_uncertainty=fan_loop_uncertainty,
-            damper_studies=damper_studies,
-            fan_speed_studies=fan_speed_studies,
-            fan_loop_speed_studies=fan_loop_speed_studies,
-            fan_variable_friction_loops=fan_variable_friction_loops,
-            fan_variable_friction_speed_studies=(
-                fan_variable_friction_speed_studies
-            ),
-            fan_variable_friction_uncertainty=(
-                fan_variable_friction_uncertainty
-            ),
-            consistency=consistency,
-            fan_airflow_consistency=fan_airflow_consistency,
-        )
-        return {
-            "dossier": name,
-            "metadata": {
-                "project_reference": data.get("project_reference"),
-                "revision": data.get("revision"),
-                "prepared_by": data.get("prepared_by"),
-                "notes": data.get("notes"),
-            },
-            "executive_summary": summary,
-            "source_files": [_clean_source(item) for item in source_records],
-            "verification": verification,
-            "hvac": hvac,
-            "recovery_tests": recovery,
-            "qualification_analyses": qualification,
-            "uncertainty_rooms": uncertainty,
-            "thermal_uncertainty_analyses": thermal_uncertainty,
-            "psychrometric_uncertainty_analyses": psychrometric_uncertainty,
-            "fan_operating_point_studies": fan_operating_points,
-            "fan_system_uncertainty_analyses": fan_system_uncertainty,
-            "fan_duct_network_studies": fan_duct_networks,
-            "fan_parallel_network_studies": fan_parallel_networks,
-            "fan_loop_network_studies": fan_loop_networks,
-            "fan_loop_uncertainty_analyses": fan_loop_uncertainty,
-            "damper_studies": damper_studies,
-            "fan_speed_studies": fan_speed_studies,
-            "fan_loop_speed_studies": fan_loop_speed_studies,
-            "fan_variable_friction_loop_studies": (
-                fan_variable_friction_loops
-            ),
-            "fan_variable_friction_speed_studies": (
-                fan_variable_friction_speed_studies
-            ),
-            "fan_variable_friction_uncertainty_analyses": (
-                fan_variable_friction_uncertainty
-            ),
-            "consistency_checks": {
-                "verification_hvac_airflow": consistency,
-                "hvac_fan_operating_airflow": fan_airflow_consistency,
-            },
-        }
+        return _build_dossier_with_source_record(manifest_path, source_record)

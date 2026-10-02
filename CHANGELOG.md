@@ -9,6 +9,13 @@
 - Adds focused GUI regressions for oversized sources and path-identity replacement.
 - Changes no solver equation, numerical tolerance, project schema, requirement criterion, or verification verdict semantic.
 
+## Unreleased Release 3 — clean standalone CLI publication failures — 2026-10-02
+
+- Converts protected-output identity failures and publication `OSError` conditions into concise command-prefixed stderr diagnostics with stable exit code 1 instead of uncaught Python tracebacks.
+- Applies the behavior consistently across every standalone file-backed engineering CLI while preserving the protected atomic writer, strict-JSON boundary, and existing engineering/status exit codes on successful publication.
+- Adds direct regression coverage for protected-input aliases and persistence failures plus an installed-wheel entrypoint smoke proving no traceback is emitted and protected input bytes remain unchanged.
+- Updates the pre-existing persistence-failure regression to assert the new controlled CLI contract while still proving the previous report and staging cleanup are preserved.
+
 ## Unreleased Release 3 — development package identity — 2026-10-02
 
 - Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.

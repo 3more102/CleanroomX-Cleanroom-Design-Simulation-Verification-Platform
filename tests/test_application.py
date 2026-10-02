@@ -667,6 +667,7 @@ def test_external_dependency_fingerprint_uses_shared_stable_file_authority(
         "sha256": expected,
     }
 
+
 def test_analysis_run_preserves_legacy_positional_constructor_shape():
     run = AnalysisRun("kind", "title", "status", {}, "", {}, None)
     assert run.input_snapshot == {}

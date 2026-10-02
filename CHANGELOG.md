@@ -9,6 +9,14 @@
 - Adds regression coverage for an ultra-dry state whose dew point is below -100 °C but remains inside the IAPWS domain.
 - Preserves the merged ASHRAE/IAPWS saturation equations, AirState dry-bulb operating range, humidity-ratio/enthalpy/specific-volume equations, and ordinary dew-point results.
 
+## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
+
+- Routes every standalone file-backed engineering CLI through one protected atomic output writer.
+- Rejects output destinations that alias declared engineering inputs by resolved path or existing same-file identity, and rechecks immediately before atomic replacement.
+- Extends strict JSON serialization across the standalone result-producing CLI surface so non-finite or Python-only values fail closed before publication.
+- Protects dossier dependencies, consistency-project pairs, assurance snapshots, and project-bundle destinations against overwrite races.
+- Restacks the reviewed unique delta from superseded PR #748 onto exact current main without importing its stale history.
+
 ## Unreleased — CI supply-chain hardening — 2026-10-01
 
 - Pins every third-party GitHub Action used by the repository workflows to a reviewed immutable commit SHA while retaining human-readable upstream version comments.

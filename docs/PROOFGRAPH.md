@@ -97,6 +97,31 @@ Each evidence record can retain:
 Confidence is optional. ProofGraph does not manufacture a confidence percentage
 when none exists in the underlying engineering evidence.
 
+## Operational evidence ingestion
+
+`operational_evidence_bundle` adds numeric operational observations only when the
+caller supplies an explicit source kind, source reference, immutable source
+revision, timezone-aware observation timestamp, absolute measurement uncertainty,
+assessment timestamp, and maximum accepted age.
+
+The adapter never reads the system clock. It normalizes timestamps to UTC, rejects
+future observations relative to the supplied assessment timestamp, and records the
+measurement as `OperationalEvidence` with the supplied absolute uncertainty in
+`ConfidenceRecord`.
+
+Freshness is represented separately as `CalculationEvidence` linked upstream to
+the exact operational observation. Its deterministic value records
+`current`/`stale`, observation age, the caller-owned maximum age, and the
+explicit assessment timestamp. A stale observation remains retained evidence; it
+is not deleted or silently promoted.
+
+`proofgraph_with_operational_evidence` attaches these records immutably to an
+existing graph without changing requirements, checks, findings, verdicts,
+corrective actions, or verification runs. The adapter performs no hidden unit
+conversion, no confidence inference, no regulatory interpretation, and no
+automatic requirement binding. Declared source identity/revision is traceability
+metadata; it does not by itself authenticate the external source.
+
 ## Evidence precedence and conflict assessment
 
 `assess_evidence_precedence` evaluates competing ProofGraph evidence claims
@@ -211,17 +236,15 @@ The model remains pure Python with no GUI dependency.
 ## Remaining integration slices
 
 The shared ProofGraph model now includes calculation and IFC design bridges,
-commissioning evidence adapters, explicit canonical requirement-evidence
-authority, retained verification history, cross-artifact integrity checks,
-project traceability, desktop requirement/evidence/verdict drill-down, and the
-read-only precedence/conflict assessment described above.
+commissioning and operational evidence adapters, explicit canonical
+requirement-evidence authority, retained verification history, cross-artifact
+integrity checks, project traceability, desktop requirement/evidence/verdict
+drill-down, and the read-only precedence/conflict assessment described above.
 
 Remaining high-value work should stay on this representation rather than create
 a parallel evidence model:
 
-1. add operational-evidence adapters only when source identity, freshness, and
-   uncertainty contracts are explicit;
-2. persist a precedence policy in project configuration only when a workflow
+1. persist a precedence policy in project configuration only when a workflow
    truly requires reusable project-owned assessment policy. Until then,
    precedence remains an explicit caller-owned input and does not alter canonical
    verification.

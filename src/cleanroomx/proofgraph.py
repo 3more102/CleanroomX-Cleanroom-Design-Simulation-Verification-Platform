@@ -17,6 +17,10 @@ from .proofgraph_ifc import (
     ifc_design_evidence_bundle,
     proofgraph_with_ifc_design_evidence,
 )
+from .proofgraph_operational import (
+    operational_evidence_bundle,
+    proofgraph_with_operational_evidence,
+)
 from .proofgraph_evidence_policy import (
     EVIDENCE_PRECEDENCE_DECISION_SCOPE,
     EVIDENCE_PRECEDENCE_SCHEMA,
@@ -85,5 +89,7 @@ __all__ = [
     "proofgraph_from_dict",
     "ifc_design_evidence_bundle",
     "proofgraph_with_ifc_design_evidence",
+    "operational_evidence_bundle",
+    "proofgraph_with_operational_evidence",
     "assess_evidence_precedence",
 ]

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 
 import pytest
 
 import cleanroomx.project as project_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
     ProjectFormatError, atomic_write_text, capture_project_file_revision,
-    load_project_document, load_project_document_with_revision_info, project_from_dict,
+    load_project_document, load_project_document_with_revision,
+    load_project_document_with_revision_info, project_from_dict,
     project_from_dict_with_migration_info, save_project_document,
 )
 
@@ -145,13 +148,94 @@ def test_revision_aware_loader_preserves_migration_provenance(tmp_path):
         encoding="utf-8",
     )
 
+    exact_bytes = path.read_bytes()
     project, revision, info = load_project_document_with_revision_info(path)
 
     assert project.name == "Legacy v0"
     assert revision.exists is True
-    assert revision.sha256
+    assert revision.size == len(exact_bytes)
+    assert revision.sha256 == sha256(exact_bytes).hexdigest()
     assert info.migrated is True
     assert info.source_schema_version == 0
+
+
+def test_revision_loader_binds_revision_to_exact_bytes_passed_to_parser(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(
+        tmp_path / "source.cleanroomx.json",
+        ProjectDocument(name="Source snapshot"),
+    )
+    alternate = save_project_document(
+        tmp_path / "alternate.cleanroomx.json",
+        ProjectDocument(name="Transient alternate"),
+    )
+    source_bytes = source.read_bytes()
+    alternate_bytes = alternate.read_bytes()
+    original_parser = strict_json_module.strict_json_loads
+    parsed_bytes = []
+
+    def mutate_live_path_after_verified_read(text):
+        raw = text.encode("utf-8")
+        parsed_bytes.append(raw)
+        source.write_bytes(alternate_bytes)
+        return original_parser(text)
+
+    monkeypatch.setattr(
+        strict_json_module,
+        "strict_json_loads",
+        mutate_live_path_after_verified_read,
+    )
+
+    project, revision = load_project_document_with_revision(source, attempts=1)
+
+    assert parsed_bytes == [source_bytes]
+    assert project.name == "Source snapshot"
+    assert revision.size == len(source_bytes)
+    assert revision.sha256 == sha256(source_bytes).hexdigest()
+    assert source.read_bytes() == alternate_bytes
+    assert revision.sha256 != sha256(source.read_bytes()).hexdigest()
+
+
+def test_revision_loader_enforces_project_byte_ceiling_on_exact_snapshot(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "oversized-revision.cleanroomx.json"
+    source.write_bytes(b"x" * 65)
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+
+    with pytest.raises(OSError, match="exceeds maximum supported size"):
+        load_project_document_with_revision_info(source)
+
+
+def test_revision_loader_rejects_live_path_identity_replacement(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(
+        tmp_path / "source.cleanroomx.json",
+        ProjectDocument(name="Source"),
+    )
+    replacement = save_project_document(
+        tmp_path / "replacement.cleanroomx.json",
+        ProjectDocument(name="Replacement"),
+    )
+    real_stat = project_module.Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement_identity(self, *args, **kwargs):
+        if self == source:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(project_module.Path, "stat", report_replacement_identity)
+
+    with pytest.raises(OSError, match="changed repeatedly while opening") as raised:
+        load_project_document_with_revision_info(source, attempts=1)
+
+    assert isinstance(
+        raised.value.__cause__,
+        project_module.StrictJSONFileChangedError,
+    )
 
 
 def test_project_loader_rejects_future_schema():

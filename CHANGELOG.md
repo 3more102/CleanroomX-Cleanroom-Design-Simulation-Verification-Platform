@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — desktop GUI I/O safety — 2026-10-02
+
+- Routes desktop **Import Analysis Input JSON** through the canonical bounded, revision-stable strict-JSON reader before file-reference rebasing.
+- Inherits the ordinary 64 MiB ceiling plus strict UTF-8, duplicate-key, non-finite-number, excessive-nesting, and live-path revision/identity rejection.
+- Protects generic GUI exports from the saved project source, retained recovery source, and declared file-backed engineering dependencies, including existing hardlink aliases.
+- Rechecks protected identities at the atomic pre-replace boundary and composes those checks with caller-specific publication guards.
+- Adds focused regressions for oversized and replaced import sources, source-parent rebasing, project/dependency overwrite attempts, publication races, recovery-source protection, and unsaved absolute dependencies.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, analysis-result semantic, or verification verdict semantic.
+
 ## Unreleased Release 3 — development package identity — 2026-10-02
 
 - Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.

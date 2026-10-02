@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased Release 3 — exact portable bundle verification snapshot — 2026-10-02
+
+- Captures each portable bundle into one bounded, revision-stable private archive snapshot before ZIP verification.
+- Binds reported bundle SHA-256/byte-size evidence to the exact archive bytes whose ZIP structure, manifest, project, dependencies, hashes, and references are verified, removing the separate fingerprint/open/fingerprint ABA window.
+- Reuses that same verified snapshot for transactional extraction, while retaining a final live-source SHA-256/size recheck before publication so a changed original bundle still fails closed.
+- Preserves existing archive/member resource ceilings, path-safety rules, schema validation, transactional extraction durability, and project/dependency integrity checks.
+- Adds regression coverage proving a separate transient archive read cannot substitute different contents for the digest-bound verified snapshot.
+- Changes no solver equation, numerical tolerance, engineering-unit convention, project schema, bundle schema, requirement criterion, verification verdict, or release identity.
+
+## Unreleased Release 3 — runtime source fingerprint revision binding — 2026-10-02
+
+- Binds every Python source file included in application execution provenance to the exact path-manifest revision observed before hashing and a stable opened-descriptor revision during the read.
+- Rechecks the same opened descriptor after reading plus the source path after close; POSIX builds also bind opened device/inode identity to the manifest, while Windows keeps the portable path-manifest and descriptor-stability checks.
+- Preserves deterministic tree ordering, metadata-keyed fingerprint caching, bounded retry behavior, and the existing before/after analysis code-revision guard.
+- Adds a focused cross-platform regression that keeps the outer tree manifest stable while the opened-descriptor revision changes, proving the descriptor-level guard fails closed.
+- Changes no solver equation, numerical tolerance, engineering-unit convention, project schema, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — runtime source fingerprint revision binding — 2026-10-02
 
 - Binds every Python source file included in application execution provenance to the exact path-manifest revision observed before hashing and a stable opened-descriptor revision during the read.

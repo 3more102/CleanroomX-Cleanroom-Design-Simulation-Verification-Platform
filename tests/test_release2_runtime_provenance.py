@@ -97,7 +97,6 @@ def test_python_tree_fingerprint_is_deterministic_cached_and_content_sensitive(t
     assert changed["sha256"] != first["sha256"]
 
 
-
 def test_python_tree_fingerprint_rejects_opened_source_revision_change(
     tmp_path,
     monkeypatch,

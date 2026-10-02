@@ -1558,7 +1558,12 @@ def extract_ifc_semantics(
     )
     records: list[dict[str, Any]] = []
 
-    for entity in model.by_type("IfcSpace"):
+    try:
+        space_entities = tuple(model.by_type("IfcSpace"))
+    except Exception as exc:
+        raise IfcImportError("unable to enumerate IFC spaces") from exc
+
+    for entity in space_entities:
         try:
             length, width, height = _space_dimensions_m(
                 entity, unit_scale, element_util
@@ -1616,11 +1621,30 @@ def extract_ifc_semantics(
         try:
             if ifc_class == "IfcFlowTerminal":
                 # IfcOpenShell includes subtypes by default; keep this generic query exact.
-                entities = model.by_type(ifc_class, include_subtypes=False)
+                entities = tuple(
+                    model.by_type(ifc_class, include_subtypes=False)
+                )
             else:
-                entities = model.by_type(ifc_class)
-        except Exception:
-            continue
+                entities = tuple(model.by_type(ifc_class))
+        except RuntimeError as exc:
+            message = str(exc).casefold()
+            missing_schema_type = (
+                "schema" in message
+                and ifc_class.casefold() in message
+                and (
+                    "not found" in message
+                    or "unable to find" in message
+                )
+            )
+            if missing_schema_type:
+                continue
+            raise IfcImportError(
+                f"unable to enumerate IFC device class {ifc_class!r}"
+            ) from exc
+        except Exception as exc:
+            raise IfcImportError(
+                f"unable to enumerate IFC device class {ifc_class!r}"
+            ) from exc
         for entity in entities:
             global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
             if not global_id or global_id in seen:

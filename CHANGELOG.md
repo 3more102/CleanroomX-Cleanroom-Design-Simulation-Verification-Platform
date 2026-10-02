@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — bounded desktop analysis-input import — 2026-10-02
+
+- Routes desktop **Import Analysis Input JSON** through the canonical bounded, revision-stable `load_strict_json()` reader instead of unbounded `Path.read_text()`.
+- Enforces the ordinary 64 MiB strict-JSON ceiling before parsing while preserving duplicate-key, non-finite-number, invalid-UTF-8, and excessive-nesting rejection.
+- Fails closed when the selected import path changes identity or revision during the read, before any analysis input mutation occurs.
+- Preserves existing source-directory file-reference rebasing after successful parsing.
+- Adds focused GUI regressions for oversized sources and path-identity replacement.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, or verification verdict semantic.
+
 ## Unreleased Release 3 — development package identity — 2026-10-02
 
 - Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.

@@ -4,14 +4,14 @@ import argparse
 from pathlib import Path
 import sys
 
-from .cli_output import dumps_strict_json
+from .cli_output import atomic_write_cli_output, dumps_strict_json
 from .strict_json import StrictJSONError, load_strict_json
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
+    analysis_external_dependency_references,
     run_analysis,
 )
-from .project import atomic_write_text
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,7 +50,20 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_text(args.output, text)
+        base_dir = manifest_path.resolve().parent
+        protected_inputs = [manifest_path]
+        for _field, declared_path in analysis_external_dependency_references(
+            "dossier", payload
+        ):
+            dependency = Path(declared_path).expanduser()
+            if not dependency.is_absolute():
+                dependency = base_dir / dependency
+            protected_inputs.append(dependency)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=protected_inputs,
+        )
     else:
         print(text)
     return 2 if result["executive_summary"]["state"] == "attention_required" else 0

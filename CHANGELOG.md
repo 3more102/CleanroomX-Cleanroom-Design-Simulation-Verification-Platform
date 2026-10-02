@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded dossier fallback source fingerprinting — 2026-10-02
+
+- Applies the canonical 64 MiB strict-JSON ceiling to the dossier source-record fallback SHA-256 path used without a private snapshot pool.
+- Rejects oversized manifest-declared source files before binary content reads begin, matching the already-bounded snapshot-backed dossier path.
+- Preserves dossier schema, source evidence identity, parser and solver behavior, numerical tolerances, requirement criteria, verification verdicts, and release identity.
+- Adds a sparse-file regression proving the fallback source-record path fails closed before opening oversized source bytes.
+
 ## Unreleased Release 3 — canonical assurance snapshot ingestion — 2026-10-02
 
 - Routes design-assurance input and snapshot ingestion through the shared bounded `persistence.stable_file_snapshot()` authority instead of maintaining a separate path/descriptor reader.

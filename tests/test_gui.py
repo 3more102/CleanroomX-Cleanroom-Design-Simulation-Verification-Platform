@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
@@ -995,7 +996,7 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.102.1"
+    assert payload["version"] == cleanroomx.__version__
     assert payload["analysis_count"] >= 20
     assert payload["bindings_valid"] is True
     assert payload["registry_validation"]["status"] == "ok"

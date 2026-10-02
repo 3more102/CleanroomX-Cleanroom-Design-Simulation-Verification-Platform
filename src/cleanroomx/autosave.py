@@ -325,6 +325,7 @@ def _read_recovery_json(path: str | Path) -> Any:
             f"recovery artifact could not be read: {source}: {exc}"
         ) from exc
 
+
 def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
     return _validate_recovery_payload(_read_recovery_json(path))
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 import cleanroomx.project as project_module
 import cleanroomx.project_revisions as revision_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.project import (
     ProjectDocument,
     ProjectWriteConflictError,
@@ -153,6 +155,81 @@ def test_revision_loader_rejects_oversized_artifact_before_json_parsing(
 
     with pytest.raises(ProjectRevisionError, match="artifact size .* exceeds"):
         load_project_revision(artifact)
+
+
+def test_revision_loader_rejects_live_path_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.cleanroomx.json"
+    save_project_document(source, _project("v0"))
+    _guarded_save(source, _project("v1"))
+    artifact = scan_project_revisions(source).revisions[0].path
+    replacement = tmp_path / "replacement.revision.json"
+    replacement.write_bytes(artifact.read_bytes() + b" ")
+    real_stat = Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement(self: Path, *args, **kwargs):
+        if self == artifact:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", report_replacement)
+
+    with pytest.raises(ProjectRevisionError, match="changed while reading JSON input"):
+        load_project_revision(artifact, expected_source_path=source)
+
+
+def test_revision_loader_rejects_live_path_disappearance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.cleanroomx.json"
+    save_project_document(source, _project("v0"))
+    _guarded_save(source, _project("v1"))
+    artifact = scan_project_revisions(source).revisions[0].path
+    real_stat = Path.stat
+
+    def disappear(self: Path, *args, **kwargs):
+        if self == artifact:
+            raise FileNotFoundError(str(artifact))
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", disappear)
+
+    with pytest.raises(ProjectRevisionError, match="changed while reading JSON input"):
+        load_project_revision(artifact, expected_source_path=source)
+
+
+def test_revision_loader_rejects_revision_growth_during_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.cleanroomx.json"
+    save_project_document(source, _project("v0"))
+    _guarded_save(source, _project("v1"))
+    artifact = scan_project_revisions(source).revisions[0].path
+    larger = tmp_path / "larger.revision.json"
+    larger.write_bytes(artifact.read_bytes() + b" ")
+    artifact_stat = artifact.stat()
+    larger_stat = larger.stat()
+    real_fstat = strict_json_module.os.fstat
+    calls = 0
+
+    def changing_fstat(fd: int):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return artifact_stat
+        if calls == 2:
+            return larger_stat
+        return real_fstat(fd)
+
+    monkeypatch.setattr(strict_json_module.os, "fstat", changing_fstat)
+
+    with pytest.raises(ProjectRevisionError, match="changed while reading JSON input"):
+        load_project_revision(artifact, expected_source_path=source)
 
 
 def test_revision_loader_rejects_declared_project_above_project_limit_before_decode(

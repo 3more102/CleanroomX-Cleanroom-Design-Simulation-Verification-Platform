@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — project-revision ingestion hardening — 2026-10-02
+
+- Routes saved project-revision envelopes through the canonical bounded, revision-stable strict-JSON file reader while preserving the existing revision-envelope size budget and schema validation.
+- Fails closed when a revision artifact is replaced, disappears, or changes revision during ingestion, and preserves project-revision-specific error translation.
+- Adds focused regressions for live-path identity replacement, path disappearance, and opened-file revision growth during validation.
+- Changes no solver equation, numerical tolerance, project schema, revision schema, requirement criterion, or verification verdict semantic.
+
 ## Unreleased Release 3 — bounded desktop analysis-input import — 2026-10-02
 
 - Routes desktop **Import Analysis Input JSON** through the canonical bounded, revision-stable `load_strict_json()` reader instead of unbounded `Path.read_text()`.

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import (
@@ -901,6 +902,126 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
             import_dir / filename
         ).resolve()
 
+
+
+def test_import_input_json_rejects_oversize_source_without_mutating_analysis(
+    tmp_path, monkeypatch
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    import_path = tmp_path / "oversize.json"
+    import_path.write_text(
+        '{"payload":"' + ("x" * 64) + '"}',
+        encoding="utf-8",
+    )
+    original_input = {"existing": 1}
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input=dict(original_input),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.project_path = project_dir / "project.cleanroomx.json"
+    app.status_var = Status()
+    app._current_analysis = lambda: analysis
+    app._perform_project_edit = lambda description, mutate: mutate()
+    app._invalidate_last_run_for = lambda analysis_id: None
+    app._load_analysis_into_editor = lambda item: None
+    app._update_title = lambda: None
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+    )
+    monkeypatch.setattr(strict_json_module, "STRICT_JSON_FILE_MAX_BYTES", 32)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.import_input_json()
+
+    assert analysis.input == original_input
+    assert errors
+    assert errors[-1][0] == "Import failed"
+    assert "exceeds maximum supported JSON size" in errors[-1][1]
+
+
+def test_import_input_json_rejects_path_replacement_without_mutating_analysis(
+    tmp_path, monkeypatch
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    import_path = tmp_path / "input.json"
+    replacement_path = tmp_path / "replacement.json"
+    import_path.write_text('{"value": 1}', encoding="utf-8")
+    replacement_path.write_text('{"value": 2}', encoding="utf-8")
+    original_input = {"existing": 1}
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input=dict(original_input),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.project_path = project_dir / "project.cleanroomx.json"
+    app.status_var = Status()
+    app._current_analysis = lambda: analysis
+    app._perform_project_edit = lambda description, mutate: mutate()
+    app._invalidate_last_run_for = lambda analysis_id: None
+    app._load_analysis_into_editor = lambda item: None
+    app._update_title = lambda: None
+
+    original_stat = Path.stat
+    replaced = False
+
+    def replace_before_live_path_stat(self, *args, **kwargs):
+        nonlocal replaced
+        if self == import_path and not replaced:
+            replaced = True
+            replacement_path.replace(import_path)
+        return original_stat(self, *args, **kwargs)
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+    )
+    monkeypatch.setattr(Path, "stat", replace_before_live_path_stat)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.import_input_json()
+
+    assert replaced is True
+    assert analysis.input == original_input
+    assert errors
+    assert errors[-1][0] == "Import failed"
+    assert "changed while reading JSON input" in errors[-1][1]
 
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):
     class Status:

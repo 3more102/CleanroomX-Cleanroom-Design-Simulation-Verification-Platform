@@ -166,10 +166,10 @@ def atomic_write_cli_output(
     )
 
 def write_cli_output_or_report_error(
+    command: str,
     path: str | Path,
     text: str,
     *,
-    command: str,
     protected_inputs: Iterable[str | Path] = (),
 ) -> bool:
     """Publish CLI output and convert expected publication failures to stderr.

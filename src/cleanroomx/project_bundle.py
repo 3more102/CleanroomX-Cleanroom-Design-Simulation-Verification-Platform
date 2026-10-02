@@ -342,6 +342,24 @@ def _build_portable_project(
     return portable, records, archive_to_source
 
 
+def _bundle_paths_alias(first: str | Path, second: str | Path) -> bool:
+    """Return whether two bundle paths identify the same filesystem object."""
+    left = Path(first).expanduser()
+    right = Path(second).expanduser()
+    try:
+        if os.path.normcase(str(left.resolve(strict=False))) == os.path.normcase(
+            str(right.resolve(strict=False))
+        ):
+            return True
+        if left.exists() and right.exists():
+            return left.samefile(right)
+    except (OSError, RuntimeError) as exc:
+        raise ProjectBundleError(
+            "could not verify portable bundle destination identity"
+        ) from exc
+    return False
+
+
 def export_project_bundle(
     path: str | Path,
     project: ProjectDocument,
@@ -352,27 +370,38 @@ def export_project_bundle(
 ) -> dict[str, Any]:
     """Create an atomic, deterministic, self-contained portable project bundle."""
     destination = Path(path).expanduser()
-    destination_resolved = destination.resolve(strict=False)
-    if source_project_path is not None:
-        protected_project = Path(source_project_path).expanduser().resolve(strict=False)
-        if os.path.normcase(str(destination_resolved)) == os.path.normcase(
-            str(protected_project)
-        ):
-            raise ProjectBundleError(
-                "portable bundle destination cannot overwrite the source project"
-            )
+    protected_project = (
+        None
+        if source_project_path is None
+        else Path(source_project_path).expanduser().resolve(strict=False)
+    )
+    if protected_project is not None and _bundle_paths_alias(
+        destination, protected_project
+    ):
+        raise ProjectBundleError(
+            "portable bundle destination cannot overwrite the source project"
+        )
     base = None if source_base is None else Path(source_base).expanduser().resolve(strict=False)
     portable, dependencies, archive_to_source = _build_portable_project(
         project, source_base=base
     )
-    destination_key = os.path.normcase(str(destination_resolved))
-    if any(
-        os.path.normcase(str(source.resolve(strict=False))) == destination_key
-        for source in archive_to_source.values()
-    ):
-        raise ProjectBundleError(
-            "portable bundle destination cannot overwrite a packaged dependency"
-        )
+
+    def assert_destination_safe() -> None:
+        if protected_project is not None and _bundle_paths_alias(
+            destination, protected_project
+        ):
+            raise ProjectBundleError(
+                "portable bundle destination cannot overwrite the source project"
+            )
+        if any(
+            _bundle_paths_alias(destination, source)
+            for source in archive_to_source.values()
+        ):
+            raise ProjectBundleError(
+                "portable bundle destination cannot overwrite a packaged dependency"
+            )
+
+    assert_destination_safe()
     project_bytes = _project_document_text(portable).encode("utf-8")
     _validate_payload_resource_limits(len(project_bytes), dependencies)
     manifest = {
@@ -413,10 +442,15 @@ def export_project_bundle(
                     expected_size=dependency["size_bytes"],
                 )
 
+    def assert_publication_safe() -> None:
+        assert_destination_safe()
+        if before_replace is not None:
+            before_replace()
+
     atomic_write_generated(
         destination,
         generate_bundle,
-        before_replace=before_replace,
+        before_replace=assert_publication_safe,
     )
 
     bundle_stat, bundle_sha256 = stable_file_sha256(destination.resolve(strict=False))

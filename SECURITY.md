@@ -50,3 +50,13 @@ Automated correctness/regression coverage is not a formal independent security a
 ## v0.100 file-integrity evidence
 
 Successful application runs record a canonical SHA-256 identity for the submitted input. File-backed consistency and dossier workflows record before/after SHA-256 plus byte-size evidence for referenced files so changes during a run are visible in Diagnostics and exported run bundles. These hashes are integrity/provenance evidence, not authentication or a digital signature.
+
+
+### CLI output/input separation
+
+Standalone engineering commands that accept both file-backed inputs and
+`--output` reject output destinations that alias their source engineering files,
+including resolved path aliases and existing same-file aliases. Publication uses
+the shared durable atomic writer with a second identity check immediately before
+replacement. Multi-file consistency and dossier workflows protect every declared
+source dependency in addition to their primary input/manifest.

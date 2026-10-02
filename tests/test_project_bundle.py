@@ -648,6 +648,68 @@ def test_bundle_export_never_overwrites_packaged_dependency(tmp_path):
     assert dependency.read_bytes() == original
 
 
+def test_bundle_export_rejects_hardlink_alias_of_source_project(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    project_path = save_project_document(
+        source / "portable.cleanroomx.json",
+        _consistency_project(),
+    )
+    destination = tmp_path / "portable.cleanroomx.zip"
+    destination.hardlink_to(project_path)
+    original = project_path.read_bytes()
+
+    with pytest.raises(ProjectBundleError, match="cannot overwrite the source project"):
+        export_project_bundle_from_path(project_path, destination)
+
+    assert project_path.read_bytes() == original
+    assert destination.read_bytes() == original
+
+
+def test_bundle_export_rechecks_destination_identity_before_publication(
+    tmp_path,
+    monkeypatch,
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    project_path = save_project_document(
+        source / "portable.cleanroomx.json",
+        _consistency_project(),
+    )
+    destination = tmp_path / "portable.cleanroomx.zip"
+    destination.write_bytes(b"previous verified bundle bytes")
+    previous = destination.read_bytes()
+
+    real_alias = bundle_module._bundle_paths_alias
+    publication_started = False
+
+    def publication_race(first, second):
+        if publication_started and Path(second).resolve(strict=False) == project_path:
+            return True
+        return real_alias(first, second)
+
+    def guarded_publish(path, generator, *, before_replace=None):
+        nonlocal publication_started
+        assert Path(path) == destination
+        assert callable(generator)
+        assert before_replace is not None
+        publication_started = True
+        before_replace()
+        raise AssertionError("unsafe bundle replacement should not be reached")
+
+    monkeypatch.setattr(bundle_module, "_bundle_paths_alias", publication_race)
+    monkeypatch.setattr(bundle_module, "atomic_write_generated", guarded_publish)
+
+    with pytest.raises(ProjectBundleError, match="cannot overwrite the source project"):
+        export_project_bundle_from_path(project_path, destination)
+
+    assert destination.read_bytes() == previous
+
+
 def test_bundle_export_project_race_preserves_existing_bundle(tmp_path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()

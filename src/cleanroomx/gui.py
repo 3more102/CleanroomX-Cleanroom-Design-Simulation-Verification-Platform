@@ -62,6 +62,7 @@ from .project_bundle import (
     extract_project_bundle,
 )
 from .project_diagnostics_cli import (
+    _assert_output_is_distinct_from_dependencies,
     _assert_project_output_is_safe,
     _assert_project_publication_safe,
 )
@@ -3843,18 +3844,28 @@ class CleanroomXApp:
                 source = getattr(self, "_recovery_source_path", None)
 
             protect_current_project_inputs = None
-            if project is not None and source is not None:
-                source_path = Path(source)
+            if project is not None:
+                if source is not None:
+                    source_path = Path(source)
 
-                def protect_current_project_inputs() -> None:
-                    _assert_project_output_is_safe(
-                        project,
-                        source=source_path,
-                        output=target,
-                    )
+                    def protect_current_project_inputs() -> None:
+                        _assert_project_output_is_safe(
+                            project,
+                            source=source_path,
+                            output=target,
+                        )
+                else:
+                    def protect_current_project_inputs() -> None:
+                        _assert_output_is_distinct_from_dependencies(
+                            project,
+                            base_dir=None,
+                            output=target,
+                        )
 
                 # Reject an already-dangerous selection before creating a
                 # staged file, then repeat the same check at publication time.
+                # Unsaved projects can still contain absolute file-backed
+                # dependencies, so protect those even without a project path.
                 protect_current_project_inputs()
 
             effective_before_replace = before_replace

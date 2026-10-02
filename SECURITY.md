@@ -64,3 +64,13 @@ including resolved path aliases and existing same-file aliases. Publication uses
 the shared durable atomic writer with a second identity check immediately before
 replacement. Multi-file consistency and dossier workflows protect every declared
 source dependency in addition to their primary input/manifest.
+
+### Desktop generic export/input separation
+
+Desktop input/result/run-bundle/Markdown/HTML exports use the same fail-closed
+identity principle. A destination that aliases the saved project source, a
+retained recovery source, or a declared file-backed engineering dependency is
+rejected before staging and checked again immediately before atomic replacement.
+Existing same-file aliases such as hard links are protected. For an unsaved
+project, absolute declared dependencies are protected while unresolved relative
+references remain unbound until a project base directory exists.

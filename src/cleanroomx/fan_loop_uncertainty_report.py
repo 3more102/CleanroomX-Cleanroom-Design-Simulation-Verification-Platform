@@ -30,7 +30,7 @@ def markdown_fan_loop_network_uncertainty_report(result: dict) -> str:
         "edge_resistance_pa_per_m3_s_squared"
     ].items():
         lines.append(
-            f"- Edge `{markdown_text(name)}` resistance: **{interval['lower']} to "
+            f"- Edge **{markdown_text(name)}** resistance: **{interval['lower']} to "
             f"{interval['upper']} Pa/(m³/s)²** "
             f"(nominal {interval['nominal']})"
         )
@@ -104,7 +104,9 @@ def markdown_fan_loop_network_uncertainty_report(result: dict) -> str:
     if traceability["missing_provenance"]:
         lines.append(
             "- Missing provenance: "
-            + ", ".join(traceability["missing_provenance"])
+            + ", ".join(
+                markdown_text(item) for item in traceability["missing_provenance"]
+            )
             + "."
         )
 

@@ -2,7 +2,10 @@ from contextlib import ExitStack
 import hashlib
 from pathlib import Path
 
+import pytest
+
 import cleanroomx.dossier as dossier_module
+import cleanroomx.io as io_module
 
 from cleanroomx.dossier import _source_record, build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
@@ -149,6 +152,41 @@ def test_build_dossier_routes_sources_through_private_snapshot_pool(monkeypatch)
     result = dossier_module.build_dossier("examples/dossier_demo.json")
 
     assert result["source_files"]
+    assert snapshot_paths
+    assert all(not path.exists() for path in snapshot_paths)
+
+
+def test_build_dossier_cleans_private_snapshots_when_loader_raises(
+    monkeypatch,
+) -> None:
+    original_source_record = dossier_module._source_record
+    snapshot_paths: list[Path] = []
+
+    def tracking_source_record(
+        kind,
+        supplied_path,
+        manifest_dir,
+        *,
+        snapshot_stack=None,
+    ):
+        record = original_source_record(
+            kind,
+            supplied_path,
+            manifest_dir,
+            snapshot_stack=snapshot_stack,
+        )
+        snapshot_paths.append(Path(record["_resolved_path"]))
+        return record
+
+    def fail_loader(_path):
+        raise RuntimeError("forced dossier loader failure")
+
+    monkeypatch.setattr(dossier_module, "_source_record", tracking_source_record)
+    monkeypatch.setattr(io_module, "load_project", fail_loader)
+
+    with pytest.raises(RuntimeError, match="forced dossier loader failure"):
+        dossier_module.build_dossier("examples/dossier_demo.json")
+
     assert snapshot_paths
     assert all(not path.exists() for path in snapshot_paths)
 

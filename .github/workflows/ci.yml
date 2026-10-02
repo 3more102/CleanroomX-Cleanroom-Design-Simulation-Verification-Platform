@@ -230,8 +230,10 @@ jobs:
           metadata = tomllib.loads(
               Path("pyproject.toml").read_text(encoding="utf-8")
           )
-          assert metadata["project"]["version"] == "0.102.1"
-          assert cleanroomx.__version__ == metadata["project"]["version"]
+          declared_version = metadata["project"]["version"]
+          assert declared_version != "0.102.1"
+          assert ".dev" in declared_version
+          assert cleanroomx.__version__ == declared_version
 
           for path in (
               "/tmp/cleanroomx-loop.json",

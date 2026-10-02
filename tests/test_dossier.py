@@ -1,4 +1,4 @@
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import hashlib
 from pathlib import Path
 
@@ -124,6 +124,39 @@ def test_source_record_snapshot_binds_digest_to_private_exact_bytes(tmp_path) ->
         assert record["sha256"] == hashlib.sha256(original).hexdigest()
 
     assert not snapshot.exists()
+
+
+def test_source_record_snapshot_uses_strict_json_size_ceiling(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_text('{"demo": true}\n', encoding="utf-8")
+    calls = []
+
+    @contextmanager
+    def bounded_snapshot(path, *, max_bytes, suffix):
+        resolved = Path(path)
+        calls.append((resolved, max_bytes, suffix))
+        yield resolved, resolved.stat(), "a" * 64
+
+    monkeypatch.setattr(dossier_module, "stable_file_snapshot", bounded_snapshot)
+
+    with ExitStack() as snapshots:
+        record = _source_record(
+            "demo",
+            "input.json",
+            tmp_path,
+            snapshot_stack=snapshots,
+        )
+
+    assert calls == [
+        (
+            source.resolve(),
+            dossier_module.STRICT_JSON_FILE_MAX_BYTES,
+            ".json",
+        )
+    ]
+    assert record["sha256"] == "a" * 64
 
 
 def test_build_dossier_routes_sources_through_private_snapshot_pool(monkeypatch) -> None:

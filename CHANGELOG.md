@@ -1,3 +1,7 @@
+## Unreleased — Release 3
+
+- Bounds shared atomic-persistence staged and committed verification hashes to the exact expected byte size, including the initial staged publish fingerprint, so path replacement or file growth cannot trigger unbounded verification reads.
+
 # Changelog
 
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02

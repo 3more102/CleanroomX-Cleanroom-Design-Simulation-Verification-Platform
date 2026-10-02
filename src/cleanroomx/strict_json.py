@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import math
 import os
@@ -12,6 +13,20 @@ STRICT_JSON_FILE_MAX_BYTES = 64 * 1024 * 1024
 
 class StrictJSONError(ValueError):
     """Raised when a value cannot be represented as deterministic strict JSON."""
+
+
+class StrictJSONFileChangedError(StrictJSONError):
+    """Raised when a file-backed JSON input changes during its verified read."""
+
+
+@dataclass(frozen=True)
+class StrictJSONFileSnapshot:
+    """One verified JSON value bound to the exact raw bytes that were parsed."""
+
+    value: Any
+    raw: bytes
+    size: int
+    mtime_ns: int
 
 
 def _json_child_path(path: str, key: str) -> str:
@@ -135,12 +150,12 @@ def _file_revision(stat_result: os.stat_result) -> tuple[int, int, int, int]:
     )
 
 
-def load_strict_json(
+def load_strict_json_snapshot(
     path: str | Path,
     *,
     max_bytes: int | None = None,
-) -> Any:
-    """Read one bounded, revision-stable UTF-8 file through the strict parser."""
+) -> StrictJSONFileSnapshot:
+    """Read and parse one bounded file, retaining the exact verified byte snapshot."""
     source = Path(path)
     limit = STRICT_JSON_FILE_MAX_BYTES if max_bytes is None else max_bytes
     if type(limit) is not int or limit < 1:
@@ -158,7 +173,7 @@ def load_strict_json(
         try:
             current = source.stat()
         except OSError as exc:
-            raise StrictJSONError(
+            raise StrictJSONFileChangedError(
                 f"{source} changed while reading JSON input"
             ) from exc
 
@@ -174,7 +189,9 @@ def load_strict_json(
         or _file_revision(after) != _file_revision(current)
         or len(raw) != after.st_size
     ):
-        raise StrictJSONError(f"{source} changed while reading JSON input")
+        raise StrictJSONFileChangedError(
+            f"{source} changed while reading JSON input"
+        )
 
     try:
         text = raw.decode("utf-8")
@@ -182,4 +199,19 @@ def load_strict_json(
         raise StrictJSONError(
             f"{source} must contain valid UTF-8 JSON text"
         ) from exc
-    return strict_json_loads(text)
+
+    return StrictJSONFileSnapshot(
+        value=strict_json_loads(text),
+        raw=raw,
+        size=len(raw),
+        mtime_ns=after.st_mtime_ns,
+    )
+
+
+def load_strict_json(
+    path: str | Path,
+    *,
+    max_bytes: int | None = None,
+) -> Any:
+    """Read one bounded, revision-stable UTF-8 file through the strict parser."""
+    return load_strict_json_snapshot(path, max_bytes=max_bytes).value

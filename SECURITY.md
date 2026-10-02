@@ -34,6 +34,10 @@ Project saving uses a temporary file followed by replacement to reduce the chanc
 
 Portable project bundles are treated as untrusted archive input. Inspection rejects unsafe paths, duplicate or undeclared members, encryption, unsupported compression, integrity mismatches, and explicit resource-limit violations before extraction is published. Bundle extraction uses a private staging directory and never calls `ZipFile.extractall()`.
 
+## Recovery report presentation safety
+
+Portable Markdown reporting escapes user-controlled recovery-test traceability metadata before rendering. Newlines are kept inside the field as HTML line breaks and Markdown/HTML control characters are escaped so project input cannot forge report headings, list items, tables, or raw HTML through those metadata fields.
+
 ## Operational guidance
 
 - Run CleanroomX with normal user privileges.

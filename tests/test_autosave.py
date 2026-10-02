@@ -411,6 +411,27 @@ def test_source_fingerprint_retries_when_path_is_replaced_during_hash(
     assert fingerprint["sha256"] == sha256(new_bytes).hexdigest()
 
 
+def test_source_fingerprint_rejects_oversized_project_before_read(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "oversized.cleanroomx.json"
+    with path.open("wb") as stream:
+        stream.truncate(autosave_module.PROJECT_FILE_MAX_BYTES + 1)
+
+    original_open = Path.open
+
+    def reject_project_read(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == path and mode == "rb":
+            raise AssertionError("oversized project source must be rejected before reading")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_project_read)
+
+    with pytest.raises(OSError, match="exceeds supported size limit"):
+        source_fingerprint(path)
+
+
 def test_recovery_scan_reports_malformed_artifacts_without_hiding_valid_ones(tmp_path):
     recovery_dir = tmp_path / "recovery"
     source = save_project_document(tmp_path / "project.cleanroomx.json", _project())

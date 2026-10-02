@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -154,7 +155,7 @@ def atomic_write_cli_output(
             if _paths_alias(source, destination):
                 raise CliOutputProtectionError(
                     "CLI output path must be different from protected engineering "
-                    f"input: {source.resolve(strict=False)}"
+                    f"input: {source}"
                 )
 
     assert_distinct()
@@ -163,3 +164,26 @@ def atomic_write_cli_output(
         text,
         before_replace=assert_distinct,
     )
+
+
+def publish_cli_output(
+    command: str,
+    path: str | Path,
+    text: str,
+    *,
+    protected_inputs: Iterable[str | Path] = (),
+) -> bool:
+    """Publish CLI text and report output failures without a Python traceback."""
+    try:
+        atomic_write_cli_output(
+            path,
+            text,
+            protected_inputs=protected_inputs,
+        )
+    except (CliOutputProtectionError, OSError) as exc:
+        print(
+            f"{command}: error: output publication failed: {exc}",
+            file=sys.stderr,
+        )
+        return False
+    return True

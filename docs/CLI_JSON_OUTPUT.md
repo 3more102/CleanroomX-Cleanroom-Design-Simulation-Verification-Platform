@@ -22,5 +22,8 @@ input alias during analysis and then published over that input.
 For single-file studies the protected set contains the study/network/project input.
 `cleanroomx-consistency` protects both source projects. `cleanroomx-dossier`
 protects its manifest plus every declared file-backed dependency resolved relative
-to the manifest directory. This guard is data-loss protection only; it does not
-change solver equations, numerical tolerances, report contents, or exit semantics.
+to the manifest directory. Publication protection or persistence failures are
+reported on stderr as a concise command-prefixed error and return exit code 1
+without a Python traceback; normal engineering/status exit codes are unchanged
+when publication succeeds. This guard is data-loss protection only and does not
+change solver equations, numerical tolerances, or report contents.

@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-import pytest
 
 import cleanroomx.fan_curve_cli as fan_curve_cli
 
@@ -38,7 +37,9 @@ def _stub_fan_curve_cli(monkeypatch, target: Path) -> None:
     )
 
 
-def test_cli_output_replace_failure_preserves_existing_report(tmp_path, monkeypatch):
+def test_cli_output_replace_failure_preserves_existing_report(
+    tmp_path, monkeypatch, capsys
+):
     target = tmp_path / "report.md"
     target.write_text("previous report\n", encoding="utf-8")
     _stub_fan_curve_cli(monkeypatch, target)
@@ -48,9 +49,15 @@ def test_cli_output_replace_failure_preserves_existing_report(tmp_path, monkeypa
 
     monkeypatch.setattr(Path, "replace", fail_replace)
 
-    with pytest.raises(OSError, match="simulated replace failure"):
-        fan_curve_cli.main()
+    assert fan_curve_cli.main() == 1
 
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert (
+        "cleanroomx-fan-curve: error: output publication failed: "
+        "simulated replace failure"
+    ) in captured.err
+    assert "Traceback" not in captured.err
     assert target.read_text(encoding="utf-8") == "previous report\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 

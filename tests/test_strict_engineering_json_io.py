@@ -35,7 +35,12 @@ from cleanroomx.pressure_network_io import load_pressure_network
 from cleanroomx.psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from cleanroomx.qualification_io import load_qualification_uncertainty
 from cleanroomx.recovery_io import load_recovery_test
-from cleanroomx.strict_json import StrictJSONError, load_strict_json, strict_json_loads
+from cleanroomx.strict_json import (
+    StrictJSONError,
+    load_strict_json,
+    load_strict_json_snapshot,
+    strict_json_loads,
+)
 from cleanroomx.thermal_uncertainty_io import load_thermal_uncertainty
 from cleanroomx.uncertainty_io import load_uncertain_room
 
@@ -105,6 +110,19 @@ def test_file_backed_engineering_loaders_reject_oversized_json(
 
     with pytest.raises(StrictJSONError, match="exceeds maximum supported JSON size"):
         loader(source)
+
+
+def test_strict_file_snapshot_retains_exact_verified_bytes(tmp_path: Path) -> None:
+    source = tmp_path / "snapshot.json"
+    payload = b'{"value":1}'
+    source.write_bytes(payload)
+
+    snapshot = load_strict_json_snapshot(source)
+
+    assert snapshot.value == {"value": 1}
+    assert snapshot.raw == payload
+    assert snapshot.size == len(payload)
+    assert snapshot.mtime_ns == source.stat().st_mtime_ns
 
 
 def test_strict_file_loader_accepts_input_at_exact_size_limit(tmp_path: Path) -> None:

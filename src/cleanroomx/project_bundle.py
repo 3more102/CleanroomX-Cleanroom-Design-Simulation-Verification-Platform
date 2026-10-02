@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import copy
 import hashlib
 import json
@@ -8,7 +9,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import tempfile
-from typing import Any, Callable
+from typing import Any, BinaryIO, Callable, Iterator
 import unicodedata
 import zipfile
 
@@ -645,30 +646,153 @@ def _manifest_reference_set(dependencies: list[dict[str, Any]]) -> set[tuple[str
     return references
 
 
-def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
-    """Validate bundle structure, hashes, project schema, and internal references."""
+def _bundle_stat_identity(
+    value: os.stat_result,
+) -> tuple[int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _bundle_opened_path_matches(
+    path_stat: os.stat_result,
+    opened_stat: os.stat_result,
+) -> bool:
+    """Bind an opened archive to its path revision without non-portable Windows IDs."""
+    if opened_stat.st_size != path_stat.st_size:
+        return False
+    if os.name != "nt" and (
+        opened_stat.st_dev != path_stat.st_dev
+        or opened_stat.st_ino != path_stat.st_ino
+    ):
+        return False
+    return True
+
+
+@contextmanager
+def _stable_bundle_snapshot(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+) -> Iterator[tuple[Path, BinaryIO, int, str]]:
+    """Capture one bounded stable archive revision into a private file snapshot."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
     source = Path(path).expanduser()
-    source_resolved = source.resolve(strict=False)
-    try:
-        initial_stat = source_resolved.stat()
-    except OSError as exc:
-        raise ProjectBundleError(f"bundle is unavailable or changing: {source}") from exc
-    if initial_stat.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
-        raise ProjectBundleError(
-            "bundle archive exceeds supported size limit "
-            f"({initial_stat.st_size} > {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+    last_error: OSError | None = None
+
+    for _attempt in range(attempts):
+        try:
+            before_path = source.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+
+        if before_path.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
+            raise ProjectBundleError(
+                "bundle archive exceeds supported size limit "
+                f"({before_path.st_size} > {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+            )
+
+        try:
+            snapshot = tempfile.TemporaryFile(mode="w+b")
+        except OSError as exc:
+            raise ProjectBundleError(
+                "could not create private bundle verification snapshot"
+            ) from exc
+
+        try:
+            digest = hashlib.sha256()
+            size = 0
+            try:
+                with source.open("rb") as handle:
+                    before_handle = os.fstat(handle.fileno())
+                    if before_handle.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
+                        raise ProjectBundleError(
+                            "bundle archive exceeds supported size limit "
+                            f"({before_handle.st_size} > "
+                            f"{_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+                        )
+                    for chunk in iter(
+                        lambda: handle.read(_COPY_CHUNK_SIZE),
+                        b"",
+                    ):
+                        size += len(chunk)
+                        if size > _MAX_BUNDLE_ARCHIVE_BYTES:
+                            raise ProjectBundleError(
+                                "bundle archive exceeds supported size limit "
+                                f"(more than {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+                            )
+                        digest.update(chunk)
+                        try:
+                            snapshot.write(chunk)
+                        except OSError as exc:
+                            raise ProjectBundleError(
+                                "could not write private bundle verification snapshot"
+                            ) from exc
+                    after_handle = os.fstat(handle.fileno())
+                after_path = source.stat()
+            except ProjectBundleError:
+                raise
+            except OSError as exc:
+                last_error = exc
+                continue
+
+            if (
+                not _bundle_opened_path_matches(before_path, before_handle)
+                or _bundle_stat_identity(before_handle)
+                != _bundle_stat_identity(after_handle)
+                or _bundle_stat_identity(before_path)
+                != _bundle_stat_identity(after_path)
+                or size != after_handle.st_size
+            ):
+                last_error = OSError(
+                    f"bundle changed while capturing verification snapshot: {source}"
+                )
+                continue
+
+            try:
+                snapshot.flush()
+                snapshot.seek(0)
+            except OSError as exc:
+                raise ProjectBundleError(
+                    "could not finalize private bundle verification snapshot"
+                ) from exc
+
+            try:
+                yield source, snapshot, size, digest.hexdigest()
+            finally:
+                snapshot.close()
+            return
+        finally:
+            if not snapshot.closed:
+                snapshot.close()
+
+    if last_error is None:
+        last_error = OSError(
+            f"could not capture stable bundle verification snapshot: {source}"
         )
+    raise ProjectBundleError(
+        f"bundle is unavailable or changing: {source}"
+    ) from last_error
+
+
+def _inspect_project_bundle_snapshot(
+    source: Path,
+    snapshot: BinaryIO,
+    *,
+    bundle_size_bytes: int,
+    bundle_sha256: str,
+) -> dict[str, Any]:
+    """Validate one exact private bundle snapshot and bind evidence to its bytes."""
+    snapshot.seek(0)
     try:
-        bundle_before_stat, bundle_before_sha256 = stable_file_sha256(source_resolved)
-    except OSError as exc:
-        raise ProjectBundleError(f"bundle is unavailable or changing: {source}") from exc
-    if bundle_before_stat.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
-        raise ProjectBundleError(
-            "bundle archive exceeds supported size limit after fingerprinting "
-            f"({bundle_before_stat.st_size} > {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
-        )
-    try:
-        with zipfile.ZipFile(source, mode="r") as archive:
+        with zipfile.ZipFile(snapshot, mode="r") as archive:
             infos = archive.infolist()
             if len(infos) > _MAX_DEPENDENCY_COUNT + 2:
                 raise ProjectBundleError(
@@ -810,22 +934,12 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
     except zipfile.BadZipFile as exc:
         raise ProjectBundleError("file is not a valid CleanroomX project bundle") from exc
 
-    try:
-        bundle_after_stat, bundle_after_sha256 = stable_file_sha256(source_resolved)
-    except OSError as exc:
-        raise ProjectBundleError(f"bundle changed during verification: {source}") from exc
-    if (
-        bundle_before_stat.st_size != bundle_after_stat.st_size
-        or bundle_before_sha256 != bundle_after_sha256
-    ):
-        raise ProjectBundleError(f"bundle changed during verification: {source}")
-
     return {
         "schema": PROJECT_BUNDLE_SCHEMA,
         "schema_version": PROJECT_BUNDLE_SCHEMA_VERSION,
         "bundle_path": str(source),
-        "bundle_sha256": bundle_before_sha256,
-        "bundle_size_bytes": bundle_before_stat.st_size,
+        "bundle_sha256": bundle_sha256,
+        "bundle_size_bytes": bundle_size_bytes,
         "manifest_sha256": _sha256_bytes(manifest_bytes),
         "manifest_size_bytes": len(manifest_bytes),
         "project_name": bundled_project.name,
@@ -840,6 +954,22 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
     }
 
 
+def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
+    """Validate one exact bounded archive snapshot and return bound integrity evidence."""
+    with _stable_bundle_snapshot(path) as (
+        source,
+        snapshot,
+        bundle_size_bytes,
+        bundle_sha256,
+    ):
+        return _inspect_project_bundle_snapshot(
+            source,
+            snapshot,
+            bundle_size_bytes=bundle_size_bytes,
+            bundle_sha256=bundle_sha256,
+        )
+
+
 def _fsync_staged_directory_tree(root: Path) -> None:
     """Persist staged directory entries before the tree is atomically published."""
     directories = [item for item in root.rglob("*") if item.is_dir()]
@@ -849,13 +979,13 @@ def _fsync_staged_directory_tree(root: Path) -> None:
     _fsync_directory(root)
 
 
-def extract_project_bundle(
-    path: str | Path,
+def _extract_project_bundle_snapshot(
+    source: Path,
+    snapshot: BinaryIO,
+    report: dict[str, Any],
     destination: str | Path,
 ) -> Path:
-    """Verify and transactionally extract a bundle into a new or empty directory."""
-    source = Path(path).expanduser()
-    report = inspect_project_bundle(source)
+    """Transactionally extract one already-verified private bundle snapshot."""
     target = Path(destination).expanduser().resolve(strict=False)
     if target.exists():
         if not target.is_dir():
@@ -889,7 +1019,8 @@ def extract_project_bundle(
             },
         }
         try:
-            with zipfile.ZipFile(source, mode="r") as archive:
+            snapshot.seek(0)
+            with zipfile.ZipFile(snapshot, mode="r") as archive:
                 for member, (expected_size, expected_sha256) in expected.items():
                     safe = _safe_archive_path(member, field="archive member")
                     output = stage.joinpath(*safe.parts)
@@ -949,3 +1080,29 @@ def extract_project_bundle(
             shutil.rmtree(stage, ignore_errors=True)
 
     return target.joinpath(*PurePosixPath(report["project_path"]).parts)
+
+
+def extract_project_bundle(
+    path: str | Path,
+    destination: str | Path,
+) -> Path:
+    """Verify and transactionally extract one immutable bundle snapshot."""
+    with _stable_bundle_snapshot(path) as (
+        source,
+        snapshot,
+        bundle_size_bytes,
+        bundle_sha256,
+    ):
+        report = _inspect_project_bundle_snapshot(
+            source,
+            snapshot,
+            bundle_size_bytes=bundle_size_bytes,
+            bundle_sha256=bundle_sha256,
+        )
+        return _extract_project_bundle_snapshot(
+            source,
+            snapshot,
+            report,
+            destination,
+        )
+

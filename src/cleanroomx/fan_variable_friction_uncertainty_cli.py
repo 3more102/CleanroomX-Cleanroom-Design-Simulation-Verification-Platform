@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 from .fan_variable_friction_uncertainty import (
     analyze_fan_variable_friction_loop_uncertainty,
 )
@@ -55,11 +55,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-fan-loop-friction-uncertainty",
             args.output,
             text,
             protected_inputs=(args.study,),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 0 if result["status"] == "complete" else 2

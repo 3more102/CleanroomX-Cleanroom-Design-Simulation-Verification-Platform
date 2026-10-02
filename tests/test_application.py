@@ -637,46 +637,35 @@ def test_dossier_analysis_uses_same_external_dependency_guard(tmp_path, monkeypa
     assert raised.value.changes[0]["status"] == "changed_during_run"
 
 
-def test_external_dependency_fingerprint_retries_a_torn_read(tmp_path, monkeypatch):
-    _copy_example(tmp_path, "facility_project.json")
-    _copy_example(tmp_path, "consistency_hvac_demo.json")
-    payload = {
-        "verification_project": "facility_project.json",
-        "hvac_project": "consistency_hvac_demo.json",
-    }
-    target = tmp_path / "facility_project.json"
-    original_sha256_file = application_module._sha256_file
-    calls = {"count": 0}
+def test_external_dependency_fingerprint_uses_shared_stable_file_authority(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "dependency.json"
+    target.write_bytes(b'{"value":1}\n')
+    metadata = target.stat()
+    expected = hashlib.sha256(target.read_bytes()).hexdigest()
+    calls = []
 
-    def mutate_after_first_hash(path):
-        digest = original_sha256_file(path)
-        if path == target and calls["count"] == 0:
-            calls["count"] += 1
-            path.write_text(
-                path.read_text(encoding="utf-8") + "\n",
-                encoding="utf-8",
-            )
-        return digest
+    def shared_stable_hash(path, *, attempts):
+        calls.append((Path(path), attempts))
+        return metadata, expected
 
     monkeypatch.setattr(
         application_module,
-        "_sha256_file",
-        mutate_after_first_hash,
+        "stable_file_sha256",
+        shared_stable_hash,
     )
 
-    run = run_analysis("consistency", payload, base_dir=tmp_path)
+    fingerprint = application_module._stable_file_fingerprint(target)
 
-    provenance = run.diagnostics["application_execution_provenance"]
-    verification = next(
-        item
-        for item in provenance["external_dependencies"]
-        if item["field"] == "verification_project"
-    )
-    expected = hashlib.sha256(target.read_bytes()).hexdigest()
-    assert calls["count"] == 1
-    assert verification["sha256_before"] == expected
-    assert verification["sha256_after"] == expected
-    assert verification["stable_during_run"] is True
+    assert calls == [
+        (target, application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS)
+    ]
+    assert fingerprint == {
+        "size_bytes": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+        "sha256": expected,
+    }
 
 
 def test_analysis_run_preserves_legacy_positional_constructor_shape():

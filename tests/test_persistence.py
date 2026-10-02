@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import os
 from pathlib import Path
 import stat
@@ -15,6 +16,36 @@ from cleanroomx.persistence import (
     atomic_write_bytes,
     atomic_write_text,
 )
+
+
+def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source.json"
+    replacement = tmp_path / "replacement.json"
+    original_bytes = b'{"revision":1}\n'
+    replacement_bytes = b'{"revision":2}\n'
+    source.write_bytes(original_bytes)
+    replacement.write_bytes(replacement_bytes)
+
+    original_open = Path.open
+    substituted = False
+
+    def transient_replacement_open(self, *args, **kwargs):
+        nonlocal substituted
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == source and mode == "rb" and not substituted:
+            substituted = True
+            return original_open(replacement, *args, **kwargs)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", transient_replacement_open)
+
+    metadata, digest = persistence.stable_file_sha256(source, attempts=2)
+
+    assert substituted is True
+    assert metadata.st_size == len(original_bytes)
+    assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
 def test_atomic_text_write_uses_exact_utf8_bytes_and_creates_parent(tmp_path):

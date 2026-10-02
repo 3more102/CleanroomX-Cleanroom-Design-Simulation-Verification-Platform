@@ -97,6 +97,73 @@ def test_python_tree_fingerprint_is_deterministic_cached_and_content_sensitive(t
     assert changed["sha256"] != first["sha256"]
 
 
+def test_python_tree_manifest_rejects_oversized_source_before_read(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "oversized.py"
+    with source.open("wb") as stream:
+        stream.truncate(application_module._RUNTIME_SOURCE_FILE_MAX_BYTES + 1)
+
+    original_open = Path.open
+
+    def reject_source_read(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == source and mode == "rb":
+            raise AssertionError("oversized runtime source must be rejected before read")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_source_read)
+
+    with pytest.raises(RuntimeError, match="source file exceeds supported size limit"):
+        application_module._python_tree_manifest(root)
+
+
+def test_python_tree_hash_bounds_read_to_observed_source_size(tmp_path, monkeypatch):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    manifest = application_module._python_tree_manifest(root)
+    requested_sizes = []
+    original_open = Path.open
+
+    class BoundedReadProxy:
+        def __init__(self, handle):
+            self._handle = handle
+
+        def __enter__(self):
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._handle.__exit__(exc_type, exc, tb)
+
+        def fileno(self):
+            return self._handle.fileno()
+
+        def read(self, size=-1):
+            requested_sizes.append(size)
+            return self._handle.read(size)
+
+    def bounded_open(self, *args, **kwargs):
+        handle = original_open(self, *args, **kwargs)
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == source and mode == "rb":
+            return BoundedReadProxy(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", bounded_open)
+
+    application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
+
+    assert requested_sizes == [source.stat().st_size + 1]
+
+
 def test_python_tree_fingerprint_rejects_opened_source_revision_change(
     tmp_path,
     monkeypatch,

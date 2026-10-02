@@ -36,6 +36,7 @@ from .strict_json import (
     StrictJSONError,
     StrictJSONFileChangedError,
     StrictJSONFileSnapshot,
+    StrictJSONSizeError,
     clone_strict_json,
     load_strict_json_snapshot,
 )
@@ -665,6 +666,10 @@ def _load_project_snapshot(
         ) from exc
     except StrictJSONFileChangedError:
         raise
+    except StrictJSONSizeError as exc:
+        raise ProjectFormatError(
+            _project_file_size_message(exc.observed_size)
+        ) from exc
     except StrictJSONError as exc:
         if isinstance(exc.__cause__, UnicodeDecodeError):
             decode_error = exc.__cause__

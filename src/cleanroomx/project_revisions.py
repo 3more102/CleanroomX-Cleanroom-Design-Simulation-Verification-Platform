@@ -24,7 +24,7 @@ from .project import (
     project_from_dict,
     project_save_lock,
 )
-from .strict_json import StrictJSONError, strict_json_loads
+from .strict_json import StrictJSONError, load_strict_json, strict_json_loads
 
 
 PROJECT_REVISION_SCHEMA = "cleanroomx.project-revision"
@@ -218,24 +218,18 @@ def _load_payload(path: Path) -> dict[str, Any]:
             f"project revision artifact size {size_bytes} bytes exceeds maximum "
             f"supported size of {max_bytes} bytes"
         )
-    with path.open("rb") as handle:
-        raw = handle.read(max_bytes + 1)
-    if len(raw) > max_bytes:
-        raise ProjectRevisionError(
-            f"project revision artifact size exceeds maximum supported size "
-            f"of {max_bytes} bytes"
-        )
     try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise ProjectRevisionError("project revision must be UTF-8 text") from exc
-    try:
-        data = strict_json_loads(text)
+        data = load_strict_json(path, max_bytes=max_bytes)
     except json.JSONDecodeError as exc:
         raise ProjectRevisionError(
             f"invalid project revision JSON at line {exc.lineno}, column {exc.colno}"
         ) from exc
     except StrictJSONError as exc:
+        if "exceeds maximum supported JSON size" in str(exc):
+            raise ProjectRevisionError(
+                "project revision artifact size exceeds maximum supported size "
+                f"of {max_bytes} bytes"
+            ) from exc
         raise ProjectRevisionError(
             f"invalid project revision strict JSON: {exc}"
         ) from exc

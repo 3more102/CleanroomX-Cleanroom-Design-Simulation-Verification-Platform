@@ -32,6 +32,7 @@ from cleanroomx.fan_variable_friction_uncertainty_io import (
 from cleanroomx.fan_variable_friction_uncertainty_report import (
     markdown_fan_variable_friction_loop_uncertainty_report,
 )
+from cleanroomx.markdown import markdown_text
 
 
 def _example_data() -> dict:
@@ -3989,3 +3990,32 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         "Maximum iteration-limit remaining-bracket binary-width consistency error"
         in report
     )
+
+
+
+def test_report_escapes_edge_names_outside_inline_code() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    malicious = "Edge` | field\n## forged <tag> *x*"
+    scenario_malicious = "Scenario` | field\n## forged <scenario> *x*"
+    if result.get("fan_curve_scenarios"):
+        result["fan_curve_scenarios"][0]["name"] = scenario_malicious
+    intervals = result["input_intervals"]["edge_local_loss_coefficient"]
+    first_name = next(iter(intervals))
+    intervals[malicious] = intervals.pop(first_name)
+    result["traceability"]["complete"] = False
+    result["traceability"]["missing_provenance"] = [f"edge:{malicious}"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    escaped = markdown_text(malicious)
+
+    assert f"Edge **{escaped}** local-loss coefficient K" in report
+    assert f"edge:{escaped}" in report
+    if result.get("fan_curve_scenarios"):
+        assert f"**{markdown_text(scenario_malicious)}**:" in report
+        assert "<scenario>" not in report
+    assert "\n## forged" not in report
+    assert "<tag>" not in report

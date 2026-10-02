@@ -8,11 +8,13 @@ import pytest
 
 import cleanroomx.gui as gui_module
 import cleanroomx.project as project_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.persistence import AtomicWriteDurabilityError
 from cleanroomx.project import (
     ProjectDocument,
     ProjectFileBusyError,
+    ProjectFormatError,
     ProjectSaveDurabilityError,
     ProjectWriteConflictError,
     capture_project_file_revision,
@@ -46,20 +48,29 @@ class Value:
         self.value = value
 
 
-def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
+def test_stable_load_retries_when_snapshot_reports_revision_change(
+    tmp_path, monkeypatch
+):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
+    original_snapshot = project_module.load_strict_json_snapshot
     calls = {"count": 0}
 
-    def changing_load(source):
-        project = original_load(source)
+    def changing_snapshot(source, *, max_bytes=None):
         if calls["count"] == 0:
+            calls["count"] += 1
             save_project_document(path, ProjectDocument(name="Second"))
+            raise project_module.StrictJSONFileChangedError(
+                f"{source} changed while reading JSON input"
+            )
         calls["count"] += 1
-        return project
+        return original_snapshot(source, max_bytes=max_bytes)
 
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+    monkeypatch.setattr(
+        project_module,
+        "load_strict_json_snapshot",
+        changing_snapshot,
+    )
 
     project, revision = load_project_document_with_revision(path)
 
@@ -86,20 +97,23 @@ def test_migration_aware_stable_load_retries_and_rebinds_provenance(
         }),
         encoding="utf-8",
     )
-    original_load = project_module.load_project_document_with_migration_info
+    original_snapshot = project_module.load_strict_json_snapshot
     calls = {"count": 0}
 
-    def changing_load(source):
-        loaded = original_load(source)
+    def changing_snapshot(source, *, max_bytes=None):
         if calls["count"] == 0:
+            calls["count"] += 1
             save_project_document(path, ProjectDocument(name="Current"))
+            raise project_module.StrictJSONFileChangedError(
+                f"{source} changed while reading JSON input"
+            )
         calls["count"] += 1
-        return loaded
+        return original_snapshot(source, max_bytes=max_bytes)
 
     monkeypatch.setattr(
         project_module,
-        "load_project_document_with_migration_info",
-        changing_load,
+        "load_strict_json_snapshot",
+        changing_snapshot,
     )
 
     project, revision, migration_info = load_project_document_with_revision_info(path)
@@ -109,6 +123,153 @@ def test_migration_aware_stable_load_retries_and_rebinds_provenance(
     assert migration_info.migrated is False
     assert migration_info.source_schema_version == 1
     assert revision == capture_project_file_revision(path)
+
+
+def test_revision_aware_load_cannot_bind_separate_transient_parse(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="First"))
+    original_load = project_module.load_project_document
+    calls = {"count": 0}
+
+    def transient_separate_load(source):
+        calls["count"] += 1
+        save_project_document(path, ProjectDocument(name="Transient"))
+        loaded = original_load(source)
+        save_project_document(path, ProjectDocument(name="First"))
+        return loaded
+
+    monkeypatch.setattr(
+        project_module,
+        "load_project_document",
+        transient_separate_load,
+    )
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert calls["count"] == 0
+    assert project.name == "First"
+    assert revision == capture_project_file_revision(path)
+
+
+def test_revision_aware_load_binds_revision_to_bytes_supplied_to_parser(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    alternate = tmp_path / "alternate.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Parsed snapshot"))
+    save_project_document(alternate, ProjectDocument(name="Later path contents"))
+    parsed_bytes = path.read_bytes()
+    later_bytes = alternate.read_bytes()
+    original_parser = strict_json_module.strict_json_loads
+    parser_inputs = []
+
+    def mutate_path_after_verified_read(text):
+        raw = text.encode("utf-8")
+        parser_inputs.append(raw)
+        path.write_bytes(later_bytes)
+        return original_parser(text)
+
+    monkeypatch.setattr(
+        strict_json_module,
+        "strict_json_loads",
+        mutate_path_after_verified_read,
+    )
+
+    project, revision = load_project_document_with_revision(path, attempts=1)
+
+    assert parser_inputs == [parsed_bytes]
+    assert project.name == "Parsed snapshot"
+    assert revision.size == len(parsed_bytes)
+    assert revision.sha256 == project_module.sha256(parsed_bytes).hexdigest()
+    assert path.read_bytes() == later_bytes
+    assert revision.sha256 != project_module.sha256(later_bytes).hexdigest()
+
+
+def test_revision_aware_load_preserves_project_invalid_utf8_diagnostic(tmp_path):
+    path = tmp_path / "invalid-utf8.cleanroomx.json"
+    path.write_bytes(b'{"schema":"cleanroomx.project","name":"\xff"}')
+
+    with pytest.raises(
+        ProjectFormatError,
+        match="project file must contain valid UTF-8 text",
+    ) as raised:
+        load_project_document_with_revision(path)
+
+    assert "invalid byte sequence at offset" in str(raised.value)
+    assert isinstance(raised.value.__cause__, strict_json_module.StrictJSONError)
+    assert isinstance(raised.value.__cause__.__cause__, UnicodeDecodeError)
+
+
+def test_revision_aware_load_preserves_project_size_ceiling(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.cleanroomx.json"
+    path.write_bytes(b"x" * 65)
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+
+    with pytest.raises(OSError, match="exceeds maximum supported size"):
+        load_project_document_with_revision(path)
+
+
+def test_revision_aware_load_rejects_live_path_replacement(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Stable"))
+    replacement = tmp_path / "replacement.cleanroomx.json"
+    save_project_document(replacement, ProjectDocument(name="Replacement"))
+    real_stat = strict_json_module.Path.stat
+    replacement_stat = real_stat(replacement)
+    normalized = path.resolve(strict=False)
+
+    def report_replacement(self, *args, **kwargs):
+        if self == normalized:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(strict_json_module.Path, "stat", report_replacement)
+
+    with pytest.raises(OSError, match="changed repeatedly while opening"):
+        load_project_document_with_revision(path, attempts=1)
+
+
+def test_revision_aware_load_rejects_live_path_disappearance(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Stable"))
+    real_stat = strict_json_module.Path.stat
+    normalized = path.resolve(strict=False)
+
+    def disappear(self, *args, **kwargs):
+        if self == normalized:
+            raise FileNotFoundError(str(normalized))
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(strict_json_module.Path, "stat", disappear)
+
+    with pytest.raises(OSError, match="changed repeatedly while opening"):
+        load_project_document_with_revision(path, attempts=1)
+
+
+def test_revision_aware_load_rejects_opened_file_revision_change(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Stable"))
+    larger = tmp_path / "larger.cleanroomx.json"
+    larger.write_bytes(path.read_bytes() + b" ")
+    original_stat = path.stat()
+    larger_stat = larger.stat()
+    real_fstat = strict_json_module.os.fstat
+    calls = {"count": 0}
+
+    def changing_fstat(fd):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return original_stat
+        if calls["count"] == 2:
+            return larger_stat
+        return real_fstat(fd)
+
+    monkeypatch.setattr(strict_json_module.os, "fstat", changing_fstat)
+
+    with pytest.raises(OSError, match="changed repeatedly while opening"):
+        load_project_document_with_revision(path, attempts=1)
 
 
 def test_guarded_save_rejects_external_content_change(tmp_path):

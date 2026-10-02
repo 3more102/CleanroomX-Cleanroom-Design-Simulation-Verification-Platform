@@ -378,3 +378,122 @@ def test_gui_input_import_uses_bounded_strict_json_reader(
     assert errors
     assert errors[-1][0] == "Import failed"
     assert "exceeds maximum supported JSON size" in errors[-1][1]
+
+
+
+def test_gui_input_import_rejects_live_path_identity_replacement(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "input.json"
+    replacement = tmp_path / "replacement.json"
+    source.write_text('{"revision": 1}\n', encoding="utf-8")
+    replacement.write_text('{"revision": 2}\n', encoding="utf-8")
+    original_input = {"sentinel": True}
+    analysis = AnalysisDocument(
+        id="room",
+        name="Room",
+        kind="room_verification",
+        input=dict(original_input),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app._current_analysis = lambda: analysis
+    app._base_dir = lambda: tmp_path
+    app._perform_project_edit = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("replaced-path input must fail before project mutation")
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(source),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "rebase_analysis_file_references",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("rebasing must not run after an unstable file read")
+        ),
+    )
+
+    real_stat = Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement_identity(self: Path, *args, **kwargs):
+        if self == source:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", report_replacement_identity)
+
+    app.import_input_json()
+
+    assert analysis.input == original_input
+    assert errors
+    assert errors[-1][0] == "Import failed"
+    assert "changed while reading JSON input" in errors[-1][1]
+
+
+def test_gui_input_import_rebases_after_revision_stable_read(
+    monkeypatch,
+    tmp_path,
+):
+    source_dir = tmp_path / "imports"
+    source_dir.mkdir()
+    source = source_dir / "input.json"
+    source.write_text('{"value": 7}\n', encoding="utf-8")
+    target_base = tmp_path / "project"
+    target_base.mkdir()
+    analysis = AnalysisDocument(
+        id="room",
+        name="Room",
+        kind="room_verification",
+        input={"sentinel": "old"},
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app._current_analysis = lambda: analysis
+    app._base_dir = lambda: target_base
+    app._perform_project_edit = lambda _description, mutate: mutate()
+    app._invalidate_last_run_for = lambda _analysis_id: None
+    app._load_analysis_into_editor = lambda _analysis: None
+    app._update_title = lambda: None
+    app.status_var = _Status()
+
+    calls = {}
+
+    def record_rebase(kind, payload, *, source_base, target_base):
+        calls["kind"] = kind
+        calls["payload"] = payload
+        calls["source_base"] = source_base
+        calls["target_base"] = target_base
+        return {"rebased": True}
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(source),
+    )
+    monkeypatch.setattr(
+        gui_module.rebase_analysis_file_references,
+        record_rebase,
+    )
+
+    app.import_input_json()
+
+    assert calls["kind"] == analysis.kind
+    assert calls["payload"] == {"value": 7}
+    assert calls["source_base"] == source.parent
+    assert calls["target_base"] == target_base
+    assert analysis.input == {"rebased": True}

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — canonical assurance snapshot ingestion — 2026-10-02
+
+- Routes design-assurance input and snapshot ingestion through the shared bounded `persistence.stable_file_snapshot()` authority instead of maintaining a separate path/descriptor reader.
+- Parses only the private digest-bound bytes captured by that authority, so later live-path replacement cannot substitute different content after revision capture.
+- Preserves the 16 MiB assurance-input ceiling, 64 MiB snapshot ceiling, UTF-8/strict-JSON validation, snapshot schema, deterministic replay, protected-output behavior, and engineering verdict semantics.
+- Adds a regression that mutates the live input immediately after canonical capture and proves analysis still consumes the exact captured revision.
+
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
 
 - Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.

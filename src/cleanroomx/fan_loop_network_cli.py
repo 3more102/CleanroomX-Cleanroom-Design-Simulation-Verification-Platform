@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 from .fan_loop_network import solve_fan_loop_network
 from .fan_loop_network_io import load_fan_loop_network_study
 from .fan_loop_network_report import markdown_fan_loop_network_report
@@ -37,11 +37,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-fan-loop",
             args.output,
             text,
             protected_inputs=(args.study,),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 0 if result["status"] == "solved" else 2

@@ -48,6 +48,39 @@ def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
+def test_stable_file_snapshot_binds_digest_to_private_exact_bytes_and_cleans_up(
+    tmp_path,
+):
+    source = tmp_path / "facility.ifc"
+    payload = b"ISO-10303-21;\nDATA;\nENDSEC;\n"
+    source.write_bytes(payload)
+
+    with persistence.stable_file_snapshot(
+        source,
+        max_bytes=len(payload),
+        suffix=".ifc",
+    ) as (snapshot, metadata, digest):
+        captured_snapshot = snapshot
+        assert snapshot != source
+        assert snapshot.name == "snapshot.ifc"
+        assert snapshot.read_bytes() == payload
+        assert metadata.st_size == len(payload)
+        assert digest == hashlib.sha256(payload).hexdigest()
+
+    assert not captured_snapshot.exists()
+
+
+def test_stable_file_snapshot_rejects_oversized_source_without_publishing_snapshot(
+    tmp_path,
+):
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"1234")
+
+    with pytest.raises(OSError, match="exceeds supported size limit"):
+        with persistence.stable_file_snapshot(source, max_bytes=3):
+            raise AssertionError("oversized snapshot must never be yielded")
+
+
 def test_atomic_text_write_uses_exact_utf8_bytes_and_creates_parent(tmp_path):
     target = tmp_path / "nested" / "report.txt"
 

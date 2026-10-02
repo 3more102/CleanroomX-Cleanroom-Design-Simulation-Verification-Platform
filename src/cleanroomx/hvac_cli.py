@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import dumps_strict_json, publish_cli_output
 from .hvac import analyze_hvac_project
 from .hvac_io import load_hvac_project
 from .hvac_report import markdown_hvac_report
@@ -38,11 +38,13 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_cli_output(
+        if not publish_cli_output(
+            "cleanroomx-hvac",
             args.output,
             text,
             protected_inputs=(args.project,),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 0

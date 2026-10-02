@@ -23,3 +23,8 @@ UTF-8 decoding, duplicate-key rejection, non-finite-number rejection, and
 nesting handling continue through the existing strict JSON parser. These are
 input-safety controls; they do not change engineering equations, tolerances,
 units, or acceptance criteria.
+
+The desktop **File → Import Analysis Input JSON...** workflow uses this same
+bounded, revision-stable reader before rebasing any file references from the
+import source directory into the active project directory. A failed read leaves
+the current analysis input unchanged.

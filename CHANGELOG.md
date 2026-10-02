@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — bounded portable bundle export fingerprinting — 2026-10-02
+
+- Applies the existing portable-bundle dependency and archive byte ceilings directly to stable SHA-256 reads during export, not only to pre-read metadata checks.
+- Prevents a dependency that grows after its initial size check from forcing an unbounded fingerprint read before packaging.
+- Bounds the post-publication bundle fingerprint as well, so a replaced destination cannot trigger an unbounded read before export evidence is returned.
+- Reuses the shared stable-file fingerprint authority and changes no bundle schema, project schema, solver equation, requirement criterion, or verification verdict.
+- Adds focused regression coverage proving every portable-bundle export fingerprint call carries the appropriate hard byte ceiling.
+
 ## Unreleased Release 3 — bounded autosave source fingerprinting — 2026-10-02
 
 - Bounds autosave/recovery source-project fingerprint reads to the canonical 64 MiB project-file ceiling already enforced by project loading.

@@ -688,6 +688,16 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
                         "bundle archive member names collide on portable filesystems: "
                         f"{previous_name!r} and {info.filename!r}"
                     )
+                for existing_key, existing_name in portable_names.items():
+                    if len(existing_key) == len(portable_key):
+                        continue
+                    shared_length = min(len(existing_key), len(portable_key))
+                    if existing_key[:shared_length] == portable_key[:shared_length]:
+                        raise ProjectBundleError(
+                            "bundle archive member names collide as file/directory "
+                            "prefixes on portable filesystems: "
+                            f"{existing_name!r} and {info.filename!r}"
+                        )
                 portable_names[portable_key] = info.filename
                 if info.is_dir():
                     raise ProjectBundleError(

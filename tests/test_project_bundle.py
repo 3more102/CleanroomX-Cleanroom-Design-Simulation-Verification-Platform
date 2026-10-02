@@ -936,3 +936,24 @@ def test_bundle_extraction_durably_creates_nested_destination_parents(
         tmp_path,
         tmp_path / "handoff",
     ]
+
+@pytest.mark.parametrize(
+    ("first_name", "second_name"),
+    [
+        ("dependencies/input.json", "dependencies/input.json/nested.json"),
+        ("dependencies/Input", "dependencies/input/nested.json"),
+        ("dependencies/é", "dependencies/e\u0301/nested.json"),
+    ],
+)
+def test_bundle_verifier_rejects_portable_file_directory_prefix_collisions(
+    tmp_path, first_name, second_name
+):
+    malicious = tmp_path / "prefix-colliding.cleanroomx.zip"
+    with zipfile.ZipFile(malicious, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr(PROJECT_BUNDLE_MANIFEST, b"{}")
+        archive.writestr(first_name, b"first")
+        archive.writestr(second_name, b"second")
+
+    with pytest.raises(ProjectBundleError, match="file/directory prefixes"):
+        inspect_project_bundle(malicious)
+

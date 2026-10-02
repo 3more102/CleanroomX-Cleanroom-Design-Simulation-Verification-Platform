@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — portable bundle namespace hardening — 2026-10-02
+
+- Rejects archive member file/directory ancestor collisions before manifest parsing and extraction.
+- Applies the collision check after Unicode NFC normalization plus case folding so case-insensitive and canonically equivalent path aliases fail closed consistently across portable filesystems.
+- Preserves bundle schema version 1, deterministic ZIP output, payload limits, integrity checks, solver behavior, and engineering acceptance semantics.
+
 ## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
 
 - Routes every standalone file-backed engineering CLI through one protected atomic output writer.

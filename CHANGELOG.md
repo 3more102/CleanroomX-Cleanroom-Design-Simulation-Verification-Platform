@@ -8,6 +8,15 @@
 - Adds focused regression coverage for path/descriptor ABA-style substitution recovery and for the application layer's use of the shared stable-file authority.
 - Changes no solver equation, numerical tolerance, engineering-unit convention, requirement criterion, verification verdict, or release identity.
 
+## Unreleased Release 3 — exact portable bundle verification snapshot — 2026-10-02
+
+- Captures each portable bundle into one bounded, revision-stable private archive snapshot before ZIP verification.
+- Binds reported bundle SHA-256/byte-size evidence to the exact archive bytes whose ZIP structure, manifest, project, dependencies, hashes, and references are verified, removing the separate fingerprint/open/fingerprint ABA window.
+- Reuses that same verified snapshot for transactional extraction, while retaining a final live-source SHA-256/size recheck before publication so a changed original bundle still fails closed.
+- Preserves existing archive/member resource ceilings, path-safety rules, schema validation, transactional extraction durability, and project/dependency integrity checks.
+- Adds regression coverage proving a separate transient archive read cannot substitute different contents for the digest-bound verified snapshot.
+- Changes no solver equation, numerical tolerance, engineering-unit convention, project schema, bundle schema, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — runtime source fingerprint revision binding — 2026-10-02
 
 - Binds every Python source file included in application execution provenance to the exact path-manifest revision observed before hashing and a stable opened-descriptor revision during the read.

@@ -48,6 +48,6 @@ Release 2 keeps validated engineering backends behind a single application bound
 - **Recovery authority:** `cleanroomx.autosave` writes session-isolated recovery artifacts with versioned SHA-256 integrity evidence. Legacy v1 artifacts remain readable as explicitly unverified evidence.
 - **Execution evidence authority:** `cleanroomx.application` isolates and single-parses submitted inputs, rejects mutation of the execution snapshot, records exact input and external-dependency provenance, and freezes completed run evidence.
 - **Run-history authority:** `cleanroomx.run_history` persists a bounded integrity-checked audit ledger without making audit evidence part of undoable design state.
-- **Extension and handoff boundaries:** `cleanroomx.plugins` defines analysis plugin API v1; `cleanroomx.project_bundle` owns verified portable project handoff; `cleanroomx.engineering_report` owns verified self-contained HTML engineering reports.
+- **Extension and handoff boundaries:** `cleanroomx.plugins` defines analysis plugin API v1; `cleanroomx.project_bundle` owns verified portable project handoff and binds verification/extraction to one exact bounded private archive snapshot; `cleanroomx.engineering_report` owns verified self-contained HTML engineering reports.
 
 These boundaries do not intentionally change numerical solver equations, tolerances, or acceptance semantics.

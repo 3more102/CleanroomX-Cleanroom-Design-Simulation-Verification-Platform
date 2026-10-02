@@ -3837,13 +3837,46 @@ class CleanroomXApp:
     ) -> bool:
         target = Path(path)
         try:
-            if before_replace is None:
+            project = getattr(self, "project", None)
+            source = getattr(self, "project_path", None)
+            if source is None:
+                source = getattr(self, "_recovery_source_path", None)
+
+            protect_current_project_inputs = None
+            if project is not None and source is not None:
+                source_path = Path(source)
+
+                def protect_current_project_inputs() -> None:
+                    _assert_project_output_is_safe(
+                        project,
+                        source=source_path,
+                        output=target,
+                    )
+
+                # Reject an already-dangerous selection before creating a
+                # staged file, then repeat the same check at publication time.
+                protect_current_project_inputs()
+
+            effective_before_replace = before_replace
+            if (
+                protect_current_project_inputs is not None
+                and before_replace is not None
+            ):
+                def protect_then_validate_caller() -> None:
+                    protect_current_project_inputs()
+                    before_replace()
+
+                effective_before_replace = protect_then_validate_caller
+            elif protect_current_project_inputs is not None:
+                effective_before_replace = protect_current_project_inputs
+
+            if effective_before_replace is None:
                 atomic_write_text(target, content)
             else:
                 atomic_write_text(
                     target,
                     content,
-                    before_replace=before_replace,
+                    before_replace=effective_before_replace,
                 )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")

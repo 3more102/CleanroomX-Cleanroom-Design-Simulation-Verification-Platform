@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+import cleanroomx.autosave as autosave_module
 from cleanroomx.autosave import (
     RecoveryFormatError,
     quarantine_recovery_artifact,
@@ -30,6 +31,63 @@ def test_quarantine_preserves_invalid_bytes_and_writes_audit_manifest(tmp_path):
     assert manifest["reason"] == "integrity/parse failure"
     assert manifest["size_bytes"] == len(suspect)
     assert manifest["sha256"] == sha256(suspect).hexdigest()
+
+
+def test_quarantine_manifest_binds_to_bytes_moved_into_quarantine(tmp_path, monkeypatch):
+    artifact = tmp_path / "broken.recovery.json"
+    original = b"original suspect bytes"
+    moved = b"replacement suspect bytes"
+    artifact.write_bytes(original)
+
+    real_replace = autosave_module.os.replace
+
+    def mutate_then_replace(source, destination):
+        if source == artifact.resolve():
+            artifact.write_bytes(moved)
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(autosave_module.os, "replace", mutate_then_replace)
+
+    quarantined = quarantine_recovery_artifact(
+        artifact,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+    )
+
+    assert quarantined.path.read_bytes() == moved
+    manifest = json.loads(quarantined.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["size_bytes"] == len(moved)
+    assert manifest["sha256"] == sha256(moved).hexdigest()
+    assert quarantined.sha256 == sha256(moved).hexdigest()
+
+
+def test_quarantine_rollback_never_overwrites_repopulated_recovery_path(
+    tmp_path, monkeypatch
+):
+    artifact = tmp_path / "broken.recovery.json"
+    suspect = b"suspect recovery bytes"
+    newer = b"newer recovery bytes"
+    artifact.write_bytes(suspect)
+
+    def fail_manifest_write(_path, _text):
+        artifact.write_bytes(newer)
+        raise OSError("manifest write blocked")
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", fail_manifest_write)
+
+    with pytest.raises(OSError, match="preserving the quarantined artifact"):
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=tmp_path,
+            reason="parse failure",
+        )
+
+    assert artifact.read_bytes() == newer
+    quarantine_dir = tmp_path / "quarantine"
+    quarantined = list(quarantine_dir.glob("*.quarantined"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == suspect
+    assert list(quarantine_dir.glob("*.quarantined.manifest.json")) == []
 
 
 def test_quarantine_refuses_valid_legacy_recovery(tmp_path):

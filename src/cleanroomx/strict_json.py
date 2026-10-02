@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
+
+
+STRICT_JSON_FILE_MAX_BYTES = 64 * 1024 * 1024
 
 
 class StrictJSONError(ValueError):
@@ -122,11 +126,58 @@ def strict_json_loads(text: str) -> Any:
         ) from exc
 
 
-def load_strict_json(path: str | Path) -> Any:
-    """Read a UTF-8 JSON file through the canonical strict parser."""
+def _file_revision(stat_result: os.stat_result) -> tuple[int, int, int, int]:
+    return (
+        stat_result.st_dev,
+        stat_result.st_ino,
+        stat_result.st_size,
+        stat_result.st_mtime_ns,
+    )
+
+
+def load_strict_json(
+    path: str | Path,
+    *,
+    max_bytes: int | None = None,
+) -> Any:
+    """Read one bounded, revision-stable UTF-8 file through the strict parser."""
     source = Path(path)
+    limit = STRICT_JSON_FILE_MAX_BYTES if max_bytes is None else max_bytes
+    if type(limit) is not int or limit < 1:
+        raise ValueError("max_bytes must be a positive integer")
+
+    with source.open("rb") as stream:
+        before = os.fstat(stream.fileno())
+        if before.st_size > limit:
+            raise StrictJSONError(
+                f"{source} exceeds maximum supported JSON size "
+                f"({before.st_size} > {limit} bytes)"
+            )
+        raw = stream.read(limit + 1)
+        after = os.fstat(stream.fileno())
+        try:
+            current = source.stat()
+        except OSError as exc:
+            raise StrictJSONError(
+                f"{source} changed while reading JSON input"
+            ) from exc
+
+    if len(raw) > limit or after.st_size > limit:
+        observed_size = max(len(raw), after.st_size)
+        raise StrictJSONError(
+            f"{source} exceeds maximum supported JSON size "
+            f"({observed_size} > {limit} bytes)"
+        )
+
+    if (
+        _file_revision(before) != _file_revision(after)
+        or _file_revision(after) != _file_revision(current)
+        or len(raw) != after.st_size
+    ):
+        raise StrictJSONError(f"{source} changed while reading JSON input")
+
     try:
-        text = source.read_text(encoding="utf-8")
+        text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise StrictJSONError(
             f"{source} must contain valid UTF-8 JSON text"

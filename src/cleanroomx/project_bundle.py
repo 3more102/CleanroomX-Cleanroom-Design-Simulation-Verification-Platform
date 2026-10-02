@@ -1053,7 +1053,8 @@ def _extract_project_bundle_snapshot(
 
         try:
             bundle_after_copy_stat, bundle_after_copy_sha256 = stable_file_sha256(
-                source.resolve(strict=False)
+                source.resolve(strict=False),
+                max_bytes=_MAX_BUNDLE_ARCHIVE_BYTES,
             )
         except OSError as exc:
             raise ProjectBundleError("bundle changed during extraction") from exc

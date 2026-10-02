@@ -932,11 +932,17 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
 
     original_fingerprint = bundle_module.stable_file_sha256
     calls = 0
+    observed_limits: list[int | None] = []
 
-    def changed_after_inspection(path):
+    def changed_after_inspection(path, *, attempts=3, max_bytes=None):
         nonlocal calls
         calls += 1
-        stat_result, digest = original_fingerprint(path)
+        observed_limits.append(max_bytes)
+        stat_result, digest = original_fingerprint(
+            path,
+            attempts=attempts,
+            max_bytes=max_bytes,
+        )
         if calls == 1:
             digest = "f" * 64
         return stat_result, digest
@@ -953,6 +959,7 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
 
     assert not destination.exists()
     assert not list(tmp_path.glob(".extracted.*.tmp"))
+    assert observed_limits == [bundle_module._MAX_BUNDLE_ARCHIVE_BYTES]
 
 
 

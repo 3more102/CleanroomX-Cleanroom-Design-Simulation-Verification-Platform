@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded atomic persistence verification — 2026-10-02
+
+- Applies each already-known expected byte size to staged and committed SHA-256 rechecks in the canonical atomic persistence path.
+- Prevents a replaced or growing staged/destination file from forcing an unbounded verification read after its trusted expected size has already been established.
+- Preserves atomic replacement, durability, rollback, file formats, engineering results, requirement criteria, and verification verdict semantics.
+- Adds regressions proving byte ceilings are propagated through both in-memory atomic writes and streamed staged-file publication.
+
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
 
 - Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.

@@ -497,3 +497,64 @@ def test_gui_input_import_rebases_after_revision_stable_read(
     assert calls["source_base"] == source.parent
     assert calls["target_base"] == target_base
     assert analysis.input == {"rebased": True}
+
+
+def test_gui_input_import_rejects_path_replacement_before_mutation(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "input.json"
+    replacement = tmp_path / "replacement.json"
+    source.write_text('{"value": 1}\n', encoding="utf-8")
+    replacement.write_text('{"value": 2, "replacement": true}\n', encoding="utf-8")
+    original_input = {"sentinel": True}
+    analysis = AnalysisDocument(
+        id="room",
+        name="Room",
+        kind="room_verification",
+        input=dict(original_input),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app._current_analysis = lambda: analysis
+    app._base_dir = lambda: tmp_path
+    app._perform_project_edit = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("replaced input must fail before project mutation")
+    )
+
+    errors = []
+    real_stat = Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement_identity(self: Path, *args, **kwargs):
+        if self == source:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(source),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "rebase_analysis_file_references",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("rebase must not run before a revision-stable read")
+        ),
+    )
+    monkeypatch.setattr(Path, "stat", report_replacement_identity)
+
+    app.import_input_json()
+
+    assert analysis.input == original_input
+    assert errors
+    assert errors[-1][0] == "Import failed"
+    assert "changed while reading JSON input" in errors[-1][1]

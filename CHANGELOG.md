@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — protected generic desktop exports — 2026-10-02
+
+- Protects generic desktop input/result/run-bundle/Markdown/HTML exports from overwriting the saved project source, retained recovery source, or declared file-backed engineering dependencies.
+- Detects resolved-path and existing same-file/hardlink aliases before staging output and rechecks protected identities immediately before atomic replacement.
+- Protects absolute declared dependencies for unsaved projects while intentionally leaving unresolved relative references unbound until a project base directory exists.
+- Composes the generic protection boundary with caller-specific publication guards instead of replacing them.
+- Adds focused regressions for direct source/dependency overwrite, hardlink aliases, project/dependency publication races, recovery-source protection, unsaved-project behavior, and guard composition.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, result semantic, or verification verdict semantic.
+
 ## Unreleased Release 3 — project-revision ingestion hardening — 2026-10-02
 
 - Routes saved project-revision envelopes through the canonical bounded, revision-stable strict-JSON file reader while preserving the existing revision-envelope size budget and schema validation.

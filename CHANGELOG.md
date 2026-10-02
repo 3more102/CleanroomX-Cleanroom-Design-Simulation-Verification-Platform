@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — bounded desktop analysis-input ingestion — 2026-10-02
+
+- Routes **Import Analysis Input JSON** through the canonical bounded, revision-stable strict-JSON file reader instead of unbounded text materialization.
+- Applies the shared 64 MiB ceiling and preserves duplicate-key, non-finite-number, invalid-UTF-8, and excessive-nesting rejection.
+- Fails closed when the opened file or live source path changes during ingestion, before file-reference rebasing or project mutation.
+- Adds focused desktop regressions for oversized input and live-path identity replacement, including proof that the existing analysis input remains unchanged on failure.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, verification verdict, or file-reference rebasing semantics.
+
 ## Unreleased Release 3 — development package identity — 2026-10-02
 
 - Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.

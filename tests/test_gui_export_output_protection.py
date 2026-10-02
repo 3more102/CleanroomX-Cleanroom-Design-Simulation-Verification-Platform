@@ -297,3 +297,37 @@ def test_gui_unsaved_project_protects_absolute_dependency(monkeypatch, tmp_path)
     assert errors
     assert "external dependency" in errors[-1][1]
 
+def test_gui_unsaved_project_allows_unresolved_relative_dependencies(tmp_path):
+    output = tmp_path / "result.json"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project_path = None
+    app._recovery_source_path = None
+    app.project = ProjectDocument(
+        name="Unsaved relative dependencies",
+        analyses=[
+            AnalysisDocument(
+                id="consistency",
+                name="Consistency",
+                kind="consistency",
+                input={
+                    "verification_project": "verification.json",
+                    "hvac_project": "hvac.json",
+                    "room_airflow_abs_tolerance_m3_h": 0.0,
+                    "require_same_room_set": True,
+                },
+            )
+        ],
+        active_analysis_id="consistency",
+    )
+    app.status_var = _Status()
+
+    assert app._write_export_file(
+        str(output),
+        "safe export\n",
+        label="Result",
+    ) is True
+
+    assert output.read_text(encoding="utf-8") == "safe export\n"
+

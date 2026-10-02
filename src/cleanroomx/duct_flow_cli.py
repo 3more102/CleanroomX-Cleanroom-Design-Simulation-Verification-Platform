@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import dumps_strict_json, publish_cli_output
 from .duct_flow import solve_parallel_branch_flows
 from .duct_flow_io import load_parallel_flow_network
 from .duct_flow_report import markdown_parallel_flow_report
@@ -38,11 +38,13 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_cli_output(
+        if not publish_cli_output(
+            "cleanroomx-duct-flow",
             args.output,
             text,
             protected_inputs=(args.network,),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 0

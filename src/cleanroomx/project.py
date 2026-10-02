@@ -32,7 +32,13 @@ from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
 )
-from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
+from .strict_json import (
+    StrictJSONError,
+    StrictJSONFileChangedError,
+    clone_strict_json,
+    load_strict_json_snapshot,
+    strict_json_loads,
+)
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
 PROJECT_SCHEMA = "cleanroomx.project"
@@ -792,23 +798,51 @@ def project_save_lock(path: str | Path) -> Iterator[Path]:
         os.close(descriptor)
 
 
-def _load_project_with_stable_revision(
+def _load_project_exact_snapshot(
     path: str | Path,
     *,
-    loader,
     attempts: int,
-):
-    """Run one loader against a revision that remains stable across the read."""
+) -> tuple[ProjectDocument, ProjectFileRevision, ProjectMigrationInfo]:
+    """Load one project and bind its revision to the exact bytes passed to parsing."""
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
+
     source = _normalized_project_path(path)
+    normalized = os.path.normcase(str(source))
+    last_change: StrictJSONFileChangedError | None = None
+
     for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        loaded = loader(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return loaded, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
+        try:
+            snapshot = load_strict_json_snapshot(
+                source,
+                max_bytes=PROJECT_FILE_MAX_BYTES,
+            )
+        except StrictJSONFileChangedError as exc:
+            last_change = exc
+            continue
+        except json.JSONDecodeError as exc:
+            raise ProjectFormatError(
+                f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
+            ) from exc
+        except StrictJSONError as exc:
+            raise ProjectFormatError(str(exc)) from exc
+
+        project, migration_info = project_from_dict_with_migration_info(
+            snapshot.value
+        )
+        revision = ProjectFileRevision(
+            path=normalized,
+            exists=True,
+            size=len(snapshot.raw),
+            mtime_ns=snapshot.mtime_ns,
+            sha256=sha256(snapshot.raw).hexdigest(),
+        )
+        return project, revision, migration_info
+
+    assert last_change is not None
+    raise OSError(
+        f"project file changed repeatedly while opening: {source}"
+    ) from last_change
 
 
 def load_project_document_with_revision(
@@ -816,13 +850,12 @@ def load_project_document_with_revision(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
-    loaded, revision = _load_project_with_stable_revision(
+    """Load a project and revision from one exact stable parsed byte snapshot."""
+    project, revision, _migration_info = _load_project_exact_snapshot(
         path,
-        loader=load_project_document,
         attempts=attempts,
     )
-    return loaded, revision
+    return project, revision
 
 
 def load_project_document_with_revision_info(
@@ -830,14 +863,8 @@ def load_project_document_with_revision_info(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision, ProjectMigrationInfo]:
-    """Load a stable project revision together with migration provenance."""
-    loaded, revision = _load_project_with_stable_revision(
-        path,
-        loader=load_project_document_with_migration_info,
-        attempts=attempts,
-    )
-    project, migration_info = loaded
-    return project, revision, migration_info
+    """Load one exact stable project revision together with migration provenance."""
+    return _load_project_exact_snapshot(path, attempts=attempts)
 
 
 def _project_document_text(project: ProjectDocument) -> str:

@@ -35,7 +35,12 @@ from cleanroomx.pressure_network_io import load_pressure_network
 from cleanroomx.psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from cleanroomx.qualification_io import load_qualification_uncertainty
 from cleanroomx.recovery_io import load_recovery_test
-from cleanroomx.strict_json import StrictJSONError, load_strict_json, strict_json_loads
+from cleanroomx.strict_json import (
+    StrictJSONError,
+    load_strict_json,
+    load_strict_json_snapshot,
+    strict_json_loads,
+)
 from cleanroomx.thermal_uncertainty_io import load_thermal_uncertainty
 from cleanroomx.uncertainty_io import load_uncertain_room
 
@@ -113,6 +118,21 @@ def test_strict_file_loader_accepts_input_at_exact_size_limit(tmp_path: Path) ->
     source.write_bytes(payload)
 
     assert load_strict_json(source, max_bytes=len(payload)) == {"value": 1}
+
+
+def test_strict_file_snapshot_returns_exact_bytes_passed_to_parser(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "snapshot.json"
+    payload = b'{"value":1,"label":"exact"}'
+    source.write_bytes(payload)
+
+    snapshot = load_strict_json_snapshot(source)
+
+    assert snapshot.value == {"value": 1, "label": "exact"}
+    assert snapshot.raw_bytes == payload
+    assert snapshot.size == len(payload)
+    assert snapshot.mtime_ns == source.stat().st_mtime_ns
 
 
 def test_strict_file_loader_rejects_path_identity_change_after_read(

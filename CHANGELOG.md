@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — exact project snapshot revision binding — 2026-10-02
+
+- Adds a canonical strict-JSON file snapshot boundary that returns the parsed value together with the exact stable bytes and opened-descriptor metadata that produced it.
+- Binds `load_project_document_with_revision()` and `load_project_document_with_revision_info()` SHA-256/size evidence to those exact parsed bytes, removing the separate fingerprint/read/fingerprint ABA window.
+- Preserves bounded 64 MiB ingestion, duplicate-key/non-finite/invalid-UTF-8/excessive-nesting rejection, migration provenance, retry semantics for observed file-revision races, and the historical oversized revision-load failure contract.
+- Adds regressions for a transient separate-read ABA, live-path replacement/disappearance, opened-file revision change, and project-size ceiling behavior.
+- Changes no solver equation, numerical tolerance, engineering-unit convention, project schema, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — desktop generic export protected-output hardening — 2026-10-02
 
 - Protects generic desktop exports (analysis input, result, run bundle, Markdown, and HTML) from replacing the active project source, restored recovery source, or declared file-backed engineering dependencies.

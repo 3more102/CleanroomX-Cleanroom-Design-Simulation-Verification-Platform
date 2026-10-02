@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — desktop generic export protected-output hardening — 2026-10-02
+
+- Protects generic desktop exports (analysis input, result, run bundle, Markdown, and HTML) from replacing the active project source, restored recovery source, or declared file-backed engineering dependencies.
+- Checks resolved-path and existing same-file identity before staging and repeats the same protection immediately before atomic replacement, closing path/symlink/hardlink publication races.
+- Preserves caller-specific pre-replace guards such as project-dossier revision validation by composing them after the generic protected-input recheck.
+- For unsaved projects without a canonical base directory, protects absolute declared dependencies and deliberately leaves unresolved relative dependency strings untouched until a project base exists.
+- Adds focused regressions for project-source and hardlink aliases, dependency aliases, publication-time alias races, recovery-source protection, and unsaved-project behavior.
+- Changes no solver equation, numerical tolerance, project schema, analysis-input schema, requirement criterion, or verification verdict semantic.
+
 ## Unreleased Release 3 — bounded desktop analysis-input import — 2026-10-02
 
 - Routes desktop **Import Analysis Input JSON** through the canonical bounded, revision-stable `load_strict_json()` reader instead of unbounded `Path.read_text()`.

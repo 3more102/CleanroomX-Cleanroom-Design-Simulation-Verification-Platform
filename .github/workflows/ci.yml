@@ -165,6 +165,16 @@ jobs:
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-assurance-snapshot --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-assurance-snapshot create examples/design_assurance_demo.json /tmp/cleanroomx-assurance.snapshot.json
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-assurance-snapshot verify /tmp/cleanroomx-assurance.snapshot.json > /tmp/cleanroomx-assurance-verify.json
+          cp examples/fan_variable_friction_loop_demo.json /tmp/cleanroomx-protected-input.json
+          set +e
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-fan-loop-friction /tmp/cleanroomx-protected-input.json --format json --output /tmp/cleanroomx-protected-input.json > /tmp/cleanroomx-protected-output.stdout 2> /tmp/cleanroomx-protected-output.stderr
+          protected_output_rc=$?
+          set -e
+          test "$protected_output_rc" -eq 1
+          test ! -s /tmp/cleanroomx-protected-output.stdout
+          grep -F "cleanroomx-fan-loop-friction: error: output publication failed:" /tmp/cleanroomx-protected-output.stderr
+          ! grep -F "Traceback" /tmp/cleanroomx-protected-output.stderr
+          cmp examples/fan_variable_friction_loop_demo.json /tmp/cleanroomx-protected-input.json
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-check examples/gui_demo.cleanroomx.json --output /tmp/cleanroomx-project-diagnostics.json
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-run examples/gui_demo.cleanroomx.json --analysis verification --output /tmp/cleanroomx-project-batch.json
           /tmp/cleanroomx-wheel-env/bin/python - <<'PY'

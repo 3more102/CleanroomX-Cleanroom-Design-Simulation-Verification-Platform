@@ -8,6 +8,12 @@
 - Leaves historical v0.102.1 release evidence, validation documents, demo fixtures, and release publisher checks unchanged.
 - Changes no solver equation, engineering tolerance, project schema, acceptance criterion, or historical release tag.
 
+## Unreleased Release 3 — clean standalone CLI publication failures — 2026-10-02
+
+- Converts protected-output identity failures and publication `OSError` conditions into concise command-prefixed stderr diagnostics with stable exit code 1 instead of uncaught Python tracebacks.
+- Applies the behavior consistently across every standalone file-backed engineering CLI while preserving the protected atomic writer, strict-JSON boundary, and existing engineering/status exit codes on successful publication.
+- Adds direct regression coverage for protected-input aliases and persistence failures plus an installed-wheel entrypoint smoke proving no traceback is emitted and protected input bytes remain unchanged.
+
 ## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
 
 - Routes every standalone file-backed engineering CLI through one protected atomic output writer.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+import sys
 from typing import Any, Iterable
 
 from .persistence import atomic_write_text
@@ -163,3 +164,31 @@ def atomic_write_cli_output(
         text,
         before_replace=assert_distinct,
     )
+
+def write_cli_output_or_report_error(
+    path: str | Path,
+    text: str,
+    *,
+    command: str,
+    protected_inputs: Iterable[str | Path] = (),
+) -> bool:
+    """Publish CLI output and convert expected publication failures to stderr.
+
+    Returns True after successful publication. Protection failures and filesystem
+    publication errors are reported as concise command-prefixed diagnostics and
+    return False so callers preserve existing engineering/status exit semantics.
+    """
+    try:
+        atomic_write_cli_output(
+            path,
+            text,
+            protected_inputs=protected_inputs,
+        )
+    except (CliOutputProtectionError, OSError) as exc:
+        print(
+            f"{command}: error: output publication failed: {exc}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+

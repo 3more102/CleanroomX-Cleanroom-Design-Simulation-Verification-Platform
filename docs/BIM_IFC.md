@@ -31,6 +31,7 @@ The importer currently supports:
 - `IfcFlowController`, `IfcUnitaryEquipment`, `IfcFan`, `IfcPump`, and
   `IfcFurnishingElement` -> equipment
 - IFC unit scaling to metres through IfcOpenShell
+- schema-aware device enumeration that skips only entity classes absent from the source IFC schema; unexpected IfcOpenShell enumeration failures abort extraction instead of silently dropping devices
 - full nested local-placement transforms for element origins through IfcOpenShell,
   including parent rotation and translation
 - exact world-space axis-aligned bounds for rectangular `IfcSpace` footprints

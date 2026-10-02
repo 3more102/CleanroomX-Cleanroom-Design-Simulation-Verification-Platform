@@ -19,6 +19,19 @@ class StrictJSONFileChangedError(StrictJSONError):
     """Raised when a file-backed JSON input changes during its verified read."""
 
 
+class StrictJSONSizeError(StrictJSONError):
+    """Raised when a file-backed JSON input exceeds its configured byte ceiling."""
+
+    def __init__(self, path: str | Path, observed_size: int, limit: int):
+        self.path = Path(path)
+        self.observed_size = observed_size
+        self.limit = limit
+        super().__init__(
+            f"{self.path} exceeds maximum supported JSON size "
+            f"({observed_size} > {limit} bytes)"
+        )
+
+
 @dataclass(frozen=True)
 class StrictJSONFileSnapshot:
     """One verified JSON value bound to the exact raw bytes that were parsed."""
@@ -164,10 +177,7 @@ def load_strict_json_snapshot(
     with source.open("rb") as stream:
         before = os.fstat(stream.fileno())
         if before.st_size > limit:
-            raise StrictJSONError(
-                f"{source} exceeds maximum supported JSON size "
-                f"({before.st_size} > {limit} bytes)"
-            )
+            raise StrictJSONSizeError(source, before.st_size, limit)
         raw = stream.read(limit + 1)
         after = os.fstat(stream.fileno())
         try:
@@ -179,10 +189,7 @@ def load_strict_json_snapshot(
 
     if len(raw) > limit or after.st_size > limit:
         observed_size = max(len(raw), after.st_size)
-        raise StrictJSONError(
-            f"{source} exceeds maximum supported JSON size "
-            f"({observed_size} > {limit} bytes)"
-        )
+        raise StrictJSONSizeError(source, observed_size, limit)
 
     if (
         _file_revision(before) != _file_revision(after)

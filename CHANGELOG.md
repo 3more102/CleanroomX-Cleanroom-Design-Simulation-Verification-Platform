@@ -3,7 +3,7 @@
 ## Unreleased Release 3 — recovery quarantine transaction hardening — 2026-10-02
 
 - Binds quarantine audit-manifest size and SHA-256 evidence to the bytes that were actually moved into the quarantine directory, closing the pre-move observation gap.
-- Prevents quarantine rollback from overwriting a newer recovery artifact that repopulates the original path after the suspect artifact has been moved; both artifacts are preserved and the operation fails closed.
+- Makes quarantine rollback atomically no-clobber: if any directory entry repopulates the original recovery path before restoration, the quarantined bytes are preserved and newer recovery data is never overwritten.
 - Adds race-focused regressions for moved-byte evidence binding and repopulated-source rollback safety. No solver, project schema, engineering calculation, or verdict semantic changes.
 
 ## Unreleased Release 3 — psychrometric dew-point domain and phase-boundary hardening — 2026-10-02

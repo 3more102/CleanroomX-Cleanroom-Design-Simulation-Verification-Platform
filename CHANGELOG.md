@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded runtime source fingerprinting — 2026-10-02
+
+- Caps each Python source file included in execution-provenance fingerprinting at 16 MiB and the complete CleanroomX Python source tree at 128 MiB before any source content is opened.
+- Replaces the remaining unbounded runtime-source `read()` with an exact manifest-size-plus-one bounded read, preserving revision-change detection while preventing oversized or growing files from forcing unbounded memory reads.
+- Adds regressions proving oversized files and aggregate source trees fail before binary reads and that accepted source reads always carry an explicit byte limit.
+- Preserves the existing SHA-256 source-tree algorithm and digest for source trees within the supported limits; changes no solver equation, project schema, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
 
 - Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.

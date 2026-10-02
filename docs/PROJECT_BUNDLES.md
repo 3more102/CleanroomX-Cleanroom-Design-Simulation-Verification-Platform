@@ -22,6 +22,8 @@ Export uses the existing application dependency registry instead of a second lis
 
 All entries use stored ZIP members with fixed metadata and deterministic ordering. Repeating an export from identical project/dependency bytes produces identical bundle bytes.
 
+Verification first copies the live bundle through a bounded, revision-stable read into a private archive snapshot. The SHA-256 and byte size reported by verification are computed from those exact snapshot bytes, and ZIP structure/member validation reads only that snapshot. This prevents a transient replace/restore of the live path from making the verified contents diverge from the reported bundle digest.
+
 Verification rejects:
 
 - archives larger than 1,040 MiB before archive hashing;
@@ -42,7 +44,7 @@ Verification rejects:
 
 ## Transactional extraction
 
-Extraction never uses `ZipFile.extractall()`. The bundle is fully verified first, then every expected member is copied into a private sibling staging directory and re-hashed while copying. The final directory is published with a single rename only after the extracted project can be loaded successfully.
+Extraction never uses `ZipFile.extractall()`. The bundle is fully verified from one private archive snapshot, then every expected member is copied from that same snapshot into a private sibling staging directory and re-hashed while copying. Immediately before publication, CleanroomX rechecks the original live bundle path against the snapshot-bound SHA-256 and byte size; a changed or missing source aborts extraction. The final directory is published with a single rename only after the extracted project can be loaded successfully.
 
 The destination must be new or empty. Existing non-empty directories are never merged with or overwritten.
 

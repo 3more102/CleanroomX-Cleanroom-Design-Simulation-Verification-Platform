@@ -104,6 +104,30 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
     assert record["path"] == "input.json"
 
 
+def test_source_record_fallback_rejects_oversized_json_before_read(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "oversized-input.json"
+    with source.open("wb") as stream:
+        stream.truncate(dossier_module.STRICT_JSON_FILE_MAX_BYTES + 1)
+
+    original_open = Path.open
+    resolved_source = source.resolve()
+
+    def reject_source_read(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self).resolve() == resolved_source and "r" in mode and "b" in mode:
+            raise AssertionError(
+                "oversized dossier source must be rejected before binary reading"
+            )
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_source_read)
+
+    with pytest.raises(OSError, match="exceeds supported size limit"):
+        _source_record("demo", source.name, tmp_path)
+
+
 def test_source_record_snapshot_binds_digest_to_private_exact_bytes(tmp_path) -> None:
     source = tmp_path / "input.json"
     original = b'{"demo": true}\n'

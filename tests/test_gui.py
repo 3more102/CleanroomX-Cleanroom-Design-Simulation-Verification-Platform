@@ -1023,6 +1023,7 @@ def test_import_input_json_rejects_path_replacement_without_mutating_analysis(
     assert errors[-1][0] == "Import failed"
     assert "changed while reading JSON input" in errors[-1][1]
 
+
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):
     class Status:
         def set(self, value):

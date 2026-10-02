@@ -7,7 +7,7 @@ def markdown_fan_driven_parallel_network_report(result: dict) -> str:
     lines = [
         f"# CleanroomX Fan-Driven Parallel Network Report — {markdown_text(result['study'])}",
         "",
-        f"- Fan curve: **{result['fan_curve']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
         f"- Status: **{result['status'].upper()}**",
         f"- Fixed pressure: **{result['fixed_pressure_pa']} Pa**",
         "- Equivalent parallel-network resistance: "

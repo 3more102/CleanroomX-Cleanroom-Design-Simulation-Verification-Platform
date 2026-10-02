@@ -1083,6 +1083,7 @@ def _hash_python_tree_manifest(
         "source_file_count": len(manifest),
     }
 
+
 def _fingerprint_python_tree(root: Path) -> dict:
     """Fingerprint Python source while avoiding repeated unchanged-tree reads."""
 

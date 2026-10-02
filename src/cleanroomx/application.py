@@ -996,6 +996,7 @@ def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, in
         raise RuntimeError(f"cannot inspect CleanroomX source tree: {root}") from exc
     return tuple(manifest)
 
+
 @lru_cache(maxsize=8)
 def _hash_python_tree_manifest(
     root_text: str,

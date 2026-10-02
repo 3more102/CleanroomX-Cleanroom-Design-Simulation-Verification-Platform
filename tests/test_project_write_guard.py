@@ -84,6 +84,34 @@ def test_revision_load_binds_digest_to_the_exact_parsed_snapshot(
     assert revision.sha256 != on_disk_revision.sha256
 
 
+def test_revision_load_ignores_a_transient_separate_public_parse(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="First"))
+    original_load = project_module.load_project_document
+    calls = {"count": 0}
+
+    def transient_separate_load(source):
+        calls["count"] += 1
+        save_project_document(path, ProjectDocument(name="Transient"))
+        project = original_load(source)
+        save_project_document(path, ProjectDocument(name="First"))
+        return project
+
+    monkeypatch.setattr(
+        project_module,
+        "load_project_document",
+        transient_separate_load,
+    )
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert calls["count"] == 0
+    assert project.name == "First"
+    assert revision == capture_project_file_revision(path)
+
+
 def test_revision_load_retries_only_when_exact_snapshot_read_detects_change(
     tmp_path, monkeypatch
 ):

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — desktop file I/O safety hardening — 2026-10-02
+
+- Routes **Import analysis input JSON** through the canonical bounded, revision-stable strict-JSON reader instead of unbounded `Path.read_text()` materialization.
+- Protects generic desktop exports from overwriting the active project source, retained recovery source, and declared file-backed engineering dependencies, including alias/race checks at atomic publication.
+- Preserves source-directory reference rebasing, caller-specific publication guards, and existing strict-JSON validation semantics.
+- Adds focused desktop regressions for oversized/replaced imports and project/dependency/recovery export aliasing and publication races.
+- Changes no solver equation, numerical tolerance, engineering unit, project schema, requirement criterion, analysis result, or verification verdict semantic.
+
 ## Unreleased Release 3 — development package identity — 2026-10-02
 
 - Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.

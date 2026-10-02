@@ -15,7 +15,7 @@ from typing import Any
 
 from . import __version__
 from .persistence import atomic_write_text, stable_file_sha256
-from .project import ProjectDocument, project_from_dict
+from .project import PROJECT_FILE_MAX_BYTES, ProjectDocument, project_from_dict
 from .strict_json import StrictJSONError, strict_json_loads
 
 
@@ -29,6 +29,7 @@ RECOVERY_QUARANTINE_SCHEMA_VERSION = 1
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 DEFAULT_RECOVERY_QUARANTINE_LIMIT = 20
+RECOVERY_FILE_MAX_BYTES = 2 * PROJECT_FILE_MAX_BYTES
 
 
 class RecoveryFormatError(ValueError):
@@ -293,17 +294,82 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     return data
 
 
-def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
+def _recovery_file_revision(
+    stat_result: os.stat_result,
+) -> tuple[int, int, int, int]:
+    return (
+        stat_result.st_dev,
+        stat_result.st_ino,
+        stat_result.st_size,
+        stat_result.st_mtime_ns,
+    )
+
+
+def _recovery_file_size_message(size_bytes: int) -> str:
+    return (
+        f"recovery artifact size {size_bytes} bytes exceeds maximum supported size "
+        f"of {RECOVERY_FILE_MAX_BYTES} bytes"
+    )
+
+
+def _validate_recovery_file_size(size_bytes: int) -> None:
+    if size_bytes > RECOVERY_FILE_MAX_BYTES:
+        raise RecoveryFormatError(_recovery_file_size_message(size_bytes))
+
+
+def _read_recovery_json(path: str | Path) -> Any:
+    """Read one bounded, revision-stable recovery artifact as strict JSON."""
     source = Path(path)
     try:
-        data = strict_json_loads(source.read_text(encoding="utf-8"))
+        with source.open("rb") as stream:
+            before = os.fstat(stream.fileno())
+            _validate_recovery_file_size(before.st_size)
+            raw = stream.read(RECOVERY_FILE_MAX_BYTES + 1)
+            after = os.fstat(stream.fileno())
+            try:
+                current = source.stat()
+            except OSError as exc:
+                raise RecoveryFormatError(
+                    f"recovery artifact changed while it was being read: {source}"
+                ) from exc
+    except RecoveryFormatError:
+        raise
+    except OSError as exc:
+        raise RecoveryFormatError(
+            f"recovery artifact could not be read: {source}: {exc}"
+        ) from exc
+
+    if len(raw) > RECOVERY_FILE_MAX_BYTES or after.st_size > RECOVERY_FILE_MAX_BYTES:
+        _validate_recovery_file_size(max(len(raw), after.st_size))
+
+    if (
+        _recovery_file_revision(before) != _recovery_file_revision(after)
+        or _recovery_file_revision(after) != _recovery_file_revision(current)
+        or len(raw) != after.st_size
+    ):
+        raise RecoveryFormatError(
+            f"recovery artifact changed while it was being read: {source}"
+        )
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RecoveryFormatError(
+            f"recovery artifact must contain valid UTF-8 JSON text: {source}"
+        ) from exc
+
+    try:
+        return strict_json_loads(text)
     except json.JSONDecodeError as exc:
         raise RecoveryFormatError(
             f"invalid recovery JSON at line {exc.lineno}, column {exc.colno}"
         ) from exc
     except StrictJSONError as exc:
         raise RecoveryFormatError(f"invalid strict recovery JSON: {exc}") from exc
-    return _validate_recovery_payload(data)
+
+
+def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
+    return _validate_recovery_payload(_read_recovery_json(path))
 
 
 def restore_recovery_artifact(path: str | Path) -> RecoveredProjectState:
@@ -412,10 +478,6 @@ def quarantine_recovery_artifact(
             "refusing to quarantine a valid recovery artifact; use discard instead"
         )
 
-    stat_result, artifact_sha256 = stable_file_sha256(resolved_artifact)
-    if stat_result.st_size < 0:
-        raise OSError("invalid recovery artifact byte size")
-
     quarantined_at_utc = _utc_now_text()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     token = uuid.uuid4().hex[:8]
@@ -423,31 +485,55 @@ def quarantine_recovery_artifact(
     quarantined_name = f"{resolved_artifact.name}.{stamp}-{token}.quarantined"
     destination = quarantine_dir / quarantined_name
     manifest_path = quarantine_dir / f"{quarantined_name}.manifest.json"
-    manifest = {
-        "schema": RECOVERY_QUARANTINE_SCHEMA,
-        "schema_version": RECOVERY_QUARANTINE_SCHEMA_VERSION,
-        "quarantined_at_utc": quarantined_at_utc,
-        "original_name": resolved_artifact.name,
-        "quarantined_name": quarantined_name,
-        "reason": reason_text,
-        "size_bytes": stat_result.st_size,
-        "sha256": artifact_sha256,
-    }
-    manifest_text = json.dumps(
-        manifest, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-    ) + "\n"
 
     os.replace(resolved_artifact, destination)
     try:
+        stat_result, artifact_sha256 = stable_file_sha256(destination)
+        if stat_result.st_size < 0:
+            raise OSError("invalid recovery artifact byte size")
+        manifest = {
+            "schema": RECOVERY_QUARANTINE_SCHEMA,
+            "schema_version": RECOVERY_QUARANTINE_SCHEMA_VERSION,
+            "quarantined_at_utc": quarantined_at_utc,
+            "original_name": resolved_artifact.name,
+            "quarantined_name": quarantined_name,
+            "reason": reason_text,
+            "size_bytes": stat_result.st_size,
+            "sha256": artifact_sha256,
+        }
+        manifest_text = json.dumps(
+            manifest, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+        ) + "\n"
         atomic_write_text(manifest_path, manifest_text)
-    except BaseException:
+    except BaseException as finalize_error:
+        # Atomic persistence can report a failure after replacing the manifest.
+        # In that committed state the manifest path already names this quarantine
+        # artifact; rolling the artifact back would create a stale forensic record.
+        if getattr(finalize_error, "committed", False):
+            raise
         try:
-            os.replace(destination, resolved_artifact)
+            # Restore through a no-clobber hard link instead of check-then-replace.
+            # link(2) fails atomically if any directory entry has repopulated the
+            # recovery path, so rollback can never overwrite newer recovery data.
+            os.link(destination, resolved_artifact)
+        except FileExistsError:
+            raise OSError(
+                "quarantine finalization failed after the recovery path was "
+                "repopulated; preserving the quarantined artifact instead of "
+                "overwriting newer recovery data"
+            ) from finalize_error
         except OSError as rollback_error:
             raise OSError(
-                "quarantine manifest write failed and rollback could not restore "
-                f"{resolved_artifact}: {rollback_error}"
+                "quarantine finalization failed and safe rollback could not restore "
+                f"{resolved_artifact}: {rollback_error}; preserving quarantined bytes"
             ) from rollback_error
+        try:
+            destination.unlink()
+        except OSError as cleanup_error:
+            raise OSError(
+                "quarantine finalization failed after safe rollback restored the "
+                f"original path, but quarantine cleanup failed: {cleanup_error}"
+            ) from cleanup_error
         raise
 
     _rotate_quarantine(quarantine_dir, history_limit)
@@ -675,6 +761,7 @@ class AutosaveManager:
             ensure_ascii=False,
             allow_nan=False,
         ) + "\n"
+        _validate_recovery_file_size(len(text.encode("utf-8")))
         try:
             atomic_write_text(destination, text)
             persisted = load_recovery_artifact(destination)

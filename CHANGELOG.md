@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — standalone CLI publication error contract — 2026-10-02
+
+- Converts protected-output identity and atomic filesystem publication failures across all standalone file-backed engineering CLIs into concise command-prefixed stderr diagnostics without Python tracebacks.
+- Reserves exit code 1 for output-publication failure while preserving every existing solver/engineering status exit code after successful publication.
+- Keeps protected engineering inputs byte-identical when output aliases are rejected and retains the shared pre-replace identity recheck.
+- Adds direct-main, filesystem-error, installed-entrypoint, and repository-wide wiring regressions.
+
+
 ## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
 
 - Routes every standalone file-backed engineering CLI through one protected atomic output writer.

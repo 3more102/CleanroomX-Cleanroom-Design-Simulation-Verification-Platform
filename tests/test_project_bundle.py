@@ -186,6 +186,41 @@ def test_bundle_export_rejects_oversized_dependency_without_replacing_target(
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 
+
+def test_bundle_export_bounds_dependency_and_published_bundle_fingerprints(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    verification = _copy_example(source, "facility_project.json")
+    hvac = _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "bounded-export.cleanroomx.zip"
+
+    original = bundle_module.stable_file_sha256
+    observed: list[tuple[Path, int | None]] = []
+
+    def bounded_hash(path, *, attempts=3, max_bytes=None):
+        observed.append((Path(path).resolve(strict=False), max_bytes))
+        return original(path, attempts=attempts, max_bytes=max_bytes)
+
+    monkeypatch.setattr(bundle_module, "stable_file_sha256", bounded_hash)
+
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    assert (
+        verification.resolve(strict=False),
+        bundle_module._MAX_DEPENDENCY_MEMBER_BYTES,
+    ) in observed
+    assert (
+        hvac.resolve(strict=False),
+        bundle_module._MAX_DEPENDENCY_MEMBER_BYTES,
+    ) in observed
+    assert (
+        bundle.resolve(strict=False),
+        bundle_module._MAX_BUNDLE_ARCHIVE_BYTES,
+    ) in observed
+    assert all(limit is not None for _path, limit in observed)
+
 def test_bundle_verifier_rejects_oversized_archive_before_hashing(
     tmp_path, monkeypatch
 ):

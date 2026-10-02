@@ -440,19 +440,29 @@ def quarantine_recovery_artifact(
         ) + "\n"
         atomic_write_text(manifest_path, manifest_text)
     except BaseException as finalize_error:
-        if resolved_artifact.exists():
+        try:
+            # Restore through a no-clobber hard link instead of check-then-replace.
+            # link(2) fails atomically if any directory entry has repopulated the
+            # recovery path, so rollback can never overwrite newer recovery data.
+            os.link(destination, resolved_artifact)
+        except FileExistsError:
             raise OSError(
                 "quarantine finalization failed after the recovery path was "
                 "repopulated; preserving the quarantined artifact instead of "
                 "overwriting newer recovery data"
             ) from finalize_error
-        try:
-            os.replace(destination, resolved_artifact)
         except OSError as rollback_error:
             raise OSError(
-                "quarantine finalization failed and rollback could not restore "
-                f"{resolved_artifact}: {rollback_error}"
+                "quarantine finalization failed and safe rollback could not restore "
+                f"{resolved_artifact}: {rollback_error}; preserving quarantined bytes"
             ) from rollback_error
+        try:
+            destination.unlink()
+        except OSError as cleanup_error:
+            raise OSError(
+                "quarantine finalization failed after safe rollback restored the "
+                f"original path, but quarantine cleanup failed: {cleanup_error}"
+            ) from cleanup_error
         raise
 
     _rotate_quarantine(quarantine_dir, history_limit)

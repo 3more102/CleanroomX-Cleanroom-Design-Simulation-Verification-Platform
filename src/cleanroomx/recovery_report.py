@@ -44,7 +44,9 @@ def markdown_recovery_report(result: dict) -> str:
         lines.extend(["## Traceability", ""])
         for key, value in metadata.items():
             if value is not None:
-                lines.append(f"- {key.replace('_', ' ').title()}: {value}")
+                lines.append(
+                    f"- {key.replace('_', ' ').title()}: {markdown_text(value)}"
+                )
         lines.append("")
 
     lines.extend(

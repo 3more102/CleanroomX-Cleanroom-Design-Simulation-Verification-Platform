@@ -412,10 +412,6 @@ def quarantine_recovery_artifact(
             "refusing to quarantine a valid recovery artifact; use discard instead"
         )
 
-    stat_result, artifact_sha256 = stable_file_sha256(resolved_artifact)
-    if stat_result.st_size < 0:
-        raise OSError("invalid recovery artifact byte size")
-
     quarantined_at_utc = _utc_now_text()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     token = uuid.uuid4().hex[:8]
@@ -423,31 +419,55 @@ def quarantine_recovery_artifact(
     quarantined_name = f"{resolved_artifact.name}.{stamp}-{token}.quarantined"
     destination = quarantine_dir / quarantined_name
     manifest_path = quarantine_dir / f"{quarantined_name}.manifest.json"
-    manifest = {
-        "schema": RECOVERY_QUARANTINE_SCHEMA,
-        "schema_version": RECOVERY_QUARANTINE_SCHEMA_VERSION,
-        "quarantined_at_utc": quarantined_at_utc,
-        "original_name": resolved_artifact.name,
-        "quarantined_name": quarantined_name,
-        "reason": reason_text,
-        "size_bytes": stat_result.st_size,
-        "sha256": artifact_sha256,
-    }
-    manifest_text = json.dumps(
-        manifest, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-    ) + "\n"
 
     os.replace(resolved_artifact, destination)
     try:
+        stat_result, artifact_sha256 = stable_file_sha256(destination)
+        if stat_result.st_size < 0:
+            raise OSError("invalid recovery artifact byte size")
+        manifest = {
+            "schema": RECOVERY_QUARANTINE_SCHEMA,
+            "schema_version": RECOVERY_QUARANTINE_SCHEMA_VERSION,
+            "quarantined_at_utc": quarantined_at_utc,
+            "original_name": resolved_artifact.name,
+            "quarantined_name": quarantined_name,
+            "reason": reason_text,
+            "size_bytes": stat_result.st_size,
+            "sha256": artifact_sha256,
+        }
+        manifest_text = json.dumps(
+            manifest, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+        ) + "\n"
         atomic_write_text(manifest_path, manifest_text)
-    except BaseException:
+    except BaseException as finalize_error:
+        # Atomic persistence can report a failure after replacing the manifest.
+        # In that committed state the manifest path already names this quarantine
+        # artifact; rolling the artifact back would create a stale forensic record.
+        if getattr(finalize_error, "committed", False):
+            raise
         try:
-            os.replace(destination, resolved_artifact)
+            # Restore through a no-clobber hard link instead of check-then-replace.
+            # link(2) fails atomically if any directory entry has repopulated the
+            # recovery path, so rollback can never overwrite newer recovery data.
+            os.link(destination, resolved_artifact)
+        except FileExistsError:
+            raise OSError(
+                "quarantine finalization failed after the recovery path was "
+                "repopulated; preserving the quarantined artifact instead of "
+                "overwriting newer recovery data"
+            ) from finalize_error
         except OSError as rollback_error:
             raise OSError(
-                "quarantine manifest write failed and rollback could not restore "
-                f"{resolved_artifact}: {rollback_error}"
+                "quarantine finalization failed and safe rollback could not restore "
+                f"{resolved_artifact}: {rollback_error}; preserving quarantined bytes"
             ) from rollback_error
+        try:
+            destination.unlink()
+        except OSError as cleanup_error:
+            raise OSError(
+                "quarantine finalization failed after safe rollback restored the "
+                f"original path, but quarantine cleanup failed: {cleanup_error}"
+            ) from cleanup_error
         raise
 
     _rotate_quarantine(quarantine_dir, history_limit)

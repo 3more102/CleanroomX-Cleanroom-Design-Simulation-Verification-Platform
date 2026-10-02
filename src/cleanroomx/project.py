@@ -32,7 +32,14 @@ from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
 )
-from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
+from .strict_json import (
+    StrictJSONError,
+    StrictJSONFileChangedError,
+    StrictJSONFileSnapshot,
+    clone_strict_json,
+    load_strict_json_with_snapshot,
+    strict_json_loads,
+)
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
 PROJECT_SCHEMA = "cleanroomx.project"
@@ -644,20 +651,40 @@ def _read_project_text(source: Path) -> str:
         ) from exc
 
 
-def load_project_document_with_migration_info(
+def _load_project_document_snapshot(
     path: str | Path,
-) -> tuple[ProjectDocument, ProjectMigrationInfo]:
-    """Load and validate a project while reporting supported legacy migration."""
-    source = Path(path)
+) -> tuple[
+    tuple[ProjectDocument, ProjectMigrationInfo],
+    StrictJSONFileSnapshot,
+]:
+    """Load one project from the exact stable byte snapshot returned by strict JSON."""
+    source = _normalized_project_path(path)
+    _validate_project_file_size(source.stat().st_size)
     try:
-        data = strict_json_loads(_read_project_text(source))
+        data, snapshot = load_strict_json_with_snapshot(
+            source,
+            max_bytes=PROJECT_FILE_MAX_BYTES,
+        )
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except StrictJSONFileChangedError:
+        raise
     except StrictJSONError as exc:
         raise ProjectFormatError(str(exc)) from exc
-    return project_from_dict_with_migration_info(data)
+    return project_from_dict_with_migration_info(data), snapshot
+
+
+def load_project_document_with_migration_info(
+    path: str | Path,
+) -> tuple[ProjectDocument, ProjectMigrationInfo]:
+    """Load and validate a project while reporting supported legacy migration."""
+    try:
+        loaded, _snapshot = _load_project_document_snapshot(path)
+    except StrictJSONFileChangedError as exc:
+        raise ProjectFormatError(str(exc)) from exc
+    return loaded
 
 
 def load_project_document(path: str | Path) -> ProjectDocument:
@@ -792,23 +819,39 @@ def project_save_lock(path: str | Path) -> Iterator[Path]:
         os.close(descriptor)
 
 
-def _load_project_with_stable_revision(
+def _project_revision_from_snapshot(
+    path: str | Path,
+    snapshot: StrictJSONFileSnapshot,
+) -> ProjectFileRevision:
+    """Bind a project revision digest to the exact bytes accepted by the parser."""
+    source = _normalized_project_path(path)
+    return ProjectFileRevision(
+        path=os.path.normcase(str(source)),
+        exists=True,
+        size=snapshot.size,
+        mtime_ns=snapshot.mtime_ns,
+        sha256=sha256(snapshot.raw_bytes).hexdigest(),
+    )
+
+
+def _load_project_with_snapshot_revision(
     path: str | Path,
     *,
-    loader,
     attempts: int,
 ):
-    """Run one loader against a revision that remains stable across the read."""
+    """Load one project and bind its revision to that exact parsed byte snapshot."""
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
     source = _normalized_project_path(path)
+    last_change: StrictJSONFileChangedError | None = None
     for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        loaded = loader(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return loaded, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
+        try:
+            loaded, snapshot = _load_project_document_snapshot(source)
+        except StrictJSONFileChangedError as exc:
+            last_change = exc
+            continue
+        return loaded, _project_revision_from_snapshot(source, snapshot)
+    raise OSError(f"project file changed repeatedly while opening: {source}") from last_change
 
 
 def load_project_document_with_revision(
@@ -816,13 +859,13 @@ def load_project_document_with_revision(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
-    loaded, revision = _load_project_with_stable_revision(
+    """Load a project together with the exact stable content revision that was parsed."""
+    loaded, revision = _load_project_with_snapshot_revision(
         path,
-        loader=load_project_document,
         attempts=attempts,
     )
-    return loaded, revision
+    project, _migration_info = loaded
+    return project, revision
 
 
 def load_project_document_with_revision_info(
@@ -830,10 +873,9 @@ def load_project_document_with_revision_info(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision, ProjectMigrationInfo]:
-    """Load a stable project revision together with migration provenance."""
-    loaded, revision = _load_project_with_stable_revision(
+    """Load a parsed project snapshot together with its exact revision and provenance."""
+    loaded, revision = _load_project_with_snapshot_revision(
         path,
-        loader=load_project_document_with_migration_info,
         attempts=attempts,
     )
     project, migration_info = loaded

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — shared dossier source fingerprint authority — 2026-10-02
+
+- Routes dossier source-file SHA-256 capture through the canonical `persistence.stable_file_sha256()` authority instead of a separate unguarded read/hash loop.
+- Binds accepted dossier source digests to one opened descriptor and the same live path identity before and after hashing, inheriting bounded retry behavior against path/descriptor substitution races.
+- Preserves dossier schemas, source-path labels, analysis loaders, engineering calculations, requirements, verification verdicts, and release identity.
+- Adds focused regression coverage proving dossier provenance delegates to the shared stable-file authority.
+
 ## Unreleased Release 3 — digest-bound IFC source snapshots — 2026-10-02
 
 - Adds a canonical bounded stable-file snapshot authority in `cleanroomx.persistence`, sharing the same path/descriptor revision checks used by stable SHA-256 fingerprinting.

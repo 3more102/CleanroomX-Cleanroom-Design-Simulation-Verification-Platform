@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
+
+- Routes every standalone file-backed engineering CLI through one protected atomic output writer.
+- Rejects output destinations that alias declared engineering inputs by resolved path or existing same-file identity, and rechecks immediately before atomic replacement.
+- Extends strict JSON serialization across the standalone result-producing CLI surface so non-finite or Python-only values fail closed before publication.
+- Protects dossier dependencies, consistency-project pairs, assurance snapshots, and project-bundle destinations against overwrite races.
+- Restacks the reviewed unique delta from superseded PR #748 onto exact current main without importing its stale history.
+
 ## Unreleased Release 3 — psychrometric dew-point domain and phase-boundary hardening — 2026-10-02
 
 - Adds direct regressions against the official IAPWS R14-08 230 K sublimation-pressure verification point and IAPWS-IF97 Region 4 300 K saturation-pressure verification point.

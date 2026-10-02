@@ -147,7 +147,7 @@ The desktop application does not change CleanroomX acceptance semantics or conve
 The Release 2 integration adds durable project-state and evidence workflows around the existing engineering backends:
 
 - **Project-wide Undo/Redo** uses one bounded transaction history across project fields, analysis edits, and spatial edits. Persistent run-history evidence and the current camera/view are not rewound as design edits.
-- **Saved revisions** preserve validated prior project bytes before guarded overwrites and restore only to a separate destination, keeping the currently opened project binding explicit.
+- **Saved revisions** preserve validated prior project bytes before guarded overwrites and restore only to a separate destination, keeping the currently opened project binding explicit. Revision envelopes are bounded and read through the canonical strict-JSON file boundary, so duplicate keys, non-finite values, invalid UTF-8, live-path replacement/disappearance, and revision changes during ingestion fail closed.
 - **Recovery integrity** verifies current recovery artifacts with SHA-256 evidence before they are offered for restoration. Legacy v1 recovery artifacts remain readable but are labeled unverified.
 - **Run history** records accepted completed runs as a bounded integrity-checked audit ledger tied to the exact analysis input and execution provenance.
 - **Portable HTML reports** export the current fresh completed run as a self-contained verified engineering report. See [Portable Engineering HTML Report](PORTABLE_ENGINEERING_REPORT.md).

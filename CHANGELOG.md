@@ -7,6 +7,14 @@
 - Extends the existing extraction race regression to prove the final live-source fingerprint carries the hard archive-size ceiling.
 - Changes no bundle schema, project schema, solver equation, engineering tolerance, requirement criterion, verification verdict, or release identity.
 
+## Unreleased Release 3 — bounded recovery quarantine fingerprinting — 2026-10-02
+
+- Applies the existing 128 MiB recovery-artifact ceiling directly to the stable SHA-256 read used when quarantine binds its audit manifest to moved suspect bytes.
+- Prevents oversized malformed recovery artifacts from forcing an unbounded hash after bounded recovery ingestion has already rejected them.
+- Reuses the existing no-clobber quarantine rollback path: if bounded fingerprinting rejects the moved artifact, the original recovery path is restored when still vacant and no incomplete manifest is published.
+- Preserves recovery/quarantine schemas, retention semantics, project persistence, solver behavior, requirement criteria, and verification verdicts.
+- Adds a regression proving an oversized suspect fails bounded finalization and is restored without a stray quarantine artifact or manifest.
+
 ## Unreleased Release 3 — bounded portable bundle export fingerprinting — 2026-10-02
 
 - Applies the existing portable-bundle dependency and archive byte ceilings directly to stable SHA-256 reads during export, not only to pre-read metadata checks.

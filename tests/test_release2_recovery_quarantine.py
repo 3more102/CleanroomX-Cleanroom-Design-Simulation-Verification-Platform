@@ -191,6 +191,32 @@ def test_quarantine_rollback_is_no_clobber_if_path_repopulates_at_restore(
     assert len(quarantined) == 1
     assert quarantined[0].read_bytes() == suspect
 
+def test_quarantine_rejects_oversized_suspect_before_unbounded_hash(
+    tmp_path, monkeypatch
+):
+    artifact = tmp_path / "oversized.recovery.json"
+    suspect = b"{broken oversized recovery artifact"
+    artifact.write_bytes(suspect)
+
+    monkeypatch.setattr(
+        autosave_module,
+        "RECOVERY_FILE_MAX_BYTES",
+        len(suspect) - 1,
+    )
+
+    with pytest.raises(OSError, match="file exceeds supported size limit"):
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=tmp_path,
+            reason="oversized invalid recovery",
+        )
+
+    assert artifact.read_bytes() == suspect
+    quarantine_dir = tmp_path / "quarantine"
+    assert list(quarantine_dir.glob("*.quarantined")) == []
+    assert list(quarantine_dir.glob("*.quarantined.manifest.json")) == []
+
+
 def test_quarantine_refuses_valid_legacy_recovery(tmp_path):
     artifact = tmp_path / "valid.recovery.json"
     artifact.write_text(

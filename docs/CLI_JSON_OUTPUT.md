@@ -23,4 +23,10 @@ For single-file studies the protected set contains the study/network/project inp
 `cleanroomx-consistency` protects both source projects. `cleanroomx-dossier`
 protects its manifest plus every declared file-backed dependency resolved relative
 to the manifest directory. This guard is data-loss protection only; it does not
-change solver equations, numerical tolerances, report contents, or exit semantics.
+change solver equations, numerical tolerances, report contents, or engineering/status exit semantics.
+
+If protected-output identity verification or atomic filesystem publication fails, the
+standalone command reports one command-prefixed diagnostic on stderr and returns
+exit code `1` instead of emitting a Python traceback. This publication-failure code
+is reserved independently of each command's existing engineering/status codes; those
+codes are returned unchanged after a successful output write.

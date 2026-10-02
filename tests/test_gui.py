@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import (
@@ -900,6 +901,52 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
         assert (project_dir / analysis.input[key]).resolve() == (
             import_dir / filename
         ).resolve()
+
+
+def test_import_input_json_rejects_oversized_source_without_mutating_analysis(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "oversized.json"
+    source.write_text('{"value": 12345}', encoding="utf-8")
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input={"sentinel": "original"},
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.project_path = tmp_path / "project.cleanroomx.json"
+    app._current_analysis = lambda: analysis
+    app._perform_project_edit = lambda *args, **kwargs: pytest.fail(
+        "project edit must not run after an oversized import"
+    )
+
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(source)
+    )
+    monkeypatch.setattr(strict_json_module, "STRICT_JSON_FILE_MAX_BYTES", 8)
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.import_input_json()
+
+    assert analysis.input == {"sentinel": "original"}
+    assert len(errors) == 1
+    assert errors[0]["title"] == "Import failed"
+    assert "exceeds maximum supported JSON size" in errors[0]["message"]
+    assert errors[0]["parent"] is app.root
 
 
 def test_import_input_json_rejects_replaced_source_without_mutating_analysis(

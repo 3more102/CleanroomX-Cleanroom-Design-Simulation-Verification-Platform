@@ -86,8 +86,8 @@ def markdown_fan_variable_friction_speed_report(result: dict) -> str:
             diagnostics = case["solver_diagnostics"]
             lines.append(
                 f"- **{case['speed_ratio']}x — {case['status']}**: "
-                f"{case['solver_message']} "
-                f"(termination: {diagnostics['termination_reason']})"
+                f"{markdown_text(case['solver_message'])} "
+                f"(termination: {markdown_text(diagnostics['termination_reason'])})"
             )
 
     lines.extend(["", "## Engineering note", "", result["scope_note"], ""])

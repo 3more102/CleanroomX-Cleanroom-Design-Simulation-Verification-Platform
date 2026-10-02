@@ -227,6 +227,60 @@ def test_revision_loader_rejects_live_path_identity_replacement(
     )
 
 
+def test_revision_loader_retries_transient_exact_snapshot_change(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(
+        tmp_path / "retry.cleanroomx.json",
+        ProjectDocument(name="Stable"),
+    )
+    real_loader = project_module._load_project_snapshot
+    calls = {"count": 0}
+
+    def transient_change(path):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise project_module.StrictJSONFileChangedError(
+                f"{path} changed while reading JSON input"
+            )
+        return real_loader(path)
+
+    monkeypatch.setattr(
+        project_module,
+        "_load_project_snapshot",
+        transient_change,
+    )
+
+    project, revision = load_project_document_with_revision(source, attempts=2)
+
+    assert calls["count"] == 2
+    assert project.name == "Stable"
+    assert revision == capture_project_file_revision(source)
+
+
+def test_revision_loader_fails_after_configured_snapshot_change_attempts(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(
+        tmp_path / "unstable.cleanroomx.json",
+        ProjectDocument(name="Stable"),
+    )
+
+    def always_changed(path):
+        raise project_module.StrictJSONFileChangedError(
+            f"{path} changed while reading JSON input"
+        )
+
+    monkeypatch.setattr(
+        project_module,
+        "_load_project_snapshot",
+        always_changed,
+    )
+
+    with pytest.raises(OSError, match="changed repeatedly while opening"):
+        load_project_document_with_revision(source, attempts=2)
+
+
 def test_project_loader_rejects_future_schema():
     with pytest.raises(ProjectFormatError, match="future"):
         project_from_dict({

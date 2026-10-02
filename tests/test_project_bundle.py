@@ -933,10 +933,10 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
     original_fingerprint = bundle_module.stable_file_sha256
     calls = 0
 
-    def changed_after_inspection(path):
+    def changed_after_inspection(path, **kwargs):
         nonlocal calls
         calls += 1
-        stat_result, digest = original_fingerprint(path)
+        stat_result, digest = original_fingerprint(path, **kwargs)
         if calls == 1:
             digest = "f" * 64
         return stat_result, digest
@@ -954,6 +954,33 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
     assert not destination.exists()
     assert not list(tmp_path.glob(".extracted.*.tmp"))
 
+
+
+def test_bundle_extraction_bounds_live_archive_recheck(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "bounded-live-recheck.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    original_fingerprint = bundle_module.stable_file_sha256
+    calls: list[tuple[Path, int | None]] = []
+
+    def bounded_fingerprint(path, **kwargs):
+        calls.append((Path(path).resolve(strict=False), kwargs.get("max_bytes")))
+        return original_fingerprint(path, **kwargs)
+
+    monkeypatch.setattr(bundle_module, "stable_file_sha256", bounded_fingerprint)
+    destination = tmp_path / "extracted"
+
+    extract_project_bundle(bundle, destination)
+
+    assert calls == [
+        (bundle.resolve(), bundle_module._MAX_BUNDLE_ARCHIVE_BYTES)
+    ]
 
 
 def test_bundle_extraction_fsyncs_staged_directories_before_publish(

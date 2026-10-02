@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 import json
 import multiprocessing
 
@@ -10,6 +11,7 @@ import cleanroomx.gui as gui_module
 import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.persistence import AtomicWriteDurabilityError
+from cleanroomx.strict_json import StrictJSONFileChangedError, StrictJSONFileSnapshot
 from cleanroomx.project import (
     ProjectDocument,
     ProjectFileBusyError,
@@ -46,69 +48,101 @@ class Value:
         self.value = value
 
 
-def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
-    path = tmp_path / "project.cleanroomx.json"
-    save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
-    calls = {"count": 0}
-
-    def changing_load(source):
-        project = original_load(source)
-        if calls["count"] == 0:
-            save_project_document(path, ProjectDocument(name="Second"))
-        calls["count"] += 1
-        return project
-
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
-
-    project, revision = load_project_document_with_revision(path)
-
-    assert calls["count"] == 2
-    assert project.name == "Second"
-    assert revision == capture_project_file_revision(path)
-
-
-def test_migration_aware_stable_load_retries_and_rebinds_provenance(
+def test_revision_load_binds_digest_to_the_exact_parsed_snapshot(
     tmp_path, monkeypatch
 ):
-    path = tmp_path / "legacy.cleanroomx.json"
-    path.write_text(
-        json.dumps({
-            "schema": "cleanroomx.project",
-            "schema_version": 0,
-            "name": "Legacy",
-            "analysis": {
-                "id": "a1",
-                "name": "Room",
-                "kind": "room_verification",
-                "input": {},
-            },
-        }),
-        encoding="utf-8",
-    )
-    original_load = project_module.load_project_document_with_migration_info
-    calls = {"count": 0}
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="On disk"))
+    on_disk_revision = capture_project_file_revision(path)
 
-    def changing_load(source):
-        loaded = original_load(source)
-        if calls["count"] == 0:
-            save_project_document(path, ProjectDocument(name="Current"))
-        calls["count"] += 1
-        return loaded
+    parsed_path = tmp_path / "parsed.cleanroomx.json"
+    save_project_document(parsed_path, ProjectDocument(name="Parsed snapshot"))
+    parsed_bytes = parsed_path.read_bytes()
+    parsed_data = json.loads(parsed_bytes.decode("utf-8"))
+    snapshot = StrictJSONFileSnapshot(
+        raw_bytes=parsed_bytes,
+        size=len(parsed_bytes),
+        mtime_ns=123456789,
+    )
+
+    def exact_snapshot_loader(source):
+        assert source == path.resolve(strict=False)
+        return project_module.project_from_dict_with_migration_info(parsed_data), snapshot
 
     monkeypatch.setattr(
         project_module,
-        "load_project_document_with_migration_info",
-        changing_load,
+        "_load_project_document_snapshot",
+        exact_snapshot_loader,
+    )
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert project.name == "Parsed snapshot"
+    assert revision.sha256 == sha256(parsed_bytes).hexdigest()
+    assert revision.size == len(parsed_bytes)
+    assert revision.mtime_ns == snapshot.mtime_ns
+    assert revision.sha256 != on_disk_revision.sha256
+
+
+def test_revision_load_retries_only_when_exact_snapshot_read_detects_change(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Stable"))
+    real_loader = project_module._load_project_document_snapshot
+    calls = {"count": 0}
+
+    def changing_snapshot_loader(source):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise StrictJSONFileChangedError(
+                f"{source} changed while reading JSON input"
+            )
+        return real_loader(source)
+
+    monkeypatch.setattr(
+        project_module,
+        "_load_project_document_snapshot",
+        changing_snapshot_loader,
     )
 
     project, revision, migration_info = load_project_document_with_revision_info(path)
 
     assert calls["count"] == 2
-    assert project.name == "Current"
+    assert project.name == "Stable"
     assert migration_info.migrated is False
     assert migration_info.source_schema_version == 1
     assert revision == capture_project_file_revision(path)
+
+
+def test_revision_load_respects_project_size_ceiling(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.cleanroomx.json"
+    path.write_bytes(b"{" + (b"x" * 128))
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+
+    with pytest.raises(project_module.ProjectFormatError, match="maximum supported size"):
+        load_project_document_with_revision(path)
+
+
+def test_revision_load_fails_after_configured_snapshot_change_attempts(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Stable"))
+
+    def always_changed(source):
+        raise StrictJSONFileChangedError(
+            f"{source} changed while reading JSON input"
+        )
+
+    monkeypatch.setattr(
+        project_module,
+        "_load_project_document_snapshot",
+        always_changed,
+    )
+
+    with pytest.raises(OSError, match="changed repeatedly while opening"):
+        load_project_document_with_revision(path, attempts=2)
 
 
 def test_guarded_save_rejects_external_content_change(tmp_path):

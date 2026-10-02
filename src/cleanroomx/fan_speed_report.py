@@ -49,7 +49,7 @@ def markdown_fan_speed_report(result: dict) -> str:
         lines.extend(["", "## Unresolved speed cases", ""])
         for case in unresolved:
             lines.append(
-                f"- **{case['speed_ratio']}x** — {case['solver_message']}"
+                f"- **{case['speed_ratio']}x** — {markdown_text(case['solver_message'])}"
             )
 
     lines.extend(

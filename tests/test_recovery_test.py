@@ -185,3 +185,28 @@ def test_nonfinite_recovery_inputs_are_rejected(bad: float) -> None:
 def test_negative_uncertainty_is_rejected() -> None:
     with pytest.raises(ValueError, match="concentration_uncertainty_abs"):
         RecoverySample(0, 100, -1)
+
+def test_recovery_report_escapes_user_supplied_traceability_metadata() -> None:
+    spec = RecoveryTestSpec(
+        name="Traceability safety",
+        particle_size_um=0.5,
+        target_concentration_per_m3=100,
+        instrument_id="PC-1\n## Forged heading",
+        sample_location="<script>alert(1)</script>",
+        occupancy_state="at_rest|forged",
+        method_reference="SOP_[42]",
+        samples=(
+            RecoverySample(0, 1000),
+            RecoverySample(5, 80),
+        ),
+    )
+
+    report = markdown_recovery_report(analyze_recovery_test(spec))
+
+    assert "\n## Forged heading" not in report
+    assert "PC-1<br>## Forged heading" in report
+    assert "<script>" not in report
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in report
+    assert "at\\_rest\\|forged" in report
+    assert "SOP\\_\\[42\\]" in report
+

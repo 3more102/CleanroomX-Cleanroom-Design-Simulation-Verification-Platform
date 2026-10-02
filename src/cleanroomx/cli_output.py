@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Any
+from pathlib import Path
+from typing import Any, Iterable
 
+from .persistence import atomic_write_text
 from .strict_json import StrictJSONError
 
 
@@ -111,3 +113,53 @@ def dumps_strict_json(
         raise StrictJSONError(
             f"$ cannot be serialized as strict JSON: {exc}"
         ) from exc
+
+
+class CliOutputProtectionError(ValueError):
+    """Raised when a CLI output destination aliases protected engineering input."""
+
+
+def _paths_alias(first: str | Path, second: str | Path) -> bool:
+    left = Path(first).expanduser()
+    right = Path(second).expanduser()
+    try:
+        if left.resolve(strict=False) == right.resolve(strict=False):
+            return True
+        if left.exists() and right.exists():
+            return left.samefile(right)
+    except (OSError, RuntimeError) as exc:
+        raise CliOutputProtectionError(
+            f"could not verify CLI output identity for {right}"
+        ) from exc
+    return False
+
+
+def atomic_write_cli_output(
+    path: str | Path,
+    text: str,
+    *,
+    protected_inputs: Iterable[str | Path] = (),
+) -> Path:
+    """Atomically publish CLI text without replacing declared engineering inputs.
+
+    Protection is checked before staging and again through the shared persistence
+    pre-replace hook. The second check closes the normal analysis-to-publication
+    window for path, symlink, or hardlink aliases.
+    """
+    destination = Path(path).expanduser()
+    protected = tuple(Path(item).expanduser() for item in protected_inputs)
+
+    def assert_distinct() -> None:
+        for source in protected:
+            if _paths_alias(source, destination):
+                raise CliOutputProtectionError(
+                    "CLI output path must be different from protected engineering "
+                    f"input: {source.resolve(strict=False)}"
+                )
+
+    assert_distinct()
+    return atomic_write_text(
+        destination,
+        text,
+        before_replace=assert_distinct,
+    )

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
+from .strict_json import StrictJSONError
 from .pressure_network import solve_room_pressure_network
 from .pressure_network_io import load_pressure_network
 from .pressure_network_report import markdown_pressure_network_report
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output, dumps_strict_json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,13 +54,24 @@ def main() -> int:
         ),
         max_iterations=args.max_iterations,
     )
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_pressure_network_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_pressure_network_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-pressure-network: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.network,),
+        )
     else:
         print(text)
     return 0

@@ -9,6 +9,7 @@ import pytest
 
 import cleanroomx.dossier_cli as dossier_cli
 import cleanroomx.duct_flow_cli as duct_flow_cli
+import cleanroomx.fan_curve_cli as fan_curve_cli
 import cleanroomx.hvac_cli as hvac_cli
 import cleanroomx.recovery_cli as recovery_cli
 from cleanroomx.cli_output import dumps_strict_json
@@ -178,3 +179,48 @@ def test_dossier_cli_rejects_nonfinite_json_before_output_write(
     assert captured.out == ""
     assert "non-finite" in captured.err
     assert output.read_bytes() == previous
+
+def test_all_cli_result_json_paths_use_strict_serializer() -> None:
+    package_dir = Path(fan_curve_cli.__file__).resolve().parent
+    offenders: list[str] = []
+    for path in sorted(package_dir.glob("*_cli.py")):
+        source = path.read_text(encoding="utf-8")
+        if "json.dumps(result" in source:
+            offenders.append(path.name)
+
+    assert offenders == []
+
+
+def test_fan_curve_cli_rejects_nonfinite_json_before_output_write(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    output, previous = _sentinel_output(tmp_path)
+    monkeypatch.setattr(
+        fan_curve_cli,
+        "load_fan_operating_point_study",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        fan_curve_cli,
+        "solve_fan_operating_point",
+        lambda _study: {"status": "solved", "result": float("nan")},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-fan-curve",
+            "input.json",
+            "--format",
+            "json",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert fan_curve_cli.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "non-finite" in captured.err
+    assert output.read_bytes() == previous
+

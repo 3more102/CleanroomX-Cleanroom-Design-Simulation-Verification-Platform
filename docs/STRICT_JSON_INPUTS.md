@@ -3,6 +3,10 @@
 CleanroomX file-backed engineering loaders share the canonical
 `load_strict_json()` boundary.
 
+The desktop **Import Analysis Input JSON** action uses the same boundary before
+reference rebasing or project mutation, so operator-selected analysis input files
+receive the same resource, encoding, and revision-stability protections.
+
 ## Resource ceiling
 
 Ordinary strict-JSON engineering inputs are limited to 64 MiB before JSON

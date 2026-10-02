@@ -104,6 +104,31 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
     assert record["path"] == "input.json"
 
 
+def test_source_record_direct_hash_uses_strict_json_size_ceiling(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_text('{"demo": true}\n', encoding="utf-8")
+    calls = []
+
+    def bounded_hash(path, *, max_bytes):
+        resolved = Path(path)
+        calls.append((resolved, max_bytes))
+        return resolved.stat(), "b" * 64
+
+    monkeypatch.setattr(dossier_module, "stable_file_sha256", bounded_hash)
+
+    record = _source_record("demo", "input.json", tmp_path)
+
+    assert calls == [
+        (
+            source.resolve(),
+            dossier_module.STRICT_JSON_FILE_MAX_BYTES,
+        )
+    ]
+    assert record["sha256"] == "b" * 64
+
+
 def test_source_record_snapshot_binds_digest_to_private_exact_bytes(tmp_path) -> None:
     source = tmp_path / "input.json"
     original = b'{"demo": true}\n'

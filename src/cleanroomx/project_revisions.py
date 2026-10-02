@@ -212,12 +212,6 @@ def preserve_project_revision(
 
 def _load_payload(path: Path) -> dict[str, Any]:
     max_bytes = _project_revision_max_bytes()
-    size_bytes = path.stat().st_size
-    if size_bytes > max_bytes:
-        raise ProjectRevisionError(
-            f"project revision artifact size {size_bytes} bytes exceeds maximum "
-            f"supported size of {max_bytes} bytes"
-        )
     try:
         data = load_strict_json(path, max_bytes=max_bytes)
     except json.JSONDecodeError as exc:
@@ -227,7 +221,7 @@ def _load_payload(path: Path) -> dict[str, Any]:
     except StrictJSONError as exc:
         if "exceeds maximum supported JSON size" in str(exc):
             raise ProjectRevisionError(
-                "project revision artifact size exceeds maximum supported size "
+                "project revision artifact size observed exceeds maximum supported size "
                 f"of {max_bytes} bytes"
             ) from exc
         raise ProjectRevisionError(

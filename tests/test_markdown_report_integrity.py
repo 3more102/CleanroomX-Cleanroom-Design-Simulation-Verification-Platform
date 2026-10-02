@@ -1,6 +1,17 @@
 from __future__ import annotations
 
 from cleanroomx.dossier_report import markdown_dossier_report
+from cleanroomx.fan_curve_report import markdown_fan_operating_point_report
+from cleanroomx.fan_loop_speed_report import markdown_fan_loop_speed_report
+from cleanroomx.fan_loop_uncertainty_report import (
+    markdown_fan_loop_network_uncertainty_report,
+)
+from cleanroomx.fan_network_report import markdown_fan_driven_parallel_network_report
+from cleanroomx.fan_speed_report import markdown_fan_speed_report
+from cleanroomx.fan_uncertainty_report import markdown_fan_system_uncertainty_report
+from cleanroomx.fan_variable_friction_speed_report import (
+    markdown_fan_variable_friction_speed_report,
+)
 from cleanroomx.loop_network import LoopedFlowNetwork, QuadraticFlowEdge, solve_looped_network
 from cleanroomx.loop_network_report import markdown_looped_network_report
 from cleanroomx.markdown import markdown_text
@@ -144,3 +155,175 @@ def test_dossier_report_escapes_external_text_boundaries() -> None:
     assert "REF | A\nB" not in report
     assert "Room | A\nB" not in report
 
+
+
+def test_fan_report_metadata_cannot_create_markdown_structure() -> None:
+    malicious = "Injected | field\n## forged <tag> *x*"
+    expected = markdown_text(malicious)
+
+    reports = [
+        markdown_fan_operating_point_report(
+            {
+                "study": malicious,
+                "fan_curve": malicious,
+                "system_curve": malicious,
+                "status": "no_intersection_in_supplied_range",
+                "system_model": {
+                    "fixed_pressure_pa": 0.0,
+                    "resistance_pa_per_m3_s_squared": 1.0,
+                },
+                "operating_point": None,
+                "message": "No intersection.",
+                "curve_point_checks": [],
+                "scope_note": "Internal note.",
+            }
+        ),
+        markdown_fan_speed_report(
+            {
+                "study": malicious,
+                "reference_fan_curve": malicious,
+                "system_curve": malicious,
+                "status": "screening_complete",
+                "speed_case_count": 0,
+                "reference_speed_rpm": None,
+                "speed_cases": [],
+                "scope_note": "Internal note.",
+            }
+        ),
+        markdown_fan_driven_parallel_network_report(
+            {
+                "study": malicious,
+                "fan_curve": malicious,
+                "status": "no_intersection_in_supplied_range",
+                "fixed_pressure_pa": 0.0,
+                "equivalent_network_resistance_pa_per_m3_s_squared": 1.0,
+                "path_resistances": [],
+                "fan_operating_point": None,
+                "message": "No intersection.",
+                "fan_curve_point_checks": [],
+                "scope_note": "Internal note.",
+            }
+        ),
+        markdown_fan_system_uncertainty_report(
+            {
+                "analysis": malicious,
+                "status": "indeterminate",
+                "fan_curve": malicious,
+                "system_curve": malicious,
+                "solved_corner_count": 0,
+                "corner_count": 0,
+                "input_intervals": {
+                    "fixed_pressure_pa": {"lower": 0.0, "upper": 0.0, "nominal": 0.0},
+                    "resistance_pa_per_m3_s_squared": {
+                        "lower": 1.0,
+                        "upper": 1.0,
+                        "nominal": 1.0,
+                    },
+                },
+                "nominal_operating_point": None,
+                "operating_point_envelope": None,
+                "message": "No envelope.",
+                "corners": [],
+                "traceability": {"complete": True, "missing_provenance": []},
+                "engineering_note": "Internal note.",
+            }
+        ),
+        markdown_fan_loop_network_uncertainty_report(
+            {
+                "analysis": malicious,
+                "status": "indeterminate",
+                "fan_curve": malicious,
+                "fan_discharge_node": malicious,
+                "fan_suction_node": malicious,
+                "solved_corner_count": 0,
+                "corner_count": 0,
+                "input_intervals": {
+                    "fixed_pressure_pa": {"lower": 0.0, "upper": 0.0, "nominal": 0.0},
+                    "edge_resistance_pa_per_m3_s_squared": {},
+                },
+                "nominal_operating_point": None,
+                "operating_point_envelope": None,
+                "equivalent_loop_resistance_envelope": None,
+                "message": "No envelope.",
+                "corners": [],
+                "traceability": {"complete": True, "missing_provenance": []},
+                "engineering_note": "Internal note.",
+            }
+        ),
+        markdown_fan_loop_speed_report(
+            {
+                "study": malicious,
+                "reference_fan_curve": malicious,
+                "loop_network": malicious,
+                "fan_discharge_node": malicious,
+                "fan_suction_node": malicious,
+                "fixed_pressure_pa": 0.0,
+                "status": "screening_complete",
+                "speed_case_count": 0,
+                "reference_speed_rpm": None,
+                "speed_cases": [],
+                "scope_note": "Internal note.",
+            }
+        ),
+        markdown_fan_variable_friction_speed_report(
+            {
+                "study": malicious,
+                "reference_fan_curve": malicious,
+                "loop_network": malicious,
+                "fan_discharge_node": malicious,
+                "fan_suction_node": malicious,
+                "fixed_pressure_pa": 0.0,
+                "status": "screening_complete",
+                "speed_case_count": 0,
+                "unresolved_speed_case_count": 0,
+                "reference_speed_rpm": None,
+                "speed_cases": [],
+                "scope_note": "Internal note.",
+            }
+        ),
+    ]
+
+    for report in reports:
+        assert expected in report
+        assert malicious not in report
+        assert "\n## forged" not in report
+        assert "<tag>" not in report
+
+
+
+def test_fan_loop_uncertainty_edge_labels_cannot_break_inline_structure() -> None:
+    malicious = "Edge` | field\n## forged <tag> *x*"
+    escaped = markdown_text(malicious)
+    report = markdown_fan_loop_network_uncertainty_report(
+        {
+            "analysis": "Presentation safety",
+            "status": "indeterminate",
+            "fan_curve": "Fan",
+            "fan_discharge_node": "Supply",
+            "fan_suction_node": "Return",
+            "solved_corner_count": 0,
+            "corner_count": 0,
+            "input_intervals": {
+                "fixed_pressure_pa": {"lower": 0.0, "upper": 0.0, "nominal": 0.0},
+                "edge_resistance_pa_per_m3_s_squared": {
+                    malicious: {"lower": 1.0, "upper": 2.0, "nominal": 1.5},
+                },
+            },
+            "nominal_operating_point": None,
+            "nominal_equivalent_loop_resistance_pa_per_m3_s_squared": None,
+            "operating_point_envelope": None,
+            "equivalent_loop_resistance_envelope": None,
+            "message": "No envelope.",
+            "corners": [],
+            "traceability": {
+                "complete": False,
+                "missing_provenance": [f"edge:{malicious}"],
+            },
+            "engineering_note": "Internal note.",
+        }
+    )
+
+    assert f"Edge **{escaped}** resistance" in report
+    assert f"edge:{escaped}" in report
+    assert "\n## forged" not in report
+    assert "<tag>" not in report

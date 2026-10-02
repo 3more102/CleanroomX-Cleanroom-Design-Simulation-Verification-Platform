@@ -92,7 +92,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 1. Create a new project or open an existing `.cleanroomx.json` project.
 2. Add an analysis from the application catalog, or select an existing analysis.
-3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
+3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected. File imports use the shared bounded strict-JSON reader, reject inputs larger than 64 MiB, and fail closed if the opened file or live path changes while the bytes are being read.
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.

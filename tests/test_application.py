@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
@@ -646,8 +647,8 @@ def test_external_dependency_fingerprint_uses_shared_stable_file_authority(
     expected = hashlib.sha256(target.read_bytes()).hexdigest()
     calls = []
 
-    def shared_stable_hash(path, *, attempts):
-        calls.append((Path(path), attempts))
+    def shared_stable_hash(path, *, attempts, max_bytes):
+        calls.append((Path(path), attempts, max_bytes))
         return metadata, expected
 
     monkeypatch.setattr(
@@ -659,13 +660,87 @@ def test_external_dependency_fingerprint_uses_shared_stable_file_authority(
     fingerprint = application_module._stable_file_fingerprint(target)
 
     assert calls == [
-        (target, application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS)
+        (
+            target,
+            application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS,
+            application_module.STRICT_JSON_FILE_MAX_BYTES,
+        )
     ]
     assert fingerprint == {
         "size_bytes": metadata.st_size,
         "mtime_ns": metadata.st_mtime_ns,
         "sha256": expected,
     }
+
+
+def test_external_dependency_fingerprint_rejects_oversized_json_before_read(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "oversized-dependency.json"
+    with target.open("wb") as stream:
+        stream.truncate(application_module.STRICT_JSON_FILE_MAX_BYTES + 1)
+
+    original_open = Path.open
+
+    def reject_dependency_read(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == target and mode == "rb":
+            raise AssertionError("oversized dependency must be rejected before reading")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_dependency_read)
+
+    with pytest.raises(OSError, match="exceeds supported size limit"):
+        application_module._stable_file_fingerprint(target)
+
+
+def test_external_dependency_snapshot_uses_bounded_stable_authority(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    calls = []
+    original = application_module.stable_file_snapshot
+
+    @contextmanager
+    def bounded_snapshot(path, *, attempts, max_bytes, suffix=""):
+        calls.append((Path(path), attempts, max_bytes, suffix))
+        with original(
+            path,
+            attempts=attempts,
+            max_bytes=max_bytes,
+            suffix=suffix,
+        ) as snapshot:
+            yield snapshot
+
+    monkeypatch.setattr(
+        application_module,
+        "stable_file_snapshot",
+        bounded_snapshot,
+    )
+
+    execution_payload, dependencies, aliases = (
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+    )
+
+    assert calls == [
+        (
+            dependency,
+            application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS,
+            application_module.STRICT_JSON_FILE_MAX_BYTES,
+            ".json",
+        )
+    ]
+    assert len(dependencies) == 1
+    assert execution_payload["verification_project"].endswith("dependency-0000.json")
+    assert aliases
 
 
 def test_analysis_run_preserves_legacy_positional_constructor_shape():

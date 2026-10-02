@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 from .fan_curve import solve_fan_operating_point
 from .fan_curve_io import load_fan_operating_point_study
 from .fan_curve_report import markdown_fan_operating_point_report
@@ -39,11 +39,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-fan-curve",
             args.output,
             text,
             protected_inputs=(args.study,),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 0 if result["status"] == "solved" else 2

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import copy
 import json
 from pathlib import Path
@@ -241,6 +242,58 @@ def test_snapshot_output_identity_is_rechecked_before_replace(
 
     assert source.read_bytes() == before
     assert output.read_bytes() == before
+
+
+
+def test_input_ingestion_uses_digest_bound_private_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    original = DEMO.read_bytes()
+    source.write_bytes(original)
+
+    real_stable_file_snapshot = assurance_snapshot_module.stable_file_snapshot
+    calls: list[tuple[Path, int, int | None, str]] = []
+
+    @contextmanager
+    def controlled_snapshot(
+        path,
+        *,
+        attempts=3,
+        max_bytes=None,
+        suffix="",
+    ):
+        with real_stable_file_snapshot(
+            path,
+            attempts=attempts,
+            max_bytes=max_bytes,
+            suffix=suffix,
+        ) as captured:
+            calls.append((Path(path), attempts, max_bytes, suffix))
+            source.write_text('{"changed":true}\n', encoding="utf-8")
+            yield captured
+
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "stable_file_snapshot",
+        controlled_snapshot,
+    )
+
+    snapshot = create_assurance_snapshot(source)
+
+    assert snapshot["source"]["utf8_text"] == original.decode("utf-8")
+    assert snapshot["source"]["size_bytes"] == len(original)
+    assert calls == [
+        (
+            source,
+            3,
+            assurance_snapshot_module.ASSURANCE_INPUT_MAX_BYTES,
+            source.suffix,
+        )
+    ]
+    assert source.read_text(encoding="utf-8") == '{"changed":true}\n'
+
 
 
 def test_input_size_limit_is_enforced(

@@ -450,7 +450,11 @@ def atomic_publish_staged_file(
                 os.fchmod(handle.fileno(), existing_mode)
             os.fsync(handle.fileno())
 
-        staged_stat, expected_sha256 = stable_file_sha256(staged)
+        initial_staged_size = staged.stat().st_size
+        staged_stat, expected_sha256 = stable_file_sha256(
+            staged,
+            max_bytes=initial_staged_size,
+        )
         expected_size = staged_stat.st_size
 
         if before_replace is not None:

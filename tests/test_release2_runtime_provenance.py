@@ -97,6 +97,100 @@ def test_python_tree_fingerprint_is_deterministic_cached_and_content_sensitive(t
     assert changed["sha256"] != first["sha256"]
 
 
+def test_python_tree_fingerprint_rejects_oversized_source_before_binary_read(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "oversized.py"
+    with source.open("wb") as stream:
+        stream.truncate(application_module._RUNTIME_SOURCE_FILE_MAX_BYTES + 1)
+
+    original_open = Path.open
+
+    def reject_binary_read(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == source and mode == "rb":
+            raise AssertionError("oversized runtime source must fail before binary read")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_binary_read)
+    application_module._hash_python_tree_manifest.cache_clear()
+
+    with pytest.raises(RuntimeError, match="source file exceeds supported size limit"):
+        application_module._fingerprint_python_tree(root)
+
+
+def test_python_tree_fingerprint_rejects_oversized_tree_before_binary_read(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    first = root / "first.py"
+    second = root / "second.py"
+    first.write_bytes(b"A" * 8)
+    second.write_bytes(b"B" * 8)
+
+    monkeypatch.setattr(application_module, "_RUNTIME_SOURCE_FILE_MAX_BYTES", 8)
+    monkeypatch.setattr(application_module, "_RUNTIME_SOURCE_TREE_MAX_BYTES", 12)
+    original_open = Path.open
+
+    def reject_binary_read(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if mode == "rb" and Path(self).parent == root:
+            raise AssertionError("oversized runtime tree must fail before binary read")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_binary_read)
+    application_module._hash_python_tree_manifest.cache_clear()
+
+    with pytest.raises(RuntimeError, match="source tree exceeds supported size limit"):
+        application_module._fingerprint_python_tree(root)
+
+
+def test_python_tree_fingerprint_uses_bounded_source_read(tmp_path, monkeypatch):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    source.write_bytes(b"VALUE = 1\n")
+    requested_sizes = []
+    original_open = Path.open
+
+    class RecordingReader:
+        def __init__(self, handle):
+            self._handle = handle
+
+        def __enter__(self):
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._handle.__exit__(exc_type, exc, tb)
+
+        def fileno(self):
+            return self._handle.fileno()
+
+        def read(self, size=-1):
+            requested_sizes.append(size)
+            return self._handle.read(size)
+
+    def recording_open(self, *args, **kwargs):
+        handle = original_open(self, *args, **kwargs)
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == source and mode == "rb":
+            return RecordingReader(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", recording_open)
+    application_module._hash_python_tree_manifest.cache_clear()
+    result = application_module._fingerprint_python_tree(root)
+
+    assert result["source_file_count"] == 1
+    assert requested_sizes == [source.stat().st_size + 1]
+
+
 def test_python_tree_fingerprint_rejects_opened_source_revision_change(
     tmp_path,
     monkeypatch,

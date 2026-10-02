@@ -17,6 +17,7 @@ from .application import ANALYSIS_SPECS
 from .persistence import (
     AtomicWriteDurabilityError,
     atomic_write_text as _shared_atomic_write_text,
+    stable_file_sha256,
 )
 from .project_requirements import (
     ProjectRequirementsFormatError,
@@ -681,45 +682,43 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     """Capture a stable content revision for optimistic project-save protection."""
     source = _normalized_project_path(path)
     normalized = os.path.normcase(str(source))
-    if not source.exists():
+    try:
+        initial = source.stat()
+    except FileNotFoundError:
         return ProjectFileRevision(
             path=normalized, exists=False, size=None, mtime_ns=None, sha256=None
         )
-    if not source.is_file():
+    if not stat.S_ISREG(initial.st_mode):
         raise OSError(f"project path is not a regular file: {source}")
+    if initial.st_size > PROJECT_FILE_MAX_BYTES:
+        # Revision capture historically reports file-access failures as OSError;
+        # preserve that contract for batch/bundle stability checks.
+        raise OSError(_project_file_size_message(initial.st_size))
 
-    last_error: OSError | None = None
-    for _attempt in range(3):
-        before = source.stat()
-        if before.st_size > PROJECT_FILE_MAX_BYTES:
-            # Revision capture historically reports file-access failures as OSError;
-            # preserve that contract for batch/bundle stability checks.
-            raise OSError(_project_file_size_message(before.st_size))
-        digest = sha256()
-        try:
-            bytes_hashed = 0
-            with source.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    bytes_hashed += len(chunk)
-                    if bytes_hashed > PROJECT_FILE_MAX_BYTES:
-                        raise OSError(_project_file_size_message(bytes_hashed))
-                    digest.update(chunk)
-        except OSError as exc:
-            last_error = exc
-            continue
-        after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return ProjectFileRevision(
-                path=normalized,
-                exists=True,
-                size=after.st_size,
-                mtime_ns=after.st_mtime_ns,
-                sha256=digest.hexdigest(),
-            )
-        last_error = OSError(f"project file changed while fingerprinting: {source}")
+    try:
+        metadata, digest = stable_file_sha256(
+            source,
+            attempts=3,
+            max_bytes=PROJECT_FILE_MAX_BYTES,
+        )
+    except OSError as exc:
+        if "exceeds supported size limit" in str(exc):
+            try:
+                observed_size = source.stat().st_size
+            except OSError:
+                raise exc
+            if observed_size <= PROJECT_FILE_MAX_BYTES:
+                observed_size = PROJECT_FILE_MAX_BYTES + 1
+            raise OSError(_project_file_size_message(observed_size)) from exc
+        raise
 
-    assert last_error is not None
-    raise last_error
+    return ProjectFileRevision(
+        path=normalized,
+        exists=True,
+        size=metadata.st_size,
+        mtime_ns=metadata.st_mtime_ns,
+        sha256=digest,
+    )
 
 
 def project_file_revision_matches(

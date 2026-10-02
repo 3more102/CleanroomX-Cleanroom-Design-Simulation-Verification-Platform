@@ -272,6 +272,39 @@ def test_revision_aware_load_rejects_opened_file_revision_change(
         load_project_document_with_revision(path, attempts=1)
 
 
+def test_revision_capture_rejects_transient_path_descriptor_substitution(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "project.cleanroomx.json"
+    replacement = tmp_path / "replacement.cleanroomx.json"
+    original_bytes = b'{"revision":1}\n'
+    replacement_bytes = b'{"revision":2}\n'
+    assert len(original_bytes) == len(replacement_bytes)
+    source.write_bytes(original_bytes)
+    replacement.write_bytes(replacement_bytes)
+
+    original_open = project_module.Path.open
+    substituted = False
+
+    def transient_replacement_open(self, *args, **kwargs):
+        nonlocal substituted
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if self == source and mode == "rb" and not substituted:
+            substituted = True
+            return original_open(replacement, *args, **kwargs)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(project_module.Path, "open", transient_replacement_open)
+
+    revision = capture_project_file_revision(source)
+
+    assert substituted is True
+    assert revision.exists is True
+    assert revision.size == len(original_bytes)
+    assert revision.sha256 == project_module.sha256(original_bytes).hexdigest()
+    assert revision.sha256 != project_module.sha256(replacement_bytes).hexdigest()
+
+
 def test_guarded_save_rejects_external_content_change(tmp_path):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="Opened"))

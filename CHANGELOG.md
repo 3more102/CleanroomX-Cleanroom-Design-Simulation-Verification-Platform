@@ -23,6 +23,13 @@
 - Reuses the shared stable-file fingerprint authority and changes no bundle schema, project schema, solver equation, requirement criterion, or verification verdict.
 - Adds focused regression coverage proving every portable-bundle export fingerprint call carries the appropriate hard byte ceiling.
 
+## Unreleased Release 3 — bounded external dependency fingerprinting — 2026-10-02
+
+- Bounds file-backed consistency and dossier dependency fingerprints to the canonical 64 MiB strict-JSON ceiling before hashing or private snapshot copy.
+- Captures execution inputs through the shared bounded stable-file snapshot authority, closing the fingerprint-to-copy race against path replacement or file growth.
+- Rejects oversized declared dependency files before binary content reads begin, preventing unbounded pre-parser hashing or live-path copying of external engineering inputs.
+- Preserves dependency provenance, parser semantics, solver behavior, and dossier evidence identity; adds regressions for both bounded fingerprinting and bounded snapshot capture.
+
 ## Unreleased Release 3 — bounded autosave source fingerprinting — 2026-10-02
 
 - Bounds autosave/recovery source-project fingerprint reads to the canonical 64 MiB project-file ceiling already enforced by project loading.

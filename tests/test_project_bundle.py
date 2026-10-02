@@ -827,6 +827,7 @@ def test_bundle_snapshot_rejects_live_path_revision_change_during_capture(
             self.st_ino = value.st_ino
             self.st_size = value.st_size
             self.st_mtime_ns = value.st_mtime_ns + 1
+            self.st_ctime_ns = value.st_ctime_ns
 
     def changed_second_path_stat(self, *args, **kwargs):
         nonlocal path_stat_calls
@@ -865,6 +866,7 @@ def test_bundle_snapshot_rejects_opened_revision_change_during_capture(
             self.st_ino = value.st_ino
             self.st_size = value.st_size
             self.st_mtime_ns = value.st_mtime_ns + 1
+            self.st_ctime_ns = value.st_ctime_ns
 
     def changed_second_descriptor_stat(fd):
         nonlocal descriptor_stat_calls

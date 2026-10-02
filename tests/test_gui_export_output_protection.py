@@ -250,3 +250,50 @@ def test_gui_generic_export_rechecks_dependency_alias_before_replace(
     assert errors
     assert "external dependency" in errors[-1][1]
 
+def test_gui_unsaved_project_protects_absolute_dependency(monkeypatch, tmp_path):
+    verification = tmp_path / "verification.json"
+    dependency = tmp_path / "hvac.json"
+    verification.write_text("{}\n", encoding="utf-8")
+    dependency.write_text('{"engineering": "input"}\n', encoding="utf-8")
+    before = dependency.read_bytes()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project_path = None
+    app._recovery_source_path = None
+    app.project = ProjectDocument(
+        name="Unsaved protected dependencies",
+        analyses=[
+            AnalysisDocument(
+                id="consistency",
+                name="Consistency",
+                kind="consistency",
+                input={
+                    "verification_project": str(verification),
+                    "hvac_project": str(dependency),
+                    "room_airflow_abs_tolerance_m3_h": 0.0,
+                    "require_same_room_set": True,
+                },
+            )
+        ],
+        active_analysis_id="consistency",
+    )
+    app.status_var = _Status()
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+
+    assert app._write_export_file(
+        str(dependency),
+        "replacement\n",
+        label="Result",
+    ) is False
+
+    assert dependency.read_bytes() == before
+    assert app.status_var.value == "Result export failed"
+    assert errors
+    assert "external dependency" in errors[-1][1]
+

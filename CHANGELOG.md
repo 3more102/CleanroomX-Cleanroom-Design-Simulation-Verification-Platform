@@ -2,8 +2,8 @@
 
 ## Unreleased Release 3 — runtime source fingerprint revision binding — 2026-10-02
 
-- Binds every Python source file included in application execution provenance to the exact opened file-descriptor identity, size, mtime, and ctime observed before hashing.
-- Rechecks the opened descriptor after reading and rejects size or revision changes before accepting source bytes, closing the per-file transient/torn-read gap between the source-tree manifests.
+- Binds every Python source file included in application execution provenance to the exact path-manifest revision observed before hashing and a stable opened-descriptor revision during the read.
+- Rechecks the same opened descriptor after reading plus the source path after close; POSIX builds also bind opened device/inode identity to the manifest, while Windows keeps the portable path-manifest and descriptor-stability checks.
 - Preserves deterministic tree ordering, metadata-keyed fingerprint caching, bounded retry behavior, and the existing before/after analysis code-revision guard.
 - Adds a focused cross-platform regression that keeps the outer tree manifest stable while the opened-descriptor revision changes, proving the descriptor-level guard fails closed.
 - Changes no solver equation, numerical tolerance, engineering-unit convention, project schema, requirement criterion, verification verdict, or release identity.

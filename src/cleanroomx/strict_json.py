@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import math
 import os
@@ -12,6 +13,19 @@ STRICT_JSON_FILE_MAX_BYTES = 64 * 1024 * 1024
 
 class StrictJSONError(ValueError):
     """Raised when a value cannot be represented as deterministic strict JSON."""
+
+
+class StrictJSONFileChangedError(StrictJSONError):
+    """Raised when a file-backed JSON input changes during one bounded read."""
+
+
+@dataclass(frozen=True)
+class StrictJSONFileSnapshot:
+    """Exact stable bytes and filesystem revision used for strict JSON parsing."""
+
+    raw_bytes: bytes
+    size: int
+    mtime_ns: int
 
 
 def _json_child_path(path: str, key: str) -> str:
@@ -135,17 +149,12 @@ def _file_revision(stat_result: os.stat_result) -> tuple[int, int, int, int]:
     )
 
 
-def load_strict_json(
-    path: str | Path,
+def _read_strict_json_snapshot(
+    source: Path,
     *,
-    max_bytes: int | None = None,
-) -> Any:
-    """Read one bounded, revision-stable UTF-8 file through the strict parser."""
-    source = Path(path)
-    limit = STRICT_JSON_FILE_MAX_BYTES if max_bytes is None else max_bytes
-    if type(limit) is not int or limit < 1:
-        raise ValueError("max_bytes must be a positive integer")
-
+    limit: int,
+) -> StrictJSONFileSnapshot:
+    """Read one exact stable byte snapshot behind the strict-JSON file boundary."""
     with source.open("rb") as stream:
         before = os.fstat(stream.fileno())
         if before.st_size > limit:
@@ -158,7 +167,7 @@ def load_strict_json(
         try:
             current = source.stat()
         except OSError as exc:
-            raise StrictJSONError(
+            raise StrictJSONFileChangedError(
                 f"{source} changed while reading JSON input"
             ) from exc
 
@@ -174,12 +183,46 @@ def load_strict_json(
         or _file_revision(after) != _file_revision(current)
         or len(raw) != after.st_size
     ):
-        raise StrictJSONError(f"{source} changed while reading JSON input")
+        raise StrictJSONFileChangedError(
+            f"{source} changed while reading JSON input"
+        )
 
+    return StrictJSONFileSnapshot(
+        raw_bytes=raw,
+        size=after.st_size,
+        mtime_ns=after.st_mtime_ns,
+    )
+
+
+def load_strict_json_with_snapshot(
+    path: str | Path,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[Any, StrictJSONFileSnapshot]:
+    """Parse strict JSON and return the exact stable bytes that were parsed."""
+    source = Path(path)
+    limit = STRICT_JSON_FILE_MAX_BYTES if max_bytes is None else max_bytes
+    if type(limit) is not int or limit < 1:
+        raise ValueError("max_bytes must be a positive integer")
+
+    snapshot = _read_strict_json_snapshot(source, limit=limit)
     try:
-        text = raw.decode("utf-8")
+        text = snapshot.raw_bytes.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise StrictJSONError(
             f"{source} must contain valid UTF-8 JSON text"
         ) from exc
-    return strict_json_loads(text)
+    return strict_json_loads(text), snapshot
+
+
+def load_strict_json(
+    path: str | Path,
+    *,
+    max_bytes: int | None = None,
+) -> Any:
+    """Read one bounded, revision-stable UTF-8 file through the strict parser."""
+    value, _snapshot = load_strict_json_with_snapshot(
+        path,
+        max_bytes=max_bytes,
+    )
+    return value

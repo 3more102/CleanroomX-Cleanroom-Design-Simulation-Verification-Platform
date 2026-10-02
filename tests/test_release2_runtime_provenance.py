@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,63 @@ def test_python_tree_fingerprint_is_deterministic_cached_and_content_sensitive(t
     source.write_text("VALUE = 3\n", encoding="utf-8")
     changed = application_module._fingerprint_python_tree(root)
     assert changed["sha256"] != first["sha256"]
+
+
+
+def test_python_tree_fingerprint_rejects_opened_source_revision_change(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    manifest = application_module._python_tree_manifest(root)
+    original_open = Path.open
+
+    class _MutatingReader:
+        def __init__(self, handle):
+            self._handle = handle
+            self._mutated = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._handle.__exit__(exc_type, exc, tb)
+
+        def fileno(self):
+            return self._handle.fileno()
+
+        def read(self, *args, **kwargs):
+            data = self._handle.read(*args, **kwargs)
+            if not self._mutated:
+                fd = os.open(source, os.O_WRONLY | os.O_TRUNC)
+                try:
+                    os.write(fd, b"VALUE = 999999\n")
+                finally:
+                    os.close(fd)
+                self._mutated = True
+            return data
+
+    def guarded_open(path, *args, **kwargs):
+        handle = original_open(path, *args, **kwargs)
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if path == source and mode == "rb":
+            return _MutatingReader(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", guarded_open)
+    monkeypatch.setattr(
+        application_module,
+        "_python_tree_manifest",
+        lambda _root: manifest,
+    )
+
+    with pytest.raises(RuntimeError, match="changed while it was being fingerprinted"):
+        application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
 
 
 def test_application_info_exposes_current_implementation_revision():

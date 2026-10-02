@@ -10,7 +10,7 @@ from .application import (
     ExternalDependencySnapshotError,
     run_analysis,
 )
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,11 +76,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-consistency",
             args.output,
             text,
             protected_inputs=(args.verification_project, args.hvac_project),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 2 if result["status"] == "fail" else 0

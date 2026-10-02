@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import errno
 from hashlib import sha256
 import os
 from pathlib import Path
 import stat
 import tempfile
-from typing import Callable
+from typing import Callable, Iterator
 
 
 BeforeReplace = Callable[[], None]
@@ -123,24 +124,76 @@ def _ensure_directory_durable(directory: Path) -> None:
         _fsync_directory(item.parent)
 
 
-def stable_file_sha256(
-    path: str | Path,
+def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+    )
+
+
+def _validate_stable_file_max_bytes(max_bytes: int | None) -> int | None:
+    if max_bytes is None:
+        return None
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 0:
+        raise ValueError("max_bytes must be a non-negative integer or None")
+    return max_bytes
+
+
+def _capture_stable_file_revision(
+    source: Path,
     *,
-    attempts: int = 3,
+    attempts: int,
+    max_bytes: int | None,
+    snapshot_path: Path | None,
 ) -> tuple[os.stat_result, str]:
-    """Hash one stable file revision and reject path/descriptor replacement races."""
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
-    source = Path(path)
+    limit = _validate_stable_file_max_bytes(max_bytes)
     last_error: OSError | None = None
+
     for _attempt in range(attempts):
         try:
             before_path = source.stat()
+            if limit is not None and before_path.st_size > limit:
+                raise OSError(
+                    "file exceeds supported size limit "
+                    f"({before_path.st_size} > {limit} bytes): {source}"
+                )
+
             digest = sha256()
+            bytes_read = 0
             with source.open("rb") as handle:
                 before_handle = os.fstat(handle.fileno())
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
+                if limit is not None and before_handle.st_size > limit:
+                    raise OSError(
+                        "file exceeds supported size limit "
+                        f"({before_handle.st_size} > {limit} bytes): {source}"
+                    )
+
+                if snapshot_path is None:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        bytes_read += len(chunk)
+                        if limit is not None and bytes_read > limit:
+                            raise OSError(
+                                "file exceeds supported size limit while reading "
+                                f"(more than {limit} bytes): {source}"
+                            )
+                        digest.update(chunk)
+                else:
+                    with snapshot_path.open("wb") as snapshot:
+                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                            bytes_read += len(chunk)
+                            if limit is not None and bytes_read > limit:
+                                raise OSError(
+                                    "file exceeds supported size limit while reading "
+                                    f"(more than {limit} bytes): {source}"
+                                )
+                            digest.update(chunk)
+                            snapshot.write(chunk)
+                        snapshot.flush()
+
                 after_handle = os.fstat(handle.fileno())
             after_path = source.stat()
         except OSError as exc:
@@ -148,36 +201,61 @@ def stable_file_sha256(
             continue
 
         identities = (
-            (
-                before_path.st_dev,
-                before_path.st_ino,
-                before_path.st_size,
-                before_path.st_mtime_ns,
-            ),
-            (
-                before_handle.st_dev,
-                before_handle.st_ino,
-                before_handle.st_size,
-                before_handle.st_mtime_ns,
-            ),
-            (
-                after_handle.st_dev,
-                after_handle.st_ino,
-                after_handle.st_size,
-                after_handle.st_mtime_ns,
-            ),
-            (
-                after_path.st_dev,
-                after_path.st_ino,
-                after_path.st_size,
-                after_path.st_mtime_ns,
-            ),
+            _stable_file_identity(before_path),
+            _stable_file_identity(before_handle),
+            _stable_file_identity(after_handle),
+            _stable_file_identity(after_path),
         )
-        if identities[0] == identities[1] == identities[2] == identities[3]:
+        if (
+            identities[0] == identities[1] == identities[2] == identities[3]
+            and bytes_read == after_handle.st_size
+        ):
             return after_path, digest.hexdigest()
         last_error = OSError(f"file changed while verifying: {source}")
+
     assert last_error is not None
     raise last_error
+
+
+def stable_file_sha256(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+    max_bytes: int | None = None,
+) -> tuple[os.stat_result, str]:
+    """Hash one stable file revision and reject path/descriptor replacement races."""
+    return _capture_stable_file_revision(
+        Path(path),
+        attempts=attempts,
+        max_bytes=max_bytes,
+        snapshot_path=None,
+    )
+
+
+@contextmanager
+def stable_file_snapshot(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+    max_bytes: int | None = None,
+    suffix: str = "",
+) -> Iterator[tuple[Path, os.stat_result, str]]:
+    """Copy one stable source revision into a private digest-bound file snapshot."""
+    if not isinstance(suffix, str):
+        raise TypeError("suffix must be a string")
+    if any(separator and separator in suffix for separator in (os.sep, os.altsep)):
+        raise ValueError("suffix must not contain path separators")
+
+    source = Path(path)
+    with tempfile.TemporaryDirectory(prefix="cleanroomx-stable-file-") as directory:
+        snapshot = Path(directory) / f"snapshot{suffix}"
+        metadata, digest = _capture_stable_file_revision(
+            source,
+            attempts=attempts,
+            max_bytes=max_bytes,
+            snapshot_path=snapshot,
+        )
+        yield snapshot, metadata, digest
 
 
 # Backward-compatible private alias for existing tests/internal callers.

@@ -8,6 +8,9 @@ CleanroomX file-backed engineering loaders share the canonical
 Ordinary strict-JSON engineering inputs are limited to 64 MiB before JSON
 parsing. The canonical reader also performs a bounded read, so a file that
 grows after the initial metadata check cannot force an unbounded allocation.
+The desktop **Import analysis input JSON** action uses this same canonical reader
+before file-reference rebasing, so imported analysis inputs inherit the same
+size ceiling and opened-file/live-path revision checks.
 Specialized formats with their own documented limits, such as normal project
 documents, assurance snapshots, portable bundles, and IFC sources, retain
 their dedicated limits.

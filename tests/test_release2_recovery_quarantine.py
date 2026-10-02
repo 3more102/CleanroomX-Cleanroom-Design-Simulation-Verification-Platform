@@ -61,6 +61,31 @@ def test_quarantine_manifest_binds_to_bytes_moved_into_quarantine(tmp_path, monk
     assert quarantined.sha256 == sha256(moved).hexdigest()
 
 
+def test_quarantine_finalization_failure_restores_when_path_stays_vacant(
+    tmp_path, monkeypatch
+):
+    artifact = tmp_path / "broken.recovery.json"
+    suspect = b"suspect recovery bytes"
+    artifact.write_bytes(suspect)
+
+    def fail_manifest_write(_path, _text):
+        raise OSError("manifest write blocked")
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", fail_manifest_write)
+
+    with pytest.raises(OSError, match="manifest write blocked"):
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=tmp_path,
+            reason="parse failure",
+        )
+
+    assert artifact.read_bytes() == suspect
+    quarantine_dir = tmp_path / "quarantine"
+    assert list(quarantine_dir.glob("*.quarantined")) == []
+    assert list(quarantine_dir.glob("*.quarantined.manifest.json")) == []
+
+
 def test_quarantine_rollback_never_overwrites_repopulated_recovery_path(
     tmp_path, monkeypatch
 ):

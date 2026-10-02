@@ -475,6 +475,30 @@ def test_ifc_extraction_rejects_unexpected_device_enumeration_failure(
         extract_ifc_semantics(source)
 
 
+def test_ifc_extraction_rejects_unrelated_schema_runtime_error(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcAirTerminal":
+                raise RuntimeError("schema cache not found while reading backend")
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    source = tmp_path / "broken-schema-cache.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to enumerate IFC device class 'IfcAirTerminal'",
+    ) as raised:
+        extract_ifc_semantics(source)
+
+    assert isinstance(raised.value.__cause__, RuntimeError)
+
+
 def test_ifc_extraction_rejects_space_enumeration_failure(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
 

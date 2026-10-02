@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.damper_study_io import load_loop_damper_study
 from cleanroomx.dossier import build_dossier
 from cleanroomx.dossier_cli import main as dossier_main
@@ -30,6 +31,7 @@ from cleanroomx.fan_variable_friction_uncertainty_io import (
 from cleanroomx.hvac_io import load_hvac_project
 from cleanroomx.io import load_project, load_room
 from cleanroomx.loop_network_io import load_looped_flow_network
+from cleanroomx.pressure_network_io import load_pressure_network
 from cleanroomx.psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from cleanroomx.qualification_io import load_qualification_uncertainty
 from cleanroomx.recovery_io import load_recovery_test
@@ -39,12 +41,14 @@ from cleanroomx.uncertainty_io import load_uncertain_room
 
 
 FILE_LOADERS: tuple[Callable[[str | Path], object], ...] = (
+    build_dossier,
     load_room,
     load_project,
     load_recovery_test,
     load_hvac_project,
     load_parallel_flow_network,
     load_looped_flow_network,
+    load_pressure_network,
     load_uncertain_room,
     load_qualification_uncertainty,
     load_fan_speed_study,
@@ -87,6 +91,74 @@ def test_strict_file_loader_rejects_duplicate_object_keys(tmp_path: Path) -> Non
 
     with pytest.raises(StrictJSONError, match="duplicate JSON object key"):
         load_strict_json(source)
+
+
+@pytest.mark.parametrize("loader", FILE_LOADERS, ids=lambda loader: loader.__name__)
+def test_file_backed_engineering_loaders_reject_oversized_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader: Callable[[str | Path], object],
+) -> None:
+    source = tmp_path / "oversized.json"
+    source.write_text('{"sentinel": 12345}', encoding="utf-8")
+    monkeypatch.setattr(strict_json_module, "STRICT_JSON_FILE_MAX_BYTES", 8)
+
+    with pytest.raises(StrictJSONError, match="exceeds maximum supported JSON size"):
+        loader(source)
+
+
+def test_strict_file_loader_accepts_input_at_exact_size_limit(tmp_path: Path) -> None:
+    source = tmp_path / "exact-limit.json"
+    payload = b'{"value":1}'
+    source.write_bytes(payload)
+
+    assert load_strict_json(source, max_bytes=len(payload)) == {"value": 1}
+
+
+def test_strict_file_loader_rejects_path_identity_change_after_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    replacement = tmp_path / "replacement.json"
+    source.write_text('{"revision": 1}', encoding="utf-8")
+    replacement.write_text('{"revision": 2}', encoding="utf-8")
+    real_stat = Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement_identity(self: Path, *args, **kwargs):
+        if self == source:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", report_replacement_identity)
+
+    with pytest.raises(StrictJSONError, match="changed while reading JSON input"):
+        load_strict_json(source)
+
+
+def test_strict_file_loader_rejects_path_disappearance_after_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_text('{"revision": 1}', encoding="utf-8")
+    real_stat = Path.stat
+
+    def disappear_on_live_path_check(self: Path, *args, **kwargs):
+        if self == source:
+            raise FileNotFoundError(str(source))
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", disappear_on_live_path_check)
+
+    with pytest.raises(
+        StrictJSONError,
+        match="changed while reading JSON input",
+    ) as raised:
+        load_strict_json(source)
+
+    assert isinstance(raised.value.__cause__, FileNotFoundError)
 
 
 @pytest.mark.parametrize("loader", FILE_LOADERS, ids=lambda loader: loader.__name__)

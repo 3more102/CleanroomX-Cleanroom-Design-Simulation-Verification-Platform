@@ -18,7 +18,6 @@ from cleanroomx.persistence import (
 )
 
 
-
 def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     tmp_path, monkeypatch
 ):

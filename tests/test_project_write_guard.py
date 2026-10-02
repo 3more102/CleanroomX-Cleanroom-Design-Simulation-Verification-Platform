@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 import json
 import multiprocessing
 
@@ -10,9 +11,11 @@ import cleanroomx.gui as gui_module
 import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.persistence import AtomicWriteDurabilityError
+from cleanroomx.strict_json import StrictJSONFileChangedError
 from cleanroomx.project import (
     ProjectDocument,
     ProjectFileBusyError,
+    ProjectFormatError,
     ProjectSaveDurabilityError,
     ProjectWriteConflictError,
     capture_project_file_revision,
@@ -46,29 +49,30 @@ class Value:
         self.value = value
 
 
-def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
+def test_revision_load_binds_revision_to_exact_parsed_snapshot(
+    tmp_path, monkeypatch
+):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
-    calls = {"count": 0}
+    raw = path.read_bytes()
 
-    def changing_load(source):
-        project = original_load(source)
-        if calls["count"] == 0:
-            save_project_document(path, ProjectDocument(name="Second"))
-        calls["count"] += 1
-        return project
+    def forbid_separate_revision_capture(_path):
+        raise AssertionError("revision loader must not perform a separate fingerprint read")
 
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+    monkeypatch.setattr(
+        project_module,
+        "capture_project_file_revision",
+        forbid_separate_revision_capture,
+    )
 
     project, revision = load_project_document_with_revision(path)
 
-    assert calls["count"] == 2
-    assert project.name == "Second"
-    assert revision == capture_project_file_revision(path)
+    assert project.name == "First"
+    assert revision.size == len(raw)
+    assert revision.sha256 == sha256(raw).hexdigest()
 
 
-def test_migration_aware_stable_load_retries_and_rebinds_provenance(
+def test_migration_aware_revision_binds_to_exact_legacy_snapshot(
     tmp_path, monkeypatch
 ):
     path = tmp_path / "legacy.cleanroomx.json"
@@ -86,29 +90,83 @@ def test_migration_aware_stable_load_retries_and_rebinds_provenance(
         }),
         encoding="utf-8",
     )
-    original_load = project_module.load_project_document_with_migration_info
-    calls = {"count": 0}
+    raw = path.read_bytes()
 
-    def changing_load(source):
-        loaded = original_load(source)
-        if calls["count"] == 0:
-            save_project_document(path, ProjectDocument(name="Current"))
-        calls["count"] += 1
-        return loaded
+    def forbid_separate_revision_capture(_path):
+        raise AssertionError("migration-aware load must use the parsed byte snapshot")
 
     monkeypatch.setattr(
         project_module,
-        "load_project_document_with_migration_info",
-        changing_load,
+        "capture_project_file_revision",
+        forbid_separate_revision_capture,
     )
 
     project, revision, migration_info = load_project_document_with_revision_info(path)
 
+    assert project.name == "Legacy"
+    assert migration_info.migrated is True
+    assert migration_info.source_schema_version == 0
+    assert revision.size == len(raw)
+    assert revision.sha256 == sha256(raw).hexdigest()
+
+
+def test_revision_load_retries_canonical_snapshot_change(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Stable"))
+    original_load = project_module.load_strict_json_snapshot
+    calls = {"count": 0}
+
+    def transient_change(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise StrictJSONFileChangedError("injected project snapshot change")
+        return original_load(*args, **kwargs)
+
+    monkeypatch.setattr(
+        project_module,
+        "load_strict_json_snapshot",
+        transient_change,
+    )
+
+    project, revision = load_project_document_with_revision(path, attempts=2)
+
     assert calls["count"] == 2
-    assert project.name == "Current"
-    assert migration_info.migrated is False
-    assert migration_info.source_schema_version == 1
-    assert revision == capture_project_file_revision(path)
+    assert project.name == "Stable"
+    assert revision.sha256 == sha256(path.read_bytes()).hexdigest()
+
+
+def test_revision_load_rejects_oversized_exact_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Too large"))
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 8)
+
+    with pytest.raises(
+        ProjectFormatError,
+        match="exceeds maximum supported JSON size",
+    ):
+        load_project_document_with_revision(path, attempts=1)
+
+
+def test_revision_load_rejects_live_path_identity_replacement(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    replacement = tmp_path / "replacement.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    save_project_document(replacement, ProjectDocument(name="Replacement"))
+    source = path.resolve(strict=False)
+    real_stat = project_module.Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement_identity(self, *args, **kwargs):
+        if self == source:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(project_module.Path, "stat", report_replacement_identity)
+
+    with pytest.raises(OSError, match="changed repeatedly while opening"):
+        load_project_document_with_revision(path, attempts=1)
 
 
 def test_guarded_save_rejects_external_content_change(tmp_path):

@@ -7,7 +7,7 @@ from .strict_json import StrictJSONError
 from .pressure_network import solve_room_pressure_network
 from .pressure_network_io import load_pressure_network
 from .pressure_network_report import markdown_pressure_network_report
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import dumps_strict_json, publish_cli_output
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,11 +67,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not publish_cli_output(
+            "cleanroomx-pressure-network",
             args.output,
             text,
             protected_inputs=(args.network,),
-        )
+        ):
+            return 1
     else:
         print(text)
     return 0

@@ -304,7 +304,10 @@ def _build_portable_project(
                         f"(more than {_MAX_TOTAL_PAYLOAD_BYTES} bytes)"
                     )
                 try:
-                    source_stat, source_sha256 = stable_file_sha256(source)
+                    source_stat, source_sha256 = stable_file_sha256(
+                        source,
+                        max_bytes=_MAX_DEPENDENCY_MEMBER_BYTES,
+                    )
                 except OSError as exc:
                     raise ProjectBundleError(
                         f"dependency is unavailable or changing while packaging: {source}"
@@ -454,7 +457,10 @@ def export_project_bundle(
         before_replace=assert_publication_safe,
     )
 
-    bundle_stat, bundle_sha256 = stable_file_sha256(destination.resolve(strict=False))
+    bundle_stat, bundle_sha256 = stable_file_sha256(
+        destination.resolve(strict=False),
+        max_bytes=_MAX_BUNDLE_ARCHIVE_BYTES,
+    )
     return {
         "bundle_path": str(destination),
         "bundle_sha256": bundle_sha256,

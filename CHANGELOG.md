@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — development package identity — 2026-10-02
+
+- Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.
+- Keeps `pyproject.toml` and `cleanroomx.__version__` synchronized and removes active CI/GUI tests that treated moving `main` as exactly `0.102.1`.
+- Adds a focused packaging-contract regression that requires an explicit numeric `.devN` identity and rejects reuse of the published stable version.
+- Leaves historical v0.102.1 release evidence, validation documents, demo fixtures, and release publisher checks unchanged.
+- Changes no solver equation, engineering tolerance, project schema, acceptance criterion, or historical release tag.
+
 ## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
 
 - Routes every standalone file-backed engineering CLI through one protected atomic output writer.

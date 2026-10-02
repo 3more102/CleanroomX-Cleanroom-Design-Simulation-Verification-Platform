@@ -21,7 +21,8 @@ from .input_contracts import (
     validate_consistency_input_contract,
     validate_dossier_input_contract,
 )
-from .persistence import stable_file_sha256
+from .persistence import stable_file_sha256, stable_file_snapshot
+from .strict_json import STRICT_JSON_FILE_MAX_BYTES
 from .plugins import (
     PLUGIN_API_VERSION,
     PluginOrigin,
@@ -1316,6 +1317,7 @@ def _stable_file_fingerprint(path: Path) -> dict:
     metadata, digest = stable_file_sha256(
         path,
         attempts=_DEPENDENCY_FINGERPRINT_ATTEMPTS,
+        max_bytes=STRICT_JSON_FILE_MAX_BYTES,
     )
     return {
         "size_bytes": metadata.st_size,
@@ -1436,7 +1438,33 @@ def _prepare_external_dependency_snapshot(
             source = _resolve_relative(base_dir, declared_path)
             destination = snapshot_dir / f"dependency-{index:04d}.json"
             try:
-                shutil.copyfile(source, destination)
+                with stable_file_snapshot(
+                    source,
+                    attempts=_DEPENDENCY_FINGERPRINT_ATTEMPTS,
+                    max_bytes=STRICT_JSON_FILE_MAX_BYTES,
+                    suffix=".json",
+                ) as (stable_source, stable_metadata, stable_digest):
+                    current = {
+                        "size_bytes": stable_metadata.st_size,
+                        "mtime_ns": stable_metadata.st_mtime_ns,
+                        "sha256": stable_digest,
+                    }
+                    if (
+                        current["sha256"] != expected["sha256"]
+                        or current["size_bytes"] != expected["size_bytes"]
+                        or current["mtime_ns"] != expected["mtime_ns"]
+                    ):
+                        changes.append({
+                            "field": field,
+                            "declared_path": declared_path,
+                            "status": "changed_while_snapshotting",
+                            "sha256_before": expected["sha256"],
+                            "snapshot_sha256": current["sha256"],
+                            "size_bytes_before": expected["size_bytes"],
+                            "snapshot_size_bytes": current["size_bytes"],
+                        })
+                        continue
+                    shutil.copyfile(stable_source, destination)
             except OSError as exc:
                 try:
                     current = _stable_file_fingerprint(source)

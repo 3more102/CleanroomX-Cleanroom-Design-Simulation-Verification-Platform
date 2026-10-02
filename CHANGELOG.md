@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — shared stable dependency fingerprint authority — 2026-10-02
+
+- Routes application external-dependency fingerprints through the existing `persistence.stable_file_sha256()` authority instead of maintaining a second path-stat/hash/path-stat implementation.
+- Binds accepted dependency digests to one opened file descriptor and the same live path identity before and after hashing, rejecting path/descriptor substitution races before analysis freshness or execution provenance can trust the revision.
+- Preserves the existing three-attempt stabilization policy, dependency provenance fields, immutable execution snapshots, verification-currency semantics, and project schemas.
+- Adds focused regression coverage for path/descriptor ABA-style substitution recovery and for the application layer's use of the shared stable-file authority.
+- Changes no solver equation, numerical tolerance, engineering-unit convention, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — runtime source fingerprint revision binding — 2026-10-02
 
 - Binds every Python source file included in application execution provenance to the exact path-manifest revision observed before hashing and a stable opened-descriptor revision during the read.

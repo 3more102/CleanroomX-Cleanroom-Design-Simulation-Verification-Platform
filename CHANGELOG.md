@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — digest-bound IFC source snapshots — 2026-10-02
+
+- Adds a canonical bounded stable-file snapshot authority in `cleanroomx.persistence`, sharing the same path/descriptor revision checks used by stable SHA-256 fingerprinting.
+- Parses IFC through a private exact-byte snapshot whose SHA-256 becomes the persisted source provenance, rather than reopening the live source path after hashing.
+- Preserves the existing 512 MiB IFC source ceiling and final live-source drift rejection while closing replace/restore (ABA) substitution between provenance hashing and IfcOpenShell parsing.
+- Adds regressions proving snapshot cleanup, bounded capture, digest binding, and resistance to transient live-path substitution.
+- Changes no IFC semantic schema, spatial identity rule, solver equation, engineering tolerance, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — shared stable dependency fingerprint authority — 2026-10-02
 
 - Routes application external-dependency fingerprints through the existing `persistence.stable_file_sha256()` authority instead of maintaining a second path-stat/hash/path-stat implementation.

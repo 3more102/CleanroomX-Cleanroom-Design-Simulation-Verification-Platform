@@ -8,7 +8,6 @@
 - Protects dossier dependencies, consistency-project pairs, assurance snapshots, and project-bundle destinations against overwrite races.
 - Restacks the reviewed unique delta from superseded PR #748 onto exact current main without importing its stale history.
 
-
 ## Unreleased Release 3 — psychrometric dew-point domain and phase-boundary hardening — 2026-10-02
 
 - Adds direct regressions against the official IAPWS R14-08 230 K sublimation-pressure verification point and IAPWS-IF97 Region 4 300 K saturation-pressure verification point.

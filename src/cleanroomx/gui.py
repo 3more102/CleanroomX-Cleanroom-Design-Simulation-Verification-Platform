@@ -3836,15 +3836,33 @@ class CleanroomXApp:
         before_replace=None,
     ) -> bool:
         target = Path(path)
-        try:
-            if before_replace is None:
-                atomic_write_text(target, content)
-            else:
-                atomic_write_text(
-                    target,
-                    content,
-                    before_replace=before_replace,
+
+        def assert_output_safe() -> None:
+            source = getattr(self, "project_path", None)
+            if source is None:
+                source = getattr(self, "_recovery_source_path", None)
+            if source is not None:
+                _assert_project_output_is_safe(
+                    self.project,
+                    source=Path(source),
+                    output=target,
                 )
+
+        def assert_publication_safe() -> None:
+            assert_output_safe()
+            if before_replace is not None:
+                before_replace()
+
+        try:
+            # Fail before staging if the selected destination already aliases
+            # persisted engineering input, then repeat the identity check at
+            # the atomic replacement boundary to close path/hardlink races.
+            assert_output_safe()
+            atomic_write_text(
+                target,
+                content,
+                before_replace=assert_publication_safe,
+            )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
             messagebox.showerror(

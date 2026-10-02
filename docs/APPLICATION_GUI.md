@@ -62,7 +62,7 @@ When one of the supported legacy formats is opened, the desktop displays it as a
 
 ### External-change write protection
 
-When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
+When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. Revision-aware loading derives the SHA-256 and byte size from the exact bounded strict-JSON byte snapshot passed to parsing, rather than from a separate fingerprint read, and rejects observed opened-file or live-path revision changes during that snapshot. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
 
 If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
 

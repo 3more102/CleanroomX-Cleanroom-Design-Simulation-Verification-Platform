@@ -23,6 +23,7 @@ from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
     analysis_catalog,
+    analysis_external_dependency_references,
     analysis_run_is_current,
     application_info,
     rebase_analysis_file_references,
@@ -64,6 +65,7 @@ from .project_bundle import (
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
     _assert_project_publication_safe,
+    _paths_alias,
 )
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -100,7 +102,7 @@ from .verification_run_history import (
     validate_project_verification_run_history,
     verification_run_history_records,
 )
-from .strict_json import strict_json_loads as _strict_json_loads
+from .strict_json import load_strict_json, strict_json_loads as _strict_json_loads
 from .spatial import (
     SPATIAL_METADATA_KEY,
     SpatialDesignWorkspace,
@@ -3802,7 +3804,7 @@ class CleanroomXApp:
             return
         source_path = Path(path)
         try:
-            payload = _strict_json_loads(source_path.read_text(encoding="utf-8"))
+            payload = load_strict_json(source_path)
             if not isinstance(payload, dict):
                 raise ValueError("input file must contain a JSON object")
             payload = rebase_analysis_file_references(
@@ -3837,13 +3839,70 @@ class CleanroomXApp:
     ) -> bool:
         target = Path(path)
         try:
-            if before_replace is None:
+            project = getattr(self, "project", None)
+            source = getattr(self, "project_path", None)
+            if source is None:
+                source = getattr(self, "_recovery_source_path", None)
+
+            protect_current_project_inputs = None
+            if project is not None:
+                if source is not None:
+                    source_path = Path(source)
+
+                    def protect_current_project_inputs() -> None:
+                        _assert_project_output_is_safe(
+                            project,
+                            source=source_path,
+                            output=target,
+                        )
+                else:
+
+                    def protect_current_project_inputs() -> None:
+                        for analysis in project.analyses:
+                            for field, declared_path in (
+                                analysis_external_dependency_references(
+                                    analysis.kind,
+                                    analysis.input,
+                                )
+                            ):
+                                dependency = Path(declared_path).expanduser()
+                                if not dependency.is_absolute():
+                                    continue
+                                if _paths_alias(dependency, target):
+                                    raise ValueError(
+                                        "export output path must be different from "
+                                        "external dependency "
+                                        f"{field!r} for analysis {analysis.id!r}: "
+                                        f"{dependency.resolve(strict=False)}"
+                                    )
+
+                # Reject an already-dangerous selection before creating a
+                # staged file, then repeat the same check at publication time.
+                # Unsaved projects have no canonical base directory, so only
+                # absolute file-backed dependencies can be protected there.
+                protect_current_project_inputs()
+
+            effective_before_replace = before_replace
+            if (
+                protect_current_project_inputs is not None
+                and before_replace is not None
+            ):
+
+                def protect_then_validate_caller() -> None:
+                    protect_current_project_inputs()
+                    before_replace()
+
+                effective_before_replace = protect_then_validate_caller
+            elif protect_current_project_inputs is not None:
+                effective_before_replace = protect_current_project_inputs
+
+            if effective_before_replace is None:
                 atomic_write_text(target, content)
             else:
                 atomic_write_text(
                     target,
                     content,
-                    before_replace=before_replace,
+                    before_replace=effective_before_replace,
                 )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")

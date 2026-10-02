@@ -64,3 +64,14 @@ def test_console_script_targets_resolve_to_zero_argument_callables(
 def test_runtime_version_matches_project_metadata() -> None:
     project_version = str(_project_metadata()["project"]["version"])
     assert cleanroomx.__version__ == project_version
+
+def test_unreleased_main_uses_distinct_development_version() -> None:
+    project_version = str(_project_metadata()["project"]["version"])
+    release, marker, serial = project_version.partition(".dev")
+
+    assert project_version != "0.102.1"
+    assert marker == ".dev"
+    assert serial.isdigit()
+    release_parts = release.split(".")
+    assert len(release_parts) == 3
+    assert all(part.isdigit() for part in release_parts)

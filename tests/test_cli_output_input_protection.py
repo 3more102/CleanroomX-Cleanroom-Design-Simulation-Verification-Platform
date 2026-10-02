@@ -181,6 +181,30 @@ def test_dossier_cli_cannot_publish_over_declared_dependency(tmp_path, monkeypat
     assert dependency.read_bytes() == before
 
 
+def test_alias_rejection_does_not_reresolve_source_for_diagnostic(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "engineering-input.json"
+    output = tmp_path / "report.json"
+
+    monkeypatch.setattr(cli_output, "_paths_alias", lambda *_args: True)
+
+    def unexpected_resolve(*_args, **_kwargs):
+        raise RuntimeError("source path changed during diagnostic formatting")
+
+    monkeypatch.setattr(Path, "resolve", unexpected_resolve)
+
+    with pytest.raises(
+        cli_output.CliOutputProtectionError,
+        match="protected engineering input",
+    ):
+        cli_output.atomic_write_cli_output(
+            output,
+            "report\n",
+            protected_inputs=(source,),
+        )
+
+
 def test_publish_cli_output_reports_persistence_failure(tmp_path, monkeypatch, capsys):
     output = tmp_path / "report.json"
 

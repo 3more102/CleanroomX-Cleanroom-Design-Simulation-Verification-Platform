@@ -913,18 +913,20 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     target = tmp_path / "result.json"
     calls = []
 
-    monkeypatch.setattr(
-        gui_module,
-        "atomic_write_text",
-        lambda path, content: calls.append((Path(path), content)),
-    )
+    def record_write(path, content, *, before_replace=None):
+        assert before_replace is not None
+        before_replace()
+        calls.append((Path(path), content))
+
+    monkeypatch.setattr(gui_module, "atomic_write_text", record_write)
     assert app._write_export_file(str(target), "payload", label="Result") is True
     assert calls == [(target, "payload")]
     assert "Exported result" in app.status_var.value
 
     captured = {}
 
-    def fail_write(path, content):
+    def fail_write(path, content, *, before_replace=None):
+        assert before_replace is not None
         raise OSError("disk full")
 
     monkeypatch.setattr(gui_module, "atomic_write_text", fail_write)
@@ -940,6 +942,114 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     assert captured["title"] == "Result export failed"
     assert captured["message"] == "disk full"
     assert captured["parent"] is app.root
+
+
+def test_export_writer_cannot_overwrite_open_project(monkeypatch, tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Protected GUI project"),
+    )
+    before = project_path.read_bytes()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._recovery_source_path = None
+    app.status_var = Status()
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert (
+        app._write_export_file(
+            str(project_path),
+            "destructive export\n",
+            label="Result",
+        )
+        is False
+    )
+    assert project_path.read_bytes() == before
+    assert errors
+    assert "project source" in errors[-1][1]
+
+
+def test_export_writer_rechecks_dependency_identity_before_replace(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    dependency = tmp_path / "verification.json"
+    dependency.write_text("protected engineering dependency\n", encoding="utf-8")
+    hvac_dependency = tmp_path / "hvac.json"
+    hvac_dependency.write_text("{}\n", encoding="utf-8")
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="Protected GUI dependencies",
+            analyses=[
+                AnalysisDocument(
+                    id="consistency",
+                    name="Consistency",
+                    kind="consistency",
+                    input={
+                        "verification_project": dependency.name,
+                        "hvac_project": hvac_dependency.name,
+                    },
+                )
+            ],
+            active_analysis_id="consistency",
+        ),
+    )
+    before = dependency.read_bytes()
+    output = tmp_path / "result.json"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._recovery_source_path = None
+    app.status_var = Status()
+
+    def alias_then_validate(path, content, *, before_replace=None):
+        assert Path(path) == output
+        assert content == "result\n"
+        assert before_replace is not None
+        output.hardlink_to(dependency)
+        before_replace()
+        raise AssertionError("unsafe replacement should not be reached")
+
+    errors = []
+    monkeypatch.setattr(gui_module, "atomic_write_text", alias_then_validate)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert (
+        app._write_export_file(
+            str(output),
+            "result\n",
+            label="Result",
+        )
+        is False
+    )
+    assert dependency.read_bytes() == before
+    assert output.read_bytes() == before
+    assert errors
+    assert "external dependency" in errors[-1][1]
 
 
 def test_remove_analysis_invalidates_matching_result(monkeypatch):

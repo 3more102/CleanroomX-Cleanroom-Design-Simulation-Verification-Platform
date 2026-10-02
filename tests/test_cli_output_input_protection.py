@@ -100,7 +100,7 @@ def test_protected_cli_writer_rechecks_identity_before_replace(tmp_path, monkeyp
     assert output.read_bytes() == before
 
 
-def test_fan_curve_cli_cannot_publish_over_its_study(tmp_path, monkeypatch):
+def test_fan_curve_cli_cannot_publish_over_its_study(tmp_path, monkeypatch, capsys):
     source = tmp_path / "fan-study.json"
     source.write_text('{"engineering": "input"}\n', encoding="utf-8")
     before = source.read_bytes()
@@ -132,13 +132,15 @@ def test_fan_curve_cli_cannot_publish_over_its_study(tmp_path, monkeypatch):
         lambda _result: "report\n",
     )
 
-    with pytest.raises(cli_output.CliOutputProtectionError, match="protected engineering input"):
-        fan_curve_cli.main()
-
+    assert fan_curve_cli.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-fan-curve: error: output publication failed:" in captured.err
+    assert "Traceback" not in captured.err
     assert source.read_bytes() == before
 
 
-def test_dossier_cli_cannot_publish_over_declared_dependency(tmp_path, monkeypatch):
+def test_dossier_cli_cannot_publish_over_declared_dependency(tmp_path, monkeypatch, capsys):
     dependency = tmp_path / "verification.json"
     dependency.write_text("protected engineering dependency\n", encoding="utf-8")
     before = dependency.read_bytes()
@@ -171,10 +173,62 @@ def test_dossier_cli_cannot_publish_over_declared_dependency(tmp_path, monkeypat
         ),
     )
 
-    with pytest.raises(cli_output.CliOutputProtectionError, match="protected engineering input"):
-        dossier_cli.main()
-
+    assert dossier_cli.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: output publication failed:" in captured.err
+    assert "Traceback" not in captured.err
     assert dependency.read_bytes() == before
+
+
+def test_alias_rejection_does_not_reresolve_source_for_diagnostic(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "engineering-input.json"
+    output = tmp_path / "report.json"
+
+    monkeypatch.setattr(cli_output, "_paths_alias", lambda *_args: True)
+
+    def unexpected_resolve(*_args, **_kwargs):
+        raise RuntimeError("source path changed during diagnostic formatting")
+
+    monkeypatch.setattr(Path, "resolve", unexpected_resolve)
+
+    with pytest.raises(
+        cli_output.CliOutputProtectionError,
+        match="protected engineering input",
+    ):
+        cli_output.atomic_write_cli_output(
+            output,
+            "report\n",
+            protected_inputs=(source,),
+        )
+
+
+def test_publish_cli_output_reports_persistence_failure(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "report.json"
+
+    def fail_write(*_args, **_kwargs):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(cli_output, "atomic_write_text", fail_write)
+
+    assert (
+        cli_output.publish_cli_output(
+            "cleanroomx-test",
+            output,
+            "report\n",
+        )
+        is False
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert (
+        captured.err
+        == "cleanroomx-test: error: output publication failed: simulated disk failure\n"
+    )
+    assert "Traceback" not in captured.err
+    assert not output.exists()
 
 
 def test_all_standalone_file_output_clis_use_protected_writer():
@@ -182,5 +236,6 @@ def test_all_standalone_file_output_clis_use_protected_writer():
     for filename in STANDALONE_FILE_OUTPUT_CLIS:
         source = (package_dir / filename).read_text(encoding="utf-8")
         assert "--output" in source, filename
-        assert "atomic_write_cli_output(" in source, filename
+        assert "publish_cli_output(" in source, filename
+        assert "atomic_write_cli_output(" not in source, filename
         assert "atomic_write_text(args.output, text)" not in source, filename

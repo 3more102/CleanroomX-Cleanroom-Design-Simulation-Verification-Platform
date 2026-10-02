@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — runtime source fingerprint revision binding — 2026-10-02
+
+- Binds every Python source file included in application execution provenance to the exact opened file-descriptor identity, size, mtime, and ctime observed before hashing.
+- Rechecks the opened descriptor after reading and rejects size or revision changes before accepting source bytes, closing the per-file transient/torn-read gap between the source-tree manifests.
+- Preserves deterministic tree ordering, metadata-keyed fingerprint caching, bounded retry behavior, and the existing before/after analysis code-revision guard.
+- Adds a focused regression that hides the outer tree-manifest change while mutating an opened source during hashing, proving the descriptor-level guard fails closed.
+- Changes no solver equation, numerical tolerance, engineering-unit convention, project schema, requirement criterion, verification verdict, or release identity.
+
 ## Unreleased Release 3 — exact project snapshot revision binding — 2026-10-02
 
 - Adds a canonical strict-JSON file snapshot boundary that returns the parsed value together with the exact stable bytes and opened-descriptor metadata that produced it.

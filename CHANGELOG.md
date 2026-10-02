@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded autosave source fingerprinting — 2026-10-02
+
+- Bounds autosave/recovery source-project fingerprint reads to the canonical 64 MiB project-file ceiling already enforced by project loading.
+- Rejects oversized source paths before opening their contents, preventing recovery scanning from performing unbounded hashing when a recovery artifact references a very large file.
+- Reuses the shared stable-file SHA-256 authority and preserves recovery schema, integrity semantics, source-relation states, autosave cadence, and project format.
+- Adds a sparse-file regression proving oversized project sources fail before any binary read begins.
+
 ## Unreleased Release 3 — digest-bound dossier source snapshots — 2026-10-02
 
 - Routes every file-backed dossier source through the shared bounded stable-file snapshot authority before any engineering parser or solver consumes it.

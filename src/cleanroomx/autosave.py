@@ -236,7 +236,10 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
             "mtime_ns": None,
             "sha256": None,
         }
-    stat, digest = stable_file_sha256(source)
+    stat, digest = stable_file_sha256(
+        source,
+        max_bytes=PROJECT_FILE_MAX_BYTES,
+    )
     return {
         "path": str(source),
         "exists": True,

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — hardened GUI file-I/O boundaries — 2026-10-02
+
+- Routes desktop **Import Analysis Input JSON** through the canonical bounded, revision-stable strict-JSON file reader instead of unbounded `Path.read_text()`.
+- Preserves strict UTF-8, duplicate-key, non-finite-number, excessive-nesting, 64 MiB size, and live-path revision checks before analysis mutation or file-reference rebasing.
+- Protects generic GUI exports from overwriting the saved project, retained recovery source, or declared file-backed engineering dependencies, including hardlink aliases and replacement-time races.
+- Preserves caller-specific publication guards and changes no solver equation, numerical tolerance, project schema, requirement criterion, or verification verdict semantic.
+
 ## Unreleased Release 3 — desktop GUI I/O safety — 2026-10-02
 
 - Routes desktop **Import Analysis Input JSON** through the canonical bounded, revision-stable strict-JSON reader before file-reference rebasing.

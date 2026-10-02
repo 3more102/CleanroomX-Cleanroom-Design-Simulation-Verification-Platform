@@ -12,6 +12,11 @@ Specialized formats with their own documented limits, such as normal project
 documents, assurance snapshots, portable bundles, and IFC sources, retain
 their dedicated limits.
 
+The desktop **Import analysis input JSON** action uses this same canonical
+bounded reader before rebasing any file-backed analysis references. An
+oversized, replaced, or revision-changing import therefore fails before the
+selected analysis is mutated.
+
 ## Revision stability
 
 The reader opens the input in binary mode and compares the opened file revision

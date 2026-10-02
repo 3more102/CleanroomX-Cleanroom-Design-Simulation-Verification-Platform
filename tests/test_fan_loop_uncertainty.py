@@ -200,3 +200,28 @@ def test_markdown_report_contains_corner_envelope_and_traceability() -> None:
     assert "Bounded corner envelope" in text
     assert "Corner results" in text
     assert "Provenance complete for bounded inputs: **yes**" in text
+
+
+def test_markdown_report_escapes_user_supplied_identifiers() -> None:
+    result = analyze_fan_loop_network_uncertainty(
+        fan_loop_network_uncertainty_from_dict(_data())
+    )
+    result["fan_curve"] = "Fan\n## forged <script>_[x]|"
+    result["fan_discharge_node"] = "Supply|<tag>"
+    result["fan_suction_node"] = "Return_[r]"
+    intervals = result["input_intervals"][
+        "edge_resistance_pa_per_m3_s_squared"
+    ]
+    direct = intervals.pop("Direct")
+    intervals["Edge|<b>_[e]"] = direct
+    result["traceability"]["missing_provenance"] = ["edge:Edge|<b>_[e]"]
+
+    report = markdown_fan_loop_network_uncertainty_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Fan<br>## forged &lt;script&gt;" in report
+    assert r"Supply\|&lt;tag&gt;" in report
+    assert r"Return\_\[r\]" in report
+    assert r"Edge\|&lt;b&gt;\_\[e\]" in report
+    assert r"edge:Edge\|&lt;b&gt;\_\[e\]" in report

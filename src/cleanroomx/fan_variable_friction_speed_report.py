@@ -8,10 +8,10 @@ def markdown_fan_variable_friction_speed_report(result: dict) -> str:
         "# CleanroomX Fan-Speed / Variable-Friction Loop Study — "
         f"{markdown_text(result['study'])}",
         "",
-        f"- Reference fan curve: **{result['reference_fan_curve']}**",
-        f"- Loop network: **{result['loop_network']}**",
-        f"- Fan discharge node: **{result['fan_discharge_node']}**",
-        f"- Fan suction node: **{result['fan_suction_node']}**",
+        f"- Reference fan curve: **{markdown_text(result['reference_fan_curve'])}**",
+        f"- Loop network: **{markdown_text(result['loop_network'])}**",
+        f"- Fan discharge node: **{markdown_text(result['fan_discharge_node'])}**",
+        f"- Fan suction node: **{markdown_text(result['fan_suction_node'])}**",
         f"- Fixed pressure: **{result['fixed_pressure_pa']} Pa**",
         f"- Overall status: **{result['status'].upper()}**",
         f"- Speed cases: **{result['speed_case_count']}**",
@@ -86,8 +86,8 @@ def markdown_fan_variable_friction_speed_report(result: dict) -> str:
             diagnostics = case["solver_diagnostics"]
             lines.append(
                 f"- **{case['speed_ratio']}x — {case['status']}**: "
-                f"{case['solver_message']} "
-                f"(termination: {diagnostics['termination_reason']})"
+                f"{markdown_text(case['solver_message'])} "
+                f"(termination: {markdown_text(diagnostics['termination_reason'])})"
             )
 
     lines.extend(["", "## Engineering note", "", result["scope_note"], ""])

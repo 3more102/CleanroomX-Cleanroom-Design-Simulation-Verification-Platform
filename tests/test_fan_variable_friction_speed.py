@@ -224,3 +224,24 @@ def test_cli_json_example_succeeds(monkeypatch, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "screening_complete"
     assert payload["counts"] == {"solved": 3}
+
+
+def test_markdown_report_escapes_user_supplied_identifiers() -> None:
+    result = analyze_fan_variable_friction_speed_study(
+        load_fan_variable_friction_speed_study(
+            "examples/fan_variable_friction_speed_demo.json"
+        )
+    )
+    result["reference_fan_curve"] = "Fan\n## forged <script>_[x]|"
+    result["loop_network"] = "Loop|<b>_[n]"
+    result["fan_discharge_node"] = "Supply|<tag>"
+    result["fan_suction_node"] = "Return_[r]"
+
+    report = markdown_fan_variable_friction_speed_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Fan<br>## forged &lt;script&gt;" in report
+    assert r"Loop\|&lt;b&gt;\_\[n\]" in report
+    assert r"Supply\|&lt;tag&gt;" in report
+    assert r"Return\_\[r\]" in report

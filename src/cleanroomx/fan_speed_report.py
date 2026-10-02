@@ -7,8 +7,8 @@ def markdown_fan_speed_report(result: dict) -> str:
     lines = [
         f"# CleanroomX Fan-Speed Study — {markdown_text(result['study'])}",
         "",
-        f"- Reference fan curve: **{result['reference_fan_curve']}**",
-        f"- System curve: **{result['system_curve']}**",
+        f"- Reference fan curve: **{markdown_text(result['reference_fan_curve'])}**",
+        f"- System curve: **{markdown_text(result['system_curve'])}**",
         f"- Overall status: **{result['status'].upper()}**",
         f"- Speed cases: **{result['speed_case_count']}**",
     ]
@@ -49,7 +49,7 @@ def markdown_fan_speed_report(result: dict) -> str:
         lines.extend(["", "## Unresolved speed cases", ""])
         for case in unresolved:
             lines.append(
-                f"- **{case['speed_ratio']}x** — {case['solver_message']}"
+                f"- **{case['speed_ratio']}x** — {markdown_text(case['solver_message'])}"
             )
 
     lines.extend(

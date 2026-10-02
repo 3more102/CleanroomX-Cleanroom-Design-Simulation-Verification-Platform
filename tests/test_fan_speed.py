@@ -127,3 +127,28 @@ def test_loader_and_markdown_report() -> None:
     assert "Fan-Speed Study" in text
     assert "Homologous input-power factor" in text
     assert "900.0" in text
+
+
+def test_markdown_report_escapes_user_supplied_curve_names() -> None:
+    result = analyze_fan_speed_study(
+        FanSpeedStudy(
+            "Presentation safety",
+            FanCurve(
+                "Fan\n## forged <script>_[x]|",
+                _curve().points,
+            ),
+            SystemCurve(
+                "System|<b>_[y]",
+                fixed_pressure_pa=80,
+                resistance_pa_per_m3_s_squared=100,
+            ),
+            speed_ratios=(1.0,),
+        )
+    )
+
+    report = markdown_fan_speed_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Fan<br>## forged &lt;script&gt;" in report
+    assert r"System\|&lt;b&gt;\_\[y\]" in report

@@ -320,6 +320,48 @@ def test_atomic_publish_staged_file_requires_same_directory(tmp_path):
     assert not target.exists()
 
 
+def test_atomic_write_verification_hashes_are_bounded_to_expected_payload_size(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "bounded.json"
+    payload = b'{"bounded":true}\n'
+    original = persistence._stable_file_sha256
+    limits: list[int | None] = []
+
+    def bounded_hash(path, *, attempts=3, max_bytes=None):
+        limits.append(max_bytes)
+        return original(path, attempts=attempts, max_bytes=max_bytes)
+
+    monkeypatch.setattr(persistence, "_stable_file_sha256", bounded_hash)
+
+    atomic_write_bytes(target, payload)
+
+    assert limits == [len(payload), len(payload)]
+    assert target.read_bytes() == payload
+
+
+def test_atomic_publish_hashes_are_bounded_to_observed_stage_size(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "portable.cleanroomx.zip"
+    staged = tmp_path / ".portable.cleanroomx.zip.stage"
+    payload = b"streamed-bundle-bytes"
+    staged.write_bytes(payload)
+    original = persistence.stable_file_sha256
+    limits: list[int | None] = []
+
+    def bounded_hash(path, *, attempts=3, max_bytes=None):
+        limits.append(max_bytes)
+        return original(path, attempts=attempts, max_bytes=max_bytes)
+
+    monkeypatch.setattr(persistence, "stable_file_sha256", bounded_hash)
+
+    atomic_publish_staged_file(target, staged)
+
+    assert limits == [len(payload), len(payload), len(payload)]
+    assert target.read_bytes() == payload
+
+
 
 def test_atomic_write_durably_records_each_created_parent_directory(
     tmp_path, monkeypatch

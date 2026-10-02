@@ -1630,6 +1630,7 @@ def extract_ifc_semantics(
             message = str(exc).casefold()
             missing_schema_type = (
                 "schema" in message
+                and ifc_class.casefold() in message
                 and (
                     "not found" in message
                     or "unable to find" in message

@@ -424,6 +424,28 @@ def test_ifc_extraction_skips_device_type_absent_from_source_schema(
     assert semantics["records"] == []
 
 
+def test_ifc_extraction_does_not_treat_generic_schema_failure_as_missing_type(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcAirTerminal":
+                raise RuntimeError("IFC schema registry not found")
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    source = tmp_path / "broken-schema.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to enumerate IFC device class 'IfcAirTerminal'",
+    ):
+        extract_ifc_semantics(source)
+
+
 @pytest.mark.parametrize(
     "failure",
     [

@@ -59,7 +59,7 @@ def _records():
 
 def _install_empty_ifcopenshell(monkeypatch):
     class Model:
-        def by_type(self, _ifc_class):
+        def by_type(self, _ifc_class, include_subtypes=True):
             return []
 
     ifcopenshell = types.ModuleType("ifcopenshell")
@@ -305,7 +305,7 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcAirTerminal":
                 return [entity]
             return []
@@ -400,6 +400,96 @@ def test_ifc_extraction_queries_generic_flow_terminal_without_subtypes(
     ]
     assert semantics["records"][0]["ifc_class"] == "IfcFlowTerminal"
 
+
+
+def test_ifc_extraction_skips_device_type_absent_from_source_schema(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcUnitaryEquipment":
+                raise RuntimeError(
+                    "Entity with name 'IfcUnitaryEquipment' not found in schema 'IFC2X3'"
+                )
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    source = tmp_path / "legacy.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+
+    assert semantics["records"] == []
+
+
+def test_ifc_extraction_does_not_treat_generic_schema_failure_as_missing_type(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcAirTerminal":
+                raise RuntimeError("IFC schema registry not found")
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    source = tmp_path / "broken-schema.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to enumerate IFC device class 'IfcAirTerminal'",
+    ):
+        extract_ifc_semantics(source)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        OSError("IFC backend read failure"),
+        RuntimeError("unexpected IFC backend failure"),
+    ],
+)
+def test_ifc_extraction_rejects_unexpected_device_enumeration_failure(
+    monkeypatch, tmp_path, failure
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcAirTerminal":
+                raise failure
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    source = tmp_path / "broken.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to enumerate IFC device class 'IfcAirTerminal'",
+    ):
+        extract_ifc_semantics(source)
+
+
+def test_ifc_extraction_rejects_space_enumeration_failure(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcSpace":
+                raise OSError("IFC backend read failure")
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    source = tmp_path / "broken-spaces.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    with pytest.raises(IfcImportError, match="unable to enumerate IFC spaces"):
+        extract_ifc_semantics(source)
 
 def test_ifc_extraction_preserves_quarter_turn_space_footprint(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
@@ -852,7 +942,7 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcSpace":
                 return [space]
             return []

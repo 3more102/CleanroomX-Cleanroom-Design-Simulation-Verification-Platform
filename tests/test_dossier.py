@@ -1,5 +1,6 @@
 import hashlib
 
+import cleanroomx.dossier as dossier_module
 from cleanroomx.dossier import _source_record, build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
 
@@ -95,6 +96,24 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
     expected = hashlib.sha256(source.read_bytes()).hexdigest()
     assert record["sha256"] == expected
     assert record["path"] == "input.json"
+
+
+def test_source_record_uses_shared_stable_file_authority(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "input.json"
+    source.write_text('{"demo": true}\n', encoding="utf-8")
+    expected_digest = "a" * 64
+    calls = []
+
+    def shared_stable_hash(path):
+        calls.append(path)
+        return source.stat(), expected_digest
+
+    monkeypatch.setattr(dossier_module, "stable_file_sha256", shared_stable_hash)
+
+    record = _source_record("demo", "input.json", tmp_path)
+
+    assert calls == [source.resolve()]
+    assert record["sha256"] == expected_digest
 
 
 def test_repository_demo_builds_end_to_end() -> None:

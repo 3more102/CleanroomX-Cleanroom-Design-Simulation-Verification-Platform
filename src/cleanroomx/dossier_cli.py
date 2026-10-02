@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 from .strict_json import StrictJSONError, load_strict_json
 from .application import (
     ExternalDependencyChangedError,
@@ -59,11 +59,13 @@ def main() -> int:
             if not dependency.is_absolute():
                 dependency = base_dir / dependency
             protected_inputs.append(dependency)
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-dossier",
             args.output,
             text,
             protected_inputs=protected_inputs,
-        )
+        ):
+            return 1
     else:
         print(text)
     return 2 if result["executive_summary"]["state"] == "attention_required" else 0

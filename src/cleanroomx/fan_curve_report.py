@@ -7,8 +7,8 @@ def markdown_fan_operating_point_report(result: dict) -> str:
     lines = [
         f"# CleanroomX Fan/System Operating-Point Report — {markdown_text(result['study'])}",
         "",
-        f"- Fan curve: **{result['fan_curve']}**",
-        f"- System curve: **{result['system_curve']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
+        f"- System curve: **{markdown_text(result['system_curve'])}**",
         f"- Status: **{result['status'].upper()}**",
         "",
         "## System model",

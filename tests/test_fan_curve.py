@@ -11,6 +11,7 @@ from cleanroomx.fan_curve import (
 from cleanroomx.hvac import analyze_hvac_project
 from cleanroomx.hvac_io import hvac_project_from_dict
 from cleanroomx.fan_curve_io import fan_operating_point_study_from_dict
+from cleanroomx.fan_curve_report import markdown_fan_operating_point_report
 
 
 def _curve() -> FanCurve:
@@ -302,3 +303,25 @@ def test_hvac_fan_curve_check_uses_unrounded_static_pressure() -> None:
     assert check["pressure_margin_pa"] == -0.0002
     assert check["status"] == "fail"
     assert check["passes_required_duty"] is False
+
+
+def test_markdown_report_escapes_user_supplied_curve_names() -> None:
+    malicious = "Fan | name\n## forged <script>_[x]"
+    result = solve_fan_operating_point(
+        FanOperatingPointStudy(
+            "Presentation safety",
+            FanCurve(malicious, _curve().points),
+            SystemCurve(
+                malicious,
+                fixed_pressure_pa=80,
+                resistance_pa_per_m3_s_squared=100,
+            ),
+        )
+    )
+
+    report = markdown_fan_operating_point_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Fan \\| name<br>## forged &lt;script&gt;" in report
+    assert r"\_\[x\]" in report

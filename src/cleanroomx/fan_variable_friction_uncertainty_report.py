@@ -15,7 +15,7 @@ def _fmt_extreme_source(source: dict) -> str:
     if "fan_speed_ratio" in source:
         parts.append(f"speed={source['fan_speed_ratio']}")
     if "fan_curve_scenario" in source:
-        parts.append(f"scenario={source['fan_curve_scenario']}")
+        parts.append(f"scenario={markdown_text(source['fan_curve_scenario'])}")
 
     labels = (
         ("fan_curve_pressure_pa", "fan-P"),
@@ -33,7 +33,7 @@ def _fmt_extreme_source(source: dict) -> str:
         values = source.get(key)
         if values:
             encoded = ", ".join(
-                f"{name}={value}" for name, value in values.items()
+                f"{markdown_text(name)}={value}" for name, value in values.items()
             )
             parts.append(f"{label}[{encoded}]")
     return "; ".join(parts)
@@ -47,8 +47,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         f"{markdown_text(result['analysis'])}",
         "",
         f"- Status: **{result['status'].upper()}**",
-        f"- Fan curve: **{result['fan_curve']}**",
-        f"- Loop network: **{result['loop_network']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
+        f"- Loop network: **{markdown_text(result['loop_network'])}**",
         f"- Solved corners: **{result['solved_corner_count']}/{result['corner_count']}**",
         "",
         "## Input intervals",
@@ -86,7 +86,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_local_loss_coefficient"
     ].items():
         lines.append(
-            f"- Edge `{name}` local-loss coefficient K: "
+            f"- Edge **{markdown_text(name)}** local-loss coefficient K: "
             f"**{interval['lower']} to {interval['upper']}** "
             f"(nominal {interval['nominal']})"
         )
@@ -94,7 +94,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_absolute_roughness_m", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Absolute roughness: "
+            f"- Edge **{markdown_text(name)}** Absolute roughness: "
             f"**{interval['lower']} to {interval['upper']} m** "
             f"(nominal {interval['nominal']} m)"
         )
@@ -102,7 +102,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_kinematic_viscosity_m2_s", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Kinematic viscosity: "
+            f"- Edge **{markdown_text(name)}** Kinematic viscosity: "
             f"**{interval['lower']} to {interval['upper']} m²/s** "
             f"(nominal {interval['nominal']} m²/s)"
         )
@@ -110,7 +110,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_air_density_kg_m3", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Air density: "
+            f"- Edge **{markdown_text(name)}** Air density: "
             f"**{interval['lower']} to {interval['upper']} kg/m³** "
             f"(nominal {interval['nominal']} kg/m³)"
         )
@@ -118,7 +118,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_length_m", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Duct length: "
+            f"- Edge **{markdown_text(name)}** Duct length: "
             f"**{interval['lower']} to {interval['upper']} m** "
             f"(nominal {interval['nominal']} m)"
         )
@@ -126,7 +126,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_circular_diameter_m", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Circular diameter: "
+            f"- Edge **{markdown_text(name)}** Circular diameter: "
             f"**{interval['lower']} to {interval['upper']} m** "
             f"(nominal {interval['nominal']} m)"
         )
@@ -134,7 +134,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_rectangular_width_m", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Rectangular width: "
+            f"- Edge **{markdown_text(name)}** Rectangular width: "
             f"**{interval['lower']} to {interval['upper']} m** "
             f"(nominal {interval['nominal']} m)"
         )
@@ -142,7 +142,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "edge_rectangular_height_m", {}
     ).items():
         lines.append(
-            f"- Edge `{name}` Rectangular height: "
+            f"- Edge **{markdown_text(name)}** Rectangular height: "
             f"**{interval['lower']} to {interval['upper']} m** "
             f"(nominal {interval['nominal']} m)"
         )
@@ -156,7 +156,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 for point in scenario["points"]
             )
             lines.append(
-                f"- `{markdown_text(scenario['name'])}`: {point_text}"
+                f"- **{markdown_text(scenario['name'])}**: {point_text}"
             )
 
     solver_result_integrity = result.get(
@@ -289,7 +289,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     context = [f"corner {source['corner_index']}"]
                     if "fan_curve_scenario" in source:
                         context.append(
-                            f"scenario={source['fan_curve_scenario']}"
+                            f"scenario={markdown_text(source['fan_curve_scenario'])}"
                         )
                     if "fan_speed_ratio" in source:
                         context.append(
@@ -500,8 +500,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             for case in unresolved:
                 lines.append(
                     f"| {case['corner_index']} | {case['status']} | "
-                    f"{case['termination_reason']} | "
-                    f"{case.get('fan_curve_scenario', '—')} | "
+                    f"{markdown_text(case['termination_reason'])} | "
+                    f"{markdown_text(case.get('fan_curve_scenario', '—'))} | "
                     f"{case.get('fan_speed_ratio', '—')} | "
                     f"{case['fixed_pressure_pa']} |"
                 )
@@ -1925,7 +1925,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ).items()
         )
         local_losses = ", ".join(
-            f"{name}={value}"
+            f"{markdown_text(name)}={value}"
             for name, value in corner[
                 "edge_local_loss_coefficient"
             ].items()
@@ -1942,12 +1942,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         ):
             for name, value in corner.get(key, {}).items():
                 physical_values.append(
-                    f"{name} {label}={value} {unit}"
+                    f"{markdown_text(name)} {label}={value} {unit}"
                 )
         lines.append(
             f"| {corner['fixed_pressure_pa']} | "
             f"{corner.get('fan_speed_ratio', '—')} | "
-            f"{corner.get('fan_curve_scenario', '—')} | "
+            f"{markdown_text(corner.get('fan_curve_scenario', '—'))} | "
             f"{fan_pressures or '—'} | {fan_airflows or '—'} | "
             f"{local_losses or '—'} | "
             f"{', '.join(physical_values) or '—'} | {corner['status']} | "
@@ -1968,7 +1968,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
     if traceability["missing_provenance"]:
         lines.append(
             "- Missing provenance: "
-            + ", ".join(traceability["missing_provenance"])
+            + ", ".join(markdown_text(item) for item in traceability["missing_provenance"])
         )
 
     integrity = result.get("result_integrity")

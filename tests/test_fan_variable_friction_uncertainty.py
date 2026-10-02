@@ -3989,3 +3989,34 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         "Maximum iteration-limit remaining-bracket binary-width consistency error"
         in report
     )
+
+
+def test_markdown_report_escapes_user_supplied_network_metadata() -> None:
+    malicious = "Edge | name\n## forged <script>_[x]`"
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    result["fan_curve"] = malicious
+    result["loop_network"] = malicious
+
+    intervals = result["input_intervals"]["edge_local_loss_coefficient"]
+    first_name = next(iter(intervals))
+    first_interval = intervals.pop(first_name)
+    intervals[malicious] = first_interval
+
+    result["fan_curve_scenarios"] = [{"name": malicious, "points": []}]
+    result["corners"][0]["fan_curve_scenario"] = malicious
+    corner_losses = result["corners"][0]["edge_local_loss_coefficient"]
+    first_corner_name = next(iter(corner_losses))
+    first_corner_value = corner_losses.pop(first_corner_name)
+    corner_losses[malicious] = first_corner_value
+    result["traceability"]["missing_provenance"] = [malicious]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Edge \\| name<br>## forged &lt;script&gt;" in report
+    assert r"\_\[x\]\`" in report

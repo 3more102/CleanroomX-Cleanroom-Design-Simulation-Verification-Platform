@@ -10,6 +10,7 @@ from cleanroomx.fan_network import (
     solve_fan_driven_parallel_network,
 )
 from cleanroomx.fan_network_io import fan_driven_parallel_network_study_from_dict
+from cleanroomx.fan_network_report import markdown_fan_driven_parallel_network_report
 
 
 def _fan() -> FanCurve:
@@ -259,3 +260,24 @@ def test_json_loader_builds_fan_driven_network_study() -> None:
     assert study.fixed_pressure_pa == 75
     assert len(study.paths) == 2
     assert study.paths[1].sections[0].width_m == 0.5
+
+
+def test_markdown_report_escapes_user_supplied_fan_curve_name() -> None:
+    malicious = "Fan | name\n## forged <script>_[x]"
+    path_a = ParallelFlowPath("A", (_section("A1", 0.5),))
+    path_b = ParallelFlowPath("B", (_section("B1", 0.5),))
+    result = solve_fan_driven_parallel_network(
+        FanDrivenParallelNetworkStudy(
+            "Presentation safety",
+            FanCurve(malicious, _fan().points),
+            80,
+            (path_a, path_b),
+        )
+    )
+
+    report = markdown_fan_driven_parallel_network_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Fan \\| name<br>## forged &lt;script&gt;" in report
+    assert r"\_\[x\]" in report

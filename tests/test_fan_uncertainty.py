@@ -128,3 +128,20 @@ def test_markdown_report_contains_envelope_and_corner_table() -> None:
     assert "Bounded operating-point envelope" in text
     assert "Corner results" in text
     assert "Provenance complete: **yes**" in text
+
+
+def test_markdown_report_escapes_user_supplied_curve_names() -> None:
+    malicious = "Curve | name\n## forged <script>_[x]"
+    data = _data()
+    data["fan_curve"]["name"] = malicious
+    data["system_curve"]["name"] = malicious
+    result = analyze_fan_system_uncertainty(
+        fan_system_uncertainty_from_dict(data)
+    )
+
+    report = markdown_fan_system_uncertainty_report(result)
+
+    assert "\n## forged" not in report
+    assert "<script>" not in report
+    assert "Curve \\| name<br>## forged &lt;script&gt;" in report
+    assert r"\_\[x\]" in report

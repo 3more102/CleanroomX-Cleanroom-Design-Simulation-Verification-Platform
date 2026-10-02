@@ -12,8 +12,8 @@ def markdown_fan_system_uncertainty_report(result: dict) -> str:
         f"# CleanroomX Fan/System Uncertainty Report — {markdown_text(result['analysis'])}",
         "",
         f"- Status: **{result['status'].upper()}**",
-        f"- Fan curve: **{result['fan_curve']}**",
-        f"- System curve: **{result['system_curve']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
+        f"- System curve: **{markdown_text(result['system_curve'])}**",
         f"- Solved corners: **{result['solved_corner_count']}/{result['corner_count']}**",
         "",
         "## Input intervals",
@@ -96,7 +96,7 @@ def markdown_fan_system_uncertainty_report(result: dict) -> str:
     if traceability["missing_provenance"]:
         lines.append(
             "- Missing provenance: "
-            + ", ".join(traceability["missing_provenance"])
+            + ", ".join(markdown_text(item) for item in traceability["missing_provenance"])
             + "."
         )
 

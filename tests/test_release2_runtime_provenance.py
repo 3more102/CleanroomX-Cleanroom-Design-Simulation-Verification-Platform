@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -94,6 +95,45 @@ def test_python_tree_fingerprint_is_deterministic_cached_and_content_sensitive(t
     source.write_text("VALUE = 3\n", encoding="utf-8")
     changed = application_module._fingerprint_python_tree(root)
     assert changed["sha256"] != first["sha256"]
+
+
+def test_python_tree_fingerprint_rejects_opened_source_revision_change(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    manifest = application_module._python_tree_manifest(root)
+    real_fstat = application_module.os.fstat
+    fstat_calls = 0
+
+    def changed_fstat(fd):
+        nonlocal fstat_calls
+        metadata = real_fstat(fd)
+        fstat_calls += 1
+        if fstat_calls != 2:
+            return metadata
+        return SimpleNamespace(
+            st_dev=metadata.st_dev,
+            st_ino=metadata.st_ino,
+            st_size=metadata.st_size + 1,
+            st_mtime_ns=metadata.st_mtime_ns,
+            st_ctime_ns=metadata.st_ctime_ns,
+        )
+
+    monkeypatch.setattr(application_module.os, "fstat", changed_fstat)
+    monkeypatch.setattr(
+        application_module,
+        "_python_tree_manifest",
+        lambda _root: manifest,
+    )
+
+    with pytest.raises(RuntimeError, match="changed while it was being fingerprinted"):
+        application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
 
 
 def test_application_info_exposes_current_implementation_revision():

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -109,41 +109,24 @@ def test_python_tree_fingerprint_rejects_opened_source_revision_change(
 
     application_module._hash_python_tree_manifest.cache_clear()
     manifest = application_module._python_tree_manifest(root)
-    original_open = Path.open
+    real_fstat = application_module.os.fstat
+    fstat_calls = 0
 
-    class _MutatingReader:
-        def __init__(self, handle):
-            self._handle = handle
-            self._mutated = False
+    def changed_fstat(fd):
+        nonlocal fstat_calls
+        metadata = real_fstat(fd)
+        fstat_calls += 1
+        if fstat_calls != 2:
+            return metadata
+        return SimpleNamespace(
+            st_dev=metadata.st_dev,
+            st_ino=metadata.st_ino,
+            st_size=metadata.st_size + 1,
+            st_mtime_ns=metadata.st_mtime_ns,
+            st_ctime_ns=metadata.st_ctime_ns,
+        )
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return self._handle.__exit__(exc_type, exc, tb)
-
-        def fileno(self):
-            return self._handle.fileno()
-
-        def read(self, *args, **kwargs):
-            data = self._handle.read(*args, **kwargs)
-            if not self._mutated:
-                fd = os.open(source, os.O_WRONLY | os.O_TRUNC)
-                try:
-                    os.write(fd, b"VALUE = 999999\n")
-                finally:
-                    os.close(fd)
-                self._mutated = True
-            return data
-
-    def guarded_open(path, *args, **kwargs):
-        handle = original_open(path, *args, **kwargs)
-        mode = args[0] if args else kwargs.get("mode", "r")
-        if path == source and mode == "rb":
-            return _MutatingReader(handle)
-        return handle
-
-    monkeypatch.setattr(Path, "open", guarded_open)
+    monkeypatch.setattr(application_module.os, "fstat", changed_fstat)
     monkeypatch.setattr(
         application_module,
         "_python_tree_manifest",

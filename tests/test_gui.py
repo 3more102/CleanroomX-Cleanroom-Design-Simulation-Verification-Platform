@@ -902,6 +902,62 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
         ).resolve()
 
 
+def test_import_input_json_rejects_replaced_source_without_mutating_analysis(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "input.json"
+    replacement = tmp_path / "replacement.json"
+    source.write_text('{"value": 1}', encoding="utf-8")
+    replacement.write_text('{"value": 2}', encoding="utf-8")
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input={"sentinel": "original"},
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.project_path = tmp_path / "project.cleanroomx.json"
+    app._current_analysis = lambda: analysis
+    app._perform_project_edit = lambda *args, **kwargs: pytest.fail(
+        "project edit must not run after a revision-unstable import"
+    )
+
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(source)
+    )
+    real_stat = Path.stat
+    replacement_stat = real_stat(replacement)
+
+    def report_replacement_identity(self: Path, *args, **kwargs):
+        if self == source:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", report_replacement_identity)
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.import_input_json()
+
+    assert analysis.input == {"sentinel": "original"}
+    assert len(errors) == 1
+    assert errors[0]["title"] == "Import failed"
+    assert "changed while reading JSON input" in errors[0]["message"]
+    assert errors[0]["parent"] is app.root
+
+
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):
     class Status:
         def set(self, value):

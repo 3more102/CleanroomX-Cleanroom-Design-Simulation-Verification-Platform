@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 from .uncertainty import analyze_room_uncertainty
 from .uncertainty_io import load_uncertain_room
 from .uncertainty_report import markdown_uncertainty_report
@@ -37,11 +37,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-uncertainty",
             args.output,
             text,
             protected_inputs=(args.room,),
-        )
+        ):
+            return 1
     else:
         print(text)
 

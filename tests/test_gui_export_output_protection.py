@@ -164,6 +164,7 @@ def test_gui_generic_export_rechecks_alias_before_replace(monkeypatch, tmp_path)
     assert errors
     assert "project source" in errors[-1][1]
 
+
 def test_gui_generic_export_protects_recovery_source(monkeypatch, tmp_path):
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",
@@ -189,6 +190,7 @@ def test_gui_generic_export_protects_recovery_source(monkeypatch, tmp_path):
     assert project_path.read_bytes() == before
     assert errors
     assert "project source" in errors[-1][1]
+
 
 
 def test_gui_generic_export_rechecks_dependency_alias_before_replace(
@@ -250,6 +252,85 @@ def test_gui_generic_export_rechecks_dependency_alias_before_replace(
     assert errors
     assert "external dependency" in errors[-1][1]
 
+
+
+def test_gui_generic_export_composes_project_guard_before_caller_guard(
+    monkeypatch,
+    tmp_path,
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Composed GUI guard"),
+    )
+    destination = tmp_path / "result.json"
+    app = _saved_app(project_path)
+    events = []
+
+    monkeypatch.setattr(
+        gui_module,
+        "_assert_project_output_is_safe",
+        lambda *args, **kwargs: events.append("project"),
+    )
+
+    def publish(path, content, *, before_replace=None):
+        assert Path(path) == destination
+        assert content == "candidate\\n"
+        assert before_replace is not None
+        before_replace()
+
+    monkeypatch.setattr(gui_module, "atomic_write_text", publish)
+
+    assert app._write_export_file(
+        str(destination),
+        "candidate\\n",
+        label="Result",
+        before_replace=lambda: events.append("caller"),
+    ) is True
+
+    assert events == ["project", "project", "caller"]
+
+
+def test_gui_generic_export_composes_caller_before_replace_guard(
+    monkeypatch,
+    tmp_path,
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Composed GUI publication guard"),
+    )
+    destination = tmp_path / "result.json"
+    app = _saved_app(project_path)
+    events = []
+
+    monkeypatch.setattr(
+        gui_module,
+        "_assert_project_output_is_safe",
+        lambda *args, **kwargs: events.append("generic"),
+    )
+
+    def publish(path, content, *, before_replace=None):
+        assert Path(path) == destination
+        assert content == "candidate\n"
+        assert before_replace is not None
+        before_replace()
+        Path(path).write_text(content, encoding="utf-8")
+
+    monkeypatch.setattr(gui_module, "atomic_write_text", publish)
+
+    def caller_guard():
+        events.append("caller")
+
+    assert app._write_export_file(
+        str(destination),
+        "candidate\n",
+        label="Result",
+        before_replace=caller_guard,
+    ) is True
+
+    assert events == ["generic", "generic", "caller"]
+    assert destination.read_text(encoding="utf-8") == "candidate\n"
+
+
 def test_gui_unsaved_project_protects_absolute_dependency(monkeypatch, tmp_path):
     verification = tmp_path / "verification.json"
     dependency = tmp_path / "hvac.json"
@@ -296,6 +377,7 @@ def test_gui_unsaved_project_protects_absolute_dependency(monkeypatch, tmp_path)
     assert app.status_var.value == "Result export failed"
     assert errors
     assert "external dependency" in errors[-1][1]
+
 
 def test_gui_unsaved_project_allows_unresolved_relative_dependencies(tmp_path):
     output = tmp_path / "result.json"

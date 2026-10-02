@@ -130,6 +130,8 @@ For `consistency` and `dossier`, those external dependencies are guarded as engi
 
 Cached desktop results are also bound to the canonical SHA-256 of the exact submitted analysis input. Before a cached result is restored, before a completed background run is accepted, and before result/run-bundle/report export, CleanroomX compares that recorded identity with the current analysis kind and input. A mismatch clears the cached result and requires a rerun. The existing immediate invalidation hooks remain in place, but the provenance check is the final fail-closed boundary if a mutation path misses an invalidation notification.
 
+Runtime implementation provenance fingerprints the installed CleanroomX Python source tree before and after analysis execution. Source capture is fail-closed and resource-bounded: an individual Python source file may contribute at most 16 MiB and the complete source tree at most 128 MiB. Accepted files are read with an explicit manifest-derived byte ceiling while retaining the existing descriptor/path revision checks, so provenance cannot be forced into an unbounded source-content read.
+
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
 ## Validation and automated smoke

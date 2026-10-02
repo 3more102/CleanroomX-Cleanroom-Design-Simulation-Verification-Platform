@@ -946,6 +946,8 @@ def analysis_input_sha256(payload: dict) -> str:
 
 _RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
 _RUNTIME_CODE_FINGERPRINT_ATTEMPTS = 3
+_RUNTIME_SOURCE_FILE_MAX_BYTES = 16 * 1024 * 1024
+_RUNTIME_SOURCE_TREE_MAX_BYTES = 128 * 1024 * 1024
 
 
 def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, int], ...]:
@@ -962,8 +964,22 @@ def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, in
             key=lambda path: path.relative_to(root).as_posix(),
         )
         manifest = []
+        total_size = 0
         for source in sources:
             metadata = source.stat()
+            if metadata.st_size > _RUNTIME_SOURCE_FILE_MAX_BYTES:
+                raise RuntimeError(
+                    "CleanroomX source file exceeds supported size limit: "
+                    f"{source} ({metadata.st_size} bytes > "
+                    f"{_RUNTIME_SOURCE_FILE_MAX_BYTES} bytes)"
+                )
+            total_size += metadata.st_size
+            if total_size > _RUNTIME_SOURCE_TREE_MAX_BYTES:
+                raise RuntimeError(
+                    "CleanroomX source tree exceeds supported size limit: "
+                    f"{root} ({total_size} bytes > "
+                    f"{_RUNTIME_SOURCE_TREE_MAX_BYTES} bytes)"
+                )
             manifest.append(
                 (
                     source.relative_to(root).as_posix(),
@@ -1039,7 +1055,7 @@ def _hash_python_tree_manifest(
                     before.st_mtime_ns,
                     before.st_ctime_ns,
                 )
-                content = stream.read()
+                content = stream.read(expected_size + 1)
                 after = os.fstat(stream.fileno())
                 opened_after_metadata = (
                     after.st_dev,

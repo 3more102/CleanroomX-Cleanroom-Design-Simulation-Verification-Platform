@@ -285,6 +285,50 @@ def test_atomic_publish_staged_file_streams_through_shared_commit_path(tmp_path)
     assert not staged.exists()
 
 
+def test_atomic_write_verification_rechecks_use_expected_size_bound(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "bounded-write.bin"
+    payload = b"bounded-payload"
+    observed_limits: list[int | None] = []
+    original = persistence._stable_file_sha256
+
+    def bounded_hash(path, *, attempts=3, max_bytes=None):
+        observed_limits.append(max_bytes)
+        return original(path, attempts=attempts, max_bytes=max_bytes)
+
+    monkeypatch.setattr(persistence, "_stable_file_sha256", bounded_hash)
+
+    atomic_write_bytes(target, payload)
+
+    assert observed_limits == [len(payload), len(payload)]
+
+
+def test_atomic_publish_rechecks_use_captured_stage_size_bound(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "bounded-publish.bin"
+    staged = tmp_path / ".bounded-publish.stage"
+    payload = b"streamed-bounded-payload"
+    staged.write_bytes(payload)
+    observed: list[tuple[Path, int | None]] = []
+    original = persistence.stable_file_sha256
+
+    def bounded_hash(path, *, attempts=3, max_bytes=None):
+        observed.append((Path(path), max_bytes))
+        return original(path, attempts=attempts, max_bytes=max_bytes)
+
+    monkeypatch.setattr(persistence, "stable_file_sha256", bounded_hash)
+
+    atomic_publish_staged_file(target, staged)
+
+    assert observed == [
+        (staged, len(payload)),
+        (staged, len(payload)),
+        (target, len(payload)),
+    ]
+
+
 def test_atomic_publish_staged_file_detects_change_after_conflict_hook(tmp_path):
     target = tmp_path / "portable.cleanroomx.zip"
     target.write_bytes(b"previous-bundle")

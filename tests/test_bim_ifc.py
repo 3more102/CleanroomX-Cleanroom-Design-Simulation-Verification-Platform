@@ -1,4 +1,5 @@
 import copy
+import hashlib
 from pathlib import Path
 import sys
 import types

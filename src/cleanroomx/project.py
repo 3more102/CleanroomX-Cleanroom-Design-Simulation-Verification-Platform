@@ -38,7 +38,6 @@ from .strict_json import (
     StrictJSONFileSnapshot,
     clone_strict_json,
     load_strict_json_with_snapshot,
-    strict_json_loads,
 )
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 

@@ -3,13 +3,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 from . import __version__
 from .design_assurance import analyze_design_assurance, design_assurance_from_dict
-from .persistence import atomic_write_text
+from .persistence import atomic_write_text, stable_file_snapshot
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 
 
@@ -98,77 +97,46 @@ def _read_stable_utf8(
 ) -> tuple[bytes, str]:
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
+
     source = Path(path)
-    last_error: OSError | None = None
-
-    for _attempt in range(attempts):
-        try:
-            before_path = source.stat()
-            if before_path.st_size > max_bytes:
-                raise AssuranceSnapshotError(
-                    f"{source} size {before_path.st_size} bytes exceeds maximum "
-                    f"supported size of {max_bytes} bytes"
-                )
-            with source.open("rb") as handle:
-                before_handle = os.fstat(handle.fileno())
+    try:
+        with stable_file_snapshot(
+            source,
+            attempts=attempts,
+            max_bytes=max_bytes,
+            suffix=source.suffix,
+        ) as (snapshot_path, metadata, digest):
+            with snapshot_path.open("rb") as handle:
                 data = handle.read(max_bytes + 1)
-                after_handle = os.fstat(handle.fileno())
-            after_path = source.stat()
-        except AssuranceSnapshotError:
-            raise
-        except OSError as exc:
-            last_error = exc
-            continue
-
-        identities = (
-            (
-                before_path.st_dev,
-                before_path.st_ino,
-                before_path.st_size,
-                before_path.st_mtime_ns,
-            ),
-            (
-                before_handle.st_dev,
-                before_handle.st_ino,
-                before_handle.st_size,
-                before_handle.st_mtime_ns,
-            ),
-            (
-                after_handle.st_dev,
-                after_handle.st_ino,
-                after_handle.st_size,
-                after_handle.st_mtime_ns,
-            ),
-            (
-                after_path.st_dev,
-                after_path.st_ino,
-                after_path.st_size,
-                after_path.st_mtime_ns,
-            ),
-        )
-        if not (
-            identities[0] == identities[1] == identities[2] == identities[3]
-        ):
-            last_error = OSError(f"file changed while reading: {source}")
-            continue
-        if len(data) != after_path.st_size:
-            last_error = OSError(f"file changed while reading: {source}")
-            continue
-        if len(data) > max_bytes:
-            raise AssuranceSnapshotError(
-                f"{source} exceeds maximum supported size of {max_bytes} bytes"
+    except OSError as exc:
+        message = str(exc)
+        if "exceeds supported size limit" in message:
+            message = (
+                f"{source} exceeds maximum supported size of "
+                f"{max_bytes} bytes"
             )
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise AssuranceSnapshotError(
-                f"{source} must contain valid UTF-8 JSON text"
-            ) from exc
-        return data, text
+        raise AssuranceSnapshotError(message) from exc
 
-    if last_error is None:
-        last_error = OSError(f"could not read stable file revision: {source}")
-    raise AssuranceSnapshotError(str(last_error)) from last_error
+    if len(data) > max_bytes:
+        raise AssuranceSnapshotError(
+            f"{source} exceeds maximum supported size of {max_bytes} bytes"
+        )
+    if len(data) != metadata.st_size:
+        raise AssuranceSnapshotError(
+            f"stable assurance snapshot size mismatch for {source}"
+        )
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise AssuranceSnapshotError(
+            f"stable assurance snapshot digest mismatch for {source}"
+        )
+
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise AssuranceSnapshotError(
+            f"{source} must contain valid UTF-8 JSON text"
+        ) from exc
+    return data, text
 
 
 def _paths_alias(first: str | Path, second: str | Path) -> bool:

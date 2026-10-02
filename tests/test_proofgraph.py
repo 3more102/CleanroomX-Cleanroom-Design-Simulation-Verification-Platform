@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
+import hashlib
+import json
 
 import pytest
 
@@ -314,6 +317,63 @@ def test_graph_rejects_single_finding_verdict_status_mismatch() -> None:
 
     with pytest.raises(ValueError, match="does not match its single finding status"):
         proofgraph_from_dict(broken)
+
+
+@pytest.mark.parametrize("status", ["fail", "warning", "unknown", "indeterminate", "not_checked"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_graph_rejects_pass_verdict_with_nonpassing_support(status, reverse) -> None:
+    broken = _graph().to_dict()
+    secondary = copy.deepcopy(broken["findings"][0])
+    secondary.update(id="finding-secondary", status=status)
+    broken["findings"].append(secondary)
+    supporting_ids = [item["id"] for item in broken["findings"]]
+    broken["verdicts"][0]["finding_ids"] = supporting_ids[::-1] if reverse else supporting_ids
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="pass verdict.*non-pass findings"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_accepts_pass_verdict_with_multiple_passing_findings() -> None:
+    document = _graph().to_dict()
+    secondary = copy.deepcopy(document["findings"][0])
+    secondary["id"] = "finding-secondary"
+    document["findings"].append(secondary)
+    document["verdicts"][0]["finding_ids"].append(secondary["id"])
+    document.pop("graph_sha256")
+
+    graph = proofgraph_from_dict(document)
+    assert graph.verdicts[0].status == "pass"
+    assert len(graph.verdicts[0].finding_ids) == 2
+    assert proofgraph_from_dict(graph.to_dict()).to_dict() == graph.to_dict()
+
+
+def test_direct_graph_construction_rejects_contradictory_pass_verdict() -> None:
+    graph = _graph()
+    failed = replace(graph.findings[0], id="finding-failed", status="fail")
+    verdict = replace(
+        graph.verdicts[0], finding_ids=(graph.findings[0].id, failed.id)
+    )
+    with pytest.raises(ValueError, match="pass verdict.*non-pass findings: finding-failed"):
+        replace(graph, findings=(*graph.findings, failed), verdicts=(verdict,))
+
+
+def test_recomputed_digest_cannot_authorize_contradictory_pass_verdict() -> None:
+    document = _graph().to_dict()
+    failed = copy.deepcopy(document["findings"][0])
+    failed.update(id="finding-failed", status="fail")
+    document["findings"].append(failed)
+    document["verdicts"][0]["finding_ids"].append(failed["id"])
+    document.pop("graph_sha256")
+    document["graph_sha256"] = hashlib.sha256(
+        json.dumps(
+            document, sort_keys=True, ensure_ascii=False, allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="pass verdict.*non-pass findings"):
+        proofgraph_from_dict(document)
 
 
 def test_graph_rejects_run_verdicts_that_depend_on_unlisted_checks() -> None:

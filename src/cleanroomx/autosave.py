@@ -449,7 +449,10 @@ def quarantine_recovery_artifact(
 
     os.replace(resolved_artifact, destination)
     try:
-        stat_result, artifact_sha256 = stable_file_sha256(destination)
+        stat_result, artifact_sha256 = stable_file_sha256(
+            destination,
+            max_bytes=RECOVERY_FILE_MAX_BYTES,
+        )
         if stat_result.st_size < 0:
             raise OSError("invalid recovery artifact byte size")
         manifest = {

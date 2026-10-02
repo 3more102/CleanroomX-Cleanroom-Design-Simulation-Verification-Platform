@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — recovery quarantine transaction hardening — 2026-10-02
+
+- Binds quarantine audit-manifest size and SHA-256 evidence to the bytes that were actually moved into the quarantine directory, closing the pre-move observation gap.
+- Prevents quarantine rollback from overwriting a newer recovery artifact that repopulates the original path after the suspect artifact has been moved; both artifacts are preserved and the operation fails closed.
+- Adds race-focused regressions for moved-byte evidence binding and repopulated-source rollback safety. No solver, project schema, engineering calculation, or verdict semantic changes.
+
 ## Unreleased Release 3 — psychrometric dew-point domain and phase-boundary hardening — 2026-10-02
 
 - Adds direct regressions against the official IAPWS R14-08 230 K sublimation-pressure verification point and IAPWS-IF97 Region 4 300 K saturation-pressure verification point.

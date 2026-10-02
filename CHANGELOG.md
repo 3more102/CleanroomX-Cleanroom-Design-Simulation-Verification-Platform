@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded desktop analysis-input import — 2026-10-02
+
+- Routes **Import Analysis Input JSON** through the canonical bounded, revision-stable strict-JSON file reader instead of materializing the complete source with `Path.read_text()`.
+- Preserves duplicate-key, non-finite-number, invalid-UTF-8, excessive-nesting, and analysis file-reference rebasing behavior while rejecting oversized or replaced sources before project mutation.
+- Adds focused GUI regressions proving oversized input and source-path replacement fail closed without changing the selected analysis input.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, or verification verdict semantic.
+
 ## Unreleased Release 3 — development package identity — 2026-10-02
 
 - Changes moving Release 3 `main` package/runtime identity to `0.103.0.dev0`, distinct from the immutable published `v0.102.1` baseline.

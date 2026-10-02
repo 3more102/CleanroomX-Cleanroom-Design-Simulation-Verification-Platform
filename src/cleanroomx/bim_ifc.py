@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
+from .persistence import stable_file_sha256, stable_file_snapshot
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_LAYOUT_VERSION,
@@ -1504,24 +1505,16 @@ def _containing_storey_metadata(
 
 
 def _file_sha256(path: Path) -> str:
-    digest = sha256()
-    size = 0
-    with path.open("rb") as stream:
-        source_size = os.fstat(stream.fileno()).st_size
-        if source_size > _MAX_IFC_SOURCE_BYTES:
-            raise IfcImportError(
-                "IFC source exceeds supported size limit "
-                f"({source_size} > {_MAX_IFC_SOURCE_BYTES} bytes)"
-            )
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            size += len(chunk)
-            if size > _MAX_IFC_SOURCE_BYTES:
-                raise IfcImportError(
-                    "IFC source exceeds supported size limit while reading "
-                    f"(more than {_MAX_IFC_SOURCE_BYTES} bytes)"
-                )
-            digest.update(chunk)
-    return digest.hexdigest()
+    try:
+        _metadata, digest = stable_file_sha256(
+            path,
+            max_bytes=_MAX_IFC_SOURCE_BYTES,
+        )
+    except OSError as exc:
+        if "exceeds supported size limit" in str(exc):
+            raise IfcImportError(str(exc)) from exc
+        raise
+    return digest
 
 
 def extract_ifc_semantics(
@@ -1534,142 +1527,155 @@ def extract_ifc_semantics(
     are absent. It does not claim general B-Rep/tessellation interoperability.
     """
     source = Path(path)
-    source_digest = _file_sha256(source)
-
     try:
-        import ifcopenshell  # type: ignore[import-not-found]
-        import ifcopenshell.util.element as element_util  # type: ignore[import-not-found]
-        import ifcopenshell.util.placement as placement_util  # type: ignore[import-not-found]
-        import ifcopenshell.util.unit as unit_util  # type: ignore[import-not-found]
-    except ImportError as exc:
-        raise IfcImportError(
-            "IfcOpenShell is required to read .ifc files; install CleanroomX "
-            "with the optional 'bim' dependency"
-        ) from exc
-
-    try:
-        model = ifcopenshell.open(str(source))
-    except Exception as exc:
-        raise IfcImportError(f"unable to open IFC file {source}") from exc
-
-    unit_scale = _positive_number(
-        unit_util.calculate_unit_scale(model),
-        field="IFC length unit scale",
-    )
-    records: list[dict[str, Any]] = []
-
-    for entity in model.by_type("IfcSpace"):
-        try:
-            length, width, height = _space_dimensions_m(
-                entity, unit_scale, element_util
-            )
-        except _IfcSpaceQuantitiesUnavailable:
-            try:
-                x, y, z, length, width, height = (
-                    _space_rectangular_prism_bounds_from_geometry_m(entity)
-                )
-                dimension_source = "ifcopenshell_geometry"
-            except IfcImportError as geometry_error:
-                raise IfcImportError(
-                    f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} cannot be "
-                    "represented safely: provide positive Length/Width/Height "
-                    "quantities or an axis-aligned rectangular-prism geometry"
-                ) from geometry_error
-        else:
-            x, y, z, length, width = _space_axis_aligned_bounds_m(
-                entity,
-                length,
-                width,
-                unit_scale,
-                placement_util,
-            )
-            dimension_source = "ifc_quantities"
-        global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
-        record: dict[str, Any] = {
-            "global_id": global_id,
-            "ifc_class": "IfcSpace",
-            "name": _non_empty_text(
-                getattr(entity, "LongName", None),
-                _non_empty_text(getattr(entity, "Name", None), global_id),
-            ),
-            "x_m": x,
-            "y_m": y,
-            "z_m": z,
-            "length_m": length,
-            "width_m": width,
-            "height_m": height,
-            "dimension_source": dimension_source,
-        }
-        record.update(_cleanroomx_space_metadata(entity, element_util))
-        record.update(
-            _containing_storey_metadata(
-                entity,
-                unit_scale,
-                element_util,
-                placement_util,
-            )
+        snapshot_context = stable_file_snapshot(
+            source,
+            max_bytes=_MAX_IFC_SOURCE_BYTES,
+            suffix=source.suffix or ".ifc",
         )
-        records.append(record)
+        snapshot_source, _snapshot_metadata, source_digest = snapshot_context.__enter__()
+    except OSError as exc:
+        if "exceeds supported size limit" in str(exc):
+            raise IfcImportError(str(exc)) from exc
+        raise IfcImportError(f"unable to read stable IFC source {source}") from exc
 
-    seen = {item["global_id"] for item in records}
-    for ifc_class in _IFC_DEVICE_TYPES:
+    try:
         try:
-            if ifc_class == "IfcFlowTerminal":
-                # IfcOpenShell includes subtypes by default; keep this generic query exact.
-                entities = model.by_type(ifc_class, include_subtypes=False)
+            import ifcopenshell  # type: ignore[import-not-found]
+            import ifcopenshell.util.element as element_util  # type: ignore[import-not-found]
+            import ifcopenshell.util.placement as placement_util  # type: ignore[import-not-found]
+            import ifcopenshell.util.unit as unit_util  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise IfcImportError(
+                "IfcOpenShell is required to read .ifc files; install CleanroomX "
+                "with the optional 'bim' dependency"
+            ) from exc
+
+        try:
+            model = ifcopenshell.open(str(snapshot_source))
+        except Exception as exc:
+            raise IfcImportError(f"unable to open IFC file {source}") from exc
+
+        unit_scale = _positive_number(
+            unit_util.calculate_unit_scale(model),
+            field="IFC length unit scale",
+        )
+        records: list[dict[str, Any]] = []
+
+        for entity in model.by_type("IfcSpace"):
+            try:
+                length, width, height = _space_dimensions_m(
+                    entity, unit_scale, element_util
+                )
+            except _IfcSpaceQuantitiesUnavailable:
+                try:
+                    x, y, z, length, width, height = (
+                        _space_rectangular_prism_bounds_from_geometry_m(entity)
+                    )
+                    dimension_source = "ifcopenshell_geometry"
+                except IfcImportError as geometry_error:
+                    raise IfcImportError(
+                        f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} cannot be "
+                        "represented safely: provide positive Length/Width/Height "
+                        "quantities or an axis-aligned rectangular-prism geometry"
+                    ) from geometry_error
             else:
-                entities = model.by_type(ifc_class)
-        except Exception:
-            continue
-        for entity in entities:
+                x, y, z, length, width = _space_axis_aligned_bounds_m(
+                    entity,
+                    length,
+                    width,
+                    unit_scale,
+                    placement_util,
+                )
+                dimension_source = "ifc_quantities"
             global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
-            if not global_id or global_id in seen:
-                continue
-            seen.add(global_id)
-            x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
-            orientation_deg = _placement_orientation_deg(entity, placement_util)
             record: dict[str, Any] = {
                 "global_id": global_id,
-                "ifc_class": ifc_class,
+                "ifc_class": "IfcSpace",
                 "name": _non_empty_text(
-                    getattr(entity, "Name", None), global_id
+                    getattr(entity, "LongName", None),
+                    _non_empty_text(getattr(entity, "Name", None), global_id),
                 ),
                 "x_m": x,
                 "y_m": y,
                 "z_m": z,
-                "orientation_deg": orientation_deg,
+                "length_m": length,
+                "width_m": width,
+                "height_m": height,
+                "dimension_source": dimension_source,
             }
-            room_global_id = _containing_space_global_id(entity, element_util)
-            if room_global_id:
-                record["room_global_id"] = room_global_id
-            predefined_type = _non_empty_text(
-                getattr(entity, "PredefinedType", None)
+            record.update(_cleanroomx_space_metadata(entity, element_util))
+            record.update(
+                _containing_storey_metadata(
+                    entity,
+                    unit_scale,
+                    element_util,
+                    placement_util,
+                )
             )
-            if predefined_type:
-                record["predefined_type"] = predefined_type
-            for source_field, target_field in (
-                ("OverallWidth", "width_m"),
-                ("OverallHeight", "height_m"),
-            ):
-                value = getattr(entity, source_field, None)
-                if isinstance(value, (int, float)) and float(value) > 0:
-                    record[target_field] = float(value) * unit_scale
             records.append(record)
 
-    try:
-        final_source_digest = _file_sha256(source)
-    except OSError as exc:
-        raise IfcImportError(
-            "IFC source became unavailable while it was being read; extraction "
-            "was discarded"
-        ) from exc
-    if final_source_digest != source_digest:
-        raise IfcImportError(
-            "IFC source changed while it was being read; extraction was discarded"
-        )
+        seen = {item["global_id"] for item in records}
+        for ifc_class in _IFC_DEVICE_TYPES:
+            try:
+                if ifc_class == "IfcFlowTerminal":
+                    # IfcOpenShell includes subtypes by default; keep this generic query exact.
+                    entities = model.by_type(ifc_class, include_subtypes=False)
+                else:
+                    entities = model.by_type(ifc_class)
+            except Exception:
+                continue
+            for entity in entities:
+                global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
+                if not global_id or global_id in seen:
+                    continue
+                seen.add(global_id)
+                x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
+                orientation_deg = _placement_orientation_deg(entity, placement_util)
+                record: dict[str, Any] = {
+                    "global_id": global_id,
+                    "ifc_class": ifc_class,
+                    "name": _non_empty_text(
+                        getattr(entity, "Name", None), global_id
+                    ),
+                    "x_m": x,
+                    "y_m": y,
+                    "z_m": z,
+                    "orientation_deg": orientation_deg,
+                }
+                room_global_id = _containing_space_global_id(entity, element_util)
+                if room_global_id:
+                    record["room_global_id"] = room_global_id
+                predefined_type = _non_empty_text(
+                    getattr(entity, "PredefinedType", None)
+                )
+                if predefined_type:
+                    record["predefined_type"] = predefined_type
+                for source_field, target_field in (
+                    ("OverallWidth", "width_m"),
+                    ("OverallHeight", "height_m"),
+                ):
+                    value = getattr(entity, source_field, None)
+                    if isinstance(value, (int, float)) and float(value) > 0:
+                        record[target_field] = float(value) * unit_scale
+                records.append(record)
 
-    semantics = normalize_ifc_semantic_records(records)
-    return semantics, {
-        "source_name": source.name,
-        "source_sha256": source_digest,
-    }
+        try:
+            final_source_digest = _file_sha256(source)
+        except OSError as exc:
+            raise IfcImportError(
+                "IFC source became unavailable while it was being read; extraction "
+                "was discarded"
+            ) from exc
+        if final_source_digest != source_digest:
+            raise IfcImportError(
+                "IFC source changed while it was being read; extraction was discarded"
+            )
+
+        semantics = normalize_ifc_semantic_records(records)
+        return semantics, {
+            "source_name": source.name,
+            "source_sha256": source_digest,
+        }
+    finally:
+        snapshot_context.__exit__(None, None, None)

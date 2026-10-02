@@ -457,10 +457,13 @@ def write_assurance_snapshot(
     input_path: str | Path,
     output_path: str | Path,
 ) -> dict:
-    if _paths_alias(input_path, output_path):
-        raise AssuranceSnapshotError(
-            "assurance snapshot output path must be different from the input source"
-        )
+    def assert_output_is_distinct() -> None:
+        if _paths_alias(input_path, output_path):
+            raise AssuranceSnapshotError(
+                "assurance snapshot output path must be different from the input source"
+            )
+
+    assert_output_is_distinct()
     snapshot = create_assurance_snapshot(input_path)
     text = (
         json.dumps(
@@ -472,7 +475,11 @@ def write_assurance_snapshot(
         )
         + "\n"
     )
-    atomic_write_text(output_path, text)
+    atomic_write_text(
+        output_path,
+        text,
+        before_replace=assert_output_is_distinct,
+    )
     return snapshot
 
 

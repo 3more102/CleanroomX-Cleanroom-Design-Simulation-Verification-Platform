@@ -982,7 +982,7 @@ def _hash_python_tree_manifest(
     root_text: str,
     manifest: tuple[tuple[str, int, int, int, int, int], ...],
 ) -> dict:
-    """Hash exact stable source bytes for one already-observed source-tree manifest."""
+    """Hash stable source bytes for one already-observed source-tree manifest."""
 
     root = Path(root_text)
     digest = hashlib.sha256()
@@ -1005,22 +1005,41 @@ def _hash_python_tree_manifest(
                 expected_mtime_ns,
                 expected_ctime_ns,
             )
+            path_before = source.stat()
+            path_before_metadata = (
+                path_before.st_dev,
+                path_before.st_ino,
+                path_before.st_size,
+                path_before.st_mtime_ns,
+                path_before.st_ctime_ns,
+            )
+            if path_before_metadata != expected_metadata:
+                raise RuntimeError(
+                    "CleanroomX source tree changed while it was being fingerprinted"
+                )
+
             with source.open("rb") as stream:
                 before = os.fstat(stream.fileno())
-                before_metadata = (
+                if before.st_size != expected_size or (
+                    os.name != "nt"
+                    and (
+                        before.st_dev != expected_dev
+                        or before.st_ino != expected_ino
+                    )
+                ):
+                    raise RuntimeError(
+                        "CleanroomX source tree changed while it was being fingerprinted"
+                    )
+                opened_before_metadata = (
                     before.st_dev,
                     before.st_ino,
                     before.st_size,
                     before.st_mtime_ns,
                     before.st_ctime_ns,
                 )
-                if before_metadata != expected_metadata:
-                    raise RuntimeError(
-                        "CleanroomX source tree changed while it was being fingerprinted"
-                    )
                 content = stream.read()
                 after = os.fstat(stream.fileno())
-                after_metadata = (
+                opened_after_metadata = (
                     after.st_dev,
                     after.st_ino,
                     after.st_size,
@@ -1028,12 +1047,26 @@ def _hash_python_tree_manifest(
                     after.st_ctime_ns,
                 )
                 if (
-                    after_metadata != before_metadata
+                    opened_after_metadata != opened_before_metadata
                     or len(content) != before.st_size
                 ):
                     raise RuntimeError(
                         "CleanroomX source tree changed while it was being fingerprinted"
                     )
+
+            path_after = source.stat()
+            path_after_metadata = (
+                path_after.st_dev,
+                path_after.st_ino,
+                path_after.st_size,
+                path_after.st_mtime_ns,
+                path_after.st_ctime_ns,
+            )
+            if path_after_metadata != expected_metadata:
+                raise RuntimeError(
+                    "CleanroomX source tree changed while it was being fingerprinted"
+                )
+
             digest.update(len(relative).to_bytes(4, "big"))
             digest.update(relative)
             digest.update(len(content).to_bytes(8, "big"))
@@ -1049,7 +1082,6 @@ def _hash_python_tree_manifest(
         "sha256": digest.hexdigest(),
         "source_file_count": len(manifest),
     }
-
 
 def _fingerprint_python_tree(root: Path) -> dict:
     """Fingerprint Python source while avoiding repeated unchanged-tree reads."""

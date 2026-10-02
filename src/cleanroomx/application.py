@@ -982,16 +982,58 @@ def _hash_python_tree_manifest(
     root_text: str,
     manifest: tuple[tuple[str, int, int, int, int, int], ...],
 ) -> dict:
-    """Hash exact source bytes for one already-observed source-tree manifest."""
+    """Hash exact stable source bytes for one already-observed source-tree manifest."""
 
     root = Path(root_text)
     digest = hashlib.sha256()
     source: Path | None = None
     try:
-        for relative_text, *_metadata in manifest:
+        for (
+            relative_text,
+            expected_dev,
+            expected_ino,
+            expected_size,
+            expected_mtime_ns,
+            expected_ctime_ns,
+        ) in manifest:
             source = root / relative_text
             relative = relative_text.encode("utf-8")
-            content = source.read_bytes()
+            expected_metadata = (
+                expected_dev,
+                expected_ino,
+                expected_size,
+                expected_mtime_ns,
+                expected_ctime_ns,
+            )
+            with source.open("rb") as stream:
+                before = os.fstat(stream.fileno())
+                before_metadata = (
+                    before.st_dev,
+                    before.st_ino,
+                    before.st_size,
+                    before.st_mtime_ns,
+                    before.st_ctime_ns,
+                )
+                if before_metadata != expected_metadata:
+                    raise RuntimeError(
+                        "CleanroomX source tree changed while it was being fingerprinted"
+                    )
+                content = stream.read()
+                after = os.fstat(stream.fileno())
+                after_metadata = (
+                    after.st_dev,
+                    after.st_ino,
+                    after.st_size,
+                    after.st_mtime_ns,
+                    after.st_ctime_ns,
+                )
+                if (
+                    after_metadata != before_metadata
+                    or len(content) != before.st_size
+                ):
+                    raise RuntimeError(
+                        "CleanroomX source tree changed while it was being fingerprinted"
+                    )
             digest.update(len(relative).to_bytes(4, "big"))
             digest.update(relative)
             digest.update(len(content).to_bytes(8, "big"))

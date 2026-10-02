@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 from .persistence import atomic_write_text
 from .strict_json import StrictJSONError
+
+CLI_OUTPUT_ERROR_EXIT_CODE = 5
 
 
 def _clone_cli_json_value(
@@ -163,3 +166,32 @@ def atomic_write_cli_output(
         text,
         before_replace=assert_distinct,
     )
+
+
+def publish_cli_output(
+    path: str | Path,
+    text: str,
+    *,
+    program: str,
+    protected_inputs: Iterable[str | Path] = (),
+) -> bool:
+    """Publish CLI output with a concise operator-facing failure boundary.
+
+    The lower-level atomic_write_cli_output() remains exception-based for
+    library callers. This presentation helper catches only output protection
+    and persistence failures so analysis/input semantics retain their existing
+    exceptions and exit codes.
+    """
+    try:
+        atomic_write_cli_output(
+            path,
+            text,
+            protected_inputs=protected_inputs,
+        )
+    except (CliOutputProtectionError, OSError) as exc:
+        print(
+            f"{program}: error: output publication failed: {exc}",
+            file=sys.stderr,
+        )
+        return False
+    return True

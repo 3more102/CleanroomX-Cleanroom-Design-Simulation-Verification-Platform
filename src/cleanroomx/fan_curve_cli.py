@@ -4,7 +4,11 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import (
+    CLI_OUTPUT_ERROR_EXIT_CODE,
+    dumps_strict_json,
+    publish_cli_output,
+)
 from .fan_curve import solve_fan_operating_point
 from .fan_curve_io import load_fan_operating_point_study
 from .fan_curve_report import markdown_fan_operating_point_report
@@ -39,11 +43,13 @@ def main() -> int:
         )
         return 1
     if args.output:
-        atomic_write_cli_output(
+        if not publish_cli_output(
             args.output,
             text,
             protected_inputs=(args.study,),
-        )
+            program="cleanroomx-fan-curve",
+        ):
+            return CLI_OUTPUT_ERROR_EXIT_CODE
     else:
         print(text)
     return 0 if result["status"] == "solved" else 2

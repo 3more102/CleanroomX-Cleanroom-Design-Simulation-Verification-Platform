@@ -155,7 +155,7 @@ def atomic_write_cli_output(
             if _paths_alias(source, destination):
                 raise CliOutputProtectionError(
                     "CLI output path must be different from protected engineering "
-                    f"input: {source.resolve(strict=False)}"
+                    f"input: {source}"
                 )
 
     assert_distinct()

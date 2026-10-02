@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — IFC enumeration fail-closed hardening — 2026-10-02
+
+- Stops native IFC device extraction from swallowing arbitrary enumeration exceptions that could otherwise present incomplete device semantics as a successful import.
+- Preserves cross-schema compatibility by skipping only IfcOpenShell runtime errors that explicitly report an entity type as absent from the source schema.
+- Wraps unexpected device and mandatory IfcSpace enumeration failures as explicit `IfcImportError` failures and adds regressions for supported schema absence versus backend/read failures.
+- Changes no IFC semantic mapping, room geometry rule, solver equation, engineering tolerance, project schema, or verification criterion.
+
 ## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02
 
 - Routes every standalone file-backed engineering CLI through one protected atomic output writer.

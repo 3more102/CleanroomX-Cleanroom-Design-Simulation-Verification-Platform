@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cli_output import write_cli_output_or_report_error, dumps_strict_json
 from .recovery_io import load_recovery_test
 from .recovery_report import markdown_recovery_report
 from .recovery_test import analyze_recovery_test
@@ -39,11 +39,13 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_cli_output(
+        if not write_cli_output_or_report_error(
+            "cleanroomx-recovery-test",
             args.output,
             text,
             protected_inputs=(args.test,),
-        )
+        ):
+            return 1
     else:
         print(text)
 

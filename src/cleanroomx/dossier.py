@@ -6,7 +6,7 @@ from typing import Callable, Iterable
 
 from .input_contracts import validate_dossier_input_contract
 from .persistence import stable_file_sha256, stable_file_snapshot
-from .strict_json import load_strict_json
+from .strict_json import STRICT_JSON_FILE_MAX_BYTES, load_strict_json
 
 
 def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
@@ -695,7 +695,11 @@ def _source_record(
         resolved_path = path
     else:
         resolved_path, _metadata, digest = snapshot_stack.enter_context(
-            stable_file_snapshot(path, suffix=path.suffix)
+            stable_file_snapshot(
+                path,
+                max_bytes=STRICT_JSON_FILE_MAX_BYTES,
+                suffix=path.suffix,
+            )
         )
 
     return {

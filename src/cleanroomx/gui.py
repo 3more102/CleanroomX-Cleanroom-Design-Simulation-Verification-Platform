@@ -100,6 +100,7 @@ from .verification_run_history import (
     validate_project_verification_run_history,
     verification_run_history_records,
 )
+from .strict_json import load_strict_json as _load_strict_json
 from .strict_json import strict_json_loads as _strict_json_loads
 from .spatial import (
     SPATIAL_METADATA_KEY,
@@ -3802,7 +3803,7 @@ class CleanroomXApp:
             return
         source_path = Path(path)
         try:
-            payload = _strict_json_loads(source_path.read_text(encoding="utf-8"))
+            payload = _load_strict_json(source_path)
             if not isinstance(payload, dict):
                 raise ValueError("input file must contain a JSON object")
             payload = rebase_analysis_file_references(

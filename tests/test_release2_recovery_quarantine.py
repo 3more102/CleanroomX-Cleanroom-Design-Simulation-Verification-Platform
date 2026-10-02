@@ -10,6 +10,7 @@ from cleanroomx.autosave import (
     RecoveryFormatError,
     quarantine_recovery_artifact,
 )
+from cleanroomx.persistence import AtomicWriteDurabilityError
 
 
 def test_quarantine_preserves_invalid_bytes_and_writes_audit_manifest(tmp_path):
@@ -84,6 +85,48 @@ def test_quarantine_finalization_failure_restores_when_path_stays_vacant(
     quarantine_dir = tmp_path / "quarantine"
     assert list(quarantine_dir.glob("*.quarantined")) == []
     assert list(quarantine_dir.glob("*.quarantined.manifest.json")) == []
+
+
+def test_quarantine_preserves_committed_manifest_after_post_replace_failure(
+    tmp_path, monkeypatch
+):
+    artifact = tmp_path / "broken.recovery.json"
+    suspect = b"suspect recovery bytes"
+    artifact.write_bytes(suspect)
+
+    real_write = autosave_module.atomic_write_text
+
+    def commit_then_report_durability_failure(path, text):
+        real_write(path, text)
+        raise AtomicWriteDurabilityError(
+            path,
+            OSError("simulated post-replace directory fsync failure"),
+        )
+
+    monkeypatch.setattr(
+        autosave_module,
+        "atomic_write_text",
+        commit_then_report_durability_failure,
+    )
+
+    with pytest.raises(AtomicWriteDurabilityError) as error:
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=tmp_path,
+            reason="parse failure",
+        )
+
+    assert error.value.committed is True
+    assert not artifact.exists()
+    quarantine_dir = tmp_path / "quarantine"
+    quarantined = list(quarantine_dir.glob("*.quarantined"))
+    manifests = list(quarantine_dir.glob("*.quarantined.manifest.json"))
+    assert len(quarantined) == 1
+    assert len(manifests) == 1
+    assert quarantined[0].read_bytes() == suspect
+    manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+    assert manifest["quarantined_name"] == quarantined[0].name
+    assert manifest["sha256"] == sha256(suspect).hexdigest()
 
 
 def test_quarantine_rollback_never_overwrites_repopulated_recovery_path(

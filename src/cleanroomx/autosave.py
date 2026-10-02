@@ -440,6 +440,11 @@ def quarantine_recovery_artifact(
         ) + "\n"
         atomic_write_text(manifest_path, manifest_text)
     except BaseException as finalize_error:
+        # Atomic persistence can report a failure after replacing the manifest.
+        # In that committed state the manifest path already names this quarantine
+        # artifact; rolling the artifact back would create a stale forensic record.
+        if getattr(finalize_error, "committed", False):
+            raise
         try:
             # Restore through a no-clobber hard link instead of check-then-replace.
             # link(2) fails atomically if any directory entry has repopulated the

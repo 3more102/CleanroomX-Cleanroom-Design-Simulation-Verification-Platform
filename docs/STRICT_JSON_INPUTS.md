@@ -23,6 +23,13 @@ before and after the bounded read with the path revision observed immediately
 afterwards. A size, modification-time, or file-identity change fails closed
 instead of parsing bytes from a path that changed during ingestion.
 
+Revision-aware project loading reuses this same boundary and retains the exact
+stable byte snapshot accepted by strict parsing. Its returned SHA-256 digest and
+byte size are derived from those exact bytes, eliminating a separate fingerprint
+read that could otherwise be separated from parsing by a transient replace/restore
+race. Bounded-size failures use a typed strict-JSON error so project loading can
+preserve its historical domain-specific error contract.
+
 UTF-8 decoding, duplicate-key rejection, non-finite-number rejection, and
 nesting handling continue through the existing strict JSON parser. These are
 input-safety controls; they do not change engineering equations, tolerances,

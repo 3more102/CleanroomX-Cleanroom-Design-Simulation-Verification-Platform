@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import (
@@ -900,6 +901,100 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
         assert (project_dir / analysis.input[key]).resolve() == (
             import_dir / filename
         ).resolve()
+
+
+def test_import_input_json_rejects_oversized_file_before_mutating_analysis(
+    tmp_path, monkeypatch
+):
+    import_path = tmp_path / "oversized.json"
+    import_path.write_text('{"value":1}', encoding="utf-8")
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input={"preserve": True},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.project_path = tmp_path / "project.cleanroomx.json"
+    app._current_analysis = lambda: analysis
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+    monkeypatch.setattr(
+        strict_json_module,
+        "STRICT_JSON_FILE_MAX_BYTES",
+        import_path.stat().st_size - 1,
+    )
+
+    app.import_input_json()
+
+    assert analysis.input == {"preserve": True}
+    assert len(errors) == 1
+    assert errors[0][0] == "Import failed"
+    assert "exceeds maximum supported JSON size" in errors[0][1]
+    assert errors[0][2] is app.root
+
+
+def test_import_input_json_rejects_live_path_replacement_before_mutating_analysis(
+    tmp_path, monkeypatch
+):
+    import_path = tmp_path / "input.json"
+    replacement_path = tmp_path / "replacement.json"
+    import_path.write_text('{"value":"original"}', encoding="utf-8")
+    replacement_path.write_text('{"value":"replacement"}', encoding="utf-8")
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input={"preserve": True},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.project_path = tmp_path / "project.cleanroomx.json"
+    app._current_analysis = lambda: analysis
+
+    real_stat = Path.stat
+    replacement_stat = real_stat(replacement_path)
+
+    def report_replacement(self, *args, **kwargs):
+        if self == import_path:
+            return replacement_stat
+        return real_stat(self, *args, **kwargs)
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+    monkeypatch.setattr(Path, "stat", report_replacement)
+
+    app.import_input_json()
+
+    assert analysis.input == {"preserve": True}
+    assert len(errors) == 1
+    assert errors[0][0] == "Import failed"
+    assert "changed while reading JSON input" in errors[0][1]
+    assert errors[0][2] is app.root
 
 
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):

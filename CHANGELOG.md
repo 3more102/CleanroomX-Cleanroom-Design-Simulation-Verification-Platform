@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — exact parsed project revision snapshots — 2026-10-02
+
+- Binds revision-aware project loads to one canonical bounded strict-JSON file snapshot instead of separate fingerprint/parse/fingerprint reads.
+- Derives project revision size and SHA-256 from the exact bytes passed to strict JSON parsing while preserving migration provenance and public loader return contracts.
+- Retries descriptor/live-path revision changes and rejects replacement/disappearance races through the shared strict-JSON stability boundary.
+- Adds regressions for the historical transient ABA separate-read race, live-path replacement, retry behavior, migration rebinding, and project-size enforcement.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, verification verdict semantic, or release identity.
+
 ## Unreleased Release 3 — desktop generic export protected-output hardening — 2026-10-02
 
 - Protects generic desktop exports (analysis input, result, run bundle, Markdown, and HTML) from replacing the active project source, restored recovery source, or declared file-backed engineering dependencies.

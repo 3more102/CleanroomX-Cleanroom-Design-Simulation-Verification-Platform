@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded atomic persistence verification — 2026-10-02
+
+- Applies each already-known expected byte size to staged and committed SHA-256 rechecks in the canonical atomic persistence path.
+- Prevents a replaced or growing staged/destination file from forcing an unbounded verification read after its trusted expected size has already been established.
+- Preserves atomic replacement, durability, rollback, file formats, engineering results, requirement criteria, and verification verdict semantics.
+- Adds regressions proving byte ceilings are propagated through both in-memory atomic writes and streamed staged-file publication.
+
 ## Unreleased Release 3 — bounded dossier fallback source fingerprinting — 2026-10-02
 
 - Applies the canonical 64 MiB strict-JSON ceiling to the dossier source-record fallback SHA-256 path used without a private snapshot pool.

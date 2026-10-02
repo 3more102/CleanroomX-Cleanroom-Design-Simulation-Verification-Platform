@@ -35,6 +35,7 @@ BindingTarget = tuple[str, str] | Callable[..., Any]
 _RUN_BUNDLE_SCHEMA = "cleanroomx.analysis-run"
 _RUN_BUNDLE_SCHEMA_VERSION = 1
 _RUN_BUNDLE_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+_RUNTIME_SOURCE_FILE_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _canonical_json_sha256(payload: dict) -> str:
@@ -948,6 +949,21 @@ _RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
 _RUNTIME_CODE_FINGERPRINT_ATTEMPTS = 3
 
 
+def _validate_runtime_source_size(relative_text: str, size_bytes: int) -> None:
+    """Reject pathological source files before runtime provenance opens them."""
+
+    if size_bytes < 0:
+        raise RuntimeError(
+            f"CleanroomX source file has invalid size: {relative_text} ({size_bytes})"
+        )
+    if size_bytes > _RUNTIME_SOURCE_FILE_MAX_BYTES:
+        raise RuntimeError(
+            "CleanroomX source file exceeds supported size limit: "
+            f"{relative_text} ({size_bytes} > "
+            f"{_RUNTIME_SOURCE_FILE_MAX_BYTES} bytes)"
+        )
+
+
 def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, int], ...]:
     """Return deterministic file identity/size/time evidence for Python source."""
 
@@ -963,10 +979,12 @@ def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, in
         )
         manifest = []
         for source in sources:
+            relative_text = source.relative_to(root).as_posix()
             metadata = source.stat()
+            _validate_runtime_source_size(relative_text, metadata.st_size)
             manifest.append(
                 (
-                    source.relative_to(root).as_posix(),
+                    relative_text,
                     metadata.st_dev,
                     metadata.st_ino,
                     metadata.st_size,
@@ -977,7 +995,6 @@ def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, in
     except OSError as exc:
         raise RuntimeError(f"cannot inspect CleanroomX source tree: {root}") from exc
     return tuple(manifest)
-
 
 @lru_cache(maxsize=8)
 def _hash_python_tree_manifest(
@@ -998,6 +1015,7 @@ def _hash_python_tree_manifest(
             expected_mtime_ns,
             expected_ctime_ns,
         ) in manifest:
+            _validate_runtime_source_size(relative_text, expected_size)
             source = root / relative_text
             relative = relative_text.encode("utf-8")
             expected_metadata = (
@@ -1039,7 +1057,7 @@ def _hash_python_tree_manifest(
                     before.st_mtime_ns,
                     before.st_ctime_ns,
                 )
-                content = stream.read()
+                content = stream.read(expected_size + 1)
                 after = os.fstat(stream.fileno())
                 opened_after_metadata = (
                     after.st_dev,

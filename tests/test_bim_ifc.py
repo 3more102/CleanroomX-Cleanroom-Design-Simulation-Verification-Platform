@@ -929,34 +929,80 @@ def test_ifc_extraction_rejects_oversized_source_before_parsing(
 
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
-    digests = iter(["a" * 64, "b" * 64])
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
     monkeypatch.setattr(
         bim_ifc_module,
         "_file_sha256",
-        lambda _path: next(digests),
+        lambda _path: "b" * 64,
     )
 
     with pytest.raises(IfcImportError, match="changed while it was being read"):
-        extract_ifc_semantics(tmp_path / "facility.ifc")
+        extract_ifc_semantics(source)
 
 
-def test_ifc_extraction_binds_digest_only_after_stable_read(monkeypatch, tmp_path):
+def test_ifc_extraction_binds_digest_to_private_snapshot(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
-    calls = []
-    monkeypatch.setattr(
-        bim_ifc_module,
-        "_file_sha256",
-        lambda path: calls.append(path) or "a" * 64,
-    )
+    source = tmp_path / "facility.ifc"
+    payload = b"IFC"
+    source.write_bytes(payload)
+    opened_paths = []
 
-    semantics, provenance = extract_ifc_semantics(tmp_path / "facility.ifc")
+    ifcopenshell = sys.modules["ifcopenshell"]
+
+    class Model:
+        def by_type(self, _ifc_class, include_subtypes=True):
+            return []
+
+    def open_snapshot(path):
+        snapshot = Path(path)
+        opened_paths.append(snapshot)
+        assert snapshot != source
+        assert snapshot.read_bytes() == payload
+        return Model()
+
+    ifcopenshell.open = open_snapshot
+
+    semantics, provenance = extract_ifc_semantics(source)
 
     assert semantics["records"] == []
     assert provenance == {
         "source_name": "facility.ifc",
-        "source_sha256": "a" * 64,
+        "source_sha256": hashlib.sha256(payload).hexdigest(),
     }
-    assert len(calls) == 2
+    assert len(opened_paths) == 1
+    assert not opened_paths[0].exists()
+
+
+def test_ifc_extraction_live_path_aba_cannot_change_parsed_snapshot(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+    source = tmp_path / "facility.ifc"
+    original = b"ORIGINAL-IFC"
+    source.write_bytes(original)
+    parsed_bytes = []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+
+    class Model:
+        def by_type(self, _ifc_class, include_subtypes=True):
+            return []
+
+    def open_snapshot(path):
+        snapshot = Path(path)
+        parsed_bytes.append(snapshot.read_bytes())
+        source.write_bytes(b"TRANSIENT-REPLACEMENT")
+        source.write_bytes(original)
+        return Model()
+
+    ifcopenshell.open = open_snapshot
+
+    semantics, provenance = extract_ifc_semantics(source)
+
+    assert semantics["records"] == []
+    assert parsed_bytes == [original]
+    assert provenance["source_sha256"] == hashlib.sha256(original).hexdigest()
 
 
 def test_ifc_semantics_are_deterministic_across_record_order():

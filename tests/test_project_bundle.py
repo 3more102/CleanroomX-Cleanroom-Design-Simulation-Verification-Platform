@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 import zipfile
 
 import pytest
@@ -745,7 +747,70 @@ def test_bundle_export_project_race_preserves_existing_bundle(tmp_path, monkeypa
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 
-def test_bundle_verification_rejects_archive_revision_change(tmp_path, monkeypatch):
+def test_bundle_opened_path_identity_check_is_windows_portable(monkeypatch):
+    path_stat = SimpleNamespace(st_dev=1, st_ino=2, st_size=64)
+    opened_stat = SimpleNamespace(st_dev=9, st_ino=8, st_size=64)
+
+    monkeypatch.setattr(bundle_module.os, "name", "nt")
+    assert bundle_module._bundle_opened_path_matches(path_stat, opened_stat) is True
+
+    monkeypatch.setattr(bundle_module.os, "name", "posix")
+    assert bundle_module._bundle_opened_path_matches(path_stat, opened_stat) is False
+
+
+def test_bundle_verification_binds_report_to_exact_archive_snapshot(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+
+    original_project = _consistency_project()
+    original_project.name = "Original archive"
+    original = tmp_path / "original.cleanroomx.zip"
+    export_project_bundle(original, original_project, source_base=source)
+    original_bytes = original.read_bytes()
+    original_sha256 = hashlib.sha256(original_bytes).hexdigest()
+
+    transient_project = _consistency_project()
+    transient_project.name = "Transient replacement"
+    transient = tmp_path / "transient.cleanroomx.zip"
+    export_project_bundle(transient, transient_project, source_base=source)
+
+    real_zipfile = bundle_module.zipfile.ZipFile
+    live_path_reopened = False
+
+    def transient_separate_open(file, *args, **kwargs):
+        nonlocal live_path_reopened
+        mode = args[0] if args else kwargs.get("mode", "r")
+        try:
+            candidate = Path(os.fspath(file))
+        except TypeError:
+            candidate = None
+        if (
+            not live_path_reopened
+            and mode == "r"
+            and candidate is not None
+            and candidate.resolve(strict=False) == original.resolve(strict=False)
+        ):
+            live_path_reopened = True
+            return real_zipfile(transient, *args, **kwargs)
+        return real_zipfile(file, *args, **kwargs)
+
+    monkeypatch.setattr(bundle_module.zipfile, "ZipFile", transient_separate_open)
+
+    report = inspect_project_bundle(original)
+
+    assert live_path_reopened is False
+    assert report["project_name"] == "Original archive"
+    assert report["bundle_size_bytes"] == len(original_bytes)
+    assert report["bundle_sha256"] == original_sha256
+
+
+def test_bundle_snapshot_rejects_live_path_revision_change_during_capture(
+    tmp_path, monkeypatch
+):
     source = tmp_path / "source"
     source.mkdir()
     _copy_example(source, "facility_project.json")
@@ -753,25 +818,69 @@ def test_bundle_verification_rejects_archive_revision_change(tmp_path, monkeypat
     bundle = tmp_path / "stable.cleanroomx.zip"
     export_project_bundle(bundle, _consistency_project(), source_base=source)
 
-    original_fingerprint = bundle_module.stable_file_sha256
-    calls = 0
+    real_stat = Path.stat
+    path_stat_calls = 0
 
-    def changed_second_fingerprint(path):
-        nonlocal calls
-        calls += 1
-        stat_result, digest = original_fingerprint(path)
-        if calls == 2:
-            digest = "0" * 64
-        return stat_result, digest
+    class ChangedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev
+            self.st_ino = value.st_ino
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns + 1
 
-    monkeypatch.setattr(
-        bundle_module,
-        "stable_file_sha256",
-        changed_second_fingerprint,
-    )
+    def changed_second_path_stat(self, *args, **kwargs):
+        nonlocal path_stat_calls
+        value = real_stat(self, *args, **kwargs)
+        if self == bundle:
+            path_stat_calls += 1
+            if path_stat_calls == 2:
+                return ChangedStat(value)
+        return value
 
-    with pytest.raises(ProjectBundleError, match="changed during verification"):
-        inspect_project_bundle(bundle)
+    monkeypatch.setattr(Path, "stat", changed_second_path_stat)
+
+    with pytest.raises(ProjectBundleError, match="unavailable or changing"):
+        with bundle_module._stable_bundle_snapshot(bundle, attempts=1):
+            pass
+
+    assert path_stat_calls == 2
+
+
+def test_bundle_snapshot_rejects_opened_revision_change_during_capture(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    real_fstat = bundle_module.os.fstat
+    descriptor_stat_calls = 0
+
+    class ChangedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev
+            self.st_ino = value.st_ino
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns + 1
+
+    def changed_second_descriptor_stat(fd):
+        nonlocal descriptor_stat_calls
+        value = real_fstat(fd)
+        descriptor_stat_calls += 1
+        if descriptor_stat_calls == 2:
+            return ChangedStat(value)
+        return value
+
+    monkeypatch.setattr(bundle_module.os, "fstat", changed_second_descriptor_stat)
+
+    with pytest.raises(ProjectBundleError, match="unavailable or changing"):
+        with bundle_module._stable_bundle_snapshot(bundle, attempts=1):
+            pass
+
+    assert descriptor_stat_calls == 2
 
 
 def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
@@ -791,7 +900,7 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
         nonlocal calls
         calls += 1
         stat_result, digest = original_fingerprint(path)
-        if calls == 3:
+        if calls == 1:
             digest = "f" * 64
         return stat_result, digest
 

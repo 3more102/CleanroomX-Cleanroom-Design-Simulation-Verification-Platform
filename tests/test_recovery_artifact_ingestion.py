@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
 
 import cleanroomx.autosave as autosave_module
+import cleanroomx.strict_json as strict_json_module
 from cleanroomx.autosave import AutosaveManager, RecoveryFormatError, load_recovery_artifact
+from cleanroomx.strict_json import StrictJSONError
 
 
 def _legacy_recovery_bytes(*, project_identity: str = "session-test") -> bytes:
@@ -133,7 +134,8 @@ def test_recovery_loader_rejects_live_path_disappearance(
     with pytest.raises(RecoveryFormatError, match="changed while reading JSON input") as raised:
         load_recovery_artifact(source)
 
-    assert isinstance(raised.value.__cause__, FileNotFoundError)
+    assert isinstance(raised.value.__cause__, StrictJSONError)
+    assert isinstance(raised.value.__cause__.__cause__, FileNotFoundError)
 
 
 def test_recovery_loader_rejects_revision_growth_during_read(
@@ -146,7 +148,7 @@ def test_recovery_loader_rejects_revision_growth_during_read(
     larger.write_bytes(_legacy_recovery_bytes() + b" ")
     source_stat = source.stat()
     larger_stat = larger.stat()
-    real_fstat = os.fstat
+    real_fstat = strict_json_module.os.fstat
     calls = 0
 
     def changing_fstat(fd: int):
@@ -158,7 +160,7 @@ def test_recovery_loader_rejects_revision_growth_during_read(
             return larger_stat
         return real_fstat(fd)
 
-    monkeypatch.setattr(autosave_module.os, "fstat", changing_fstat)
+    monkeypatch.setattr(strict_json_module.os, "fstat", changing_fstat)
 
     with pytest.raises(RecoveryFormatError, match="changed while reading JSON input"):
         load_recovery_artifact(source)
@@ -179,7 +181,7 @@ def test_recovery_writer_never_publishes_artifact_above_reader_limit(
     monkeypatch.setattr(autosave_module, "RECOVERY_FILE_MAX_BYTES", 64)
 
     try:
-        with pytest.raises(RecoveryFormatError, match="exceeds maximum supported JSON size"):
+        with pytest.raises(RecoveryFormatError, match="exceeds maximum supported size"):
             manager._write_recovery(request)
     finally:
         manager.shutdown(wait=True)

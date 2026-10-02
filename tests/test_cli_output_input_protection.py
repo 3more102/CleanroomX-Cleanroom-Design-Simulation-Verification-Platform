@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import importlib.metadata as metadata
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import sys
 
@@ -100,7 +102,9 @@ def test_protected_cli_writer_rechecks_identity_before_replace(tmp_path, monkeyp
     assert output.read_bytes() == before
 
 
-def test_fan_curve_cli_cannot_publish_over_its_study(tmp_path, monkeypatch):
+def test_fan_curve_cli_reports_protected_output_failure_without_traceback(
+    tmp_path, monkeypatch, capsys
+):
     source = tmp_path / "fan-study.json"
     source.write_text('{"engineering": "input"}\n', encoding="utf-8")
     before = source.read_bytes()
@@ -132,13 +136,19 @@ def test_fan_curve_cli_cannot_publish_over_its_study(tmp_path, monkeypatch):
         lambda _result: "report\n",
     )
 
-    with pytest.raises(cli_output.CliOutputProtectionError, match="protected engineering input"):
-        fan_curve_cli.main()
+    assert fan_curve_cli.main() == 1
 
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("cleanroomx-fan-curve: error: output publication failed:")
+    assert "protected engineering input" in captured.err
+    assert "Traceback" not in captured.err
     assert source.read_bytes() == before
 
 
-def test_dossier_cli_cannot_publish_over_declared_dependency(tmp_path, monkeypatch):
+def test_dossier_cli_reports_dependency_output_failure_without_traceback(
+    tmp_path, monkeypatch, capsys
+):
     dependency = tmp_path / "verification.json"
     dependency.write_text("protected engineering dependency\n", encoding="utf-8")
     before = dependency.read_bytes()
@@ -171,16 +181,99 @@ def test_dossier_cli_cannot_publish_over_declared_dependency(tmp_path, monkeypat
         ),
     )
 
-    with pytest.raises(cli_output.CliOutputProtectionError, match="protected engineering input"):
-        dossier_cli.main()
+    assert dossier_cli.main() == 1
 
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("cleanroomx-dossier: error: output publication failed:")
+    assert "protected engineering input" in captured.err
+    assert "Traceback" not in captured.err
     assert dependency.read_bytes() == before
 
 
-def test_all_standalone_file_output_clis_use_protected_writer():
+def test_output_error_wrapper_reports_publication_oserror_without_traceback(
+    tmp_path, monkeypatch, capsys
+):
+    output = tmp_path / "report.md"
+
+    def fail_publication(*_args, **_kwargs):
+        raise OSError("simulated publication failure")
+
+    monkeypatch.setattr(cli_output, "atomic_write_cli_output", fail_publication)
+
+    assert not cli_output.write_cli_output_or_report_error(
+        "cleanroomx-test",
+        output,
+        "report\n",
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "cleanroomx-test: error: output publication failed: "
+        "simulated publication failure\n"
+    )
+    assert "Traceback" not in captured.err
+
+
+def test_installed_fan_curve_entrypoint_reports_output_failure_cleanly(tmp_path):
+    try:
+        distribution = metadata.distribution("cleanroomx")
+    except metadata.PackageNotFoundError:
+        pytest.skip("installed package metadata is not available in this test environment")
+    assert any(
+        entry.name == "cleanroomx-fan-curve"
+        for entry in distribution.entry_points
+    )
+
+    source = tmp_path / "fan-study.json"
+    source.write_text('{"engineering": "input"}\n', encoding="utf-8")
+    before = source.read_bytes()
+    script = r"""
+import importlib.metadata as metadata
+import sys
+import cleanroomx.fan_curve_cli as module
+
+source = sys.argv[1]
+module.load_fan_operating_point_study = lambda _path: {"study": "stub"}
+module.solve_fan_operating_point = lambda _study: {"status": "solved"}
+module.markdown_fan_operating_point_report = lambda _result: "report\n"
+sys.argv = [
+    "cleanroomx-fan-curve",
+    source,
+    "--format",
+    "markdown",
+    "--output",
+    source,
+]
+entry = next(
+    item
+    for item in metadata.distribution("cleanroomx").entry_points
+    if item.name == "cleanroomx-fan-curve"
+)
+raise SystemExit(entry.load()())
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script, str(source)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stdout == ""
+    assert completed.stderr.startswith(
+        "cleanroomx-fan-curve: error: output publication failed:"
+    )
+    assert "protected engineering input" in completed.stderr
+    assert "Traceback" not in completed.stderr
+    assert source.read_bytes() == before
+
+
+def test_all_standalone_file_output_clis_report_publication_failures():
     package_dir = Path(cli_output.__file__).resolve().parent
     for filename in STANDALONE_FILE_OUTPUT_CLIS:
         source = (package_dir / filename).read_text(encoding="utf-8")
         assert "--output" in source, filename
-        assert "atomic_write_cli_output(" in source, filename
+        assert "write_cli_output_or_report_error(" in source, filename
+        assert "atomic_write_cli_output(" not in source, filename
         assert "atomic_write_text(args.output, text)" not in source, filename

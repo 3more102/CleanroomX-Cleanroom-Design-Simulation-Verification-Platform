@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — bounded dossier fallback fingerprinting — 2026-10-02
+
+- Applies the canonical 64 MiB strict-JSON ceiling to the compatibility dossier source fingerprint path when no private snapshot pool is supplied.
+- Prevents oversized file-backed dossier inputs from forcing an unbounded SHA-256 read through the fallback source-record helper.
+- Keeps the normal dossier execution path unchanged: it continues to parse digest-bound private snapshots under the same strict-JSON ceiling.
+- Changes no dossier schema, solver equation, numerical tolerance, engineering-unit convention, requirement criterion, verification verdict, or release identity.
+- Adds a sparse-file regression proving oversized fallback inputs fail before binary reading begins.
+
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
 
 - Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.

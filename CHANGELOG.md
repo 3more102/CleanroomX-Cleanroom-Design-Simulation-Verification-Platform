@@ -4,6 +4,7 @@
 
 - Binds quarantine audit-manifest size and SHA-256 evidence to the bytes that were actually moved into the quarantine directory, closing the pre-move observation gap.
 - Makes quarantine rollback atomically no-clobber: if any directory entry repopulates the original recovery path before restoration, the quarantined bytes are preserved and newer recovery data is never overwritten.
+- Preserves quarantined bytes and an already-published manifest when durable manifest publication reports a post-replace committed failure, avoiding rollback into a stale forensic state.
 - Adds race-focused regressions for moved-byte evidence binding and repopulated-source rollback safety. No solver, project schema, engineering calculation, or verdict semantic changes.
 
 ## Unreleased Release 3 — standalone CLI publication safety — 2026-10-02

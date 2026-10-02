@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
-from .project import atomic_write_text
+from .strict_json import StrictJSONError
+from .cli_output import atomic_write_cli_output, dumps_strict_json
 from .psychrometric_uncertainty import analyze_psychrometric_uncertainty
 from .psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from .psychrometric_uncertainty_report import (
@@ -33,14 +34,25 @@ def main() -> int:
     result = analyze_psychrometric_uncertainty(
         load_psychrometric_uncertainty(args.file)
     )
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_psychrometric_uncertainty_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_psychrometric_uncertainty_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-psychrometric-uncertainty: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.file,),
+        )
     else:
         print(text)
     return 0

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — bounded runtime source fingerprinting — 2026-10-02
+
+- Rejects individual Python source files larger than 64 MiB before runtime provenance opens them for hashing.
+- Reads each accepted source revision with an explicit `observed_size + 1` ceiling instead of unbounded `read()`, so concurrent file growth cannot force an unbounded provenance read before drift rejection.
+- Re-validates the observed size inside the cached hash authority, preserving the existing `sha256-python-source-tree-v1` identity for accepted source trees.
+- Changes no solver equation, project schema, engineering tolerance, requirement criterion, verification verdict, or release identity; adds regressions for pre-read oversize rejection and bounded source reads.
+
 ## Unreleased Release 3 — bounded portable bundle extraction recheck — 2026-10-02
 
 - Applies the portable-bundle archive byte ceiling to the final live-source SHA-256 recheck performed after extraction from the verified private snapshot.

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — exact parsed project revision binding — 2026-10-02
+
+- Binds revision-aware project loading to the exact stable byte snapshot accepted by the canonical strict-JSON reader instead of fingerprinting the path in separate reads around parsing.
+- Derives the returned project SHA-256, byte size, and modification revision from those exact parsed bytes after opened-descriptor and live-path stability checks.
+- Preserves project size ceilings, strict UTF-8/JSON validation, duplicate-key/non-finite rejection, migration provenance, guarded-save behavior, and public loader return contracts.
+- Adds focused regressions for exact byte/digest binding, transient snapshot retries, project size ceilings, and repeated revision-change failure.
+- Changes no solver equation, numerical tolerance, project schema, requirement criterion, verification verdict semantic, or release identity.
+
 ## Unreleased Release 3 — project-revision ingestion hardening — 2026-10-02
 
 - Routes saved project-revision envelopes through the canonical bounded, revision-stable strict-JSON file reader while preserving the existing revision-envelope size budget and schema validation.

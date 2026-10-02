@@ -1,4 +1,11 @@
+from contextlib import ExitStack, contextmanager
 import hashlib
+from pathlib import Path
+
+import pytest
+
+import cleanroomx.dossier as dossier_module
+import cleanroomx.io as io_module
 
 from cleanroomx.dossier import _source_record, build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
@@ -95,6 +102,126 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
     expected = hashlib.sha256(source.read_bytes()).hexdigest()
     assert record["sha256"] == expected
     assert record["path"] == "input.json"
+
+
+def test_source_record_snapshot_binds_digest_to_private_exact_bytes(tmp_path) -> None:
+    source = tmp_path / "input.json"
+    original = b'{"demo": true}\n'
+    source.write_bytes(original)
+
+    with ExitStack() as snapshots:
+        record = _source_record(
+            "demo",
+            "input.json",
+            tmp_path,
+            snapshot_stack=snapshots,
+        )
+        snapshot = Path(record["_resolved_path"])
+        source.write_bytes(b'{"demo": false}\n')
+
+        assert snapshot != source
+        assert snapshot.read_bytes() == original
+        assert record["sha256"] == hashlib.sha256(original).hexdigest()
+
+    assert not snapshot.exists()
+
+
+def test_source_record_snapshot_uses_strict_json_size_ceiling(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_text('{"demo": true}\n', encoding="utf-8")
+    calls = []
+
+    @contextmanager
+    def bounded_snapshot(path, *, max_bytes, suffix):
+        resolved = Path(path)
+        calls.append((resolved, max_bytes, suffix))
+        yield resolved, resolved.stat(), "a" * 64
+
+    monkeypatch.setattr(dossier_module, "stable_file_snapshot", bounded_snapshot)
+
+    with ExitStack() as snapshots:
+        record = _source_record(
+            "demo",
+            "input.json",
+            tmp_path,
+            snapshot_stack=snapshots,
+        )
+
+    assert calls == [
+        (
+            source.resolve(),
+            dossier_module.STRICT_JSON_FILE_MAX_BYTES,
+            ".json",
+        )
+    ]
+    assert record["sha256"] == "a" * 64
+
+
+def test_build_dossier_routes_sources_through_private_snapshot_pool(monkeypatch) -> None:
+    original_source_record = dossier_module._source_record
+    snapshot_paths: list[Path] = []
+
+    def guarded_source_record(
+        kind,
+        supplied_path,
+        manifest_dir,
+        *,
+        snapshot_stack=None,
+    ):
+        assert snapshot_stack is not None
+        record = original_source_record(
+            kind,
+            supplied_path,
+            manifest_dir,
+            snapshot_stack=snapshot_stack,
+        )
+        snapshot_paths.append(Path(record["_resolved_path"]))
+        return record
+
+    monkeypatch.setattr(dossier_module, "_source_record", guarded_source_record)
+
+    result = dossier_module.build_dossier("examples/dossier_demo.json")
+
+    assert result["source_files"]
+    assert snapshot_paths
+    assert all(not path.exists() for path in snapshot_paths)
+
+
+def test_build_dossier_cleans_private_snapshots_when_loader_raises(
+    monkeypatch,
+) -> None:
+    original_source_record = dossier_module._source_record
+    snapshot_paths: list[Path] = []
+
+    def tracking_source_record(
+        kind,
+        supplied_path,
+        manifest_dir,
+        *,
+        snapshot_stack=None,
+    ):
+        record = original_source_record(
+            kind,
+            supplied_path,
+            manifest_dir,
+            snapshot_stack=snapshot_stack,
+        )
+        snapshot_paths.append(Path(record["_resolved_path"]))
+        return record
+
+    def fail_loader(_path):
+        raise RuntimeError("forced dossier loader failure")
+
+    monkeypatch.setattr(dossier_module, "_source_record", tracking_source_record)
+    monkeypatch.setattr(io_module, "load_project", fail_loader)
+
+    with pytest.raises(RuntimeError, match="forced dossier loader failure"):
+        dossier_module.build_dossier("examples/dossier_demo.json")
+
+    assert snapshot_paths
+    assert all(not path.exists() for path in snapshot_paths)
 
 
 def test_repository_demo_builds_end_to_end() -> None:

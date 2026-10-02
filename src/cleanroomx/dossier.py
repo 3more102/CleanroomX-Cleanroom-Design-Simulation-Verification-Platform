@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import hashlib
+from contextlib import ExitStack
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .input_contracts import validate_dossier_input_contract
-from .strict_json import load_strict_json
+from .persistence import stable_file_sha256, stable_file_snapshot
+from .strict_json import STRICT_JSON_FILE_MAX_BYTES, load_strict_json
 
 
 def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
@@ -674,22 +675,38 @@ def summarize_dossier_components(
 
 
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    _metadata, digest = stable_file_sha256(path)
+    return digest
 
 
-def _source_record(kind: str, supplied_path: str, manifest_dir: Path) -> dict:
+def _source_record(
+    kind: str,
+    supplied_path: str,
+    manifest_dir: Path,
+    *,
+    snapshot_stack: ExitStack | None = None,
+) -> dict:
     path = (manifest_dir / supplied_path).resolve()
     if not path.is_file():
         raise ValueError(f"{kind} source file does not exist: {supplied_path}")
+
+    if snapshot_stack is None:
+        digest = _sha256(path)
+        resolved_path = path
+    else:
+        resolved_path, _metadata, digest = snapshot_stack.enter_context(
+            stable_file_snapshot(
+                path,
+                max_bytes=STRICT_JSON_FILE_MAX_BYTES,
+                suffix=path.suffix,
+            )
+        )
+
     return {
         "kind": kind,
         "path": supplied_path,
-        "sha256": _sha256(path),
-        "_resolved_path": path,
+        "sha256": digest,
+        "_resolved_path": resolved_path,
     }
 
 
@@ -697,7 +714,10 @@ def _clean_source(record: dict) -> dict:
     return {key: value for key, value in record.items() if not key.startswith("_")}
 
 
-def build_dossier(manifest_path: str | Path) -> dict:
+def _build_dossier_with_source_record(
+    manifest_path: str | Path,
+    source_record: Callable[[str, str, Path], dict],
+) -> dict:
     from .consistency import (
         analyze_hvac_fan_airflow_consistency,
         analyze_project_consistency,
@@ -767,7 +787,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
     verification_project = None
     verification_path = data.get("verification_project")
     if verification_path is not None:
-        source = _source_record("verification_project", verification_path, manifest_dir)
+        source = source_record("verification_project", verification_path, manifest_dir)
         source_records.append(source)
         verification_project = load_project(source["_resolved_path"])
         verification = verify_project(verification_project).to_dict()
@@ -776,20 +796,20 @@ def build_dossier(manifest_path: str | Path) -> dict:
     hvac_project = None
     hvac_path = data.get("hvac_project")
     if hvac_path is not None:
-        source = _source_record("hvac_project", hvac_path, manifest_dir)
+        source = source_record("hvac_project", hvac_path, manifest_dir)
         source_records.append(source)
         hvac_project = load_hvac_project(source["_resolved_path"])
         hvac = analyze_hvac_project(hvac_project)
 
     recovery: list[dict] = []
     for item in data.get("recovery_tests", []):
-        source = _source_record("recovery_test", item, manifest_dir)
+        source = source_record("recovery_test", item, manifest_dir)
         source_records.append(source)
         recovery.append(analyze_recovery_test(load_recovery_test(source["_resolved_path"])))
 
     qualification: list[dict] = []
     for item in data.get("qualification_analyses", []):
-        source = _source_record("qualification_analysis", item, manifest_dir)
+        source = source_record("qualification_analysis", item, manifest_dir)
         source_records.append(source)
         qualification.append(
             analyze_qualification_uncertainty(
@@ -799,7 +819,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     uncertainty: list[dict] = []
     for item in data.get("uncertainty_rooms", []):
-        source = _source_record("uncertainty_room", item, manifest_dir)
+        source = source_record("uncertainty_room", item, manifest_dir)
         source_records.append(source)
         uncertainty.append(
             analyze_room_uncertainty(load_uncertain_room(source["_resolved_path"]))
@@ -807,7 +827,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     thermal_uncertainty: list[dict] = []
     for item in data.get("thermal_uncertainty_analyses", []):
-        source = _source_record("thermal_uncertainty_analysis", item, manifest_dir)
+        source = source_record("thermal_uncertainty_analysis", item, manifest_dir)
         source_records.append(source)
         thermal_uncertainty.append(
             analyze_thermal_uncertainty(load_thermal_uncertainty(source["_resolved_path"]))
@@ -815,7 +835,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     psychrometric_uncertainty: list[dict] = []
     for item in data.get("psychrometric_uncertainty_analyses", []):
-        source = _source_record(
+        source = source_record(
             "psychrometric_uncertainty_analysis", item, manifest_dir
         )
         source_records.append(source)
@@ -828,7 +848,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
     fan_operating_points: list[dict] = []
     fan_operating_point_studies = []
     for item in data.get("fan_operating_point_studies", []):
-        source = _source_record("fan_operating_point_study", item, manifest_dir)
+        source = source_record("fan_operating_point_study", item, manifest_dir)
         source_records.append(source)
         study = load_fan_operating_point_study(source["_resolved_path"])
         fan_operating_point_studies.append(study)
@@ -836,7 +856,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_system_uncertainty: list[dict] = []
     for item in data.get("fan_system_uncertainty_analyses", []):
-        source = _source_record(
+        source = source_record(
             "fan_system_uncertainty_analysis", item, manifest_dir
         )
         source_records.append(source)
@@ -848,7 +868,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_duct_networks: list[dict] = []
     for item in data.get("fan_duct_network_studies", []):
-        source = _source_record("fan_duct_network_study", item, manifest_dir)
+        source = source_record("fan_duct_network_study", item, manifest_dir)
         source_records.append(source)
         fan_duct_networks.append(
             analyze_fan_duct_network(
@@ -858,7 +878,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_parallel_networks: list[dict] = []
     for item in data.get("fan_parallel_network_studies", []):
-        source = _source_record("fan_parallel_network_study", item, manifest_dir)
+        source = source_record("fan_parallel_network_study", item, manifest_dir)
         source_records.append(source)
         fan_parallel_networks.append(
             solve_fan_driven_parallel_network(
@@ -868,7 +888,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_loop_networks: list[dict] = []
     for item in data.get("fan_loop_network_studies", []):
-        source = _source_record("fan_loop_network_study", item, manifest_dir)
+        source = source_record("fan_loop_network_study", item, manifest_dir)
         source_records.append(source)
         fan_loop_networks.append(
             solve_fan_loop_network(load_fan_loop_network_study(source["_resolved_path"]))
@@ -876,7 +896,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_loop_uncertainty: list[dict] = []
     for item in data.get("fan_loop_uncertainty_analyses", []):
-        source = _source_record(
+        source = source_record(
             "fan_loop_uncertainty_analysis", item, manifest_dir
         )
         source_records.append(source)
@@ -888,7 +908,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_loop_speed_studies: list[dict] = []
     for item in data.get("fan_loop_speed_studies", []):
-        source = _source_record("fan_loop_speed_study", item, manifest_dir)
+        source = source_record("fan_loop_speed_study", item, manifest_dir)
         source_records.append(source)
         fan_loop_speed_studies.append(
             analyze_fan_loop_speed_study(
@@ -898,7 +918,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_variable_friction_loops: list[dict] = []
     for item in data.get("fan_variable_friction_loop_studies", []):
-        source = _source_record(
+        source = source_record(
             "fan_variable_friction_loop_study", item, manifest_dir
         )
         source_records.append(source)
@@ -912,7 +932,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_variable_friction_speed_studies: list[dict] = []
     for item in data.get("fan_variable_friction_speed_studies", []):
-        source = _source_record(
+        source = source_record(
             "fan_variable_friction_speed_study", item, manifest_dir
         )
         source_records.append(source)
@@ -928,7 +948,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
     for item in data.get(
         "fan_variable_friction_uncertainty_analyses", []
     ):
-        source = _source_record(
+        source = source_record(
             "fan_variable_friction_uncertainty_analysis",
             item,
             manifest_dir,
@@ -944,7 +964,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     damper_studies: list[dict] = []
     for item in data.get("damper_studies", []):
-        source = _source_record("damper_study", item, manifest_dir)
+        source = source_record("damper_study", item, manifest_dir)
         source_records.append(source)
         damper_studies.append(
             solve_loop_damper_study(load_loop_damper_study(source["_resolved_path"]))
@@ -952,7 +972,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     fan_speed_studies: list[dict] = []
     for item in data.get("fan_speed_studies", []):
-        source = _source_record("fan_speed_study", item, manifest_dir)
+        source = source_record("fan_speed_study", item, manifest_dir)
         source_records.append(source)
         fan_speed_studies.append(
             analyze_fan_speed_study(
@@ -1121,3 +1141,16 @@ def build_dossier(manifest_path: str | Path) -> dict:
             "hvac_fan_operating_airflow": fan_airflow_consistency,
         },
     }
+
+
+def build_dossier(manifest_path: str | Path) -> dict:
+    with ExitStack() as source_snapshots:
+        def source_record(kind: str, supplied_path: str, manifest_dir: Path) -> dict:
+            return _source_record(
+                kind,
+                supplied_path,
+                manifest_dir,
+                snapshot_stack=source_snapshots,
+            )
+
+        return _build_dossier_with_source_record(manifest_path, source_record)

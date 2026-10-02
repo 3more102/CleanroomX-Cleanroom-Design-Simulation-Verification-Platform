@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — digest-bound dossier source snapshots — 2026-10-02
+
+- Routes every file-backed dossier source through the shared bounded stable-file snapshot authority before any engineering parser or solver consumes it.
+- Binds each dossier source SHA-256 to the exact private bytes supplied to the corresponding loader, closing the hash-then-reopen replace/restore (ABA) window.
+- Keeps original manifest-relative source names in dossier evidence while ensuring private snapshots are cleaned on success and exceptions.
+- Preserves dossier schema, solver equations, numerical tolerances, engineering-unit conventions, requirement criteria, verification verdicts, and release identity.
+
 ## Unreleased Release 3 — project revision stable fingerprint authority — 2026-10-02
 
 - Routes optimistic project-file revision capture through the shared `persistence.stable_file_sha256()` authority instead of maintaining a weaker path-stat/hash/path-stat implementation.

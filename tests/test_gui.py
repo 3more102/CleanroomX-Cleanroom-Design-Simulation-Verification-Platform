@@ -902,6 +902,49 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
         ).resolve()
 
 
+def test_import_input_json_uses_canonical_bounded_file_reader(tmp_path, monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_dir = tmp_path / "project"
+    import_dir = tmp_path / "import"
+    project_dir.mkdir()
+    import_dir.mkdir()
+    import_path = import_dir / "room.json"
+    import_path.write_text('{"ignored": true}', encoding="utf-8")
+    analysis = AnalysisDocument(id="r", name="Room", kind="room_verification", input={})
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="r"
+    )
+    app.project_path = project_dir / "project.cleanroomx.json"
+    app.status_var = Status()
+    app._current_analysis = lambda: analysis
+    app._invalidate_last_run_for = lambda analysis_id: None
+    app._load_analysis_into_editor = lambda item: None
+    app._update_title = lambda: None
+
+    calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "_load_strict_json",
+        lambda path: calls.append(Path(path)) or {"name": "Imported room"},
+    )
+
+    app.import_input_json()
+
+    assert calls == [import_path]
+    assert analysis.input == {"name": "Imported room"}
+    assert app.status_var.value == f"Imported {import_path.name}"
+
+
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):
     class Status:
         def set(self, value):

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Iterable
 
 from .input_contracts import validate_dossier_input_contract
+from .persistence import stable_file_sha256
 from .strict_json import load_strict_json
 
 
@@ -674,11 +674,8 @@ def summarize_dossier_components(
 
 
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    _metadata, digest = stable_file_sha256(path)
+    return digest
 
 
 def _source_record(kind: str, supplied_path: str, manifest_dir: Path) -> dict:

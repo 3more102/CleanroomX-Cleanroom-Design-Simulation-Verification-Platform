@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — typed runtime source revision changes — 2026-10-03
+
+- Replaces runtime-provenance retry classification based on exception-message text with a dedicated typed source-tree revision-change failure.
+- Retries only genuine source identity races while propagating unrelated runtime failures immediately, even if their message contains the old race wording.
+- Preserves runtime fingerprint schema, source-byte limits, deterministic hashing, solver equations, engineering tolerances, requirement criteria, and verification verdict semantics.
+- Adds regressions for typed retry behavior and false-positive message matching.
+
+
 ## Unreleased Release 3 — exact stable-file read ceilings — 2026-10-03
 
 - Makes the canonical stable-file authority request at most the remaining configured byte allowance plus one sentinel byte instead of issuing fixed 1 MiB reads before enforcing smaller limits.

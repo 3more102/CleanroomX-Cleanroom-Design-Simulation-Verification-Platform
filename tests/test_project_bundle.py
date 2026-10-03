@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 import zipfile
 
 import pytest
@@ -182,6 +182,45 @@ def test_bundle_export_rejects_oversized_dependency_without_replacing_target(
     with pytest.raises(ProjectBundleError, match="dependency exceeds supported size limit"):
         export_project_bundle(target, _consistency_project(), source_base=source)
 
+    assert target.read_bytes() == previous
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_bundle_export_preserves_typed_size_failure_during_dependency_fingerprint(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    dependency = _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    target = tmp_path / "growing-dependency.cleanroomx.zip"
+    target.write_bytes(b"previous verified bundle")
+    previous = target.read_bytes()
+
+    def fail_with_size_limit(path, *, attempts=3, max_bytes=None):
+        assert Path(path).resolve(strict=False) == dependency.resolve(strict=False)
+        assert max_bytes == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES
+        raise persistence_module.StableFileSizeError(
+            path,
+            bundle_module._MAX_DEPENDENCY_MEMBER_BYTES + 1,
+            bundle_module._MAX_DEPENDENCY_MEMBER_BYTES,
+        )
+
+    monkeypatch.setattr(bundle_module, "stable_file_sha256", fail_with_size_limit)
+
+    with pytest.raises(
+        ProjectBundleError,
+        match="dependency exceeds supported size limit while fingerprinting",
+    ) as exc_info:
+        export_project_bundle(target, _consistency_project(), source_base=source)
+
+    assert isinstance(exc_info.value.__cause__, persistence_module.StableFileSizeError)
+    cause = exc_info.value.__cause__
+    assert cause.observed_size == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES + 1
+    assert cause.limit == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES
+    assert str(cause.observed_size) in str(exc_info.value)
+    assert str(cause.limit) in str(exc_info.value)
+    assert str(dependency.resolve(strict=False)) in str(exc_info.value)
     assert target.read_bytes() == previous
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
@@ -782,17 +821,6 @@ def test_bundle_export_project_race_preserves_existing_bundle(tmp_path, monkeypa
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 
-def test_bundle_opened_path_identity_check_is_windows_portable(monkeypatch):
-    path_stat = SimpleNamespace(st_dev=1, st_ino=2, st_size=64)
-    opened_stat = SimpleNamespace(st_dev=9, st_ino=8, st_size=64)
-
-    monkeypatch.setattr(bundle_module.os, "name", "nt")
-    assert bundle_module._bundle_opened_path_matches(path_stat, opened_stat) is True
-
-    monkeypatch.setattr(bundle_module.os, "name", "posix")
-    assert bundle_module._bundle_opened_path_matches(path_stat, opened_stat) is False
-
-
 def test_bundle_verification_binds_report_to_exact_archive_snapshot(
     tmp_path, monkeypatch
 ):
@@ -841,6 +869,98 @@ def test_bundle_verification_binds_report_to_exact_archive_snapshot(
     assert report["project_name"] == "Original archive"
     assert report["bundle_size_bytes"] == len(original_bytes)
     assert report["bundle_sha256"] == original_sha256
+
+
+
+def test_bundle_verifier_uses_shared_bounded_stable_snapshot_authority(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "canonical-snapshot.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    original_snapshot = bundle_module.stable_file_snapshot
+    observed: list[tuple[Path, int, int | None, str]] = []
+
+    def bounded_snapshot(path, *, attempts=3, max_bytes=None, suffix=""):
+        observed.append((Path(path), attempts, max_bytes, suffix))
+        return original_snapshot(
+            path,
+            attempts=attempts,
+            max_bytes=max_bytes,
+            suffix=suffix,
+        )
+
+    monkeypatch.setattr(
+        bundle_module,
+        "stable_file_snapshot",
+        bounded_snapshot,
+    )
+
+    report = inspect_project_bundle(bundle)
+
+    assert report["bundle_path"] == str(bundle)
+    assert observed == [
+        (
+            bundle,
+            3,
+            bundle_module._MAX_BUNDLE_ARCHIVE_BYTES,
+            bundle.suffix,
+        )
+    ]
+
+
+def test_bundle_verifier_rejects_corrupted_private_snapshot(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "corrupt-private-snapshot.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    @contextmanager
+    def fail_snapshot(path, *, attempts=3, max_bytes=None, suffix=""):
+        raise persistence_module.StableFileSnapshotVerificationError(
+            path,
+            expected_size=bundle.stat().st_size,
+            expected_sha256=hashlib.sha256(bundle.read_bytes()).hexdigest(),
+            actual_size=1,
+            actual_sha256="0" * 64,
+        )
+        yield
+
+    monkeypatch.setattr(bundle_module, "stable_file_snapshot", fail_snapshot)
+
+    with pytest.raises(
+        ProjectBundleError,
+        match="could not verify private bundle verification snapshot",
+    ) as exc_info:
+        inspect_project_bundle(bundle)
+
+    assert isinstance(
+        exc_info.value.__cause__,
+        persistence_module.StableFileSnapshotVerificationError,
+    )
+
+
+def test_bundle_snapshot_does_not_reclassify_consumer_oserror(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "consumer-error.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    with pytest.raises(OSError, match="consumer archive read failed") as exc_info:
+        with bundle_module._stable_bundle_snapshot(bundle):
+            raise OSError("consumer archive read failed")
+
+    assert type(exc_info.value) is OSError
 
 
 def test_bundle_snapshot_rejects_live_path_revision_change_during_capture(
@@ -892,32 +1012,28 @@ def test_bundle_snapshot_rejects_opened_revision_change_during_capture(
     bundle = tmp_path / "stable.cleanroomx.zip"
     export_project_bundle(bundle, _consistency_project(), source_base=source)
 
-    real_fstat = bundle_module.os.fstat
-    descriptor_stat_calls = 0
+    real_identity = persistence_module._stable_file_identity
+    identity_calls = 0
 
-    class ChangedStat:
-        def __init__(self, value):
-            self.st_dev = value.st_dev
-            self.st_ino = value.st_ino
-            self.st_size = value.st_size
-            self.st_mtime_ns = value.st_mtime_ns + 1
-            self.st_ctime_ns = value.st_ctime_ns
+    def changed_after_handle_identity(value):
+        nonlocal identity_calls
+        identity_calls += 1
+        identity = real_identity(value)
+        if identity_calls == 3:
+            return (*identity[:-1], identity[-1] + 1)
+        return identity
 
-    def changed_second_descriptor_stat(fd):
-        nonlocal descriptor_stat_calls
-        value = real_fstat(fd)
-        descriptor_stat_calls += 1
-        if descriptor_stat_calls == 2:
-            return ChangedStat(value)
-        return value
-
-    monkeypatch.setattr(bundle_module.os, "fstat", changed_second_descriptor_stat)
+    monkeypatch.setattr(
+        persistence_module,
+        "_stable_file_identity",
+        changed_after_handle_identity,
+    )
 
     with pytest.raises(ProjectBundleError, match="unavailable or changing"):
         with bundle_module._stable_bundle_snapshot(bundle, attempts=1):
             pass
 
-    assert descriptor_stat_calls == 2
+    assert identity_calls == 4
 
 
 def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(

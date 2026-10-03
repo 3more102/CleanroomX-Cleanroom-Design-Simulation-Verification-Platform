@@ -20,6 +20,7 @@ from .application import (
 )
 from .persistence import (
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     _ensure_directory_durable,
     _fsync_directory,
     atomic_write_generated,
@@ -687,6 +688,10 @@ def _stable_bundle_snapshot(
                 yield source, snapshot, metadata.st_size, digest
             finally:
                 snapshot.close()
+    except StableFileSnapshotVerificationError as exc:
+        raise ProjectBundleError(
+            "could not verify private bundle verification snapshot"
+        ) from exc
     except StableFileSizeError as exc:
         raise ProjectBundleError(
             "bundle archive exceeds supported size limit "

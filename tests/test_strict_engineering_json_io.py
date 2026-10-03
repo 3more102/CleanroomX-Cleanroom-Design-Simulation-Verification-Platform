@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.persistence as persistence_module
 import cleanroomx.strict_json as strict_json_module
 from cleanroomx.damper_study_io import load_loop_damper_study
 from cleanroomx.dossier import build_dossier
@@ -154,7 +155,7 @@ def test_strict_file_loader_accepts_windows_path_descriptor_id_divergence(
     def windows_divergent_fstat(fd):
         return DivergentOpenedStat(real_fstat(fd))
 
-    monkeypatch.setattr(strict_json_module.os, "name", "nt")
+    monkeypatch.setattr(persistence_module, "_IS_WINDOWS", True)
     monkeypatch.setattr(strict_json_module.os, "fstat", windows_divergent_fstat)
 
     assert load_strict_json(source) == {"revision": 1}

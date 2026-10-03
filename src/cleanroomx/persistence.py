@@ -177,6 +177,14 @@ def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int, in
     )
 
 
+def _stable_file_windows_creation_time_ns(value: os.stat_result) -> int:
+    """Return the Windows creation timestamp across supported Python versions."""
+    birthtime_ns = getattr(value, "st_birthtime_ns", None)
+    if birthtime_ns is not None:
+        return int(birthtime_ns)
+    return value.st_ctime_ns
+
+
 def _stable_file_path_matches_opened(
     path_stat: os.stat_result,
     opened_stat: os.stat_result,
@@ -187,7 +195,8 @@ def _stable_file_path_matches_opened(
     if _IS_WINDOWS:
         return (
             opened_stat.st_mtime_ns == path_stat.st_mtime_ns
-            and opened_stat.st_ctime_ns == path_stat.st_ctime_ns
+            and _stable_file_windows_creation_time_ns(opened_stat)
+            == _stable_file_windows_creation_time_ns(path_stat)
         )
     return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
 

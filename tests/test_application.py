@@ -715,8 +715,8 @@ def test_external_dependency_capture_preserves_typed_size_failure(
     )
 
     with pytest.raises(
-        ExternalDependencySnapshotError,
-        match="input exceeds supported size limit while fingerprinting",
+        ExternalDependencyChangedError,
+        match="exceeds supported size limit",
     ) as raised:
         application_module._capture_external_dependencies(
             "dossier",
@@ -724,8 +724,15 @@ def test_external_dependency_capture_preserves_typed_size_failure(
             tmp_path,
         )
 
-    assert raised.value.field == "verification_project"
-    assert raised.value.declared_path == "dependency.json"
+    assert raised.value.changes == (
+        {
+            "field": "verification_project",
+            "declared_path": "dependency.json",
+            "status": "size_limit_exceeded",
+            "observed_size": limit + 1,
+            "limit": limit,
+        },
+    )
     assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
 
 
@@ -757,8 +764,8 @@ def test_external_dependency_snapshot_preserves_typed_size_failure(
     monkeypatch.setattr(application_module, "stable_file_snapshot", fail_snapshot)
 
     with pytest.raises(
-        ExternalDependencySnapshotError,
-        match="input exceeds supported size limit while creating execution snapshot",
+        ExternalDependencyChangedError,
+        match="exceeds supported size limit",
     ) as raised:
         application_module._prepare_external_dependency_snapshot(
             "dossier",
@@ -775,6 +782,67 @@ def test_external_dependency_snapshot_preserves_typed_size_failure(
             ".json",
         )
     ]
+    assert raised.value.changes == (
+        {
+            "field": "verification_project",
+            "declared_path": "dependency.json",
+            "status": "size_limit_exceeded",
+            "observed_size": limit + 1,
+            "limit": limit,
+        },
+    )
+    assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
+
+
+def test_external_dependency_snapshot_preserves_typed_size_failure_after_io_retry(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    metadata = dependency.stat()
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+    limit = application_module.STRICT_JSON_FILE_MAX_BYTES
+    hash_calls = 0
+
+    def stable_hash(path, *, attempts, max_bytes):
+        nonlocal hash_calls
+        assert Path(path) == dependency
+        assert attempts == application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS
+        assert max_bytes == limit
+        hash_calls += 1
+        if hash_calls == 1:
+            return metadata, digest
+        raise application_module.StableFileSizeError(path, limit + 1, limit)
+
+    @contextmanager
+    def fail_snapshot(path, *, attempts, max_bytes, suffix=""):
+        assert Path(path) == dependency
+        assert attempts == application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS
+        assert max_bytes == limit
+        assert suffix == ".json"
+        raise OSError("simulated snapshot I/O failure")
+        yield
+
+    monkeypatch.setattr(application_module, "stable_file_sha256", stable_hash)
+    monkeypatch.setattr(application_module, "stable_file_snapshot", fail_snapshot)
+
+    with pytest.raises(
+        ExternalDependencyChangedError,
+        match="exceeds supported size limit",
+    ) as raised:
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+    assert hash_calls == 2
+    assert raised.value.changes[0]["status"] == "size_limit_exceeded"
+    assert raised.value.changes[0]["observed_size"] == limit + 1
+    assert raised.value.changes[0]["limit"] == limit
     assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
 
 

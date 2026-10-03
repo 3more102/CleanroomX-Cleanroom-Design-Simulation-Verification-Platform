@@ -341,6 +341,27 @@ class ExternalDependencyChangedError(RuntimeError):
 
     def __init__(self, changes: list[dict]) -> None:
         self.changes = tuple(copy.deepcopy(changes))
+        size_limit_changes = [
+            item
+            for item in self.changes
+            if item.get("status") == "size_limit_exceeded"
+        ]
+        if size_limit_changes and len(size_limit_changes) == len(self.changes):
+            labels = [
+                (
+                    f"{item['field']} ({item['declared_path']}; "
+                    f"{item['observed_size']} > {item['limit']} bytes)"
+                )
+                for item in size_limit_changes
+            ]
+            super().__init__(
+                "External engineering input exceeds supported size limit; "
+                "a trusted analysis result was not produced. Use input(s) within "
+                "the configured byte ceiling and run again: "
+                + ", ".join(labels)
+            )
+            return
+
         labels = [
             f"{item['field']} ({item['declared_path']})"
             for item in self.changes
@@ -1388,11 +1409,14 @@ def _capture_external_dependencies(
         try:
             fingerprint = _stable_file_fingerprint(path)
         except StableFileSizeError as exc:
-            raise ExternalDependencySnapshotError(
-                field,
-                declared_path,
-                "input exceeds supported size limit while fingerprinting "
-                f"({exc.observed_size} > {exc.limit} bytes)",
+            raise ExternalDependencyChangedError(
+                [{
+                    "field": field,
+                    "declared_path": declared_path,
+                    "status": "size_limit_exceeded",
+                    "observed_size": exc.observed_size,
+                    "limit": exc.limit,
+                }]
             ) from exc
         except (OSError, RuntimeError) as exc:
             raise ExternalDependencyChangedError(
@@ -1493,15 +1517,28 @@ def _prepare_external_dependency_snapshot(
                         continue
                     shutil.copyfile(stable_source, destination)
             except StableFileSizeError as exc:
-                raise ExternalDependencySnapshotError(
-                    field,
-                    declared_path,
-                    "input exceeds supported size limit while creating execution snapshot "
-                    f"({exc.observed_size} > {exc.limit} bytes)",
+                raise ExternalDependencyChangedError(
+                    [{
+                        "field": field,
+                        "declared_path": declared_path,
+                        "status": "size_limit_exceeded",
+                        "observed_size": exc.observed_size,
+                        "limit": exc.limit,
+                    }]
                 ) from exc
             except OSError as exc:
                 try:
                     current = _stable_file_fingerprint(source)
+                except StableFileSizeError as size_exc:
+                    raise ExternalDependencyChangedError(
+                        [{
+                            "field": field,
+                            "declared_path": declared_path,
+                            "status": "size_limit_exceeded",
+                            "observed_size": size_exc.observed_size,
+                            "limit": size_exc.limit,
+                        }]
+                    ) from size_exc
                 except (OSError, RuntimeError):
                     changes.append({
                         "field": field,

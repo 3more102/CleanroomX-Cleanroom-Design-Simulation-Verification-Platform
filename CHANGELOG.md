@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — typed recovery strict-JSON size failures — 2026-10-03
+
+- Preserves the canonical `StrictJSONSizeError` classification when recovery-artifact ingestion exceeds its 128 MiB hard ceiling.
+- Translates the typed failure into the existing recovery-specific size error while retaining observed-size/limit evidence through the exception cause.
+- Keeps unrelated strict-JSON failures on the generic invalid-recovery path, eliminating accidental classification by message text.
+- Adds regressions for both the typed oversize path and a size-like generic strict-JSON message; recovery schema, quarantine semantics, project persistence, solver behavior, requirements, and verification verdicts are unchanged.
+
 ## Unreleased Release 3 — exact stable-file read ceilings — 2026-10-03
 
 - Makes the canonical stable-file authority request at most the remaining configured byte allowance plus one sentinel byte instead of issuing fixed 1 MiB reads before enforcing smaller limits.

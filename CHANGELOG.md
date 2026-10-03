@@ -7,6 +7,7 @@
 - Makes portable-bundle verification translate private snapshot integrity failure explicitly instead of misreporting it as a changing source archive.
 - Adds persistence- and bundle-level regressions; no solver equations, engineering tolerances, schemas, requirement criteria, or verdict semantics change.
 - Preserves consumer-side I/O failure identity by limiting bundle source/snapshot error translation to snapshot acquisition, so downstream ZIP-processing `OSError` failures are not mislabeled as source-revision failures.
+- Preserves the established Windows-safe path/descriptor binding when the bundle reader moves onto the canonical stable-file authority, while retaining exact device/inode revision binding on POSIX.
 
 ## Unreleased Release 3 — typed portable-bundle dependency size failures — 2026-10-03
 

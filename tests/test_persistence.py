@@ -50,6 +50,27 @@ def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
+def test_stable_file_path_descriptor_binding_is_windows_portable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStat:
+        def __init__(self, *, dev: int, ino: int, size: int, mtime_ns: int, ctime_ns: int):
+            self.st_dev = dev
+            self.st_ino = ino
+            self.st_size = size
+            self.st_mtime_ns = mtime_ns
+            self.st_ctime_ns = ctime_ns
+
+    path_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4)
+    opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=7, ctime_ns=6)
+
+    monkeypatch.setattr(persistence.os, "name", "nt")
+    assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is True
+
+    monkeypatch.setattr(persistence.os, "name", "posix")
+    assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is False
+
+
 def test_stable_file_sha256_rejects_ctime_only_descriptor_revision_change(
     tmp_path, monkeypatch
 ):

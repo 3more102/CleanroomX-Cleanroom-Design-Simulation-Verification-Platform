@@ -176,6 +176,18 @@ def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int, in
     )
 
 
+def _stable_file_path_matches_opened(
+    path_stat: os.stat_result,
+    opened_stat: os.stat_result,
+) -> bool:
+    """Bind an opened descriptor to its path revision without non-portable Windows IDs."""
+    if opened_stat.st_size != path_stat.st_size:
+        return False
+    if os.name == "nt":
+        return True
+    return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
+
+
 def _validate_stable_file_max_bytes(max_bytes: int | None) -> int | None:
     if max_bytes is None:
         return None
@@ -239,14 +251,12 @@ def _capture_stable_file_revision(
             last_error = exc
             continue
 
-        identities = (
-            _stable_file_identity(before_path),
-            _stable_file_identity(before_handle),
-            _stable_file_identity(after_handle),
-            _stable_file_identity(after_path),
-        )
         if (
-            identities[0] == identities[1] == identities[2] == identities[3]
+            _stable_file_identity(before_path) == _stable_file_identity(after_path)
+            and _stable_file_identity(before_handle)
+            == _stable_file_identity(after_handle)
+            and _stable_file_path_matches_opened(before_path, before_handle)
+            and _stable_file_path_matches_opened(after_path, after_handle)
             and bytes_read == after_handle.st_size
         ):
             return after_path, digest.hexdigest()

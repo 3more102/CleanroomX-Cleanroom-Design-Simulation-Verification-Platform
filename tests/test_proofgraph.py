@@ -437,27 +437,21 @@ def test_pass_finding_requires_explicit_evidence(
 @pytest.mark.parametrize(
     "status", ["fail", "warning", "unknown", "indeterminate", "not_checked"]
 )
-@pytest.mark.parametrize(
-    ("evidence_ids", "evidence_present"),
-    [
-        (("ev-pressure",), False),
-        ((), True),
-    ],
-)
-def test_non_pass_finding_rejects_inconsistent_evidence_presence(
+def test_non_pass_finding_rejects_claimed_evidence_without_reference(
     status: str,
-    evidence_ids: tuple[str, ...],
-    evidence_present: bool,
 ) -> None:
-    with pytest.raises(ValueError, match="evidence_present must match evidence_ids"):
+    with pytest.raises(
+        ValueError,
+        match="evidence_present=true requires at least one evidence id",
+    ):
         ComplianceFinding(
             id="finding-non-pass",
             check_id="check-pressure",
             requirement_id="CRX-PRESS-001",
             status=status,
-            reason="Non-pass evidence state must remain internally consistent.",
-            evidence_ids=evidence_ids,
-            evidence_present=evidence_present,
+            reason="Claimed finding evidence must remain explicitly traceable.",
+            evidence_ids=(),
+            evidence_present=True,
         )
 
 
@@ -468,10 +462,11 @@ def test_non_pass_finding_rejects_inconsistent_evidence_presence(
     ("evidence_ids", "evidence_present"),
     [
         ((), False),
+        (("ev-pressure",), False),
         (("ev-pressure",), True),
     ],
 )
-def test_non_pass_finding_accepts_consistent_evidence_presence(
+def test_non_pass_finding_accepts_supported_evidence_presence_semantics(
     status: str,
     evidence_ids: tuple[str, ...],
     evidence_present: bool,
@@ -481,7 +476,7 @@ def test_non_pass_finding_accepts_consistent_evidence_presence(
         check_id="check-pressure",
         requirement_id="CRX-PRESS-001",
         status=status,
-        reason="Non-pass findings may represent absent or present evidence.",
+        reason="Context evidence may remain referenced even when actual evidence is absent.",
         evidence_ids=evidence_ids,
         evidence_present=evidence_present,
     )
@@ -490,25 +485,18 @@ def test_non_pass_finding_accepts_consistent_evidence_presence(
     assert finding.evidence_ids == evidence_ids
 
 
-@pytest.mark.parametrize(
-    ("evidence_ids", "evidence_present"),
-    [
-        (["ev-pressure"], False),
-        ([], True),
-    ],
-)
-def test_graph_rejects_serialized_non_pass_evidence_presence_mismatch(
-    evidence_ids: list[str],
-    evidence_present: bool,
-) -> None:
+def test_graph_rejects_serialized_claimed_evidence_without_reference() -> None:
     broken = copy.deepcopy(_graph().to_dict())
     broken["findings"][0]["status"] = "fail"
     broken["verdicts"][0]["status"] = "fail"
-    broken["findings"][0]["evidence_ids"] = evidence_ids
-    broken["findings"][0]["evidence_present"] = evidence_present
+    broken["findings"][0]["evidence_ids"] = []
+    broken["findings"][0]["evidence_present"] = True
     broken.pop("graph_sha256")
 
-    with pytest.raises(ValueError, match="evidence_present must match evidence_ids"):
+    with pytest.raises(
+        ValueError,
+        match="evidence_present=true requires at least one evidence id",
+    ):
         proofgraph_from_dict(broken)
 
 

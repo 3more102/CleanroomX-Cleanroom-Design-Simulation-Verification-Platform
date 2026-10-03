@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — ProofGraph finding evidence flag integrity — 2026-10-03
+
+- Rejects any `ComplianceFinding` whose `evidence_present` flag contradicts whether `evidence_ids` is empty, removing ambiguous audit metadata at the canonical model boundary.
+- Preserves the existing PASS-specific requirement for affirmative evidence while allowing every non-PASS state to represent either present adverse/incomplete evidence or genuinely absent evidence.
+- Applies the same invariant to direct construction and serialized ProofGraph ingestion without changing graph schema, verdict aggregation policy, solver equations, requirement criteria, or numerical tolerances.
+- Adds focused regressions across FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED, including both invalid flag/reference combinations and both valid evidence-presence forms.
+
 ## Unreleased Release 3 — ProofGraph pass-verdict support integrity — 2026-10-02
 
 - Rejects a `pass` verdict when any of its referenced findings is `fail`, `warning`, `unknown`, `indeterminate`, or `not_checked`, closing the multi-finding bypass of the existing single-finding status guard.

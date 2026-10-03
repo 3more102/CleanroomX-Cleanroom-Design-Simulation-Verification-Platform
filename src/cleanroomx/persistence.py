@@ -72,6 +72,30 @@ class StableFileSizeError(OSError):
         )
 
 
+class StableFileSnapshotVerificationError(OSError):
+    """Raised when private snapshot bytes do not match the captured source revision."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        expected_sha256: str,
+        actual_size: int | None,
+        actual_sha256: str | None,
+    ) -> None:
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.actual_size = actual_size
+        self.actual_sha256 = actual_sha256
+        super().__init__(
+            f"stable file snapshot verification failed for {self.path}: "
+            f"expected {expected_size} bytes / sha256 {expected_sha256}, "
+            f"got {actual_size!r} bytes / sha256 {actual_sha256!r}"
+        )
+
+
 _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
     errno.EBADF,
     errno.EINVAL,
@@ -269,6 +293,39 @@ def stable_file_snapshot(
             max_bytes=max_bytes,
             snapshot_path=snapshot,
         )
+        try:
+            snapshot_metadata, snapshot_digest = stable_file_sha256(
+                snapshot,
+                attempts=1,
+                max_bytes=metadata.st_size,
+            )
+        except StableFileSizeError as exc:
+            raise StableFileSnapshotVerificationError(
+                snapshot,
+                expected_size=metadata.st_size,
+                expected_sha256=digest,
+                actual_size=exc.observed_size,
+                actual_sha256=None,
+            ) from exc
+        except OSError as exc:
+            raise StableFileSnapshotVerificationError(
+                snapshot,
+                expected_size=metadata.st_size,
+                expected_sha256=digest,
+                actual_size=None,
+                actual_sha256=None,
+            ) from exc
+        if (
+            snapshot_metadata.st_size != metadata.st_size
+            or snapshot_digest != digest
+        ):
+            raise StableFileSnapshotVerificationError(
+                snapshot,
+                expected_size=metadata.st_size,
+                expected_sha256=digest,
+                actual_size=snapshot_metadata.st_size,
+                actual_sha256=snapshot_digest,
+            )
         yield snapshot, metadata, digest
 
 

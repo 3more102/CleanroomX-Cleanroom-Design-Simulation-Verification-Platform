@@ -213,8 +213,73 @@ def test_python_tree_fingerprint_rejects_opened_source_revision_change(
         lambda _root: manifest,
     )
 
-    with pytest.raises(RuntimeError, match="changed while it was being fingerprinted"):
+    with pytest.raises(
+        application_module._RuntimeSourceTreeChangedError,
+        match="changed while it was being fingerprinted",
+    ):
         application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
+
+
+
+def test_python_tree_fingerprint_retries_only_typed_revision_change(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    (root / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+    expected = {
+        "algorithm": application_module._RUNTIME_CODE_FINGERPRINT_ALGORITHM,
+        "sha256": "0" * 64,
+        "source_file_count": 1,
+    }
+    calls = 0
+
+    def typed_race_then_success(root_text, manifest):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise application_module._RuntimeSourceTreeChangedError(
+                "simulated runtime source revision race"
+            )
+        return expected
+
+    monkeypatch.setattr(
+        application_module,
+        "_hash_python_tree_manifest",
+        typed_race_then_success,
+    )
+
+    assert application_module._fingerprint_python_tree(root) == expected
+    assert calls == 2
+
+
+def test_python_tree_fingerprint_does_not_retry_unrelated_runtime_error_with_race_text(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    (root / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+    calls = 0
+
+    def unrelated_failure(root_text, manifest):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError(
+            "changed while it was being fingerprinted but this is an unrelated failure"
+        )
+
+    monkeypatch.setattr(
+        application_module,
+        "_hash_python_tree_manifest",
+        unrelated_failure,
+    )
+
+    with pytest.raises(RuntimeError, match="unrelated failure"):
+        application_module._fingerprint_python_tree(root)
+
+    assert calls == 1
 
 
 def test_application_info_exposes_current_implementation_revision():

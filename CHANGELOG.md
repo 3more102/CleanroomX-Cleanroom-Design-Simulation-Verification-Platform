@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased Release 3 — typed portable-bundle dependency size failures — 2026-10-03
+
+- Preserves the canonical `StableFileSizeError` classification when a portable-bundle dependency grows beyond its hard byte ceiling during stable fingerprinting.
+- Reports the deterministic resource-limit violation as a bundle size error instead of collapsing it into the transient unavailable/changing I/O path.
+- Keeps export fail-closed and non-destructive: an existing destination remains unchanged and no staged bundle is published after the typed size failure.
+- Adds regression coverage for the mid-fingerprint growth path; bundle/project schemas, solver equations, engineering tolerances, requirement criteria, and verification verdicts are unchanged.
+
+## Unreleased Release 3 — canonical portable-bundle snapshot authority — 2026-10-03
+
+- Routes portable-bundle verification snapshot capture through the shared bounded `persistence.stable_file_snapshot()` authority instead of maintaining a second path/descriptor/hash/copy implementation.
+- Preserves the existing archive byte ceiling, three-attempt stabilization policy, exact digest-bound private bytes, ZIP verification semantics, extraction drift guard, and public `ProjectBundleError` contract.
+- Translates the shared typed `StableFileSizeError` into the existing bundle-domain oversized-archive error while retaining fail-closed handling for unstable or unavailable inputs.
+- Adds a regression proving bundle verification invokes the canonical snapshot authority with the hard archive-size ceiling; no project/bundle schema, solver equation, engineering tolerance, requirement criterion, or verification verdict changes.
+
 ## Unreleased Release 3 — exact stable-file read ceilings — 2026-10-03
 
 - Makes the canonical stable-file authority request at most the remaining configured byte allowance plus one sentinel byte instead of issuing fixed 1 MiB reads before enforcing smaller limits.

@@ -23,6 +23,7 @@ from .input_contracts import (
 )
 from .persistence import (
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     stable_file_sha256,
     stable_file_snapshot,
 )
@@ -1521,6 +1522,17 @@ def _prepare_external_dependency_snapshot(
                         })
                         continue
                     shutil.copyfile(stable_source, destination)
+            except StableFileSnapshotVerificationError as exc:
+                detail = (
+                    "private snapshot verification failed "
+                    f"(expected {exc.expected_size} bytes / sha256 {exc.expected_sha256}; "
+                    f"got {exc.actual_size!r} bytes / sha256 {exc.actual_sha256!r})"
+                )
+                raise ExternalDependencySnapshotError(
+                    field,
+                    declared_path,
+                    detail,
+                ) from exc
             except StableFileSizeError as exc:
                 raise ExternalDependencyChangedError(
                     [{

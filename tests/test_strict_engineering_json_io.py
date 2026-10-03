@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.persistence as persistence_module
 import cleanroomx.strict_json as strict_json_module
 from cleanroomx.damper_study_io import load_loop_damper_study
 from cleanroomx.dossier import build_dossier
@@ -135,6 +136,64 @@ def test_strict_file_snapshot_returns_exact_bytes_passed_to_parser(
     assert snapshot.mtime_ns == source.stat().st_mtime_ns
 
 
+def test_strict_file_loader_accepts_windows_path_descriptor_id_divergence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "windows-portable.json"
+    source.write_text('{"revision": 1}', encoding="utf-8")
+    real_fstat = strict_json_module.os.fstat
+
+    class DivergentOpenedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev + 100
+            self.st_ino = value.st_ino + 100
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns
+            self.st_ctime_ns = value.st_ctime_ns
+
+    def windows_divergent_fstat(fd):
+        return DivergentOpenedStat(real_fstat(fd))
+
+    monkeypatch.setattr(persistence_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(strict_json_module.os, "fstat", windows_divergent_fstat)
+
+    assert load_strict_json(source) == {"revision": 1}
+
+
+def test_strict_file_loader_rejects_ctime_only_descriptor_revision_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "ctime-revision.json"
+    source.write_text('{"revision": 1}', encoding="utf-8")
+    real_fstat = strict_json_module.os.fstat
+    descriptor_stat_calls = 0
+
+    class ChangedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev
+            self.st_ino = value.st_ino
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns
+            self.st_ctime_ns = value.st_ctime_ns + 1
+
+    def changed_after_read(fd):
+        nonlocal descriptor_stat_calls
+        value = real_fstat(fd)
+        descriptor_stat_calls += 1
+        if descriptor_stat_calls == 2:
+            return ChangedStat(value)
+        return value
+
+    monkeypatch.setattr(strict_json_module.os, "fstat", changed_after_read)
+
+    with pytest.raises(StrictJSONError, match="changed while reading JSON input"):
+        load_strict_json(source)
+
+    assert descriptor_stat_calls == 2
+
+
 def test_strict_file_loader_rejects_path_identity_change_after_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -145,16 +204,22 @@ def test_strict_file_loader_rejects_path_identity_change_after_read(
     replacement.write_text('{"revision": 2}', encoding="utf-8")
     real_stat = Path.stat
     replacement_stat = real_stat(replacement)
+    source_stat_calls = 0
 
     def report_replacement_identity(self: Path, *args, **kwargs):
+        nonlocal source_stat_calls
         if self == source:
-            return replacement_stat
+            source_stat_calls += 1
+            if source_stat_calls == 2:
+                return replacement_stat
         return real_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", report_replacement_identity)
 
     with pytest.raises(StrictJSONError, match="changed while reading JSON input"):
         load_strict_json(source)
+
+    assert source_stat_calls == 2
 
 
 def test_strict_file_loader_rejects_path_disappearance_after_read(
@@ -164,10 +229,14 @@ def test_strict_file_loader_rejects_path_disappearance_after_read(
     source = tmp_path / "input.json"
     source.write_text('{"revision": 1}', encoding="utf-8")
     real_stat = Path.stat
+    source_stat_calls = 0
 
     def disappear_on_live_path_check(self: Path, *args, **kwargs):
+        nonlocal source_stat_calls
         if self == source:
-            raise FileNotFoundError(str(source))
+            source_stat_calls += 1
+            if source_stat_calls == 2:
+                raise FileNotFoundError(str(source))
         return real_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", disappear_on_live_path_check)
@@ -177,6 +246,8 @@ def test_strict_file_loader_rejects_path_disappearance_after_read(
         match="changed while reading JSON input",
     ) as raised:
         load_strict_json(source)
+
+    assert source_stat_calls == 2
 
     assert isinstance(raised.value.__cause__, FileNotFoundError)
 

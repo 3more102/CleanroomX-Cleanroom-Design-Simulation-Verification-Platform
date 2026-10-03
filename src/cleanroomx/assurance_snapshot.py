@@ -8,7 +8,11 @@ from typing import Any
 
 from . import __version__
 from .design_assurance import analyze_design_assurance, design_assurance_from_dict
-from .persistence import atomic_write_text, stable_file_snapshot
+from .persistence import (
+    StableFileSizeError,
+    atomic_write_text,
+    stable_file_snapshot,
+)
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 
 
@@ -108,14 +112,12 @@ def _read_stable_utf8(
         ) as (snapshot_path, metadata, digest):
             with snapshot_path.open("rb") as handle:
                 data = handle.read(max_bytes + 1)
+    except StableFileSizeError as exc:
+        raise AssuranceSnapshotError(
+            f"{source} exceeds maximum supported size of {max_bytes} bytes"
+        ) from exc
     except OSError as exc:
-        message = str(exc)
-        if "exceeds supported size limit" in message:
-            message = (
-                f"{source} exceeds maximum supported size of "
-                f"{max_bytes} bytes"
-            )
-        raise AssuranceSnapshotError(message) from exc
+        raise AssuranceSnapshotError(str(exc)) from exc
 
     if len(data) > max_bytes:
         raise AssuranceSnapshotError(

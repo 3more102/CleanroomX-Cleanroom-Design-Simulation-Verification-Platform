@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased Release 3 — ProofGraph finding evidence flag integrity — 2026-10-03
+## Unreleased Release 3 — ProofGraph claimed-evidence traceability — 2026-10-03
 
-- Rejects any `ComplianceFinding` whose `evidence_present` flag contradicts whether `evidence_ids` is empty, removing ambiguous audit metadata at the canonical model boundary.
-- Preserves the existing PASS-specific requirement for affirmative evidence while allowing every non-PASS state to represent either present adverse/incomplete evidence or genuinely absent evidence.
-- Applies the same invariant to direct construction and serialized ProofGraph ingestion without changing graph schema, verdict aggregation policy, solver equations, requirement criteria, or numerical tolerances.
-- Adds focused regressions across FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED, including both invalid flag/reference combinations and both valid evidence-presence forms.
+- Rejects any `ComplianceFinding` that declares `evidence_present=true` without at least one explicit `evidence_ids` reference, so affirmative evidence claims remain traceable at the canonical model boundary.
+- Preserves existing fail-closed semantics where `evidence_present=false` may coexist with referenced target/context evidence when the actual observation or calculation needed for the finding is unavailable.
+- Extends the existing stronger PASS invariant without changing graph schema, verdict aggregation policy, solver equations, requirement criteria, engineering-unit conventions, or numerical tolerances.
+- Adds focused regressions across FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED plus serialized ingestion, while retaining the existing ACH and pressure missing-actual-evidence workflows.
 
 ## Unreleased Release 3 — ProofGraph pass-verdict support integrity — 2026-10-02
 

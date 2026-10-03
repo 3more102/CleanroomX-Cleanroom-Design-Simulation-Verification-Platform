@@ -184,15 +184,21 @@ def _capture_stable_file_revision(
                 if limit is not None and before_handle.st_size > limit:
                     raise StableFileSizeError(source, before_handle.st_size, limit)
 
+                def read_chunk() -> bytes:
+                    read_size = 1024 * 1024
+                    if limit is not None:
+                        read_size = min(read_size, limit - bytes_read + 1)
+                    return handle.read(read_size)
+
                 if snapshot_path is None:
-                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    for chunk in iter(read_chunk, b""):
                         bytes_read += len(chunk)
                         if limit is not None and bytes_read > limit:
                             raise StableFileSizeError(source, bytes_read, limit)
                         digest.update(chunk)
                 else:
                     with snapshot_path.open("wb") as snapshot:
-                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        for chunk in iter(read_chunk, b""):
                             bytes_read += len(chunk)
                             if limit is not None and bytes_read > limit:
                                 raise StableFileSizeError(source, bytes_read, limit)

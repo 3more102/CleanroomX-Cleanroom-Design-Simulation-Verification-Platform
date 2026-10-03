@@ -655,17 +655,17 @@ def _read_project_text(source: Path) -> str:
 def load_project_document_with_migration_info(
     path: str | Path,
 ) -> tuple[ProjectDocument, ProjectMigrationInfo]:
-    """Load and validate a project while reporting supported legacy migration."""
-    source = Path(path)
+    """Load and validate one stable project snapshot with migration provenance."""
     try:
-        data = strict_json_loads(_read_project_text(source))
-    except json.JSONDecodeError as exc:
-        raise ProjectFormatError(
-            f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
-        ) from exc
-    except StrictJSONError as exc:
-        raise ProjectFormatError(str(exc)) from exc
-    return project_from_dict_with_migration_info(data)
+        project, _revision, migration_info = _load_project_snapshot_with_revision_info(
+            path,
+            attempts=3,
+        )
+    except OSError as exc:
+        if isinstance(exc.__cause__, StrictJSONSizeError):
+            raise ProjectFormatError(str(exc)) from exc
+        raise
+    return project, migration_info
 
 
 def load_project_document(path: str | Path) -> ProjectDocument:

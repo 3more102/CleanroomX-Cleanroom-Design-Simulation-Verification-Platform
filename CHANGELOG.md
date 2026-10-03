@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased Release 3 — deterministic IFC private-snapshot diagnostics — 2026-10-03
+
+- Preserves typed `StableFileSnapshotVerificationError` evidence at the IFC import boundary instead of collapsing private-copy integrity failure into generic source I/O.
+- Reports the original IFC source path plus expected/actual size and SHA-256 evidence without exposing random private temporary-snapshot paths.
+- Keeps existing IFC size-limit and generic I/O contracts unchanged; IFC semantics, spatial identity, geometry rules, solvers, requirements, and verdict behavior are unchanged.
 ## Unreleased Release 3 — deterministic assurance private-snapshot diagnostics — 2026-10-03
 
 - Preserves typed `StableFileSnapshotVerificationError` evidence at the assurance-ingestion boundary without leaking random private temporary-snapshot paths.

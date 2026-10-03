@@ -184,7 +184,10 @@ def _stable_file_path_matches_opened(
     if opened_stat.st_size != path_stat.st_size:
         return False
     if os.name == "nt":
-        return True
+        return (
+            opened_stat.st_mtime_ns == path_stat.st_mtime_ns
+            and opened_stat.st_ctime_ns == path_stat.st_ctime_ns
+        )
     return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
 
 

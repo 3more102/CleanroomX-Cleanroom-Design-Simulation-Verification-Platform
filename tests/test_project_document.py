@@ -32,6 +32,52 @@ def test_project_document_round_trip(tmp_path):
     assert raw["schema_version"] == PROJECT_SCHEMA_VERSION
 
 
+def test_plain_project_loader_uses_revision_stable_snapshot(tmp_path, monkeypatch):
+    path = save_project_document(
+        tmp_path / "stable-open.cleanroomx.json",
+        ProjectDocument(name="Stable Open"),
+    )
+    original_snapshot = project_module.load_strict_json_snapshot
+    calls = []
+
+    def observing_snapshot(source, *, max_bytes=None):
+        calls.append((source, max_bytes))
+        return original_snapshot(source, max_bytes=max_bytes)
+
+    monkeypatch.setattr(
+        project_module,
+        "load_strict_json_snapshot",
+        observing_snapshot,
+    )
+
+    loaded = load_project_document(path)
+
+    assert loaded.name == "Stable Open"
+    assert calls == [(path, project_module.PROJECT_FILE_MAX_BYTES)]
+
+
+def test_plain_project_loader_fails_closed_when_snapshot_changes(tmp_path, monkeypatch):
+    path = save_project_document(
+        tmp_path / "changing-open.cleanroomx.json",
+        ProjectDocument(name="Changing Open"),
+    )
+
+    def changing_snapshot(source, *, max_bytes=None):
+        assert max_bytes == project_module.PROJECT_FILE_MAX_BYTES
+        raise project_module.StrictJSONFileChangedError(
+            f"{source} changed while reading JSON input"
+        )
+
+    monkeypatch.setattr(
+        project_module,
+        "load_strict_json_snapshot",
+        changing_snapshot,
+    )
+
+    with pytest.raises(ProjectFormatError, match="changed while reading JSON input"):
+        load_project_document(path)
+
+
 def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):
     target = tmp_path / "export.json"
     target.write_text("old", encoding="utf-8")

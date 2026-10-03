@@ -24,6 +24,8 @@ from .input_contracts import (
 from .persistence import (
     StableFileSizeError,
     StableFileSnapshotVerificationError,
+    _stable_file_identity,
+    _stable_file_path_matches_opened,
     stable_file_sha256,
     stable_file_snapshot,
 )
@@ -1054,48 +1056,21 @@ def _hash_python_tree_manifest(
                 expected_ctime_ns,
             )
             path_before = source.stat()
-            path_before_metadata = (
-                path_before.st_dev,
-                path_before.st_ino,
-                path_before.st_size,
-                path_before.st_mtime_ns,
-                path_before.st_ctime_ns,
-            )
-            if path_before_metadata != expected_metadata:
+            if _stable_file_identity(path_before) != expected_metadata:
                 raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )
 
             with source.open("rb") as stream:
                 before = os.fstat(stream.fileno())
-                if before.st_size != expected_size or (
-                    os.name != "nt"
-                    and (
-                        before.st_dev != expected_dev
-                        or before.st_ino != expected_ino
-                    )
-                ):
+                if not _stable_file_path_matches_opened(path_before, before):
                     raise _RuntimeSourceTreeChangedError(
                         "CleanroomX source tree changed while it was being fingerprinted"
                     )
-                opened_before_metadata = (
-                    before.st_dev,
-                    before.st_ino,
-                    before.st_size,
-                    before.st_mtime_ns,
-                    before.st_ctime_ns,
-                )
                 content = stream.read(expected_size + 1)
                 after = os.fstat(stream.fileno())
-                opened_after_metadata = (
-                    after.st_dev,
-                    after.st_ino,
-                    after.st_size,
-                    after.st_mtime_ns,
-                    after.st_ctime_ns,
-                )
                 if (
-                    opened_after_metadata != opened_before_metadata
+                    _stable_file_identity(after) != _stable_file_identity(before)
                     or len(content) != before.st_size
                 ):
                     raise _RuntimeSourceTreeChangedError(
@@ -1103,14 +1078,10 @@ def _hash_python_tree_manifest(
                     )
 
             path_after = source.stat()
-            path_after_metadata = (
-                path_after.st_dev,
-                path_after.st_ino,
-                path_after.st_size,
-                path_after.st_mtime_ns,
-                path_after.st_ctime_ns,
-            )
-            if path_after_metadata != expected_metadata:
+            if (
+                _stable_file_identity(path_after) != expected_metadata
+                or not _stable_file_path_matches_opened(path_after, after)
+            ):
                 raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )

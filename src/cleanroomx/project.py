@@ -39,7 +39,6 @@ from .strict_json import (
     StrictJSONSizeError,
     clone_strict_json,
     load_strict_json_snapshot,
-    strict_json_loads,
 )
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
@@ -655,17 +654,30 @@ def _read_project_text(source: Path) -> str:
 def load_project_document_with_migration_info(
     path: str | Path,
 ) -> tuple[ProjectDocument, ProjectMigrationInfo]:
-    """Load and validate a project while reporting supported legacy migration."""
+    """Load one revision-stable project snapshot and report legacy migration."""
     source = Path(path)
     try:
-        data = strict_json_loads(_read_project_text(source))
+        snapshot = load_strict_json_snapshot(
+            source,
+            max_bytes=PROJECT_FILE_MAX_BYTES,
+        )
+    except StrictJSONSizeError as exc:
+        raise ProjectFormatError(
+            _project_file_size_message(exc.observed_size)
+        ) from exc
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
     except StrictJSONError as exc:
+        if isinstance(exc.__cause__, UnicodeDecodeError):
+            decode_error = exc.__cause__
+            raise ProjectFormatError(
+                "project file must contain valid UTF-8 text; "
+                f"invalid byte sequence at offset {decode_error.start}"
+            ) from exc
         raise ProjectFormatError(str(exc)) from exc
-    return project_from_dict_with_migration_info(data)
+    return project_from_dict_with_migration_info(snapshot.value)
 
 
 def load_project_document(path: str | Path) -> ProjectDocument:

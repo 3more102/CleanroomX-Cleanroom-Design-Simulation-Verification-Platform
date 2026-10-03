@@ -974,6 +974,46 @@ def test_ifc_extraction_does_not_classify_generic_oserror_as_size(
         extract_ifc_semantics(source)
 
 
+def test_ifc_extraction_preserves_private_snapshot_verification_without_temp_path(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+    private_snapshot = tmp_path / "private-random-snapshot-12345.ifc"
+    expected_size = source.stat().st_size
+
+    def fail_snapshot(*_args, **_kwargs):
+        raise bim_ifc_module.StableFileSnapshotVerificationError(
+            private_snapshot,
+            expected_size=expected_size,
+            expected_sha256="1" * 64,
+            actual_size=expected_size,
+            actual_sha256="2" * 64,
+        )
+
+    monkeypatch.setattr(
+        bim_ifc_module,
+        "stable_file_snapshot",
+        fail_snapshot,
+    )
+
+    with pytest.raises(
+        IfcImportError,
+        match="private IFC snapshot verification failed",
+    ) as exc_info:
+        extract_ifc_semantics(source)
+
+    message = str(exc_info.value)
+    assert str(source) in message
+    assert str(private_snapshot) not in message
+    assert f"expected {expected_size} bytes / sha256 {'1' * 64}" in message
+    assert f"got {expected_size!r} bytes / sha256 {'2' * 64!r}" in message
+    assert isinstance(
+        exc_info.value.__cause__,
+        bim_ifc_module.StableFileSnapshotVerificationError,
+    )
+
+
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
     source = tmp_path / "facility.ifc"

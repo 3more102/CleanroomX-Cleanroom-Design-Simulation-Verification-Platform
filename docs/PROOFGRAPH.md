@@ -153,6 +153,13 @@ PASS findings are strictly evidence-backed. A finding with status `pass` must
 declare `evidence_present=true` and reference at least one evidence record.
 Missing evidence therefore cannot be serialized as successful compliance.
 
+For every finding status, `evidence_present` must agree with the explicit
+`evidence_ids` list: `true` requires at least one referenced evidence record,
+while `false` requires an empty list. Non-PASS findings still support either
+state, so FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED can represent
+present adverse/incomplete evidence or genuinely absent evidence without
+contradictory audit metadata.
+
 When a compliance check declares `required_evidence_kinds`, a PASS finding must
 also reference at least one evidence record of every required kind. This closes
 the semantic gap where a check could require, for example, both design and

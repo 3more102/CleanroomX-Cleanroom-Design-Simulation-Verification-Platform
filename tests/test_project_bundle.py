@@ -216,6 +216,12 @@ def test_bundle_export_preserves_typed_size_failure_during_dependency_fingerprin
         export_project_bundle(target, _consistency_project(), source_base=source)
 
     assert isinstance(exc_info.value.__cause__, persistence_module.StableFileSizeError)
+    cause = exc_info.value.__cause__
+    assert cause.observed_size == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES + 1
+    assert cause.limit == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES
+    assert str(cause.observed_size) in str(exc_info.value)
+    assert str(cause.limit) in str(exc_info.value)
+    assert str(dependency.resolve(strict=False)) in str(exc_info.value)
     assert target.read_bytes() == previous
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 

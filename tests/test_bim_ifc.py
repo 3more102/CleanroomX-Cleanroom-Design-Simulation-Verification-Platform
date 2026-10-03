@@ -929,6 +929,30 @@ def test_ifc_extraction_rejects_oversized_source_before_parsing(
         extract_ifc_semantics(source)
 
 
+def test_ifc_extraction_does_not_classify_generic_oserror_as_size(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+
+    def fail_snapshot(*_args, **_kwargs):
+        raise OSError(
+            "file exceeds supported size limit but this is an injected I/O failure"
+        )
+
+    monkeypatch.setattr(
+        bim_ifc_module,
+        "stable_file_snapshot",
+        fail_snapshot,
+    )
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to read stable IFC source",
+    ):
+        extract_ifc_semantics(source)
+
+
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
     source = tmp_path / "facility.ifc"

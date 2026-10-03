@@ -929,6 +929,27 @@ def test_ifc_extraction_rejects_oversized_source_before_parsing(
         extract_ifc_semantics(source)
 
 
+def test_ifc_digest_helper_does_not_classify_generic_oserror_by_message(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+
+    def fail_hash(*_args, **_kwargs):
+        raise OSError(
+            "file exceeds supported size limit but this is an injected I/O failure"
+        )
+
+    monkeypatch.setattr(
+        bim_ifc_module,
+        "stable_file_sha256",
+        fail_hash,
+    )
+
+    with pytest.raises(OSError, match="injected I/O failure"):
+        bim_ifc_module._file_sha256(source)
+
+
 def test_ifc_extraction_does_not_classify_generic_oserror_as_size(
     monkeypatch, tmp_path
 ):

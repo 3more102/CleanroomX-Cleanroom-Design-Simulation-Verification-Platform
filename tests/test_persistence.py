@@ -12,6 +12,7 @@ import cleanroomx.persistence as persistence
 from cleanroomx.persistence import (
     AtomicWriteDurabilityError,
     AtomicWriteVerificationError,
+    StableFileSizeError,
     atomic_publish_staged_file,
     atomic_write_bytes,
     atomic_write_text,
@@ -76,9 +77,16 @@ def test_stable_file_snapshot_rejects_oversized_source_without_publishing_snapsh
     source = tmp_path / "facility.ifc"
     source.write_bytes(b"1234")
 
-    with pytest.raises(OSError, match="exceeds supported size limit"):
+    with pytest.raises(
+        StableFileSizeError,
+        match="exceeds supported size limit",
+    ) as exc_info:
         with persistence.stable_file_snapshot(source, max_bytes=3):
             raise AssertionError("oversized snapshot must never be yielded")
+
+    assert exc_info.value.path == source
+    assert exc_info.value.observed_size == 4
+    assert exc_info.value.limit == 3
 
 
 def test_atomic_text_write_uses_exact_utf8_bytes_and_creates_parent(tmp_path):

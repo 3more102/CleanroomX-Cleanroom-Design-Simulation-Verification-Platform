@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased Release 3 — typed analysis dependency size failures — 2026-10-03
+
+- Preserves canonical `StableFileSizeError` evidence for file-backed analysis dependencies instead of collapsing deterministic byte-ceiling violations into transient unavailable/unstable classifications.
+- Keeps live-source size failures in the external-dependency change contract with explicit observed-size/limit evidence, while private execution-snapshot failures retain the snapshot-error contract.
+- Covers initial fingerprinting, snapshot capture retry, private-copy verification, and backend snapshot verification without changing solver equations, engineering tolerances, project schemas, or verdict semantics.
+
+## Unreleased Release 3 — exact stable-file read ceilings — 2026-10-03
+
+- Makes the canonical stable-file authority request at most the remaining configured byte allowance plus one sentinel byte instead of issuing fixed 1 MiB reads before enforcing smaller limits.
+- Applies the exact read ceiling to both stable SHA-256 fingerprinting and digest-bound private snapshots while preserving the existing size-error contract, retry policy, and accepted-file digests.
+- Adds regressions proving a file exactly at the configured limit is read with bounded requests in both modes.
+- Changes no project schema, solver equation, engineering tolerance, requirement criterion, ProofGraph verdict, or persistence format.
+
 ## Unreleased Release 3 — typed stable-file size failures — 2026-10-03
 
 - Adds a canonical `StableFileSizeError` from the shared stable-file hashing/snapshot authority, carrying the source path, observed byte count, and configured limit.

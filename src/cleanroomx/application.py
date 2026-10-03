@@ -25,7 +25,7 @@ from .persistence import (
     StableFileSizeError,
     StableFileSnapshotVerificationError,
     _stable_file_identity,
-    _stable_file_path_matches_opened,
+    _stable_runtime_path_matches_opened,
     stable_file_sha256,
     stable_file_snapshot,
 )
@@ -1063,7 +1063,7 @@ def _hash_python_tree_manifest(
 
             with source.open("rb") as stream:
                 before = os.fstat(stream.fileno())
-                if not _stable_file_path_matches_opened(path_before, before):
+                if not _stable_runtime_path_matches_opened(path_before, before):
                     raise _RuntimeSourceTreeChangedError(
                         "CleanroomX source tree changed while it was being fingerprinted "
                         "(path/handle binding mismatch: "

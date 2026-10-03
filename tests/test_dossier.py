@@ -147,6 +147,53 @@ def test_source_record_snapshot_binds_digest_to_private_exact_bytes(tmp_path) ->
     assert not snapshot.exists()
 
 
+def test_source_record_snapshot_preserves_verification_type_without_temp_path(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_text('{"demo": true}\n', encoding="utf-8")
+    private_snapshot = tmp_path / "private-random-snapshot-12345.json"
+    expected_size = source.stat().st_size
+
+    @contextmanager
+    def fail_snapshot(*_args, **_kwargs):
+        raise dossier_module.StableFileSnapshotVerificationError(
+            private_snapshot,
+            expected_size=expected_size,
+            expected_sha256="1" * 64,
+            actual_size=expected_size,
+            actual_sha256="2" * 64,
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(dossier_module, "stable_file_snapshot", fail_snapshot)
+
+    with ExitStack() as snapshots:
+        with pytest.raises(
+            dossier_module.StableFileSnapshotVerificationError
+        ) as exc_info:
+            _source_record(
+                "demo",
+                source.name,
+                tmp_path,
+                snapshot_stack=snapshots,
+            )
+
+    error = exc_info.value
+    assert error.path == source.resolve()
+    assert str(source.resolve()) in str(error)
+    assert str(private_snapshot) not in str(error)
+    assert error.expected_size == expected_size
+    assert error.expected_sha256 == "1" * 64
+    assert error.actual_size == expected_size
+    assert error.actual_sha256 == "2" * 64
+    assert isinstance(
+        error.__cause__,
+        dossier_module.StableFileSnapshotVerificationError,
+    )
+    assert error.__cause__.path == private_snapshot
+
+
 def test_source_record_snapshot_uses_strict_json_size_ceiling(
     tmp_path, monkeypatch
 ) -> None:

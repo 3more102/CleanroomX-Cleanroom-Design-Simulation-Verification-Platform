@@ -13,6 +13,7 @@ from cleanroomx.persistence import (
     AtomicWriteDurabilityError,
     AtomicWriteVerificationError,
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     atomic_publish_staged_file,
     atomic_write_bytes,
     atomic_write_text,
@@ -69,6 +70,43 @@ def test_stable_file_snapshot_binds_digest_to_private_exact_bytes_and_cleans_up(
         assert digest == hashlib.sha256(payload).hexdigest()
 
     assert not captured_snapshot.exists()
+
+
+def test_stable_file_snapshot_rejects_corrupted_private_copy(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "facility.ifc"
+    payload = b"ISO-10303-21;\nDATA;\nENDSEC;\n"
+    source.write_bytes(payload)
+    original_capture = persistence._capture_stable_file_revision
+
+    def corrupt_private_copy(*args, **kwargs):
+        metadata, digest = original_capture(*args, **kwargs)
+        snapshot_path = kwargs["snapshot_path"]
+        assert snapshot_path is not None
+        snapshot_path.write_bytes(b"corrupted-private-copy")
+        return metadata, digest
+
+    monkeypatch.setattr(
+        persistence,
+        "_capture_stable_file_revision",
+        corrupt_private_copy,
+    )
+
+    with pytest.raises(StableFileSnapshotVerificationError) as exc_info:
+        with persistence.stable_file_snapshot(
+            source,
+            max_bytes=len(payload),
+            suffix=".ifc",
+        ):
+            raise AssertionError("corrupted private snapshot must never be yielded")
+
+    assert exc_info.value.expected_size == len(payload)
+    assert exc_info.value.expected_sha256 == hashlib.sha256(payload).hexdigest()
+    assert exc_info.value.actual_size == len(b"corrupted-private-copy")
+    assert exc_info.value.actual_sha256 == hashlib.sha256(
+        b"corrupted-private-copy"
+    ).hexdigest()
 
 
 def test_stable_file_snapshot_rejects_oversized_source_without_publishing_snapshot(

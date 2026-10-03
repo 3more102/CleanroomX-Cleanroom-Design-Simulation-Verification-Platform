@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — stable plain project ingestion — 2026-10-03
+
+- Routes ordinary `load_project_document()` / migration-aware project opens through the existing bounded revision-stable strict-JSON snapshot authority instead of a separate direct byte-read path.
+- Fails closed when the opened file or live pathname changes during ingestion, while preserving the existing 64 MiB project ceiling, strict JSON validation, UTF-8 offset diagnostics, and migration semantics.
+- Adds regression coverage proving the ordinary loader uses the shared snapshot boundary and rejects concurrent source changes without changing project schema, solver behavior, numerical tolerances, or persistence formats.
+
+
 ## Unreleased Release 3 — ProofGraph pass-verdict support integrity — 2026-10-02
 
 - Rejects a `pass` verdict when any of its referenced findings is `fail`, `warning`, `unknown`, `indeterminate`, or `not_checked`, closing the multi-finding bypass of the existing single-finding status guard.

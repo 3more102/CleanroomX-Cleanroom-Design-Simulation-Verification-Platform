@@ -344,6 +344,63 @@ def test_input_ingestion_does_not_classify_generic_oserror_as_size(
     assert "exceeds maximum supported size" not in str(exc_info.value)
 
 
+def test_create_wraps_non_strict_analysis_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(DEMO.read_bytes())
+
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "analyze_design_assurance",
+        lambda _model: {"status": float("nan")},
+    )
+
+    with pytest.raises(
+        AssuranceSnapshotError,
+        match="design assurance result is not strict JSON",
+    ):
+        create_assurance_snapshot(source)
+
+
+def test_verify_wraps_non_strict_replayed_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = create_assurance_snapshot(DEMO)
+
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "analyze_design_assurance",
+        lambda _model: {"status": float("nan")},
+    )
+
+    with pytest.raises(
+        AssuranceSnapshotError,
+        match="replayed design assurance result is not strict JSON",
+    ):
+        verify_assurance_snapshot(snapshot)
+
+
+def test_cli_create_reports_non_strict_analysis_result_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = tmp_path / "invalid.snapshot.json"
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "analyze_design_assurance",
+        lambda _model: {"status": float("nan")},
+    )
+
+    assert snapshot_cli_main(["create", str(DEMO), str(output)]) == 2
+    captured = capsys.readouterr()
+    assert "design assurance result is not strict JSON" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output.exists()
+
+
 def test_cli_create_and_verify_round_trip(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

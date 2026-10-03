@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — assurance snapshot strict-JSON error boundary — 2026-10-03
+
+- Converts non-strict design-assurance analysis results into the assurance-snapshot domain error contract during both snapshot creation and deterministic replay verification.
+- Prevents `cleanroomx-assurance-snapshot` from leaking a raw `StrictJSONError` traceback if an analysis implementation returns non-finite or otherwise invalid JSON content.
+- Adds direct creation/replay regressions plus a CLI no-traceback regression while preserving snapshot schema, canonicalization, solver equations, engineering tolerances, requirements, and verdict semantics.
+
 ## Unreleased Release 3 — dossier CLI manifest error boundary — 2026-10-03
 
 - Converts strict-JSON, UTF-8, size, missing-file, and other manifest read failures at the `cleanroomx-dossier` CLI boundary into deterministic stderr diagnostics and exit code 1 instead of exposing a Python traceback.

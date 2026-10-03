@@ -157,6 +157,28 @@ def test_revision_loader_rejects_oversized_artifact_before_json_parsing(
         load_project_revision(artifact)
 
 
+def test_revision_loader_does_not_classify_generic_strict_json_error_as_size(
+    tmp_path, monkeypatch
+):
+    artifact = tmp_path / "generic-strict-json-error.cleanroomx.revision.json"
+    artifact.write_text("{}", encoding="utf-8")
+
+    def fail_strict_json(*args, **kwargs):
+        raise strict_json_module.StrictJSONError(
+            "exceeds maximum supported JSON size but this is an injected semantic failure"
+        )
+
+    monkeypatch.setattr(revision_module, "load_strict_json", fail_strict_json)
+
+    with pytest.raises(
+        ProjectRevisionError,
+        match="invalid project revision strict JSON",
+    ) as exc_info:
+        load_project_revision(artifact)
+
+    assert "artifact size" not in str(exc_info.value)
+
+
 def test_revision_loader_rejects_live_path_replacement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -62,14 +62,18 @@ def test_stable_file_path_descriptor_binding_is_windows_portable(
             self.st_ctime_ns = ctime_ns
 
     path_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4)
-    opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=7, ctime_ns=6)
+    opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=4)
 
     monkeypatch.setattr(persistence.os, "name", "nt")
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is True
 
+    changed_mtime = FakeStat(dev=9, ino=8, size=64, mtime_ns=30, ctime_ns=4)
+    changed_ctime = FakeStat(dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=40)
+    assert persistence._stable_file_path_matches_opened(path_stat, changed_mtime) is False
+    assert persistence._stable_file_path_matches_opened(path_stat, changed_ctime) is False
+
     monkeypatch.setattr(persistence.os, "name", "posix")
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is False
-
 
 def test_stable_file_sha256_rejects_ctime_only_descriptor_revision_change(
     tmp_path, monkeypatch

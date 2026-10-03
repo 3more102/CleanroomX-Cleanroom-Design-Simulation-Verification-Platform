@@ -444,6 +444,72 @@ def test_recovery_scan_preserves_valid_candidate_when_source_is_unreadable(
     assert candidate.source_is_newer is False
 
 
+def test_recovery_scan_classifies_source_disappearing_during_fingerprint_as_missing(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None and artifact.exists()
+    finally:
+        manager.shutdown(wait=True)
+
+    def disappeared_source(path):
+        assert Path(path).resolve(strict=False) == source.resolve(strict=False)
+        return {
+            "path": str(source.resolve(strict=False)),
+            "exists": False,
+            "size": None,
+            "mtime_ns": None,
+            "sha256": None,
+        }
+
+    monkeypatch.setattr(autosave_module, "source_fingerprint", disappeared_source)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    candidate = scan.candidates[0]
+    assert candidate.path == artifact
+    assert candidate.source_relation == "source_missing"
+    assert candidate.source_is_newer is False
+
+
+def test_source_fingerprint_classifies_disappearance_after_selection_as_missing(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "disappearing.cleanroomx.json"
+    source.write_bytes(b"{}")
+    calls = {"count": 0}
+
+    def disappear_during_fingerprint(path, *, attempts=3, max_bytes=None):
+        calls["count"] += 1
+        raise FileNotFoundError(str(path))
+
+    monkeypatch.setattr(
+        autosave_module,
+        "stable_file_sha256",
+        disappear_during_fingerprint,
+    )
+
+    fingerprint = source_fingerprint(source)
+
+    assert calls["count"] == 1
+    assert fingerprint == {
+        "path": str(source.resolve(strict=False)),
+        "exists": False,
+        "size": None,
+        "mtime_ns": None,
+        "sha256": None,
+    }
+
+
 def test_source_fingerprint_retries_when_path_is_replaced_during_hash(
     tmp_path, monkeypatch
 ):

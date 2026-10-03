@@ -153,12 +153,13 @@ PASS findings are strictly evidence-backed. A finding with status `pass` must
 declare `evidence_present=true` and reference at least one evidence record.
 Missing evidence therefore cannot be serialized as successful compliance.
 
-For every finding status, `evidence_present` must agree with the explicit
-`evidence_ids` list: `true` requires at least one referenced evidence record,
-while `false` requires an empty list. Non-PASS findings still support either
-state, so FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED can represent
-present adverse/incomplete evidence or genuinely absent evidence without
-contradictory audit metadata.
+For every finding status, `evidence_present=true` requires at least one
+explicit evidence reference. The converse is intentionally not required:
+`evidence_present=false` may coexist with non-empty `evidence_ids` when those
+records are contextual or target evidence but the actual observation/calculation
+needed for the finding is unavailable. This preserves fail-closed UNKNOWN,
+FAIL, WARNING, INDETERMINATE, and NOT_CHECKED workflows without allowing a
+finding to claim present evidence that has no traceable record.
 
 When a compliance check declares `required_evidence_kinds`, a PASS finding must
 also reference at least one evidence record of every required kind. This closes

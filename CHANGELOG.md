@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — canonical stable project ingestion — 2026-10-03
+
+- Routes backward-compatible `load_project_document()` and migration-aware project opens through the same bounded, revision-stable strict-JSON snapshot authority used by revision-bound loads.
+- Retries transient file/path changes up to the canonical three-attempt boundary and fails closed if the source keeps changing, preventing mixed-revision or substituted-path parsing.
+- Preserves the historical oversized-project `ProjectFormatError` contract using typed exception causality rather than message-text matching, while retaining strict JSON and UTF-8 validation.
+- Removes the obsolete direct text-ingestion helper and its now-unused `strict_json_loads` dependency from the project loader, and adds regressions for successful retry plus repeated-change failure; schemas, migrations, solver equations, tolerances, requirements, and verdicts are unchanged.
+
 ## Unreleased Release 3 — ProofGraph claimed-evidence traceability — 2026-10-03
 
 - Rejects any `ComplianceFinding` that claims `evidence_present=true` without at least one explicit `evidence_id`, closing an audit-traceability gap at the canonical model boundary.

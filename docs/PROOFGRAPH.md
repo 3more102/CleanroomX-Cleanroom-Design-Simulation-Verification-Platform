@@ -160,6 +160,14 @@ PASS findings are strictly evidence-backed. A finding with status `pass` must
 declare `evidence_present=true` and reference at least one evidence record.
 Missing evidence therefore cannot be serialized as successful compliance.
 
+For every finding status, `evidence_present=true` also requires at least one
+explicit `evidence_id`, so a finding cannot claim that evaluated evidence was
+present without a traceable evidence record. The inverse is intentionally not
+required for non-PASS findings: `evidence_present=false` may retain design,
+requirement, or other contextual evidence IDs while recording that the evaluated
+actual/measurement/calculation itself was absent. This preserves auditable
+context without inventing result evidence.
+
 When a compliance check declares `required_evidence_kinds`, a PASS finding must
 also reference at least one evidence record of every required kind. This closes
 the semantic gap where a check could require, for example, both design and

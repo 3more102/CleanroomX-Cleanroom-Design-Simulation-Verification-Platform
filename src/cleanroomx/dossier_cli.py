@@ -28,7 +28,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     manifest_path = Path(args.manifest)
-    payload = load_strict_json(manifest_path)
+    try:
+        payload = load_strict_json(manifest_path)
+    except (OSError, ValueError) as exc:
+        print(
+            f"cleanroomx-dossier: error: invalid manifest: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
         run = run_analysis(
             "dossier",

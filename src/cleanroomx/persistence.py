@@ -181,14 +181,19 @@ def _stable_file_path_matches_opened(
     path_stat: os.stat_result,
     opened_stat: os.stat_result,
 ) -> bool:
-    """Bind an opened descriptor to its path revision without non-portable Windows IDs."""
+    """Bind an opened descriptor to its path revision across supported platforms."""
     if opened_stat.st_size != path_stat.st_size:
         return False
     if _IS_WINDOWS:
-        return (
-            opened_stat.st_mtime_ns == path_stat.st_mtime_ns
-            and opened_stat.st_ctime_ns == path_stat.st_ctime_ns
-        )
+        path_ino = path_stat.st_ino
+        opened_ino = opened_stat.st_ino
+        if path_ino != 0 and opened_ino != 0:
+            return (
+                opened_stat.st_dev == path_stat.st_dev
+                and opened_ino == path_ino
+                and opened_stat.st_mtime_ns == path_stat.st_mtime_ns
+            )
+        return opened_stat.st_mtime_ns == path_stat.st_mtime_ns
     return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
 
 

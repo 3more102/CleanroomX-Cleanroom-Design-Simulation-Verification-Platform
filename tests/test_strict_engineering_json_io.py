@@ -281,7 +281,7 @@ def test_dossier_cli_rejects_invalid_utf8_without_traceback(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     manifest = tmp_path / "invalid-utf8-dossier.json"
-    manifest.write_bytes(b'{"sentinel": "\\xff"}')
+    manifest.write_bytes(b'{"sentinel": "\xff"}')
     monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
 
     assert dossier_main() == 1

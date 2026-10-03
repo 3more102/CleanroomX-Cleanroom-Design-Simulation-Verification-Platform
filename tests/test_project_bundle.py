@@ -187,6 +187,45 @@ def test_bundle_export_rejects_oversized_dependency_without_replacing_target(
 
 
 
+def test_bundle_export_preserves_typed_size_failure_during_dependency_fingerprint(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    dependency = _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    target = tmp_path / "growing-dependency.cleanroomx.zip"
+    target.write_bytes(b"previous verified bundle")
+    previous = target.read_bytes()
+
+    def fail_with_size_limit(path, *, attempts=3, max_bytes=None):
+        assert Path(path).resolve(strict=False) == dependency.resolve(strict=False)
+        assert max_bytes == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES
+        raise persistence_module.StableFileSizeError(
+            path,
+            bundle_module._MAX_DEPENDENCY_MEMBER_BYTES + 1,
+            bundle_module._MAX_DEPENDENCY_MEMBER_BYTES,
+        )
+
+    monkeypatch.setattr(bundle_module, "stable_file_sha256", fail_with_size_limit)
+
+    with pytest.raises(
+        ProjectBundleError,
+        match="dependency exceeds supported size limit while fingerprinting",
+    ) as exc_info:
+        export_project_bundle(target, _consistency_project(), source_base=source)
+
+    assert isinstance(exc_info.value.__cause__, persistence_module.StableFileSizeError)
+    cause = exc_info.value.__cause__
+    assert cause.observed_size == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES + 1
+    assert cause.limit == bundle_module._MAX_DEPENDENCY_MEMBER_BYTES
+    assert str(cause.observed_size) in str(exc_info.value)
+    assert str(cause.limit) in str(exc_info.value)
+    assert str(dependency.resolve(strict=False)) in str(exc_info.value)
+    assert target.read_bytes() == previous
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
 def test_bundle_export_bounds_dependency_and_published_bundle_fingerprints(
     tmp_path, monkeypatch
 ):

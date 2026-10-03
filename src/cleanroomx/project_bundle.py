@@ -19,6 +19,7 @@ from .application import (
     _resolve_relative,
 )
 from .persistence import (
+    StableFileSizeError,
     _ensure_directory_durable,
     _fsync_directory,
     atomic_write_generated,
@@ -308,6 +309,11 @@ def _build_portable_project(
                         source,
                         max_bytes=_MAX_DEPENDENCY_MEMBER_BYTES,
                     )
+                except StableFileSizeError as exc:
+                    raise ProjectBundleError(
+                        "bundle dependency exceeds supported size limit while fingerprinting: "
+                        f"{source} ({exc.observed_size} > {exc.limit} bytes)"
+                    ) from exc
                 except OSError as exc:
                     raise ProjectBundleError(
                         f"dependency is unavailable or changing while packaging: {source}"

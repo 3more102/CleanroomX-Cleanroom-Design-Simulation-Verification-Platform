@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — typed portable-bundle dependency size failures — 2026-10-03
+
+- Preserves the canonical `StableFileSizeError` classification when a portable-bundle dependency grows beyond its hard byte ceiling during stable fingerprinting.
+- Reports the deterministic resource-limit violation as a bundle size error instead of collapsing it into the transient unavailable/changing I/O path.
+- Keeps export fail-closed and non-destructive: an existing destination remains unchanged and no staged bundle is published after the typed size failure.
+- Adds regression coverage for the mid-fingerprint growth path; bundle/project schemas, solver equations, engineering tolerances, requirement criteria, and verification verdicts are unchanged.
+
 ## Unreleased Release 3 — exact stable-file read ceilings — 2026-10-03
 
 - Makes the canonical stable-file authority request at most the remaining configured byte allowance plus one sentinel byte instead of issuing fixed 1 MiB reads before enforcing smaller limits.

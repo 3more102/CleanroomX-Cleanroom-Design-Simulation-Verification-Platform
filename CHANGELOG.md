@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — ctime-bound stable-file revision identity — 2026-10-03
+
+- Extends the canonical stable-file revision identity with `st_ctime_ns` so same-size rewrites whose modification time is restored cannot evade the path/descriptor stability guard on filesystems where ctime records the revision change.
+- Applies the stronger identity equally to stable SHA-256 fingerprinting and private digest-bound snapshots without changing accepted stable-file digests, byte ceilings, retry counts, schemas, solver equations, engineering tolerances, or verification verdicts.
+- Adds a regression that changes only descriptor ctime evidence while device, inode, size, and mtime remain unchanged and requires the read to fail closed.
+
 ## Unreleased Release 3 — typed runtime source revision changes — 2026-10-03
 
 - Replaces runtime-provenance retry classification based on exception-message text with a dedicated typed source-tree revision-change failure.

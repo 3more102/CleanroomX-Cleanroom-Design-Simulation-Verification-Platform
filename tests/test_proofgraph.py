@@ -319,6 +319,94 @@ def test_graph_rejects_single_finding_verdict_status_mismatch() -> None:
         proofgraph_from_dict(broken)
 
 
+@pytest.mark.parametrize(
+    ("finding_status", "verdict_status"),
+    [
+        ("pass", "fail"),
+        ("fail", "warning"),
+        ("warning", "unknown"),
+        ("unknown", "indeterminate"),
+        ("indeterminate", "fail"),
+        ("not_checked", "warning"),
+    ],
+)
+def test_graph_rejects_homogeneous_multi_finding_verdict_status_mismatch(
+    finding_status: str,
+    verdict_status: str,
+) -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    broken["findings"][0]["status"] = finding_status
+    secondary = copy.deepcopy(broken["findings"][0])
+    secondary["id"] = "finding-secondary"
+    broken["findings"].append(secondary)
+    broken["verdicts"][0]["status"] = verdict_status
+    broken["verdicts"][0]["finding_ids"] = [
+        broken["findings"][0]["id"],
+        secondary["id"],
+    ]
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="does not match homogeneous finding status"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_preserves_mixed_finding_nonpass_aggregation() -> None:
+    document = copy.deepcopy(_graph().to_dict())
+    document["findings"][0]["status"] = "fail"
+    secondary = copy.deepcopy(document["findings"][0])
+    secondary.update(id="finding-secondary-warning", status="warning")
+    document["findings"].append(secondary)
+    document["verdicts"][0]["status"] = "fail"
+    document["verdicts"][0]["finding_ids"] = [
+        document["findings"][0]["id"],
+        secondary["id"],
+    ]
+    document.pop("graph_sha256")
+
+    graph = proofgraph_from_dict(document)
+
+    assert graph.verdicts[0].status == "fail"
+    assert {item.status for item in graph.findings} == {"fail", "warning"}
+
+
+def test_direct_graph_construction_rejects_homogeneous_multi_finding_mismatch() -> None:
+    graph = _graph()
+    secondary = replace(graph.findings[0], id="finding-secondary")
+    verdict = replace(
+        graph.verdicts[0],
+        status="fail",
+        finding_ids=(graph.findings[0].id, secondary.id),
+    )
+
+    with pytest.raises(ValueError, match="does not match homogeneous finding status"):
+        replace(graph, findings=(*graph.findings, secondary), verdicts=(verdict,))
+
+
+def test_recomputed_digest_cannot_authorize_homogeneous_verdict_mismatch() -> None:
+    document = copy.deepcopy(_graph().to_dict())
+    secondary = copy.deepcopy(document["findings"][0])
+    secondary["id"] = "finding-secondary"
+    document["findings"].append(secondary)
+    document["verdicts"][0]["status"] = "fail"
+    document["verdicts"][0]["finding_ids"] = [
+        document["findings"][0]["id"],
+        secondary["id"],
+    ]
+    document.pop("graph_sha256")
+    document["graph_sha256"] = hashlib.sha256(
+        json.dumps(
+            document,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="does not match homogeneous finding status"):
+        proofgraph_from_dict(document)
+
+
 @pytest.mark.parametrize("status", ["fail", "warning", "unknown", "indeterminate", "not_checked"])
 @pytest.mark.parametrize("reverse", [False, True])
 def test_graph_rejects_pass_verdict_with_nonpassing_support(status, reverse) -> None:

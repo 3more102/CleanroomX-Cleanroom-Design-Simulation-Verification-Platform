@@ -50,7 +50,7 @@ def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
-def test_stable_file_path_descriptor_binding_uses_windows_file_ids_when_available(
+def test_stable_file_path_descriptor_binding_ignores_windows_file_id_divergence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeStat:
@@ -74,16 +74,16 @@ def test_stable_file_path_descriptor_binding_uses_windows_file_ids_when_availabl
     path_stat = FakeStat(
         dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4, birthtime_ns=7
     )
-    opened_same_file = FakeStat(
-        dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=9, birthtime_ns=11
+    opened_same_revision = FakeStat(
+        dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=11, birthtime_ns=7
     )
     opened_replacement = FakeStat(
-        dev=1, ino=8, size=64, mtime_ns=3, ctime_ns=4, birthtime_ns=7
+        dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=11, birthtime_ns=8
     )
 
     monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
     assert (
-        persistence._stable_file_path_matches_opened(path_stat, opened_same_file)
+        persistence._stable_file_path_matches_opened(path_stat, opened_same_revision)
         is True
     )
     assert (
@@ -93,7 +93,7 @@ def test_stable_file_path_descriptor_binding_uses_windows_file_ids_when_availabl
 
     monkeypatch.setattr(persistence, "_IS_WINDOWS", False)
     assert (
-        persistence._stable_file_path_matches_opened(path_stat, opened_same_file)
+        persistence._stable_file_path_matches_opened(path_stat, opened_same_revision)
         is False
     )
 
@@ -130,6 +130,28 @@ def test_stable_file_path_descriptor_binding_windows_zero_id_uses_birthtime(
         persistence._stable_file_path_matches_opened(path_stat, opened_replacement)
         is False
     )
+
+
+def test_stable_file_path_descriptor_binding_windows_uses_common_creation_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class PathStat:
+        st_dev = 1
+        st_ino = 2
+        st_size = 64
+        st_mtime_ns = 3
+        st_ctime_ns = 4
+        st_birthtime_ns = 7
+
+    class OpenedStat:
+        st_dev = 9
+        st_ino = 8
+        st_size = 64
+        st_mtime_ns = 3
+        st_ctime_ns = 4
+
+    monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
+    assert persistence._stable_file_path_matches_opened(PathStat(), OpenedStat()) is True
 
 
 def test_stable_file_path_descriptor_binding_windows_311_creation_time_fallback(

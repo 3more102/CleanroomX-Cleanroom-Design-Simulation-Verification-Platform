@@ -8,7 +8,7 @@ import pytest
 import cleanroomx.autosave as autosave_module
 import cleanroomx.strict_json as strict_json_module
 from cleanroomx.autosave import AutosaveManager, RecoveryFormatError, load_recovery_artifact
-from cleanroomx.strict_json import StrictJSONError
+from cleanroomx.strict_json import StrictJSONError, StrictJSONSizeError
 
 
 def _legacy_recovery_bytes(*, project_identity: str = "session-test") -> bytes:
@@ -49,8 +49,39 @@ def test_recovery_loader_rejects_oversized_artifact_before_parsing(
     source.write_bytes(payload)
     monkeypatch.setattr(autosave_module, "RECOVERY_FILE_MAX_BYTES", len(payload) - 1)
 
-    with pytest.raises(RecoveryFormatError, match="exceeds maximum supported JSON size"):
+    with pytest.raises(RecoveryFormatError, match="recovery artifact size") as raised:
         load_recovery_artifact(source)
+
+    assert isinstance(raised.value.__cause__, StrictJSONSizeError)
+    assert raised.value.__cause__.observed_size == len(payload)
+    assert raised.value.__cause__.limit == len(payload) - 1
+    assert str(len(payload)) in str(raised.value)
+    assert str(len(payload) - 1) in str(raised.value)
+
+
+def test_recovery_loader_does_not_classify_generic_strict_json_error_as_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "generic-strict-json-error.recovery.json"
+    source.write_text("{}", encoding="utf-8")
+
+    def fail_strict_json(*args, **kwargs):
+        raise strict_json_module.StrictJSONError(
+            "exceeds maximum supported JSON size but this is an injected semantic failure"
+        )
+
+    monkeypatch.setattr(autosave_module, "load_strict_json", fail_strict_json)
+
+    with pytest.raises(
+        RecoveryFormatError,
+        match="invalid strict recovery JSON",
+    ) as raised:
+        load_recovery_artifact(source)
+
+    assert "recovery artifact size" not in str(raised.value)
+    assert isinstance(raised.value.__cause__, StrictJSONError)
+    assert not isinstance(raised.value.__cause__, StrictJSONSizeError)
 
 
 def test_recovery_loader_rejects_invalid_utf8(

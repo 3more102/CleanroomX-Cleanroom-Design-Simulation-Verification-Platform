@@ -72,6 +72,30 @@ class StableFileSizeError(OSError):
         )
 
 
+class StableFileSnapshotVerificationError(OSError):
+    """Raised when private snapshot bytes do not match the captured source revision."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        expected_sha256: str,
+        actual_size: int | None,
+        actual_sha256: str | None,
+    ) -> None:
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.actual_size = actual_size
+        self.actual_sha256 = actual_sha256
+        super().__init__(
+            f"stable file snapshot verification failed for {self.path}: "
+            f"expected {expected_size} bytes / sha256 {expected_sha256}, "
+            f"got {actual_size!r} bytes / sha256 {actual_sha256!r}"
+        )
+
+
 _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
     errno.EBADF,
     errno.EINVAL,
@@ -142,13 +166,29 @@ def _ensure_directory_durable(directory: Path) -> None:
         _fsync_directory(item.parent)
 
 
-def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
     return (
         value.st_dev,
         value.st_ino,
         value.st_size,
         value.st_mtime_ns,
+        value.st_ctime_ns,
     )
+
+
+def _stable_file_path_matches_opened(
+    path_stat: os.stat_result,
+    opened_stat: os.stat_result,
+) -> bool:
+    """Bind an opened descriptor to its path revision without non-portable Windows IDs."""
+    if opened_stat.st_size != path_stat.st_size:
+        return False
+    if os.name == "nt":
+        return (
+            opened_stat.st_mtime_ns == path_stat.st_mtime_ns
+            and opened_stat.st_ctime_ns == path_stat.st_ctime_ns
+        )
+    return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
 
 
 def _validate_stable_file_max_bytes(max_bytes: int | None) -> int | None:
@@ -214,14 +254,12 @@ def _capture_stable_file_revision(
             last_error = exc
             continue
 
-        identities = (
-            _stable_file_identity(before_path),
-            _stable_file_identity(before_handle),
-            _stable_file_identity(after_handle),
-            _stable_file_identity(after_path),
-        )
         if (
-            identities[0] == identities[1] == identities[2] == identities[3]
+            _stable_file_identity(before_path) == _stable_file_identity(after_path)
+            and _stable_file_identity(before_handle)
+            == _stable_file_identity(after_handle)
+            and _stable_file_path_matches_opened(before_path, before_handle)
+            and _stable_file_path_matches_opened(after_path, after_handle)
             and bytes_read == after_handle.st_size
         ):
             return after_path, digest.hexdigest()
@@ -269,6 +307,39 @@ def stable_file_snapshot(
             max_bytes=max_bytes,
             snapshot_path=snapshot,
         )
+        try:
+            snapshot_metadata, snapshot_digest = stable_file_sha256(
+                snapshot,
+                attempts=1,
+                max_bytes=max(metadata.st_size, 1),
+            )
+        except StableFileSizeError as exc:
+            raise StableFileSnapshotVerificationError(
+                snapshot,
+                expected_size=metadata.st_size,
+                expected_sha256=digest,
+                actual_size=exc.observed_size,
+                actual_sha256=None,
+            ) from exc
+        except OSError as exc:
+            raise StableFileSnapshotVerificationError(
+                snapshot,
+                expected_size=metadata.st_size,
+                expected_sha256=digest,
+                actual_size=None,
+                actual_sha256=None,
+            ) from exc
+        if (
+            snapshot_metadata.st_size != metadata.st_size
+            or snapshot_digest != digest
+        ):
+            raise StableFileSnapshotVerificationError(
+                snapshot,
+                expected_size=metadata.st_size,
+                expected_sha256=digest,
+                actual_size=snapshot_metadata.st_size,
+                actual_sha256=snapshot_digest,
+            )
         yield snapshot, metadata, digest
 
 

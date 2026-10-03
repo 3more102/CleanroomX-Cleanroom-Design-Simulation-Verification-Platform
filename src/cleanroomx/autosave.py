@@ -20,7 +20,12 @@ from .persistence import (
     stable_file_sha256,
 )
 from .project import PROJECT_FILE_MAX_BYTES, ProjectDocument, project_from_dict
-from .strict_json import StrictJSONError, load_strict_json, strict_json_loads
+from .strict_json import (
+    StrictJSONError,
+    StrictJSONSizeError,
+    load_strict_json,
+    strict_json_loads,
+)
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
@@ -324,6 +329,10 @@ def _read_recovery_json(path: str | Path) -> Any:
     except json.JSONDecodeError as exc:
         raise RecoveryFormatError(
             f"invalid recovery JSON at line {exc.lineno}, column {exc.colno}"
+        ) from exc
+    except StrictJSONSizeError as exc:
+        raise RecoveryFormatError(
+            _recovery_file_size_message(exc.observed_size)
         ) from exc
     except StrictJSONError as exc:
         raise RecoveryFormatError(f"invalid strict recovery JSON: {exc}") from exc

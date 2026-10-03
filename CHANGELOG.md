@@ -3,7 +3,7 @@
 ## Unreleased Release 3 — integrity boundary hardening — 2026-10-03
 
 - Reuses the canonical stable-file revision identity and Windows path/handle binding policy for runtime Python-source provenance, rejecting same-size path/handle substitutions without changing the source-tree digest algorithm.
-- Uses documented Windows file IDs (`st_dev` + nonzero `st_ino`) for path/handle binding when available, with `st_birthtime_ns` on Python 3.12+ and legacy `st_ctime_ns` on Python 3.11 as the zero-ID fallback; this avoids false `ctime` mismatches while strengthening same-size ABA rejection.
+- Keeps the shared Windows stable-file binding portable across path/descriptor ID divergence using size, modification time, and a common creation-time clock, while runtime Python-source provenance additionally requires matching nonzero Windows file IDs to reject same-size/same-mtime path substitution.
 - Preserves typed private-snapshot verification evidence at IFC import and direct dossier source-record boundaries while reporting the original source path instead of random private temporary-snapshot paths.
 - Adds focused regressions for runtime provenance, IFC diagnostics, and dossier diagnostics; solver equations, engineering tolerances, IFC semantics, dossier schema, requirement criteria, and verdict behavior are unchanged.
 

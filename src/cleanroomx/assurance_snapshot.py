@@ -180,7 +180,12 @@ def create_assurance_snapshot(input_path: str | Path) -> dict:
     except (TypeError, ValueError) as exc:
         raise AssuranceSnapshotError(str(exc)) from exc
 
-    result = clone_strict_json(result)
+    try:
+        result = clone_strict_json(result)
+    except StrictJSONError as exc:
+        raise AssuranceSnapshotError(
+            f"design assurance result is not strict JSON: {exc}"
+        ) from exc
     document = {
         "schema": ASSURANCE_SNAPSHOT_SCHEMA,
         "schema_version": ASSURANCE_SNAPSHOT_SCHEMA_VERSION,
@@ -286,7 +291,12 @@ def verify_assurance_snapshot(snapshot: dict) -> dict:
         raise AssuranceSnapshotError(
             f"embedded design assurance input cannot be replayed: {exc}"
         ) from exc
-    replayed_result = clone_strict_json(replayed_result)
+    try:
+        replayed_result = clone_strict_json(replayed_result)
+    except StrictJSONError as exc:
+        raise AssuranceSnapshotError(
+            f"replayed design assurance result is not strict JSON: {exc}"
+        ) from exc
 
     analysis = document["analysis"]
     if not isinstance(analysis, dict):

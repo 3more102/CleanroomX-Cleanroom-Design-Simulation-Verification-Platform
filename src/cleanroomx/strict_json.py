@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .persistence import _stable_file_identity, _stable_file_path_matches_opened
+
 
 STRICT_JSON_FILE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -154,16 +156,6 @@ def strict_json_loads(text: str) -> Any:
         ) from exc
 
 
-def _file_revision(stat_result: os.stat_result) -> tuple[int, int, int, int, int]:
-    return (
-        stat_result.st_dev,
-        stat_result.st_ino,
-        stat_result.st_size,
-        stat_result.st_mtime_ns,
-        stat_result.st_ctime_ns,
-    )
-
-
 def load_strict_json_snapshot(
     path: str | Path,
     *,
@@ -176,26 +168,40 @@ def load_strict_json_snapshot(
         raise ValueError("max_bytes must be a positive integer")
 
     with source.open("rb") as stream:
-        before = os.fstat(stream.fileno())
-        if before.st_size > limit:
-            raise StrictJSONSizeError(source, before.st_size, limit)
-        raw = stream.read(limit + 1)
-        after = os.fstat(stream.fileno())
         try:
-            current = source.stat()
+            before_path = source.stat()
+        except OSError as exc:
+            raise StrictJSONFileChangedError(
+                f"{source} changed while reading JSON input"
+            ) from exc
+        before_handle = os.fstat(stream.fileno())
+        if not _stable_file_path_matches_opened(before_path, before_handle):
+            raise StrictJSONFileChangedError(
+                f"{source} changed while reading JSON input"
+            )
+        before_size = max(before_path.st_size, before_handle.st_size)
+        if before_size > limit:
+            raise StrictJSONSizeError(source, before_size, limit)
+
+        raw = stream.read(limit + 1)
+        after_handle = os.fstat(stream.fileno())
+        try:
+            after_path = source.stat()
         except OSError as exc:
             raise StrictJSONFileChangedError(
                 f"{source} changed while reading JSON input"
             ) from exc
 
-    if len(raw) > limit or after.st_size > limit:
-        observed_size = max(len(raw), after.st_size)
+    if len(raw) > limit or after_handle.st_size > limit:
+        observed_size = max(len(raw), after_handle.st_size)
         raise StrictJSONSizeError(source, observed_size, limit)
 
     if (
-        _file_revision(before) != _file_revision(after)
-        or _file_revision(after) != _file_revision(current)
-        or len(raw) != after.st_size
+        _stable_file_identity(before_path) != _stable_file_identity(after_path)
+        or _stable_file_identity(before_handle)
+        != _stable_file_identity(after_handle)
+        or not _stable_file_path_matches_opened(after_path, after_handle)
+        or len(raw) != after_handle.st_size
     ):
         raise StrictJSONFileChangedError(
             f"{source} changed while reading JSON input"
@@ -212,7 +218,7 @@ def load_strict_json_snapshot(
         value=strict_json_loads(text),
         raw_bytes=raw,
         size=len(raw),
-        mtime_ns=after.st_mtime_ns,
+        mtime_ns=after_handle.st_mtime_ns,
     )
 
 

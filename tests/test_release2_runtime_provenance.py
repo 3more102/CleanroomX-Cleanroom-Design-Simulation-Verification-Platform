@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import cleanroomx.application as application_module
+import cleanroomx.persistence as persistence_module
 from cleanroomx.application import RuntimeCodeChangedError, application_info, run_analysis
 
 
@@ -218,6 +220,52 @@ def test_python_tree_fingerprint_rejects_opened_source_revision_change(
         match="changed while it was being fingerprinted",
     ):
         application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
+
+
+def test_python_tree_fingerprint_rejects_windows_same_size_path_handle_substitution(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    replacement = tmp_path / "replacement.py"
+    source.write_bytes(b"VALUE = 1\n")
+    replacement.write_bytes(b"VALUE = 2\n")
+    source_stat = source.stat()
+    replacement_stat = replacement.stat()
+    os.utime(
+        replacement,
+        ns=(
+            replacement_stat.st_atime_ns,
+            source_stat.st_mtime_ns + 1_000_000_000,
+        ),
+    )
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    manifest = application_module._python_tree_manifest(root)
+    original_open = Path.open
+    substituted = False
+
+    def substitute_same_size_source(self, *args, **kwargs):
+        nonlocal substituted
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == source and mode == "rb":
+            substituted = True
+            return original_open(replacement, *args, **kwargs)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(persistence_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(Path, "open", substitute_same_size_source)
+    monkeypatch.setattr(application_module, "_python_tree_manifest", lambda _root: manifest)
+
+    with pytest.raises(
+        application_module._RuntimeSourceTreeChangedError,
+        match="changed while it was being fingerprinted",
+    ):
+        application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
+
+    assert substituted is True
 
 
 def test_python_tree_fingerprint_retries_only_typed_revision_change(

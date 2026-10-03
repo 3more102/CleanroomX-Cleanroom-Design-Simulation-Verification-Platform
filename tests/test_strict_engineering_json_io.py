@@ -135,6 +135,39 @@ def test_strict_file_snapshot_returns_exact_bytes_passed_to_parser(
     assert snapshot.mtime_ns == source.stat().st_mtime_ns
 
 
+def test_strict_file_loader_rejects_ctime_only_descriptor_revision_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "ctime-revision.json"
+    source.write_text('{"revision": 1}', encoding="utf-8")
+    real_fstat = strict_json_module.os.fstat
+    descriptor_stat_calls = 0
+
+    class ChangedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev
+            self.st_ino = value.st_ino
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns
+            self.st_ctime_ns = value.st_ctime_ns + 1
+
+    def changed_after_read(fd):
+        nonlocal descriptor_stat_calls
+        value = real_fstat(fd)
+        descriptor_stat_calls += 1
+        if descriptor_stat_calls == 2:
+            return ChangedStat(value)
+        return value
+
+    monkeypatch.setattr(strict_json_module.os, "fstat", changed_after_read)
+
+    with pytest.raises(StrictJSONError, match="changed while reading JSON input"):
+        load_strict_json(source)
+
+    assert descriptor_stat_calls == 2
+
+
 def test_strict_file_loader_rejects_path_identity_change_after_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

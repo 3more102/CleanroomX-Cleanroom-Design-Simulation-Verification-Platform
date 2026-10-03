@@ -154,12 +154,13 @@ def strict_json_loads(text: str) -> Any:
         ) from exc
 
 
-def _file_revision(stat_result: os.stat_result) -> tuple[int, int, int, int]:
+def _file_revision(stat_result: os.stat_result) -> tuple[int, int, int, int, int]:
     return (
         stat_result.st_dev,
         stat_result.st_ino,
         stat_result.st_size,
         stat_result.st_mtime_ns,
+        stat_result.st_ctime_ns,
     )
 
 

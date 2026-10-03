@@ -27,6 +27,7 @@
 - Extends the canonical stable-file revision identity with `st_ctime_ns` so same-size rewrites whose modification time is restored cannot evade the path/descriptor stability guard on filesystems where ctime records the revision change.
 - Applies the stronger identity equally to stable SHA-256 fingerprinting and private digest-bound snapshots without changing accepted stable-file digests, byte ceilings, retry counts, schemas, solver equations, engineering tolerances, or verification verdicts.
 - Adds a regression that changes only descriptor ctime evidence while device, inode, size, and mtime remain unchanged and requires the read to fail closed.
+- Applies the same ctime-bound revision identity to strict-JSON file ingestion so engineering JSON inputs cannot retain a weaker same-size/restored-mtime race boundary.
 
 ## Unreleased Release 3 — typed recovery strict-JSON size failures — 2026-10-03
 

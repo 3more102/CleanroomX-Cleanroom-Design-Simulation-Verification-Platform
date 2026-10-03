@@ -58,10 +58,12 @@ must agree. A graph therefore cannot silently combine explicitly identified
 evidence from different projects. Evidence that does not carry project identity
 remains valid for adapters whose source contract does not yet supply one.
 
-For verdicts backed by exactly one finding, the verdict status must equal that
-finding status. This prevents a serialized graph from presenting a PASS verdict
-over a FAIL, UNKNOWN, INDETERMINATE, NOT_CHECKED, or WARNING finding without an
-explicit multi-finding aggregation policy.
+When every finding referenced by a verdict has the same status, the verdict must
+carry that same status. A single-finding verdict is the simplest case of this
+rule. Homogeneous multi-finding support therefore cannot be relabeled as a
+different PASS, FAIL, WARNING, UNKNOWN, INDETERMINATE, or NOT_CHECKED outcome.
+Mixed-status finding sets remain available for an explicit caller-owned
+aggregation policy; this invariant does not choose an aggregate status for them.
 
 For PASS verdicts backed by one or more findings, every referenced finding must
 be PASS. The verdict is also closed over the compliance checks represented by

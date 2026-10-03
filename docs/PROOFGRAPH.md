@@ -63,6 +63,13 @@ finding status. This prevents a serialized graph from presenting a PASS verdict
 over a FAIL, UNKNOWN, INDETERMINATE, NOT_CHECKED, or WARNING finding without an
 explicit multi-finding aggregation policy.
 
+For PASS verdicts backed by one or more findings, every referenced finding must
+be PASS. The verdict is also closed over the compliance checks represented by
+those findings: a PASS verdict cannot omit a FAIL, WARNING, UNKNOWN,
+INDETERMINATE, or NOT_CHECKED sibling finding from one of its supporting checks.
+This prevents selective finding references from hiding a contradictory outcome
+while keeping independent checks available for separate verdicts.
+
 Verification runs are also closed over their declared checks: every verdict in
 a run may depend only on findings whose compliance checks are listed in that
 same run. Every check declared by the run must also contribute to at least one

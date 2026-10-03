@@ -337,3 +337,21 @@ jobs:
       - name: Smoke CMD checkout launcher
         shell: cmd
         run: start-cleanroomx.cmd --check
+
+  required-ci:
+    name: Required CI Gate
+    if: ${{ always() }}
+    needs:
+      - test
+      - windows-launcher-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required CI jobs succeeded
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          WINDOWS_LAUNCHER_RESULT: ${{ needs.windows-launcher-smoke.result }}
+        run: |
+          echo "Python matrix result: ${TEST_RESULT}"
+          echo "Windows launcher result: ${WINDOWS_LAUNCHER_RESULT}"
+          test "${TEST_RESULT}" = "success"
+          test "${WINDOWS_LAUNCHER_RESULT}" = "success"

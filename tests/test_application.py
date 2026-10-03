@@ -846,6 +846,99 @@ def test_external_dependency_snapshot_preserves_typed_size_failure_after_io_retr
     assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
 
 
+
+def test_external_dependency_copy_verification_preserves_typed_size_failure(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    destination = snapshot_dir / "dependency-0000.json"
+    metadata = dependency.stat()
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+    limit = application_module.STRICT_JSON_FILE_MAX_BYTES
+
+    def stable_hash(path, *, attempts, max_bytes):
+        candidate = Path(path)
+        assert attempts == application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS
+        assert max_bytes == limit
+        if candidate == dependency:
+            return metadata, digest
+        if candidate == destination:
+            raise application_module.StableFileSizeError(
+                candidate,
+                limit + 1,
+                limit,
+            )
+        raise AssertionError(f"unexpected fingerprint path: {candidate}")
+
+    @contextmanager
+    def stable_snapshot(path, *, attempts, max_bytes, suffix=""):
+        assert Path(path) == dependency
+        assert attempts == application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS
+        assert max_bytes == limit
+        assert suffix == ".json"
+        yield dependency, metadata, digest
+
+    monkeypatch.setattr(application_module, "stable_file_sha256", stable_hash)
+    monkeypatch.setattr(application_module, "stable_file_snapshot", stable_snapshot)
+
+    with pytest.raises(
+        ExternalDependencySnapshotError,
+        match="private snapshot exceeds supported size limit during verification",
+    ) as raised:
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+    assert raised.value.field == "verification_project"
+    assert raised.value.declared_path == "dependency.json"
+    assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
+
+
+def test_external_dependency_backend_verification_preserves_typed_size_failure(
+    tmp_path, monkeypatch
+):
+    snapshot = tmp_path / "dependency-0000.json"
+    snapshot.write_text('{"value":1}\n', encoding="utf-8")
+    limit = application_module.STRICT_JSON_FILE_MAX_BYTES
+
+    def fail_with_size_limit(path, *, attempts, max_bytes):
+        assert Path(path) == snapshot
+        assert attempts == application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS
+        assert max_bytes == limit
+        raise application_module.StableFileSizeError(path, limit + 1, limit)
+
+    monkeypatch.setattr(
+        application_module,
+        "stable_file_sha256",
+        fail_with_size_limit,
+    )
+
+    with pytest.raises(
+        ExternalDependencySnapshotError,
+        match="private snapshot exceeds supported size limit during backend execution",
+    ) as raised:
+        application_module._verify_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": str(snapshot)},
+            [{
+                "field": "verification_project",
+                "declared_path": "dependency.json",
+                "sha256": "0" * 64,
+                "size_bytes": 0,
+            }],
+        )
+
+    assert raised.value.field == "verification_project"
+    assert raised.value.declared_path == "dependency.json"
+    assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
+
+
 def test_external_dependency_snapshot_uses_bounded_stable_authority(
     tmp_path, monkeypatch
 ):

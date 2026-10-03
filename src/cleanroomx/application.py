@@ -23,6 +23,7 @@ from .input_contracts import (
 )
 from .persistence import (
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     stable_file_sha256,
     stable_file_snapshot,
 )
@@ -1530,6 +1531,15 @@ def _prepare_external_dependency_snapshot(
                         "observed_size": exc.observed_size,
                         "limit": exc.limit,
                     }]
+                ) from exc
+            except StableFileSnapshotVerificationError as exc:
+                raise ExternalDependencySnapshotError(
+                    field,
+                    declared_path,
+                    "private snapshot integrity verification failed "
+                    f"(expected {exc.expected_size} bytes / sha256 "
+                    f"{exc.expected_sha256}, got {exc.actual_size!r} bytes / "
+                    f"sha256 {exc.actual_sha256!r})",
                 ) from exc
             except OSError as exc:
                 try:

@@ -238,9 +238,11 @@ def test_python_tree_fingerprint_rejects_windows_same_size_path_handle_substitut
         replacement,
         ns=(
             replacement_stat.st_atime_ns,
-            source_stat.st_mtime_ns + 1_000_000_000,
+            source_stat.st_mtime_ns,
         ),
     )
+    replacement_stat = replacement.stat()
+    assert source_stat.st_ino != replacement_stat.st_ino
 
     application_module._hash_python_tree_manifest.cache_clear()
     manifest = application_module._python_tree_manifest(root)
@@ -262,9 +264,16 @@ def test_python_tree_fingerprint_rejects_windows_same_size_path_handle_substitut
     with pytest.raises(
         application_module._RuntimeSourceTreeChangedError,
         match="changed while it was being fingerprinted",
-    ):
+    ) as exc_info:
         application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
 
+    message = str(exc_info.value)
+    assert "path/handle binding mismatch" in message
+    assert f"path dev={source_stat.st_dev}, ino={source_stat.st_ino}" in message
+    assert (
+        f"handle dev={replacement_stat.st_dev}, ino={replacement_stat.st_ino}"
+        in message
+    )
     assert substituted is True
 
 

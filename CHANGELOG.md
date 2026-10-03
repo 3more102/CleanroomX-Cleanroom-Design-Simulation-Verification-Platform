@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — typed analysis dependency size failures — 2026-10-03
+
+- Preserves canonical `StableFileSizeError` evidence for file-backed analysis dependencies instead of collapsing deterministic byte-ceiling violations into transient unavailable/unstable classifications.
+- Keeps live-source size failures in the external-dependency change contract with explicit observed-size/limit evidence, while private execution-snapshot failures retain the snapshot-error contract.
+- Covers initial fingerprinting, snapshot capture retry, private-copy verification, and backend snapshot verification without changing solver equations, engineering tolerances, project schemas, or verdict semantics.
+
 ## Unreleased Release 3 — assurance snapshot strict-JSON error boundary — 2026-10-03
 
 - Converts non-strict design-assurance analysis results into the assurance-snapshot domain error contract during both snapshot creation and deterministic replay verification.

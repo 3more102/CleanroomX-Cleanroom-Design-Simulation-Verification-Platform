@@ -5,6 +5,7 @@ import json
 import pytest
 
 import cleanroomx.project as project_module
+from cleanroomx.persistence import StableFileSizeError
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
     ProjectFormatError, atomic_write_text, capture_project_file_revision,
@@ -241,7 +242,34 @@ def test_revision_hash_stops_if_file_outgrows_initial_stat(tmp_path, monkeypatch
     monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
     _underreport_file_size(monkeypatch, path, reported_size=64)
 
-    with pytest.raises(OSError, match="exceeds maximum supported size"):
+    with pytest.raises(
+        OSError,
+        match="exceeds maximum supported size",
+    ) as exc_info:
+        capture_project_file_revision(path)
+
+    assert isinstance(exc_info.value.__cause__, StableFileSizeError)
+    assert exc_info.value.__cause__.observed_size == 65
+    assert exc_info.value.__cause__.limit == 64
+
+
+def test_revision_capture_does_not_classify_generic_oserror_by_message(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    path.write_bytes(b"{}")
+
+    def fail_hash(_path, *, attempts=3, max_bytes=None):
+        raise OSError(
+            "file exceeds supported size limit but this is an injected I/O failure"
+        )
+
+    monkeypatch.setattr(project_module, "stable_file_sha256", fail_hash)
+
+    with pytest.raises(
+        OSError,
+        match="injected I/O failure",
+    ):
         capture_project_file_revision(path)
 
 

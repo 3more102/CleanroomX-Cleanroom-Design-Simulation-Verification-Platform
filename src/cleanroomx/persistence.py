@@ -54,6 +54,24 @@ class AtomicWriteVerificationError(OSError):
         )
 
 
+class StableFileSizeError(OSError):
+    """Raised when a bounded stable-file read exceeds its byte ceiling."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        observed_size: int,
+        limit: int,
+    ) -> None:
+        self.path = Path(path)
+        self.observed_size = observed_size
+        self.limit = limit
+        super().__init__(
+            "file exceeds supported size limit "
+            f"({observed_size} > {limit} bytes): {self.path}"
+        )
+
+
 _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
     errno.EBADF,
     errno.EINVAL,
@@ -157,45 +175,35 @@ def _capture_stable_file_revision(
         try:
             before_path = source.stat()
             if limit is not None and before_path.st_size > limit:
-                raise OSError(
-                    "file exceeds supported size limit "
-                    f"({before_path.st_size} > {limit} bytes): {source}"
-                )
+                raise StableFileSizeError(source, before_path.st_size, limit)
 
             digest = sha256()
             bytes_read = 0
             with source.open("rb") as handle:
                 before_handle = os.fstat(handle.fileno())
                 if limit is not None and before_handle.st_size > limit:
-                    raise OSError(
-                        "file exceeds supported size limit "
-                        f"({before_handle.st_size} > {limit} bytes): {source}"
-                    )
+                    raise StableFileSizeError(source, before_handle.st_size, limit)
 
                 if snapshot_path is None:
                     for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                         bytes_read += len(chunk)
                         if limit is not None and bytes_read > limit:
-                            raise OSError(
-                                "file exceeds supported size limit while reading "
-                                f"(more than {limit} bytes): {source}"
-                            )
+                            raise StableFileSizeError(source, bytes_read, limit)
                         digest.update(chunk)
                 else:
                     with snapshot_path.open("wb") as snapshot:
                         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                             bytes_read += len(chunk)
                             if limit is not None and bytes_read > limit:
-                                raise OSError(
-                                    "file exceeds supported size limit while reading "
-                                    f"(more than {limit} bytes): {source}"
-                                )
+                                raise StableFileSizeError(source, bytes_read, limit)
                             digest.update(chunk)
                             snapshot.write(chunk)
                         snapshot.flush()
 
                 after_handle = os.fstat(handle.fileno())
             after_path = source.stat()
+        except StableFileSizeError:
+            raise
         except OSError as exc:
             last_error = exc
             continue

@@ -8,7 +8,11 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
-from .persistence import stable_file_sha256, stable_file_snapshot
+from .persistence import (
+    StableFileSizeError,
+    stable_file_sha256,
+    stable_file_snapshot,
+)
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_LAYOUT_VERSION,
@@ -1510,10 +1514,8 @@ def _file_sha256(path: Path) -> str:
             path,
             max_bytes=_MAX_IFC_SOURCE_BYTES,
         )
-    except OSError as exc:
-        if "exceeds supported size limit" in str(exc):
-            raise IfcImportError(str(exc)) from exc
-        raise
+    except StableFileSizeError as exc:
+        raise IfcImportError(str(exc)) from exc
     return digest
 
 
@@ -1534,9 +1536,9 @@ def extract_ifc_semantics(
             suffix=source.suffix or ".ifc",
         )
         snapshot_source, _snapshot_metadata, source_digest = snapshot_context.__enter__()
+    except StableFileSizeError as exc:
+        raise IfcImportError(str(exc)) from exc
     except OSError as exc:
-        if "exceeds supported size limit" in str(exc):
-            raise IfcImportError(str(exc)) from exc
         raise IfcImportError(f"unable to read stable IFC source {source}") from exc
 
     try:

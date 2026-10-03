@@ -16,6 +16,7 @@ from . import __version__
 from .application import ANALYSIS_SPECS
 from .persistence import (
     AtomicWriteDurabilityError,
+    StableFileSizeError,
     atomic_write_text as _shared_atomic_write_text,
     stable_file_sha256,
 )
@@ -688,16 +689,8 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
             attempts=3,
             max_bytes=PROJECT_FILE_MAX_BYTES,
         )
-    except OSError as exc:
-        if "exceeds supported size limit" in str(exc):
-            try:
-                observed_size = source.stat().st_size
-            except OSError:
-                raise exc
-            if observed_size <= PROJECT_FILE_MAX_BYTES:
-                observed_size = PROJECT_FILE_MAX_BYTES + 1
-            raise OSError(_project_file_size_message(observed_size)) from exc
-        raise
+    except StableFileSizeError as exc:
+        raise OSError(_project_file_size_message(exc.observed_size)) from exc
 
     return ProjectFileRevision(
         path=normalized,

@@ -315,6 +315,35 @@ def test_input_size_limit_is_enforced(
         create_assurance_snapshot(source)
 
 
+def test_input_ingestion_does_not_classify_generic_oserror_as_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(DEMO.read_bytes())
+
+    @contextmanager
+    def fail_snapshot(*_args, **_kwargs):
+        raise OSError(
+            "file exceeds supported size limit but this is an injected I/O failure"
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "stable_file_snapshot",
+        fail_snapshot,
+    )
+
+    with pytest.raises(
+        AssuranceSnapshotError,
+        match="injected I/O failure",
+    ) as exc_info:
+        create_assurance_snapshot(source)
+
+    assert "exceeds maximum supported size" not in str(exc_info.value)
+
+
 def test_cli_create_and_verify_round_trip(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

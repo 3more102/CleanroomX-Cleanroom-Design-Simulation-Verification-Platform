@@ -12,6 +12,7 @@ import cleanroomx.persistence as persistence
 from cleanroomx.persistence import (
     AtomicWriteDurabilityError,
     AtomicWriteVerificationError,
+    StableFileSizeError,
     atomic_publish_staged_file,
     atomic_write_bytes,
     atomic_write_text,
@@ -76,9 +77,39 @@ def test_stable_file_snapshot_rejects_oversized_source_without_publishing_snapsh
     source = tmp_path / "facility.ifc"
     source.write_bytes(b"1234")
 
-    with pytest.raises(OSError, match="exceeds supported size limit"):
+    with pytest.raises(
+        StableFileSizeError,
+        match="exceeds supported size limit",
+    ) as exc_info:
         with persistence.stable_file_snapshot(source, max_bytes=3):
             raise AssertionError("oversized snapshot must never be yielded")
+
+    assert exc_info.value.path == source
+    assert exc_info.value.observed_size == 4
+    assert exc_info.value.limit == 3
+
+
+def test_stable_file_size_failure_is_not_retried(tmp_path, monkeypatch):
+    source = tmp_path / "oversized.bin"
+    source.write_bytes(b"1234")
+    original_stat = Path.stat
+    calls = {"count": 0}
+
+    def counting_stat(self, *args, **kwargs):
+        if self == source:
+            calls["count"] += 1
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", counting_stat)
+
+    with pytest.raises(StableFileSizeError):
+        persistence.stable_file_sha256(
+            source,
+            attempts=3,
+            max_bytes=3,
+        )
+
+    assert calls["count"] == 1
 
 
 def test_atomic_text_write_uses_exact_utf8_bytes_and_creates_parent(tmp_path):

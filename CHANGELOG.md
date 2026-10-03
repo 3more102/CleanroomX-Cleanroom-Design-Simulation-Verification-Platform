@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — typed stable-file size failures — 2026-10-03
+
+- Adds a canonical `StableFileSizeError` from the shared stable-file hashing/snapshot authority, carrying the source path, observed byte count, and configured limit.
+- Fails immediately on deterministic size-limit violations instead of retrying them as transient I/O failures.
+- Removes message-text matching from project revision capture, IFC ingestion, and design-assurance snapshot ingestion; only the typed size failure is translated into each domain's existing public error contract.
+- Adds regressions proving oversized inputs remain rejected while unrelated `OSError` messages cannot be misclassified as size violations; no solver equation, engineering tolerance, requirement criterion, ProofGraph verdict, project schema, or persistence format changes.
+
 ## Unreleased Release 3 — canonical stable project ingestion — 2026-10-03
 
 - Routes backward-compatible `load_project_document()` and migration-aware project opens through the same bounded, revision-stable strict-JSON snapshot authority used by revision-bound loads.

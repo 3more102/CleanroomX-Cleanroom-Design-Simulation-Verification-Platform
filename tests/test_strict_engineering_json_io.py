@@ -223,13 +223,53 @@ def test_dossier_manifest_rejects_non_finite_json(
         build_dossier(manifest)
 
 
-def test_dossier_cli_rejects_non_finite_manifest_before_execution(
+def test_dossier_cli_rejects_non_finite_manifest_without_traceback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     manifest = tmp_path / "dossier.json"
     manifest.write_text('{"sentinel": NaN}', encoding="utf-8")
     monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
 
-    with pytest.raises(StrictJSONError, match="non-finite JSON constant"):
-        dossier_main()
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert "non-finite JSON constant" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dossier_cli_rejects_malformed_json_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "malformed-dossier.json"
+    manifest.write_text('{"name": "broken",}', encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
+
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dossier_cli_reports_missing_manifest_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "missing-dossier.json"
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
+
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert str(manifest) in captured.err
+    assert "Traceback" not in captured.err

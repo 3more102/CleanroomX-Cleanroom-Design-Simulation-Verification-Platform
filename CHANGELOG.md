@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — verified private stable-file snapshots — 2026-10-03
+
+- Re-hashes each private stable-file snapshot before yielding it and requires exact size/SHA-256 agreement with the captured source revision.
+- Adds a typed `StableFileSnapshotVerificationError` so callers can distinguish private-copy integrity failure from live-source instability.
+- Makes portable-bundle verification translate private snapshot integrity failure explicitly instead of misreporting it as a changing source archive.
+- Adds persistence- and bundle-level regressions; no solver equations, engineering tolerances, schemas, requirement criteria, or verdict semantics change.
+
 ## Unreleased Release 3 — typed portable-bundle dependency size failures — 2026-10-03
 
 - Preserves the canonical `StableFileSizeError` classification when a portable-bundle dependency grows beyond its hard byte ceiling during stable fingerprinting.

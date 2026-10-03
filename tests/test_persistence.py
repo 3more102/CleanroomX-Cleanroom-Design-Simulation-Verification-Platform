@@ -49,6 +49,40 @@ def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
+def test_stable_file_sha256_rejects_ctime_only_descriptor_revision_change(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "ctime-revision.json"
+    source.write_bytes(b'{"revision":1}\n')
+    real_fstat = persistence.os.fstat
+    descriptor_stat_calls = 0
+    injected = False
+
+    class ChangedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev
+            self.st_ino = value.st_ino
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns
+            self.st_ctime_ns = value.st_ctime_ns + 1
+
+    def changed_after_read(fd):
+        nonlocal descriptor_stat_calls, injected
+        value = real_fstat(fd)
+        descriptor_stat_calls += 1
+        if descriptor_stat_calls == 2:
+            injected = True
+            return ChangedStat(value)
+        return value
+
+    monkeypatch.setattr(persistence.os, "fstat", changed_after_read)
+
+    with pytest.raises(OSError, match="file changed while verifying"):
+        persistence.stable_file_sha256(source, attempts=1)
+
+    assert injected is True
+
+
 def test_stable_file_snapshot_binds_digest_to_private_exact_bytes_and_cleans_up(
     tmp_path,
 ):

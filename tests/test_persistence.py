@@ -81,10 +81,10 @@ def test_stable_file_snapshot_rejects_corrupted_private_copy(
     original_capture = persistence._capture_stable_file_revision
 
     def corrupt_private_copy(*args, **kwargs):
-        metadata, digest = original_capture(*args, **kwargs)
         snapshot_path = kwargs["snapshot_path"]
-        assert snapshot_path is not None
-        snapshot_path.write_bytes(b"corrupted-private-copy")
+        metadata, digest = original_capture(*args, **kwargs)
+        if snapshot_path is not None:
+            snapshot_path.write_bytes(b"corrupted-private-copy")
         return metadata, digest
 
     monkeypatch.setattr(

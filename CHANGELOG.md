@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — ProofGraph homogeneous-verdict integrity — 2026-10-03
+
+- Rejects any verdict whose referenced findings are all the same status when the verdict relabels that homogeneous outcome as a different status.
+- Keeps the existing stronger PASS rules and preserves caller-owned aggregation for genuinely mixed-status finding sets.
+- Enforces the invariant in direct graph construction and serialized ingestion, including payloads with recomputed valid graph digests.
+- Adds regressions across all verdict-state families without changing graph schema, solver equations, engineering tolerances, project requirement criteria, or mixed-status aggregation semantics.
+
 ## Unreleased Release 3 — typed stable-file size failures — 2026-10-03
 
 - Adds a canonical `StableFileSizeError` from the shared stable-file hashing/snapshot authority, carrying the source path, observed byte count, and configured limit.

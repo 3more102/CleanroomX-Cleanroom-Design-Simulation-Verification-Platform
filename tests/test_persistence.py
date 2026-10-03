@@ -71,6 +71,48 @@ def test_stable_file_path_descriptor_binding_is_windows_portable(
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is False
 
 
+def test_stable_file_path_descriptor_binding_uses_windows_birthtime_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStat:
+        def __init__(
+            self,
+            *,
+            dev: int,
+            ino: int,
+            size: int,
+            mtime_ns: int,
+            ctime_ns: int,
+            birthtime_ns: int,
+        ):
+            self.st_dev = dev
+            self.st_ino = ino
+            self.st_size = size
+            self.st_mtime_ns = mtime_ns
+            self.st_ctime_ns = ctime_ns
+            self.st_birthtime_ns = birthtime_ns
+
+    path_stat = FakeStat(
+        dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4, birthtime_ns=7
+    )
+    opened_same_file = FakeStat(
+        dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=6, birthtime_ns=7
+    )
+    opened_replacement = FakeStat(
+        dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=6, birthtime_ns=8
+    )
+
+    monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
+    assert (
+        persistence._stable_file_path_matches_opened(path_stat, opened_same_file)
+        is True
+    )
+    assert (
+        persistence._stable_file_path_matches_opened(path_stat, opened_replacement)
+        is False
+    )
+
+
 def test_stable_file_path_descriptor_binding_rejects_windows_same_size_aba(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

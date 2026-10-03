@@ -807,6 +807,21 @@ class ProofGraph:
                         f"pass verdict {verdict.id!r} references non-pass findings: "
                         + ", ".join(nonpassing)
                     )
+                represented_check_ids = {
+                    finding.check_id for finding in referenced_findings
+                }
+                omitted_nonpassing = sorted(
+                    finding.id
+                    for finding in self.findings
+                    if finding.check_id in represented_check_ids
+                    and finding.id not in verdict.finding_ids
+                    and finding.status != "pass"
+                )
+                if omitted_nonpassing:
+                    raise ValueError(
+                        f"pass verdict {verdict.id!r} omits non-pass findings from "
+                        "its supporting checks: " + ", ".join(omitted_nonpassing)
+                    )
 
         for action in self.corrective_actions:
             if action.requirement_id not in requirement_ids:

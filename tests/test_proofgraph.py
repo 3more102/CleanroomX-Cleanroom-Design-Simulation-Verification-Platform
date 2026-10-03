@@ -348,6 +348,88 @@ def test_graph_accepts_pass_verdict_with_multiple_passing_findings() -> None:
     assert proofgraph_from_dict(graph.to_dict()).to_dict() == graph.to_dict()
 
 
+@pytest.mark.parametrize(
+    "status", ["fail", "warning", "unknown", "indeterminate", "not_checked"]
+)
+def test_graph_rejects_pass_verdict_that_omits_nonpassing_finding_for_supported_check(
+    status,
+) -> None:
+    broken = _graph().to_dict()
+    hidden = copy.deepcopy(broken["findings"][0])
+    hidden.update(id="finding-hidden-nonpass", status=status)
+    broken["findings"].append(hidden)
+    broken.pop("graph_sha256")
+
+    with pytest.raises(
+        ValueError,
+        match="pass verdict.*omits non-pass findings from its supporting checks",
+    ):
+        proofgraph_from_dict(broken)
+
+
+def test_pass_verdict_check_closure_is_local_to_its_supporting_checks() -> None:
+    document = _graph().to_dict()
+    secondary_check = copy.deepcopy(document["checks"][0])
+    secondary_check["id"] = "check-secondary"
+    document["checks"].append(secondary_check)
+
+    secondary_finding = copy.deepcopy(document["findings"][0])
+    secondary_finding.update(
+        id="finding-secondary-fail",
+        check_id=secondary_check["id"],
+        status="fail",
+    )
+    document["findings"].append(secondary_finding)
+
+    secondary_verdict = copy.deepcopy(document["verdicts"][0])
+    secondary_verdict.update(
+        id="verdict-secondary-fail",
+        status="fail",
+        finding_ids=[secondary_finding["id"]],
+    )
+    document["verdicts"].append(secondary_verdict)
+    document["verification_runs"][0]["check_ids"].append(secondary_check["id"])
+    document["verification_runs"][0]["verdict_ids"].append(secondary_verdict["id"])
+    document.pop("graph_sha256")
+
+    graph = proofgraph_from_dict(document)
+
+    assert graph.verdicts[0].status == "pass"
+    assert graph.verdicts[1].status == "fail"
+
+
+def test_direct_graph_construction_rejects_pass_verdict_with_hidden_nonpass_sibling() -> None:
+    graph = _graph()
+    hidden = replace(
+        graph.findings[0], id="finding-hidden-failed", status="fail"
+    )
+    with pytest.raises(
+        ValueError,
+        match="pass verdict.*omits non-pass findings from its supporting checks",
+    ):
+        replace(graph, findings=(*graph.findings, hidden))
+
+
+def test_recomputed_digest_cannot_hide_nonpass_sibling_from_pass_verdict() -> None:
+    document = _graph().to_dict()
+    hidden = copy.deepcopy(document["findings"][0])
+    hidden.update(id="finding-hidden-failed", status="fail")
+    document["findings"].append(hidden)
+    document.pop("graph_sha256")
+    document["graph_sha256"] = hashlib.sha256(
+        json.dumps(
+            document, sort_keys=True, ensure_ascii=False, allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(
+        ValueError,
+        match="pass verdict.*omits non-pass findings from its supporting checks",
+    ):
+        proofgraph_from_dict(document)
+
+
 def test_direct_graph_construction_rejects_contradictory_pass_verdict() -> None:
     graph = _graph()
     failed = replace(graph.findings[0], id="finding-failed", status="fail")

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — ProofGraph pass-verdict check closure — 2026-10-03
+
+- Rejects a `pass` verdict that selectively references only passing findings while omitting a non-pass sibling finding from the same supporting compliance check.
+- Keeps the closure check local to the checks actually represented by each verdict, so independent checks for the same requirement can retain separate PASS and non-PASS verdicts.
+- Enforces the invariant in direct graph construction and serialized ingestion, including payloads with recomputed valid graph digests.
+- Changes no solver equation, numerical tolerance, project requirement criterion, graph schema version, or non-PASS verdict aggregation policy.
+
 ## Unreleased Release 3 — ProofGraph pass-verdict support integrity — 2026-10-02
 
 - Rejects a `pass` verdict when any of its referenced findings is `fail`, `warning`, `unknown`, `indeterminate`, or `not_checked`, closing the multi-finding bypass of the existing single-finding status guard.

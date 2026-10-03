@@ -39,7 +39,6 @@ from .strict_json import (
     StrictJSONSizeError,
     clone_strict_json,
     load_strict_json_snapshot,
-    strict_json_loads,
 )
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
@@ -638,18 +637,6 @@ def _read_project_bytes_bounded(source: Path) -> bytes:
         payload = handle.read(PROJECT_FILE_MAX_BYTES + 1)
     _validate_project_file_size(len(payload))
     return payload
-
-
-def _read_project_text(source: Path) -> str:
-    """Read one project through a bounded strict UTF-8 file boundary."""
-    payload = _read_project_bytes_bounded(source)
-    try:
-        return payload.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise ProjectFormatError(
-            "project file must contain valid UTF-8 text; "
-            f"invalid byte sequence at offset {exc.start}"
-        ) from exc
 
 
 def load_project_document_with_migration_info(

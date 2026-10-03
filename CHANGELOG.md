@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — runtime provenance stable path/handle binding — 2026-10-03
+
+- Reuses the canonical stable-file revision identity and Windows path/handle binding policy while hashing the CleanroomX Python source tree for execution provenance.
+- Rejects a same-size Windows path-to-handle substitution when the opened source revision carries different modification/change timestamps, closing the remaining ABA gap outside the shared persistence reader.
+- Preserves the `sha256-python-source-tree-v1` digest algorithm, source-tree caching, byte ceilings, typed retry behavior, solver equations, engineering tolerances, requirement criteria, and verification verdicts.
+
 ## Unreleased Release 3 — verified stable snapshot authority — 2026-10-03
 
 - Verifies private stable-file snapshots against the captured source digest before any consumer can use them, including empty-file snapshots.

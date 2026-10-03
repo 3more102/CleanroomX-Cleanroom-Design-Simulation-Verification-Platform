@@ -204,6 +204,22 @@ def _stable_file_path_matches_opened(
     return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
 
 
+def _stable_runtime_path_matches_opened(
+    path_stat: os.stat_result,
+    opened_stat: os.stat_result,
+) -> bool:
+    """Apply stable binding plus Windows file-index identity for runtime provenance."""
+    if not _stable_file_path_matches_opened(path_stat, opened_stat):
+        return False
+    if not _IS_WINDOWS:
+        return True
+    path_ino = path_stat.st_ino
+    opened_ino = opened_stat.st_ino
+    if path_ino == 0 or opened_ino == 0:
+        return True
+    return opened_stat.st_dev == path_stat.st_dev and opened_ino == path_ino
+
+
 def _validate_stable_file_max_bytes(max_bytes: int | None) -> int | None:
     if max_bytes is None:
         return None

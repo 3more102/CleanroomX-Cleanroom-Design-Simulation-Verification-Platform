@@ -11,6 +11,7 @@ from typing import Callable, Iterator
 
 
 BeforeReplace = Callable[[], None]
+_IS_WINDOWS = os.name == "nt"
 
 
 class AtomicWriteDurabilityError(OSError):

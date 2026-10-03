@@ -223,13 +223,90 @@ def test_dossier_manifest_rejects_non_finite_json(
         build_dossier(manifest)
 
 
-def test_dossier_cli_rejects_non_finite_manifest_before_execution(
+def test_dossier_cli_rejects_non_finite_manifest_without_traceback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     manifest = tmp_path / "dossier.json"
     manifest.write_text('{"sentinel": NaN}', encoding="utf-8")
     monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
 
-    with pytest.raises(StrictJSONError, match="non-finite JSON constant"):
-        dossier_main()
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert "non-finite JSON constant" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dossier_cli_rejects_malformed_json_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "malformed-dossier.json"
+    manifest.write_text('{"name": "broken",}', encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
+
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dossier_cli_reports_missing_manifest_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "missing-dossier.json"
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
+
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert str(manifest) in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dossier_cli_rejects_invalid_utf8_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "invalid-utf8-dossier.json"
+    manifest.write_bytes(b'{"sentinel": "\\xff"}')
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
+
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert "valid UTF-8 JSON text" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dossier_cli_rejects_oversized_manifest_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "oversized-dossier.json"
+    manifest.write_text('{"sentinel": 12345}', encoding="utf-8")
+    monkeypatch.setattr(strict_json_module, "STRICT_JSON_FILE_MAX_BYTES", 8)
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-dossier", str(manifest)])
+
+    assert dossier_main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanroomx-dossier: error: invalid manifest:" in captured.err
+    assert "exceeds maximum supported JSON size" in captured.err
+    assert "Traceback" not in captured.err

@@ -639,18 +639,6 @@ def _read_project_bytes_bounded(source: Path) -> bytes:
     return payload
 
 
-def _read_project_text(source: Path) -> str:
-    """Read one project through a bounded strict UTF-8 file boundary."""
-    payload = _read_project_bytes_bounded(source)
-    try:
-        return payload.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise ProjectFormatError(
-            "project file must contain valid UTF-8 text; "
-            f"invalid byte sequence at offset {exc.start}"
-        ) from exc
-
-
 def load_project_document_with_migration_info(
     path: str | Path,
 ) -> tuple[ProjectDocument, ProjectMigrationInfo]:

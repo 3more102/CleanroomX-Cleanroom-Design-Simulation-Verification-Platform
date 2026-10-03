@@ -142,12 +142,13 @@ def _ensure_directory_durable(directory: Path) -> None:
         _fsync_directory(item.parent)
 
 
-def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
     return (
         value.st_dev,
         value.st_ino,
         value.st_size,
         value.st_mtime_ns,
+        value.st_ctime_ns,
     )
 
 

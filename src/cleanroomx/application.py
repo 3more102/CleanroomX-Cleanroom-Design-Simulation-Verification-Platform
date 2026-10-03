@@ -1098,8 +1098,8 @@ def _hash_python_tree_manifest(
 
     if _python_tree_manifest(root) != manifest:
         raise _RuntimeSourceTreeChangedError(
-        "CleanroomX source tree changed while it was being fingerprinted"
-    )
+            "CleanroomX source tree changed while it was being fingerprinted"
+        )
 
     return {
         "algorithm": _RUNTIME_CODE_FINGERPRINT_ALGORITHM,

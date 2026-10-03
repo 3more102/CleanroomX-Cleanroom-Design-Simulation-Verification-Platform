@@ -79,6 +79,34 @@ def test_stable_load_retries_when_snapshot_reports_revision_change(
     assert revision == capture_project_file_revision(path)
 
 
+def test_legacy_project_load_retries_changed_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="First"))
+    original_snapshot = project_module.load_strict_json_snapshot
+    calls = {"count": 0}
+
+    def changing_snapshot(source, *, max_bytes=None):
+        if calls["count"] == 0:
+            calls["count"] += 1
+            save_project_document(path, ProjectDocument(name="Second"))
+            raise project_module.StrictJSONFileChangedError(
+                f"{source} changed while reading JSON input"
+            )
+        calls["count"] += 1
+        return original_snapshot(source, max_bytes=max_bytes)
+
+    monkeypatch.setattr(
+        project_module,
+        "load_strict_json_snapshot",
+        changing_snapshot,
+    )
+
+    project = load_project_document(path)
+
+    assert calls["count"] == 2
+    assert project.name == "Second"
+
+
 def test_migration_aware_stable_load_retries_and_rebinds_provenance(
     tmp_path, monkeypatch
 ):

@@ -64,10 +64,10 @@ def test_stable_file_path_descriptor_binding_is_windows_portable(
     path_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4)
     opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=4)
 
-    monkeypatch.setattr(persistence.os, "name", "nt")
+    monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is True
 
-    monkeypatch.setattr(persistence.os, "name", "posix")
+    monkeypatch.setattr(persistence, "_IS_WINDOWS", False)
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is False
 
 
@@ -85,7 +85,7 @@ def test_stable_file_path_descriptor_binding_rejects_windows_same_size_aba(
     path_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4)
     opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=5, ctime_ns=6)
 
-    monkeypatch.setattr(persistence.os, "name", "nt")
+    monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is False
 
 

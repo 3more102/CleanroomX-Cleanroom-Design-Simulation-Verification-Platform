@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — verified stable snapshot authority — 2026-10-03
+
+- Verifies private stable-file snapshots against the captured source digest before any consumer can use them, including empty-file snapshots.
+- Consolidates project-bundle verification on the shared bounded stable-snapshot authority instead of maintaining a second archive capture implementation.
+- Binds Windows path/descriptor identity to size plus modification/change timestamps while ignoring only non-portable device/inode identifiers, closing the same-size ABA gap identified in #891.
+- Preserves snapshot-verification failures as typed private-snapshot errors through analysis execution instead of reclassifying them as live-source changes.
+
 ## Unreleased Release 3 — typed analysis dependency size failures — 2026-10-03
 
 - Preserves canonical `StableFileSizeError` evidence for file-backed analysis dependencies instead of collapsing deterministic byte-ceiling violations into transient unavailable/unstable classifications.

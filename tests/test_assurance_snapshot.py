@@ -344,6 +344,49 @@ def test_input_ingestion_does_not_classify_generic_oserror_as_size(
     assert "exceeds maximum supported size" not in str(exc_info.value)
 
 
+def test_input_ingestion_preserves_private_snapshot_verification_without_temp_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(DEMO.read_bytes())
+    private_snapshot = tmp_path / "private-random-snapshot-12345.json"
+    expected_size = source.stat().st_size
+
+    @contextmanager
+    def fail_snapshot(*_args, **_kwargs):
+        raise assurance_snapshot_module.StableFileSnapshotVerificationError(
+            private_snapshot,
+            expected_size=expected_size,
+            expected_sha256="1" * 64,
+            actual_size=expected_size,
+            actual_sha256="2" * 64,
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "stable_file_snapshot",
+        fail_snapshot,
+    )
+
+    with pytest.raises(
+        AssuranceSnapshotError,
+        match="private assurance snapshot verification failed",
+    ) as exc_info:
+        create_assurance_snapshot(source)
+
+    message = str(exc_info.value)
+    assert str(source) in message
+    assert str(private_snapshot) not in message
+    assert f"expected {expected_size} bytes / sha256 {'1' * 64}" in message
+    assert f"got {expected_size!r} bytes / sha256 {'2' * 64!r}" in message
+    assert isinstance(
+        exc_info.value.__cause__,
+        assurance_snapshot_module.StableFileSnapshotVerificationError,
+    )
+
+
 def test_create_wraps_non_strict_analysis_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

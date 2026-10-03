@@ -10,6 +10,7 @@ from . import __version__
 from .design_assurance import analyze_design_assurance, design_assurance_from_dict
 from .persistence import (
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     atomic_write_text,
     stable_file_snapshot,
 )
@@ -115,6 +116,12 @@ def _read_stable_utf8(
     except StableFileSizeError as exc:
         raise AssuranceSnapshotError(
             f"{source} exceeds maximum supported size of {max_bytes} bytes"
+        ) from exc
+    except StableFileSnapshotVerificationError as exc:
+        raise AssuranceSnapshotError(
+            f"private assurance snapshot verification failed for {source}: "
+            f"expected {exc.expected_size} bytes / sha256 {exc.expected_sha256}; "
+            f"got {exc.actual_size!r} bytes / sha256 {exc.actual_sha256!r}"
         ) from exc
     except OSError as exc:
         raise AssuranceSnapshotError(str(exc)) from exc

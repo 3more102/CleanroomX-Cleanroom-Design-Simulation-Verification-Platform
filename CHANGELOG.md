@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — deterministic assurance private-snapshot diagnostics — 2026-10-03
+
+- Preserves typed `StableFileSnapshotVerificationError` evidence at the assurance-ingestion boundary without leaking random private temporary-snapshot paths.
+- Reports the stable source path plus expected/actual size and SHA-256 evidence deterministically while preserving existing size-limit and generic I/O error contracts.
+- Adds a regression for private snapshot verification failure; snapshot schema, solver equations, engineering tolerances, requirement criteria, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — verified stable snapshot authority — 2026-10-03
 
 - Verifies private stable-file snapshots against the captured source digest before any consumer can use them, including empty-file snapshots.

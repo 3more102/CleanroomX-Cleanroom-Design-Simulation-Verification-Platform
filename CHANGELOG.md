@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — stable legacy project ingestion — 2026-10-03
+
+- Routes the backward-compatible `load_project_document()` / migration-info API through the same bounded, revision-stable strict-JSON snapshot path used by revision-aware project loading.
+- Retries transient source changes instead of parsing bytes from a changing pathname, so recovery comparison and other legacy callers cannot consume a mixed or substituted project revision.
+- Preserves legacy oversized-file error classification as `ProjectFormatError`, project schema/migration behavior, solver equations, engineering tolerances, requirement criteria, and verification verdicts.
+- Adds a regression proving the legacy loader retries a changed snapshot and returns the stabilized project revision.
+
 ## Unreleased Release 3 — ProofGraph pass-verdict check closure — 2026-10-03
 
 - Rejects a `pass` verdict that selectively references only passing findings while omitting a non-pass sibling finding from the same supporting compliance check.

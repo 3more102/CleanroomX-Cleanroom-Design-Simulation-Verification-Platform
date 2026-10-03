@@ -939,6 +939,50 @@ def test_external_dependency_backend_verification_preserves_typed_size_failure(
     assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
 
 
+def test_external_dependency_snapshot_preserves_private_verification_failure(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    expected_size = dependency.stat().st_size
+    expected_digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+
+    @contextmanager
+    def fail_snapshot(path, *, attempts, max_bytes, suffix=""):
+        raise application_module.StableFileSnapshotVerificationError(
+            path,
+            expected_size=expected_size,
+            expected_sha256=expected_digest,
+            actual_size=expected_size,
+            actual_sha256="0" * 64,
+        )
+        yield
+
+    monkeypatch.setattr(application_module, "stable_file_snapshot", fail_snapshot)
+
+    with pytest.raises(
+        ExternalDependencySnapshotError,
+        match="private snapshot verification failed",
+    ) as raised:
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+    assert raised.value.field == "verification_project"
+    assert raised.value.declared_path == "dependency.json"
+    assert isinstance(
+        raised.value.__cause__,
+        application_module.StableFileSnapshotVerificationError,
+    )
+    assert raised.value.__cause__.expected_sha256 == expected_digest
+    assert raised.value.__cause__.actual_sha256 == "0" * 64
+
+
 def test_external_dependency_snapshot_uses_bounded_stable_authority(
     tmp_path, monkeypatch
 ):

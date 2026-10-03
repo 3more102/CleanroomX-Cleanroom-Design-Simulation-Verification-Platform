@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — typed recovery strict-JSON size failures — 2026-10-03
+
+- Preserves the canonical `StrictJSONSizeError` classification when recovery-artifact ingestion exceeds its 128 MiB hard ceiling.
+- Translates the typed failure into the existing recovery-specific size error while retaining observed-size/limit evidence through the exception cause.
+- Keeps unrelated strict-JSON failures on the generic invalid-recovery path, eliminating accidental classification by message text.
+- Adds regressions for both the typed oversize path and a size-like generic strict-JSON message; recovery schema, quarantine semantics, project persistence, solver behavior, requirements, and verification verdicts are unchanged.
+
 ## Unreleased Release 3 — typed runtime source revision changes — 2026-10-03
 
 - Replaces runtime-provenance retry classification based on exception-message text with a dedicated typed source-tree revision-change failure.

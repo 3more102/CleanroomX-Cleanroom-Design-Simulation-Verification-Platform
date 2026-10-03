@@ -792,14 +792,19 @@ class ProofGraph:
             referenced_findings = tuple(
                 findings_by_id[finding_id] for finding_id in verdict.finding_ids
             )
-            if (
-                len(referenced_findings) == 1
-                and verdict.status != referenced_findings[0].status
-            ):
-                raise ValueError(
-                    f"verdict {verdict.id!r} status {verdict.status!r} does not "
-                    f"match its single finding status {referenced_findings[0].status!r}"
-                )
+            referenced_statuses = {finding.status for finding in referenced_findings}
+            if len(referenced_statuses) == 1:
+                finding_status = next(iter(referenced_statuses))
+                if verdict.status != finding_status:
+                    if len(referenced_findings) == 1:
+                        raise ValueError(
+                            f"verdict {verdict.id!r} status {verdict.status!r} does not "
+                            f"match its single finding status {finding_status!r}"
+                        )
+                    raise ValueError(
+                        f"verdict {verdict.id!r} status {verdict.status!r} does not "
+                        f"match homogeneous finding status {finding_status!r}"
+                    )
             if verdict.status == "pass":
                 nonpassing = sorted(
                     finding.id

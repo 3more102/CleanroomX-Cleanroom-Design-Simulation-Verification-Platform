@@ -21,6 +21,8 @@ _RELATION_LABELS = {
     "source_unchanged": "Original unchanged",
     "source_changed": "Original changed",
     "source_newer": "Original is newer",
+    "source_oversized": "Original exceeds supported size limit",
+    "source_unavailable": "Original could not be read",
 }
 
 _INTEGRITY_LABELS = {
@@ -57,6 +59,18 @@ def recovery_safety_message(candidate: RecoveryCandidate) -> str:
         return (
             "The original file still matches the fingerprint captured by this recovery. "
             "Restoring still opens a separate unsaved copy."
+        )
+    if candidate.source_relation == "source_oversized":
+        return (
+            "The original project exceeds the supported source fingerprint size limit. "
+            "This recovery remains valid; restoring opens a separate unsaved copy and "
+            "does not overwrite the original file."
+        )
+    if candidate.source_relation == "source_unavailable":
+        return (
+            "The original project could not be read reliably. This recovery remains "
+            "valid; restoring opens a separate unsaved copy and does not overwrite "
+            "the original file."
         )
     return (
         "This recovery came from a project that had not been explicitly saved. "

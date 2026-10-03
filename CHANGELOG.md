@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — dossier CLI manifest error boundary — 2026-10-03
+
+- Converts strict-JSON, UTF-8, size, missing-file, and other manifest read failures at the `cleanroomx-dossier` CLI boundary into deterministic stderr diagnostics and exit code 1 instead of exposing a Python traceback.
+- Rejects the invalid manifest before analysis execution or output publication.
+- Adds regressions for malformed JSON syntax, non-finite JSON, and a missing manifest path while preserving dossier analysis, engineering criteria, result semantics, and output contracts for valid inputs.
+
 ## Unreleased Release 3 — typed runtime source revision changes — 2026-10-03
 
 - Replaces runtime-provenance retry classification based on exception-message text with a dedicated typed source-tree revision-change failure.

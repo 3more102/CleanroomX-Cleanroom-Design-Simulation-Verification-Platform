@@ -19,10 +19,12 @@ from .application import (
     _resolve_relative,
 )
 from .persistence import (
+    StableFileSizeError,
     _ensure_directory_durable,
     _fsync_directory,
     atomic_write_generated,
     stable_file_sha256,
+    stable_file_snapshot,
 )
 from .project import (
     PROJECT_FILE_MAX_BYTES,
@@ -308,6 +310,11 @@ def _build_portable_project(
                         source,
                         max_bytes=_MAX_DEPENDENCY_MEMBER_BYTES,
                     )
+                except StableFileSizeError as exc:
+                    raise ProjectBundleError(
+                        "bundle dependency exceeds supported size limit while fingerprinting: "
+                        f"{source} ({exc.observed_size} > {exc.limit} bytes)"
+                    ) from exc
                 except OSError as exc:
                     raise ProjectBundleError(
                         f"dependency is unavailable or changing while packaging: {source}"
@@ -652,141 +659,45 @@ def _manifest_reference_set(dependencies: list[dict[str, Any]]) -> set[tuple[str
     return references
 
 
-def _bundle_stat_identity(
-    value: os.stat_result,
-) -> tuple[int, int, int, int, int]:
-    return (
-        value.st_dev,
-        value.st_ino,
-        value.st_size,
-        value.st_mtime_ns,
-        value.st_ctime_ns,
-    )
-
-
-def _bundle_opened_path_matches(
-    path_stat: os.stat_result,
-    opened_stat: os.stat_result,
-) -> bool:
-    """Bind an opened archive to its path revision without non-portable Windows IDs."""
-    if opened_stat.st_size != path_stat.st_size:
-        return False
-    if os.name != "nt" and (
-        opened_stat.st_dev != path_stat.st_dev
-        or opened_stat.st_ino != path_stat.st_ino
-    ):
-        return False
-    return True
-
-
 @contextmanager
 def _stable_bundle_snapshot(
     path: str | Path,
     *,
     attempts: int = 3,
 ) -> Iterator[tuple[Path, BinaryIO, int, str]]:
-    """Capture one bounded stable archive revision into a private file snapshot."""
+    """Capture one bounded archive revision through the shared snapshot authority."""
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
 
     source = Path(path).expanduser()
-    last_error: OSError | None = None
-
-    for _attempt in range(attempts):
-        try:
-            before_path = source.stat()
-        except OSError as exc:
-            last_error = exc
-            continue
-
-        if before_path.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
-            raise ProjectBundleError(
-                "bundle archive exceeds supported size limit "
-                f"({before_path.st_size} > {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
-            )
-
-        try:
-            snapshot = tempfile.TemporaryFile(mode="w+b")
-        except OSError as exc:
-            raise ProjectBundleError(
-                "could not create private bundle verification snapshot"
-            ) from exc
-
-        try:
-            digest = hashlib.sha256()
-            size = 0
+    try:
+        with stable_file_snapshot(
+            source,
+            attempts=attempts,
+            max_bytes=_MAX_BUNDLE_ARCHIVE_BYTES,
+            suffix=source.suffix,
+        ) as (snapshot_path, metadata, digest):
             try:
-                with source.open("rb") as handle:
-                    before_handle = os.fstat(handle.fileno())
-                    if before_handle.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
-                        raise ProjectBundleError(
-                            "bundle archive exceeds supported size limit "
-                            f"({before_handle.st_size} > "
-                            f"{_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
-                        )
-                    for chunk in iter(
-                        lambda: handle.read(_COPY_CHUNK_SIZE),
-                        b"",
-                    ):
-                        size += len(chunk)
-                        if size > _MAX_BUNDLE_ARCHIVE_BYTES:
-                            raise ProjectBundleError(
-                                "bundle archive exceeds supported size limit "
-                                f"(more than {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
-                            )
-                        digest.update(chunk)
-                        try:
-                            snapshot.write(chunk)
-                        except OSError as exc:
-                            raise ProjectBundleError(
-                                "could not write private bundle verification snapshot"
-                            ) from exc
-                    after_handle = os.fstat(handle.fileno())
-                after_path = source.stat()
-            except ProjectBundleError:
-                raise
-            except OSError as exc:
-                last_error = exc
-                continue
-
-            if (
-                not _bundle_opened_path_matches(before_path, before_handle)
-                or _bundle_stat_identity(before_handle)
-                != _bundle_stat_identity(after_handle)
-                or _bundle_stat_identity(before_path)
-                != _bundle_stat_identity(after_path)
-                or size != after_handle.st_size
-            ):
-                last_error = OSError(
-                    f"bundle changed while capturing verification snapshot: {source}"
-                )
-                continue
-
-            try:
-                snapshot.flush()
-                snapshot.seek(0)
+                snapshot = snapshot_path.open("rb")
             except OSError as exc:
                 raise ProjectBundleError(
-                    "could not finalize private bundle verification snapshot"
+                    "could not open private bundle verification snapshot"
                 ) from exc
-
             try:
-                yield source, snapshot, size, digest.hexdigest()
+                yield source, snapshot, metadata.st_size, digest
             finally:
                 snapshot.close()
-            return
-        finally:
-            if not snapshot.closed:
-                snapshot.close()
-
-    if last_error is None:
-        last_error = OSError(
-            f"could not capture stable bundle verification snapshot: {source}"
-        )
-    raise ProjectBundleError(
-        f"bundle is unavailable or changing: {source}"
-    ) from last_error
-
+    except StableFileSizeError as exc:
+        raise ProjectBundleError(
+            "bundle archive exceeds supported size limit "
+            f"({exc.observed_size} > {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+        ) from exc
+    except ProjectBundleError:
+        raise
+    except OSError as exc:
+        raise ProjectBundleError(
+            f"bundle is unavailable or changing: {source}"
+        ) from exc
 
 def _inspect_project_bundle_snapshot(
     source: Path,

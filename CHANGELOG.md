@@ -7,6 +7,13 @@
 - Preserves legacy oversized-file error classification as `ProjectFormatError` by mapping only the canonical strict-JSON size failure cause; unrelated file-access failures remain `OSError`.
 - Preserves project schema/migration behavior, solver equations, engineering tolerances, requirement criteria, and verification verdicts.
 
+## Unreleased Release 3 — ProofGraph claimed-evidence traceability — 2026-10-03
+
+- Rejects any `ComplianceFinding` that claims `evidence_present=true` without at least one explicit `evidence_id`, closing an audit-traceability gap at the canonical model boundary.
+- Preserves valid non-PASS findings that retain design/requirement/context evidence IDs while `evidence_present=false` indicates the evaluated actual, measurement, or calculation was unavailable.
+- Applies the invariant to direct construction and serialized ProofGraph ingestion without changing graph schema, verdict aggregation, solver equations, requirement criteria, or numerical tolerances.
+- Adds regressions across FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED plus serialized invalid/valid context-evidence cases.
+
 ## Unreleased Release 3 — ProofGraph pass-verdict check closure — 2026-10-03
 
 - Rejects a `pass` verdict that selectively references only passing findings while omitting a non-pass sibling finding from the same supporting compliance check.

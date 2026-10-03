@@ -13,6 +13,7 @@ from cleanroomx.persistence import (
     AtomicWriteDurabilityError,
     AtomicWriteVerificationError,
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     atomic_publish_staged_file,
     atomic_write_bytes,
     atomic_write_text,
@@ -49,6 +50,40 @@ def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
+def test_stable_file_sha256_rejects_ctime_only_descriptor_revision_change(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "ctime-revision.json"
+    source.write_bytes(b'{"revision":1}\n')
+    real_fstat = persistence.os.fstat
+    descriptor_stat_calls = 0
+    injected = False
+
+    class ChangedStat:
+        def __init__(self, value):
+            self.st_dev = value.st_dev
+            self.st_ino = value.st_ino
+            self.st_size = value.st_size
+            self.st_mtime_ns = value.st_mtime_ns
+            self.st_ctime_ns = value.st_ctime_ns + 1
+
+    def changed_after_read(fd):
+        nonlocal descriptor_stat_calls, injected
+        value = real_fstat(fd)
+        descriptor_stat_calls += 1
+        if descriptor_stat_calls == 2:
+            injected = True
+            return ChangedStat(value)
+        return value
+
+    monkeypatch.setattr(persistence.os, "fstat", changed_after_read)
+
+    with pytest.raises(OSError, match="file changed while verifying"):
+        persistence.stable_file_sha256(source, attempts=1)
+
+    assert injected is True
+
+
 def test_stable_file_snapshot_binds_digest_to_private_exact_bytes_and_cleans_up(
     tmp_path,
 ):
@@ -69,6 +104,43 @@ def test_stable_file_snapshot_binds_digest_to_private_exact_bytes_and_cleans_up(
         assert digest == hashlib.sha256(payload).hexdigest()
 
     assert not captured_snapshot.exists()
+
+
+def test_stable_file_snapshot_rejects_corrupted_private_copy(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "facility.ifc"
+    payload = b"ISO-10303-21;\nDATA;\nENDSEC;\n"
+    source.write_bytes(payload)
+    original_capture = persistence._capture_stable_file_revision
+
+    def corrupt_private_copy(*args, **kwargs):
+        snapshot_path = kwargs["snapshot_path"]
+        metadata, digest = original_capture(*args, **kwargs)
+        if snapshot_path is not None:
+            snapshot_path.write_bytes(b"corrupted-private-copy")
+        return metadata, digest
+
+    monkeypatch.setattr(
+        persistence,
+        "_capture_stable_file_revision",
+        corrupt_private_copy,
+    )
+
+    with pytest.raises(StableFileSnapshotVerificationError) as exc_info:
+        with persistence.stable_file_snapshot(
+            source,
+            max_bytes=len(payload),
+            suffix=".ifc",
+        ):
+            raise AssertionError("corrupted private snapshot must never be yielded")
+
+    assert exc_info.value.expected_size == len(payload)
+    assert exc_info.value.expected_sha256 == hashlib.sha256(payload).hexdigest()
+    assert exc_info.value.actual_size == len(b"corrupted-private-copy")
+    assert exc_info.value.actual_sha256 == hashlib.sha256(
+        b"corrupted-private-copy"
+    ).hexdigest()
 
 
 def test_stable_file_snapshot_rejects_oversized_source_without_publishing_snapshot(

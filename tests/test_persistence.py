@@ -50,7 +50,7 @@ def test_stable_file_sha256_rejects_path_descriptor_aba_and_retries(
     assert digest == hashlib.sha256(original_bytes).hexdigest()
 
 
-def test_stable_file_path_descriptor_binding_is_windows_portable(
+def test_stable_file_path_descriptor_binding_ignores_windows_ctime_view_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeStat:
@@ -62,7 +62,7 @@ def test_stable_file_path_descriptor_binding_is_windows_portable(
             self.st_ctime_ns = ctime_ns
 
     path_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4)
-    opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=3, ctime_ns=4)
+    opened_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=9)
 
     monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is True
@@ -83,10 +83,30 @@ def test_stable_file_path_descriptor_binding_rejects_windows_same_size_aba(
             self.st_ctime_ns = ctime_ns
 
     path_stat = FakeStat(dev=1, ino=2, size=64, mtime_ns=3, ctime_ns=4)
-    opened_stat = FakeStat(dev=9, ino=8, size=64, mtime_ns=5, ctime_ns=6)
+    opened_stat = FakeStat(dev=1, ino=8, size=64, mtime_ns=3, ctime_ns=4)
 
     monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
     assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is False
+
+
+def test_stable_file_path_descriptor_binding_windows_zero_id_fallback_uses_mtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStat:
+        def __init__(self, *, size: int, mtime_ns: int, ctime_ns: int):
+            self.st_dev = 0
+            self.st_ino = 0
+            self.st_size = size
+            self.st_mtime_ns = mtime_ns
+            self.st_ctime_ns = ctime_ns
+
+    path_stat = FakeStat(size=64, mtime_ns=3, ctime_ns=4)
+    opened_stat = FakeStat(size=64, mtime_ns=3, ctime_ns=9)
+    changed = FakeStat(size=64, mtime_ns=5, ctime_ns=9)
+
+    monkeypatch.setattr(persistence, "_IS_WINDOWS", True)
+    assert persistence._stable_file_path_matches_opened(path_stat, opened_stat) is True
+    assert persistence._stable_file_path_matches_opened(path_stat, changed) is False
 
 
 def test_stable_file_snapshot_verifies_empty_private_copy(tmp_path) -> None:

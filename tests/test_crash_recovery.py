@@ -7,6 +7,7 @@ import pytest
 
 from cleanroomx.autosave import (
     AutosaveManager,
+    RecoveryCandidate,
     RecoveryFormatError,
     discard_recovery_artifact,
     load_recovery_artifact,
@@ -154,6 +155,42 @@ def test_recovery_inspection_exposes_identity_timestamp_source_and_draft(tmp_pat
     assert inspection.editor_text == "{broken"
     assert recovery_relation_label(candidate) == "Original unchanged"
     assert "separate unsaved copy" in recovery_safety_message(candidate)
+
+
+@pytest.mark.parametrize(
+    ("relation", "expected_label", "message_fragment"),
+    [
+        (
+            "source_oversized",
+            "Original exceeds supported size limit",
+            "exceeds the supported source fingerprint size limit",
+        ),
+        (
+            "source_unavailable",
+            "Original could not be read",
+            "could not be read reliably",
+        ),
+    ],
+)
+def test_recovery_source_inspection_failure_messages_are_safe(
+    tmp_path, relation, expected_label, message_fragment
+):
+    candidate = RecoveryCandidate(
+        path=tmp_path / "artifact.recovery.json",
+        project_identity="file-demo",
+        saved_at_utc="2026-10-03T00:00:00+00:00",
+        project_name="Recovery Demo",
+        source_path=tmp_path / "project.cleanroomx.json",
+        source_relation=relation,
+        source_is_newer=False,
+        integrity_status="verified",
+    )
+
+    assert recovery_relation_label(candidate) == expected_label
+    message = recovery_safety_message(candidate)
+    assert message_fragment in message
+    assert "separate unsaved copy" in message
+    assert "does not overwrite" in message
 
 
 def test_newer_source_warning_explicitly_promises_no_overwrite(tmp_path):

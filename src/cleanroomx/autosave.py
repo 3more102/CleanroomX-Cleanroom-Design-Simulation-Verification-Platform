@@ -237,7 +237,12 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
             "sha256": None,
         }
     source = _normalized_source_path(path)
-    if not source.exists():
+    try:
+        stat, digest = stable_file_sha256(
+            source,
+            max_bytes=PROJECT_FILE_MAX_BYTES,
+        )
+    except FileNotFoundError:
         return {
             "path": str(source),
             "exists": False,
@@ -245,10 +250,6 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
             "mtime_ns": None,
             "sha256": None,
         }
-    stat, digest = stable_file_sha256(
-        source,
-        max_bytes=PROJECT_FILE_MAX_BYTES,
-    )
     return {
         "path": str(source),
         "exists": True,
@@ -529,8 +530,6 @@ def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:
     if source_path_text is None:
         return "unsaved", False, None
     source_path = Path(source_path_text)
-    if not source_path.exists():
-        return "source_missing", False, source_path
 
     try:
         current = source_fingerprint(source_path)
@@ -538,6 +537,9 @@ def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:
         return "source_oversized", False, source_path
     except OSError:
         return "source_unavailable", False, source_path
+
+    if current.get("exists") is not True:
+        return "source_missing", False, source_path
 
     if (
         source.get("exists") is True

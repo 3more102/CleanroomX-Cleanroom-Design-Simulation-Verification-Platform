@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — recovery source-inspection race classification — 2026-10-03
+
+- Removes the suppressing `Path.exists()` precheck from recovery source-state classification so non-missing filesystem errors cannot be mislabeled as a missing original project.
+- Treats only `FileNotFoundError` from the canonical stable source fingerprint as a missing source, while preserving typed oversize and other I/O failures as `source_oversized` and `source_unavailable`.
+- Handles a source that disappears during fingerprinting through the returned `exists=false` evidence instead of falling through to `source_changed`.
+- Adds regressions for disappearance after selection and disappearance during fingerprinting; recovery validity, restore non-overwrite behavior, schemas, solvers, requirements, and verdicts are unchanged.
+
 ## Unreleased Release 3 — typed recovery strict-JSON size failures — 2026-10-03
 
 - Preserves the canonical `StrictJSONSizeError` classification when recovery-artifact ingestion exceeds its hard ceiling.

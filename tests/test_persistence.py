@@ -87,6 +87,10 @@ def test_stable_file_path_descriptor_binding_ignores_windows_file_id_divergence(
         is True
     )
     assert (
+        persistence._stable_runtime_path_matches_opened(path_stat, opened_same_revision)
+        is False
+    )
+    assert (
         persistence._stable_file_path_matches_opened(path_stat, opened_replacement)
         is False
     )

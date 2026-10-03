@@ -24,6 +24,8 @@ from .input_contracts import (
 from .persistence import (
     StableFileSizeError,
     StableFileSnapshotVerificationError,
+    _stable_file_identity,
+    _stable_runtime_path_matches_opened,
     stable_file_sha256,
     stable_file_snapshot,
 )
@@ -1054,48 +1056,28 @@ def _hash_python_tree_manifest(
                 expected_ctime_ns,
             )
             path_before = source.stat()
-            path_before_metadata = (
-                path_before.st_dev,
-                path_before.st_ino,
-                path_before.st_size,
-                path_before.st_mtime_ns,
-                path_before.st_ctime_ns,
-            )
-            if path_before_metadata != expected_metadata:
+            if _stable_file_identity(path_before) != expected_metadata:
                 raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )
 
             with source.open("rb") as stream:
                 before = os.fstat(stream.fileno())
-                if before.st_size != expected_size or (
-                    os.name != "nt"
-                    and (
-                        before.st_dev != expected_dev
-                        or before.st_ino != expected_ino
-                    )
-                ):
+                if not _stable_runtime_path_matches_opened(path_before, before):
                     raise _RuntimeSourceTreeChangedError(
-                        "CleanroomX source tree changed while it was being fingerprinted"
+                        "CleanroomX source tree changed while it was being fingerprinted "
+                        "(path/handle binding mismatch: "
+                        f"path dev={path_before.st_dev}, ino={path_before.st_ino}, "
+                        f"size={path_before.st_size}, mtime={path_before.st_mtime_ns}, "
+                        f"ctime={path_before.st_ctime_ns}; "
+                        f"handle dev={before.st_dev}, ino={before.st_ino}, "
+                        f"size={before.st_size}, mtime={before.st_mtime_ns}, "
+                        f"ctime={before.st_ctime_ns})"
                     )
-                opened_before_metadata = (
-                    before.st_dev,
-                    before.st_ino,
-                    before.st_size,
-                    before.st_mtime_ns,
-                    before.st_ctime_ns,
-                )
                 content = stream.read(expected_size + 1)
                 after = os.fstat(stream.fileno())
-                opened_after_metadata = (
-                    after.st_dev,
-                    after.st_ino,
-                    after.st_size,
-                    after.st_mtime_ns,
-                    after.st_ctime_ns,
-                )
                 if (
-                    opened_after_metadata != opened_before_metadata
+                    _stable_file_identity(after) != _stable_file_identity(before)
                     or len(content) != before.st_size
                 ):
                     raise _RuntimeSourceTreeChangedError(
@@ -1103,14 +1085,7 @@ def _hash_python_tree_manifest(
                     )
 
             path_after = source.stat()
-            path_after_metadata = (
-                path_after.st_dev,
-                path_after.st_ino,
-                path_after.st_size,
-                path_after.st_mtime_ns,
-                path_after.st_ctime_ns,
-            )
-            if path_after_metadata != expected_metadata:
+            if _stable_file_identity(path_after) != expected_metadata:
                 raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )
@@ -1141,18 +1116,21 @@ def _fingerprint_python_tree(root: Path) -> dict:
     if not root.is_dir():
         raise RuntimeError(f"CleanroomX source root is unavailable: {root}")
 
+    last_change: _RuntimeSourceTreeChangedError | None = None
     for _attempt in range(_RUNTIME_CODE_FINGERPRINT_ATTEMPTS):
         manifest = _python_tree_manifest(root)
         if not manifest:
             raise RuntimeError(f"no Python source files found under CleanroomX root: {root}")
         try:
             return copy.deepcopy(_hash_python_tree_manifest(str(root), manifest))
-        except _RuntimeSourceTreeChangedError:
+        except _RuntimeSourceTreeChangedError as exc:
+            last_change = exc
             continue
 
+    assert last_change is not None
     raise _RuntimeSourceTreeChangedError(
         "CleanroomX source tree changed repeatedly while capturing runtime provenance"
-    )
+    ) from last_change
 
 
 def _capture_runtime_code_fingerprint() -> dict:

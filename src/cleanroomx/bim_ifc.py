@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 from .persistence import (
     StableFileSizeError,
+    StableFileSnapshotVerificationError,
     stable_file_sha256,
     stable_file_snapshot,
 )
@@ -1538,6 +1539,12 @@ def extract_ifc_semantics(
         snapshot_source, _snapshot_metadata, source_digest = snapshot_context.__enter__()
     except StableFileSizeError as exc:
         raise IfcImportError(str(exc)) from exc
+    except StableFileSnapshotVerificationError as exc:
+        raise IfcImportError(
+            f"private IFC snapshot verification failed for {source}: "
+            f"expected {exc.expected_size} bytes / sha256 {exc.expected_sha256}; "
+            f"got {exc.actual_size!r} bytes / sha256 {exc.actual_sha256!r}"
+        ) from exc
     except OSError as exc:
         raise IfcImportError(f"unable to read stable IFC source {source}") from exc
 

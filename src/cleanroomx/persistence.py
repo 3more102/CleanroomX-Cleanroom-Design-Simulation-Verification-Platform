@@ -177,19 +177,47 @@ def _stable_file_identity(value: os.stat_result) -> tuple[int, int, int, int, in
     )
 
 
+def _stable_file_windows_creation_times_match(
+    path_stat: os.stat_result,
+    opened_stat: os.stat_result,
+) -> bool:
+    """Compare one Windows creation revision without mixing stat capabilities."""
+    path_birthtime_ns = getattr(path_stat, "st_birthtime_ns", None)
+    opened_birthtime_ns = getattr(opened_stat, "st_birthtime_ns", None)
+    if path_birthtime_ns is not None and opened_birthtime_ns is not None:
+        return int(opened_birthtime_ns) == int(path_birthtime_ns)
+    return opened_stat.st_ctime_ns == path_stat.st_ctime_ns
+
+
 def _stable_file_path_matches_opened(
     path_stat: os.stat_result,
     opened_stat: os.stat_result,
 ) -> bool:
-    """Bind an opened descriptor to its path revision without non-portable Windows IDs."""
+    """Bind an opened descriptor to its path revision across supported platforms."""
     if opened_stat.st_size != path_stat.st_size:
         return False
     if _IS_WINDOWS:
         return (
             opened_stat.st_mtime_ns == path_stat.st_mtime_ns
-            and opened_stat.st_ctime_ns == path_stat.st_ctime_ns
+            and _stable_file_windows_creation_times_match(path_stat, opened_stat)
         )
     return _stable_file_identity(path_stat) == _stable_file_identity(opened_stat)
+
+
+def _stable_runtime_path_matches_opened(
+    path_stat: os.stat_result,
+    opened_stat: os.stat_result,
+) -> bool:
+    """Apply stable binding plus Windows file-index identity for runtime provenance."""
+    if not _stable_file_path_matches_opened(path_stat, opened_stat):
+        return False
+    if not _IS_WINDOWS:
+        return True
+    path_ino = path_stat.st_ino
+    opened_ino = opened_stat.st_ino
+    if path_ino == 0 or opened_ino == 0:
+        return True
+    return opened_stat.st_dev == path_stat.st_dev and opened_ino == path_ino
 
 
 def _validate_stable_file_max_bytes(max_bytes: int | None) -> int | None:

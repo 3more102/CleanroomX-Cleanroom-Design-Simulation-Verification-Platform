@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from .input_contracts import validate_dossier_input_contract
-from .persistence import stable_file_sha256, stable_file_snapshot
+from .persistence import (
+    StableFileSnapshotVerificationError,
+    stable_file_sha256,
+    stable_file_snapshot,
+)
 from .strict_json import STRICT_JSON_FILE_MAX_BYTES, load_strict_json
 
 
@@ -697,13 +701,22 @@ def _source_record(
         digest = _sha256(path)
         resolved_path = path
     else:
-        resolved_path, _metadata, digest = snapshot_stack.enter_context(
-            stable_file_snapshot(
-                path,
-                max_bytes=STRICT_JSON_FILE_MAX_BYTES,
-                suffix=path.suffix,
+        try:
+            resolved_path, _metadata, digest = snapshot_stack.enter_context(
+                stable_file_snapshot(
+                    path,
+                    max_bytes=STRICT_JSON_FILE_MAX_BYTES,
+                    suffix=path.suffix,
+                )
             )
-        )
+        except StableFileSnapshotVerificationError as exc:
+            raise StableFileSnapshotVerificationError(
+                path,
+                expected_size=exc.expected_size,
+                expected_sha256=exc.expected_sha256,
+                actual_size=exc.actual_size,
+                actual_sha256=exc.actual_sha256,
+            ) from exc
 
     return {
         "kind": kind,

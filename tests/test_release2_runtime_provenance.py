@@ -220,7 +220,6 @@ def test_python_tree_fingerprint_rejects_opened_source_revision_change(
         application_module._hash_python_tree_manifest(str(root.resolve()), manifest)
 
 
-
 def test_python_tree_fingerprint_retries_only_typed_revision_change(
     tmp_path,
     monkeypatch,

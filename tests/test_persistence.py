@@ -112,6 +112,60 @@ def test_stable_file_size_failure_is_not_retried(tmp_path, monkeypatch):
     assert calls["count"] == 1
 
 
+@pytest.mark.parametrize("capture_snapshot", [False, True])
+def test_stable_file_read_requests_respect_max_bytes_plus_sentinel(
+    tmp_path, monkeypatch, capture_snapshot
+):
+    source = tmp_path / "bounded-source.bin"
+    payload = b"abcd"
+    source.write_bytes(payload)
+    requested_sizes: list[int] = []
+    original_open = Path.open
+
+    class TrackingReader:
+        def __init__(self, handle):
+            self._handle = handle
+
+        def __enter__(self):
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self._handle.__exit__(*args)
+
+        def fileno(self):
+            return self._handle.fileno()
+
+        def read(self, size=-1):
+            requested_sizes.append(size)
+            return self._handle.read(size)
+
+    def tracking_open(self, *args, **kwargs):
+        handle = original_open(self, *args, **kwargs)
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if self == source and mode == "rb":
+            return TrackingReader(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", tracking_open)
+
+    if capture_snapshot:
+        with persistence.stable_file_snapshot(
+            source,
+            max_bytes=len(payload),
+        ) as (snapshot, metadata, digest):
+            assert snapshot.read_bytes() == payload
+    else:
+        metadata, digest = persistence.stable_file_sha256(
+            source,
+            max_bytes=len(payload),
+        )
+
+    assert metadata.st_size == len(payload)
+    assert digest == hashlib.sha256(payload).hexdigest()
+    assert requested_sizes == [len(payload) + 1, 1]
+
+
 def test_atomic_text_write_uses_exact_utf8_bytes_and_creates_parent(tmp_path):
     target = tmp_path / "nested" / "report.txt"
 

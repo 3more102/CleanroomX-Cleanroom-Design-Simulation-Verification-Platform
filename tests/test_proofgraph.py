@@ -516,6 +516,85 @@ def test_pass_finding_requires_explicit_evidence(
         )
 
 
+@pytest.mark.parametrize(
+    "status", ["fail", "warning", "unknown", "indeterminate", "not_checked"]
+)
+def test_non_pass_finding_rejects_claimed_evidence_without_reference(
+    status: str,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="evidence_present=true requires at least one evidence id",
+    ):
+        ComplianceFinding(
+            id="finding-non-pass",
+            check_id="check-pressure",
+            requirement_id="CRX-PRESS-001",
+            status=status,
+            reason="Claimed finding evidence must remain explicitly traceable.",
+            evidence_ids=(),
+            evidence_present=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "status", ["fail", "warning", "unknown", "indeterminate", "not_checked"]
+)
+@pytest.mark.parametrize(
+    ("evidence_ids", "evidence_present"),
+    [
+        ((), False),
+        (("ev-pressure",), False),
+        (("ev-pressure",), True),
+    ],
+)
+def test_non_pass_finding_accepts_context_and_actual_evidence_semantics(
+    status: str,
+    evidence_ids: tuple[str, ...],
+    evidence_present: bool,
+) -> None:
+    finding = ComplianceFinding(
+        id="finding-non-pass",
+        check_id="check-pressure",
+        requirement_id="CRX-PRESS-001",
+        status=status,
+        reason="Context evidence may remain referenced when evaluated actual evidence is absent.",
+        evidence_ids=evidence_ids,
+        evidence_present=evidence_present,
+    )
+
+    assert finding.evidence_present is evidence_present
+    assert finding.evidence_ids == evidence_ids
+
+
+def test_graph_rejects_serialized_claimed_evidence_without_reference() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    broken["findings"][0]["status"] = "fail"
+    broken["verdicts"][0]["status"] = "fail"
+    broken["findings"][0]["evidence_ids"] = []
+    broken["findings"][0]["evidence_present"] = True
+    broken.pop("graph_sha256")
+
+    with pytest.raises(
+        ValueError,
+        match="evidence_present=true requires at least one evidence id",
+    ):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_accepts_context_evidence_when_actual_evidence_is_absent() -> None:
+    document = copy.deepcopy(_graph().to_dict())
+    document["findings"][0]["status"] = "fail"
+    document["verdicts"][0]["status"] = "fail"
+    document["findings"][0]["evidence_present"] = False
+    document.pop("graph_sha256")
+
+    graph = proofgraph_from_dict(document)
+
+    assert graph.findings[0].evidence_ids == ("ev-pressure",)
+    assert graph.findings[0].evidence_present is False
+
+
 def test_graph_rejects_pass_finding_missing_required_evidence_kind() -> None:
     broken = copy.deepcopy(_graph().to_dict())
     broken["checks"][0]["required_evidence_kinds"] = ["design", "calculation"]

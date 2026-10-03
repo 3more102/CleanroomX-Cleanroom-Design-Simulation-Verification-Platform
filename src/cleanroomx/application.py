@@ -1078,10 +1078,7 @@ def _hash_python_tree_manifest(
                     )
 
             path_after = source.stat()
-            if (
-                _stable_file_identity(path_after) != expected_metadata
-                or not _stable_file_path_matches_opened(path_after, after)
-            ):
+            if _stable_file_identity(path_after) != expected_metadata:
                 raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )

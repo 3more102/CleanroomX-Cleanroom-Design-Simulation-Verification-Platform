@@ -14,7 +14,11 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .persistence import atomic_write_text, stable_file_sha256
+from .persistence import (
+    StableFileSizeError,
+    atomic_write_text,
+    stable_file_sha256,
+)
 from .project import PROJECT_FILE_MAX_BYTES, ProjectDocument, project_from_dict
 from .strict_json import StrictJSONError, load_strict_json, strict_json_loads
 
@@ -519,7 +523,13 @@ def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:
     if not source_path.exists():
         return "source_missing", False, source_path
 
-    current = source_fingerprint(source_path)
+    try:
+        current = source_fingerprint(source_path)
+    except StableFileSizeError:
+        return "source_oversized", False, source_path
+    except OSError:
+        return "source_unavailable", False, source_path
+
     if (
         source.get("exists") is True
         and source.get("sha256")

@@ -406,6 +406,10 @@ class ComplianceFinding:
                 raise ValueError(
                     "pass compliance finding requires at least one evidence id"
                 )
+        if self.evidence_present != bool(self.evidence_ids):
+            raise ValueError(
+                "compliance_finding.evidence_present must match evidence_ids"
+            )
         object.__setattr__(
             self, "expected", _json_value(self.expected, "compliance_finding.expected")
         )

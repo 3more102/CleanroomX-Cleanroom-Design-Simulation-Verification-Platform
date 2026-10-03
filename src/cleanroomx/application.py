@@ -1067,9 +1067,11 @@ def _hash_python_tree_manifest(
                     raise _RuntimeSourceTreeChangedError(
                         "CleanroomX source tree changed while it was being fingerprinted "
                         "(path/handle binding mismatch: "
-                        f"path size={path_before.st_size}, mtime={path_before.st_mtime_ns}, "
+                        f"path dev={path_before.st_dev}, ino={path_before.st_ino}, "
+                        f"size={path_before.st_size}, mtime={path_before.st_mtime_ns}, "
                         f"ctime={path_before.st_ctime_ns}; "
-                        f"handle size={before.st_size}, mtime={before.st_mtime_ns}, "
+                        f"handle dev={before.st_dev}, ino={before.st_ino}, "
+                        f"size={before.st_size}, mtime={before.st_mtime_ns}, "
                         f"ctime={before.st_ctime_ns})"
                     )
                 content = stream.read(expected_size + 1)

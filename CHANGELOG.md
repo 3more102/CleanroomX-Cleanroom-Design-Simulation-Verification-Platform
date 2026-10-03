@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — canonical stable snapshots and bundle authority — 2026-10-03
+
+- Binds stable-file revision identity to ctime as well as device/inode/size/mtime, while preserving Windows-safe path/descriptor matching.
+- Re-hashes private stable-file snapshots before use and raises typed integrity evidence if the copied bytes do not match the captured source revision.
+- Reuses the canonical stable-file revision authority for strict-JSON ingestion and portable-bundle verification instead of maintaining weaker duplicate readers.
+- Preserves typed bundle size failures and keeps consumer-side I/O errors distinct from snapshot-acquisition failures.
+- Integrates the stronger snapshot contract with analysis dependency execution so private-snapshot corruption is reported as an execution-snapshot failure rather than a live-input change.
+
 ## Unreleased Release 3 — verified private stable-file snapshots — 2026-10-03
 
 - Re-hashes each private stable-file snapshot before yielding it and requires exact size/SHA-256 agreement with the captured source revision.

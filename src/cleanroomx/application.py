@@ -950,6 +950,10 @@ _RUNTIME_SOURCE_FILE_MAX_BYTES = 16 * 1024 * 1024
 _RUNTIME_SOURCE_TREE_MAX_BYTES = 128 * 1024 * 1024
 
 
+class _RuntimeSourceTreeChangedError(RuntimeError):
+    """Raised when runtime source identity changes during fingerprinting."""
+
+
 def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, int], ...]:
     """Return deterministic file identity/size/time evidence for Python source."""
 
@@ -1032,7 +1036,7 @@ def _hash_python_tree_manifest(
                 path_before.st_ctime_ns,
             )
             if path_before_metadata != expected_metadata:
-                raise RuntimeError(
+                raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )
 
@@ -1045,7 +1049,7 @@ def _hash_python_tree_manifest(
                         or before.st_ino != expected_ino
                     )
                 ):
-                    raise RuntimeError(
+                    raise _RuntimeSourceTreeChangedError(
                         "CleanroomX source tree changed while it was being fingerprinted"
                     )
                 opened_before_metadata = (
@@ -1068,7 +1072,7 @@ def _hash_python_tree_manifest(
                     opened_after_metadata != opened_before_metadata
                     or len(content) != before.st_size
                 ):
-                    raise RuntimeError(
+                    raise _RuntimeSourceTreeChangedError(
                         "CleanroomX source tree changed while it was being fingerprinted"
                     )
 
@@ -1081,7 +1085,7 @@ def _hash_python_tree_manifest(
                 path_after.st_ctime_ns,
             )
             if path_after_metadata != expected_metadata:
-                raise RuntimeError(
+                raise _RuntimeSourceTreeChangedError(
                     "CleanroomX source tree changed while it was being fingerprinted"
                 )
 
@@ -1093,7 +1097,9 @@ def _hash_python_tree_manifest(
         raise RuntimeError(f"cannot read CleanroomX source file: {source}") from exc
 
     if _python_tree_manifest(root) != manifest:
-        raise RuntimeError("CleanroomX source tree changed while it was being fingerprinted")
+        raise _RuntimeSourceTreeChangedError(
+        "CleanroomX source tree changed while it was being fingerprinted"
+    )
 
     return {
         "algorithm": _RUNTIME_CODE_FINGERPRINT_ALGORITHM,
@@ -1115,11 +1121,10 @@ def _fingerprint_python_tree(root: Path) -> dict:
             raise RuntimeError(f"no Python source files found under CleanroomX root: {root}")
         try:
             return copy.deepcopy(_hash_python_tree_manifest(str(root), manifest))
-        except RuntimeError as exc:
-            if "changed while it was being fingerprinted" not in str(exc):
-                raise
+        except _RuntimeSourceTreeChangedError:
+            continue
 
-    raise RuntimeError(
+    raise _RuntimeSourceTreeChangedError(
         "CleanroomX source tree changed repeatedly while capturing runtime provenance"
     )
 

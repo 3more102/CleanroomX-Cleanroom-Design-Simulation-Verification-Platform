@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased Release 3 — verified private stable-file snapshots — 2026-10-03
+
+- Re-hashes each private stable-file snapshot before yielding it and requires exact size/SHA-256 agreement with the captured source revision.
+- Adds a typed `StableFileSnapshotVerificationError` so callers can distinguish private-copy integrity failure from live-source instability.
+- Makes portable-bundle verification translate private snapshot integrity failure explicitly instead of misreporting it as a changing source archive.
+- Adds persistence- and bundle-level regressions; no solver equations, engineering tolerances, schemas, requirement criteria, or verdict semantics change.
+- Preserves consumer-side I/O failure identity by limiting bundle source/snapshot error translation to snapshot acquisition, so downstream ZIP-processing `OSError` failures are not mislabeled as source-revision failures.
+
+## Unreleased Release 3 — typed portable-bundle dependency size failures — 2026-10-03
+
+- Preserves the canonical `StableFileSizeError` classification when a portable-bundle dependency grows beyond its hard byte ceiling during stable fingerprinting.
+- Reports the deterministic resource-limit violation as a bundle size error instead of collapsing it into the transient unavailable/changing I/O path.
+- Keeps export fail-closed and non-destructive: an existing destination remains unchanged and no staged bundle is published after the typed size failure.
+- Adds regression coverage for the mid-fingerprint growth path; bundle/project schemas, solver equations, engineering tolerances, requirement criteria, and verification verdicts are unchanged.
+
+## Unreleased Release 3 — canonical portable-bundle snapshot authority — 2026-10-03
+
+- Routes portable-bundle verification snapshot capture through the shared bounded `persistence.stable_file_snapshot()` authority instead of maintaining a second path/descriptor/hash/copy implementation.
+- Preserves the existing archive byte ceiling, three-attempt stabilization policy, exact digest-bound private bytes, ZIP verification semantics, extraction drift guard, and public `ProjectBundleError` contract.
+- Translates the shared typed `StableFileSizeError` into the existing bundle-domain oversized-archive error while retaining fail-closed handling for unstable or unavailable inputs.
+- Adds a regression proving bundle verification invokes the canonical snapshot authority with the hard archive-size ceiling; no project/bundle schema, solver equation, engineering tolerance, requirement criterion, or verification verdict changes.
+
+## Unreleased Release 3 — ctime-bound stable-file revision identity — 2026-10-03
+
+- Extends the canonical stable-file revision identity with `st_ctime_ns` so same-size rewrites whose modification time is restored cannot evade the path/descriptor stability guard on filesystems where ctime records the revision change.
+- Applies the stronger identity equally to stable SHA-256 fingerprinting and private digest-bound snapshots without changing accepted stable-file digests, byte ceilings, retry counts, schemas, solver equations, engineering tolerances, or verification verdicts.
+- Adds a regression that changes only descriptor ctime evidence while device, inode, size, and mtime remain unchanged and requires the read to fail closed.
+
 ## Unreleased Release 3 — typed runtime source revision changes — 2026-10-03
 
 - Replaces runtime-provenance retry classification based on exception-message text with a dedicated typed source-tree revision-change failure.

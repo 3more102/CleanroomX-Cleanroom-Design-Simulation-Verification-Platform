@@ -373,6 +373,77 @@ def test_recovery_scan_detects_newer_changed_source(tmp_path):
     assert candidate.source_is_newer is True
 
 
+def test_recovery_scan_preserves_valid_candidate_when_source_is_oversized(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None and artifact.exists()
+    finally:
+        manager.shutdown(wait=True)
+
+    original = autosave_module.source_fingerprint
+    limit = autosave_module.PROJECT_FILE_MAX_BYTES
+
+    def oversized_source(path):
+        if Path(path).resolve(strict=False) == source.resolve(strict=False):
+            raise autosave_module.StableFileSizeError(path, limit + 1, limit)
+        return original(path)
+
+    monkeypatch.setattr(autosave_module, "source_fingerprint", oversized_source)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    candidate = scan.candidates[0]
+    assert candidate.path == artifact
+    assert candidate.source_path == source.resolve()
+    assert candidate.source_relation == "source_oversized"
+    assert candidate.source_is_newer is False
+
+
+def test_recovery_scan_preserves_valid_candidate_when_source_is_unreadable(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None and artifact.exists()
+    finally:
+        manager.shutdown(wait=True)
+
+    original = autosave_module.source_fingerprint
+
+    def unreadable_source(path):
+        if Path(path).resolve(strict=False) == source.resolve(strict=False):
+            raise OSError("source read failed")
+        return original(path)
+
+    monkeypatch.setattr(autosave_module, "source_fingerprint", unreadable_source)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    candidate = scan.candidates[0]
+    assert candidate.path == artifact
+    assert candidate.source_path == source.resolve()
+    assert candidate.source_relation == "source_unavailable"
+    assert candidate.source_is_newer is False
+
+
 def test_source_fingerprint_retries_when_path_is_replaced_during_hash(
     tmp_path, monkeypatch
 ):

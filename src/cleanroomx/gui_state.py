@@ -59,6 +59,20 @@ def _bounded_dimension(
     return dimension
 
 
+def clamp_window_size_to_display(
+    width: int,
+    height: int,
+    screen_width: int,
+    screen_height: int,
+) -> tuple[int, int]:
+    """Fit a requested window size within the current display bounds."""
+    available_width = max(1, int(screen_width))
+    available_height = max(1, int(screen_height))
+    fitted_width = min(max(1, int(width)), available_width)
+    fitted_height = min(max(1, int(height)), available_height)
+    return fitted_width, fitted_height
+
+
 def _normalize_recent_projects(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []

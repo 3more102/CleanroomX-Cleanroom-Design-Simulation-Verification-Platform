@@ -109,6 +109,33 @@ class _AutosaveRequest:
     digest: str
 
 
+@dataclass(frozen=True)
+class _RecoveryRetentionCandidate:
+    path: Path
+    saved_at_utc: str
+    recovery_id: str
+    size_bytes: int
+    sha256: str
+    file_identity: tuple[str, int, int]
+
+
+def _recovery_retention_file_identity(
+    metadata: os.stat_result,
+) -> tuple[str, int, int]:
+    """Return rename-stable file identity for retention ownership checks."""
+    if os.name == "nt":
+        inode = int(metadata.st_ino)
+        if inode != 0:
+            return ("windows-file-index", int(metadata.st_dev), inode)
+        birthtime_ns = getattr(metadata, "st_birthtime_ns", None)
+        if birthtime_ns is not None:
+            return ("windows-birthtime", 0, int(birthtime_ns))
+        # On Windows st_ctime_ns is the creation time on Python versions
+        # without st_birthtime_ns and remains stable across a same-volume rename.
+        return ("windows-creation-time", 0, int(metadata.st_ctime_ns))
+    return ("posix-inode", int(metadata.st_dev), int(metadata.st_ino))
+
+
 def _utc_now_text() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
@@ -651,6 +678,118 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
     return RecoveryScan(candidates=tuple(candidates), issues=tuple(issues))
 
 
+def _capture_recovery_retention_candidate(
+    path: Path,
+    *,
+    project_identity: str,
+    session_id: str,
+) -> _RecoveryRetentionCandidate | None:
+    """Bind retention eligibility to one stable, validated recovery revision."""
+    try:
+        before_stat, before_sha256 = stable_file_sha256(
+            path,
+            max_bytes=RECOVERY_FILE_MAX_BYTES,
+        )
+        recovery = load_recovery_artifact(path)
+        after_stat, after_sha256 = stable_file_sha256(
+            path,
+            max_bytes=RECOVERY_FILE_MAX_BYTES,
+        )
+    except (OSError, RecoveryFormatError, TypeError, ValueError):
+        return None
+
+    if (
+        before_stat.st_size != after_stat.st_size
+        or before_sha256 != after_sha256
+        or _recovery_retention_file_identity(before_stat)
+        != _recovery_retention_file_identity(after_stat)
+        or recovery.get("project_identity") != project_identity
+        or recovery.get("session_id") != session_id
+    ):
+        return None
+    recovery_id = recovery.get("recovery_id")
+    saved_at_utc = recovery.get("saved_at_utc")
+    if not isinstance(recovery_id, str) or not recovery_id:
+        return None
+    if not isinstance(saved_at_utc, str) or not saved_at_utc:
+        return None
+    return _RecoveryRetentionCandidate(
+        path=path,
+        saved_at_utc=saved_at_utc,
+        recovery_id=recovery_id,
+        size_bytes=after_stat.st_size,
+        sha256=after_sha256,
+        file_identity=_recovery_retention_file_identity(after_stat),
+    )
+
+
+def _delete_recovery_retention_candidate(
+    candidate: _RecoveryRetentionCandidate,
+    *,
+    project_identity: str,
+    session_id: str,
+) -> bool:
+    """Stage, revalidate, then delete only the exact discovered recovery revision."""
+    staged = candidate.path.with_name(
+        f"retention-{uuid.uuid4().hex}-{candidate.path.name}"
+    )
+    try:
+        os.replace(candidate.path, staged)
+    except FileNotFoundError:
+        return False
+
+    delete_verified = False
+    try:
+        try:
+            stat_result, digest = stable_file_sha256(
+                staged,
+                max_bytes=RECOVERY_FILE_MAX_BYTES,
+            )
+            if (
+                stat_result.st_size != candidate.size_bytes
+                or digest != candidate.sha256
+                or _recovery_retention_file_identity(stat_result)
+                != candidate.file_identity
+            ):
+                return False
+
+            recovery = load_recovery_artifact(staged)
+        except (OSError, RecoveryFormatError, TypeError, ValueError):
+            # Retention is best-effort evidence cleanup. If the staged pathname
+            # changes, becomes unreadable, or no longer parses as the exact
+            # validated recovery, preserve it rather than letting cleanup escape
+            # into the autosave completion callback.
+            return False
+
+        if (
+            recovery.get("project_identity") != project_identity
+            or recovery.get("session_id") != session_id
+            or recovery.get("recovery_id") != candidate.recovery_id
+            or recovery.get("saved_at_utc") != candidate.saved_at_utc
+        ):
+            return False
+
+        staged.unlink()
+        delete_verified = True
+        return True
+    finally:
+        if not delete_verified and staged.exists():
+            # A raced or otherwise changed candidate is evidence, not disposable
+            # history. Restore it atomically when the original pathname is vacant;
+            # otherwise preserve the staged bytes under their unique retention name.
+            try:
+                os.link(staged, candidate.path)
+            except FileExistsError:
+                pass
+            except OSError:
+                pass
+            else:
+                try:
+                    staged.unlink()
+                except OSError:
+                    pass
+
+
 class AutosaveManager:
     """Serialize recovery snapshots away from the Tk/UI thread.
 
@@ -820,31 +959,35 @@ class AutosaveManager:
         return destination
 
     def _rotate_history(self, identity: str) -> None:
-        """Prune only recovery generations owned by this manager's session.
+        """Prune only exact verified recovery revisions owned by this session.
 
-        Project identity alone is not a safe ownership boundary because multiple
-        CleanroomX processes can edit the same project concurrently. The filename
-        token narrows discovery to this session, then the recovery envelope is
-        validated before deletion so malformed or foreign evidence is preserved.
+        Discovery captures one stable byte revision for every eligible recovery.
+        Deletion first atomically stages that pathname to a unique retention name,
+        then revalidates the staged bytes and recovery identity before unlinking.
+        A concurrent replacement is restored or preserved instead of destroyed.
         """
         session_token = _session_filename_token(self.session_id)
-        owned: list[tuple[str, Path]] = []
+        owned: list[_RecoveryRetentionCandidate] = []
         pattern = f"{identity}-session-{session_token}-*.recovery.json"
         for path in self.recovery_dir.glob(pattern):
-            try:
-                recovery = load_recovery_artifact(path)
-            except (OSError, RecoveryFormatError, TypeError, ValueError):
-                continue
-            if (
-                recovery.get("project_identity") != identity
-                or recovery.get("session_id") != self.session_id
-            ):
-                continue
-            owned.append((recovery["saved_at_utc"], path))
+            candidate = _capture_recovery_retention_candidate(
+                path,
+                project_identity=identity,
+                session_id=self.session_id,
+            )
+            if candidate is not None:
+                owned.append(candidate)
 
-        owned.sort(key=lambda item: (item[0], item[1].name), reverse=True)
-        for _saved_at, stale in owned[self.history_limit :]:
-            stale.unlink(missing_ok=True)
+        owned.sort(
+            key=lambda item: (item.saved_at_utc, item.path.name),
+            reverse=True,
+        )
+        for stale in owned[self.history_limit :]:
+            _delete_recovery_retention_candidate(
+                stale,
+                project_identity=identity,
+                session_id=self.session_id,
+            )
 
     def _on_write_done(
         self,

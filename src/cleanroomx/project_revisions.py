@@ -337,14 +337,25 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
     issues: list[ProjectRevisionIssue] = []
     for artifact in sorted(directory.glob("*.cleanroomx.revision.json")):
         try:
+            artifact_before, artifact_sha256_before = stable_file_sha256(
+                artifact,
+                max_bytes=_project_revision_max_bytes(),
+            )
             snapshot = load_project_revision(
                 artifact,
                 expected_source_path=source,
             )
-            artifact_stat, artifact_sha256 = stable_file_sha256(
+            artifact_after, artifact_sha256_after = stable_file_sha256(
                 artifact,
                 max_bytes=_project_revision_max_bytes(),
             )
+            if (
+                artifact_before.st_size != artifact_after.st_size
+                or artifact_sha256_before != artifact_sha256_after
+            ):
+                raise ProjectRevisionError(
+                    "project revision artifact changed while scanning"
+                )
         except (OSError, ProjectRevisionError) as exc:
             issues.append(ProjectRevisionIssue(path=artifact, error=str(exc)))
             continue
@@ -356,8 +367,8 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
                 source_sha256=snapshot.source_sha256,
                 source_size=len(snapshot.source_bytes),
                 application_version=snapshot.application_version,
-                artifact_size=artifact_stat.st_size,
-                artifact_sha256=artifact_sha256,
+                artifact_size=artifact_after.st_size,
+                artifact_sha256=artifact_sha256_after,
             )
         )
     revisions.sort(

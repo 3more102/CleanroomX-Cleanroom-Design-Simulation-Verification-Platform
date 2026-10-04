@@ -1512,7 +1512,7 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(self.root, style="CX.Surface.TFrame", padding=(10, 5, 10, 4))
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
@@ -1646,6 +1646,40 @@ class CleanroomXApp:
         )
         self.toolbar_fit_button.pack(side="left", padx=1)
 
+        modebar = ttk.Frame(
+            self.root,
+            style="CX.Toolbar.TFrame",
+            padding=(10, 3),
+        )
+        self.modebar = modebar
+        modebar.pack(fill="x", padx=10, pady=(0, 4))
+        ttk.Label(
+            modebar,
+            text="WORKSPACE",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Separator(modebar, orient="vertical").pack(
+            side="left", fill="y", padx=(0, 6)
+        )
+        self.workspace_mode_buttons: dict[str, ttk.Button] = {}
+        for key, label in (
+            ("design", "DESIGN"),
+            ("analyze", "ANALYZE"),
+            ("verify", "VERIFY"),
+            ("evidence", "EVIDENCE"),
+            ("release", "RELEASE"),
+        ):
+            button = ttk.Button(
+                modebar,
+                text=label,
+                width=10,
+                style="CX.Mode.TButton",
+                command=lambda selected=key: self._activate_primary_workspace(selected),
+            )
+            button.pack(side="left", padx=1)
+            self.workspace_mode_buttons[key] = button
+        self._set_primary_workspace_mode("design")
+
         workflowbar = ttk.Frame(
             self.root,
             style="CX.Toolbar.TFrame",
@@ -1714,7 +1748,7 @@ class CleanroomXApp:
         self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
-        navigator = ttk.Frame(panes, padding=(8, 7))
+        navigator = ttk.Frame(panes, style="CX.Panel.TFrame", padding=(8, 7))
         self.navigator_panel = navigator
         panes.add(navigator, weight=1)
         navigator_header = ttk.Frame(
@@ -1957,25 +1991,26 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(self.root, style="CX.StatusBar.TFrame", padding=(8, 4))
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.StatusBar.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.model_status_var, style="CX.StatusBar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.selection_status_var, style="CX.StatusBar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.workspace_status_var, style="CX.StatusBar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -1984,6 +2019,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.StatusBar.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +2028,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.StatusBar.TLabel",
         ).pack(side="right")
 
     @staticmethod
@@ -2380,6 +2417,7 @@ class CleanroomXApp:
         self._sync_output_panel_visibility()
 
     def show_problems_panel(self) -> None:
+        self._set_primary_workspace_mode("verify")
         self._restore_focus_workspace_snapshot(status=False)
         self.output_panel_visible_var.set(True)
         self._sync_output_panel_visibility()
@@ -2444,6 +2482,7 @@ class CleanroomXApp:
         self.status_var.set("Panel layout reset")
 
     def _activate_proofgraph_workspace(self) -> None:
+        self._set_primary_workspace_mode("evidence")
         viewer = getattr(self, "proofgraph_viewer", None)
         if viewer is None:
             return
@@ -2995,7 +3034,44 @@ class CleanroomXApp:
         if self.import_ifc_spatial_layout():
             self._activate_spatial_workspace("split")
 
+    def _set_primary_workspace_mode(self, mode: str) -> None:
+        key = str(mode or "").strip().lower()
+        buttons = getattr(self, "workspace_mode_buttons", {})
+        for name, button in buttons.items():
+            button.configure(
+                style=(
+                    "CX.ModeActive.TButton"
+                    if name == key
+                    else "CX.Mode.TButton"
+                )
+            )
+
+    def _activate_primary_workspace(self, mode: str) -> None:
+        """Navigate existing workflows without creating parallel engineering state."""
+        key = str(mode or "").strip().lower()
+        if key == "design":
+            self._activate_spatial_workspace("split")
+        elif key == "analyze":
+            self._activate_analysis_input_workspace()
+        elif key == "verify":
+            self.show_problems_panel()
+        elif key == "evidence":
+            self._activate_proofgraph_workspace()
+        elif key == "release":
+            self._restore_focus_workspace_snapshot(status=False)
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+                self.output_notebook.select(self.report_text.master)
+            self.workspace_status_var.set("Workspace: Release")
+        else:
+            raise ValueError(
+                "workspace mode must be design, analyze, verify, evidence, or release"
+            )
+        self._set_primary_workspace_mode(key)
+
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
+        self._set_primary_workspace_mode("design")
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
         if mode is not None and hasattr(self, "spatial_workspace"):
@@ -3005,6 +3081,7 @@ class CleanroomXApp:
 
     def _activate_analysis_input_workspace(self) -> None:
         """Open the current analysis input editor without changing engineering data."""
+        self._set_primary_workspace_mode("analyze")
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
             self.notebook.select(self.input_tab)
             self.workspace_status_var.set("Workspace: Analysis Inputs")
@@ -4332,9 +4409,14 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
+            self._set_primary_workspace_mode("evidence")
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
+            return
+        if item_id == "nav-reports":
+            self._activate_primary_workspace("release")
+            self.selection_status_var.set("Selected: Reports")
             return
         if item_id.startswith("nav-"):
             return

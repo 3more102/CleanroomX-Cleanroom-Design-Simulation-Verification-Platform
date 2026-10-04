@@ -3006,6 +3006,7 @@ class CleanroomXApp:
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
+        self._restore_navigator_tree()
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
 
@@ -3063,6 +3064,16 @@ class CleanroomXApp:
         self._capture_navigator_tree()
         self._apply_navigator_filter()
 
+    def _restore_navigator_tree(self) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+        for iid, parent, index in list(
+            getattr(self, "_navigator_tree_snapshot", [])
+        ):
+            if tree.exists(iid) and (not parent or tree.exists(parent)):
+                tree.move(iid, parent, index)
+
     def _capture_navigator_tree(self) -> None:
         tree = getattr(self, "analysis_tree", None)
         if tree is None:
@@ -3084,9 +3095,7 @@ class CleanroomXApp:
         if tree is None or not snapshot:
             return
 
-        for iid, parent, index in snapshot:
-            if tree.exists(iid):
-                tree.move(iid, parent, index)
+        self._restore_navigator_tree()
 
         query = self.navigator_filter_var.get().strip().casefold()
         if not query:
@@ -3211,6 +3220,7 @@ class CleanroomXApp:
         return "break"
 
     def _refresh_spatial_navigator(self) -> None:
+        self._restore_navigator_tree()
         tree = getattr(self, "analysis_tree", None)
         if tree is None:
             return

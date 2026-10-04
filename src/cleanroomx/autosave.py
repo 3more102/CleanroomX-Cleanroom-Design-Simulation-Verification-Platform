@@ -421,55 +421,6 @@ _RECOVERY_QUARANTINE_MANIFEST_KEYS = frozenset({
 })
 
 
-def _quarantine_manifest_binding(
-    manifest_path: Path,
-    *,
-    expected_quarantined_name: str,
-) -> tuple[int, str] | None:
-    """Return validated size/digest evidence for one complete quarantine manifest."""
-    try:
-        manifest = load_strict_json(
-            manifest_path,
-            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
-        )
-    except (OSError, ValueError):
-        return None
-    if not isinstance(manifest, dict) or set(manifest) != _RECOVERY_QUARANTINE_MANIFEST_KEYS:
-        return None
-
-    schema_version = manifest["schema_version"]
-    if (
-        manifest["schema"] != RECOVERY_QUARANTINE_SCHEMA
-        or isinstance(schema_version, bool)
-        or not isinstance(schema_version, int)
-        or schema_version != RECOVERY_QUARANTINE_SCHEMA_VERSION
-        or manifest["quarantined_name"] != expected_quarantined_name
-    ):
-        return None
-
-    for field in ("quarantined_at_utc", "original_name", "quarantined_name", "reason"):
-        value = manifest[field]
-        if not isinstance(value, str) or not value.strip():
-            return None
-    try:
-        _parse_utc(manifest["quarantined_at_utc"])
-    except (TypeError, ValueError):
-        return None
-
-    size_bytes = manifest["size_bytes"]
-    digest = manifest["sha256"]
-    if (
-        isinstance(size_bytes, bool)
-        or not isinstance(size_bytes, int)
-        or size_bytes < 0
-        or not isinstance(digest, str)
-        or len(digest) != 64
-        or any(character not in "0123456789abcdef" for character in digest)
-    ):
-        return None
-    return size_bytes, digest
-
-
 def _quarantine_pair_is_verified(
     manifest_path: Path,
     artifact_path: Path,
@@ -484,7 +435,10 @@ def _quarantine_pair_is_verified(
         )
     except (OSError, ValueError):
         return False
-    if not isinstance(manifest, dict):
+    if (
+        not isinstance(manifest, dict)
+        or set(manifest) != _RECOVERY_QUARANTINE_MANIFEST_KEYS
+    ):
         return False
 
     schema_version = manifest.get("schema_version")

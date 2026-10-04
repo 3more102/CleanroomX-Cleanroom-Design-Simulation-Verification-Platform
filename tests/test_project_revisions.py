@@ -423,3 +423,27 @@ def test_guarded_save_over_non_project_target_does_not_mislabel_revision(tmp_pat
 
     assert load_project_document(path).description == "new"
     assert scan_project_revisions(path).revisions == ()
+
+def test_restore_revision_runs_commit_guard_for_resolved_target(tmp_path):
+    source = tmp_path / "source.cleanroomx.json"
+    save_project_document(source, _project("old"))
+    _guarded_save(source, _project("current"))
+    revision = scan_project_revisions(source).revisions[0]
+    destination = tmp_path / "restored.cleanroomx.json"
+    guarded_targets = []
+
+    def block_before_replace(target):
+        guarded_targets.append(target)
+        raise ValueError("blocked protected restore target")
+
+    with pytest.raises(ValueError, match="blocked protected restore target"):
+        restore_project_revision(
+            revision.path,
+            destination,
+            expected_source_path=source,
+            before_replace=block_before_replace,
+        )
+
+    assert guarded_targets == [destination.resolve(strict=False)]
+    assert not destination.exists()
+

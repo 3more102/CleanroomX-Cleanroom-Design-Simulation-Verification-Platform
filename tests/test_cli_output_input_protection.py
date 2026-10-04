@@ -12,32 +12,20 @@ import cleanroomx.dossier_cli as dossier_cli
 import cleanroomx.fan_curve_cli as fan_curve_cli
 
 
-STANDALONE_FILE_OUTPUT_CLIS = (
-    "consistency_cli.py",
-    "damper_study_cli.py",
-    "dossier_cli.py",
-    "duct_flow_cli.py",
-    "fan_curve_cli.py",
-    "fan_duct_network_cli.py",
-    "fan_loop_network_cli.py",
-    "fan_loop_speed_cli.py",
-    "fan_loop_uncertainty_cli.py",
-    "fan_network_cli.py",
-    "fan_speed_cli.py",
-    "fan_uncertainty_cli.py",
-    "fan_variable_friction_loop_cli.py",
-    "fan_variable_friction_speed_cli.py",
-    "fan_variable_friction_uncertainty_cli.py",
-    "hvac_cli.py",
-    "loop_network_cli.py",
-    "pressure_network_cli.py",
-    "psychrometric_uncertainty_cli.py",
-    "qualification_cli.py",
-    "recovery_cli.py",
-    "thermal_uncertainty_cli.py",
-    "uncertainty_cli.py",
-    "variable_friction_loop_cli.py",
-)
+def _discover_output_capable_cli_modules() -> tuple[Path, ...]:
+    """Discover CLI modules that expose a file-output option.
+
+    The set is derived from source, not a manually maintained filename list, so
+    newly added output-capable commands automatically enter the safety gate.
+    """
+    package_dir = Path(cli_output.__file__).resolve().parent
+    candidates = [*package_dir.glob("*_cli.py"), package_dir / "project_batch.py"]
+    discovered: list[Path] = []
+    for path in sorted(set(candidates)):
+        source = path.read_text(encoding="utf-8")
+        if '"--output"' in source or "'--output'" in source:
+            discovered.append(path)
+    return tuple(discovered)
 
 
 def test_protected_cli_writer_rejects_direct_input_overwrite(tmp_path):
@@ -231,11 +219,18 @@ def test_publish_cli_output_reports_persistence_failure(tmp_path, monkeypatch, c
     assert not output.exists()
 
 
-def test_all_standalone_file_output_clis_use_protected_writer():
-    package_dir = Path(cli_output.__file__).resolve().parent
-    for filename in STANDALONE_FILE_OUTPUT_CLIS:
-        source = (package_dir / filename).read_text(encoding="utf-8")
-        assert "--output" in source, filename
-        assert "publish_cli_output(" in source, filename
-        assert "atomic_write_cli_output(" not in source, filename
-        assert "atomic_write_text(args.output, text)" not in source, filename
+def test_all_output_capable_clis_use_guarded_publication():
+    candidates = _discover_output_capable_cli_modules()
+    assert candidates
+
+    for path in candidates:
+        source = path.read_text(encoding="utf-8")
+        uses_shared_writer = "publish_cli_output(" in source
+        uses_revision_guarded_writer = (
+            "atomic_write_text(" in source and "before_replace=" in source
+        )
+
+        assert uses_shared_writer or uses_revision_guarded_writer, path.name
+        if uses_shared_writer:
+            assert "protected_inputs=" in source, path.name
+            assert "atomic_write_cli_output(" not in source, path.name

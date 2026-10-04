@@ -72,6 +72,7 @@ from .project_diagnostics_cli import (
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
+    clamp_window_size_to_display,
     default_gui_layout_state_path,
     load_gui_layout_state,
     normalize_gui_layout_state,
@@ -1179,8 +1180,19 @@ class CleanroomXApp:
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
-        self.root.geometry("1440x900")
-        self.root.minsize(1050, 680)
+        self._display_width = max(1, int(self.root.winfo_screenwidth()))
+        self._display_height = max(1, int(self.root.winfo_screenheight()))
+        self.root.minsize(
+            min(1050, self._display_width),
+            min(680, self._display_height),
+        )
+        default_width, default_height = clamp_window_size_to_display(
+            1440,
+            900,
+            self._display_width,
+            self._display_height,
+        )
+        self.root.geometry(f"{default_width}x{default_height}")
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
@@ -1214,10 +1226,13 @@ class CleanroomXApp:
             else default_gui_layout_state_path()
         )
         self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
-        self.root.geometry(
-            f"{self._ui_layout_state['window_width']}x"
-            f"{self._ui_layout_state['window_height']}"
+        window_width, window_height = clamp_window_size_to_display(
+            self._ui_layout_state["window_width"],
+            self._ui_layout_state["window_height"],
+            self._display_width,
+            self._display_height,
         )
+        self.root.geometry(f"{window_width}x{window_height}")
         self._recent_project_paths = [
             Path(value)
             for value in self._ui_layout_state["recent_projects"]
@@ -1989,12 +2004,22 @@ class CleanroomXApp:
             }
         else:
             visibility = dict(focus_snapshot)
+        screen_width = max(1, int(self.root.winfo_screenwidth()))
+        screen_height = max(1, int(self.root.winfo_screenheight()))
+        minimum_width = min(1050, screen_width)
+        minimum_height = min(680, screen_height)
         width = self.root.winfo_width()
         height = self.root.winfo_height()
-        if width < 1050:
+        if width < minimum_width:
             width = int(state.get("window_width", 1440))
-        if height < 680:
+        if height < minimum_height:
             height = int(state.get("window_height", 900))
+        width, height = clamp_window_size_to_display(
+            width,
+            height,
+            screen_width,
+            screen_height,
+        )
         state.update(
             {
                 **visibility,

@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, publish_cli_output
 from .strict_json import StrictJSONError, load_strict_json
 from .application import (
     ExternalDependencyChangedError,
@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-dossier")
 def main() -> int:
     args = build_parser().parse_args()
     manifest_path = Path(args.manifest)

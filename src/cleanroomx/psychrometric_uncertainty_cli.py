@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .psychrometric_uncertainty import analyze_psychrometric_uncertainty
 from .psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from .psychrometric_uncertainty_report import (
@@ -29,10 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-psychrometric-uncertainty")
 def main() -> int:
     args = build_parser().parse_args()
     result = analyze_psychrometric_uncertainty(
-        load_psychrometric_uncertainty(args.file)
+        load_cli_input(load_psychrometric_uncertainty, args.file)
     )
     try:
         text = (

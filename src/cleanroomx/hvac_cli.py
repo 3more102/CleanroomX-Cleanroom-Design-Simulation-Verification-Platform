@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .hvac import analyze_hvac_project
 from .hvac_io import load_hvac_project
 from .hvac_report import markdown_hvac_report
@@ -21,9 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-hvac")
 def main() -> int:
     args = build_parser().parse_args()
-    result = analyze_hvac_project(load_hvac_project(args.project))
+    result = analyze_hvac_project(load_cli_input(load_hvac_project, args.project))
     try:
         text = (
             dumps_strict_json(result)

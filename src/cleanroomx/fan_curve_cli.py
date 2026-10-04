@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .fan_curve import solve_fan_operating_point
 from .fan_curve_io import load_fan_operating_point_study
 from .fan_curve_report import markdown_fan_operating_point_report
@@ -21,10 +21,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-fan-curve")
 def main() -> int:
     args = build_parser().parse_args()
     result = solve_fan_operating_point(
-        load_fan_operating_point_study(args.study)
+        load_cli_input(load_fan_operating_point_study, args.study)
     )
     try:
         text = (

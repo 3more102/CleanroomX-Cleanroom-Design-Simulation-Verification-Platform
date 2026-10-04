@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .qualification import analyze_qualification_uncertainty
 from .qualification_io import load_qualification_uncertainty
 from .qualification_report import markdown_qualification_report
@@ -21,9 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-qualification")
 def main() -> int:
     args = build_parser().parse_args()
-    result = analyze_qualification_uncertainty(load_qualification_uncertainty(args.file))
+    result = analyze_qualification_uncertainty(load_cli_input(load_qualification_uncertainty, args.file))
     try:
         text = (
             dumps_strict_json(result)

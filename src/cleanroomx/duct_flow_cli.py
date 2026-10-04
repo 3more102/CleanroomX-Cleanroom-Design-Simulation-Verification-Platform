@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .duct_flow import solve_parallel_branch_flows
 from .duct_flow_io import load_parallel_flow_network
 from .duct_flow_report import markdown_parallel_flow_report
@@ -21,9 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-duct-flow")
 def main() -> int:
     args = build_parser().parse_args()
-    result = solve_parallel_branch_flows(load_parallel_flow_network(args.network))
+    result = solve_parallel_branch_flows(load_cli_input(load_parallel_flow_network, args.network))
     try:
         text = (
             dumps_strict_json(result)

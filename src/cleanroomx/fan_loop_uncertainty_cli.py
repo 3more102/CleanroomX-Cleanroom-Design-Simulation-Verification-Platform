@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .fan_loop_uncertainty import analyze_fan_loop_network_uncertainty
 from .fan_loop_uncertainty_io import load_fan_loop_network_uncertainty
 from .fan_loop_uncertainty_report import (
@@ -23,10 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-fan-loop-uncertainty")
 def main() -> int:
     args = build_parser().parse_args()
     result = analyze_fan_loop_network_uncertainty(
-        load_fan_loop_network_uncertainty(args.study)
+        load_cli_input(load_fan_loop_network_uncertainty, args.study)
     )
     try:
         text = (

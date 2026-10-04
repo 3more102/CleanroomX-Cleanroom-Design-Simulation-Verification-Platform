@@ -69,6 +69,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_proofgraph import ProofGraphViewer
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -1336,6 +1337,10 @@ class CleanroomXApp:
             label="Verification History...",
             command=self.show_verification_history,
         )
+        verify_menu.add_command(
+            label="Open ProofGraph Explorer",
+            command=self._activate_proofgraph_workspace,
+        )
         menubar.add_cascade(label="Verify", menu=verify_menu)
 
         bim_menu = tk.Menu(menubar, tearoff=False)
@@ -1537,6 +1542,13 @@ class CleanroomXApp:
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
+        self.proofgraph_viewer = ProofGraphViewer(
+            self.notebook,
+            on_navigate=self._navigate_proofgraph_node,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(output_host, padding=(8, 3))
@@ -1610,6 +1622,76 @@ class CleanroomXApp:
             anchor="e",
         ).pack(side="right")
 
+    def _activate_proofgraph_workspace(self) -> None:
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return
+        self.notebook.select(viewer)
+        self.workspace_status_var.set("Workspace: ProofGraph")
+
+    def _navigate_proofgraph_node(self, node: dict) -> bool:
+        raw = node.get("raw", {}) if isinstance(node, dict) else {}
+        if not isinstance(raw, dict):
+            raw = {}
+
+        candidates: list[str] = []
+        if node.get("type") == "model_object":
+            candidates.append(str(node.get("id") or ""))
+        for key in ("subject_ref", "cleanroomx_entity_id"):
+            value = str(raw.get(key) or "").strip()
+            if value:
+                candidates.append(value)
+
+        provenance = raw.get("provenance")
+        if isinstance(provenance, list):
+            for record in provenance:
+                if not isinstance(record, dict):
+                    continue
+                value = str(record.get("cleanroomx_entity_id") or "").strip()
+                if value:
+                    candidates.append(value)
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            for candidate in dict.fromkeys(value for value in candidates if value):
+                for kind in ("room", "device"):
+                    if workspace.select_item(kind, candidate, notify=True):
+                        self._activate_spatial_workspace()
+                        workspace.fit_selected()
+                        self.status_var.set(
+                            f"ProofGraph: opened {kind} {candidate}"
+                        )
+                        return True
+
+        if node.get("type") == "requirement":
+            self.status_var.set(
+                f"ProofGraph requirement selected: {node.get('label') or node.get('id')}"
+            )
+        else:
+            self.status_var.set(
+                "ProofGraph node has no directly navigable CleanroomX spatial object"
+            )
+        return False
+
+    @staticmethod
+    def _proofgraph_documents_from_records(records: list[dict]) -> list[dict]:
+        documents: list[dict] = []
+        seen: set[str] = set()
+        for record in reversed(records):
+            raw_graphs = record.get("proofgraphs", [])
+            if not isinstance(raw_graphs, list):
+                continue
+            for document in raw_graphs:
+                if not isinstance(document, dict):
+                    continue
+                digest = str(document.get("graph_sha256") or "")
+                identity = digest or str(document.get("id") or "")
+                if not identity or identity in seen:
+                    continue
+                seen.add(identity)
+                documents.append(document)
+        return documents
+
     def _refresh_engineering_panels(self) -> dict | None:
         panel = getattr(self, "problems_panel", None)
         if panel is None:
@@ -1658,6 +1740,11 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            viewer = getattr(self, "proofgraph_viewer", None)
+            if viewer is not None:
+                viewer.set_documents(
+                    self._proofgraph_documents_from_records(records)
+                )
             lines = [
                 "PERSISTED VERIFICATION EVIDENCE",
                 "",
@@ -1683,6 +1770,9 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            viewer = getattr(self, "proofgraph_viewer", None)
+            if viewer is not None:
+                viewer.set_documents([])
             self._set_text(
                 self.evidence_text,
                 f"Verification evidence unavailable: {exc}\n",
@@ -2384,6 +2474,9 @@ class CleanroomXApp:
             )
             return False
 
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None:
+            viewer.set_documents(list(workflow.proofgraphs))
         message = self._project_verification_summary_text(workflow)
         if workflow.verification.get("verified") is True:
             self.status_var.set(
@@ -2941,6 +3034,10 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
             self.selection_status_var.set(f"Selected: {kind} {spatial_id}")
+            return
+        if item_id == "nav-proofgraph":
+            self._activate_proofgraph_workspace()
+            self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id.startswith("nav-"):
             return

@@ -2774,7 +2774,11 @@ class CleanroomXApp:
         )
         for path in getattr(self, "_recent_project_paths", []):
             resolved = path.resolve(strict=False)
-            name = path.stem
+            name = path.name
+            if name.endswith(".cleanroomx.json"):
+                name = name[: -len(".cleanroomx.json")]
+            else:
+                name = path.stem
             if active_path is not None and resolved == active_path:
                 name = self.project.name or name
             try:

@@ -42,6 +42,50 @@ def test_filter_commands_matches_label_category_shortcut_and_keywords():
     assert filter_commands(commands, "") == commands
 
 
+def test_filter_commands_ranks_direct_label_matches_ahead_of_keyword_matches():
+    noop = lambda: None
+    commands = [
+        PaletteCommand(
+            "history",
+            "Open Analysis History",
+            "Analysis",
+            noop,
+            keywords=("run",),
+        ),
+        PaletteCommand(
+            "run",
+            "Run Current Analysis",
+            "Analysis",
+            noop,
+        ),
+    ]
+
+    assert [item.id for item in filter_commands(commands, "run")] == [
+        "run",
+        "history",
+    ]
+
+
+def test_filter_commands_supports_low_priority_ordered_fuzzy_queries():
+    noop = lambda: None
+    commands = [
+        PaletteCommand(
+            "proof",
+            "Open ProofGraph Explorer",
+            "Evidence",
+            noop,
+        ),
+        PaletteCommand(
+            "run",
+            "Run Current Analysis",
+            "Analysis",
+            noop,
+        ),
+    ]
+
+    assert [item.id for item in filter_commands(commands, "pfg")] == ["proof"]
+
+
 @pytest.fixture
 def root():
     try:
@@ -92,6 +136,48 @@ def test_command_palette_filters_and_dispatches_existing_callback(root):
 
     assert invoked == ["proof"]
     assert not palette.winfo_exists()
+
+
+def test_command_palette_escape_clears_query_before_closing(root):
+    palette = CommandPalette(
+        root,
+        commands=[
+            PaletteCommand(
+                "proof",
+                "Open ProofGraph Explorer",
+                "Evidence",
+                lambda: None,
+            )
+        ],
+    )
+    root.update()
+
+    palette._query_var.set("proof")
+    root.update()
+    assert palette._escape() == "break"
+    root.update()
+
+    assert palette.winfo_exists()
+    assert palette._query_var.get() == ""
+
+    assert palette._escape() == "break"
+    root.update()
+    assert not palette.winfo_exists()
+
+
+def test_command_palette_up_from_search_focuses_last_result(root):
+    palette = CommandPalette(
+        root,
+        commands=[
+            PaletteCommand("one", "One", "Test", lambda: None),
+            PaletteCommand("two", "Two", "Test", lambda: None),
+        ],
+    )
+    root.update()
+
+    assert palette._focus_last_result() == "break"
+    assert palette.tree.selection() == (palette.tree.get_children()[-1],)
+    palette._close()
 
 
 def test_application_command_catalog_uses_existing_workflows_without_duplicates(root, tmp_path):

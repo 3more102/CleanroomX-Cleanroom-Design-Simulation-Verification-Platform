@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — quarantine retention revision-bound pruning — 2026-10-04
+
+- Validates the complete recovery-quarantine manifest schema before retention may count a forensic pair as rotatable, including exact non-boolean schema-version typing and required timestamp/name/reason fields.
+- Moves pruning candidates to unpredictable private staging names and re-verifies the staged pair before deletion, so a concurrent replacement on the original live pathname is never the object retention unlinks.
+- Adds regressions for malformed manifests and concurrent repopulation after staging; recovery bytes that fail final verification remain preserved for operator review.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

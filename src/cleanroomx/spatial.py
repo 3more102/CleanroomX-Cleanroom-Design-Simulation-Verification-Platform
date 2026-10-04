@@ -110,6 +110,7 @@ def empty_layout() -> dict:
             "show_labels": True,
             "show_devices": True,
             "show_relationships": True,
+            "overlay_mode": "pressure",
         },
     }
 
@@ -282,6 +283,16 @@ def normalize_layout(value: Any) -> dict:
                 "show_relationships": bool(view.get("show_relationships", True)),
             }
         )
+        overlay_mode = str(
+            view.get(
+                "overlay_mode",
+                "pressure" if view.get("show_pressure", True) else "none",
+            )
+        ).strip().lower()
+        if overlay_mode not in ENGINEERING_OVERLAY_MODES:
+            overlay_mode = "pressure"
+        result["view"]["overlay_mode"] = overlay_mode
+        result["view"]["show_pressure"] = overlay_mode == "pressure"
     return result
 
 
@@ -1184,6 +1195,246 @@ def pressure_overlay_state(
     }
 
 
+ENGINEERING_OVERLAY_MODES = ("none", "pressure", "ach", "airflow", "status")
+
+
+def _engineering_status(value: Any) -> str:
+    token = str(value or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "passed": "pass",
+        "verified": "pass",
+        "failed": "fail",
+        "error": "fail",
+        "warn": "warning",
+        "not_verified": "not_checked",
+        "missing_evidence": "not_checked",
+        "unverified": "not_checked",
+    }
+    return aliases.get(token, token or "unavailable")
+
+
+def _status_fill(status: str) -> str:
+    normalized = _engineering_status(status)
+    if normalized == "pass":
+        return "#dcfce7"
+    if normalized == "fail":
+        return "#fee2e2"
+    if normalized == "warning":
+        return "#fef3c7"
+    if normalized == "not_checked":
+        return "#e2e8f0"
+    return "#dfe7ef"
+
+
+def _scalar_fill(
+    value: float | None,
+    minimum: float | None,
+    maximum: float | None,
+    *,
+    low_rgb: tuple[int, int, int] = (224, 242, 254),
+    high_rgb: tuple[int, int, int] = (14, 116, 144),
+) -> str:
+    if value is None or minimum is None or maximum is None:
+        return "#dfe7ef"
+    ratio = 0.5 if maximum <= minimum else (value - minimum) / (maximum - minimum)
+    ratio = max(0.0, min(1.0, ratio))
+    rgb = tuple(
+        int(round(low + (high - low) * ratio))
+        for low, high in zip(low_rgb, high_rgb)
+    )
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def engineering_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+    *,
+    mode: str = "pressure",
+) -> dict:
+    """Project canonical run/spatial results into display-only room overlays.
+
+    This function never evaluates engineering requirements. It only maps values and
+    statuses already present in fresh analysis results or explicit spatial evidence.
+    """
+    normalized_mode = str(mode or "none").strip().lower()
+    if normalized_mode not in ENGINEERING_OVERLAY_MODES:
+        normalized_mode = "none"
+
+    normalized = normalize_layout(layout)
+    result_dict = result if isinstance(result, dict) else {}
+
+    if normalized_mode == "pressure":
+        pressure = pressure_overlay_state(normalized, analysis, result_dict)
+        rooms = []
+        for item in pressure["rooms"]:
+            value = item.get("pressure_pa")
+            status = _engineering_status(item.get("status"))
+            label = (
+                "Pressure: unavailable"
+                if value is None
+                else f"Pressure: {value:+g} Pa"
+            )
+            if status not in {"unavailable", "spatial"}:
+                label += f" · {status.upper()}"
+            rooms.append({**item, "label": label})
+        return {
+            "mode": "pressure",
+            "title": "Pressure",
+            "unit": "Pa",
+            "minimum": pressure.get("minimum_pressure_pa"),
+            "maximum": pressure.get("maximum_pressure_pa"),
+            "rooms": rooms,
+        }
+
+    raw_reports = _result_room_reports(result_dict)
+    report_by_name: dict[str, dict] = {}
+    for report in raw_reports:
+        name = str(report.get("room") or report.get("name") or "").strip().casefold()
+        if name:
+            report_by_name[name] = report
+    node_by_name = {
+        str(node.get("name") or "").strip().casefold(): node
+        for node in result_dict.get("nodes", [])
+        if isinstance(node, dict) and str(node.get("name") or "").strip()
+    }
+
+    rooms: list[dict] = []
+    scalar_values: list[float] = []
+    for room in normalized["rooms"]:
+        linked_name = str(
+            room.get("analysis_room_name") or room.get("name") or ""
+        ).strip()
+        report = report_by_name.get(linked_name.casefold()) if linked_name else None
+        node = node_by_name.get(linked_name.casefold()) if linked_name else None
+
+        value: float | None = None
+        status = "unavailable"
+        label = f"{normalized_mode.title()}: unavailable"
+        details: dict[str, Any] = {}
+
+        if normalized_mode == "ach" and isinstance(report, dict):
+            raw_ach = _geometry_number(report.get("ach"))
+            if math.isfinite(raw_ach):
+                value = raw_ach
+                scalar_values.append(raw_ach)
+                findings = report.get("findings")
+                if isinstance(findings, list):
+                    ach_finding = next(
+                        (
+                            item
+                            for item in findings
+                            if isinstance(item, dict)
+                            and str(item.get("code") or "").upper() == "ACH"
+                        ),
+                        None,
+                    )
+                    if ach_finding is not None:
+                        status = _engineering_status(ach_finding.get("status"))
+                label = f"ACH: {raw_ach:.2f} 1/h"
+                if status != "unavailable":
+                    label += f" · {status.upper()}"
+
+        elif normalized_mode == "airflow":
+            source = report if isinstance(report, dict) else node
+            if isinstance(source, dict):
+                air_balance = source.get("air_balance")
+                if not isinstance(air_balance, dict):
+                    air_balance = source
+                supply = _geometry_number(
+                    air_balance.get("supply_airflow_m3_h")
+                    if "supply_airflow_m3_h" in air_balance
+                    else air_balance.get("supply_m3_h")
+                )
+                if not math.isfinite(supply):
+                    supply = _geometry_number(source.get("governing_airflow_m3_h"))
+                returned = _geometry_number(
+                    air_balance.get("return_airflow_m3_h")
+                    if "return_airflow_m3_h" in air_balance
+                    else air_balance.get("return_m3_h")
+                )
+                exhausted = _geometry_number(
+                    air_balance.get("exhaust_airflow_m3_h")
+                    if "exhaust_airflow_m3_h" in air_balance
+                    else air_balance.get("exhaust_m3_h")
+                )
+                if math.isfinite(supply):
+                    value = supply
+                    scalar_values.append(supply)
+                    details["supply_m3_h"] = supply
+                if math.isfinite(returned):
+                    details["return_m3_h"] = returned
+                if math.isfinite(exhausted):
+                    details["exhaust_m3_h"] = exhausted
+                if "passes_minimum_surplus" in air_balance:
+                    status = "pass" if air_balance.get("passes_minimum_surplus") else "fail"
+                if details:
+                    parts = []
+                    if "supply_m3_h" in details:
+                        parts.append(f"S {details['supply_m3_h']:.0f}")
+                    if "return_m3_h" in details:
+                        parts.append(f"R {details['return_m3_h']:.0f}")
+                    if "exhaust_m3_h" in details:
+                        parts.append(f"E {details['exhaust_m3_h']:.0f}")
+                    label = "Airflow: " + " / ".join(parts) + " m³/h"
+                    if status != "unavailable":
+                        label += f" · {status.upper()}"
+
+        elif normalized_mode == "status":
+            if isinstance(report, dict):
+                status = _engineering_status(report.get("status"))
+                if status == "unavailable":
+                    air_balance = report.get("air_balance")
+                    if isinstance(air_balance, dict) and "passes_minimum_surplus" in air_balance:
+                        status = (
+                            "pass"
+                            if air_balance.get("passes_minimum_surplus")
+                            else "fail"
+                        )
+            if status == "unavailable" and isinstance(node, dict):
+                raw_status = node.get("status")
+                if raw_status is not None:
+                    status = _engineering_status(raw_status)
+            label = (
+                "Status: NOT VERIFIED"
+                if status in {"unavailable", "not_checked"}
+                else f"Status: {status.upper()}"
+            )
+
+        rooms.append(
+            {
+                "room_id": room["id"],
+                "value": value,
+                "status": status,
+                "label": label,
+                "fill": "#dfe7ef",
+                "details": details,
+            }
+        )
+
+    minimum = min(scalar_values) if scalar_values else None
+    maximum = max(scalar_values) if scalar_values else None
+    for item in rooms:
+        if normalized_mode == "status":
+            item["fill"] = _status_fill(item["status"])
+        elif normalized_mode in {"ach", "airflow"}:
+            item["fill"] = _scalar_fill(item["value"], minimum, maximum)
+
+    return {
+        "mode": normalized_mode,
+        "title": {
+            "none": "No overlay",
+            "ach": "Air Changes per Hour",
+            "airflow": "Airflow",
+            "status": "Verification Status",
+        }.get(normalized_mode, normalized_mode.title()),
+        "unit": {"ach": "1/h", "airflow": "m³/h"}.get(normalized_mode, ""),
+        "minimum": minimum,
+        "maximum": maximum,
+        "rooms": rooms,
+    }
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -1241,6 +1492,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_labels = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
         self._show_relationships = tk.BooleanVar(value=True)
+        self._overlay_mode = tk.StringVar(value="Pressure")
+        self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
@@ -1360,7 +1613,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left", padx=(2, 6))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
-            ("Pressure", self._show_pressure, "show_pressure"),
             ("Labels", self._show_labels, "show_labels"),
             ("Devices", self._show_devices, "show_devices"),
             ("Relations", self._show_relationships, "show_relationships"),
@@ -1378,6 +1630,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(viewbar, textvariable=self._validation_var).pack(
             side="right", padx=(10, 2)
         )
+
+        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar.pack(fill="x")
+        ttk.Label(
+            overlaybar,
+            text="ENGINEERING OVERLAY",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        overlay_picker = ttk.Combobox(
+            overlaybar,
+            textvariable=self._overlay_mode,
+            values=("None", "Pressure", "ACH", "Airflow", "Status"),
+            state="readonly",
+            width=13,
+        )
+        overlay_picker.pack(side="left")
+        overlay_picker.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._set_overlay_mode(self._overlay_mode.get()),
+        )
+        ttk.Label(
+            overlaybar,
+            textvariable=self._overlay_summary_var,
+        ).pack(side="left", padx=(12, 0))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -1837,10 +2113,38 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_labels.set(bool(view.get("show_labels", True)))
         self._show_devices.set(bool(view.get("show_devices", True)))
         self._show_relationships.set(bool(view.get("show_relationships", True)))
+        overlay_mode = str(view.get("overlay_mode") or "pressure").strip().lower()
+        if overlay_mode not in ENGINEERING_OVERLAY_MODES:
+            overlay_mode = "pressure"
+        self._overlay_mode.set(
+            {
+                "none": "None",
+                "pressure": "Pressure",
+                "ach": "ACH",
+                "airflow": "Airflow",
+                "status": "Status",
+            }[overlay_mode]
+        )
+        self._show_pressure.set(overlay_mode == "pressure")
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
         self._update_history_controls()
+        self.redraw()
+
+    def _set_overlay_mode(self, value: str) -> None:
+        mode = str(value or "none").strip().lower()
+        if mode not in ENGINEERING_OVERLAY_MODES:
+            mode = "none"
+        view = self.layout.setdefault("view", {})
+        view["overlay_mode"] = mode
+        view["show_pressure"] = mode == "pressure"
+        self._show_pressure.set(mode == "pressure")
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._on_change()
+        self._status_setter(f"Engineering overlay: {mode.title()}")
         self.redraw()
 
     def _set_view_flag(self, key: str, value: bool) -> None:
@@ -2711,12 +3015,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        overlay = pressure_overlay_state(
+        overlay_mode = self._overlay_mode.get().strip().lower()
+        overlay = engineering_overlay_state(
             self.layout,
             self._analysis_getter(),
             getattr(self, "_result_getter", lambda: None)(),
+            mode=overlay_mode,
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
+        self._update_overlay_summary(overlay)
         warning_ids = self._warning_item_ids()
 
         for room in self.layout["rooms"]:
@@ -2740,7 +3047,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             fill = (
                 overlay_by_room[room["id"]]["fill"]
-                if self._show_pressure.get()
+                if overlay_mode != "none"
                 else "#dfe7ef"
             )
             canvas.create_rectangle(
@@ -2752,24 +3059,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             if self._show_labels.get():
                 overlay_room = overlay_by_room[room["id"]]
-                if self._show_pressure.get():
-                    pressure_text = (
-                        "\nPressure unavailable"
-                        if overlay_room["pressure_pa"] is None
-                        else (
-                            f"\n{overlay_room['pressure_pa']:g} Pa "
-                            f"({overlay_room.get('source', 'spatial')})"
-                        )
-                    )
-                else:
-                    pressure_text = ""
+                overlay_text = (
+                    ""
+                    if overlay_mode == "none"
+                    else "\n" + str(overlay_room.get("label") or "")
+                )
                 canvas.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2,
                     text=(
                         f"{room['name']}\n"
                         f"{room['length_m']:g} × {room['width_m']:g} × "
-                        f"{room['height_m']:g} m{pressure_text}"
+                        f"{room['height_m']:g} m{overlay_text}"
                     ),
                     justify="center",
                     tags=(f"room:{room['id']}", "room"),
@@ -2865,6 +3166,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                         tags=(tag, "device"),
                     )
 
+        self._draw_engineering_legend(canvas, overlay)
         self._draw_measurement_overlay()
 
         if not self.layout["rooms"] and not self.layout["devices"]:
@@ -3069,12 +3371,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        overlay = pressure_overlay_state(
+        overlay_mode = self._overlay_mode.get().strip().lower()
+        overlay = engineering_overlay_state(
             self.layout,
             self._analysis_getter(),
             getattr(self, "_result_getter", lambda: None)(),
+            mode=overlay_mode,
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
+        self._update_overlay_summary(overlay)
         warning_ids = self._warning_item_ids()
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -3110,7 +3415,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             fill = (
                 overlay_by_room[room["id"]]["fill"]
-                if self._show_pressure.get()
+                if overlay_mode != "none"
                 else "#dfe7ef"
             )
             selected = self.selected == _Hit("room", room["id"])
@@ -3156,9 +3461,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                     *start, *end, fill=outline, width=1, tags=(tag, "room3d")
                 )
             if self._show_labels.get():
+                overlay_room = overlay_by_room[room["id"]]
+                overlay_text = (
+                    ""
+                    if overlay_mode == "none"
+                    else "\n" + str(overlay_room.get("label") or "")
+                )
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=room["name"] + overlay_text,
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )
@@ -3221,6 +3532,83 @@ class SpatialDesignWorkspace(ttk.Frame):
                         fill="#fbbf24", outline=device_outline,
                         width=2, tags=(tag, "device3d"),
                     )
+
+        self._draw_engineering_legend(canvas, overlay)
+
+    def _update_overlay_summary(self, overlay: dict) -> None:
+        mode = str(overlay.get("mode") or "none")
+        if mode == "none":
+            self._overlay_summary_var.set("Overlay: None")
+            return
+        title = str(overlay.get("title") or mode.title())
+        minimum = overlay.get("minimum")
+        maximum = overlay.get("maximum")
+        unit = str(overlay.get("unit") or "")
+        if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
+            suffix = f" {unit}" if unit else ""
+            self._overlay_summary_var.set(
+                f"Overlay: {title} · {minimum:.2f}–{maximum:.2f}{suffix}"
+            )
+        else:
+            self._overlay_summary_var.set(f"Overlay: {title}")
+
+    def _draw_engineering_legend(self, canvas: tk.Canvas, overlay: dict) -> None:
+        mode = str(overlay.get("mode") or "none")
+        if mode == "none":
+            return
+        x0, y0 = 12, 12
+        width = 188
+        if mode == "status":
+            height = 104
+            canvas.create_rectangle(
+                x0, y0, x0 + width, y0 + height,
+                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+            )
+            canvas.create_text(
+                x0 + 8, y0 + 8, anchor="nw",
+                text="Verification Status", fill="#0f172a",
+                tags=("overlay_legend",),
+            )
+            for index, (label, fill) in enumerate(
+                (
+                    ("PASS", "#dcfce7"),
+                    ("WARNING", "#fef3c7"),
+                    ("FAIL", "#fee2e2"),
+                    ("NOT VERIFIED", "#e2e8f0"),
+                )
+            ):
+                y = y0 + 30 + index * 17
+                canvas.create_rectangle(
+                    x0 + 8, y, x0 + 20, y + 10,
+                    fill=fill, outline="#64748b", tags=("overlay_legend",),
+                )
+                canvas.create_text(
+                    x0 + 28, y + 5, anchor="w",
+                    text=label, fill="#334155", tags=("overlay_legend",),
+                )
+        else:
+            minimum = overlay.get("minimum")
+            maximum = overlay.get("maximum")
+            unit = str(overlay.get("unit") or "")
+            title = str(overlay.get("title") or mode.title())
+            canvas.create_rectangle(
+                x0, y0, x0 + width, y0 + 64,
+                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+            )
+            canvas.create_text(
+                x0 + 8, y0 + 8, anchor="nw",
+                text=title, fill="#0f172a", tags=("overlay_legend",),
+            )
+            if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
+                suffix = f" {unit}" if unit else ""
+                text = f"{minimum:.2f}{suffix}  →  {maximum:.2f}{suffix}"
+            else:
+                text = "No result values available"
+            canvas.create_text(
+                x0 + 8, y0 + 34, anchor="nw",
+                text=text, fill="#334155", tags=("overlay_legend",),
+            )
+        canvas.tag_raise("overlay_legend")
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:

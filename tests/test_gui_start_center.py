@@ -29,7 +29,7 @@ def app():
 
 def test_start_center_is_initial_workspace(app):
     assert app.notebook.select() == str(app.start_center)
-    assert app.workspace_status_var.get() == "Workspace: Split"
+    assert app.workspace_status_var.get() == "Workspace: Start"
     assert app.start_center.recent_tree.get_children() == ()
 
 

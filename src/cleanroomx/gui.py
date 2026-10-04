@@ -1234,6 +1234,9 @@ class CleanroomXApp:
         self.model_status_var = tk.StringVar(value="Model: ready")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
+        self.view_status_var = tk.StringVar(
+            value="Split · 2D 100% · 3D 100% · Ortho"
+        )
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1710,6 +1713,7 @@ class CleanroomXApp:
             on_undo_requested=self.undo_project_edit,
             on_redo_requested=self.redo_project_edit,
             on_selection_change=self._on_workspace_selection_change,
+            on_view_status_change=self.view_status_var.set,
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
@@ -1850,6 +1854,15 @@ class CleanroomXApp:
             side="left", fill="y", padx=8
         )
         ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Label(
+            status_bar,
+            textvariable=self.view_status_var,
+            anchor="e",
+            width=34,
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -2491,8 +2504,11 @@ class CleanroomXApp:
                 self.analysis_tree.see(element_id)
                 self._on_analysis_selected()
                 self.notebook.select(self.input_tab)
+                analysis = self._current_analysis()
                 self.selection_status_var.set(
-                    f"Selected: analysis {element_id}"
+                    f"Analysis: {analysis.name}"
+                    if analysis is not None
+                    else f"Analysis: {element_id}"
                 )
                 return
 
@@ -2502,9 +2518,7 @@ class CleanroomXApp:
                 if workspace.select_item(kind, element_id, notify=True):
                     self._activate_spatial_workspace()
                     workspace.fit_selected()
-                    self.selection_status_var.set(
-                        f"Selected: {kind} {element_id}"
-                    )
+                    self._sync_spatial_selection_status()
                     return
 
         self.status_var.set(
@@ -4096,6 +4110,13 @@ class CleanroomXApp:
         self._capture_navigator_tree()
         self._apply_navigator_filter()
 
+    def _sync_spatial_selection_status(self) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            self.selection_status_var.set("Selected: —")
+            return
+        self.selection_status_var.set(workspace.selection_status_text())
+
     def _on_navigator_selected(self, event=None) -> None:
         if self._selection_guard:
             return
@@ -4108,7 +4129,7 @@ class CleanroomXApp:
             if hasattr(self, "spatial_workspace"):
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
-            self.selection_status_var.set(f"Selected: {kind} {spatial_id}")
+                self._sync_spatial_selection_status()
             return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()
@@ -4131,7 +4152,7 @@ class CleanroomXApp:
         if tree is None:
             return
         navigator_id = f"{kind}:{item_id}"
-        self.selection_status_var.set(f"Selected: {kind} {item_id}")
+        self._sync_spatial_selection_status()
         if not tree.exists(navigator_id):
             self._refresh_spatial_navigator()
         if not tree.exists(navigator_id):
@@ -4200,6 +4221,7 @@ class CleanroomXApp:
         self._restore_run_for(analysis.id)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+            self._sync_spatial_selection_status()
 
     def _on_spatial_changed(self) -> None:
         self._update_title()

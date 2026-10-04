@@ -23,6 +23,7 @@ from .project import (
 from .project_diagnostics_cli import (
     _assert_output_is_distinct_from_dependencies,
     _assert_output_is_distinct_from_source,
+    _paths_alias,
 )
 
 PROJECT_BATCH_SCHEMA = "cleanroomx.project-batch-run"
@@ -156,11 +157,22 @@ def _source_revision_state(
     return project_file_revision_matches(expected, current), None
 
 
+def _assert_output_is_distinct_from_cancel_file(
+    cancel_file: Path | None,
+    output: str | Path,
+) -> None:
+    """Reject a batch report destination that aliases the cancellation sentinel."""
+    if cancel_file is not None and _paths_alias(cancel_file, output):
+        raise ValueError("batch output path must be different from the cancel file")
+
+
 def _assert_output_publication_safe(
     source: Path,
     project: ProjectDocument,
     revision: ProjectFileRevision,
     output: str | Path,
+    *,
+    cancel_file: Path | None = None,
 ) -> None:
     """Revalidate source revision and protected output identities before commit."""
     matches, check_error = _source_revision_state(source, revision)
@@ -173,6 +185,7 @@ def _assert_output_publication_safe(
         base_dir=source.parent,
         output=output,
     )
+    _assert_output_is_distinct_from_cancel_file(cancel_file, output)
 
 
 def _run_loaded_project(
@@ -460,6 +473,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 base_dir=source.parent,
                 output=args.output,
             )
+            _assert_output_is_distinct_from_cancel_file(cancel_file, args.output)
         batch = _run_loaded_project(
             source,
             project,
@@ -477,6 +491,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 project,
                 revision,
                 args.output,
+                cancel_file=cancel_file,
             )
             atomic_write_text(
                 args.output,
@@ -486,6 +501,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project,
                     revision,
                     args.output,
+                    cancel_file=cancel_file,
                 ),
             )
         else:

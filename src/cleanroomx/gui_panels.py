@@ -31,6 +31,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self._last_error: str | None = None
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
@@ -272,6 +273,20 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     break
         self._show_selected_detail()
 
+    @staticmethod
+    def _issue_is_navigable(issue: dict[str, Any] | None) -> bool:
+        if not isinstance(issue, dict):
+            return False
+        element = issue.get("element")
+        if not isinstance(element, dict) or not element.get("id"):
+            return False
+        return str(element.get("type") or "") in {
+            "analysis",
+            "spatial_element",
+            "room",
+            "device",
+        }
+
     def refresh(self) -> dict[str, Any] | None:
         try:
             result = analyze_project_diagnostics(
@@ -280,12 +295,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             )
         except Exception as exc:
             self.last_result = None
+            self._last_error = str(exc)
             self.summary_var.set(f"Diagnostics unavailable: {exc}")
             self._status_setter("Project diagnostics failed")
             self._populate()
             return None
 
         self.last_result = result
+        self._last_error = None
         summary = result.get("summary", {})
         self.summary_var.set(
             "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
@@ -307,7 +324,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
         self.navigate_button.configure(
-            state="normal" if issue is not None else "disabled"
+            state="normal" if self._issue_is_navigable(issue) else "disabled"
         )
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
@@ -335,6 +352,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     )
                 )
             self.detail.insert("1.0", "\n".join(lines))
+        elif self._last_error:
+            self.detail.insert(
+                "1.0",
+                "Project diagnostics could not be refreshed. "
+                f"{self._last_error}",
+            )
         elif not isinstance(self.last_result, dict):
             self.detail.insert(
                 "1.0",

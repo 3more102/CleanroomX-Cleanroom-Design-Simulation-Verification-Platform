@@ -423,3 +423,70 @@ def test_gui_unsaved_project_allows_unresolved_relative_dependencies(tmp_path):
 
     assert output.read_text(encoding="utf-8") == "safe export\n"
 
+def test_gui_revision_restore_refuses_declared_dependency(monkeypatch, tmp_path):
+    verification = tmp_path / "verification.json"
+    dependency = tmp_path / "hvac.json"
+    verification.write_text("{}\n", encoding="utf-8")
+    dependency.write_text('{"engineering": "input"}\n', encoding="utf-8")
+    before = dependency.read_bytes()
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="Protected revision restore dependency",
+            analyses=[
+                AnalysisDocument(
+                    id="consistency",
+                    name="Consistency",
+                    kind="consistency",
+                    input={
+                        "verification_project": verification.name,
+                        "hvac_project": dependency.name,
+                        "room_airflow_abs_tolerance_m3_h": 0.0,
+                        "require_same_room_set": True,
+                    },
+                )
+            ],
+            active_analysis_id="consistency",
+        ),
+    )
+    app = _saved_app(project_path)
+
+    class _Root:
+        def wait_window(self, _dialog):
+            return None
+
+    revision = tmp_path / "saved.cleanroomx.revision.json"
+    scan = type("_Scan", (), {"revisions": [revision], "issues": []})()
+
+    class _Dialog:
+        def __init__(self, _root, _scan):
+            self.result = revision
+
+    app.root = _Root()
+    errors = []
+    monkeypatch.setattr(gui_module, "scan_project_revisions", lambda _path: scan)
+    monkeypatch.setattr(gui_module, "ProjectRevisionCenter", _Dialog)
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **_kwargs: str(dependency),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "restore_project_revision",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unsafe restore destination must be rejected before restore")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+
+    assert app.show_saved_revisions() is False
+
+    assert dependency.read_bytes() == before
+    assert errors
+    assert "external dependency" in errors[-1][1]
+

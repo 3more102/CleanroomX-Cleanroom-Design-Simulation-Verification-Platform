@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import sys
+import tomllib
 
 import cleanroomx.bim_ifc_cli as bim_ifc_cli
 import cleanroomx.cli_output as cli_output
@@ -281,3 +283,106 @@ def test_guarded_save_state_errors_remain_clean_cli_failures(
     assert captured.err.startswith(f"{command}: error: ")
     assert "Traceback" not in captured.err
 
+
+def _configured_cli_entry_points() -> tuple[tuple[str, Path, str], ...]:
+    """Resolve every installed console script to its configured entry function."""
+    package_dir = Path(cli_output.__file__).resolve().parent
+    repository_root = package_dir.parents[1]
+    metadata = tomllib.loads(
+        (repository_root / "pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    entries: list[tuple[str, Path, str]] = []
+    for command, entry_point in metadata["project"]["scripts"].items():
+        module_name, separator, target = entry_point.partition(":")
+        assert separator == ":", command
+        assert module_name.startswith("cleanroomx."), command
+        # The desktop launcher has its own UI error-reporting contract and
+        # intentionally catches broad exceptions at the Tk entry boundary.
+        # This guard covers command-line entry points only.
+        if module_name == "cleanroomx.gui":
+            continue
+        module_path = (
+            repository_root
+            / "src"
+            / Path(*module_name.split(".")).with_suffix(".py")
+        )
+        assert module_path.is_file(), command
+        entries.append((command, module_path, target))
+    return tuple(sorted(entries))
+
+
+def _handled_exception_names(node: ast.expr | None) -> set[str]:
+    if node is None:
+        return {"<bare>"}
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, ast.Attribute):
+        return {node.attr}
+    if isinstance(node, ast.Tuple):
+        names: set[str] = set()
+        for element in node.elts:
+            names.update(_handled_exception_names(element))
+        return names
+    return set()
+
+
+def _entry_function(tree: ast.Module, command: str, target: str) -> ast.FunctionDef:
+    target_name = target.split(".", 1)[0]
+    matches = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == target_name
+    ]
+    assert len(matches) == 1, f"{command}: expected one top-level {target!r} entry"
+    return matches[0]
+
+
+def _entry_exception_handlers(function: ast.FunctionDef) -> tuple[ast.ExceptHandler, ...]:
+    handlers: list[ast.ExceptHandler] = []
+
+    class EntryBoundaryVisitor(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            return
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            return
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            return
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            return
+
+        def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+            handlers.append(node)
+            self.generic_visit(node)
+
+    visitor = EntryBoundaryVisitor()
+    for statement in function.body:
+        visitor.visit(statement)
+    return tuple(handlers)
+
+
+def test_all_configured_cli_entry_boundaries_do_not_catch_broad_runtime_errors() -> None:
+    configured = _configured_cli_entry_points()
+    assert configured
+
+    forbidden = {"<bare>", "BaseException", "Exception", "RuntimeError"}
+    violations: list[str] = []
+    for command, path, target in configured:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        function = _entry_function(tree, command, target)
+        for handler in _entry_exception_handlers(function):
+            caught = _handled_exception_names(handler.type) & forbidden
+            if caught:
+                violations.append(
+                    f"{command} ({path.name}:{handler.lineno}) catches "
+                    f"{', '.join(sorted(caught))}"
+                )
+
+    assert not violations, (
+        "configured CLI entry boundaries must not hide unexpected runtime defects behind broad catches:\n"
+        + "\n".join(violations)
+    )

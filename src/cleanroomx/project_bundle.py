@@ -916,6 +916,8 @@ def _extraction_destination_revision(path: Path) -> tuple[int, ...]:
     return (
         metadata.st_dev,
         metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
         int(getattr(metadata, "st_birthtime_ns", 0)),
     )
 

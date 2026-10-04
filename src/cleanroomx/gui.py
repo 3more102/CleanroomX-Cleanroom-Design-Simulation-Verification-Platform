@@ -1448,7 +1448,13 @@ class CleanroomXApp:
 
         content = ttk.Frame(panes)
         panes.add(content, weight=5)
-        self.notebook = ttk.Notebook(content)
+
+        self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
+        self.workspace_panes.pack(fill="both", expand=True)
+
+        workspace_host = ttk.Frame(self.workspace_panes)
+        self.workspace_panes.add(workspace_host, weight=5)
+        self.notebook = ttk.Notebook(workspace_host)
         self.notebook.pack(fill="both", expand=True)
 
         self.spatial_workspace = SpatialDesignWorkspace(
@@ -1515,16 +1521,30 @@ class CleanroomXApp:
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
-        self.result_text = self._add_text_tab("Results")
-        self.diagnostics_text = self._add_text_tab("Diagnostics")
-
         plot_tab = ttk.Frame(self.notebook)
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
-        self.report_text = self._add_text_tab("Report")
+        output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        self.workspace_panes.add(output_host, weight=1)
+        output_header = ttk.Frame(output_host, padding=(8, 3))
+        output_header.pack(fill="x")
+        ttk.Label(
+            output_header, text="OUTPUT / VERIFICATION", style="CX.Section.TLabel"
+        ).pack(side="left")
+        ttk.Label(
+            output_header,
+            text="Run results, deterministic diagnostics, and engineering reports",
+        ).pack(side="right")
+        self.output_notebook = ttk.Notebook(output_host)
+        self.output_notebook.pack(fill="both", expand=True)
+        self.result_text = self._add_text_tab("Results", notebook=self.output_notebook)
+        self.diagnostics_text = self._add_text_tab(
+            "Diagnostics", notebook=self.output_notebook
+        )
+        self.report_text = self._add_text_tab("Report", notebook=self.output_notebook)
 
         status_bar = ttk.Frame(self.root, padding=(8, 4))
         status_bar.pack(fill="x", side="bottom")
@@ -1562,9 +1582,15 @@ class CleanroomXApp:
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
 
-    def _add_text_tab(self, title: str) -> tk.Text:
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text=title)
+    def _add_text_tab(
+        self,
+        title: str,
+        *,
+        notebook: ttk.Notebook | None = None,
+    ) -> tk.Text:
+        target = notebook or self.notebook
+        frame = ttk.Frame(target)
+        target.add(frame, text=title)
         text = tk.Text(frame, wrap="none", state="disabled")
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)

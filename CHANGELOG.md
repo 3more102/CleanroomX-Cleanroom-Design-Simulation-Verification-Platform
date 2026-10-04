@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — host-managed plugin dependency snapshots — 2026-10-04
+
+- Introduces plugin API v2 while retaining API v1 compatibility; v2 plugins may optionally declare external file references through a deterministic `external_dependencies` resolver.
+- Captures declared plugin files through the canonical bounded stable-file snapshot authority before plugin parsing, rewrites only the execution payload to private verified bytes, re-verifies private snapshots and live sources, and records the original dependency identity in application execution provenance.
+- Preserves safe source suffixes for format-aware plugin parsers, removes execution-only private paths from durable plugin results, rejects dependency-resolver input mutation and invalid/duplicate declarations, and keeps the existing 64 MiB per-file host dependency ceiling.
+- Adds focused compatibility, parser-order, provenance, mutation, and live-source-change regressions; built-in solver equations, engineering tolerances, project schema, requirement criteria, and ProofGraph verdict semantics are unchanged.
+
 ## Unreleased Release 3 — narrow project CLI runtime boundaries — 2026-10-04
 
 - Adds a typed `CliStateError` for expected project/IFC CLI revision and state races instead of classifying every `RuntimeError` as a normal command failure.

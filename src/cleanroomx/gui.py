@@ -3061,8 +3061,6 @@ class CleanroomXApp:
             self.refresh_structure(silent=True)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
-        self._capture_navigator_tree()
-        self._apply_navigator_filter()
 
     def _restore_navigator_tree(self) -> None:
         tree = getattr(self, "analysis_tree", None)

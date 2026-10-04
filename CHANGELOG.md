@@ -3,7 +3,7 @@
 ## Unreleased Release 3 — protect GUI revision restore destinations — 2026-10-04
 
 - Applies the shared project/dependency output-identity guard before the desktop restores a saved project revision as a copy.
-- Rejects destinations that alias the open project or any declared external engineering dependency before revision bytes can be published; the revision writer's existing guarded atomic replacement still closes destination-change races.
+- Rejects destinations that alias the open project or any declared external engineering dependency both before restore work and again at the resolved atomic-replacement target, closing destination-alias races without weakening the revision writer's existing write-conflict guard.
 - Adds a regression proving a declared dependency remains byte-for-byte unchanged when selected as the restore destination; solver equations, project schemas, tolerances, requirements, and verdict semantics are unchanged.
 
 ## Unreleased Release 3 — narrow project CLI runtime boundaries — 2026-10-04

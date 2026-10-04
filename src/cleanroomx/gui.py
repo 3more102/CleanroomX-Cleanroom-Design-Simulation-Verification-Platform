@@ -4079,15 +4079,28 @@ class CleanroomXApp:
             return
 
         names = [str(analysis.name) for analysis in analyses]
-        counts = {name: names.count(name) for name in set(names)}
-        labels = [
-            (
-                f"{analysis.name} [{analysis.kind}]"
-                if counts.get(str(analysis.name), 0) > 1
-                else str(analysis.name)
-            )
+        name_counts = {name: names.count(name) for name in set(names)}
+        pairs = [
+            (str(analysis.name), str(analysis.kind))
             for analysis in analyses
         ]
+        pair_counts = {pair: pairs.count(pair) for pair in set(pairs)}
+        pair_seen: dict[tuple[str, str], int] = {}
+        labels: list[str] = []
+        for analysis in analyses:
+            name = str(analysis.name)
+            kind = str(analysis.kind)
+            pair = (name, kind)
+            label = (
+                f"{name} [{kind}]"
+                if name_counts.get(name, 0) > 1
+                else name
+            )
+            if pair_counts.get(pair, 0) > 1:
+                ordinal = pair_seen.get(pair, 0) + 1
+                pair_seen[pair] = ordinal
+                label = f"{label} #{ordinal}"
+            labels.append(label)
         combo.configure(values=tuple(labels), state="readonly")
 
         target = (
@@ -5780,6 +5793,7 @@ class CleanroomXApp:
                 messagebox.showerror("Cannot rename analysis", str(exc), parent=self.root)
                 return
             self.analysis_tree.item(analysis.id, text=analysis.name)
+            self._refresh_workflow_analysis_selector(select_id=analysis.id)
             self._update_title()
 
     def remove_analysis(self) -> None:

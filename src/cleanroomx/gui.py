@@ -3096,6 +3096,11 @@ class CleanroomXApp:
                 dialog.result,
                 destination,
                 expected_source_path=self.project_path,
+                before_replace=lambda target: _assert_project_output_is_safe(
+                    self.project,
+                    source=self.project_path,
+                    output=target,
+                ),
             )
         except ProjectWriteConflictError:
             self.status_var.set(

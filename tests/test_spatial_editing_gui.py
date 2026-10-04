@@ -689,6 +689,23 @@ def test_application_command_strip_remains_visible_at_minimum_window(app):
         assert button.winfo_x() + button.winfo_width() <= app.commandbar.winfo_width()
 
 
+def test_command_strip_highlights_active_workspace_mode(app):
+    buttons = app.toolbar_workspace_buttons
+    assert buttons["split"].instate(["selected"])
+    assert not buttons["2d"].instate(["selected"])
+    assert not buttons["3d"].instate(["selected"])
+
+    app._activate_spatial_workspace("2d")
+    app.root.update()
+    assert buttons["2d"].instate(["selected"])
+    assert not buttons["split"].instate(["selected"])
+
+    app.spatial_workspace.set_workspace_mode("3d")
+    app.root.update()
+    assert buttons["3d"].instate(["selected"])
+    assert not buttons["2d"].instate(["selected"])
+
+
 def test_panel_header_close_controls_and_problems_navigation(app):
     workspace = app.spatial_workspace
 

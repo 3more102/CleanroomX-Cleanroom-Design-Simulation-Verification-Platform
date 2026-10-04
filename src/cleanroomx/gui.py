@@ -71,6 +71,12 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_state import (
+    default_gui_layout_state_path,
+    load_gui_layout_state,
+    normalize_gui_layout_state,
+    save_gui_layout_state,
+)
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1168,6 +1174,7 @@ class CleanroomXApp:
         *,
         autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
         autosave_manager: AutosaveManager | None = None,
+        ui_state_path: str | Path | None = None,
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
@@ -1200,6 +1207,12 @@ class CleanroomXApp:
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
+        self._ui_state_path = (
+            Path(ui_state_path)
+            if ui_state_path is not None
+            else default_gui_layout_state_path()
+        )
+        self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -1221,8 +1234,12 @@ class CleanroomXApp:
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
-        self.navigator_panel_visible_var = tk.BooleanVar(value=True)
-        self.output_panel_visible_var = tk.BooleanVar(value=True)
+        self.navigator_panel_visible_var = tk.BooleanVar(
+            value=bool(self._ui_layout_state["navigator_visible"])
+        )
+        self.output_panel_visible_var = tk.BooleanVar(
+            value=bool(self._ui_layout_state["output_visible"])
+        )
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
 
         self._configure_styles()
@@ -1233,6 +1250,7 @@ class CleanroomXApp:
         self._refresh_start_center()
         self._activate_start_workspace()
         self._capture_saved_state()
+        self.root.after_idle(self._restore_ui_layout_state)
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
         self._update_title()
@@ -1702,6 +1720,134 @@ class CleanroomXApp:
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
         return str(child) in {str(item) for item in paned.panes()}
 
+    @staticmethod
+    def _pane_fraction(paned: ttk.Panedwindow, extent: int) -> float | None:
+        if len(paned.panes()) < 2 or extent <= 1:
+            return None
+        try:
+            position = paned.sashpos(0)
+        except tk.TclError:
+            return None
+        return min(0.95, max(0.05, float(position) / float(extent)))
+
+    @staticmethod
+    def _set_pane_fraction(
+        paned: ttk.Panedwindow,
+        fraction: float,
+        extent: int,
+    ) -> None:
+        if len(paned.panes()) < 2 or extent <= 1:
+            return
+        position = int(round(extent * min(0.95, max(0.05, float(fraction)))))
+        try:
+            paned.sashpos(0, position)
+        except tk.TclError:
+            return
+
+    def _remember_current_panel_fractions(self) -> None:
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        if (
+            hasattr(self, "main_panes")
+            and self.navigator_panel_visible_var.get()
+            and self._paned_contains(self.main_panes, self.navigator_panel)
+        ):
+            fraction = self._pane_fraction(
+                self.main_panes,
+                self.main_panes.winfo_width(),
+            )
+            if fraction is not None:
+                state["navigator_fraction"] = fraction
+        if (
+            hasattr(self, "workspace_panes")
+            and self.output_panel_visible_var.get()
+            and self._paned_contains(self.workspace_panes, self.output_panel)
+        ):
+            fraction = self._pane_fraction(
+                self.workspace_panes,
+                self.workspace_panes.winfo_height(),
+            )
+            if fraction is not None:
+                state["output_fraction"] = fraction
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None and workspace.inspector_visible():
+            fraction = self._pane_fraction(
+                workspace._body,
+                workspace._body.winfo_width(),
+            )
+            if fraction is not None:
+                state["inspector_fraction"] = fraction
+        self._ui_layout_state = normalize_gui_layout_state(state)
+
+    def _apply_saved_panel_sashes(self) -> None:
+        state = self._ui_layout_state
+        if (
+            self.navigator_panel_visible_var.get()
+            and self._paned_contains(self.main_panes, self.navigator_panel)
+        ):
+            self._set_pane_fraction(
+                self.main_panes,
+                state["navigator_fraction"],
+                self.main_panes.winfo_width(),
+            )
+        if (
+            self.output_panel_visible_var.get()
+            and self._paned_contains(self.workspace_panes, self.output_panel)
+        ):
+            self._set_pane_fraction(
+                self.workspace_panes,
+                state["output_fraction"],
+                self.workspace_panes.winfo_height(),
+            )
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None and workspace.inspector_visible():
+            self._set_pane_fraction(
+                workspace._body,
+                state["inspector_fraction"],
+                workspace._body.winfo_width(),
+            )
+
+    def _capture_ui_layout_state(self) -> dict:
+        self._remember_current_panel_fractions()
+        workspace = getattr(self, "spatial_workspace", None)
+        state = dict(self._ui_layout_state)
+        state.update(
+            {
+                "navigator_visible": bool(
+                    self.navigator_panel_visible_var.get()
+                ),
+                "output_visible": bool(
+                    self.output_panel_visible_var.get()
+                ),
+                "inspector_visible": bool(
+                    workspace is not None and workspace.inspector_visible()
+                ),
+            }
+        )
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        return dict(self._ui_layout_state)
+
+    def _save_ui_layout_state(self) -> None:
+        try:
+            save_gui_layout_state(
+                self._ui_state_path,
+                self._capture_ui_layout_state(),
+            )
+        except Exception:
+            return
+
+    def _restore_ui_layout_state(self) -> None:
+        state = self._ui_layout_state
+        self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
+        self.output_panel_visible_var.set(bool(state["output_visible"]))
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(bool(state["inspector_visible"]))
+        self.root.update_idletasks()
+        self._apply_saved_panel_sashes()
+        self.status_var.set("Ready")
+
     def _sync_navigator_panel_visibility(self) -> None:
         panes = getattr(self, "main_panes", None)
         panel = getattr(self, "navigator_panel", None)
@@ -1711,7 +1857,9 @@ class CleanroomXApp:
         present = self._paned_contains(panes, panel)
         if visible and not present:
             panes.insert(0, panel, weight=1)
+            self.root.after_idle(self._apply_saved_panel_sashes)
         elif not visible and present:
+            self._remember_current_panel_fractions()
             panes.forget(panel)
         state = "shown" if visible else "hidden"
         self.status_var.set(f"Project Navigator {state}")
@@ -1725,7 +1873,9 @@ class CleanroomXApp:
         present = self._paned_contains(panes, panel)
         if visible and not present:
             panes.add(panel, weight=1)
+            self.root.after_idle(self._apply_saved_panel_sashes)
         elif not visible and present:
+            self._remember_current_panel_fractions()
             panes.forget(panel)
         state = "shown" if visible else "hidden"
         self.status_var.set(f"Output / Verification {state}")
@@ -1747,7 +1897,11 @@ class CleanroomXApp:
         if workspace is None:
             return
         self._activate_spatial_workspace()
+        if workspace.inspector_visible():
+            self._remember_current_panel_fractions()
         workspace.toggle_inspector()
+        if workspace.inspector_visible():
+            self.root.after_idle(self._apply_saved_panel_sashes)
 
     def _apply_default_panel_sashes(self) -> None:
         if (
@@ -1770,6 +1924,11 @@ class CleanroomXApp:
                     0,
                     max(320, int(height * 0.72)),
                 )
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None and workspace.inspector_visible():
+            width = workspace._body.winfo_width()
+            if width > 1:
+                workspace._body.sashpos(0, max(520, int(width * 0.78)))
 
     def reset_panel_layout(self) -> None:
         self.navigator_panel_visible_var.set(True)
@@ -1779,6 +1938,7 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.show_inspector()
+        self._ui_layout_state = normalize_gui_layout_state({})
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 
@@ -5566,6 +5726,7 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        self._save_ui_layout_state()
         self._discard_current_autosave()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:

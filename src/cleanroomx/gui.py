@@ -1407,6 +1407,11 @@ class CleanroomXApp:
             command=self._sync_output_panel_visibility,
         )
         view_menu.add_command(
+            label="Design Inspector",
+            accelerator="Ctrl+I",
+            command=self.toggle_design_inspector,
+        )
+        view_menu.add_command(
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
         )
@@ -1436,6 +1441,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
+        self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -1736,6 +1742,13 @@ class CleanroomXApp:
         )
         self._sync_output_panel_visibility()
 
+    def toggle_design_inspector(self) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            return
+        self._activate_spatial_workspace()
+        workspace.toggle_inspector()
+
     def _apply_default_panel_sashes(self) -> None:
         if (
             self.navigator_panel_visible_var.get()
@@ -1763,6 +1776,9 @@ class CleanroomXApp:
         self.output_panel_visible_var.set(True)
         self._sync_navigator_panel_visibility()
         self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.show_inspector()
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 

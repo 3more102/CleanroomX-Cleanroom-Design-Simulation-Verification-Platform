@@ -1515,9 +1515,29 @@ class CleanroomXApp:
         self.commandbar = commandbar
         commandbar.pack(fill="x", padx=10, pady=(0, 4))
 
+        # Reserve the right-side global actions first so critical controls
+        # cannot be clipped when the window is at the supported minimum width.
+        self.toolbar_commands_button = ttk.Button(
+            commandbar,
+            text="Commands…",
+            width=10,
+            style="CX.Compact.TButton",
+            command=self.show_command_palette,
+        )
+        self.toolbar_commands_button.pack(side="right", padx=1)
+        self.toolbar_problems_button = ttk.Button(
+            commandbar,
+            text="Problems",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.show_problems_panel,
+        )
+        self.toolbar_problems_button.pack(side="right", padx=1)
+
         self.toolbar_new_button = ttk.Button(
             commandbar,
             text="New",
+            width=5,
             style="CX.Compact.TButton",
             command=self.new_project,
         )
@@ -1525,6 +1545,7 @@ class CleanroomXApp:
         self.toolbar_open_button = ttk.Button(
             commandbar,
             text="Open",
+            width=5,
             style="CX.Compact.TButton",
             command=self.open_project,
         )
@@ -1532,17 +1553,19 @@ class CleanroomXApp:
         self.toolbar_save_button = ttk.Button(
             commandbar,
             text="Save",
+            width=5,
             style="CX.Compact.TButton",
             command=self.save_project,
         )
         self.toolbar_save_button.pack(side="left", padx=1)
         ttk.Separator(commandbar, orient="vertical").pack(
-            side="left", fill="y", padx=6
+            side="left", fill="y", padx=4
         )
 
         self.toolbar_undo_button = ttk.Button(
             commandbar,
             text="Undo",
+            width=5,
             style="CX.Compact.TButton",
             command=self.undo_project_edit,
             state="disabled",
@@ -1551,47 +1574,36 @@ class CleanroomXApp:
         self.toolbar_redo_button = ttk.Button(
             commandbar,
             text="Redo",
+            width=5,
             style="CX.Compact.TButton",
             command=self.redo_project_edit,
             state="disabled",
         )
         self.toolbar_redo_button.pack(side="left", padx=1)
         ttk.Separator(commandbar, orient="vertical").pack(
-            side="left", fill="y", padx=6
+            side="left", fill="y", padx=4
         )
 
-        for label, mode in (("2D", "2d"), ("3D", "3d"), ("Split", "split")):
+        for label, mode, width in (
+            ("2D", "2d", 4),
+            ("3D", "3d", 4),
+            ("Split", "split", 5),
+        ):
             ttk.Button(
                 commandbar,
                 text=label,
+                width=width,
                 style="CX.Compact.TButton",
                 command=lambda selected=mode: self._activate_spatial_workspace(selected),
             ).pack(side="left", padx=1)
         self.toolbar_fit_button = ttk.Button(
             commandbar,
             text="Fit",
+            width=4,
             style="CX.Compact.TButton",
             command=lambda: self.spatial_workspace.fit_views(),
         )
         self.toolbar_fit_button.pack(side="left", padx=1)
-        ttk.Separator(commandbar, orient="vertical").pack(
-            side="left", fill="y", padx=6
-        )
-
-        self.toolbar_problems_button = ttk.Button(
-            commandbar,
-            text="Problems",
-            style="CX.Compact.TButton",
-            command=self.show_problems_panel,
-        )
-        self.toolbar_problems_button.pack(side="left", padx=1)
-        self.toolbar_commands_button = ttk.Button(
-            commandbar,
-            text="Commands…",
-            style="CX.Compact.TButton",
-            command=self.show_command_palette,
-        )
-        self.toolbar_commands_button.pack(side="right", padx=1)
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.main_panes = panes

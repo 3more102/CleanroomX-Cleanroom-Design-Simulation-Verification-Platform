@@ -823,3 +823,61 @@ def test_status_bar_tracks_live_viewport_mode_zoom_and_projection(app):
     app.root.update()
     assert app.view_status_var.get().startswith("3D · 2D 125%")
 
+def test_recent_projects_persist_across_application_restart(tmp_path):
+    state_path = tmp_path / "gui-layout.json"
+    project_a = tmp_path / "alpha.cleanroomx.json"
+    project_b = tmp_path / "beta.cleanroomx.json"
+    project_a.write_text("{}", encoding="utf-8")
+    project_b.write_text("{}", encoding="utf-8")
+
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.update()
+    first._remember_recent_project(project_a)
+    first._remember_recent_project(project_b)
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        assert second._recent_project_paths == [
+            project_b.resolve(),
+            project_a.resolve(),
+        ]
+        records = second._recent_project_records()
+        assert [record["name"] for record in records] == ["beta", "alpha"]
+        assert all(record["modified"] != "Unavailable" for record in records)
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()
+
+
+def test_forget_recent_project_updates_persisted_preferences(app, tmp_path):
+    project_a = tmp_path / "alpha.cleanroomx.json"
+    project_b = tmp_path / "beta.cleanroomx.json"
+    app._remember_recent_project(project_a)
+    app._remember_recent_project(project_b)
+
+    app._forget_recent_project(project_b)
+
+    assert app._recent_project_paths == [project_a.resolve()]
+    state = load_gui_layout_state(app._ui_state_path)
+    assert state["recent_projects"] == [str(project_a.resolve())]
+

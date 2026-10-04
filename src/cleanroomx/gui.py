@@ -71,6 +71,12 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_state import (
+    default_gui_layout_state_path,
+    load_gui_layout_state,
+    normalize_gui_layout_state,
+    save_gui_layout_state,
+)
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1168,6 +1174,7 @@ class CleanroomXApp:
         *,
         autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
         autosave_manager: AutosaveManager | None = None,
+        ui_state_path: str | Path | None = None,
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
@@ -1200,6 +1207,12 @@ class CleanroomXApp:
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
+        self._ui_state_path = (
+            Path(ui_state_path)
+            if ui_state_path is not None
+            else default_gui_layout_state_path()
+        )
+        self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -1221,8 +1234,12 @@ class CleanroomXApp:
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
-        self.navigator_panel_visible_var = tk.BooleanVar(value=True)
-        self.output_panel_visible_var = tk.BooleanVar(value=True)
+        self.navigator_panel_visible_var = tk.BooleanVar(
+            value=bool(self._ui_layout_state["navigator_visible"])
+        )
+        self.output_panel_visible_var = tk.BooleanVar(
+            value=bool(self._ui_layout_state["output_visible"])
+        )
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
 
         self._configure_styles()
@@ -1233,6 +1250,7 @@ class CleanroomXApp:
         self._refresh_start_center()
         self._activate_start_workspace()
         self._capture_saved_state()
+        self.root.after_idle(self._restore_ui_layout_state)
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
         self._update_title()

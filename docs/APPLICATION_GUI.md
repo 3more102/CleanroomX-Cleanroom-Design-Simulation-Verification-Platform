@@ -66,7 +66,7 @@ When a saved project is opened, CleanroomX records a stable content revision usi
 
 If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
 
-For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
+For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit. Save As also refuses destinations that alias declared external engineering dependencies, including existing hard-link aliases, and repeats that dependency-identity check immediately before atomic replacement so a late destination substitution cannot overwrite an engineering input.
 
 ## Recovery autosave
 

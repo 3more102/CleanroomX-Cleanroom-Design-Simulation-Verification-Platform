@@ -829,3 +829,99 @@ class ProofGraphViewer(ttk.Frame):
             self._on_subject_navigate(str(subject))
         return "break"
 
+class StartCenter(ttk.Frame):
+    """Professional zero-state surface; delegates all actions to application APIs."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        on_new: Callable[[], None],
+        on_open: Callable[[], None],
+        on_import_ifc: Callable[[], None],
+        on_open_demo: Callable[[], None],
+    ):
+        super().__init__(master, padding=(34, 30))
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(3, weight=1)
+
+        brand = ttk.Frame(self)
+        brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(10, 24))
+        ttk.Label(brand, text="CleanroomX", style="CX.Brand.TLabel").pack(anchor="w")
+        ttk.Label(
+            brand,
+            text="Engineering Design • Simulation • Verification",
+        ).pack(anchor="w", pady=(4, 0))
+        ttk.Label(
+            brand,
+            text=(
+                "Project-native cleanroom engineering with traceable analysis, "
+                "verification, diagnostics, IFC semantics, and ProofGraph evidence."
+            ),
+            wraplength=760,
+        ).pack(anchor="w", pady=(8, 0))
+
+        actions = ttk.LabelFrame(self, text="Start", padding=18)
+        actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        for index in range(2):
+            actions.columnconfigure(index, weight=1)
+
+        ttk.Button(
+            actions,
+            text="New Project",
+            style="CX.Primary.TButton",
+            command=on_new,
+        ).grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        ttk.Button(
+            actions,
+            text="Open Project",
+            style="CX.Primary.TButton",
+            command=on_open,
+        ).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        ttk.Button(
+            actions,
+            text="Import IFC",
+            command=on_import_ifc,
+        ).grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        ttk.Button(
+            actions,
+            text="Open Example Project",
+            command=on_open_demo,
+        ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        capabilities = ttk.LabelFrame(self, text="Engineering workspace", padding=18)
+        capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        ttk.Label(
+            capabilities,
+            text=(
+                "2D / 3D / Split\n"
+                "Project Navigator + contextual properties\n"
+                "Analysis + verification overlays\n"
+                "Deterministic diagnostics navigation\n"
+                "ProofGraph + evidence traceability\n"
+                "IFC semantic import / re-import review"
+            ),
+            justify="left",
+        ).pack(anchor="w")
+
+        note = ttk.LabelFrame(self, text="Authority boundary", padding=18)
+        note.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(20, 0),
+        )
+        ttk.Label(
+            note,
+            text=(
+                "The desktop UI presents existing CleanroomX domain results. "
+                "Solver equations, requirement verdicts, diagnostic rules, "
+                "project persistence, and ProofGraph validation remain owned by "
+                "their canonical application/domain services."
+            ),
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+

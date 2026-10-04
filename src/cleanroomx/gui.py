@@ -3613,7 +3613,7 @@ class CleanroomXApp:
                 analysis.kind,
                 analysis.input,
             ):
-                dependency = Path(declared_path).expanduser()
+                dependency = Path(declared_path)
                 if not dependency.is_absolute():
                     if base_dir is None:
                         continue

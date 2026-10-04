@@ -95,6 +95,45 @@ def test_project_revision_history_is_bounded_newest_first(tmp_path):
     assert descriptions == ["v5", "v4", "v3"]
 
 
+def test_revision_retention_preserves_artifact_changed_after_scan(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    real_scan = revision_module.scan_project_revisions
+    before = real_scan(path)
+    assert len(before.revisions) == 3
+    newest = before.revisions[0].path
+    other_stale = before.revisions[1].path
+    changed_stale = before.revisions[2].path
+
+    def scan_then_change(project_path):
+        scan = real_scan(project_path)
+        changed_stale.write_bytes(b"changed revision evidence after scan")
+        return scan
+
+    monkeypatch.setattr(
+        revision_module,
+        "scan_project_revisions",
+        scan_then_change,
+    )
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert newest.exists()
+    assert not other_stale.exists()
+    assert changed_stale.exists()
+
+    after = real_scan(path)
+    assert [item.path for item in after.revisions] == [newest]
+    assert [item.path for item in after.issues] == [changed_stale]
+
+
 def test_revision_envelope_budget_preserves_valid_large_project_name(
     tmp_path, monkeypatch
 ):

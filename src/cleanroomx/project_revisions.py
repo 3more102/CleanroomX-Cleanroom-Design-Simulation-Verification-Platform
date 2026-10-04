@@ -359,14 +359,45 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
     return ProjectRevisionScan(tuple(revisions), tuple(issues))
 
 
+def _revision_record_is_verified(
+    revision: ProjectRevisionRecord,
+    *,
+    expected_source_path: Path,
+) -> bool:
+    """Return whether a scanned revision still represents the same verified evidence."""
+    try:
+        current = load_project_revision(
+            revision.path,
+            expected_source_path=expected_source_path,
+        )
+    except (OSError, ProjectRevisionError):
+        return False
+    return (
+        current.created_at_utc == revision.created_at_utc
+        and current.project.name == revision.project_name
+        and current.source_sha256 == revision.source_sha256
+        and len(current.source_bytes) == revision.source_size
+        and current.application_version == revision.application_version
+    )
+
+
 def rotate_project_revisions(
     project_path: str | Path,
     limit: int = DEFAULT_PROJECT_REVISION_HISTORY_LIMIT,
 ) -> None:
     if type(limit) is not int or limit < 0:
         raise ValueError("project revision history limit must be non-negative")
-    scan = scan_project_revisions(project_path)
+    source = _normalized_path(project_path)
+    scan = scan_project_revisions(source)
     for revision in scan.revisions[limit:]:
+        # A revision may be changed, replaced, or corrupted after the initial
+        # scan. Retention must preserve anything that is no longer the exact
+        # verified evidence we selected for pruning.
+        if not _revision_record_is_verified(
+            revision,
+            expected_source_path=source,
+        ):
+            continue
         try:
             revision.path.unlink(missing_ok=True)
         except OSError:

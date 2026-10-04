@@ -422,3 +422,28 @@ def test_3d_xray_and_hover_are_view_only(app):
 def test_invalid_3d_preset_is_rejected(app):
     with pytest.raises(ValueError, match="3D preset"):
         app.spatial_workspace.set_3d_view_preset("perspective")
+
+
+
+def test_proofgraph_navigator_and_model_object_navigation_are_linked(app):
+    app.analysis_tree.selection_set("nav-proofgraph")
+    app.analysis_tree.focus("nav-proofgraph")
+    app._on_navigator_selected()
+    app.root.update()
+
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.workspace_status_var.get() == "Workspace: ProofGraph"
+
+    room = app.spatial_workspace.layout["rooms"][0]
+    node = {
+        "type": "model_object",
+        "id": room["id"],
+        "label": room.get("name") or room["id"],
+        "raw": {"subject_ref": room["id"]},
+    }
+    assert app._navigate_proofgraph_node(node)
+    app.root.update()
+
+    assert app.spatial_workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.selection_status_var.get() == f"Selected: room {room['id']}"

@@ -1653,15 +1653,16 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _is_visible(self, kind: str, item_id: str) -> bool:
         key = self._visibility_key(kind, item_id)
-        if key in self._hidden_item_keys:
+        hidden_item_keys = getattr(self, "_hidden_item_keys", set())
+        if key in hidden_item_keys:
             return False
 
         if kind == "device":
             room_id = self._device_room_id(item_id)
-            if room_id is not None and ("room", room_id) in self._hidden_item_keys:
+            if room_id is not None and ("room", room_id) in hidden_item_keys:
                 return False
 
-        isolated = self._isolated_item_key
+        isolated = getattr(self, "_isolated_item_key", None)
         if isolated is None:
             return True
         if key == isolated:

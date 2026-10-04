@@ -4,6 +4,7 @@ import json
 
 from cleanroomx.gui_state import (
     GUI_LAYOUT_STATE_VERSION,
+    clamp_window_size_to_display,
     load_gui_layout_state,
     normalize_gui_layout_state,
     save_gui_layout_state,
@@ -120,3 +121,8 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
     assert len(state["recent_projects"]) == 8
     assert state["recent_projects"][0].endswith("project-0.cleanroomx.json")
     assert state["recent_projects"][-1].endswith("project-7.cleanroomx.json")
+
+
+def test_window_size_clamps_to_current_display():
+    assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
+    assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)

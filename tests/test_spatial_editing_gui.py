@@ -472,3 +472,78 @@ def test_persisted_proofgraph_refresh_and_subject_navigation(app, monkeypatch):
     assert app.spatial_workspace.selected == _Hit("room", room["id"])
     assert app.analysis_tree.selection() == (f"room:{room['id']}",)
 
+def test_selected_room_shows_engineering_dimensions(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    dimension_items = workspace.canvas_2d.find_withtag("room_dimension")
+    assert dimension_items
+    texts = [
+        workspace.canvas_2d.itemcget(item_id, "text")
+        for item_id in dimension_items
+        if workspace.canvas_2d.type(item_id) == "text"
+    ]
+    assert f"{room['length_m']:g} m" in texts
+    assert f"{room['width_m']:g} m" in texts
+
+
+def test_snap_indicator_tracks_configured_grid_without_mutating_geometry(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+    workspace._snap_to_grid.set(True)
+    workspace._measure_mode.set("none")
+    x, y = workspace._world_to_canvas(1.26, 2.24)
+
+    workspace._draw_snap_indicator_2d(x, y)
+    app.root.update()
+
+    assert workspace.canvas_2d.find_withtag("snap_indicator")
+    grid = workspace.layout["grid_m"]
+    sx, sy = workspace._snap_indicator_world
+    assert sx == pytest.approx(round(1.26 / grid) * grid)
+    assert sy == pytest.approx(round(2.24 / grid) * grid)
+    assert workspace.layout == before
+
+
+def test_room_context_menu_exposes_real_editing_actions(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    hit = _Hit("room", room["id"])
+    workspace.select_item("room", room["id"])
+
+    menu = workspace._build_context_menu_2d(hit)
+    try:
+        labels = [
+            menu.entrycget(index, "label")
+            for index in range(menu.index("end") + 1)
+            if menu.type(index) != "separator"
+        ]
+    finally:
+        menu.destroy()
+
+    assert "Properties" in labels
+    assert "Duplicate" in labels
+    assert "Delete" in labels
+    assert "Add Door" in labels
+    assert "Add Opening" in labels
+    assert "Add Device" in labels
+    assert "Link Analysis…" in labels
+
+
+def test_hover_state_has_distinct_2d_feedback(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    room_item = workspace.canvas_2d.find_withtag(f"room:{room['id']}")[0]
+    workspace.canvas_2d.addtag_withtag("current", room_item)
+    x, y = workspace._world_to_canvas(
+        room["x_m"] + room["length_m"] / 2,
+        room["y_m"] + room["width_m"] / 2,
+    )
+    event = type("Event", (), {"x": int(x), "y": int(y)})()
+
+    workspace._on_motion(event)
+
+    assert workspace._hovered == _Hit("room", room["id"])
+

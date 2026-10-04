@@ -1619,18 +1619,22 @@ class CleanroomXApp:
             side="left", fill="y", padx=4
         )
 
+        self.toolbar_workspace_buttons: dict[str, ttk.Button] = {}
         for label, mode, width in (
             ("2D", "2d", 4),
             ("3D", "3d", 4),
             ("Split", "split", 5),
         ):
-            ttk.Button(
+            button = ttk.Button(
                 commandbar,
                 text=label,
                 width=width,
-                style="CX.Compact.TButton",
+                style="CX.WorkspaceMode.TButton",
                 command=lambda selected=mode: self._activate_spatial_workspace(selected),
-            ).pack(side="left", padx=1)
+            )
+            button.pack(side="left", padx=1)
+            self.toolbar_workspace_buttons[mode] = button
+        self._sync_workspace_mode_buttons("split")
         self.toolbar_fit_button = ttk.Button(
             commandbar,
             text="Fit",
@@ -1736,8 +1740,9 @@ class CleanroomXApp:
             on_undo_requested=self.undo_project_edit,
             on_redo_requested=self.redo_project_edit,
             on_selection_change=self._on_workspace_selection_change,
-            on_view_status_change=self.view_status_var.set,
+            on_view_status_change=self._on_workspace_view_status_change,
         )
+        self._sync_workspace_mode_buttons(self.spatial_workspace._workspace_mode.get())
         self.notebook.add(self.spatial_workspace, text="Design")
 
         self.input_tab = ttk.Frame(self.notebook)
@@ -2892,11 +2897,29 @@ class CleanroomXApp:
         if self.import_ifc_spatial_layout():
             self._activate_spatial_workspace("split")
 
+    def _sync_workspace_mode_buttons(self, mode: str) -> None:
+        if mode not in {"2d", "3d", "split"}:
+            return
+        for candidate, button in getattr(
+            self, "toolbar_workspace_buttons", {}
+        ).items():
+            if candidate == mode:
+                button.state(["selected"])
+            else:
+                button.state(["!selected"])
+
+    def _on_workspace_view_status_change(self, status: str) -> None:
+        self.view_status_var.set(status)
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            self._sync_workspace_mode_buttons(workspace._workspace_mode.get())
+
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
         if mode is not None and hasattr(self, "spatial_workspace"):
             self.spatial_workspace.set_workspace_mode(mode)
+            self._sync_workspace_mode_buttons(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
 

@@ -1510,42 +1510,48 @@ class CleanroomXApp:
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
     def _build_layout(self) -> None:
-        topbar = ttk.Frame(self.root, padding=(12, 10, 12, 7))
+        # Keep the application chrome compact enough that the engineering
+        # workspace remains fully usable at the supported 1050×680 minimum.
+        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
-            row=0, column=0, rowspan=2, sticky="w", padx=(0, 16)
+            row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(row=0, column=1, sticky="w")
-        ttk.Entry(topbar, textvariable=self.name_var, width=28).grid(
-            row=1, column=1, sticky="ew", padx=(0, 10)
+        ttk.Label(topbar, text="Project").grid(
+            row=0, column=1, sticky="w", padx=(0, 5)
         )
-        ttk.Label(topbar, text="Description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(topbar, textvariable=self.description_var).grid(
-            row=1, column=2, sticky="ew", padx=(0, 12)
+        ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
+            row=0, column=2, sticky="ew", padx=(0, 10)
+        )
+        ttk.Label(topbar, text="Description").grid(
+            row=0, column=3, sticky="w", padx=(0, 5)
+        )
+        ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
+            row=0, column=4, sticky="ew", padx=(0, 10)
         )
         ttk.Button(
             topbar,
             text="Validate",
             command=self.validate_current,
-        ).grid(row=0, column=3, rowspan=2, padx=3)
+        ).grid(row=0, column=5, padx=2)
         self.run_button = ttk.Button(
             topbar,
             text="▶ Run",
             command=self.run_current,
             style="CX.Primary.TButton",
         )
-        self.run_button.grid(row=0, column=4, rowspan=2, padx=3)
+        self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
             topbar, text="Abandon", command=self.cancel_run, state="disabled"
         )
-        self.cancel_button.grid(row=0, column=5, rowspan=2, padx=(3, 0))
-        topbar.columnconfigure(1, weight=1)
-        topbar.columnconfigure(2, weight=2)
+        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+        topbar.columnconfigure(2, weight=1)
+        topbar.columnconfigure(4, weight=2)
 
         commandbar = ttk.Frame(
             self.root,
             style="CX.Toolbar.TFrame",
-            padding=(10, 5),
+            padding=(10, 3),
         )
         self.commandbar = commandbar
         commandbar.pack(fill="x", padx=10, pady=(0, 4))
@@ -1639,6 +1645,70 @@ class CleanroomXApp:
             command=lambda: self.spatial_workspace.fit_views(),
         )
         self.toolbar_fit_button.pack(side="left", padx=1)
+
+        workflowbar = ttk.Frame(
+            self.root,
+            style="CX.Toolbar.TFrame",
+            padding=(10, 3),
+        )
+        self.workflowbar = workflowbar
+        workflowbar.pack(fill="x", padx=10, pady=(0, 4))
+        ttk.Label(
+            workflowbar,
+            text="GUIDED WORKFLOW",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Separator(workflowbar, orient="vertical").pack(
+            side="left", fill="y", padx=(0, 6)
+        )
+
+        self.workflow_design_button = ttk.Button(
+            workflowbar,
+            text="1  Design",
+            width=9,
+            style="CX.Compact.TButton",
+            command=lambda: self._activate_spatial_workspace("split"),
+        )
+        self.workflow_design_button.pack(side="left", padx=1)
+        self.workflow_input_button = ttk.Button(
+            workflowbar,
+            text="2  Inputs",
+            width=9,
+            style="CX.Compact.TButton",
+            command=self._activate_analysis_input_workspace,
+        )
+        self.workflow_input_button.pack(side="left", padx=1)
+        self.workflow_validate_button = ttk.Button(
+            workflowbar,
+            text="3  Validate",
+            width=10,
+            style="CX.Compact.TButton",
+            command=self.validate_current,
+        )
+        self.workflow_validate_button.pack(side="left", padx=1)
+        self.workflow_run_button = ttk.Button(
+            workflowbar,
+            text="4  Run",
+            width=9,
+            style="CX.Primary.TButton",
+            command=self.run_current,
+        )
+        self.workflow_run_button.pack(side="left", padx=1)
+        self.workflow_verify_button = ttk.Button(
+            workflowbar,
+            text="5  Save & Verify",
+            width=14,
+            style="CX.Compact.TButton",
+            command=self._guided_save_and_verify,
+        )
+        self.workflow_verify_button.pack(side="left", padx=1)
+        self.workflow_report_button = ttk.Button(
+            workflowbar,
+            text="6  Report",
+            width=9,
+            style="CX.Compact.TButton",
+            command=self.export_project_engineering_dossier,
+        )
+        self.workflow_report_button.pack(side="left", padx=1)
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.main_panes = panes
@@ -2899,6 +2969,30 @@ class CleanroomXApp:
             self.spatial_workspace.set_workspace_mode(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
+
+    def _activate_analysis_input_workspace(self) -> None:
+        """Open the current analysis input editor without changing engineering data."""
+        if hasattr(self, "notebook") and hasattr(self, "input_tab"):
+            self.notebook.select(self.input_tab)
+            self.workspace_status_var.set("Workspace: Analysis Inputs")
+
+    def _guided_save_and_verify(self) -> None:
+        """Save the exact project state required by canonical verification, then verify."""
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before verification.",
+                parent=self.root,
+            )
+            return
+        if self.project_path is None:
+            self.save_project_as()
+        elif self._has_unsaved_changes():
+            self.save_project()
+        if self.project_path is None or self._has_unsaved_changes():
+            self.status_var.set("Save required before verification")
+            return
+        self.run_project_requirements_verification()
 
     def _add_text_tab(
         self,

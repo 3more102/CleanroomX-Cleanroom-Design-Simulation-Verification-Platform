@@ -689,6 +689,57 @@ def test_application_command_strip_remains_visible_at_minimum_window(app):
         assert button.winfo_x() + button.winfo_width() <= app.commandbar.winfo_width()
 
 
+def test_guided_workflow_is_visible_at_minimum_window_and_opens_design(app):
+    app.root.geometry("1050x680")
+    app.root.update()
+
+    buttons = (
+        app.workflow_design_button,
+        app.workflow_input_button,
+        app.workflow_validate_button,
+        app.workflow_run_button,
+        app.workflow_verify_button,
+        app.workflow_report_button,
+    )
+    for button in buttons:
+        assert button.winfo_ismapped(), button.cget("text")
+        assert button.winfo_x() + button.winfo_width() <= app.workflowbar.winfo_width()
+
+    app.notebook.select(app.start_center)
+    app.workflow_design_button.invoke()
+    app.root.update()
+
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.workspace_status_var.get() == "Workspace: Split"
+
+    project_before = copy.deepcopy(app.project.to_dict())
+    app.workflow_input_button.invoke()
+    app.root.update()
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.workspace_status_var.get() == "Workspace: Analysis Inputs"
+    assert app.project.to_dict() == project_before
+
+
+def test_guided_save_and_verify_saves_dirty_project_before_verification(
+    app, monkeypatch, tmp_path
+):
+    calls: list[str] = []
+    app.project_path = tmp_path / "guided.cleanroomx.json"
+    dirty_states = iter((True, False))
+    monkeypatch.setattr(app, "_has_unsaved_changes", lambda: next(dirty_states))
+    monkeypatch.setattr(app, "save_project", lambda: calls.append("save"))
+    monkeypatch.setattr(
+        app,
+        "run_project_requirements_verification",
+        lambda: calls.append("verify"),
+    )
+
+    app._guided_save_and_verify()
+
+    assert calls == ["save", "verify"]
+    assert app.workflow_verify_button.cget("text") == "5  Save & Verify"
+
+
 def test_panel_header_close_controls_and_problems_navigation(app):
     workspace = app.spatial_workspace
 

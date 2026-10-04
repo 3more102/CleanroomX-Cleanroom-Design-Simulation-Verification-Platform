@@ -11,7 +11,89 @@ import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.project import save_project_document
+from cleanroomx.proofgraph_models import (
+    ComplianceCheck,
+    ComplianceFinding,
+    ComplianceVerdict,
+    DesignEvidence,
+    EvidenceSource,
+    ProofGraph,
+    Requirement,
+    RequirementSet,
+    VerificationRun,
+)
 from cleanroomx.spatial import _Hit
+
+
+def _proofgraph_document(subject_ref: str) -> dict:
+    requirement = Requirement(
+        id="REQ-GUI-1",
+        title="Room ACH requirement",
+        source="GUI regression",
+        scope=(subject_ref,),
+        criteria={"minimum": 20.0, "unit": "1/h"},
+    )
+    requirement_set = RequirementSet(
+        id="REQSET-GUI",
+        version="1",
+        title="GUI requirements",
+        source="GUI regression",
+        requirements=(requirement,),
+    )
+    source = EvidenceSource(
+        id="SRC-GUI",
+        kind="project",
+        reference="GUI regression",
+    )
+    evidence = DesignEvidence(
+        id="EVID-GUI",
+        property_name="ach",
+        value=24.0,
+        unit="1/h",
+        source_id=source.id,
+        subject_ref=subject_ref,
+    )
+    check = ComplianceCheck(
+        id="CHECK-GUI",
+        requirement_id=requirement.id,
+        evidence_ids=(evidence.id,),
+        required_evidence_kinds=("design",),
+    )
+    finding = ComplianceFinding(
+        id="FIND-GUI",
+        check_id=check.id,
+        requirement_id=requirement.id,
+        status="pass",
+        reason="ACH is above configured minimum.",
+        evidence_ids=(evidence.id,),
+        evidence_present=True,
+        expected=20.0,
+        actual=24.0,
+        unit="1/h",
+    )
+    verdict = ComplianceVerdict(
+        id="VERDICT-GUI",
+        requirement_id=requirement.id,
+        status="pass",
+        finding_ids=(finding.id,),
+        reason="Canonical GUI regression verdict.",
+    )
+    run = VerificationRun(
+        id="RUN-GUI",
+        requirement_set_id=requirement_set.id,
+        check_ids=(check.id,),
+        verdict_ids=(verdict.id,),
+    )
+    return ProofGraph(
+        id="GRAPH-GUI",
+        requirement_set=requirement_set,
+        evidence_sources=(source,),
+        evidence=(evidence,),
+        checks=(check,),
+        findings=(finding,),
+        verdicts=(verdict,),
+        verification_runs=(run,),
+    ).to_dict()
 
 
 @pytest.fixture
@@ -355,4 +437,38 @@ def test_verification_navigation_opens_analysis_without_reimplementing_verifier(
     assert app.project.active_analysis_id == analysis.id
     assert app.analysis_tree.selection() == (analysis.id,)
     assert app._editor_analysis_id == analysis.id
+
+def test_proofgraph_viewer_projects_canonical_documents_without_reverification(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _proofgraph_document(room["id"])
+
+    app.proofgraph_viewer.set_documents([document])
+    app.root.update()
+
+    assert len(app.proofgraph_viewer._documents) == 1
+    assert app.proofgraph_viewer._documents[0]["graph_sha256"] == document["graph_sha256"]
+    assert app.proofgraph_viewer.summary_var.get().startswith("6 nodes")
+    assert app.proofgraph_viewer.canvas.find_withtag("proofnode")
+
+
+def test_persisted_proofgraph_refresh_and_subject_navigation(app, monkeypatch):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _proofgraph_document(room["id"])
+    monkeypatch.setattr(
+        "cleanroomx.gui.verification_run_history_records",
+        lambda _metadata: [{"proofgraphs": [document]}],
+    )
+
+    app._refresh_proofgraph_viewer()
+    assert len(app.proofgraph_viewer._documents) == 1
+
+    app.analysis_tree.selection_set("nav-proofgraph")
+    app.analysis_tree.event_generate("<<TreeviewSelect>>")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+
+    assert app._navigate_proofgraph_subject(room["id"])
+    app.root.update()
+    assert app.spatial_workspace.selected == _Hit("room", room["id"])
+    assert app.analysis_tree.selection() == (f"room:{room['id']}",)
 

@@ -510,6 +510,181 @@ def test_plugin_api_v1_rejects_host_dependency_declarations():
     assert "API version 1 does not support" in discovery.issues[0].error
 
 
+def test_plugin_v2_rejects_non_callable_dependency_resolver():
+    plugin = AnalysisPlugin(
+        api_version=2,
+        key="bad_dependency_resolver",
+        title="Bad dependency resolver",
+        category="Plugin tests",
+        description="Invalid dependency resolver binding.",
+        parser=_parser,
+        runner=_runner,
+        reporter=_reporter,
+        external_dependencies="not-callable",
+    )
+    discovery = _discover_trusted(
+        set(),
+        entry_points=[
+            _FakeEntryPoint(
+                "bad-dependency-resolver",
+                "pkg.bad_dependency:registration",
+                plugin,
+            )
+        ],
+    )
+
+    assert discovery.plugins == ()
+    assert len(discovery.issues) == 1
+    assert "external_dependencies must be callable" in discovery.issues[0].error
+
+
+@pytest.mark.parametrize(
+    ("declared", "error"),
+    [
+        (
+            lambda payload: [
+                ("data_file", payload["data_file"]),
+                ("data_file", payload["data_file"]),
+            ],
+            "declared more than once",
+        ),
+        (
+            lambda _payload: [("data_file", "other.csv")],
+            "does not match the submitted payload",
+        ),
+        (
+            lambda _payload: [("data_file",)],
+            "entries must be (field, path) pairs",
+        ),
+    ],
+)
+def test_plugin_v2_rejects_invalid_dependency_declarations(
+    monkeypatch,
+    declared,
+    error,
+):
+    origin = PluginOrigin(
+        entry_point_name="invalid_dependency_plugin",
+        entry_point_value="cleanroomx_invalid_dependency:registration",
+        distribution_name="cleanroomx-invalid-dependency",
+        distribution_version="1.0",
+    )
+    spec = application.AnalysisSpec(
+        key="invalid_dependency_plugin",
+        title="Invalid dependency plugin",
+        category="Plugin tests",
+        parser=_parser,
+        runner=_runner,
+        reporter=None,
+        description="Dependency declaration validation test.",
+        source="plugin",
+        plugin_api_version=2,
+        plugin_origin=origin,
+        external_dependencies=declared,
+    )
+    monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
+
+    with pytest.raises((TypeError, ValueError), match=error):
+        application.analysis_external_dependency_references(
+            spec.key,
+            {"data_file": "measurements.csv"},
+        )
+
+
+def test_plugin_v2_supports_list_dependency_fields(monkeypatch):
+    def dependencies(payload: dict):
+        return [
+            ("source_files[1]", payload["source_files"][1]),
+            ("source_files[0]", payload["source_files"][0]),
+        ]
+
+    origin = PluginOrigin(
+        entry_point_name="list_dependency_plugin",
+        entry_point_value="cleanroomx_list_dependency:registration",
+        distribution_name="cleanroomx-list-dependency",
+        distribution_version="1.0",
+    )
+    spec = application.AnalysisSpec(
+        key="list_dependency_plugin",
+        title="List dependency plugin",
+        category="Plugin tests",
+        parser=lambda payload: payload,
+        runner=lambda model: {"status": "complete", "model": model},
+        reporter=None,
+        description="List dependency declaration test.",
+        source="plugin",
+        plugin_api_version=2,
+        plugin_origin=origin,
+        external_dependencies=dependencies,
+    )
+    monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
+
+    references = application.analysis_external_dependency_references(
+        spec.key,
+        {"source_files": ["first.csv", "second.csv"]},
+    )
+
+    assert references == (
+        ("source_files[0]", "first.csv"),
+        ("source_files[1]", "second.csv"),
+    )
+
+
+def test_plugin_v2_parser_mutation_after_snapshot_never_reaches_runner(
+    tmp_path,
+    monkeypatch,
+):
+    source = tmp_path / "measurements.csv"
+    source.write_text("4.25\n", encoding="utf-8")
+    runner_called = False
+
+    def dependencies(payload: dict):
+        return [("data_file", payload["data_file"])]
+
+    def parser(payload: dict) -> dict:
+        payload["data_file"] = "mutated.csv"
+        return {"value": 4.25}
+
+    def runner(model: dict) -> dict:
+        nonlocal runner_called
+        runner_called = True
+        return {"status": "complete", **model}
+
+    origin = PluginOrigin(
+        entry_point_name="mutating_snapshot_plugin",
+        entry_point_value="cleanroomx_mutating_snapshot:registration",
+        distribution_name="cleanroomx-mutating-snapshot",
+        distribution_version="1.0",
+    )
+    spec = application.AnalysisSpec(
+        key="mutating_snapshot_plugin",
+        title="Mutating snapshot plugin",
+        category="Plugin tests",
+        parser=parser,
+        runner=runner,
+        reporter=None,
+        description="Parser snapshot mutation guard test.",
+        source="plugin",
+        plugin_api_version=2,
+        plugin_origin=origin,
+        external_dependencies=dependencies,
+    )
+    monkeypatch.setattr(application, "_ANALYSES", application._ANALYSES + (spec,))
+    monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
+
+    with pytest.raises(
+        application.AnalysisInputMutationError,
+        match="input validation/parsing",
+    ):
+        application.run_analysis(
+            spec.key,
+            {"data_file": "measurements.csv"},
+            base_dir=tmp_path,
+        )
+
+    assert runner_called is False
+
+
 def test_plugin_v2_external_dependency_is_snapshotted_before_parser(
     tmp_path,
     monkeypatch,

@@ -1614,9 +1614,43 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _is_item_visible(self, kind: str, item_id: str) -> bool:
         if self._hit_key(kind, item_id) in self._hidden_item_ids:
             return False
+
+        if kind == "device":
+            device = next(
+                (item for item in self.layout["devices"] if item["id"] == item_id),
+                None,
+            )
+            room_id = str(device.get("room_id") or "") if device else ""
+            if room_id and self._hit_key("room", room_id) in self._hidden_item_ids:
+                return False
+
         if self._isolated_item is None:
             return True
-        return self._isolated_item == _Hit(kind, item_id)
+        if self._isolated_item == _Hit(kind, item_id):
+            return True
+
+        if self._isolated_item.kind == "room" and kind == "device":
+            device = next(
+                (item for item in self.layout["devices"] if item["id"] == item_id),
+                None,
+            )
+            return bool(
+                device
+                and str(device.get("room_id") or "") == self._isolated_item.item_id
+            )
+
+        if self._isolated_item.kind == "device" and kind == "room":
+            device = next(
+                (
+                    item
+                    for item in self.layout["devices"]
+                    if item["id"] == self._isolated_item.item_id
+                ),
+                None,
+            )
+            return bool(device and str(device.get("room_id") or "") == item_id)
+
+        return False
 
     def hide_selected(self) -> None:
         if self.selected is None:
@@ -1753,6 +1787,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_item_origin = None
         self._drag_history_before = None
         self._resize_room_id = None
+        self._tool_mode.set("select")
+        self._measurement_points.clear()
+        self._measurement_result_var.set("Ready")
+        self._hidden_item_ids.clear()
+        self._isolated_item = None
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)

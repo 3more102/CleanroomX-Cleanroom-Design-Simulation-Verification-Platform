@@ -1290,7 +1290,24 @@ def engineering_overlay_state(
         elif normalized_mode == "ach":
             ach = _geometry_number(report.get("ach")) if report is not None else math.nan
             if math.isfinite(ach):
-                status = str(report.get("status") or "available")
+                findings = report.get("findings")
+                ach_finding = (
+                    next(
+                        (
+                            item
+                            for item in findings
+                            if isinstance(item, dict) and item.get("code") == "ACH"
+                        ),
+                        None,
+                    )
+                    if isinstance(findings, list)
+                    else None
+                )
+                status = str(
+                    ach_finding.get("status")
+                    if isinstance(ach_finding, dict)
+                    else report.get("status") or "available"
+                )
                 fill = _overlay_status_fill(status, fallback="#dbeafe")
                 label_lines = (
                     f"ACH: {ach:g} 1/h",

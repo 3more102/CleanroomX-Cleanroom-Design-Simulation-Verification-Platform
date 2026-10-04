@@ -1611,7 +1611,10 @@ class CleanroomXApp:
         ).pack(side="right")
 
     def _refresh_engineering_panels(self) -> dict | None:
-        diagnostics = self.problems_panel.refresh()
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return None
+        diagnostics = panel.refresh()
 
         try:
             currency = assess_project_verification_currency(
@@ -1707,7 +1710,9 @@ class CleanroomXApp:
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
-        pending = self._project_diagnostics_after_id
+        if getattr(self, "problems_panel", None) is None:
+            return
+        pending = getattr(self, "_project_diagnostics_after_id", None)
         if pending is not None:
             try:
                 self.root.after_cancel(pending)

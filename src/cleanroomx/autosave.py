@@ -477,17 +477,66 @@ def _quarantine_pair_is_verified(
     expected_quarantined_name: str | None = None,
 ) -> bool:
     """Return whether one complete quarantine manifest binds to exact artifact bytes."""
-    binding = _quarantine_manifest_binding(
-        manifest_path,
-        expected_quarantined_name=(
-            artifact_path.name
-            if expected_quarantined_name is None
-            else expected_quarantined_name
-        ),
-    )
-    if binding is None:
+    try:
+        manifest = load_strict_json(
+            manifest_path,
+            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
+        )
+    except (OSError, ValueError):
         return False
-    size_bytes, digest = binding
+    if not isinstance(manifest, dict):
+        return False
+
+    schema_version = manifest.get("schema_version")
+    quarantined_at_utc = manifest.get("quarantined_at_utc")
+    original_name = manifest.get("original_name")
+    quarantined_name = manifest.get("quarantined_name")
+    reason = manifest.get("reason")
+    size_bytes = manifest.get("size_bytes")
+    digest = manifest.get("sha256")
+    expected_name = (
+        artifact_path.name
+        if expected_quarantined_name is None
+        else expected_quarantined_name
+    )
+
+    if manifest.get("schema") != RECOVERY_QUARANTINE_SCHEMA:
+        return False
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version != RECOVERY_QUARANTINE_SCHEMA_VERSION
+    ):
+        return False
+    if not isinstance(quarantined_at_utc, str) or not quarantined_at_utc:
+        return False
+    try:
+        parsed_timestamp = datetime.fromisoformat(
+            quarantined_at_utc.replace("Z", "+00:00")
+        )
+    except ValueError:
+        return False
+    if parsed_timestamp.tzinfo is None:
+        return False
+    if (
+        not isinstance(original_name, str)
+        or not original_name.strip()
+        or Path(original_name).name != original_name
+        or quarantined_name != expected_name
+        or not isinstance(reason, str)
+        or not reason.strip()
+    ):
+        return False
+    if (
+        isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 0
+        or not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        return False
+
     try:
         stat_result, actual_sha256 = stable_file_sha256(
             artifact_path,
@@ -498,78 +547,34 @@ def _quarantine_pair_is_verified(
     return stat_result.st_size == size_bytes and actual_sha256 == digest
 
 
-def _restore_staged_quarantine_path(staged: Path, original: Path) -> bool:
-    """Restore one staged forensic file without clobbering a repopulated pathname."""
-    if not staged.exists():
-        return True
-    try:
-        os.link(staged, original)
-    except FileExistsError:
-        return False
-    except OSError:
-        return False
-    try:
-        staged.unlink()
-    except OSError:
-        return False
-    return True
-
-
-def _delete_verified_quarantine_pair(
-    directory: Path,
+def _stage_quarantine_pair_for_pruning(
     manifest_path: Path,
     artifact_path: Path,
-) -> bool:
-    """Stage, re-verify, then delete only the exact revisions moved off live paths."""
-    stage_dir = directory / f".retention-{uuid.uuid4().hex}"
-    try:
-        stage_dir.mkdir(mode=0o700)
-    except OSError:
-        return False
+) -> tuple[Path, Path] | None:
+    """Move one candidate pair to unpredictable private names before deletion."""
+    suffix = ".quarantined"
+    if not artifact_path.name.endswith(suffix):
+        return None
+    token = uuid.uuid4().hex
+    stem = artifact_path.name[: -len(suffix)]
+    staged_artifact = artifact_path.with_name(
+        f"{stem}.prune-{token}{suffix}"
+    )
+    staged_manifest = staged_artifact.with_name(
+        f"{staged_artifact.name}.manifest.json"
+    )
 
-    staged_manifest = stage_dir / manifest_path.name
-    staged_artifact = stage_dir / artifact_path.name
-    manifest_moved = False
-    artifact_moved = False
+    try:
+        os.replace(artifact_path, staged_artifact)
+    except OSError:
+        return None
     try:
         os.replace(manifest_path, staged_manifest)
-        manifest_moved = True
-        os.replace(artifact_path, staged_artifact)
-        artifact_moved = True
     except OSError:
-        if artifact_moved:
-            _restore_staged_quarantine_path(staged_artifact, artifact_path)
-        if manifest_moved:
-            _restore_staged_quarantine_path(staged_manifest, manifest_path)
-        try:
-            stage_dir.rmdir()
-        except OSError:
-            pass
-        return False
-
-    if not _quarantine_pair_is_verified(
-        staged_manifest,
-        staged_artifact,
-        expected_quarantined_name=artifact_path.name,
-    ):
-        _restore_staged_quarantine_path(staged_artifact, artifact_path)
-        _restore_staged_quarantine_path(staged_manifest, manifest_path)
-        try:
-            stage_dir.rmdir()
-        except OSError:
-            pass
-        return False
-
-    try:
-        staged_artifact.unlink()
-        staged_manifest.unlink()
-        stage_dir.rmdir()
-    except OSError:
-        # The pair was already moved into a private retention directory and
-        # verified there. A cleanup failure preserves whatever remains staged;
-        # it must never trigger deletion of a newly repopulated live pathname.
-        return False
-    return True
+        # Never delete the staged artifact if the pair cannot be staged
+        # completely. Split forensic evidence is still preserved for review.
+        return None
+    return staged_manifest, staged_artifact
 
 
 def _rotate_quarantine(directory: Path, history_limit: int) -> None:
@@ -592,16 +597,30 @@ def _rotate_quarantine(directory: Path, history_limit: int) -> None:
     for _modified, _name, stale_manifest, stale_artifact in sorted(
         manifests, reverse=True
     )[history_limit:]:
-        # Move the exact live directory entries into an unpredictable private
-        # staging directory before the final verification. Any concurrent
-        # replacement stays on the live pathname and is never unlinked by
-        # retention; a raced staged replacement fails verification and is
-        # restored without clobbering newer evidence.
-        _delete_verified_quarantine_pair(
-            directory,
+        # Verification above is only discovery evidence. Stage both mutable
+        # pathnames to unpredictable private names, then verify the staged bytes
+        # again before deletion. A concurrent replacement at either original
+        # path is therefore never the object that gets unlinked.
+        if not _quarantine_pair_is_verified(stale_manifest, stale_artifact):
+            continue
+        staged = _stage_quarantine_pair_for_pruning(
             stale_manifest,
             stale_artifact,
         )
+        if staged is None:
+            continue
+        staged_manifest, staged_artifact = staged
+        if not _quarantine_pair_is_verified(
+            staged_manifest,
+            staged_artifact,
+            expected_quarantined_name=stale_artifact.name,
+        ):
+            continue
+        try:
+            staged_artifact.unlink()
+            staged_manifest.unlink()
+        except OSError:
+            continue
 
 
 def quarantine_recovery_artifact(

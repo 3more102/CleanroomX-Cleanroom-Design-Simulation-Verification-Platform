@@ -23,6 +23,7 @@ from .spatial_transforms import (
     fit_3d_view,
     model_to_screen_2d,
     project_3d,
+    project_3d_perspective,
     screen_to_model_2d,
     zoom_2d_at,
 )

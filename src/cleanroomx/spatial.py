@@ -1479,6 +1479,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_undo_requested: Callable[[], bool] | None = None,
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
+        on_view_status_change: Callable[[str], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1492,6 +1493,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_undo_requested = on_undo_requested
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
+        self._on_view_status_change = on_view_status_change
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -2198,6 +2200,58 @@ class SpatialDesignWorkspace(ttk.Frame):
         if notify:
             self._notify_selection_change()
         return True
+
+    def selection_status_text(self) -> str:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            return "Selected: —"
+
+        name = str(item.get("name") or self.selected.item_id)
+        if self.selected.kind == "room":
+            parts = [f"Room: {name}"]
+            classification = str(item.get("classification") or "").strip()
+            if classification:
+                parts.append(classification)
+            pressure = item.get("pressure_pa")
+            if isinstance(pressure, (int, float)) and math.isfinite(float(pressure)):
+                parts.append(f"{float(pressure):g} Pa")
+            return " · ".join(parts)
+
+        device_type = str(item.get("type") or "device").replace("_", " ").title()
+        parts = [f"{device_type}: {name}"]
+        room_id = str(item.get("room_id") or "")
+        room = next(
+            (
+                candidate
+                for candidate in self.layout["rooms"]
+                if str(candidate.get("id") or "") == room_id
+            ),
+            None,
+        )
+        if room is not None:
+            parts.append(str(room.get("name") or room_id))
+        return " · ".join(parts)
+
+    def viewport_status_text(self) -> str:
+        mode = self._workspace_mode.get()
+        mode_label = {"2d": "2D", "3d": "3D", "split": "Split"}.get(
+            mode,
+            "Split",
+        )
+        view = self.layout.get("view", {})
+        zoom_2d = _finite_number(view.get("zoom_2d"), 1.0) * 100.0
+        zoom_3d = _finite_number(view.get("zoom_3d"), 1.0) * 100.0
+        projection = str(view.get("projection_mode") or "orthographic").strip().lower()
+        projection_label = "Perspective" if projection == "perspective" else "Ortho"
+        return (
+            f"{mode_label} · 2D {zoom_2d:.0f}% · "
+            f"3D {zoom_3d:.0f}% · {projection_label}"
+        )
+
+    def _notify_view_status(self) -> None:
+        callback = self._on_view_status_change
+        if callback is not None:
+            callback(self.viewport_status_text())
 
     def _notify_selection_change(self) -> None:
         if self.selected is None or self._on_selection_change is None:
@@ -3570,6 +3624,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def _draw_3d(self) -> None:
+        self._notify_view_status()
         canvas = self.canvas_3d
         canvas.delete("all")
         if not self.layout["rooms"]:

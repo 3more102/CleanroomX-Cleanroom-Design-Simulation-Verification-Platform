@@ -342,7 +342,9 @@ def test_quarantine_retention_staging_never_unlinks_repopulated_live_paths(
 
     def stage_then_repopulate(source_path, destination_path):
         result = real_replace(source_path, destination_path)
-        if Path(source_path) == quarantined.path:
+        if Path(source_path) == quarantined.manifest_path:
+            # The exact verified pair is now staged under private names. Simulate
+            # another process immediately repopulating both original live paths.
             quarantined.path.write_bytes(replacement_bytes)
             quarantined.manifest_path.write_text(
                 replacement_manifest,
@@ -352,18 +354,14 @@ def test_quarantine_retention_staging_never_unlinks_repopulated_live_paths(
 
     monkeypatch.setattr(autosave_module.os, "replace", stage_then_repopulate)
 
-    assert autosave_module._delete_verified_quarantine_pair(
-        quarantine_dir,
-        quarantined.manifest_path,
-        quarantined.path,
-    )
+    autosave_module._rotate_quarantine(quarantine_dir, 0)
 
     assert quarantined.path.read_bytes() == replacement_bytes
     assert (
         quarantined.manifest_path.read_text(encoding="utf-8")
         == replacement_manifest
     )
-    assert list(quarantine_dir.glob(".retention-*")) == []
+    assert list(quarantine_dir.glob("*.prune-*")) == []
 
 
 def test_quarantine_retention_preserves_unverified_forensic_pair(tmp_path):

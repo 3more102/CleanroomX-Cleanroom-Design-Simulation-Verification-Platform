@@ -1265,6 +1265,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._isolated_item: _Hit | None = None
         self._hovered_3d: _Hit | None = None
         self._xray_3d = tk.BooleanVar(value=False)
+        self._projection_3d = tk.StringVar(value="orthographic")
+        self._section_3d_enabled = tk.BooleanVar(value=False)
+        self._section_3d_z_m = tk.DoubleVar(value=0.0)
+        self._show_bounding_box_3d = tk.BooleanVar(value=False)
+        self._isolated_floor_elevation_m: float | None = None
+        self._isolated_category_3d: str | None = None
+        self._view3d_status_var = tk.StringVar(value="Ortho · Section off")
 
         self._build()
         self.refresh()

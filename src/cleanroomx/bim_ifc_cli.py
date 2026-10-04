@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from .cli_output import CliStateError
 from .bim_ifc import (
     IFC_LINK_METADATA_KEY,
     IfcImportError,
@@ -15,6 +16,9 @@ from .bim_ifc import (
     reimport_ifc_semantics_to_project,
 )
 from .project import (
+    ProjectFileBusyError,
+    ProjectSaveDurabilityError,
+    ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document_with_revision_info,
     project_file_revision_matches,
@@ -71,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _load_current_project(path: Path):
     project, revision, migration = load_project_document_with_revision_info(path)
     if migration.migrated:
-        raise RuntimeError(
+        raise CliStateError(
             "refusing to update a migrated legacy project in place; "
             "open and save it as a current-schema CleanroomX project first"
         )
@@ -190,7 +194,7 @@ def _plan(args) -> int:
 
     current_revision = capture_project_file_revision(project_path)
     if not project_file_revision_matches(revision, current_revision):
-        raise RuntimeError(
+        raise CliStateError(
             "project file changed during IFC re-import planning; plan was discarded"
         )
 
@@ -246,7 +250,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "reimport":
             return _reimport(args)
         raise RuntimeError(f"unsupported IFC command: {args.command}")
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (
+        OSError,
+        CliStateError,
+        ProjectFileBusyError,
+        ProjectSaveDurabilityError,
+        ProjectWriteConflictError,
+        ValueError,
+    ) as exc:
         print(f"cleanroomx-ifc: error: {exc}", file=sys.stderr)
         return 2
 

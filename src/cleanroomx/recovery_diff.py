@@ -114,7 +114,9 @@ def compare_recovery_to_source(candidate: RecoveryCandidate) -> RecoveryComparis
             source_analysis_count=None,
         )
 
-    if not source_path.exists():
+    try:
+        source = load_project_document(source_path)
+    except FileNotFoundError:
         editor_id, draft_state = _draft_state(recovered.project, None, recovered.ui_state)
         return RecoveryComparison(
             source_state="missing",
@@ -130,9 +132,6 @@ def compare_recovery_to_source(candidate: RecoveryCandidate) -> RecoveryComparis
             recovered_analysis_count=len(recovered.project.analyses),
             source_analysis_count=None,
         )
-
-    try:
-        source = load_project_document(source_path)
     except (OSError, ValueError) as exc:
         editor_id, draft_state = _draft_state(recovered.project, None, recovered.ui_state)
         return RecoveryComparison(

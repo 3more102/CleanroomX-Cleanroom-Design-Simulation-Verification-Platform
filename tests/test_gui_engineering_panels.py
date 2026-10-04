@@ -8,6 +8,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
 
@@ -155,3 +156,21 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_problem_severity_is_accessible_and_follows_dark_theme(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    target_iid = next(
+        iid
+        for iid, candidate in panel._issues_by_iid.items()
+        if candidate["sequence"] == issue["sequence"]
+    )
+
+    severity_text = panel.tree.set(target_iid, "severity")
+    assert severity_text == "✕ ERROR"
+
+    app.set_theme("dark", persist=False)
+    app.root.update_idletasks()
+    palette = theme_palette("dark")
+    assert panel.detail.cget("background").lower() == palette["field"].lower()

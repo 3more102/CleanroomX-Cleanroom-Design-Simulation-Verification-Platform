@@ -1236,6 +1236,7 @@ class CleanroomXApp:
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -1243,6 +1244,7 @@ class CleanroomXApp:
             value=bool(self._ui_layout_state["output_visible"])
         )
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
+        self._focus_workspace_snapshot: dict[str, bool] | None = None
 
         self._configure_styles()
         self._build_menu()
@@ -1415,18 +1417,24 @@ class CleanroomXApp:
             label="Project Navigator",
             accelerator="Ctrl+B",
             variable=self.navigator_panel_visible_var,
-            command=self._sync_navigator_panel_visibility,
+            command=self._on_navigator_visibility_requested,
         )
         view_menu.add_checkbutton(
             label="Output / Verification",
             accelerator="Ctrl+J",
             variable=self.output_panel_visible_var,
-            command=self._sync_output_panel_visibility,
+            command=self._on_output_visibility_requested,
         )
         view_menu.add_command(
             label="Design Inspector",
             accelerator="Ctrl+I",
             command=self.toggle_design_inspector,
+        )
+        view_menu.add_checkbutton(
+            label="Focus Workspace",
+            accelerator="Ctrl+Shift+F",
+            variable=self.focus_workspace_var,
+            command=self._sync_focus_workspace,
         )
         view_menu.add_command(
             label="Reset Panel Layout",
@@ -1469,6 +1477,7 @@ class CleanroomXApp:
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
+        self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
@@ -2526,6 +2535,14 @@ class CleanroomXApp:
                 "Design",
                 lambda: self.spatial_workspace.fit_views(),
                 keywords=("zoom", "model"),
+            ),
+            PaletteCommand(
+                "workspace.focus",
+                "Toggle Focus Workspace",
+                "Window",
+                self.toggle_focus_workspace,
+                shortcut="Ctrl+Shift+F",
+                keywords=("fullscreen", "panels", "viewport", "zen"),
             ),
             PaletteCommand(
                 "bim.import",

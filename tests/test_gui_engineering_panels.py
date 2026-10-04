@@ -102,7 +102,7 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     )
     panel.tree.selection_set(target_iid)
     panel.tree.focus(target_iid)
-    app.root.update_idletasks()
+    app.root.update()
 
     assert str(panel.navigate_button.cget("state")) == "normal"
     panel.navigate_button.invoke()
@@ -125,6 +125,24 @@ def test_problem_panel_explains_when_filters_hide_all_issues(app):
     assert not panel.tree.get_children()
     assert str(panel.navigate_button.cget("state")) == "disabled"
     assert "No diagnostics match" in panel.detail.get("1.0", "end").strip()
+
+
+def test_room_diagnostic_navigation_opens_design_workspace(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    issue = {
+        "rule": "engineering_sync.geometry_newer",
+        "element": {
+            "type": "room",
+            "id": room["id"],
+            "name": room.get("name", room["id"]),
+        },
+    }
+
+    app._navigate_project_diagnostic(issue)
+    app.root.update()
+
+    assert app.spatial_workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(app.spatial_workspace)
 
 
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
@@ -170,3 +188,42 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_problem_panel_disables_navigation_for_project_level_issue(app):
+    panel = app.problems_panel
+    panel.last_result = {
+        "issues": [
+            {
+                "sequence": 1,
+                "severity": "warning",
+                "rule": "project.example",
+                "category": "project",
+                "message": "Project-level guidance",
+                "suggested_action": "Review the project.",
+                "element": {"type": "project", "name": app.project.name},
+            }
+        ]
+    }
+    panel._populate()
+    iid = panel.tree.get_children()[0]
+    panel.tree.selection_set(iid)
+    panel.tree.focus(iid)
+    app.root.update()
+
+    assert str(panel.navigate_button.cget("state")) == "disabled"
+
+
+def test_problem_panel_preserves_failed_refresh_message(app, monkeypatch):
+    panel = app.problems_panel
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("diagnostic service failed")
+
+    monkeypatch.setattr("cleanroomx.gui_panels.analyze_project_diagnostics", fail)
+    assert panel.refresh() is None
+    app.root.update()
+
+    detail = panel.detail.get("1.0", "end").strip()
+    assert "could not be refreshed" in detail
+    assert "diagnostic service failed" in detail

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — protect GUI revision restore destinations — 2026-10-04
+
+- Applies the shared project/dependency output-identity guard before the desktop restores a saved project revision as a copy.
+- Rejects destinations that alias the open project or any declared external engineering dependency before revision bytes can be published; the revision writer's existing guarded atomic replacement still closes destination-change races.
+- Adds a regression proving a declared dependency remains byte-for-byte unchanged when selected as the restore destination; solver equations, project schemas, tolerances, requirements, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — narrow project CLI runtime boundaries — 2026-10-04
 
 - Adds a typed `CliStateError` for expected project/IFC CLI revision and state races instead of classifying every `RuntimeError` as a normal command failure.

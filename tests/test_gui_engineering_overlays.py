@@ -153,7 +153,7 @@ def test_none_overlay_has_neutral_fill_and_pressure_overlay_preserves_spatial_ev
 
 
 @pytest.fixture
-def gui_app():
+def gui_app(tmp_path):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -162,7 +162,11 @@ def gui_app():
         pytest.skip(f"Tk display unavailable: {exc}")
     callback_errors = []
     root.report_callback_exception = lambda *args: callback_errors.append(args)
-    application = CleanroomXApp(root, autosave_interval_seconds=0)
+    application = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
     application.load_project_path(bundled_demo_project_path())
     root.update()
     try:

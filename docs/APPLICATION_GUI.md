@@ -118,6 +118,15 @@ The 2D view supports room creation, selection, drag movement with metric grid sn
 
 Detailed controls, persistence behavior, spatial metadata, and limitations are documented in [LAYOUT_2D_3D.md](LAYOUT_2D_3D.md).
 
+
+The next workstation slice keeps those domain boundaries and adds display/navigation tools around them. The Design workspace now supports **Fit Selected**, deterministic **Top / Front / Right / Isometric** camera presets, a persisted room-visibility display layer, and read-only **Distance** / rectangular **Area** measurement. Measurement and camera operations do not alter solver inputs or engineering geometry.
+
+The application content area is split vertically: Design/Input/Plot/ProofGraph use the primary workspace while a resizable lower engineering panel exposes **Problems**, raw **Diagnostics**, **Verification**, **Console**, **Evidence**, **Results**, and **Report**. Problems are projected from the canonical `analyze_project_diagnostics` service, and double-click navigation selects/fits the affected analysis or spatial object where an identity exists. Verification is projected from the canonical verification-currency assessment rather than a GUI-owned verdict engine.
+
+The **ProofGraph** workspace is a read-only projection of retained canonical ProofGraph documents from project verification history. Documents are reparsed through the canonical ProofGraph loader before display. The tree and graph views expose requirements, evidence, checks, findings, verdicts, and verification runs; status filtering never changes evidence precedence or verification outcomes. Evidence subject references can navigate back to mapped CleanroomX spatial objects without changing graph content.
+
+The Project Navigator also provides presentation-only search across analyses, rooms, and devices. Filtering never changes the active analysis or project model.
+
 The 3D view is generated from the same canonical spatial model as the 2D layout. Room dimensions, labels, selection, and devices therefore stay synchronized. The view supports azimuth rotation, elevation adjustment, zoom, pan, reset, and fit behavior without adding a third-party rendering dependency.
 
 For room-verification and multi-room project-verification analyses, **Sync dimensions to active analysis** explicitly copies room dimensions (and an existing observed-pressure field when present) from the spatial model into the analysis JSON. Other engineering fields such as airflow, ACH requirements, particle requirements, and pressure-cascade criteria are preserved. Results for a synchronized analysis are invalidated and must be validated/run again.

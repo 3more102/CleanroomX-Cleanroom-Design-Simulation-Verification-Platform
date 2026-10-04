@@ -39,6 +39,7 @@ DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 DEFAULT_RECOVERY_QUARANTINE_LIMIT = 20
 RECOVERY_FILE_MAX_BYTES = 2 * PROJECT_FILE_MAX_BYTES
+RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES = 1024 * 1024
 
 
 class RecoveryFormatError(ValueError):
@@ -408,18 +409,70 @@ def _resolve_recovery_artifact_path(
     return resolved_artifact, resolved_directory
 
 
+def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bool:
+    """Return whether one quarantine manifest still binds to its exact artifact bytes."""
+    try:
+        manifest = load_strict_json(
+            manifest_path,
+            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
+        )
+    except (OSError, ValueError):
+        return False
+    if not isinstance(manifest, dict):
+        return False
+    if (
+        manifest.get("schema") != RECOVERY_QUARANTINE_SCHEMA
+        or manifest.get("schema_version") != RECOVERY_QUARANTINE_SCHEMA_VERSION
+        or manifest.get("quarantined_name") != artifact_path.name
+    ):
+        return False
+
+    size_bytes = manifest.get("size_bytes")
+    digest = manifest.get("sha256")
+    if (
+        isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 0
+        or not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        return False
+
+    try:
+        stat_result, actual_sha256 = stable_file_sha256(
+            artifact_path,
+            max_bytes=RECOVERY_FILE_MAX_BYTES,
+        )
+    except OSError:
+        return False
+    return stat_result.st_size == size_bytes and actual_sha256 == digest
+
+
 def _rotate_quarantine(directory: Path, history_limit: int) -> None:
-    manifests: list[tuple[int, str, Path]] = []
+    manifests: list[tuple[int, str, Path, Path]] = []
     for manifest in directory.glob("*.quarantined.manifest.json"):
+        artifact = manifest.with_name(
+            manifest.name[: -len(".manifest.json")]
+        )
+        if not _quarantine_pair_is_verified(manifest, artifact):
+            # Retention must never destroy forensic evidence whose manifest or
+            # suspect bytes are no longer trustworthy. Preserve the pair for
+            # explicit operator review instead of counting it as rotatable history.
+            continue
         try:
             modified_ns = manifest.stat().st_mtime_ns
         except OSError:
             continue
-        manifests.append((modified_ns, manifest.name, manifest))
-    for _modified, _name, stale_manifest in sorted(manifests, reverse=True)[history_limit:]:
-        stale_artifact = stale_manifest.with_name(
-            stale_manifest.name[: -len(".manifest.json")]
-        )
+        manifests.append((modified_ns, manifest.name, manifest, artifact))
+
+    for _modified, _name, stale_manifest, stale_artifact in sorted(
+        manifests, reverse=True
+    )[history_limit:]:
+        # Re-verify immediately before deletion so a pair that changed after
+        # discovery is preserved rather than silently discarded.
+        if not _quarantine_pair_is_verified(stale_manifest, stale_artifact):
+            continue
         try:
             stale_artifact.unlink(missing_ok=True)
             stale_manifest.unlink(missing_ok=True)

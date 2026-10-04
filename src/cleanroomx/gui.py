@@ -1225,6 +1225,7 @@ class CleanroomXApp:
         self._refresh_analysis_list()
         self._refresh_engineering_panels()
         self._refresh_start_center()
+        self._activate_start_workspace()
         self._capture_saved_state()
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())

@@ -32,6 +32,7 @@ from .persistence import (
 from .strict_json import STRICT_JSON_FILE_MAX_BYTES
 from .plugins import (
     PLUGIN_API_VERSION,
+    PLUGIN_SUPPORTED_API_VERSIONS,
     PluginOrigin,
     discover_analysis_plugins,
 )
@@ -151,6 +152,7 @@ class AnalysisSpec:
     source: str = "builtin"
     plugin_api_version: int | None = None
     plugin_origin: PluginOrigin | None = None
+    external_dependencies: Callable[[dict], Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -569,6 +571,7 @@ _PLUGIN_ANALYSES = tuple(
         source="plugin",
         plugin_api_version=item.plugin.api_version,
         plugin_origin=item.origin,
+        external_dependencies=item.plugin.external_dependencies,
     )
     for item in _PLUGIN_DISCOVERY.plugins
 )
@@ -633,14 +636,28 @@ def validate_application_registry() -> dict:
                 f"{spec.key} has unsupported implementation source {spec.source!r}"
             )
         if spec.source == "plugin":
-            if spec.plugin_api_version != PLUGIN_API_VERSION:
+            if spec.plugin_api_version not in PLUGIN_SUPPORTED_API_VERSIONS:
                 raise RuntimeError(
-                    f"{spec.key} plugin API version does not match "
-                    f"{PLUGIN_API_VERSION}"
+                    f"{spec.key} plugin API version is unsupported: "
+                    f"{spec.plugin_api_version!r}"
                 )
             if spec.plugin_origin is None:
                 raise RuntimeError(f"{spec.key} plugin origin metadata is missing")
-        elif spec.plugin_origin is not None or spec.plugin_api_version is not None:
+            if spec.external_dependencies is not None:
+                if spec.plugin_api_version < 2:
+                    raise RuntimeError(
+                        f"{spec.key} plugin API v1 cannot declare host-managed "
+                        "external dependencies"
+                    )
+                if not callable(spec.external_dependencies):
+                    raise RuntimeError(
+                        f"{spec.key} plugin external dependency resolver is not callable"
+                    )
+        elif (
+            spec.plugin_origin is not None
+            or spec.plugin_api_version is not None
+            or spec.external_dependencies is not None
+        ):
             raise RuntimeError(f"{spec.key} built-in analysis has plugin metadata")
 
         if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
@@ -1351,6 +1368,102 @@ def _stable_file_fingerprint(path: Path) -> dict:
     }
 
 
+def _declared_external_dependency_value(payload: dict, field: str) -> str:
+    """Resolve one supported dependency field path from an analysis payload."""
+    if not isinstance(field, str) or not field:
+        raise ValueError("external dependency field must be a non-empty string")
+    if field.endswith("]") and "[" in field:
+        key, index_text = field[:-1].rsplit("[", 1)
+        if not key:
+            raise ValueError(f"invalid external dependency field: {field!r}")
+        try:
+            index = int(index_text)
+        except ValueError as exc:
+            raise ValueError(f"invalid external dependency field: {field!r}") from exc
+        values = payload.get(key)
+        if not isinstance(values, list) or not 0 <= index < len(values):
+            raise ValueError(
+                f"external dependency field is not present in payload: {field!r}"
+            )
+        value = values[index]
+    else:
+        if field not in payload:
+            raise ValueError(
+                f"external dependency field is not present in payload: {field!r}"
+            )
+        value = payload[field]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"external dependency field must reference a non-empty path string: {field!r}"
+        )
+    return value
+
+
+def _plugin_external_dependency_references(
+    spec: AnalysisSpec,
+    payload: dict,
+) -> list[tuple[str, str]]:
+    resolver = spec.external_dependencies
+    if resolver is None:
+        return []
+    if spec.source != "plugin" or spec.plugin_api_version is None or spec.plugin_api_version < 2:
+        raise RuntimeError(
+            f"{spec.key} has an external dependency resolver outside plugin API v2"
+        )
+
+    resolver_payload = copy.deepcopy(payload)
+    resolver_sha256 = _canonical_input_sha256(resolver_payload)
+    declared = resolver(resolver_payload)
+    try:
+        items = tuple(declared)
+    except TypeError as exc:
+        raise TypeError(
+            f"{spec.key} external dependency resolver must return an iterable "
+            "of (field, path) pairs"
+        ) from exc
+    _assert_input_snapshot_unchanged(
+        spec.key,
+        resolver_payload,
+        resolver_sha256,
+        phase="plugin external dependency declaration",
+    )
+
+    references: list[tuple[str, str]] = []
+    seen_fields: set[str] = set()
+    for item in items:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            raise TypeError(
+                f"{spec.key} external dependency resolver entries must be "
+                "(field, path) pairs"
+            )
+        field, declared_path = item
+        if not isinstance(field, str) or not field:
+            raise ValueError(
+                f"{spec.key} external dependency field must be a non-empty string"
+            )
+        if not isinstance(declared_path, str) or not declared_path.strip():
+            raise ValueError(
+                f"{spec.key} external dependency path for {field!r} must be "
+                "a non-empty string"
+            )
+        if field in seen_fields:
+            raise ValueError(
+                f"{spec.key} external dependency field is declared more than once: "
+                f"{field!r}"
+            )
+        actual_path = _declared_external_dependency_value(payload, field)
+        if actual_path != declared_path:
+            raise ValueError(
+                f"{spec.key} external dependency declaration for {field!r} "
+                "does not match the submitted payload"
+            )
+        seen_fields.add(field)
+        references.append((field, declared_path))
+
+    references.sort(key=lambda item: (item[0], item[1]))
+    return references
+
+
 def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str, str]]:
     references: list[tuple[str, str]] = []
     if kind == "consistency":
@@ -1369,6 +1482,10 @@ def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str,
                 for index, value in enumerate(values):
                     if isinstance(value, str) and value.strip():
                         references.append((f"{key}[{index}]", value))
+    else:
+        spec = ANALYSIS_SPECS.get(kind)
+        if spec is not None and spec.source == "plugin":
+            references.extend(_plugin_external_dependency_references(spec, payload))
     return references
 
 
@@ -1471,13 +1588,24 @@ def _prepare_external_dependency_snapshot(
                 )
 
             source = _resolve_relative(base_dir, declared_path)
-            destination = snapshot_dir / f"dependency-{index:04d}.json"
+            suffix = "".join(source.suffixes)
+            if (
+                not suffix
+                or len(suffix) > 32
+                or any(
+                    character
+                    not in ".-_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                    for character in suffix
+                )
+            ):
+                suffix = ".bin"
+            destination = snapshot_dir / f"dependency-{index:04d}{suffix}"
             try:
                 with stable_file_snapshot(
                     source,
                     attempts=_DEPENDENCY_FINGERPRINT_ATTEMPTS,
                     max_bytes=STRICT_JSON_FILE_MAX_BYTES,
-                    suffix=".json",
+                    suffix=suffix,
                 ) as (stable_source, stable_metadata, stable_digest):
                     current = {
                         "size_bytes": stable_metadata.st_size,
@@ -1849,6 +1977,7 @@ def _prepare_analysis_input(
     payload: dict,
     *,
     base_dir=None,
+    defer_plugin_parser: bool = False,
 ) -> _PreparedAnalysisInput:
     """Isolate, validate, and parse one exact submitted input revision."""
     if kind not in ANALYSIS_SPECS:
@@ -1873,7 +2002,10 @@ def _prepare_analysis_input(
     else:
         spec = ANALYSIS_SPECS[kind]
         assert spec.parser is not None
-        parsed = _load_callable(spec.parser)(snapshot)
+        if spec.source == "plugin" and spec.external_dependencies is not None:
+            _plugin_external_dependency_references(spec, snapshot)
+        if not defer_plugin_parser:
+            parsed = _load_callable(spec.parser)(snapshot)
 
     _assert_input_snapshot_unchanged(
         kind,
@@ -1936,7 +2068,18 @@ def run_analysis(
     project_source_revision: str | None = None,
 ) -> AnalysisRun:
     code_before = _capture_runtime_code_fingerprint()
-    prepared = _prepare_analysis_input(kind, payload, base_dir=base_dir)
+    candidate_spec = ANALYSIS_SPECS.get(kind)
+    defer_plugin_parser = bool(
+        candidate_spec is not None
+        and candidate_spec.source == "plugin"
+        and candidate_spec.external_dependencies is not None
+    )
+    prepared = _prepare_analysis_input(
+        kind,
+        payload,
+        base_dir=base_dir,
+        defer_plugin_parser=defer_plugin_parser,
+    )
     spec = ANALYSIS_SPECS[kind]
     references = _external_dependency_references(kind, prepared.payload)
 
@@ -1956,10 +2099,22 @@ def run_analysis(
                 result = _run_consistency(execution_payload, prepared.base_dir)
             elif kind == "dossier":
                 result = _run_dossier(execution_payload, prepared.base_dir)
+            elif spec.source == "plugin" and spec.external_dependencies is not None:
+                assert spec.parser is not None
+                assert spec.runner is not None
+                execution_sha256 = _canonical_input_sha256(execution_payload)
+                parsed = _load_callable(spec.parser)(execution_payload)
+                _assert_input_snapshot_unchanged(
+                    kind,
+                    execution_payload,
+                    execution_sha256,
+                    phase="input validation/parsing",
+                )
+                result = _load_callable(spec.runner)(parsed)
             else:
                 raise RuntimeError(
-                    "host-managed external dependency snapshots are only defined "
-                    "for built-in file-backed analyses"
+                    "host-managed external dependency snapshots are not defined "
+                    f"for analysis kind {kind!r}"
                 )
             _verify_external_dependency_snapshot(
                 kind, execution_payload, dependencies_before
@@ -1975,7 +2130,19 @@ def run_analysis(
             result = _run_dossier(prepared.payload, prepared.base_dir)
         else:
             assert spec.runner is not None
-            result = _load_callable(spec.runner)(prepared.parsed)
+            parsed = prepared.parsed
+            if defer_plugin_parser:
+                assert spec.parser is not None
+                execution_payload = copy.deepcopy(prepared.payload)
+                execution_sha256 = _canonical_input_sha256(execution_payload)
+                parsed = _load_callable(spec.parser)(execution_payload)
+                _assert_input_snapshot_unchanged(
+                    kind,
+                    execution_payload,
+                    execution_sha256,
+                    phase="input validation/parsing",
+                )
+            result = _load_callable(spec.runner)(parsed)
 
     _assert_input_snapshot_unchanged(
         kind,

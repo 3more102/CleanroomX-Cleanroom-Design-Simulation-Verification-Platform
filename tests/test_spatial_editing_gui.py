@@ -719,3 +719,62 @@ def test_command_strip_undo_redo_states_follow_project_history(app):
     app.root.update()
     assert str(app.toolbar_redo_button.cget("state")) == "normal"
 
+def test_focus_workspace_hides_chrome_and_restores_exact_visibility(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.navigator_panel_visible_var.set(False)
+    app._sync_navigator_panel_visibility()
+    app.output_panel_visible_var.set(True)
+    app._sync_output_panel_visibility()
+    workspace.set_inspector_visible(False)
+    app.root.update()
+
+    app.set_focus_workspace(True)
+    app.root.update()
+    assert app.focus_workspace_var.get() is True
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+    assert not workspace.inspector_visible()
+
+    app.set_focus_workspace(False)
+    app.root.update()
+    assert app.focus_workspace_var.get() is False
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert not workspace.inspector_visible()
+    assert app.project.to_dict() == project_before
+
+
+def test_focus_workspace_does_not_persist_hidden_panel_state(app):
+    workspace = app.spatial_workspace
+    app.navigator_panel_visible_var.set(True)
+    app._sync_navigator_panel_visibility()
+    app.output_panel_visible_var.set(False)
+    app._sync_output_panel_visibility()
+    workspace.set_inspector_visible(True)
+    app.root.update()
+
+    app.set_focus_workspace(True)
+    app.root.update()
+    state = app._capture_ui_layout_state()
+
+    assert state["navigator_visible"] is True
+    assert state["output_visible"] is False
+    assert state["inspector_visible"] is True
+
+
+def test_manual_panel_toggle_exits_focus_workspace_cleanly(app):
+    workspace = app.spatial_workspace
+    app.set_focus_workspace(True)
+    app.root.update()
+    assert app.focus_workspace_var.get() is True
+
+    app.toggle_navigator_panel()
+    app.root.update()
+
+    assert app.focus_workspace_var.get() is False
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert workspace.inspector_visible()
+

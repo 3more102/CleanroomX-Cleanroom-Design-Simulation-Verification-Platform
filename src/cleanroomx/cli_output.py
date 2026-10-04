@@ -1,13 +1,62 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import wraps
 import json
 import math
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, ParamSpec, TypeVar
 
 from .persistence import atomic_write_text
 from .strict_json import StrictJSONError
+
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
+def cli_error_boundary(
+    command: str,
+) -> Callable[[Callable[_P, int]], Callable[_P, int]]:
+    """Convert expected standalone-CLI failures into deterministic diagnostics."""
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError("command must be a non-empty string")
+
+    def decorate(func: Callable[_P, int]) -> Callable[_P, int]:
+        @wraps(func)
+        def guarded(*args: _P.args, **kwargs: _P.kwargs) -> int:
+            try:
+                return func(*args, **kwargs)
+            except (OSError, ValueError) as exc:
+                print(f"{command}: error: {exc}", file=sys.stderr)
+                return 1
+
+        return guarded
+
+    return decorate
+
+
+class CliInputError(ValueError):
+    """Raised when file-backed CLI input has an invalid user-supplied structure."""
+
+
+def load_cli_input(
+    loader: Callable[[str | Path], _T],
+    path: str | Path,
+) -> _T:
+    """Load one user input while normalizing structural parser failures only."""
+    try:
+        return loader(path)
+    except (OSError, ValueError):
+        raise
+    except KeyError as exc:
+        field = exc.args[0] if exc.args else "<unknown>"
+        raise CliInputError(
+            f"invalid input structure: missing required field {field!r}"
+        ) from exc
+    except (IndexError, TypeError, AttributeError) as exc:
+        raise CliInputError(f"invalid input structure: {exc}") from exc
 
 
 def _clone_cli_json_value(

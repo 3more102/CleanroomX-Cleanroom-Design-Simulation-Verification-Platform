@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .uncertainty import analyze_room_uncertainty
 from .uncertainty_io import load_uncertain_room
 from .uncertainty_report import markdown_uncertainty_report
@@ -21,9 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-uncertainty")
 def main() -> int:
     args = build_parser().parse_args()
-    result = analyze_room_uncertainty(load_uncertain_room(args.room))
+    result = analyze_room_uncertainty(load_cli_input(load_uncertain_room, args.room))
     try:
         text = (
             dumps_strict_json(result)

@@ -10,7 +10,7 @@ from .application import (
     ExternalDependencySnapshotError,
     run_analysis,
 )
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, publish_cli_output
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-consistency")
 def main() -> int:
     args = build_parser().parse_args()
     payload = {

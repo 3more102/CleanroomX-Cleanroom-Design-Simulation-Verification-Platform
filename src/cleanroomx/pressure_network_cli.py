@@ -7,7 +7,7 @@ from .strict_json import StrictJSONError
 from .pressure_network import solve_room_pressure_network
 from .pressure_network_io import load_pressure_network
 from .pressure_network_report import markdown_pressure_network_report
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,10 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-pressure-network")
 def main() -> int:
     args = build_parser().parse_args()
     result = solve_room_pressure_network(
-        load_pressure_network(args.network),
+        load_cli_input(load_pressure_network, args.network),
         mass_balance_tolerance_m3_h=(
             args.mass_balance_tolerance_m3_h
         ),

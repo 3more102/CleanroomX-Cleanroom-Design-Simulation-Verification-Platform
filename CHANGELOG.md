@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — standalone CLI input error boundaries — 2026-10-04
+
+- Adds one shared `cli_error_boundary` so expected standalone command `OSError` / `ValueError` failures return concise stderr and exit code 1 instead of a Python traceback.
+- Adds a narrow `load_cli_input` boundary for the 22 direct file-loader CLIs, translating malformed user JSON structure failures such as missing fields or wrong container shapes without swallowing unexpected runtime defects from analysis/solver code.
+- Applies the command boundary to all 24 standalone file-output engineering CLIs while preserving existing successful output, protected-output publication, strict-result JSON handling, and explicit engineering-domain exit codes.
+- Adds regressions for missing required fields, wrong root shapes, explicit exit-code preservation, unexpected-runtime propagation, and source-level completeness guards; solver equations, schemas, tolerances, requirements, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — recovery comparison source-state classification — 2026-10-04
 
 - Removes the separate source-path existence precheck from semantic recovery comparison and lets the canonical stable project loader determine source state.

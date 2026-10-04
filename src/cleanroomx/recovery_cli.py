@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .recovery_io import load_recovery_test
 from .recovery_report import markdown_recovery_report
 from .recovery_test import analyze_recovery_test
@@ -21,9 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-recovery-test")
 def main() -> int:
     args = build_parser().parse_args()
-    result = analyze_recovery_test(load_recovery_test(args.test))
+    result = analyze_recovery_test(load_cli_input(load_recovery_test, args.test))
     try:
         text = (
             dumps_strict_json(result)

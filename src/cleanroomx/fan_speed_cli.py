@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .fan_speed import analyze_fan_speed_study
 from .fan_speed_io import load_fan_speed_study
 from .fan_speed_report import markdown_fan_speed_report
@@ -25,9 +25,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-fan-speed")
 def main() -> int:
     args = build_parser().parse_args()
-    result = analyze_fan_speed_study(load_fan_speed_study(args.study))
+    result = analyze_fan_speed_study(load_cli_input(load_fan_speed_study, args.study))
     try:
         text = (
             dumps_strict_json(result)

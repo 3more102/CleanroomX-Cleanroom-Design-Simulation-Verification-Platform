@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .loop_network_io import load_looped_flow_network
 from .variable_friction_loop import solve_variable_friction_looped_network
 from .variable_friction_loop_report import (
@@ -69,10 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-loop-friction")
 def main() -> int:
     args = build_parser().parse_args()
     result = solve_variable_friction_looped_network(
-        load_looped_flow_network(args.network),
+        load_cli_input(load_looped_flow_network, args.network),
         resistance_relative_tolerance=(
             args.resistance_relative_tolerance
         ),

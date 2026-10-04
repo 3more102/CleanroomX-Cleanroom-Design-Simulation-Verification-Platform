@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .fan_network import solve_fan_driven_parallel_network
 from .fan_network_io import load_fan_driven_parallel_network_study
 from .fan_network_report import markdown_fan_driven_parallel_network_report
@@ -21,10 +21,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-fan-network")
 def main() -> int:
     args = build_parser().parse_args()
     result = solve_fan_driven_parallel_network(
-        load_fan_driven_parallel_network_study(args.study)
+        load_cli_input(load_fan_driven_parallel_network_study, args.study)
     )
     try:
         text = (

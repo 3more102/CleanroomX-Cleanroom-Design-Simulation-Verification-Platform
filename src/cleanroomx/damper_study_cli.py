@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .strict_json import StrictJSONError
-from .cli_output import dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .damper_study import solve_loop_damper_study
 from .damper_study_io import load_loop_damper_study
 from .damper_study_report import markdown_loop_damper_study_report
@@ -25,10 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx-damper-study")
 def main() -> int:
     args = build_parser().parse_args()
     result = solve_loop_damper_study(
-        load_loop_damper_study(args.study)
+        load_cli_input(load_loop_damper_study, args.study)
     )
     try:
         text = (

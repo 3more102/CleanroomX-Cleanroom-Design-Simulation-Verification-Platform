@@ -1261,6 +1261,8 @@ class CleanroomXApp:
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
         self.navigator_filter_var = tk.StringVar(value="")
+        self.navigator_filter_status_var = tk.StringVar(value="")
+        self._navigator_filter_open_state: dict[str, bool] | None = None
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
@@ -1438,6 +1440,11 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        view_menu.add_command(
+            label="Focus Project Navigator Filter",
+            accelerator="Ctrl+F",
+            command=self.focus_navigator_filter,
+        )
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -1501,6 +1508,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
+        self.root.bind("<Control-f>", lambda event: self.focus_navigator_filter())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
@@ -1738,11 +1746,19 @@ class CleanroomXApp:
         filter_row = ttk.Frame(navigator)
         filter_row.pack(fill="x", pady=(0, 6))
         ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
-        navigator_filter = ttk.Entry(
+        self.navigator_filter_entry = ttk.Entry(
             filter_row,
             textvariable=self.navigator_filter_var,
         )
-        navigator_filter.pack(side="left", fill="x", expand=True)
+        self.navigator_filter_entry.pack(side="left", fill="x", expand=True)
+        self.navigator_filter_entry.bind("<Escape>", self._clear_navigator_filter)
+        self.navigator_filter_entry.bind("<Down>", self._focus_navigator_tree)
+        ttk.Label(
+            filter_row,
+            textvariable=self.navigator_filter_status_var,
+            width=8,
+            anchor="e",
+        ).pack(side="left", padx=(4, 0))
         ttk.Button(
             filter_row,
             text="×",
@@ -1794,6 +1810,10 @@ class CleanroomXApp:
         nav_scroll.pack(side="right", fill="y")
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_navigator_selected)
         self.analysis_tree.bind("<Button-3>", self._show_navigator_context_menu)
+        self.analysis_tree.bind("<Return>", self._activate_navigator_item)
+        self.analysis_tree.bind("<Double-1>", self._activate_navigator_item)
+        self.analysis_tree.bind("<F2>", self._navigator_rename_selected)
+        self.analysis_tree.bind("<Delete>", self._navigator_delete_selected)
         self.analysis_tree.tag_configure("section", font=("TkDefaultFont", 9, "bold"))
         self.navigator_filter_var.trace_add(
             "write",
@@ -2363,6 +2383,18 @@ class CleanroomXApp:
         self._restore_focus_workspace_snapshot(status=False)
         self.navigator_panel_visible_var.set(target)
         self._sync_navigator_panel_visibility()
+
+    def focus_navigator_filter(self) -> None:
+        """Reveal the Project Navigator and focus its search field."""
+        self._restore_focus_workspace_snapshot(status=False)
+        if not self.navigator_panel_visible_var.get():
+            self.navigator_panel_visible_var.set(True)
+            self._sync_navigator_panel_visibility()
+        entry = getattr(self, "navigator_filter_entry", None)
+        if entry is not None:
+            self.root.after_idle(entry.focus_set)
+            self.root.after_idle(lambda: entry.selection_range(0, "end"))
+        self.status_var.set("Project Navigator filter focused")
 
     def hide_output_panel(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)
@@ -4099,16 +4131,33 @@ class CleanroomXApp:
         tree = getattr(self, "analysis_tree", None)
         snapshot = list(getattr(self, "_navigator_tree_snapshot", []))
         if tree is None or not snapshot:
+            self.navigator_filter_status_var.set("0 items")
             return
 
         self._restore_navigator_tree()
         query = self.navigator_filter_var.get().strip().casefold()
         if not query:
+            saved_open_state = self._navigator_filter_open_state
+            if saved_open_state is not None:
+                for iid, is_open in saved_open_state.items():
+                    if tree.exists(iid):
+                        tree.item(iid, open=is_open)
+                self._navigator_filter_open_state = None
+            self.navigator_filter_status_var.set(f"{len(snapshot)} items")
             return
 
+        if self._navigator_filter_open_state is None:
+            self._navigator_filter_open_state = {
+                iid: bool(tree.item(iid, "open"))
+                for iid, _parent, _index in snapshot
+                if tree.exists(iid)
+            }
+
         children: dict[str, list[str]] = {}
+        parents: dict[str, str] = {}
         for iid, parent, _index in snapshot:
             children.setdefault(parent, []).append(iid)
+            parents[iid] = parent
 
         visible: set[str] = set()
 
@@ -4137,6 +4186,15 @@ class CleanroomXApp:
         for root_iid in children.get("", []):
             match(root_iid)
 
+        # Filtering should expose a match, not leave it hidden under a collapsed
+        # ancestor. The original open/closed state is restored when the query clears.
+        for iid in tuple(visible):
+            parent = parents.get(iid, "")
+            while parent:
+                if tree.exists(parent):
+                    tree.item(parent, open=True)
+                parent = parents.get(parent, "")
+
         for iid, _parent, _index in reversed(snapshot):
             if tree.exists(iid) and iid not in visible:
                 tree.detach(iid)
@@ -4144,6 +4202,97 @@ class CleanroomXApp:
         selection = tree.selection()
         if selection and selection[0] not in visible:
             tree.selection_remove(selection[0])
+
+        self.navigator_filter_status_var.set(
+            f"{len(visible)}/{len(snapshot)}"
+        )
+
+    def _clear_navigator_filter(self, _event=None):
+        if self.navigator_filter_var.get():
+            self.navigator_filter_var.set("")
+        return "break"
+
+    def _focus_navigator_tree(self, _event=None):
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return "break"
+        selection = tree.selection()
+        target = selection[0] if selection and tree.exists(selection[0]) else None
+        if target is None:
+            roots = tree.get_children("")
+            target = roots[0] if roots else None
+        if target is not None:
+            tree.selection_set(target)
+            tree.focus(target)
+            tree.see(target)
+            tree.focus_set()
+        return "break"
+
+    def _activate_navigator_item(self, _event=None):
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return "break"
+        selection = tree.selection()
+        if not selection:
+            return "break"
+        item_id = selection[0]
+
+        if item_id in {
+            "nav-building",
+            "nav-hvac",
+            "nav-devices",
+            "nav-pressure",
+            "nav-analyses",
+            "nav-requirements",
+            "nav-reports",
+        }:
+            tree.item(item_id, open=not bool(tree.item(item_id, "open")))
+            return "break"
+
+        self._on_navigator_selected()
+        if item_id.startswith("room:") or item_id.startswith("device:"):
+            self._activate_spatial_workspace()
+            self.spatial_workspace.set_inspector_visible(True)
+        elif not item_id.startswith("nav-"):
+            self._activate_analysis_input_workspace()
+        return "break"
+
+    def _navigator_rename_selected(self, _event=None):
+        selection = self.analysis_tree.selection()
+        if selection and not selection[0].startswith(("nav-", "room:", "device:")):
+            self.rename_analysis()
+        else:
+            self.status_var.set("Rename is available for analyses in Project Navigator")
+        return "break"
+
+    def _delete_navigator_item(self, item_id: str) -> None:
+        if not item_id:
+            return
+        if not item_id.startswith(("nav-", "room:", "device:")):
+            self.remove_analysis()
+            return
+        if not item_id.startswith(("room:", "device:")):
+            self.status_var.set("The selected Project Navigator section cannot be deleted")
+            return
+
+        kind, spatial_id = item_id.split(":", 1)
+        if not self.spatial_workspace.select_item(kind, spatial_id):
+            return
+        label = str(self.analysis_tree.item(item_id, "text") or spatial_id)
+        if not messagebox.askyesno(
+            "Delete spatial item",
+            f"Delete {label!r} from the spatial design?",
+            parent=self.root,
+        ):
+            return
+        self.spatial_workspace.delete_selected()
+        self._sync_spatial_selection_status()
+
+    def _navigator_delete_selected(self, _event=None):
+        selection = self.analysis_tree.selection()
+        if selection:
+            self._delete_navigator_item(selection[0])
+        return "break"
 
     def _build_navigator_context_menu(self, item_id: str) -> tk.Menu | None:
         tree = getattr(self, "analysis_tree", None)
@@ -4157,6 +4306,10 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
 
+            def duplicate_spatial() -> None:
+                select_spatial()
+                self.spatial_workspace.duplicate_selected()
+
             menu.add_command(label="Open / Properties", command=select_spatial)
             menu.add_command(
                 label="Fit Selected",
@@ -4164,6 +4317,11 @@ class CleanroomXApp:
                     select_spatial(),
                     self.spatial_workspace.fit_selected(),
                 ),
+            )
+            menu.add_command(label="Duplicate", command=duplicate_spatial)
+            menu.add_command(
+                label="Delete",
+                command=lambda: self._delete_navigator_item(item_id),
             )
             menu.add_separator()
             menu.add_command(
@@ -4193,10 +4351,15 @@ class CleanroomXApp:
             return menu
         if not item_id.startswith("nav-"):
             menu.add_command(
-                label="Open Analysis",
-                command=lambda: self._on_navigator_selected(),
+                label="Open Analysis Input",
+                command=lambda: self._activate_navigator_item(),
             )
+            menu.add_command(label="Rename Analysis", command=self.rename_analysis)
             menu.add_command(label="Run Analysis", command=self.run_current)
+            menu.add_command(
+                label="Remove Analysis",
+                command=lambda: self._delete_navigator_item(item_id),
+            )
             return menu
         menu.add_command(
             label="Expand",

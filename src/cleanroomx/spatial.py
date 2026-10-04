@@ -1632,6 +1632,25 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
+
+        # Reserve validation feedback first so the action remains reachable at
+        # the supported minimum desktop width. Less-critical view toggles may
+        # compress before this primary engineering check disappears.
+        self._validation_button = ttk.Button(
+            viewbar,
+            text="Validate",
+            width=9,
+            command=self.report_validation,
+        )
+        self._validation_button.pack(side="right", padx=(6, 2))
+        self._validation_status_label = ttk.Label(
+            viewbar,
+            textvariable=self._validation_var,
+            width=24,
+            anchor="e",
+        )
+        self._validation_status_label.pack(side="right", padx=(6, 2))
+
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
         ).pack(side="left", padx=(2, 6))
@@ -1648,12 +1667,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
-        )
 
         overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
         overlaybar.pack(fill="x")

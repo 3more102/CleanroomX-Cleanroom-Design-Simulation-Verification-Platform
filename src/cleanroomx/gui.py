@@ -1263,6 +1263,8 @@ class CleanroomXApp:
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
+        self.workflow_analysis_var = tk.StringVar(value="")
+        self._workflow_analysis_ids: list[str] = []
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -1653,6 +1655,22 @@ class CleanroomXApp:
         )
         self.workflowbar = workflowbar
         workflowbar.pack(fill="x", padx=10, pady=(0, 4))
+
+        # Reserve the active-analysis selector first so the guided path remains
+        # usable even when the Project Navigator is collapsed.
+        self.workflow_analysis_combo = ttk.Combobox(
+            workflowbar,
+            textvariable=self.workflow_analysis_var,
+            state="readonly",
+            width=20,
+        )
+        self.workflow_analysis_combo.pack(side="right", padx=(4, 0))
+        self.workflow_analysis_combo.bind(
+            "<<ComboboxSelected>>",
+            self._on_workflow_analysis_selected,
+        )
+        ttk.Label(workflowbar, text="Analysis").pack(side="right", padx=(8, 0))
+
         ttk.Label(
             workflowbar,
             text="GUIDED WORKFLOW",
@@ -4038,8 +4056,74 @@ class CleanroomXApp:
             self.input_text.delete("1.0", "end")
             self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
+        self._refresh_workflow_analysis_selector(
+            select_id=self._editor_analysis_id,
+        )
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+
+    def _refresh_workflow_analysis_selector(
+        self,
+        *,
+        select_id: str | None = None,
+    ) -> None:
+        combo = getattr(self, "workflow_analysis_combo", None)
+        if combo is None:
+            return
+
+        analyses = list(self.project.analyses)
+        self._workflow_analysis_ids = [analysis.id for analysis in analyses]
+        if not analyses:
+            combo.configure(values=(), state="disabled")
+            self.workflow_analysis_var.set("No analyses")
+            return
+
+        names = [str(analysis.name) for analysis in analyses]
+        counts = {name: names.count(name) for name in set(names)}
+        labels = [
+            (
+                f"{analysis.name} [{analysis.kind}]"
+                if counts.get(str(analysis.name), 0) > 1
+                else str(analysis.name)
+            )
+            for analysis in analyses
+        ]
+        combo.configure(values=tuple(labels), state="readonly")
+
+        target = (
+            select_id
+            or getattr(self, "_editor_analysis_id", None)
+            or self.project.active_analysis_id
+        )
+        try:
+            index = self._workflow_analysis_ids.index(target)
+        except ValueError:
+            index = 0
+        combo.current(index)
+
+    def _on_workflow_analysis_selected(self, event=None) -> None:
+        combo = getattr(self, "workflow_analysis_combo", None)
+        if combo is None:
+            return
+        index = combo.current()
+        if index < 0 or index >= len(self._workflow_analysis_ids):
+            return
+
+        analysis_id = self._workflow_analysis_ids[index]
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(analysis_id):
+            self._refresh_workflow_analysis_selector(
+                select_id=getattr(self, "_editor_analysis_id", None),
+            )
+            return
+
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_analysis_selected()
+        self._refresh_workflow_analysis_selector(
+            select_id=getattr(self, "_editor_analysis_id", None),
+        )
 
     def _restore_navigator_tree(self) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -4385,6 +4469,7 @@ class CleanroomXApp:
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()
+        self._refresh_workflow_analysis_selector(select_id=analysis.id)
 
     def _on_spatial_changed(self) -> None:
         self._update_title()

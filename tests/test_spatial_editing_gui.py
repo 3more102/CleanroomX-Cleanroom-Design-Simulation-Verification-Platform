@@ -705,6 +705,10 @@ def test_guided_workflow_is_visible_at_minimum_window_and_opens_design(app):
         assert button.winfo_ismapped(), button.cget("text")
         assert button.winfo_x() + button.winfo_width() <= app.workflowbar.winfo_width()
 
+    combo = app.workflow_analysis_combo
+    assert combo.winfo_ismapped()
+    assert combo.winfo_x() + combo.winfo_width() <= app.workflowbar.winfo_width()
+
     app.notebook.select(app.start_center)
     app.workflow_design_button.invoke()
     app.root.update()
@@ -718,6 +722,24 @@ def test_guided_workflow_is_visible_at_minimum_window_and_opens_design(app):
     assert app.notebook.select() == str(app.input_tab)
     assert app.workspace_status_var.get() == "Workspace: Analysis Inputs"
     assert app.project.to_dict() == project_before
+
+
+def test_guided_workflow_analysis_selector_uses_canonical_selection(app):
+    combo = app.workflow_analysis_combo
+    analyses = list(app.project.analyses)
+    assert len(analyses) >= 2
+    assert len(tuple(combo.cget("values"))) == len(analyses)
+
+    target = analyses[1]
+    target_index = [analysis.id for analysis in analyses].index(target.id)
+    combo.current(target_index)
+    combo.event_generate("<<ComboboxSelected>>")
+    app.root.update()
+
+    assert app.project.active_analysis_id == target.id
+    assert app._editor_analysis_id == target.id
+    assert app.analysis_tree.selection() == (target.id,)
+    assert combo.current() == target_index
 
 
 def test_guided_save_and_verify_saves_dirty_project_before_verification(

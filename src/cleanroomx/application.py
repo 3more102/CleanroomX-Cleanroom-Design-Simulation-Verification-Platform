@@ -1406,7 +1406,11 @@ def _plugin_external_dependency_references(
     resolver = spec.external_dependencies
     if resolver is None:
         return []
-    if spec.source != "plugin" or spec.plugin_api_version is None or spec.plugin_api_version < 2:
+    if (
+        spec.source != "plugin"
+        or spec.plugin_api_version is None
+        or spec.plugin_api_version < 2
+    ):
         raise RuntimeError(
             f"{spec.key} has an external dependency resolver outside plugin API v2"
         )

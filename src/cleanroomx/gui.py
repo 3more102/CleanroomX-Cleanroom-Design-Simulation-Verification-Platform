@@ -3087,6 +3087,11 @@ class CleanroomXApp:
 
         destination = Path(destination_text)
         try:
+            _assert_project_output_is_safe(
+                self.project,
+                source=self.project_path,
+                output=destination,
+            )
             restored_path = restore_project_revision(
                 dialog.result,
                 destination,

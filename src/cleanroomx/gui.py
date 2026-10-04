@@ -1429,6 +1429,23 @@ class CleanroomXApp:
         ttk.Label(
             navigator, text="PROJECT NAVIGATOR", style="CX.Section.TLabel"
         ).pack(anchor="w", pady=(0, 6))
+        nav_search = ttk.Frame(navigator)
+        nav_search.pack(fill="x", pady=(0, 6))
+        self.navigator_filter_var = tk.StringVar()
+        self.navigator_filter_entry = ttk.Entry(
+            nav_search,
+            textvariable=self.navigator_filter_var,
+        )
+        self.navigator_filter_entry.pack(side="left", fill="x", expand=True)
+        self.navigator_filter_entry.bind(
+            "<KeyRelease>", lambda event: self._on_navigator_filter_changed()
+        )
+        ttk.Button(
+            nav_search,
+            text="×",
+            width=3,
+            command=self._clear_navigator_filter,
+        ).pack(side="left", padx=(4, 0))
         self.analysis_tree = ttk.Treeview(
             navigator,
             columns=("kind",),
@@ -2553,6 +2570,26 @@ class CleanroomXApp:
         self._discard_restored_recovery()
         return True
 
+    def _navigator_filter_text(self) -> str:
+        variable = getattr(self, "navigator_filter_var", None)
+        if variable is None:
+            return ""
+        return variable.get().strip().casefold()
+
+    def _navigator_matches(self, *values: object) -> bool:
+        query = self._navigator_filter_text()
+        if not query:
+            return True
+        return any(query in str(value).casefold() for value in values if value is not None)
+
+    def _on_navigator_filter_changed(self) -> None:
+        self._refresh_analysis_list(select_id=self.project.active_analysis_id)
+
+    def _clear_navigator_filter(self) -> None:
+        if hasattr(self, "navigator_filter_var"):
+            self.navigator_filter_var.set("")
+        self._refresh_analysis_list(select_id=self.project.active_analysis_id)
+
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
@@ -2579,6 +2616,8 @@ class CleanroomXApp:
             )
 
         for analysis in self.project.analyses:
+            if not self._navigator_matches(analysis.name, analysis.kind, analysis.id):
+                continue
             self.analysis_tree.insert(
                 "nav-analyses",
                 "end",
@@ -2594,13 +2633,17 @@ class CleanroomXApp:
             self.analysis_tree.focus(target)
             self.analysis_tree.see(target)
             self._load_analysis_into_editor(self.project.analysis_by_id(target))
-        elif self.project.analyses:
+        elif self.project.analyses and not self._navigator_filter_text():
             first = self.project.analyses[0].id
             self.project.active_analysis_id = first
             self.analysis_tree.selection_set(first)
             self.analysis_tree.focus(first)
             self.analysis_tree.see(first)
             self._load_analysis_into_editor(self.project.analyses[0])
+        elif self.project.analyses:
+            # Filtering is a presentation-only operation. Keep the editor bound
+            # to the active analysis even when its tree row is temporarily hidden.
+            pass
         else:
             self._editor_analysis_id = None
             self.input_text.delete("1.0", "end")
@@ -2647,6 +2690,10 @@ class CleanroomXApp:
                     if not isinstance(room, dict) or not room.get("id"):
                         continue
                     room_id = str(room["id"])
+                    if not self._navigator_matches(
+                        room.get("name"), room_id, room.get("classification")
+                    ):
+                        continue
                     tree.insert(
                         "nav-floor",
                         "end",
@@ -2663,6 +2710,8 @@ class CleanroomXApp:
                     device_id = str(device["id"])
                     device_type = str(device.get("type") or "device")
                     name = str(device.get("name") or device_id)
+                    if not self._navigator_matches(name, device_id, device_type):
+                        continue
                     tree.insert(
                         "nav-devices",
                         "end",

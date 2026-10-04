@@ -8,7 +8,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .persistence import atomic_write_bytes, atomic_write_text
@@ -408,6 +408,7 @@ def restore_project_revision(
     *,
     expected_source_path: str | Path | None = None,
     history_limit: int = DEFAULT_PROJECT_REVISION_HISTORY_LIMIT,
+    before_replace: Callable[[Path], None] | None = None,
 ) -> Path:
     """Restore verified historical bytes to a separate guarded destination."""
     snapshot = load_project_revision(
@@ -435,6 +436,8 @@ def restore_project_revision(
             current = capture_project_file_revision(target)
             if not project_file_revision_matches(expected, current):
                 raise ProjectWriteConflictError(target, expected, current)
+            if before_replace is not None:
+                before_replace(target)
 
         try:
             atomic_write_bytes(

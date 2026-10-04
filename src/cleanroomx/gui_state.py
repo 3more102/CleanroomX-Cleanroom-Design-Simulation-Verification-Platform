@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 3
+GUI_LAYOUT_STATE_VERSION = 4
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -16,6 +16,8 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "inspector_visible": True,
     "theme": "light",
     "recent_projects": [],
+    "window_width": 1440,
+    "window_height": 900,
     "navigator_fraction": 0.20,
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
@@ -37,6 +39,24 @@ def _bounded_fraction(value: Any, default: float) -> float:
     if not 0.05 <= number <= 0.95:
         return default
     return number
+
+
+def _bounded_dimension(
+    value: Any,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int = 10000,
+) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        dimension = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    if not minimum <= dimension <= maximum:
+        return default
+    return dimension
 
 
 def _normalize_recent_projects(value: Any) -> list[str]:
@@ -80,6 +100,16 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         "theme": normalize_theme_name(source.get("theme")),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
+        ),
+        "window_width": _bounded_dimension(
+            source.get("window_width"),
+            _DEFAULT_GUI_LAYOUT_STATE["window_width"],
+            minimum=1050,
+        ),
+        "window_height": _bounded_dimension(
+            source.get("window_height"),
+            _DEFAULT_GUI_LAYOUT_STATE["window_height"],
+            minimum=680,
         ),
         "navigator_fraction": _bounded_fraction(
             source.get("navigator_fraction"),

@@ -251,7 +251,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("active", palette["text"]),
         ],
         bordercolor=[("selected", palette["accent"])],
-        expand=[("selected", (0, 1, 0, 1))],
     )
 
     style.configure(

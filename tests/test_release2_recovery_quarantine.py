@@ -272,6 +272,100 @@ def test_quarantine_retention_is_bounded(tmp_path):
     assert len(list(quarantine_dir.glob("*.quarantined.manifest.json"))) == 2
     assert len(list(quarantine_dir.glob("*.quarantined"))) == 2
 
+@pytest.mark.parametrize("malformation", ["boolean_version", "missing_reason"])
+def test_quarantine_retention_preserves_incomplete_manifest_schema(
+    tmp_path,
+    malformation,
+):
+    first_source = tmp_path / "broken-first.recovery.json"
+    first_source.write_bytes(b"broken-first")
+    first = quarantine_recovery_artifact(
+        first_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    second_source = tmp_path / "broken-second.recovery.json"
+    second_source.write_bytes(b"broken-second")
+    second = quarantine_recovery_artifact(
+        second_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+    if malformation == "boolean_version":
+        manifest["schema_version"] = True
+    else:
+        manifest.pop("reason")
+    first.manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    third_source = tmp_path / "broken-third.recovery.json"
+    third_source.write_bytes(b"broken-third")
+    third = quarantine_recovery_artifact(
+        third_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=1,
+    )
+
+    assert first.path.exists()
+    assert first.manifest_path.exists()
+    assert not second.path.exists()
+    assert not second.manifest_path.exists()
+    assert third.path.exists()
+    assert third.manifest_path.exists()
+
+
+def test_quarantine_retention_staging_never_unlinks_repopulated_live_paths(
+    tmp_path,
+    monkeypatch,
+):
+    source = tmp_path / "broken.recovery.json"
+    source.write_bytes(b"original forensic bytes")
+    quarantined = quarantine_recovery_artifact(
+        source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+    quarantine_dir = tmp_path / "quarantine"
+    replacement_bytes = b"new concurrent forensic bytes"
+    replacement_manifest = '{"replacement": true}\n'
+
+    real_replace = autosave_module.os.replace
+
+    def stage_then_repopulate(source_path, destination_path):
+        result = real_replace(source_path, destination_path)
+        if Path(source_path) == quarantined.path:
+            quarantined.path.write_bytes(replacement_bytes)
+            quarantined.manifest_path.write_text(
+                replacement_manifest,
+                encoding="utf-8",
+            )
+        return result
+
+    monkeypatch.setattr(autosave_module.os, "replace", stage_then_repopulate)
+
+    assert autosave_module._delete_verified_quarantine_pair(
+        quarantine_dir,
+        quarantined.manifest_path,
+        quarantined.path,
+    )
+
+    assert quarantined.path.read_bytes() == replacement_bytes
+    assert (
+        quarantined.manifest_path.read_text(encoding="utf-8")
+        == replacement_manifest
+    )
+    assert list(quarantine_dir.glob(".retention-*")) == []
+
+
 def test_quarantine_retention_preserves_unverified_forensic_pair(tmp_path):
     first_source = tmp_path / "broken-first.recovery.json"
     first_source.write_bytes(b"broken-first")

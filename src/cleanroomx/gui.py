@@ -77,6 +77,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
+from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1234,6 +1235,7 @@ class CleanroomXApp:
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
+        self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -1245,6 +1247,7 @@ class CleanroomXApp:
         self._configure_styles()
         self._build_menu()
         self._build_layout()
+        self._apply_theme_to_native_widgets(redraw=False)
         self._refresh_analysis_list()
         self._refresh_engineering_panels()
         self._refresh_start_center()
@@ -1261,14 +1264,10 @@ class CleanroomXApp:
             self.root.after(500, self._poll_autosave_status)
 
     def _configure_styles(self) -> None:
-        self.root.configure(background="#eef2f5")
-        style = ttk.Style(self.root)
-        style.configure("CX.Brand.TLabel", font=("TkDefaultFont", 15, "bold"))
-        style.configure("CX.Section.TLabel", font=("TkDefaultFont", 9, "bold"))
-        style.configure("CX.ViewTitle.TLabel", font=("TkDefaultFont", 10, "bold"))
-        style.configure("CX.Navigator.Treeview", rowheight=24)
-        style.configure("CX.Primary.TButton", padding=(12, 6))
-        style.configure("CX.Toolbar.TFrame", padding=(4, 3))
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            self.theme_var.get(),
+        )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -1433,6 +1432,15 @@ class CleanroomXApp:
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
         )
+        theme_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (("light", "Light"), ("dark", "Dark")):
+            theme_menu.add_radiobutton(
+                label=label,
+                variable=self.theme_var,
+                value=value,
+                command=lambda mode=value: self.set_theme(mode),
+            )
+        view_menu.add_cascade(label="Theme", menu=theme_menu)
         view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
@@ -1450,6 +1458,7 @@ class CleanroomXApp:
         help_menu.add_command(label="About CleanroomX", command=self.show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
+        self.menubar = menubar
         self.root.config(menu=menubar)
         self.root.bind("<Control-n>", lambda event: self.new_project())
         self.root.bind("<Control-o>", lambda event: self.open_project())
@@ -1460,6 +1469,7 @@ class CleanroomXApp:
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
+        self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -1821,6 +1831,7 @@ class CleanroomXApp:
                 "inspector_visible": bool(
                     workspace is not None and workspace.inspector_visible()
                 ),
+                "theme": normalize_theme_name(self.theme_var.get()),
             }
         )
         self._ui_layout_state = normalize_gui_layout_state(state)
@@ -1837,6 +1848,8 @@ class CleanroomXApp:
 
     def _restore_ui_layout_state(self) -> None:
         state = self._ui_layout_state
+        self.theme_var.set(normalize_theme_name(state["theme"]))
+        self.set_theme(self.theme_var.get(), persist=False)
         self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
         self.output_panel_visible_var.set(bool(state["output_visible"]))
         self._sync_navigator_panel_visibility()

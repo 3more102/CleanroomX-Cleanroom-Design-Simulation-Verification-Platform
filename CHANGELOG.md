@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — narrow project CLI runtime boundaries — 2026-10-04
+
+- Adds a typed `CliStateError` for expected project/IFC CLI revision and state races instead of classifying every `RuntimeError` as a normal command failure.
+- Narrows six project-level command boundaries so unexpected runtime defects propagate for debugging while expected source-change, migrated-project, publication-state, guarded-save lock/conflict/durability failures, and typed project-verification workflow/persistence failures retain deterministic stderr/exit-code handling.
+- Adds regression coverage across project diagnostics, project dossier, project verification, requirements traceability, verification history, and IFC planning; solver equations, schemas, tolerances, requirements, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — discovered CLI output publication guards — 2026-10-04
 
 - Derives the completeness gate from every configured `[project.scripts]` entry point, then uses the Python AST to identify commands that expose a `--output` option.

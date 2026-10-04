@@ -1318,7 +1318,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value=value,
                 variable=self._workspace_mode,
                 command=self._apply_workspace_mode,
-                style="Toolbutton",
             ).pack(side="left", padx=1)
         ttk.Separator(modebar, orient="vertical").pack(
             side="left", fill="y", padx=8

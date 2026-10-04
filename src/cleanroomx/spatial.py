@@ -1349,13 +1349,20 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
             side="left", padx=2
         )
+        syncbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        syncbar.pack(fill="x")
+        ttk.Label(
+            syncbar,
+            text="ENGINEERING SYNC",
+            style="CX.Section.TLabel",
+        ).pack(side="left")
         ttk.Button(
-            modebar,
+            syncbar,
             text="Push to analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
         ttk.Button(
-            modebar,
+            syncbar,
             text="Pull from analysis",
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",

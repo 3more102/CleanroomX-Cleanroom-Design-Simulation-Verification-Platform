@@ -5610,7 +5610,17 @@ class CleanroomXApp:
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
         canvas.delete("all")
-        palette = getattr(self, "_theme_palette", configure_ttk_theme(self.root, "light"))
+        palette = getattr(
+            self,
+            "_theme_palette",
+            {
+                "plot": "#ffffff",
+                "muted": "#5f6b78",
+                "text": "#18212b",
+                "accent": "#0b6aa8",
+                "accent_hover": "#095786",
+            },
+        )
         canvas.configure(background=palette["plot"])
         run = self.last_run
         if run is None or run.plot is None:

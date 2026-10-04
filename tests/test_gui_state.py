@@ -20,6 +20,8 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "inspector_visible": True,
         "theme": "light",
         "recent_projects": [],
+        "window_width": 1440,
+        "window_height": 900,
         "navigator_fraction": 0.20,
         "output_fraction": 0.72,
         "inspector_fraction": 0.78,
@@ -44,6 +46,8 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
                 "alpha.cleanroomx.json",
                 "beta.cleanroomx.json",
             ],
+            "window_width": 640,
+            "window_height": "broken",
             "navigator_fraction": 0.31,
             "output_fraction": 2.0,
             "inspector_fraction": float("nan"),
@@ -60,6 +64,8 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
     ]
+    assert state["window_width"] == 1440
+    assert state["window_height"] == 900
     assert state["navigator_fraction"] == 0.31
     assert state["output_fraction"] == 0.72
     assert state["inspector_fraction"] == 0.78
@@ -79,6 +85,8 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
             ],
+            "window_width": 1680,
+            "window_height": 1050,
             "navigator_fraction": 0.25,
             "output_fraction": 0.67,
             "inspector_fraction": 0.81,
@@ -95,6 +103,8 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",
     ]
+    assert payload["window_width"] == 1680
+    assert payload["window_height"] == 1050
     assert load_gui_layout_state(path) == payload
 
 

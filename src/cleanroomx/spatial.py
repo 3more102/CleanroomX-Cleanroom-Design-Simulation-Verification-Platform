@@ -2929,6 +2929,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             height_px=max(200, self.canvas_3d.winfo_height()),
             azimuth_deg=self.layout["view"]["azimuth_deg"],
             elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
         )
         self.layout["view"]["zoom_3d"] = zoom_3d
         self.layout["view"]["pan_3d_x"] = pan_3d_x
@@ -3659,16 +3662,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                         else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
                     )
                 )
+                device_bottom_z = room_floor + device["z_m"]
+                if section_height is not None and device_bottom_z >= section_height:
+                    continue
                 if device["type"] in {"door", "window", "opening", "transfer"}:
+                    device_top_z = (
+                        device_bottom_z + device.get("height_m", 0.4)
+                    )
+                    if section_height is not None:
+                        device_top_z = min(device_top_z, section_height)
                     bottom = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
-                        room_floor + device["z_m"],
+                        device_bottom_z,
                     )
                     top = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
-                        room_floor + device["z_m"] + device.get("height_m", 0.4),
+                        device_top_z,
                     )
                     canvas.create_line(
                         *bottom, *top,
@@ -3680,7 +3691,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     x, y = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
-                        room_floor + device["z_m"],
+                        device_bottom_z,
                     )
                     radius = 5 if (selected or hovered) else 4
                     canvas.create_oval(

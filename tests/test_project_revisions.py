@@ -235,6 +235,54 @@ def test_revision_retention_does_not_delete_path_recreated_after_staging(
     )
 
 
+def test_revision_retention_unrestored_stage_remains_discoverable(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    replacement = b"concurrent invalid replacement\n"
+    staged_paths: list[Path] = []
+    real_verify = revision_module._revision_record_is_verified
+
+    def reject_staged_once(
+        revision,
+        *,
+        expected_source_path,
+        artifact_path=None,
+    ):
+        if artifact_path is not None and not staged_paths:
+            staged_paths.append(Path(artifact_path))
+            revision.path.write_bytes(replacement)
+            return False
+        return real_verify(
+            revision,
+            expected_source_path=expected_source_path,
+            artifact_path=artifact_path,
+        )
+
+    monkeypatch.setattr(
+        revision_module,
+        "_revision_record_is_verified",
+        reject_staged_once,
+    )
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert staged_paths
+    staged = staged_paths[0]
+    assert staged.exists()
+    assert staged.name.endswith(".cleanroomx.revision.json")
+
+    scan = revision_module.scan_project_revisions(path)
+    assert staged in {item.path for item in scan.revisions}
+    assert any(issue.path.read_bytes() == replacement for issue in scan.issues)
+
+
 def test_revision_envelope_budget_preserves_valid_large_project_name(
     tmp_path, monkeypatch
 ):

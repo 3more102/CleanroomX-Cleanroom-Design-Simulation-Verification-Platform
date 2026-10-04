@@ -10,6 +10,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
+from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1537,6 +1538,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._projection_mode = tk.StringVar(value="Orthographic")
         self._section_enabled = tk.BooleanVar(value=False)
         self._section_height_var = tk.StringVar(value="2.40")
+        self._theme_palette = theme_palette("light")
 
         self._build()
         self.refresh()
@@ -1718,9 +1720,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(header2, textvariable=self._coord_var).pack(side="right")
         self.canvas_2d = tk.Canvas(
             self._two_d_frame,
-            background="#f7f9fb",
+            background=self._theme_palette["canvas_2d"],
             highlightthickness=1,
-            highlightbackground="#c7d0d9",
+            highlightbackground=self._theme_palette["border"],
         )
         self.canvas_2d.pack(fill="both", expand=True)
         footer2 = ttk.Frame(self._two_d_frame)
@@ -1814,9 +1816,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d = tk.Canvas(
             self._three_d_frame,
-            background="#111820",
+            background=self._theme_palette["canvas_3d"],
             highlightthickness=1,
-            highlightbackground="#314150",
+            highlightbackground=self._theme_palette["border"],
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
@@ -1963,6 +1965,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             raise ValueError("workspace mode must be '2d', '3d', or 'split'")
         self._workspace_mode.set(mode)
         self._apply_workspace_mode()
+
+    def apply_theme(self, value: str, *, redraw: bool = True) -> None:
+        """Apply presentation colors without modifying spatial/project state."""
+        self._theme_palette = theme_palette(value)
+        palette = self._theme_palette
+        self.canvas_2d.configure(
+            background=palette["canvas_2d"],
+            highlightbackground=palette["border"],
+        )
+        self.canvas_3d.configure(
+            background=palette["canvas_3d"],
+            highlightbackground=palette["border"],
+        )
+        if redraw:
+            self.redraw()
 
     def inspector_visible(self) -> bool:
         frame = getattr(self, "_inspector_frame", None)
@@ -3173,12 +3190,20 @@ class SpatialDesignWorkspace(ttk.Frame):
                 x = start_x
                 while x <= end_x + 1e-9:
                     cx, _ = self._world_to_canvas(x, 0)
-                    canvas.create_line(cx, 0, cx, h, fill="#e7ecf1", tags=("grid",))
+                    canvas.create_line(
+                        cx, 0, cx, h,
+                        fill=self._theme_palette["grid"],
+                        tags=("grid",),
+                    )
                     x += grid
                 y = start_y
                 while y <= end_y + 1e-9:
                     _, cy = self._world_to_canvas(0, y)
-                    canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
+                    canvas.create_line(
+                        0, cy, w, cy,
+                        fill=self._theme_palette["grid"],
+                        tags=("grid",),
+                    )
                     y += grid
 
         overlay_mode = self._overlay_mode.get().strip().lower()
@@ -3214,7 +3239,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill = (
                 overlay_by_room[room["id"]]["fill"]
                 if overlay_mode != "none"
-                else "#dfe7ef"
+                else self._theme_palette["surface_alt"]
             )
             canvas.create_rectangle(
                 x0, y0, x1, y1,
@@ -3239,6 +3264,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                         f"{room['height_m']:g} m{overlay_text}"
                     ),
                     justify="center",
+                    fill=self._theme_palette["text"],
                     tags=(f"room:{room['id']}", "room"),
                 )
             if selected:
@@ -3246,7 +3272,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 handle = 6
                 canvas.create_rectangle(
                     x1 - handle, y1 - handle, x1 + handle, y1 + handle,
-                    fill="#1d4ed8", outline="#ffffff",
+                    fill=self._theme_palette["accent"],
+                    outline=self._theme_palette["panel"],
                     tags=(f"resize:{room['id']}", "resize_handle"),
                 )
 
@@ -3317,18 +3344,20 @@ class SpatialDesignWorkspace(ttk.Frame):
                         canvas.create_text(
                             x, y - 10,
                             text=symbols[device["type"]],
+                            fill=self._theme_palette["text"],
                             tags=(tag, "device"),
                         )
                 else:
                     radius = 9 if (selected or hovered) else 7
                     canvas.create_oval(
                         x - radius, y - radius, x + radius, y + radius,
-                        fill="#ffffff", outline=device_outline,
+                        fill=self._theme_palette["panel"], outline=device_outline,
                         width=3 if (selected or hovered) else 2,
                         tags=(tag, "device"),
                     )
                     canvas.create_text(
                         x, y, text=symbols.get(device["type"], "?"),
+                        fill=self._theme_palette["text"],
                         tags=(tag, "device"),
                     )
 
@@ -3344,7 +3373,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     "Use + Room or open a verification project with room geometry."
                 ),
                 justify="center",
-                fill="#667788",
+                fill=self._theme_palette["muted"],
             )
 
     def _draw_room_dimensions_2d(
@@ -3359,7 +3388,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas = self.canvas_2d
         offset = 18
         tick = 4
-        color = "#475569"
+        color = self._theme_palette["muted"]
         tags = ("room_dimension", f"room:{room['id']}")
 
         y = min(y0, y1) - offset
@@ -3367,8 +3396,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas.create_line(left, y, right, y, fill=color, tags=tags)
         canvas.create_line(left, y - tick, left, y + tick, fill=color, tags=tags)
         canvas.create_line(right, y - tick, right, y + tick, fill=color, tags=tags)
-        canvas.create_line(left, min(y0, y1), left, y + tick, fill="#94a3b8", tags=tags)
-        canvas.create_line(right, min(y0, y1), right, y + tick, fill="#94a3b8", tags=tags)
+        canvas.create_line(
+            left, min(y0, y1), left, y + tick,
+            fill=self._theme_palette["border"], tags=tags,
+        )
+        canvas.create_line(
+            right, min(y0, y1), right, y + tick,
+            fill=self._theme_palette["border"], tags=tags,
+        )
         canvas.create_text(
             (left + right) / 2,
             y - 9,
@@ -3382,8 +3417,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas.create_line(x, top, x, bottom, fill=color, tags=tags)
         canvas.create_line(x - tick, top, x + tick, top, fill=color, tags=tags)
         canvas.create_line(x - tick, bottom, x + tick, bottom, fill=color, tags=tags)
-        canvas.create_line(min(x0, x1), top, x + tick, top, fill="#94a3b8", tags=tags)
-        canvas.create_line(min(x0, x1), bottom, x + tick, bottom, fill="#94a3b8", tags=tags)
+        canvas.create_line(
+            min(x0, x1), top, x + tick, top,
+            fill=self._theme_palette["border"], tags=tags,
+        )
+        canvas.create_line(
+            min(x0, x1), bottom, x + tick, bottom,
+            fill=self._theme_palette["border"], tags=tags,
+        )
         canvas.create_text(
             x - 11,
             (top + bottom) / 2,
@@ -3521,7 +3562,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 max(1, canvas.winfo_width()) / 2,
                 max(1, canvas.winfo_height()) / 2,
                 text="3D geometry appears here",
-                fill="#9fb2c5",
+                fill=self._theme_palette["muted"],
             )
             return
 

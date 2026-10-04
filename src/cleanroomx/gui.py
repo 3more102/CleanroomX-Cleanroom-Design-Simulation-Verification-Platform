@@ -77,6 +77,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
+from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1234,6 +1235,7 @@ class CleanroomXApp:
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
+        self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -1245,6 +1247,7 @@ class CleanroomXApp:
         self._configure_styles()
         self._build_menu()
         self._build_layout()
+        self._apply_theme_to_native_widgets(redraw=False)
         self._refresh_analysis_list()
         self._refresh_engineering_panels()
         self._refresh_start_center()
@@ -1261,14 +1264,10 @@ class CleanroomXApp:
             self.root.after(500, self._poll_autosave_status)
 
     def _configure_styles(self) -> None:
-        self.root.configure(background="#eef2f5")
-        style = ttk.Style(self.root)
-        style.configure("CX.Brand.TLabel", font=("TkDefaultFont", 15, "bold"))
-        style.configure("CX.Section.TLabel", font=("TkDefaultFont", 9, "bold"))
-        style.configure("CX.ViewTitle.TLabel", font=("TkDefaultFont", 10, "bold"))
-        style.configure("CX.Navigator.Treeview", rowheight=24)
-        style.configure("CX.Primary.TButton", padding=(12, 6))
-        style.configure("CX.Toolbar.TFrame", padding=(4, 3))
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            self.theme_var.get(),
+        )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -1433,6 +1432,15 @@ class CleanroomXApp:
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
         )
+        theme_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (("light", "Light"), ("dark", "Dark")):
+            theme_menu.add_radiobutton(
+                label=label,
+                variable=self.theme_var,
+                value=value,
+                command=lambda mode=value: self.set_theme(mode),
+            )
+        view_menu.add_cascade(label="Theme", menu=theme_menu)
         view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
@@ -1450,6 +1458,7 @@ class CleanroomXApp:
         help_menu.add_command(label="About CleanroomX", command=self.show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
+        self.menubar = menubar
         self.root.config(menu=menubar)
         self.root.bind("<Control-n>", lambda event: self.new_project())
         self.root.bind("<Control-o>", lambda event: self.open_project())
@@ -1460,6 +1469,7 @@ class CleanroomXApp:
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
+        self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -1821,6 +1831,7 @@ class CleanroomXApp:
                 "inspector_visible": bool(
                     workspace is not None and workspace.inspector_visible()
                 ),
+                "theme": normalize_theme_name(self.theme_var.get()),
             }
         )
         self._ui_layout_state = normalize_gui_layout_state(state)
@@ -1837,6 +1848,8 @@ class CleanroomXApp:
 
     def _restore_ui_layout_state(self) -> None:
         state = self._ui_layout_state
+        self.theme_var.set(normalize_theme_name(state["theme"]))
+        self.set_theme(self.theme_var.get(), persist=False)
         self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
         self.output_panel_visible_var.set(bool(state["output_visible"]))
         self._sync_navigator_panel_visibility()
@@ -1847,6 +1860,96 @@ class CleanroomXApp:
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
         self.status_var.set("Ready")
+
+    def _apply_menu_theme(self, menu: tk.Menu) -> None:
+        palette = self._theme_palette
+        try:
+            menu.configure(
+                background=palette["surface"],
+                foreground=palette["text"],
+                activebackground=palette["selection"],
+                activeforeground=palette["selection_text"],
+                disabledforeground=palette["disabled"],
+                selectcolor=palette["accent"],
+            )
+        except tk.TclError:
+            return
+        end = menu.index("end")
+        if end is None:
+            return
+        for index in range(end + 1):
+            try:
+                submenu_name = menu.entrycget(index, "menu")
+            except tk.TclError:
+                continue
+            if not submenu_name:
+                continue
+            try:
+                submenu = menu.nametowidget(submenu_name)
+            except (KeyError, tk.TclError):
+                continue
+            if isinstance(submenu, tk.Menu):
+                self._apply_menu_theme(submenu)
+
+    def _apply_theme_to_native_widgets(self, *, redraw: bool = True) -> None:
+        palette = self._theme_palette
+        text_widgets = [
+            getattr(self, name, None)
+            for name in (
+                "input_text",
+                "result_text",
+                "report_text",
+                "diagnostics_text",
+                "verification_text",
+                "console_text",
+                "evidence_text",
+            )
+        ]
+        problems_panel = getattr(self, "problems_panel", None)
+        if problems_panel is not None:
+            text_widgets.append(getattr(problems_panel, "detail", None))
+        for widget in text_widgets:
+            if isinstance(widget, tk.Text):
+                widget.configure(
+                    background=palette["field"],
+                    foreground=palette["field_text"],
+                    insertbackground=palette["text"],
+                    selectbackground=palette["selection"],
+                    selectforeground=palette["selection_text"],
+                )
+
+        plot_canvas = getattr(self, "plot_canvas", None)
+        if isinstance(plot_canvas, tk.Canvas):
+            plot_canvas.configure(
+                background=palette["plot"],
+                highlightbackground=palette["border"],
+            )
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        menubar = getattr(self, "menubar", None)
+        if isinstance(menubar, tk.Menu):
+            self._apply_menu_theme(menubar)
+
+        if redraw and isinstance(plot_canvas, tk.Canvas):
+            self._draw_plot()
+
+    def set_theme(self, value: str, *, persist: bool = True) -> None:
+        theme = normalize_theme_name(value)
+        self.theme_var.set(theme)
+        self._theme_palette = configure_ttk_theme(self.root, theme)
+        self._apply_theme_to_native_widgets()
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["theme"] = theme
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(f"Theme: {theme.title()}")
+
+    def toggle_theme(self) -> None:
+        self.set_theme("dark" if self.theme_var.get() == "light" else "light")
 
     def _sync_navigator_panel_visibility(self) -> None:
         panes = getattr(self, "main_panes", None)
@@ -5507,12 +5610,25 @@ class CleanroomXApp:
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
         canvas.delete("all")
+        palette = getattr(
+            self,
+            "_theme_palette",
+            {
+                "plot": "#ffffff",
+                "muted": "#5f6b78",
+                "text": "#18212b",
+                "accent": "#0b6aa8",
+                "accent_hover": "#095786",
+            },
+        )
+        canvas.configure(background=palette["plot"])
         run = self.last_run
         if run is None or run.plot is None:
             canvas.create_text(
                 max(canvas.winfo_width() / 2, 150),
                 max(canvas.winfo_height() / 2, 100),
                 text="No plot is available for the selected result.",
+                fill=palette["muted"],
             )
             return
         plot = run.plot
@@ -5541,28 +5657,35 @@ class CleanroomXApp:
             py = height - bottom - (y - ymin) / (ymax - ymin) * (height - top - bottom)
             return px, py
 
-        canvas.create_line(left, height - bottom, width - right, height - bottom)
-        canvas.create_line(left, top, left, height - bottom)
-        canvas.create_text(width / 2, 18, text=plot["title"], font=("TkDefaultFont", 11, "bold"))
-        canvas.create_text(width / 2, height - 20, text=plot["x_label"])
-        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90)
-        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n")
-        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n")
-        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e")
-        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e")
+        axis = palette["muted"]
+        text_color = palette["text"]
+        series_color = palette["accent"]
+        canvas.create_line(left, height - bottom, width - right, height - bottom, fill=axis)
+        canvas.create_line(left, top, left, height - bottom, fill=axis)
+        canvas.create_text(width / 2, 18, text=plot["title"], font=("TkDefaultFont", 11, "bold"), fill=text_color)
+        canvas.create_text(width / 2, height - 20, text=plot["x_label"], fill=text_color)
+        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90, fill=text_color)
+        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n", fill=axis)
+        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n", fill=axis)
+        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e", fill=axis)
+        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e", fill=axis)
 
         for index, series in enumerate(plot["series"]):
             coords = []
             for x, y in zip(series["x"], series["y"]):
                 coords.extend(point(x, y))
-            line_options = {"width": 2}
+            line_options = {"width": 2, "fill": series_color}
             if index % 2:
                 line_options["dash"] = (6, 4)
             if len(coords) >= 4:
                 canvas.create_line(*coords, **line_options)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
-                canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill="black")
+                canvas.create_oval(
+                    px - 2, py - 2, px + 2, py + 2,
+                    fill=series_color,
+                    outline=series_color,
+                )
 
             legend_x = max(left + 20, width - right - 170)
             legend_y = top + index * 18
@@ -5578,12 +5701,22 @@ class CleanroomXApp:
                 legend_y,
                 text=series.get("name", f"Series {index + 1}"),
                 anchor="w",
+                fill=text_color,
             )
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])
-            canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2)
-            canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
+            canvas.create_oval(
+                px - 6, py - 6, px + 6, py + 6,
+                width=2,
+                outline=palette["accent_hover"],
+            )
+            canvas.create_text(
+                px + 8, py - 8,
+                text=marker["name"],
+                anchor="sw",
+                fill=text_color,
+            )
 
     def export_result_json(self) -> None:
         run = self._current_fresh_run()

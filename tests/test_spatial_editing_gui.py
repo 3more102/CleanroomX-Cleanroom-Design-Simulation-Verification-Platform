@@ -607,3 +607,61 @@ def test_shell_panel_visibility_persists_across_app_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.set_theme("dark", persist=False)
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert app.theme_var.get() == "dark"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
+    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
+    assert app.plot_canvas.cget("background") == "#131920"
+    assert app.input_text.cget("background") == "#11161c"
+    assert app.project.to_dict() == project_before
+
+    app.toggle_theme()
+    app.root.update()
+    assert app.theme_var.get() == "light"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
+    assert app.project.to_dict() == project_before
+
+
+def test_theme_persists_with_ui_layout_across_restart(tmp_path):
+    state_path = tmp_path / "gui-theme-layout.json"
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.update()
+    first.set_theme("dark", persist=False)
+    first._save_ui_layout_state()
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        assert second.theme_var.get() == "dark"
+        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
+        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
+        assert second.plot_canvas.cget("background") == "#131920"
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()
+

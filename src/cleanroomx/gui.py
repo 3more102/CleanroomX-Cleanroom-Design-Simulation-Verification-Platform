@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from datetime import datetime
 import json
 from pathlib import Path
 import queue
@@ -70,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_proofgraph import ProofGraphViewer
+from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -1195,6 +1197,7 @@ class CleanroomXApp:
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
         self._project_diagnostics_after_id = None
+        self._recent_project_paths: list[Path] = []
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -1221,6 +1224,7 @@ class CleanroomXApp:
         self._build_layout()
         self._refresh_analysis_list()
         self._refresh_engineering_panels()
+        self._refresh_start_center()
         self._capture_saved_state()
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
@@ -1373,6 +1377,8 @@ class CleanroomXApp:
         menubar.add_cascade(label="Report", menu=report_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
+        view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
             label="Refresh Spatial Workspace",
@@ -1467,6 +1473,16 @@ class CleanroomXApp:
         self.workspace_panes.add(workspace_host, weight=5)
         self.notebook = ttk.Notebook(workspace_host)
         self.notebook.pack(fill="both", expand=True)
+
+        self.start_center = StartCenter(
+            self.notebook,
+            on_new=self.new_project,
+            on_open=self.open_project,
+            on_import_ifc=self._import_ifc_from_start,
+            on_open_demo=self._open_bundled_demo_from_start,
+            on_open_recent=self._open_recent_project_from_start,
+        )
+        self.notebook.add(self.start_center, text="Start")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -1895,6 +1911,89 @@ class CleanroomXApp:
             content,
             label="Project diagnostics",
         )
+
+    def _activate_start_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "start_center"):
+            self._refresh_start_center()
+            self.notebook.select(self.start_center)
+            self.workspace_status_var.set("Workspace: Start")
+
+    def _recent_project_records(self) -> list[dict[str, str]]:
+        records: list[dict[str, str]] = []
+        active_path = (
+            self.project_path.resolve(strict=False)
+            if self.project_path is not None
+            else None
+        )
+        for path in self._recent_project_paths:
+            resolved = path.resolve(strict=False)
+            name = path.stem
+            if active_path is not None and resolved == active_path:
+                name = self.project.name or name
+            try:
+                modified = datetime.fromtimestamp(path.stat().st_mtime).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            except OSError:
+                modified = "Unavailable"
+            records.append(
+                {
+                    "name": name,
+                    "path": str(path),
+                    "modified": modified,
+                }
+            )
+        return records
+
+    def _refresh_start_center(self) -> None:
+        start_center = getattr(self, "start_center", None)
+        if start_center is not None:
+            start_center.set_recent_projects(self._recent_project_records())
+
+    def _remember_recent_project(self, path: str | Path) -> None:
+        candidate = Path(path).resolve(strict=False)
+        self._recent_project_paths = [
+            existing
+            for existing in self._recent_project_paths
+            if existing.resolve(strict=False) != candidate
+        ]
+        self._recent_project_paths.insert(0, candidate)
+        del self._recent_project_paths[8:]
+        self._refresh_start_center()
+
+    def _open_recent_project_from_start(self, path: str) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run first.",
+                parent=self.root,
+            )
+            return
+        if not self._confirm_project_replacement():
+            return
+        try:
+            self.load_project_path(path)
+        except Exception as exc:
+            messagebox.showerror("Open failed", str(exc), parent=self.root)
+
+    def _open_bundled_demo_from_start(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run first.",
+                parent=self.root,
+            )
+            return
+        if not self._confirm_project_replacement():
+            return
+        try:
+            self.load_project_path(bundled_demo_project_path())
+        except Exception as exc:
+            messagebox.showerror("Open example failed", str(exc), parent=self.root)
+
+    def _import_ifc_from_start(self) -> None:
+        if self.import_ifc_spatial_layout():
+            self._activate_spatial_workspace("split")
 
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
@@ -3753,7 +3852,9 @@ class CleanroomXApp:
         self._refresh_engineering_panels()
         self._capture_saved_state()
         self.status_var.set("New project")
+        self._refresh_start_center()
         self._update_title()
+        self._activate_spatial_workspace("split")
 
     def open_project(self) -> None:
         if self._running:
@@ -4067,6 +4168,8 @@ class CleanroomXApp:
             self._capture_saved_state()
             self.status_var.set(f"Opened {project_path.name}")
             self._update_title()
+        self._remember_recent_project(project_path)
+        self._activate_spatial_workspace()
 
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()
@@ -4177,6 +4280,7 @@ class CleanroomXApp:
         self._project_file_revision = saved_revision
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
+        self._remember_recent_project(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
 
     def _assert_save_as_destination_safe(self, target: str | Path) -> None:
@@ -4355,6 +4459,7 @@ class CleanroomXApp:
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self._discard_restored_recovery()
+        self._remember_recent_project(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
 

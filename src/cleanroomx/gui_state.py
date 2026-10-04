@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_VERSION = 5
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -18,6 +18,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
+    "workspace_mode": "split",
     "navigator_fraction": 0.20,
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
@@ -71,6 +72,11 @@ def clamp_window_size_to_display(
     fitted_width = min(max(1, int(width)), available_width)
     fitted_height = min(max(1, int(height)), available_height)
     return fitted_width, fitted_height
+
+
+def _normalize_workspace_mode(value: Any) -> str:
+    mode = str(value or "").strip().lower()
+    return mode if mode in {"2d", "3d", "split"} else "split"
 
 
 def _normalize_recent_projects(value: Any) -> list[str]:
@@ -128,6 +134,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             source.get("window_height"),
             _DEFAULT_GUI_LAYOUT_STATE["window_height"],
             minimum=680,
+        ),
+        "workspace_mode": _normalize_workspace_mode(
+            source.get("workspace_mode")
         ),
         "navigator_fraction": _bounded_fraction(
             source.get("navigator_fraction"),

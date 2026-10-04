@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — discovered CLI output publication guards — 2026-10-04
+
+- Derives the completeness gate from every configured `[project.scripts]` entry point, then uses the Python AST to identify commands that expose a `--output` option.
+- Requires every actual `publish_cli_output(...)` call to declare `protected_inputs` and every direct `atomic_write_text(...)` publication call in those commands to carry a `before_replace` guard.
+- Prohibits direct `atomic_write_cli_output(...)` use in configured output-capable commands and automatically covers future console entry points regardless of module filename; solver equations, project schemas, engineering tolerances, requirement criteria, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — standalone CLI input error boundaries — 2026-10-04
 
 - Adds one shared `cli_error_boundary` so expected standalone command `OSError` / `ValueError` failures return concise stderr and exit code 1 instead of a Python traceback.

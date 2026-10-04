@@ -3579,6 +3579,52 @@ class CleanroomXApp:
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
 
+    def _assert_save_as_destination_safe(self, target: str | Path) -> None:
+        """Reject Save As targets that alias protected project inputs."""
+        destination = Path(target)
+        migration_source = getattr(self, "_migration_source_path", None)
+        if migration_source is not None and _paths_alias(
+            Path(migration_source),
+            destination,
+        ):
+            raise ValueError(
+                "project save destination must be different from the protected "
+                "legacy migration source"
+            )
+
+        recovery_source = getattr(self, "_recovery_source_path", None)
+        restored_artifact = getattr(self, "_restored_recovery_artifact", None)
+        if (
+            restored_artifact is not None
+            and recovery_source is not None
+            and _paths_alias(Path(recovery_source), destination)
+        ):
+            raise ValueError(
+                "project save destination must be different from the protected "
+                "recovery source"
+            )
+
+        base_dir = self._base_dir()
+        if base_dir is None and migration_source is not None:
+            base_dir = Path(migration_source).parent
+
+        for analysis in self.project.analyses:
+            for field, declared_path in analysis_external_dependency_references(
+                analysis.kind,
+                analysis.input,
+            ):
+                dependency = Path(declared_path).expanduser()
+                if not dependency.is_absolute():
+                    if base_dir is None:
+                        continue
+                    dependency = base_dir / dependency
+                if _paths_alias(dependency, destination):
+                    raise ValueError(
+                        "project save destination must be different from external "
+                        f"dependency {field!r} for analysis {analysis.id!r}: "
+                        f"{dependency.resolve(strict=False)}"
+                    )
+
     def save_project_as(self) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -3634,6 +3680,13 @@ class CleanroomXApp:
             )
             return
 
+        try:
+            self._assert_save_as_destination_safe(destination)
+        except (OSError, ValueError) as exc:
+            self.status_var.set("Save blocked")
+            messagebox.showerror("Save blocked", str(exc), parent=self.root)
+            return
+
         previous_base = self._base_dir()
         editor_id = self._editor_analysis_id
         candidate = copy.deepcopy(self.project)
@@ -3666,6 +3719,7 @@ class CleanroomXApp:
                 destination,
                 candidate,
                 expected_revision=expected_revision,
+                before_replace=self._assert_save_as_destination_safe,
             )
         except ProjectFileBusyError:
             self._report_project_save_busy(destination)

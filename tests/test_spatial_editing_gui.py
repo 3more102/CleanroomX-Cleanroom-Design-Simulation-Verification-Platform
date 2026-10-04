@@ -120,3 +120,68 @@ def test_editing_toolbar_controls_remain_visible(app, size):
             if isinstance(button, (ttk.Button, ttk.Menubutton)):
                 assert button.winfo_ismapped(), button.cget("text")
                 assert button.winfo_x() + button.winfo_width() <= row.winfo_width(), button.cget("text")
+
+
+
+def test_workspace_modes_make_2d_and_3d_first_class_views(app):
+    workspace = app.spatial_workspace
+
+    workspace.set_workspace_mode("2d")
+    app.root.update()
+    panes = tuple(str(item) for item in workspace._view_panes.panes())
+    assert str(workspace._two_d_frame) in panes
+    assert str(workspace._three_d_frame) not in panes
+    assert workspace.canvas_2d.winfo_ismapped()
+
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    panes = tuple(str(item) for item in workspace._view_panes.panes())
+    assert str(workspace._two_d_frame) not in panes
+    assert str(workspace._three_d_frame) in panes
+    assert workspace.canvas_3d.winfo_ismapped()
+
+    workspace.set_workspace_mode("split")
+    app.root.update()
+    panes = tuple(str(item) for item in workspace._view_panes.panes())
+    assert str(workspace._two_d_frame) in panes
+    assert str(workspace._three_d_frame) in panes
+
+
+def test_project_navigator_and_workspace_selection_stay_synchronized(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    navigator_id = f"room:{room['id']}"
+
+    assert app.analysis_tree.exists("nav-building")
+    assert app.analysis_tree.exists("nav-analyses")
+    assert app.analysis_tree.exists(navigator_id)
+
+    app.analysis_tree.selection_set(navigator_id)
+    app.analysis_tree.event_generate("<<TreeviewSelect>>")
+    app.root.update()
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(workspace)
+
+    other = workspace.layout["rooms"][1]
+    workspace.select_item("room", other["id"], notify=True)
+    app.root.update()
+    assert app.analysis_tree.selection() == (f"room:{other['id']}",)
+
+
+def test_contextual_inspector_hides_irrelevant_fields(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["analysis_room_name"].winfo_manager() == "pack"
+    assert workspace._property_rows["room_id"].winfo_manager() == ""
+
+    device = workspace.layout["devices"][0]
+    workspace.select_item("device", device["id"])
+    app.root.update()
+
+    assert workspace._property_rows["room_id"].winfo_manager() == "pack"
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
+    assert workspace._property_rows["classification"].winfo_manager() == ""

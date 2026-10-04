@@ -1926,7 +1926,7 @@ class CleanroomXApp:
             if self.project_path is not None
             else None
         )
-        for path in self._recent_project_paths:
+        for path in getattr(self, "_recent_project_paths", []):
             resolved = path.resolve(strict=False)
             name = path.stem
             if active_path is not None and resolved == active_path:
@@ -1953,9 +1953,10 @@ class CleanroomXApp:
 
     def _remember_recent_project(self, path: str | Path) -> None:
         candidate = Path(path).resolve(strict=False)
+        recent_paths = list(getattr(self, "_recent_project_paths", []))
         self._recent_project_paths = [
             existing
-            for existing in self._recent_project_paths
+            for existing in recent_paths
             if existing.resolve(strict=False) != candidate
         ]
         self._recent_project_paths.insert(0, candidate)

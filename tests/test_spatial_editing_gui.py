@@ -300,9 +300,11 @@ def test_viewport_visibility_controls_keep_room_context(app):
 @pytest.mark.parametrize(
     ("preset", "azimuth", "elevation"),
     [
-        ("top", 0.0, 89.0),
-        ("front", 0.0, 5.0),
-        ("right", 90.0, 5.0),
+        ("top", 0.0, 90.0),
+        ("front", 0.0, 0.0),
+        ("back", 180.0, 0.0),
+        ("left", 270.0, 0.0),
+        ("right", 90.0, 0.0),
         ("iso", 35.0, 28.0),
     ],
 )
@@ -354,3 +356,69 @@ def test_fit_selected_centers_selected_room_without_geometry_changes(app):
     assert screen_x == pytest.approx(workspace.canvas_2d.winfo_width() / 2.0, abs=2.0)
     assert screen_y == pytest.approx(workspace.canvas_2d.winfo_height() / 2.0, abs=2.0)
     assert workspace.layout["rooms"] == geometry_before
+
+
+
+def test_3d_fit_changes_only_3d_camera(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    workspace.layout["view"].update(
+        {
+            "zoom_2d": 2.5,
+            "pan_x": 42.0,
+            "pan_y": -19.0,
+            "zoom_3d": 0.2,
+            "pan_3d_x": 500.0,
+            "pan_3d_y": -400.0,
+        }
+    )
+    before_2d = (
+        workspace.layout["view"]["zoom_2d"],
+        workspace.layout["view"]["pan_x"],
+        workspace.layout["view"]["pan_y"],
+    )
+
+    workspace.fit_3d()
+
+    assert workspace.layout["view"]["zoom_3d"] > 0.2
+    assert (
+        workspace.layout["view"]["zoom_2d"],
+        workspace.layout["view"]["pan_x"],
+        workspace.layout["view"]["pan_y"],
+    ) == before_2d
+
+
+def test_3d_xray_and_hover_are_view_only(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    room = workspace.layout["rooms"][0]
+    metadata_before = copy.deepcopy(app.project.metadata)
+
+    workspace._xray_3d.set(True)
+    workspace._draw_3d()
+    app.root.update()
+
+    room_items = workspace.canvas_3d.find_withtag(f"room:{room['id']}")
+    polygons = [
+        item_id
+        for item_id in room_items
+        if workspace.canvas_3d.type(item_id) == "polygon"
+    ]
+    assert polygons
+    assert any(
+        workspace.canvas_3d.itemcget(item_id, "stipple") == "gray50"
+        for item_id in polygons
+    )
+
+    workspace.canvas_3d.addtag_withtag("current", polygons[0])
+    workspace._on_3d_motion(type("Event", (), {"x": 0, "y": 0})())
+    assert workspace._hovered_3d == _Hit("room", room["id"])
+
+    workspace._on_3d_leave()
+    assert workspace._hovered_3d is None
+    assert app.project.metadata == metadata_before
+
+
+def test_invalid_3d_preset_is_rejected(app):
+    with pytest.raises(ValueError, match="3D preset"):
+        app.spatial_workspace.set_3d_view_preset("perspective")

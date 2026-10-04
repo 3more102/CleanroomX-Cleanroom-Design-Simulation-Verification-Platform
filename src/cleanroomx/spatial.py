@@ -1631,9 +1631,11 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _is_visible(self, kind: str, item_id: str) -> bool:
         key = self._visibility_key(kind, item_id)
-        if key in self._hidden_item_keys:
+        hidden = getattr(self, "_hidden_item_keys", ())
+        isolated = getattr(self, "_isolated_item_key", None)
+        if key in hidden:
             return False
-        return self._isolated_item_key is None or key == self._isolated_item_key
+        return isolated is None or key == isolated
 
     def hide_selected(self) -> None:
         if self.selected is None:

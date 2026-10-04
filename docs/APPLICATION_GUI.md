@@ -132,6 +132,14 @@ Problems can be searched and filtered by severity. Double-clicking a spatial iss
 
 The **Verification** view summarizes current verification-currency state from the existing verification authority; the **Evidence** view lists retained project-verification records without recomputing historical verdicts. These views are read-only projections over existing domain services and do not change solver, requirement, ProofGraph, or acceptance semantics.
 
+## ProofGraph explorer
+
+The **ProofGraph** workspace reads only ProofGraph documents retained in the canonical project-verification history. Before a graph is rendered, CleanroomX reparses it with the canonical `proofgraph_from_dict()` validator. Digest tampering, broken source/evidence references, invalid provenance, inconsistent finding/verdict closure, or invalid verification-run relationships therefore fail closed instead of being visualized as trusted evidence.
+
+The explorer provides a tree, an interactive graph, and a node-detail view. It projects requirements, CleanroomX model-object references, IFC identities, evidence sources, originating calculations, evidence/results, checks, findings, verdicts, and verification runs without recomputing any solver result or compliance verdict. Filters cover requirements, evidence, calculations, IFC, verification, failures, and unresolved evidence while retaining immediate graph context. Double-clicking a node that carries a CleanroomX entity or subject reference selects that room/device in the shared spatial workspace and fits it in the synchronized engineering views.
+
+The Project Navigator **ProofGraph** entry activates this workspace. Graph selection is digest-aware and duplicate retained documents are collapsed by canonical `graph_sha256`. Invalid retained evidence is cleared from the viewer and reported through the existing evidence/status surfaces rather than silently accepted.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256, byte-size, and nanosecond modification-time evidence for external dependencies. Diagnostics exposes this evidence and **Export Run Bundle JSON** preserves the completed run data.

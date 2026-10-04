@@ -1214,6 +1214,10 @@ class CleanroomXApp:
             else default_gui_layout_state_path()
         )
         self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
+        self._recent_project_paths = [
+            Path(value)
+            for value in self._ui_layout_state["recent_projects"]
+        ]
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -1985,6 +1989,10 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "recent_projects": [
+                    str(path)
+                    for path in self._recent_project_paths[:8]
+                ],
             }
         )
         self._ui_layout_state = normalize_gui_layout_state(state)
@@ -2754,7 +2762,11 @@ class CleanroomXApp:
         )
         for path in getattr(self, "_recent_project_paths", []):
             resolved = path.resolve(strict=False)
-            name = path.stem
+            name = path.name
+            if name.endswith(".cleanroomx.json"):
+                name = name[: -len(".cleanroomx.json")]
+            else:
+                name = path.stem
             if active_path is not None and resolved == active_path:
                 name = self.project.name or name
             try:
@@ -2788,6 +2800,17 @@ class CleanroomXApp:
         self._recent_project_paths.insert(0, candidate)
         del self._recent_project_paths[8:]
         self._refresh_start_center()
+        self._save_ui_layout_state()
+
+    def _forget_recent_project(self, path: str | Path) -> None:
+        candidate = Path(path).resolve(strict=False)
+        self._recent_project_paths = [
+            existing
+            for existing in self._recent_project_paths
+            if existing.resolve(strict=False) != candidate
+        ]
+        self._refresh_start_center()
+        self._save_ui_layout_state()
 
     def _open_recent_project_from_start(self, path: str) -> None:
         if self._running:
@@ -2799,8 +2822,17 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        candidate = Path(path)
+        if not candidate.is_file():
+            self._forget_recent_project(candidate)
+            messagebox.showerror(
+                "Open failed",
+                f"Recent project is no longer available:\n{candidate}",
+                parent=self.root,
+            )
+            return
         try:
-            self.load_project_path(path)
+            self.load_project_path(candidate)
         except Exception as exc:
             messagebox.showerror("Open failed", str(exc), parent=self.root)
 

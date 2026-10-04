@@ -353,10 +353,15 @@ def _filtered_projection(
             matched.add(node["key"])
 
     # Keep immediate context around filtered nodes so the graph does not become
-    # a collection of disconnected status boxes.
+    # a collection of disconnected status boxes. For unresolved-evidence review,
+    # only retain upstream context: downstream verdicts are consequences of the
+    # unresolved finding, not unresolved evidence themselves.
     expanded = set(matched)
     for edge in edges:
-        if edge["source"] in matched or edge["target"] in matched:
+        if filter_key == "unresolved evidence":
+            if edge["target"] in matched:
+                expanded.add(edge["source"])
+        elif edge["source"] in matched or edge["target"] in matched:
             expanded.add(edge["source"])
             expanded.add(edge["target"])
 

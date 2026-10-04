@@ -628,6 +628,7 @@ def _rotate_quarantine(directory: Path, history_limit: int) -> None:
             revision,
         )
 
+
 def quarantine_recovery_artifact(
     path: str | Path,
     *,

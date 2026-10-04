@@ -7,57 +7,67 @@ import tkinter as tk
 from tkinter import ttk
 
 
+_DEFAULT_THEME = "dark"
+
 _THEME_PALETTES: dict[str, dict[str, str]] = {
     "light": {
-        "background": "#e9edf2",
-        "surface": "#f6f8fa",
-        "surface_alt": "#eef2f6",
+        "background": "#eef3f8",
+        "surface": "#f8fafc",
+        "surface_alt": "#e8eef5",
         "panel": "#ffffff",
-        "text": "#18212b",
-        "muted": "#5f6b78",
-        "border": "#c8d1dc",
-        "accent": "#0b6aa8",
-        "accent_hover": "#095786",
+        "text": "#172033",
+        "muted": "#5f6f84",
+        "border": "#c7d2df",
+        "accent": "#0284c7",
+        "accent_hover": "#0369a1",
         "accent_text": "#ffffff",
-        "selection": "#cfe8ff",
-        "selection_text": "#102a43",
+        "selection": "#dbeafe",
+        "selection_text": "#0f2742",
         "field": "#ffffff",
-        "field_text": "#18212b",
-        "tree": "#fbfcfd",
-        "disabled": "#9aa5b1",
-        "canvas_2d": "#f7f9fb",
-        "canvas_3d": "#111820",
+        "field_text": "#172033",
+        "tree": "#fbfdff",
+        "disabled": "#8a98aa",
+        "canvas_2d": "#f8fafc",
+        "canvas_3d": "#111827",
         "plot": "#ffffff",
-        "grid": "#d7dee7",
+        "grid": "#d6dee8",
+        "success": "#15803d",
+        "warning": "#b45309",
+        "error": "#dc2626",
+        "info": "#0284c7",
     },
     "dark": {
-        "background": "#14191f",
-        "surface": "#1b2129",
-        "surface_alt": "#232a33",
-        "panel": "#1e252d",
-        "text": "#e6edf3",
-        "muted": "#9aa7b4",
-        "border": "#394451",
-        "accent": "#2f81f7",
-        "accent_hover": "#58a6ff",
-        "accent_text": "#ffffff",
-        "selection": "#264f78",
-        "selection_text": "#ffffff",
-        "field": "#11161c",
-        "field_text": "#e6edf3",
-        "tree": "#171d24",
-        "disabled": "#6f7b87",
-        "canvas_2d": "#1b222a",
-        "canvas_3d": "#0d1117",
-        "plot": "#131920",
-        "grid": "#33404c",
+        "background": "#0B1220",
+        "surface": "#111B2E",
+        "surface_alt": "#17243A",
+        "panel": "#111B2E",
+        "text": "#F1F5F9",
+        "muted": "#94A3B8",
+        "border": "#263750",
+        "accent": "#22D3EE",
+        "accent_hover": "#38BDF8",
+        "accent_text": "#07111F",
+        "selection": "#164E63",
+        "selection_text": "#F1F5F9",
+        "field": "#0F172A",
+        "field_text": "#F1F5F9",
+        "tree": "#0F172A",
+        "disabled": "#64748B",
+        "canvas_2d": "#0D1728",
+        "canvas_3d": "#08111F",
+        "plot": "#0D1728",
+        "grid": "#263750",
+        "success": "#22C55E",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "info": "#38BDF8",
     },
 }
 
 
 def normalize_theme_name(value: Any) -> str:
     name = str(value or "").strip().lower()
-    return name if name in _THEME_PALETTES else "light"
+    return name if name in _THEME_PALETTES else _DEFAULT_THEME
 
 
 def theme_palette(value: Any) -> dict[str, str]:
@@ -77,11 +87,16 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ".",
         background=palette["background"],
         foreground=palette["text"],
+        bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
+        troughcolor=palette["background"],
     )
-    style.configure(
-        "TFrame",
-        background=palette["background"],
-    )
+    style.configure("TFrame", background=palette["background"])
+    style.configure("CX.Surface.TFrame", background=palette["surface"])
+    style.configure("CX.Panel.TFrame", background=palette["panel"])
+    style.configure("CX.Card.TFrame", background=palette["surface_alt"])
+
     style.configure(
         "TLabel",
         background=palette["background"],
@@ -89,18 +104,20 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     )
     style.configure(
         "TLabelframe",
-        background=palette["background"],
+        background=palette["panel"],
         foreground=palette["text"],
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
+        relief="solid",
     )
     style.configure(
         "TLabelframe.Label",
-        background=palette["background"],
+        background=palette["panel"],
         foreground=palette["text"],
         font=("TkDefaultFont", 9, "bold"),
     )
+
     style.configure(
         "TButton",
         background=palette["surface_alt"],
@@ -108,7 +125,8 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(8, 5),
+        padding=(9, 5),
+        relief="flat",
     )
     style.map(
         "TButton",
@@ -121,7 +139,119 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("disabled", palette["disabled"]),
             ("!disabled", palette["text"]),
         ],
+        bordercolor=[
+            ("focus", palette["accent"]),
+            ("active", palette["accent"]),
+        ],
     )
+    style.configure(
+        "CX.Primary.TButton",
+        background=palette["accent"],
+        foreground=palette["accent_text"],
+        bordercolor=palette["accent"],
+        padding=(12, 6),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.map(
+        "CX.Primary.TButton",
+        background=[
+            ("active", palette["accent_hover"]),
+            ("pressed", palette["accent_hover"]),
+            ("disabled", palette["surface_alt"]),
+        ],
+        foreground=[
+            ("disabled", palette["disabled"]),
+            ("!disabled", palette["accent_text"]),
+        ],
+        bordercolor=[
+            ("focus", palette["accent_hover"]),
+            ("!disabled", palette["accent"]),
+        ],
+    )
+    style.configure(
+        "CX.Secondary.TButton",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        bordercolor=palette["border"],
+        padding=(10, 5),
+    )
+    style.map(
+        "CX.Secondary.TButton",
+        background=[
+            ("active", palette["surface"]),
+            ("pressed", palette["selection"]),
+        ],
+        bordercolor=[
+            ("focus", palette["accent"]),
+            ("active", palette["accent"]),
+        ],
+    )
+    style.configure(
+        "CX.Destructive.TButton",
+        background=palette["surface_alt"],
+        foreground=palette["error"],
+        bordercolor=palette["error"],
+        padding=(10, 5),
+    )
+    style.map(
+        "CX.Destructive.TButton",
+        background=[
+            ("active", palette["error"]),
+            ("pressed", palette["error"]),
+            ("disabled", palette["surface_alt"]),
+        ],
+        foreground=[
+            ("active", "#ffffff"),
+            ("pressed", "#ffffff"),
+            ("disabled", palette["disabled"]),
+        ],
+    )
+    style.configure(
+        "CX.Compact.TButton",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        bordercolor=palette["border"],
+        padding=(6, 3),
+    )
+    style.map(
+        "CX.Compact.TButton",
+        background=[
+            ("active", palette["surface"]),
+            ("pressed", palette["selection"]),
+            ("disabled", palette["surface_alt"]),
+        ],
+        foreground=[("disabled", palette["disabled"])],
+        bordercolor=[("focus", palette["accent"])],
+    )
+    style.configure(
+        "CX.Mode.TButton",
+        background=palette["background"],
+        foreground=palette["muted"],
+        bordercolor=palette["background"],
+        padding=(11, 5),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.map(
+        "CX.Mode.TButton",
+        background=[
+            ("active", palette["surface_alt"]),
+            ("pressed", palette["selection"]),
+        ],
+        foreground=[
+            ("active", palette["text"]),
+            ("pressed", palette["text"]),
+        ],
+        bordercolor=[("focus", palette["accent"])],
+    )
+    style.configure(
+        "CX.ModeActive.TButton",
+        background=palette["selection"],
+        foreground=palette["accent"],
+        bordercolor=palette["accent"],
+        padding=(11, 5),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+
     style.configure(
         "TCheckbutton",
         background=palette["background"],
@@ -142,6 +272,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=[("active", palette["background"])],
         foreground=[("disabled", palette["disabled"])],
     )
+
     style.configure(
         "TEntry",
         fieldbackground=palette["field"],
@@ -150,6 +281,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         insertcolor=palette["text"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
+        padding=(6, 4),
     )
     style.map(
         "TEntry",
@@ -158,6 +290,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("readonly", palette["surface_alt"]),
         ],
         foreground=[("disabled", palette["disabled"])],
+        bordercolor=[("focus", palette["accent"])],
     )
     style.configure(
         "TCombobox",
@@ -168,6 +301,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
+        padding=(5, 3),
     )
     style.map(
         "TCombobox",
@@ -178,6 +312,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=[("disabled", palette["disabled"])],
         selectbackground=[("readonly", palette["selection"])],
         selectforeground=[("readonly", palette["selection_text"])],
+        bordercolor=[("focus", palette["accent"])],
     )
     style.configure(
         "TSpinbox",
@@ -187,7 +322,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
+        padding=(5, 3),
     )
+    style.map("TSpinbox", bordercolor=[("focus", palette["accent"])])
+
     style.configure(
         "TNotebook",
         background=palette["background"],
@@ -196,29 +334,33 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     )
     style.configure(
         "TNotebook.Tab",
-        background=palette["surface_alt"],
+        background=palette["surface"],
         foreground=palette["muted"],
-        padding=(10, 6),
+        padding=(11, 6),
         bordercolor=palette["border"],
+        font=("TkDefaultFont", 9),
     )
     style.map(
         "TNotebook.Tab",
         background=[
-            ("selected", palette["panel"]),
-            ("active", palette["surface"]),
+            ("selected", palette["surface_alt"]),
+            ("active", palette["panel"]),
         ],
         foreground=[
-            ("selected", palette["text"]),
+            ("selected", palette["accent"]),
             ("active", palette["text"]),
         ],
+        bordercolor=[("selected", palette["accent"])],
     )
+
     style.configure(
         "Treeview",
         background=palette["tree"],
         fieldbackground=palette["tree"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        rowheight=24,
+        rowheight=26,
+        relief="flat",
     )
     style.map(
         "Treeview",
@@ -231,18 +373,44 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9, "bold"),
+        padding=(7, 5),
+        relief="flat",
     )
     style.map(
         "Treeview.Heading",
         background=[("active", palette["surface"])],
+        foreground=[("active", palette["accent"])],
     )
     style.configure(
-        "TPanedwindow",
-        background=palette["border"],
+        "CX.Navigator.Treeview",
+        background=palette["tree"],
+        fieldbackground=palette["tree"],
+        foreground=palette["text"],
+        rowheight=27,
+        bordercolor=palette["border"],
+        relief="flat",
     )
+    style.map(
+        "CX.Navigator.Treeview",
+        background=[("selected", palette["selection"])],
+        foreground=[("selected", palette["selection_text"])],
+    )
+
+    style.configure("TPanedwindow", background=palette["border"])
+    style.configure("TSeparator", background=palette["border"])
     style.configure(
-        "TSeparator",
-        background=palette["border"],
+        "TScrollbar",
+        background=palette["surface_alt"],
+        troughcolor=palette["background"],
+        bordercolor=palette["border"],
+        arrowcolor=palette["muted"],
+        lightcolor=palette["surface_alt"],
+        darkcolor=palette["surface_alt"],
+    )
+    style.map(
+        "TScrollbar",
+        background=[("active", palette["surface"])],
+        arrowcolor=[("active", palette["text"])],
     )
     style.configure(
         "TMenubutton",
@@ -256,6 +424,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TMenubutton",
         background=[("active", palette["surface"])],
         foreground=[("disabled", palette["disabled"])],
+        bordercolor=[("focus", palette["accent"])],
     )
 
     style.configure(
@@ -277,38 +446,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 10, "bold"),
     )
     style.configure(
-        "CX.Navigator.Treeview",
-        background=palette["tree"],
-        fieldbackground=palette["tree"],
-        foreground=palette["text"],
-        rowheight=24,
-        bordercolor=palette["border"],
-    )
-    style.map(
-        "CX.Navigator.Treeview",
-        background=[("selected", palette["selection"])],
-        foreground=[("selected", palette["selection_text"])],
-    )
-    style.configure(
-        "CX.Primary.TButton",
-        background=palette["accent"],
-        foreground=palette["accent_text"],
-        bordercolor=palette["accent"],
-        padding=(12, 6),
-    )
-    style.map(
-        "CX.Primary.TButton",
-        background=[
-            ("active", palette["accent_hover"]),
-            ("pressed", palette["accent_hover"]),
-            ("disabled", palette["surface_alt"]),
-        ],
-        foreground=[
-            ("disabled", palette["disabled"]),
-            ("!disabled", palette["accent_text"]),
-        ],
-    )
-    style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
         padding=(4, 3),
@@ -316,7 +453,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.PanelHeader.TFrame",
         background=palette["surface_alt"],
-        padding=(6, 4),
+        padding=(7, 5),
     )
     style.configure(
         "CX.PanelHeader.TLabel",
@@ -325,21 +462,36 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 9, "bold"),
     )
     style.configure(
-        "CX.Compact.TButton",
-        background=palette["surface_alt"],
-        foreground=palette["text"],
+        "CX.StatusBar.TFrame",
+        background=palette["surface"],
         bordercolor=palette["border"],
-        padding=(6, 3),
     )
-    style.map(
-        "CX.Compact.TButton",
-        background=[
-            ("active", palette["surface"]),
-            ("pressed", palette["selection"]),
-            ("disabled", palette["surface_alt"]),
-        ],
-        foreground=[("disabled", palette["disabled"])],
+    style.configure(
+        "CX.StatusBar.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
     )
+
+    for name, color in (
+        ("Success", palette["success"]),
+        ("Warning", palette["warning"]),
+        ("Error", palette["error"]),
+        ("Info", palette["info"]),
+    ):
+        style.configure(
+            f"CX.{name}.TLabel",
+            background=palette["background"],
+            foreground=color,
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        style.configure(
+            f"CX.{name}Badge.TLabel",
+            background=palette["surface_alt"],
+            foreground=color,
+            padding=(6, 2),
+            font=("TkDefaultFont", 8, "bold"),
+        )
 
     # Defaults for Tk-native widgets created after this call.
     root.option_add("*Text.background", palette["field"])
@@ -347,6 +499,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     root.option_add("*Text.insertBackground", palette["text"])
     root.option_add("*Text.selectBackground", palette["selection"])
     root.option_add("*Text.selectForeground", palette["selection_text"])
+    root.option_add("*Listbox.background", palette["field"])
+    root.option_add("*Listbox.foreground", palette["field_text"])
+    root.option_add("*Listbox.selectBackground", palette["selection"])
+    root.option_add("*Listbox.selectForeground", palette["selection_text"])
     root.option_add("*Menu.background", palette["surface"])
     root.option_add("*Menu.foreground", palette["text"])
     root.option_add("*Menu.activeBackground", palette["selection"])

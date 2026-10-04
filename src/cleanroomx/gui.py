@@ -1208,7 +1208,11 @@ class CleanroomXApp:
             )
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
+        self.model_status_var = tk.StringVar(value="Model: ready")
+        self.selection_status_var = tk.StringVar(value="Selected: —")
+        self.workspace_status_var = tk.StringVar(value="Workspace: Split")
 
+        self._configure_styles()
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
@@ -1222,6 +1226,16 @@ class CleanroomXApp:
             self.root.after(self._autosave_interval_ms, self._autosave_tick)
             self.root.after(500, self._poll_autosave_status)
 
+    def _configure_styles(self) -> None:
+        self.root.configure(background="#eef2f5")
+        style = ttk.Style(self.root)
+        style.configure("CX.Brand.TLabel", font=("TkDefaultFont", 15, "bold"))
+        style.configure("CX.Section.TLabel", font=("TkDefaultFont", 9, "bold"))
+        style.configure("CX.ViewTitle.TLabel", font=("TkDefaultFont", 10, "bold"))
+        style.configure("CX.Navigator.Treeview", rowheight=24)
+        style.configure("CX.Primary.TButton", padding=(12, 6))
+        style.configure("CX.Toolbar.TFrame", padding=(4, 3))
+
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
 
@@ -1230,7 +1244,6 @@ class CleanroomXApp:
         file_menu.add_command(label="Open Project...", accelerator="Ctrl+O", command=self.open_project)
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
-        file_menu.add_command(label="Saved Revisions...", command=self.show_saved_revisions)
         file_menu.add_separator()
         file_menu.add_command(
             label="Open Portable Project Bundle...",
@@ -1240,50 +1253,9 @@ class CleanroomXApp:
             label="Export Portable Project Bundle...",
             command=self.export_portable_project_bundle,
         )
-        file_menu.add_command(
-            label="Export Project Engineering Dossier...",
-            command=self.export_project_engineering_dossier,
-        )
-        file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
-        file_menu.add_separator()
-        file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
-        file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
-        file_menu.add_separator()
-        file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
-        file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
-        file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
-        file_menu.add_command(label="Export Portable HTML Report...", command=self.export_report_html)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
-
-        analysis_menu = tk.Menu(menubar, tearoff=False)
-        analysis_menu.add_command(label="Add Analysis...", command=self.add_analysis)
-        analysis_menu.add_command(label="Rename Analysis...", command=self.rename_analysis)
-        analysis_menu.add_command(label="Remove Analysis", command=self.remove_analysis)
-        analysis_menu.add_separator()
-        analysis_menu.add_command(label="Validate Input", command=self.validate_current)
-        analysis_menu.add_command(label="Run Analysis", accelerator="F5", command=self.run_current)
-        analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
-        analysis_menu.add_separator()
-        analysis_menu.add_command(label="Run History...", command=self.show_run_history)
-        analysis_menu.add_command(
-            label="Requirements Traceability...",
-            command=self.show_requirements_traceability,
-        )
-        analysis_menu.add_command(
-            label="Verify Project Requirements",
-            command=self.run_project_requirements_verification,
-        )
-        analysis_menu.add_command(
-            label="Verify & Persist Project Requirements",
-            command=self.persist_project_requirements_verification,
-        )
-        analysis_menu.add_command(
-            label="Verification History...",
-            command=self.show_verification_history,
-        )
-        menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         self.edit_menu = tk.Menu(menubar, tearoff=False)
         self.edit_menu.add_command(
@@ -1293,6 +1265,69 @@ class CleanroomXApp:
             label="Redo Project Edit", command=self.redo_project_edit, state="disabled"
         )
         menubar.add_cascade(label="Edit", menu=self.edit_menu)
+
+        project_menu = tk.Menu(menubar, tearoff=False)
+        project_menu.add_command(label="Add Analysis...", command=self.add_analysis)
+        project_menu.add_command(label="Rename Analysis...", command=self.rename_analysis)
+        project_menu.add_command(label="Remove Analysis", command=self.remove_analysis)
+        project_menu.add_separator()
+        project_menu.add_command(label="Saved Revisions...", command=self.show_saved_revisions)
+        project_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
+        menubar.add_cascade(label="Project", menu=project_menu)
+
+        design_menu = tk.Menu(menubar, tearoff=False)
+        design_menu.add_command(
+            label="2D Workspace", accelerator="Ctrl+1",
+            command=lambda: self._activate_spatial_workspace("2d"),
+        )
+        design_menu.add_command(
+            label="3D Workspace", accelerator="Ctrl+2",
+            command=lambda: self._activate_spatial_workspace("3d"),
+        )
+        design_menu.add_command(
+            label="Split 2D + 3D", accelerator="Ctrl+3",
+            command=lambda: self._activate_spatial_workspace("split"),
+        )
+        design_menu.add_separator()
+        design_menu.add_command(
+            label="Add Room",
+            command=lambda: self.spatial_workspace.add_room(),
+        )
+        design_menu.add_command(
+            label="Fit Spatial Views",
+            command=lambda: self.spatial_workspace.fit_views(),
+        )
+        menubar.add_cascade(label="Design", menu=design_menu)
+
+        analyze_menu = tk.Menu(menubar, tearoff=False)
+        analyze_menu.add_command(label="Validate Input", command=self.validate_current)
+        analyze_menu.add_command(
+            label="Run Analysis", accelerator="F5", command=self.run_current
+        )
+        analyze_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
+        analyze_menu.add_separator()
+        analyze_menu.add_command(label="Run History...", command=self.show_run_history)
+        menubar.add_cascade(label="Analyze", menu=analyze_menu)
+
+        verify_menu = tk.Menu(menubar, tearoff=False)
+        verify_menu.add_command(
+            label="Verify Project Requirements",
+            command=self.run_project_requirements_verification,
+        )
+        verify_menu.add_command(
+            label="Verify & Persist Project Requirements",
+            command=self.persist_project_requirements_verification,
+        )
+        verify_menu.add_separator()
+        verify_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
+        verify_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
+        menubar.add_cascade(label="Verify", menu=verify_menu)
 
         bim_menu = tk.Menu(menubar, tearoff=False)
         bim_menu.add_command(
@@ -1309,15 +1344,29 @@ class CleanroomXApp:
         )
         menubar.add_cascade(label="BIM", menu=bim_menu)
 
+        report_menu = tk.Menu(menubar, tearoff=False)
+        report_menu.add_command(
+            label="Export Project Engineering Dossier...",
+            command=self.export_project_engineering_dossier,
+        )
+        report_menu.add_separator()
+        report_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
+        report_menu.add_command(
+            label="Export Run Bundle JSON...", command=self.export_run_bundle_json
+        )
+        report_menu.add_command(
+            label="Export Report Markdown...", command=self.export_report_markdown
+        )
+        report_menu.add_command(
+            label="Export Portable HTML Report...", command=self.export_report_html
+        )
+        menubar.add_cascade(label="Report", menu=report_menu)
+
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
             label="Refresh Spatial Workspace",
             command=lambda: self.spatial_workspace.refresh(),
-        )
-        view_menu.add_command(
-            label="Fit Spatial Views",
-            command=lambda: self.spatial_workspace.fit_views(),
         )
         view_menu.add_checkbutton(
             label="Wrap output text",
@@ -1334,54 +1383,71 @@ class CleanroomXApp:
         self.root.bind("<Control-n>", lambda event: self.new_project())
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
+        self.root.bind("<Control-Key-1>", lambda event: self._activate_spatial_workspace("2d"))
+        self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
+        self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
         self.root.bind("<F5>", lambda event: self.run_current())
 
     def _build_layout(self) -> None:
-        metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
-        metadata.pack(fill="x")
-        ttk.Label(metadata, text="Project").grid(row=0, column=0, sticky="w")
-        ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
-            row=0, column=1, sticky="ew", padx=(6, 12)
+        topbar = ttk.Frame(self.root, padding=(12, 10, 12, 7))
+        topbar.pack(fill="x")
+        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
+            row=0, column=0, rowspan=2, sticky="w", padx=(0, 16)
         )
-        ttk.Label(metadata, text="Description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(metadata, textvariable=self.description_var).grid(
-            row=0, column=3, sticky="ew", padx=(6, 12)
+        ttk.Label(topbar, text="Project").grid(row=0, column=1, sticky="w")
+        ttk.Entry(topbar, textvariable=self.name_var, width=28).grid(
+            row=1, column=1, sticky="ew", padx=(0, 10)
         )
-        ttk.Button(metadata, text="Validate", command=self.validate_current).grid(
-            row=0, column=4, padx=3
+        ttk.Label(topbar, text="Description").grid(row=0, column=2, sticky="w")
+        ttk.Entry(topbar, textvariable=self.description_var).grid(
+            row=1, column=2, sticky="ew", padx=(0, 12)
         )
-        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
-        self.run_button.grid(row=0, column=5, padx=3)
+        ttk.Button(
+            topbar,
+            text="Validate",
+            command=self.validate_current,
+        ).grid(row=0, column=3, rowspan=2, padx=3)
+        self.run_button = ttk.Button(
+            topbar,
+            text="▶ Run",
+            command=self.run_current,
+            style="CX.Primary.TButton",
+        )
+        self.run_button.grid(row=0, column=4, rowspan=2, padx=3)
         self.cancel_button = ttk.Button(
-            metadata, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar, text="Abandon", command=self.cancel_run, state="disabled"
         )
-        self.cancel_button.grid(row=0, column=6, padx=3)
-        metadata.columnconfigure(1, weight=1)
-        metadata.columnconfigure(3, weight=2)
+        self.cancel_button.grid(row=0, column=5, rowspan=2, padx=(3, 0))
+        topbar.columnconfigure(1, weight=1)
+        topbar.columnconfigure(2, weight=2)
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
-        panes.pack(fill="both", expand=True, padx=8, pady=4)
+        panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
-        sidebar = ttk.Frame(panes, padding=4)
-        panes.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="Analyses", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", pady=(0, 4)
-        )
+        navigator = ttk.Frame(panes, padding=(8, 7))
+        panes.add(navigator, weight=1)
+        ttk.Label(
+            navigator, text="PROJECT NAVIGATOR", style="CX.Section.TLabel"
+        ).pack(anchor="w", pady=(0, 6))
         self.analysis_tree = ttk.Treeview(
-            sidebar, columns=("kind",), show="tree headings", selectmode="browse"
+            navigator,
+            columns=("kind",),
+            show="tree",
+            selectmode="browse",
+            style="CX.Navigator.Treeview",
         )
-        self.analysis_tree.heading("#0", text="Name")
-        self.analysis_tree.heading("kind", text="Kind")
-        self.analysis_tree.column("#0", width=210)
-        self.analysis_tree.column("kind", width=155)
-        scroll = ttk.Scrollbar(sidebar, orient="vertical", command=self.analysis_tree.yview)
-        self.analysis_tree.configure(yscrollcommand=scroll.set)
+        self.analysis_tree.column("#0", width=245, minwidth=180)
+        nav_scroll = ttk.Scrollbar(
+            navigator, orient="vertical", command=self.analysis_tree.yview
+        )
+        self.analysis_tree.configure(yscrollcommand=nav_scroll.set)
         self.analysis_tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        self.analysis_tree.bind("<<TreeviewSelect>>", self._on_analysis_selected)
+        nav_scroll.pack(side="right", fill="y")
+        self.analysis_tree.bind("<<TreeviewSelect>>", self._on_navigator_selected)
+        self.analysis_tree.tag_configure("section", font=("TkDefaultFont", 9, "bold"))
 
         content = ttk.Frame(panes)
-        panes.add(content, weight=4)
+        panes.add(content, weight=5)
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
 
@@ -1397,8 +1463,9 @@ class CleanroomXApp:
             on_history_record=self._record_spatial_project_edit,
             on_undo_requested=self.undo_project_edit,
             on_redo_requested=self.redo_project_edit,
+            on_selection_change=self._on_workspace_selection_change,
         )
-        self.notebook.add(self.spatial_workspace, text="Design 2D + 3D")
+        self.notebook.add(self.spatial_workspace, text="Design")
 
         input_tab = ttk.Frame(self.notebook)
         self.notebook.add(input_tab, text="Input")
@@ -1428,8 +1495,12 @@ class CleanroomXApp:
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
         self.input_text = tk.Text(json_tab, wrap="none", undo=True)
-        input_scroll_y = ttk.Scrollbar(json_tab, orient="vertical", command=self.input_text.yview)
-        input_scroll_x = ttk.Scrollbar(json_tab, orient="horizontal", command=self.input_text.xview)
+        input_scroll_y = ttk.Scrollbar(
+            json_tab, orient="vertical", command=self.input_text.yview
+        )
+        input_scroll_x = ttk.Scrollbar(
+            json_tab, orient="horizontal", command=self.input_text.xview
+        )
         self.input_text.configure(
             yscrollcommand=input_scroll_y.set, xscrollcommand=input_scroll_x.set
         )
@@ -1438,12 +1509,13 @@ class CleanroomXApp:
         input_scroll_x.grid(row=1, column=0, sticky="ew")
         json_tab.rowconfigure(0, weight=1)
         json_tab.columnconfigure(0, weight=1)
-        self.input_text.bind("<FocusOut>", lambda event: self.refresh_structure(silent=True))
+        self.input_text.bind(
+            "<FocusOut>", lambda event: self.refresh_structure(silent=True)
+        )
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
         self.result_text = self._add_text_tab("Results")
-        self.report_text = self._add_text_tab("Report")
         self.diagnostics_text = self._add_text_tab("Diagnostics")
 
         plot_tab = ttk.Frame(self.notebook)
@@ -1452,24 +1524,43 @@ class CleanroomXApp:
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
-        status_bar = ttk.Frame(self.root)
+        self.report_text = self._add_text_tab("Report")
+
+        status_bar = ttk.Frame(self.root, padding=(8, 4))
         status_bar.pack(fill="x", side="bottom")
-        status = ttk.Label(
+        ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
-            relief="sunken",
-            padding=(6, 3),
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
         )
-        status.pack(fill="x", side="left", expand=True)
-        autosave_status = ttk.Label(
+        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Label(
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
-            relief="sunken",
-            padding=(8, 3),
-        )
-        autosave_status.pack(side="right")
+        ).pack(side="right")
+
+    def _activate_spatial_workspace(self, mode: str | None = None) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
+            self.notebook.select(self.spatial_workspace)
+        if mode is not None and hasattr(self, "spatial_workspace"):
+            self.spatial_workspace.set_workspace_mode(mode)
+            label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
+            self.workspace_status_var.set(f"Workspace: {label}")
 
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)

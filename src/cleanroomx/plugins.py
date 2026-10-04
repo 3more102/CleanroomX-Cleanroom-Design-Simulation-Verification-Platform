@@ -7,7 +7,8 @@ import re
 from typing import Any, Callable, Iterable, Mapping
 
 
-PLUGIN_API_VERSION = 1
+PLUGIN_API_VERSION = 2
+PLUGIN_SUPPORTED_API_VERSIONS = frozenset({1, 2})
 PLUGIN_ENTRY_POINT_GROUP = "cleanroomx.analysis_plugins"
 PLUGIN_TRUST_MODE_ENV = "CLEANROOMX_PLUGIN_MODE"
 PLUGIN_ALLOWLIST_ENV = "CLEANROOMX_PLUGIN_ALLOWLIST"
@@ -190,6 +191,7 @@ class AnalysisPlugin:
     parser: Callable[[dict], Any]
     runner: Callable[[Any], Any]
     reporter: Callable[[dict], str] | None = None
+    external_dependencies: Callable[[dict], Iterable[tuple[str, str]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -295,10 +297,11 @@ def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
         )
     if type(plugin.api_version) is not int:
         raise TypeError("plugin API version must be an integer")
-    if plugin.api_version != PLUGIN_API_VERSION:
+    if plugin.api_version not in PLUGIN_SUPPORTED_API_VERSIONS:
+        supported = ", ".join(str(item) for item in sorted(PLUGIN_SUPPORTED_API_VERSIONS))
         raise ValueError(
             f"unsupported plugin API version {plugin.api_version!r}; "
-            f"expected {PLUGIN_API_VERSION}"
+            f"supported versions are {supported}"
         )
 
     key = _nonempty_text(plugin.key, "plugin key")
@@ -319,6 +322,17 @@ def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
         raise TypeError("plugin runner must be callable")
     if plugin.reporter is not None and not callable(plugin.reporter):
         raise TypeError("plugin reporter must be callable when provided")
+    if plugin.external_dependencies is not None and not callable(
+        plugin.external_dependencies
+    ):
+        raise TypeError(
+            "plugin external_dependencies must be callable when provided"
+        )
+    if plugin.api_version == 1 and plugin.external_dependencies is not None:
+        raise ValueError(
+            "plugin API version 1 does not support host-managed external "
+            "dependency declarations; use API version 2"
+        )
 
     return AnalysisPlugin(
         api_version=plugin.api_version,
@@ -329,6 +343,7 @@ def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
         parser=plugin.parser,
         runner=plugin.runner,
         reporter=plugin.reporter,
+        external_dependencies=plugin.external_dependencies,
     )
 
 

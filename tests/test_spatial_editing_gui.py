@@ -281,3 +281,23 @@ def test_engineering_output_is_docked_below_primary_workspace(app):
     assert app.diagnostics_text.master.master == app.output_notebook
     assert app.report_text.master.master == app.output_notebook
 
+def test_project_navigator_search_filters_without_changing_active_analysis(app):
+    active_before = app.project.active_analysis_id
+    room = app.spatial_workspace.layout["rooms"][0]
+    query = str(room["name"])
+
+    app.navigator_filter_var.set(query)
+    app._on_navigator_filter_changed()
+    app.root.update()
+
+    visible_rooms = app.analysis_tree.get_children("nav-floor")
+    assert visible_rooms == (f"room:{room['id']}",)
+    assert app.project.active_analysis_id == active_before
+
+    app._clear_navigator_filter()
+    app.root.update()
+    assert len(app.analysis_tree.get_children("nav-floor")) == len(
+        app.spatial_workspace.layout["rooms"]
+    )
+    assert app.project.active_analysis_id == active_before
+

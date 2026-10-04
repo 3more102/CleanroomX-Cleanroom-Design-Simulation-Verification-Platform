@@ -1484,25 +1484,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
-        ttk.Button(
-            modebar, text="Fit selected", width=11, command=self.fit_selected
-        ).pack(side="left", padx=2)
-        view3d_button = ttk.Menubutton(modebar, text="3D View")
-        view3d_menu = tk.Menu(view3d_button, tearoff=False)
-        view3d_button.configure(menu=view3d_menu)
-        for preset, label in (
-            ("top", "Top"),
-            ("front", "Front"),
-            ("right", "Right"),
-            ("iso", "Isometric"),
-        ):
-            view3d_menu.add_command(
-                label=label,
-                command=lambda p=preset: self.set_3d_view_preset(p),
-            )
-        view3d_menu.add_separator()
-        view3d_menu.add_command(label="Reset camera", command=self.reset_3d)
-        view3d_button.pack(side="left", padx=2)
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
@@ -1520,6 +1501,45 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
+
+        navtools = ttk.Frame(self, padding=(8, 0, 8, 4))
+        navtools.pack(fill="x")
+        ttk.Label(navtools, text="Navigation").pack(side="left", padx=(0, 6))
+        ttk.Button(
+            navtools, text="Fit selected", width=11, command=self.fit_selected
+        ).pack(side="left", padx=2)
+        view3d_button = ttk.Menubutton(navtools, text="3D View")
+        view3d_menu = tk.Menu(view3d_button, tearoff=False)
+        view3d_button.configure(menu=view3d_menu)
+        for preset, label in (
+            ("top", "Top"),
+            ("front", "Front"),
+            ("right", "Right"),
+            ("iso", "Isometric"),
+        ):
+            view3d_menu.add_command(
+                label=label,
+                command=lambda p=preset: self.set_3d_view_preset(p),
+            )
+        view3d_menu.add_separator()
+        view3d_menu.add_command(label="Reset camera", command=self.reset_3d)
+        view3d_button.pack(side="left", padx=2)
+
+        measure_button = ttk.Menubutton(navtools, text="Measure")
+        measure_menu = tk.Menu(measure_button, tearoff=False)
+        measure_button.configure(menu=measure_menu)
+        measure_menu.add_command(
+            label="Distance", command=lambda: self.start_measurement("distance")
+        )
+        measure_menu.add_command(
+            label="Area (rectangle)", command=lambda: self.start_measurement("area")
+        )
+        measure_menu.add_separator()
+        measure_menu.add_command(label="Clear", command=self.clear_measurement)
+        measure_button.pack(side="left", padx=(8, 2))
+        ttk.Label(navtools, textvariable=self._measure_var).pack(
+            side="left", padx=(4, 2)
+        )
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
@@ -1553,19 +1573,6 @@ class SpatialDesignWorkspace(ttk.Frame):
             "<<ComboboxSelected>>", lambda _event: self._set_overlay_mode()
         )
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        measure_button = ttk.Menubutton(viewbar, text="Measure")
-        measure_menu = tk.Menu(measure_button, tearoff=False)
-        measure_button.configure(menu=measure_menu)
-        measure_menu.add_command(
-            label="Distance", command=lambda: self.start_measurement("distance")
-        )
-        measure_menu.add_command(
-            label="Area (rectangle)", command=lambda: self.start_measurement("area")
-        )
-        measure_menu.add_separator()
-        measure_menu.add_command(label="Clear", command=self.clear_measurement)
-        measure_button.pack(side="left", padx=(8, 2))
-        ttk.Label(viewbar, textvariable=self._measure_var).pack(side="left", padx=(4, 2))
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )

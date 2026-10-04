@@ -911,14 +911,11 @@ def _fsync_staged_directory_tree(root: Path) -> None:
 
 
 def _extraction_destination_revision(path: Path) -> tuple[int, ...]:
-    """Capture one empty extraction directory revision for publication checks."""
+    """Capture rename-stable directory identity for publication checks."""
     metadata = path.stat()
     return (
         metadata.st_dev,
         metadata.st_ino,
-        metadata.st_size,
-        metadata.st_mtime_ns,
-        metadata.st_ctime_ns,
         int(getattr(metadata, "st_birthtime_ns", 0)),
     )
 

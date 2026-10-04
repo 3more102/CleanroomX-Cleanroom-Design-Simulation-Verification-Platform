@@ -1097,6 +1097,23 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
     assert observed_limits == [bundle_module._MAX_BUNDLE_ARCHIVE_BYTES]
 
 
+def test_bundle_extraction_publishes_into_existing_empty_destination(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    destination = tmp_path / "extracted"
+    destination.mkdir()
+    extracted_project = extract_project_bundle(bundle, destination)
+
+    assert extracted_project.is_file()
+    assert extracted_project.parent == destination
+    assert not list(tmp_path.glob(".extracted.*.destination-stage"))
+
+
 def test_bundle_extraction_rejects_destination_created_before_publication(
     tmp_path, monkeypatch
 ):

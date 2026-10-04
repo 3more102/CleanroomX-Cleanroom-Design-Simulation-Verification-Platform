@@ -5,12 +5,95 @@ import copy
 import os
 import tkinter as tk
 from tkinter import ttk
+from types import SimpleNamespace
 
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.project import save_project_document
+from cleanroomx.proofgraph_models import (
+    ComplianceCheck,
+    ComplianceFinding,
+    ComplianceVerdict,
+    DesignEvidence,
+    EvidenceSource,
+    ProofGraph,
+    Requirement,
+    RequirementSet,
+    VerificationRun,
+)
 from cleanroomx.spatial import _Hit
+
+
+def _proofgraph_document(subject_ref: str) -> dict:
+    requirement = Requirement(
+        id="REQ-GUI-1",
+        title="Room ACH requirement",
+        source="GUI regression",
+        scope=(subject_ref,),
+        criteria={"minimum": 20.0, "unit": "1/h"},
+    )
+    requirement_set = RequirementSet(
+        id="REQSET-GUI",
+        version="1",
+        title="GUI requirements",
+        source="GUI regression",
+        requirements=(requirement,),
+    )
+    source = EvidenceSource(
+        id="SRC-GUI",
+        kind="project",
+        reference="GUI regression",
+    )
+    evidence = DesignEvidence(
+        id="EVID-GUI",
+        property_name="ach",
+        value=24.0,
+        unit="1/h",
+        source_id=source.id,
+        subject_ref=subject_ref,
+    )
+    check = ComplianceCheck(
+        id="CHECK-GUI",
+        requirement_id=requirement.id,
+        evidence_ids=(evidence.id,),
+        required_evidence_kinds=("design",),
+    )
+    finding = ComplianceFinding(
+        id="FIND-GUI",
+        check_id=check.id,
+        requirement_id=requirement.id,
+        status="pass",
+        reason="ACH is above configured minimum.",
+        evidence_ids=(evidence.id,),
+        evidence_present=True,
+        expected=20.0,
+        actual=24.0,
+        unit="1/h",
+    )
+    verdict = ComplianceVerdict(
+        id="VERDICT-GUI",
+        requirement_id=requirement.id,
+        status="pass",
+        finding_ids=(finding.id,),
+        reason="Canonical GUI regression verdict.",
+    )
+    run = VerificationRun(
+        id="RUN-GUI",
+        requirement_set_id=requirement_set.id,
+        check_ids=(check.id,),
+        verdict_ids=(verdict.id,),
+    )
+    return ProofGraph(
+        id="GRAPH-GUI",
+        requirement_set=requirement_set,
+        evidence_sources=(source,),
+        evidence=(evidence,),
+        checks=(check,),
+        findings=(finding,),
+        verdicts=(verdict,),
+        verification_runs=(run,),
+    ).to_dict()
 
 
 @pytest.fixture
@@ -186,7 +269,208 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
     assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
     assert workspace._property_rows["classification"].winfo_manager() == ""
 
+def test_fit_selected_and_3d_view_presets_are_deterministic(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    assert workspace.select_item("room", room["id"])
 
+    workspace.set_3d_view_preset("top")
+    app.root.update()
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(0.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(75.0)
+    assert workspace.layout["view"]["zoom_3d"] > 0
+
+    workspace.set_3d_view_preset("front")
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(0.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(5.0)
+
+    workspace.set_3d_view_preset("right")
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(90.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(5.0)
+
+    workspace.set_3d_view_preset("iso")
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(35.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(28.0)
+    assert workspace.fit_selected()
+    assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
+    assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_room_layer_visibility_is_persisted_and_applied(app):
+    workspace = app.spatial_workspace
+    assert workspace.canvas_2d.find_withtag("room")
+    assert workspace.canvas_3d.find_withtag("room3d")
+
+    workspace._show_rooms.set(False)
+    workspace._set_view_flag("show_rooms", False)
+    app.root.update()
+    assert workspace.layout["view"]["show_rooms"] is False
+    assert not workspace.canvas_2d.find_withtag("room")
+    assert not workspace.canvas_3d.find_withtag("room3d")
+
+    workspace._show_rooms.set(True)
+    workspace._set_view_flag("show_rooms", True)
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag("room")
+    assert workspace.canvas_3d.find_withtag("room3d")
+
+
+def test_2d_distance_and_area_measurement_do_not_change_geometry(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+
+    p0 = workspace._world_to_canvas(0.0, 0.0)
+    p1 = workspace._world_to_canvas(3.0, 4.0)
+
+    workspace.start_measurement("distance")
+    workspace._capture_measure_point(SimpleNamespace(x=p0[0], y=p0[1]))
+    workspace._capture_measure_point(SimpleNamespace(x=p1[0], y=p1[1]))
+    app.root.update()
+    assert workspace._measure_var.get() == "Distance: 5.000 m"
+    assert workspace.canvas_2d.find_withtag("measurement")
+    assert workspace.layout == before
+
+    p2 = workspace._world_to_canvas(2.0, 3.0)
+    workspace.start_measurement("area")
+    workspace._capture_measure_point(SimpleNamespace(x=p0[0], y=p0[1]))
+    workspace._capture_measure_point(SimpleNamespace(x=p2[0], y=p2[1]))
+    app.root.update()
+    assert workspace._measure_var.get() == "Area: 6.000 m²"
+    assert workspace.layout == before
+
+    workspace.clear_measurement()
+    app.root.update()
+    assert workspace._measure_mode.get() == "none"
+    assert not workspace.canvas_2d.find_withtag("measurement")
+
+def test_engineering_output_is_docked_below_primary_workspace(app):
+    app.root.update()
+    panes = tuple(str(item) for item in app.workspace_panes.panes())
+    assert len(panes) == 2
+
+    primary_tabs = [app.notebook.tab(tab_id, "text") for tab_id in app.notebook.tabs()]
+    output_tabs = [
+        app.output_notebook.tab(tab_id, "text")
+        for tab_id in app.output_notebook.tabs()
+    ]
+    assert "Design" in primary_tabs
+    assert "Input" in primary_tabs
+    assert "Plot" in primary_tabs
+    assert "Results" not in primary_tabs
+    assert output_tabs == [
+        "Problems",
+        "Diagnostics",
+        "Verification",
+        "Console",
+        "Evidence",
+        "Results",
+        "Report",
+    ]
+
+    assert app.problems_panel.master == app.output_notebook
+    assert app.verification_panel.master == app.output_notebook
+    assert app.result_text.master.master == app.output_notebook
+    assert app.diagnostics_text.master.master == app.output_notebook
+    assert app.report_text.master.master == app.output_notebook
+
+def test_project_navigator_search_filters_without_changing_active_analysis(app):
+    active_before = app.project.active_analysis_id
+    room = app.spatial_workspace.layout["rooms"][0]
+    query = str(room["name"])
+
+    app.navigator_filter_var.set(query)
+    app._on_navigator_filter_changed()
+    app.root.update()
+
+    visible_rooms = app.analysis_tree.get_children("nav-floor")
+    assert visible_rooms == (f"room:{room['id']}",)
+    assert app.project.active_analysis_id == active_before
+
+    app._clear_navigator_filter()
+    app.root.update()
+    assert len(app.analysis_tree.get_children("nav-floor")) == len(
+        app.spatial_workspace.layout["rooms"]
+    )
+    assert app.project.active_analysis_id == active_before
+
+def test_canonical_project_diagnostics_populate_problems_and_verification(app):
+    report = app._refresh_project_diagnostics()
+    app.root.update()
+
+    assert isinstance(report, dict)
+    assert isinstance(report.get("issues"), list)
+    assert app.problems_panel._report == report
+    assert app.verification_panel.summary_var.get().startswith(
+        "Verification currency"
+    )
+    assert app.evidence_text.get("1.0", "end").strip()
+
+
+def test_problem_navigation_selects_and_fits_spatial_object(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.set_workspace_mode("split")
+
+    issue = {
+        "rule": "test_navigation",
+        "element": {
+            "type": "room",
+            "id": room["id"],
+            "name": room["name"],
+        },
+    }
+    assert app._navigate_project_diagnostic(issue)
+    app.root.update()
+
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(workspace)
+    assert app.analysis_tree.selection() == (f"room:{room['id']}",)
+    assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
+    assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_verification_navigation_opens_analysis_without_reimplementing_verifier(app):
+    analysis = app.project.analyses[0]
+    assert app._navigate_analysis(analysis.id)
+    app.root.update()
+
+    assert app.project.active_analysis_id == analysis.id
+    assert app.analysis_tree.selection() == (analysis.id,)
+    assert app._editor_analysis_id == analysis.id
+
+def test_proofgraph_viewer_projects_canonical_documents_without_reverification(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _proofgraph_document(room["id"])
+
+    app.proofgraph_viewer.set_documents([document])
+    app.root.update()
+
+    assert len(app.proofgraph_viewer._documents) == 1
+    assert app.proofgraph_viewer._documents[0]["graph_sha256"] == document["graph_sha256"]
+    assert app.proofgraph_viewer.summary_var.get().startswith("6 nodes")
+    assert app.proofgraph_viewer.canvas.find_withtag("proofnode")
+
+
+def test_persisted_proofgraph_refresh_and_subject_navigation(app, monkeypatch):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _proofgraph_document(room["id"])
+    monkeypatch.setattr(
+        "cleanroomx.gui.verification_run_history_records",
+        lambda _metadata: [{"proofgraphs": [document]}],
+    )
+
+    app._refresh_proofgraph_viewer()
+    assert len(app.proofgraph_viewer._documents) == 1
+
+    app.analysis_tree.selection_set("nav-proofgraph")
+    app.analysis_tree.event_generate("<<TreeviewSelect>>")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+
+    assert app._navigate_proofgraph_subject(room["id"])
+    app.root.update()
+    assert app.spatial_workspace.selected == _Hit("room", room["id"])
+    assert app.analysis_tree.selection() == (f"room:{room['id']}",)
 
 def test_selected_room_shows_engineering_dimensions(app):
     workspace = app.spatial_workspace
@@ -209,6 +493,7 @@ def test_snap_indicator_tracks_configured_grid_without_mutating_geometry(app):
     workspace = app.spatial_workspace
     before = copy.deepcopy(workspace.layout)
     workspace._snap_to_grid.set(True)
+    workspace._measure_mode.set("none")
     x, y = workspace._world_to_canvas(1.26, 2.24)
 
     workspace._draw_snap_indicator_2d(x, y)
@@ -261,3 +546,4 @@ def test_hover_state_has_distinct_2d_feedback(app):
     workspace._on_motion(event)
 
     assert workspace._hovered == _Hit("room", room["id"])
+

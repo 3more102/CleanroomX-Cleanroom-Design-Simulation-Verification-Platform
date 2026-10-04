@@ -187,6 +187,54 @@ def test_revision_retention_preserves_replacement_at_prune_staging(
     )
 
 
+def test_revision_retention_does_not_delete_path_recreated_after_staging(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    replacement = b"concurrent replacement after retention staging\n"
+    recreated_paths: list[Path] = []
+    real_verify = revision_module._revision_record_is_verified
+
+    def verify_then_recreate(
+        revision,
+        *,
+        expected_source_path,
+        artifact_path=None,
+    ):
+        verified = real_verify(
+            revision,
+            expected_source_path=expected_source_path,
+            artifact_path=artifact_path,
+        )
+        if verified and artifact_path is not None and not recreated_paths:
+            assert not revision.path.exists()
+            revision.path.write_bytes(replacement)
+            recreated_paths.append(revision.path)
+        return verified
+
+    monkeypatch.setattr(
+        revision_module,
+        "_revision_record_is_verified",
+        verify_then_recreate,
+    )
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert recreated_paths
+    recreated = recreated_paths[0]
+    assert recreated.read_bytes() == replacement
+    assert not any(
+        item.name.endswith(".retention-stage")
+        for item in project_revision_dir(path).iterdir()
+    )
+
+
 def test_revision_envelope_budget_preserves_valid_large_project_name(
     tmp_path, monkeypatch
 ):

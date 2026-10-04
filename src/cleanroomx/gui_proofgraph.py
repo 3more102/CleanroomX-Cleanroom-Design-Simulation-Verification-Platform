@@ -6,6 +6,8 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .proofgraph_io import proofgraph_from_dict
+
 
 _TYPE_ORDER = {
     "requirement": 0,
@@ -50,6 +52,12 @@ def proofgraph_projection(document: dict[str, Any] | None) -> dict[str, Any]:
     """
     if not isinstance(document, dict):
         return {"nodes": [], "edges": []}
+
+    # Persisted ProofGraph is an evidence artifact, not display input that the GUI
+    # may trust implicitly. Re-parse it through the canonical validator so digest,
+    # identity, provenance, check/finding/verdict closure, and run relationships
+    # are verified before anything is rendered.
+    document = proofgraph_from_dict(document).to_dict()
 
     nodes: dict[str, dict[str, Any]] = {}
     edges: set[tuple[str, str, str]] = set()
@@ -482,11 +490,12 @@ class ProofGraphViewer(ttk.Frame):
         for document in documents:
             if not isinstance(document, dict):
                 continue
-            digest = _text(document.get("graph_sha256"))
-            graph_id = _text(document.get("id"))
+            canonical = proofgraph_from_dict(document).to_dict()
+            digest = _text(canonical.get("graph_sha256"))
+            graph_id = _text(canonical.get("id"))
             key = digest or graph_id
             if key and key not in unique:
-                unique[key] = document
+                unique[key] = canonical
         self._documents = list(unique.values())
         labels = [self._document_label(document) for document in self._documents]
         self.graph_picker.configure(values=labels)

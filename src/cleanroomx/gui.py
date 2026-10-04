@@ -2206,6 +2206,7 @@ class CleanroomXApp:
         ]
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
+            problems_panel.apply_theme(self.theme_var.get())
             text_widgets.append(getattr(problems_panel, "detail", None))
         proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
         if proofgraph_viewer is not None:

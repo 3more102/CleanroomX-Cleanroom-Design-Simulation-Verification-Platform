@@ -1254,6 +1254,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
         self._resize_room_id: str | None = None
+        self._hidden_item_keys: set[tuple[str, str]] = set()
+        self._isolated_item_key: tuple[str, str] | None = None
+        self._measure_mode = tk.BooleanVar(value=False)
+        self._measure_start_world: tuple[float, float] | None = None
+        self._measure_end_world: tuple[float, float] | None = None
+        self._measure_var = tk.StringVar(value="Measure: off")
 
         self._build()
         self.refresh()
@@ -1328,6 +1334,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
+        view_button = ttk.Menubutton(modebar, text="View")
+        view_menu = tk.Menu(view_button, tearoff=False)
+        view_button.configure(menu=view_menu)
+        view_menu.add_command(label="Fit selected", command=self.fit_selected)
+        view_menu.add_separator()
+        view_menu.add_command(label="Isolate selected", command=self.isolate_selected)
+        view_menu.add_command(label="Hide selected", command=self.hide_selected)
+        view_menu.add_command(label="Show all objects", command=self.show_all_objects)
+        view_button.pack(side="left", padx=2)
         ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
             side="left", padx=2
         )
@@ -1362,6 +1377,13 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
+        ttk.Checkbutton(
+            viewbar,
+            text="Measure",
+            variable=self._measure_mode,
+            command=self._toggle_measure_mode,
+        ).pack(side="left", padx=(10, 2))
+        ttk.Label(viewbar, textvariable=self._measure_var).pack(side="left", padx=(4, 2))
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
@@ -1404,6 +1426,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             header3, text="3D MODEL", style="CX.ViewTitle.TLabel"
         ).pack(side="left")
+        for preset, label in (
+            ("top", "Top"),
+            ("front", "Front"),
+            ("right", "Right"),
+            ("iso", "Iso"),
+        ):
+            ttk.Button(
+                header3,
+                text=label,
+                width=5,
+                command=lambda p=preset: self.set_3d_view_preset(p),
+            ).pack(side="left", padx=1)
+        ttk.Button(
+            header3, text="Fit", width=4, command=self.fit_views
+        ).pack(side="left", padx=(3, 1))
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
                 header3,
@@ -1583,6 +1620,118 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         self._on_selection_change(self.selected.kind, self.selected.item_id)
 
+    def _visibility_key(self, kind: str, item_id: str) -> tuple[str, str]:
+        return (str(kind), str(item_id))
+
+    def _is_visible(self, kind: str, item_id: str) -> bool:
+        key = self._visibility_key(kind, item_id)
+        if key in self._hidden_item_keys:
+            return False
+        return self._isolated_item_key is None or key == self._isolated_item_key
+
+    def hide_selected(self) -> None:
+        if self.selected is None:
+            self._status_setter("Select a room or device to hide")
+            return
+        key = self._visibility_key(self.selected.kind, self.selected.item_id)
+        self._hidden_item_keys.add(key)
+        if self._isolated_item_key == key:
+            self._isolated_item_key = None
+        self._status_setter(f"Hidden {self.selected.kind} {self.selected.item_id}")
+        self.redraw()
+
+    def isolate_selected(self) -> None:
+        if self.selected is None:
+            self._status_setter("Select a room or device to isolate")
+            return
+        self._isolated_item_key = self._visibility_key(
+            self.selected.kind, self.selected.item_id
+        )
+        self._hidden_item_keys.discard(self._isolated_item_key)
+        self._status_setter(
+            f"Isolated {self.selected.kind} {self.selected.item_id}"
+        )
+        self.redraw()
+
+    def show_all_objects(self) -> None:
+        self._hidden_item_keys.clear()
+        self._isolated_item_key = None
+        self._status_setter("All spatial objects are visible")
+        self.redraw()
+
+    def _toggle_measure_mode(self) -> None:
+        self._measure_start_world = None
+        self._measure_end_world = None
+        if self._measure_mode.get():
+            self._measure_var.set("Measure: click first point")
+            self._status_setter("Distance measurement enabled")
+        else:
+            self._measure_var.set("Measure: off")
+            self._status_setter("Distance measurement disabled")
+        self.redraw()
+
+    def _on_measure_click(self, event: tk.Event) -> None:
+        point = self._canvas_to_world(event.x, event.y)
+        if self._measure_start_world is None or self._measure_end_world is not None:
+            self._measure_start_world = point
+            self._measure_end_world = None
+            self._measure_var.set(
+                f"Measure: start {point[0]:.2f}, {point[1]:.2f} m"
+            )
+        else:
+            self._measure_end_world = point
+            dx = point[0] - self._measure_start_world[0]
+            dy = point[1] - self._measure_start_world[1]
+            distance = math.hypot(dx, dy)
+            self._measure_var.set(f"Distance: {distance:.3f} m")
+            self._status_setter(f"Measured distance {distance:.3f} m")
+        self.redraw()
+
+    def _draw_measurement_2d(self) -> None:
+        if not self._measure_mode.get() or self._measure_start_world is None:
+            return
+        start = self._world_to_canvas(*self._measure_start_world)
+        self.canvas_2d.create_oval(
+            start[0] - 4,
+            start[1] - 4,
+            start[0] + 4,
+            start[1] + 4,
+            fill="#0f766e",
+            outline="#ffffff",
+            tags=("measurement",),
+        )
+        if self._measure_end_world is None:
+            return
+        end = self._world_to_canvas(*self._measure_end_world)
+        distance = math.hypot(
+            self._measure_end_world[0] - self._measure_start_world[0],
+            self._measure_end_world[1] - self._measure_start_world[1],
+        )
+        self.canvas_2d.create_line(
+            *start,
+            *end,
+            fill="#0f766e",
+            width=2,
+            dash=(6, 3),
+            tags=("measurement",),
+        )
+        self.canvas_2d.create_oval(
+            end[0] - 4,
+            end[1] - 4,
+            end[0] + 4,
+            end[1] + 4,
+            fill="#0f766e",
+            outline="#ffffff",
+            tags=("measurement",),
+        )
+        self.canvas_2d.create_text(
+            (start[0] + end[0]) / 2.0,
+            (start[1] + end[1]) / 2.0 - 12,
+            text=f"{distance:.3f} m",
+            fill="#0f766e",
+            tags=("measurement",),
+        )
+
     def refresh(self) -> None:
         # A refresh may replace the canonical project/layout beneath an active
         # gesture. Never let stale drag origins mutate the refreshed model.
@@ -1593,6 +1742,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        self._hidden_item_keys.clear()
+        self._isolated_item_key = None
+        self._measure_start_world = None
+        self._measure_end_world = None
+        if self._measure_mode.get():
+            self._measure_var.set("Measure: click first point")
         view = self.layout.get("view", {})
         self._snap_to_grid.set(bool(view.get("snap_to_grid", True)))
         self._show_pressure.set(bool(view.get("show_pressure", True)))
@@ -2138,6 +2293,63 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_y"] = pan_3d_y
         self._persist("Fit spatial views")
 
+    def fit_selected(self) -> None:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            self._status_setter("Select a room or device to fit")
+            return
+        if self.selected.kind == "room":
+            min_x = item["x_m"]
+            min_y = item["y_m"]
+            max_x = min_x + item["length_m"]
+            max_y = min_y + item["width_m"]
+        else:
+            half = max(0.25, float(item.get("width_m", 0.5)) / 2.0)
+            min_x = item["x_m"] - half
+            min_y = item["y_m"] - half
+            max_x = item["x_m"] + half
+            max_y = item["y_m"] + half
+        width_m = max(0.5, max_x - min_x)
+        height_m = max(0.5, max_y - min_y)
+        cw = max(200, self.canvas_2d.winfo_width())
+        ch = max(200, self.canvas_2d.winfo_height())
+        self.layout["view"]["zoom_2d"] = max(
+            0.2,
+            min(
+                5.0,
+                0.68
+                * min(
+                    cw / (BASE_2D_PIXELS_PER_M * width_m),
+                    ch / (BASE_2D_PIXELS_PER_M * height_m),
+                ),
+            ),
+        )
+        scale = self._scale_2d()
+        self.layout["view"]["pan_x"] = -((min_x + max_x) / 2.0) * scale
+        self.layout["view"]["pan_y"] = -((min_y + max_y) / 2.0) * scale
+        self._persist("Fit selected spatial object")
+        self._status_setter(
+            f"Fit selected {self.selected.kind} {self.selected.item_id}"
+        )
+
+    def set_3d_view_preset(self, preset: str) -> None:
+        presets = {
+            "top": (0.0, 90.0),
+            "front": (0.0, 0.0),
+            "right": (90.0, 0.0),
+            "iso": (35.0, 28.0),
+        }
+        if preset not in presets:
+            raise ValueError("3D view preset must be top, front, right, or iso")
+        azimuth, elevation = presets[preset]
+        self.layout["view"]["azimuth_deg"] = azimuth
+        self.layout["view"]["elevation_deg"] = elevation
+        self.layout["view"]["zoom_3d"] = 1.0
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
+        self._draw_3d()
+        self._status_setter(f"3D view preset: {preset.title()}")
+
     def reset_2d(self) -> None:
         """Restore the 2D viewport without changing model geometry."""
         self.layout["view"]["zoom_2d"] = 1.0
@@ -2214,6 +2426,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 state = "pass"
             else:
                 state = "fail"
+            if not self._is_visible("room", high["id"]) or not self._is_visible(
+                "room", low["id"]
+            ):
+                continue
             relationships.append((high, low, minimum, observed_delta, state))
         return relationships
 
@@ -2351,6 +2567,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         warning_ids = self._warning_item_ids()
 
         for room in self.layout["rooms"]:
+            if not self._is_visible("room", room["id"]):
+                continue
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(
                 room["x_m"] + room["length_m"],
@@ -2437,6 +2655,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 "transfer": "T",
             }
             for device in self.layout["devices"]:
+                if not self._is_visible("device", device["id"]):
+                    continue
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
                 selected = self.selected == _Hit("device", device["id"])
                 device_outline = (
@@ -2478,6 +2698,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                         x, y, text=symbols.get(device["type"], "?"),
                         tags=(tag, "device"),
                     )
+
+        self._draw_measurement_2d()
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -2543,7 +2765,11 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
-            self.layout["rooms"],
+            (
+                room
+                for room in self.layout["rooms"]
+                if self._is_visible("room", room["id"])
+            ),
             key=lambda room: (
                 (room["x_m"] - cx) * math.sin(az)
                 + (room["y_m"] - cy) * math.cos(az)
@@ -2613,6 +2839,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._show_devices.get():
             room_by_id = {room["id"]: room for room in self.layout["rooms"]}
             for device in self.layout["devices"]:
+                if not self._is_visible("device", device["id"]):
+                    continue
                 room = room_by_id.get(str(device.get("room_id") or ""))
                 room_floor = (
                     room.get("floor_elevation_m", floor_z)
@@ -2666,6 +2894,9 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
+        if self._measure_mode.get():
+            self._on_measure_click(event)
+            return
         current = self.canvas_2d.find_withtag("current")
         hit = None
         self._resize_room_id = None

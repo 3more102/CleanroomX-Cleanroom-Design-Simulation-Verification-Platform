@@ -9,7 +9,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 import uuid
 
 from . import __version__
@@ -907,6 +907,7 @@ def save_project_document_guarded(
     *,
     expected_revision: ProjectFileRevision,
     revision_history_limit: int = 5,
+    before_replace: Callable[[Path], None] | None = None,
 ) -> tuple[Path, ProjectFileRevision]:
     """Save one verified project revision under the cooperative process lock.
 
@@ -922,6 +923,11 @@ def save_project_document_guarded(
         current = capture_project_file_revision(destination)
         if not project_file_revision_matches(expected_revision, current):
             raise ProjectWriteConflictError(destination, expected_revision, current)
+
+    def assert_publishable() -> None:
+        assert_unchanged()
+        if before_replace is not None:
+            before_replace(destination)
 
     with project_save_lock(destination):
         assert_unchanged()
@@ -954,7 +960,7 @@ def save_project_document_guarded(
             saved_path = _atomic_write_text(
                 destination,
                 text,
-                before_replace=assert_unchanged,
+                before_replace=assert_publishable,
             )
         except AtomicWriteDurabilityError as exc:
             # Replacement already happened. Keep the prior revision and bound

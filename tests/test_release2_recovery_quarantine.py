@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+from pathlib import Path
 
 import pytest
 
@@ -310,4 +311,104 @@ def test_quarantine_retention_preserves_unverified_forensic_pair(tmp_path):
     assert third.manifest_path.exists()
     assert not second.path.exists()
     assert not second.manifest_path.exists()
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "boolean_schema_version",
+        "missing_quarantined_at_utc",
+        "missing_original_name",
+        "missing_reason",
+        "unexpected_field",
+    ),
+)
+def test_quarantine_retention_requires_complete_manifest_schema(tmp_path, mutation):
+    first_source = tmp_path / "broken-first.recovery.json"
+    first_source.write_bytes(b"broken-first")
+    first = quarantine_recovery_artifact(
+        first_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+    if mutation == "boolean_schema_version":
+        manifest["schema_version"] = True
+    elif mutation == "unexpected_field":
+        manifest["unexpected"] = "must not be silently accepted"
+    else:
+        manifest.pop(mutation.removeprefix("missing_"))
+    first.manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    second_source = tmp_path / "broken-second.recovery.json"
+    second_source.write_bytes(b"broken-second")
+    second = quarantine_recovery_artifact(
+        second_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=1,
+    )
+
+    assert first.path.exists()
+    assert first.manifest_path.exists()
+    assert second.path.exists()
+    assert second.manifest_path.exists()
+
+
+def test_quarantine_retention_preserves_revision_replaced_before_prune_staging(
+    tmp_path,
+    monkeypatch,
+):
+    first_source = tmp_path / "broken-first.recovery.json"
+    first_source.write_bytes(b"broken-first")
+    quarantine_recovery_artifact(
+        first_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    second_source = tmp_path / "broken-second.recovery.json"
+    second_source.write_bytes(b"broken-second")
+    quarantine_recovery_artifact(
+        second_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    quarantine_dir = tmp_path / "quarantine"
+    replacement = b"concurrent replacement forensic evidence"
+    raced_paths: list[Path] = []
+    real_replace = autosave_module.os.replace
+
+    def replace_with_race(source, destination):
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            not raced_paths
+            and source_path.name.endswith(".quarantined")
+            and destination_path.name.endswith(".retention-stage")
+        ):
+            source_path.write_bytes(replacement)
+            raced_paths.append(source_path)
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(autosave_module.os, "replace", replace_with_race)
+
+    autosave_module._rotate_quarantine(quarantine_dir, history_limit=1)
+
+    assert raced_paths
+    raced_artifact = raced_paths[0]
+    raced_manifest = raced_artifact.with_name(f"{raced_artifact.name}.manifest.json")
+    assert raced_artifact.read_bytes() == replacement
+    assert raced_manifest.exists()
+    assert not any(
+        path.name.endswith(".retention-stage")
+        for path in quarantine_dir.iterdir()
+    )
 

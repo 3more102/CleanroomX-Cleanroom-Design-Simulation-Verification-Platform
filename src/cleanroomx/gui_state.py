@@ -48,7 +48,11 @@ def _normalize_recent_projects(value: Any) -> list[str]:
         if not isinstance(item, str):
             continue
         path = item.strip()
-        if not path or path in seen:
+        if not path or "\\x00" in path or path in seen:
+            continue
+        try:
+            Path(path)
+        except (OSError, ValueError):
             continue
         seen.add(path)
         recent.append(path)

@@ -3015,9 +3015,15 @@ class CleanroomXApp:
                 button.state(["!selected"])
 
     def _on_workspace_mode_change(self, mode: str) -> None:
+        self._sync_workspace_mode_buttons(mode)
+        notebook = getattr(self, "notebook", None)
+        workspace = getattr(self, "spatial_workspace", None)
+        if notebook is None or workspace is None:
+            return
+        if str(notebook.select()) != str(workspace):
+            return
         label = {"2d": "2D", "3d": "3D", "split": "Split"}.get(mode, "Split")
         self.workspace_status_var.set(f"Workspace: {label}")
-        self._sync_workspace_mode_buttons(mode)
 
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):

@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1198,6 +1199,7 @@ class CleanroomXApp:
         self._recovery_checkpoint_after_id = None
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
+        self._command_palette_window: CommandPalette | None = None
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -1377,6 +1379,14 @@ class CleanroomXApp:
         )
         menubar.add_cascade(label="Report", menu=report_menu)
 
+        tools_menu = tk.Menu(menubar, tearoff=False)
+        tools_menu.add_command(
+            label="Command Palette...",
+            accelerator="Ctrl+Shift+P",
+            command=self.show_command_palette,
+        )
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
         view_menu.add_separator()
@@ -1403,6 +1413,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-1>", lambda event: self._activate_spatial_workspace("2d"))
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
+        self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -1911,6 +1922,163 @@ class CleanroomXApp:
             path,
             content,
             label="Project diagnostics",
+        )
+
+    def _command_palette_commands(self) -> list[PaletteCommand]:
+        return [
+            PaletteCommand(
+                "file.new",
+                "New Project",
+                "File",
+                self.new_project,
+                shortcut="Ctrl+N",
+                keywords=("create", "project"),
+            ),
+            PaletteCommand(
+                "file.open",
+                "Open Project",
+                "File",
+                self.open_project,
+                shortcut="Ctrl+O",
+                keywords=("load", "project"),
+            ),
+            PaletteCommand(
+                "file.save",
+                "Save Project",
+                "File",
+                self.save_project,
+                shortcut="Ctrl+S",
+            ),
+            PaletteCommand(
+                "workspace.start",
+                "Open Start Center",
+                "Window",
+                self._activate_start_workspace,
+                keywords=("home", "recent", "example"),
+            ),
+            PaletteCommand(
+                "workspace.2d",
+                "Open 2D Workspace",
+                "Design",
+                lambda: self._activate_spatial_workspace("2d"),
+                shortcut="Ctrl+1",
+                keywords=("plan", "viewport"),
+            ),
+            PaletteCommand(
+                "workspace.3d",
+                "Open 3D Workspace",
+                "Design",
+                lambda: self._activate_spatial_workspace("3d"),
+                shortcut="Ctrl+2",
+                keywords=("model", "viewport"),
+            ),
+            PaletteCommand(
+                "workspace.split",
+                "Open Split 2D + 3D Workspace",
+                "Design",
+                lambda: self._activate_spatial_workspace("split"),
+                shortcut="Ctrl+3",
+                keywords=("viewport",),
+            ),
+            PaletteCommand(
+                "design.fit",
+                "Fit Spatial Views",
+                "Design",
+                lambda: self.spatial_workspace.fit_views(),
+                keywords=("zoom", "model"),
+            ),
+            PaletteCommand(
+                "bim.import",
+                "Import IFC Spatial Layout",
+                "BIM",
+                self.import_ifc_spatial_layout,
+                keywords=("ifc", "bim", "model"),
+            ),
+            PaletteCommand(
+                "analysis.validate",
+                "Validate Current Analysis Input",
+                "Analysis",
+                self.validate_current,
+                keywords=("check", "input"),
+            ),
+            PaletteCommand(
+                "analysis.run",
+                "Run Current Analysis",
+                "Analysis",
+                self.run_current,
+                shortcut="F5",
+                keywords=("solver", "calculate"),
+            ),
+            PaletteCommand(
+                "verification.refresh",
+                "Refresh Project Diagnostics",
+                "Verification",
+                self._refresh_engineering_panels,
+                shortcut="F8",
+                keywords=("problems", "errors", "warnings"),
+            ),
+            PaletteCommand(
+                "verification.run",
+                "Verify Project Requirements",
+                "Verification",
+                self.run_project_requirements_verification,
+                keywords=("requirements", "compliance"),
+            ),
+            PaletteCommand(
+                "verification.persist",
+                "Verify and Persist Project Requirements",
+                "Verification",
+                self.persist_project_requirements_verification,
+                keywords=("requirements", "evidence"),
+            ),
+            PaletteCommand(
+                "proofgraph.open",
+                "Open ProofGraph Explorer",
+                "Evidence",
+                self._activate_proofgraph_workspace,
+                keywords=("proof", "provenance", "traceability"),
+            ),
+            PaletteCommand(
+                "traceability.open",
+                "Open Requirements Traceability",
+                "Verification",
+                self.show_requirements_traceability,
+                keywords=("requirements", "evidence", "trace"),
+            ),
+            PaletteCommand(
+                "report.dossier",
+                "Export Project Engineering Dossier",
+                "Report",
+                self.export_project_engineering_dossier,
+                keywords=("report", "evidence"),
+            ),
+            PaletteCommand(
+                "recovery.open",
+                "Open Recovery Center",
+                "Project",
+                self.show_recovery_center,
+                keywords=("autosave", "restore"),
+            ),
+        ]
+
+    def show_command_palette(self) -> None:
+        existing = getattr(self, "_command_palette_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    existing.search.focus_set()
+                    return
+            except tk.TclError:
+                pass
+
+        def clear_reference() -> None:
+            self._command_palette_window = None
+
+        self._command_palette_window = CommandPalette(
+            self.root,
+            commands=self._command_palette_commands(),
+            on_close=clear_reference,
         )
 
     def _activate_start_workspace(self) -> None:

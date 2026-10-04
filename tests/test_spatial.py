@@ -24,6 +24,7 @@ from cleanroomx.spatial import (
     SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
+    engineering_overlay_state,
     engineering_sync_status,
     layout_metrics,
     normalize_layout,
@@ -1670,3 +1671,163 @@ def test_workspace_validation_uses_normalized_hot_path_without_renormalizing(
     assert workspace._validation_issues == []
     assert workspace._last_validation_key is not None
 
+
+
+
+def test_engineering_overlay_state_uses_canonical_result_values_without_mutation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "name": "Facility",
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "supply_airflow_m3_h": 2700.0,
+                },
+                {
+                    "name": "Ante",
+                    "length_m": 4.0,
+                    "width_m": 3.0,
+                    "height_m": 2.8,
+                    "supply_airflow_m3_h": 900.0,
+                },
+            ],
+        },
+    )
+    layout = derive_layout_from_analysis(analysis)
+    before = copy.deepcopy(layout)
+    result = {
+        "project": "Facility",
+        "status": "fail",
+        "rooms": [
+            {
+                "room": "Process",
+                "ach": 30.0,
+                "status": "pass_with_unchecked",
+                "findings": [
+                    {"code": "ACH", "status": "pass", "actual": 30.0, "unit": "1/h"},
+                    {"code": "PRESSURE", "status": "not_checked", "unit": "Pa"},
+                ],
+            },
+            {
+                "room": "Ante",
+                "ach": 12.5,
+                "status": "fail",
+                "findings": [
+                    {"code": "ACH", "status": "fail", "actual": 12.5, "unit": "1/h"},
+                ],
+            },
+        ],
+    }
+
+    ach = engineering_overlay_state(layout, analysis, result, mode="ach")
+    by_id = {item["room_id"]: item for item in ach["rooms"]}
+    assert by_id[layout["rooms"][0]["id"]]["label_lines"] == ("ACH: 30 1/h", "PASS")
+    assert by_id[layout["rooms"][0]["id"]]["status"] == "pass"
+    assert by_id[layout["rooms"][1]["id"]]["status"] == "fail"
+
+    verification = engineering_overlay_state(
+        layout, analysis, result, mode="verification"
+    )
+    verification_by_id = {item["room_id"]: item for item in verification["rooms"]}
+    assert verification_by_id[layout["rooms"][0]["id"]]["compact_label"] == "WARNING"
+    assert verification_by_id[layout["rooms"][1]["id"]]["compact_label"] == "FAIL"
+    assert layout == before
+
+
+def test_airflow_overlay_projects_hvac_and_air_system_results_without_solving():
+    analysis = AnalysisDocument(
+        id="hvac",
+        name="HVAC",
+        kind="hvac",
+        input={},
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "analysis_room_name": "Process",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                }
+            ]
+        }
+    )
+    hvac_result = {
+        "rooms": [
+            {
+                "name": "Process",
+                "air_balance": {
+                    "supply_airflow_m3_h": 2700.0,
+                    "return_airflow_m3_h": 2350.0,
+                    "exhaust_airflow_m3_h": 200.0,
+                    "net_surplus_m3_h": 150.0,
+                    "passes_minimum_surplus": True,
+                },
+            }
+        ]
+    }
+    overlay = engineering_overlay_state(layout, analysis, hvac_result, mode="airflow")
+    room = overlay["rooms"][0]
+    assert room["status"] == "pass"
+    assert room["label_lines"] == (
+        "Supply: 2700 m³/h",
+        "Return 2350 · Exhaust 200 m³/h",
+        "Surplus: +150 m³/h",
+    )
+    assert room["compact_label"] == "S 2700 / R 2350 / E 200"
+
+    design_result = {
+        "rooms": [
+            {
+                "name": "Process",
+                "governing_airflow_m3_h": 3000.0,
+                "proposed_return_airflow_m3_h": 2600.0,
+                "exhaust_airflow_m3_h": 250.0,
+                "achieved_surplus_m3_h": 150.0,
+                "warnings": ["screening warning"],
+            }
+        ]
+    }
+    overlay = engineering_overlay_state(layout, analysis, design_result, mode="airflow")
+    assert overlay["rooms"][0]["status"] == "warning"
+    assert overlay["rooms"][0]["label_lines"][0] == "Supply: 3000 m³/h"
+
+
+def test_engineering_overlay_rejects_unknown_modes_and_marks_missing_results():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "room-a",
+                    "name": "Room A",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                }
+            ]
+        }
+    )
+    ach = engineering_overlay_state(layout, None, None, mode="ach")
+    assert ach["rooms"][0]["available"] is False
+    assert ach["rooms"][0]["compact_label"] == "ACH —"
+
+    verification = engineering_overlay_state(
+        layout, None, None, mode="verification"
+    )
+    assert verification["rooms"][0]["compact_label"] == "NOT VERIFIED"
+
+    with pytest.raises(ValueError, match="overlay mode"):
+        engineering_overlay_state(layout, None, None, mode="invented")

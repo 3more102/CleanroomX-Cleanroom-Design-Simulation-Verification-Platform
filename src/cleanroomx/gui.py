@@ -62,7 +62,7 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
-from .gui_components import DiagnosticsPanel, VerificationPanel
+from .gui_components import DiagnosticsPanel, ProofGraphViewer, VerificationPanel
 from .project_diagnostics import analyze_project_diagnostics
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
@@ -1552,6 +1552,12 @@ class CleanroomXApp:
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
+        self.proofgraph_viewer = ProofGraphViewer(
+            self.notebook,
+            on_subject_navigate=self._navigate_proofgraph_subject,
+        )
+        self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(output_host, padding=(8, 3))
@@ -1648,6 +1654,7 @@ class CleanroomXApp:
 
         self._project_diagnostics_report = report
         panel.set_report(report)
+        self._refresh_proofgraph_viewer()
         verification_panel = getattr(self, "verification_panel", None)
         if verification_panel is not None:
             verification_panel.set_report(report)
@@ -1669,6 +1676,54 @@ class CleanroomXApp:
                 ),
             )
         return report
+
+    def _refresh_proofgraph_viewer(self) -> None:
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return
+        try:
+            records = verification_run_history_records(self.project.metadata)
+        except VerificationRunHistoryIntegrityError:
+            viewer.clear()
+            return
+
+        documents: list[dict] = []
+        for record in records:
+            raw_graphs = record.get("proofgraphs", [])
+            if isinstance(raw_graphs, list):
+                documents.extend(
+                    graph for graph in raw_graphs if isinstance(graph, dict)
+                )
+        try:
+            viewer.set_documents(documents)
+        except ValueError as exc:
+            viewer.clear()
+            self.status_var.set(f"ProofGraph unavailable: {exc}")
+
+    def _navigate_proofgraph_subject(self, subject_ref: str) -> bool:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            return False
+        token = str(subject_ref).strip()
+        if not token:
+            return False
+
+        for kind, collection_name in (("room", "rooms"), ("device", "devices")):
+            for item in workspace.layout.get(collection_name, []):
+                candidates = {
+                    str(item.get("id") or ""),
+                    str(item.get("name") or ""),
+                    str(item.get("analysis_room_name") or ""),
+                }
+                if token in candidates and workspace.select_item(kind, str(item["id"]), notify=True):
+                    self._activate_spatial_workspace()
+                    workspace.fit_selected()
+                    self.status_var.set(f"ProofGraph: opened {kind} {item['id']}")
+                    return True
+        self.status_var.set(
+            f"ProofGraph subject {token!r} is not mapped to a spatial object"
+        )
+        return False
 
     def _navigate_analysis(self, analysis_id: str) -> bool:
         tree = getattr(self, "analysis_tree", None)
@@ -2880,6 +2935,17 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
             self.selection_status_var.set(f"Selected: {kind} {spatial_id}")
+            return
+        if item_id == "nav-proofgraph":
+            if hasattr(self, "proofgraph_viewer"):
+                self.notebook.select(self.proofgraph_viewer)
+            self._refresh_proofgraph_viewer()
+            self.selection_status_var.set("Selected: ProofGraph")
+            return
+        if item_id == "nav-evidence":
+            if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
+                self.output_notebook.select(self.evidence_text.master)
+            self.selection_status_var.set("Selected: Evidence")
             return
         if item_id.startswith("nav-"):
             return

@@ -94,8 +94,12 @@ def test_command_palette_filters_and_dispatches_existing_callback(root):
     assert not palette.winfo_exists()
 
 
-def test_application_command_catalog_uses_existing_workflows_without_duplicates(root):
-    app = CleanroomXApp(root, autosave_interval_seconds=0)
+def test_application_command_catalog_uses_existing_workflows_without_duplicates(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
 
     commands = app._command_palette_commands()
     ids = [command.id for command in commands]

@@ -124,6 +124,14 @@ For room-verification and multi-room project-verification analyses, **Sync dimen
 
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
 
+## Engineering problems and verification workspace
+
+The main engineering workspace includes a persistent bottom output pane with **Problems**, **Diagnostics**, **Verification**, **Console**, **Evidence**, **Results**, and **Report** views. The **Problems** view is not a second diagnostics engine: it presents the canonical deterministic `analyze_project_diagnostics()` result as an IDE-style table with severity, rule code, description, affected object, level context when available, and source category.
+
+Problems can be searched and filtered by severity. Double-clicking a spatial issue selects the referenced room or device, activates the design workspace, and fits the affected object in the synchronized 2D/3D views. Analysis-level issues navigate to the existing analysis input editor. Export uses the same canonical diagnostics payload and Markdown renderer as the project diagnostics CLI.
+
+The **Verification** view summarizes current verification-currency state from the existing verification authority; the **Evidence** view lists retained project-verification records without recomputing historical verdicts. These views are read-only projections over existing domain services and do not change solver, requirement, ProofGraph, or acceptance semantics.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256, byte-size, and nanosecond modification-time evidence for external dependencies. Diagnostics exposes this evidence and **Export Run Bundle JSON** preserves the completed run data.

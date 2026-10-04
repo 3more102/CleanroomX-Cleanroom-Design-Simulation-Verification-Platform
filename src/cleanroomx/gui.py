@@ -1236,6 +1236,7 @@ class CleanroomXApp:
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -1243,6 +1244,7 @@ class CleanroomXApp:
             value=bool(self._ui_layout_state["output_visible"])
         )
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
+        self._focus_workspace_snapshot: dict[str, bool] | None = None
 
         self._configure_styles()
         self._build_menu()
@@ -1415,18 +1417,24 @@ class CleanroomXApp:
             label="Project Navigator",
             accelerator="Ctrl+B",
             variable=self.navigator_panel_visible_var,
-            command=self._sync_navigator_panel_visibility,
+            command=self._on_navigator_visibility_requested,
         )
         view_menu.add_checkbutton(
             label="Output / Verification",
             accelerator="Ctrl+J",
             variable=self.output_panel_visible_var,
-            command=self._sync_output_panel_visibility,
+            command=self._on_output_visibility_requested,
         )
         view_menu.add_command(
             label="Design Inspector",
             accelerator="Ctrl+I",
             command=self.toggle_design_inspector,
+        )
+        view_menu.add_checkbutton(
+            label="Focus Workspace",
+            accelerator="Ctrl+Shift+F",
+            variable=self.focus_workspace_var,
+            command=self._sync_focus_workspace,
         )
         view_menu.add_command(
             label="Reset Panel Layout",
@@ -1469,6 +1477,7 @@ class CleanroomXApp:
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
+        self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
@@ -1944,8 +1953,9 @@ class CleanroomXApp:
         self._remember_current_panel_fractions()
         workspace = getattr(self, "spatial_workspace", None)
         state = dict(self._ui_layout_state)
-        state.update(
-            {
+        focus_snapshot = getattr(self, "_focus_workspace_snapshot", None)
+        if focus_snapshot is None:
+            visibility = {
                 "navigator_visible": bool(
                     self.navigator_panel_visible_var.get()
                 ),
@@ -1955,6 +1965,12 @@ class CleanroomXApp:
                 "inspector_visible": bool(
                     workspace is not None and workspace.inspector_visible()
                 ),
+            }
+        else:
+            visibility = dict(focus_snapshot)
+        state.update(
+            {
+                **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
             }
         )
@@ -1971,6 +1987,8 @@ class CleanroomXApp:
             return
 
     def _restore_ui_layout_state(self) -> None:
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
         state = self._ui_layout_state
         self.theme_var.set(normalize_theme_name(state["theme"]))
         self.set_theme(self.theme_var.get(), persist=False)
@@ -2075,6 +2093,77 @@ class CleanroomXApp:
     def toggle_theme(self) -> None:
         self.set_theme("dark" if self.theme_var.get() == "light" else "light")
 
+    def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
+        snapshot = getattr(self, "_focus_workspace_snapshot", None)
+        if snapshot is None:
+            self.focus_workspace_var.set(False)
+            return False
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
+        self.navigator_panel_visible_var.set(
+            bool(snapshot["navigator_visible"])
+        )
+        self.output_panel_visible_var.set(bool(snapshot["output_visible"]))
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(
+                bool(snapshot["inspector_visible"])
+            )
+        self.root.after_idle(self._apply_saved_panel_sashes)
+        if status:
+            self.status_var.set("Focus Workspace disabled")
+        return True
+
+    def set_focus_workspace(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        workspace = getattr(self, "spatial_workspace", None)
+        if enabled:
+            if self._focus_workspace_snapshot is None:
+                self._remember_current_panel_fractions()
+                self._focus_workspace_snapshot = {
+                    "navigator_visible": bool(
+                        self.navigator_panel_visible_var.get()
+                    ),
+                    "output_visible": bool(
+                        self.output_panel_visible_var.get()
+                    ),
+                    "inspector_visible": bool(
+                        workspace is not None and workspace.inspector_visible()
+                    ),
+                }
+            self.focus_workspace_var.set(True)
+            self.navigator_panel_visible_var.set(False)
+            self.output_panel_visible_var.set(False)
+            self._sync_navigator_panel_visibility()
+            self._sync_output_panel_visibility()
+            if workspace is not None:
+                workspace.set_inspector_visible(False)
+            self.status_var.set("Focus Workspace enabled")
+            return
+        self._restore_focus_workspace_snapshot()
+
+    def _sync_focus_workspace(self) -> None:
+        self.set_focus_workspace(bool(self.focus_workspace_var.get()))
+
+    def toggle_focus_workspace(self) -> None:
+        self.set_focus_workspace(
+            self._focus_workspace_snapshot is None
+        )
+
+    def _on_navigator_visibility_requested(self) -> None:
+        target = bool(self.navigator_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(target)
+        self._sync_navigator_panel_visibility()
+
+    def _on_output_visibility_requested(self) -> None:
+        target = bool(self.output_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(target)
+        self._sync_output_panel_visibility()
+
     def _sync_navigator_panel_visibility(self) -> None:
         panes = getattr(self, "main_panes", None)
         panel = getattr(self, "navigator_panel", None)
@@ -2108,26 +2197,29 @@ class CleanroomXApp:
         self.status_var.set(f"Output / Verification {state}")
 
     def hide_navigator_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
         self.navigator_panel_visible_var.set(False)
         self._sync_navigator_panel_visibility()
 
     def toggle_navigator_panel(self) -> None:
-        self.navigator_panel_visible_var.set(
-            not bool(self.navigator_panel_visible_var.get())
-        )
+        target = not bool(self.navigator_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(target)
         self._sync_navigator_panel_visibility()
 
     def hide_output_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
         self.output_panel_visible_var.set(False)
         self._sync_output_panel_visibility()
 
     def toggle_output_panel(self) -> None:
-        self.output_panel_visible_var.set(
-            not bool(self.output_panel_visible_var.get())
-        )
+        target = not bool(self.output_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(target)
         self._sync_output_panel_visibility()
 
     def show_problems_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
         self.output_panel_visible_var.set(True)
         self._sync_output_panel_visibility()
         panel = getattr(self, "problems_panel", None)
@@ -2140,10 +2232,12 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is None:
             return
+        target = not workspace.inspector_visible()
+        self._restore_focus_workspace_snapshot(status=False)
         self._activate_spatial_workspace()
         if workspace.inspector_visible():
             self._remember_current_panel_fractions()
-        workspace.toggle_inspector()
+        workspace.set_inspector_visible(target)
         if workspace.inspector_visible():
             self.root.after_idle(self._apply_saved_panel_sashes)
 
@@ -2175,6 +2269,8 @@ class CleanroomXApp:
                 workspace._body.sashpos(0, max(520, int(width * 0.78)))
 
     def reset_panel_layout(self) -> None:
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
         self.navigator_panel_visible_var.set(True)
         self.output_panel_visible_var.set(True)
         self._sync_navigator_panel_visibility()
@@ -2526,6 +2622,14 @@ class CleanroomXApp:
                 "Design",
                 lambda: self.spatial_workspace.fit_views(),
                 keywords=("zoom", "model"),
+            ),
+            PaletteCommand(
+                "workspace.focus",
+                "Toggle Focus Workspace",
+                "Window",
+                self.toggle_focus_workspace,
+                shortcut="Ctrl+Shift+F",
+                keywords=("fullscreen", "panels", "viewport", "zen"),
             ),
             PaletteCommand(
                 "bim.import",

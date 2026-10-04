@@ -1476,6 +1476,63 @@ class SpatialDesignWorkspace(ttk.Frame):
             variable=self._xray_3d,
             command=self._draw_3d,
         ).pack(side="left", padx=(4, 2))
+        projection = ttk.Combobox(
+            header3,
+            textvariable=self._projection_3d,
+            values=("orthographic", "perspective"),
+            state="readonly",
+            width=11,
+        )
+        projection.pack(side="left", padx=2)
+        projection.bind(
+            "<<ComboboxSelected>>",
+            lambda event: self.set_3d_projection(self._projection_3d.get()),
+        )
+        section_button = ttk.Menubutton(header3, text="Section")
+        section_menu = tk.Menu(section_button, tearoff=False)
+        section_menu.add_command(
+            label="Toggle horizontal section",
+            command=self.toggle_3d_section,
+        )
+        section_menu.add_command(
+            label="Section at selected",
+            command=self.section_3d_at_selected,
+        )
+        section_menu.add_separator()
+        section_menu.add_command(
+            label="Raise 0.5 m",
+            command=lambda: self.adjust_3d_section(0.5),
+        )
+        section_menu.add_command(
+            label="Lower 0.5 m",
+            command=lambda: self.adjust_3d_section(-0.5),
+        )
+        section_menu.add_command(label="Clear section", command=self.clear_3d_section)
+        section_button.configure(menu=section_menu)
+        section_button.pack(side="left", padx=2)
+        isolate3d_button = ttk.Menubutton(header3, text="Isolate")
+        isolate3d_menu = tk.Menu(isolate3d_button, tearoff=False)
+        isolate3d_menu.add_command(
+            label="Selected floor",
+            command=self.isolate_selected_floor_3d,
+        )
+        isolate3d_menu.add_command(
+            label="Selected category",
+            command=self.isolate_selected_category_3d,
+        )
+        isolate3d_menu.add_separator()
+        isolate3d_menu.add_command(
+            label="Clear 3D isolation",
+            command=self.clear_3d_isolation,
+        )
+        isolate3d_button.configure(menu=isolate3d_menu)
+        isolate3d_button.pack(side="left", padx=2)
+        ttk.Checkbutton(
+            header3,
+            text="BBox",
+            variable=self._show_bounding_box_3d,
+            command=self._draw_3d,
+        ).pack(side="left", padx=2)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
                 header3,
@@ -1499,6 +1556,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             highlightbackground="#314150",
         )
         self.canvas_3d.pack(fill="both", expand=True)
+        footer3 = ttk.Frame(self._three_d_frame)
+        footer3.pack(fill="x", padx=4, pady=(3, 0))
+        ttk.Label(
+            footer3,
+            textvariable=self._view3d_status_var,
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
 
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._body.add(inspector, weight=2)

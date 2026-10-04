@@ -190,6 +190,252 @@ def test_autosave_rotates_history_per_project_identity(tmp_path):
         manager.shutdown(wait=True)
 
 
+def test_autosave_rotation_preserves_path_replacement_after_discovery(
+    tmp_path,
+    monkeypatch,
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=10,
+        session_id="session-a",
+    )
+    try:
+        identity = manager.begin_project(source)
+        for marker in (1, 2):
+            assert manager.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            )
+            manager.wait_for_idle()
+
+        artifacts = list(recovery_dir.glob("*.recovery.json"))
+        assert len(artifacts) == 2
+        stale = min(
+            artifacts,
+            key=lambda item: load_recovery_artifact(item)["saved_at_utc"],
+        )
+        newest = max(
+            artifacts,
+            key=lambda item: load_recovery_artifact(item)["saved_at_utc"],
+        )
+        replacement = b"concurrent replacement evidence"
+
+        real_replace = autosave_module.os.replace
+
+        def replace_after_discovery(source_path, destination_path):
+            source_candidate = Path(source_path)
+            destination_candidate = Path(destination_path)
+            if (
+                source_candidate == stale
+                and destination_candidate.name.startswith("retention-")
+                and destination_candidate.name.endswith(".recovery.json")
+            ):
+                stale.write_bytes(replacement)
+            return real_replace(source_path, destination_path)
+
+        monkeypatch.setattr(
+            autosave_module.os,
+            "replace",
+            replace_after_discovery,
+        )
+
+        manager.history_limit = 1
+        manager._rotate_history(identity)
+
+        assert stale.read_bytes() == replacement
+        assert newest.exists()
+        assert list(recovery_dir.glob("retention-*.recovery.json")) == []
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_autosave_rotation_preserves_byte_identical_replacement_during_discovery(
+    tmp_path,
+    monkeypatch,
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=10,
+        session_id="session-a",
+    )
+    try:
+        identity = manager.begin_project(source)
+        for marker in (1, 2):
+            assert manager.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            )
+            manager.wait_for_idle()
+
+        artifacts = list(recovery_dir.glob("*.recovery.json"))
+        stale = min(
+            artifacts,
+            key=lambda item: load_recovery_artifact(item)["saved_at_utc"],
+        )
+        newest = max(
+            artifacts,
+            key=lambda item: load_recovery_artifact(item)["saved_at_utc"],
+        )
+        replacement = recovery_dir / "discovery-identical-replacement.tmp"
+        replacement.write_bytes(stale.read_bytes())
+
+        original_load = autosave_module.load_recovery_artifact
+        real_replace = autosave_module.os.replace
+        replaced = {"done": False}
+
+        def replace_during_retention_discovery(path):
+            candidate = Path(path)
+            if candidate == stale and not replaced["done"]:
+                real_replace(replacement, stale)
+                replaced["done"] = True
+            return original_load(path)
+
+        monkeypatch.setattr(
+            autosave_module,
+            "load_recovery_artifact",
+            replace_during_retention_discovery,
+        )
+
+        manager.history_limit = 1
+        manager._rotate_history(identity)
+
+        assert replaced["done"] is True
+        assert stale.exists()
+        assert original_load(stale)["project_identity"] == identity
+        assert newest.exists()
+        assert list(recovery_dir.glob("retention-*.recovery.json")) == []
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_autosave_rotation_preserves_byte_identical_path_replacement(
+    tmp_path,
+    monkeypatch,
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=10,
+        session_id="session-a",
+    )
+    try:
+        identity = manager.begin_project(source)
+        for marker in (1, 2):
+            assert manager.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            )
+            manager.wait_for_idle()
+
+        artifacts = list(recovery_dir.glob("*.recovery.json"))
+        stale = min(
+            artifacts,
+            key=lambda item: load_recovery_artifact(item)["saved_at_utc"],
+        )
+        newest = max(
+            artifacts,
+            key=lambda item: load_recovery_artifact(item)["saved_at_utc"],
+        )
+        replacement = recovery_dir / "byte-identical-replacement.tmp"
+        replacement.write_bytes(stale.read_bytes())
+        replacement_identity = (
+            replacement.stat().st_dev,
+            replacement.stat().st_ino,
+        )
+
+        real_replace = autosave_module.os.replace
+        replaced = {"done": False}
+
+        def install_identical_replacement(source_path, destination_path):
+            source_candidate = Path(source_path)
+            destination_candidate = Path(destination_path)
+            if (
+                not replaced["done"]
+                and source_candidate == stale
+                and destination_candidate.name.startswith("retention-")
+            ):
+                real_replace(replacement, stale)
+                replaced["done"] = True
+            return real_replace(source_path, destination_path)
+
+        monkeypatch.setattr(
+            autosave_module.os,
+            "replace",
+            install_identical_replacement,
+        )
+
+        manager.history_limit = 1
+        manager._rotate_history(identity)
+
+        assert replaced["done"] is True
+        assert stale.exists()
+        assert load_recovery_artifact(stale)["project_identity"] == identity
+        assert newest.exists()
+        if stale.stat().st_ino != 0 and replacement_identity[1] != 0:
+            assert (stale.stat().st_dev, stale.stat().st_ino) == replacement_identity
+        assert list(recovery_dir.glob("retention-*.recovery.json")) == []
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_autosave_rotation_validation_failure_does_not_stall_coordinator(
+    tmp_path,
+    monkeypatch,
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=10,
+        session_id="session-a",
+    )
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+
+        original_load = autosave_module.load_recovery_artifact
+
+        def reject_staged_retention(path):
+            if Path(path).name.startswith("retention-"):
+                raise RecoveryFormatError("staged recovery changed during retention")
+            return original_load(path)
+
+        monkeypatch.setattr(
+            autosave_module,
+            "load_recovery_artifact",
+            reject_staged_retention,
+        )
+        manager.history_limit = 1
+
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=2),
+            source_path=source,
+        )
+        manager.wait_for_idle(timeout=5.0)
+        assert manager.status().state == "saved"
+
+        # A failed retention revalidation is preservation, not a coordinator
+        # failure. The completed Future must be released so later autosaves run.
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=3),
+            source_path=source,
+        )
+        manager.wait_for_idle(timeout=5.0)
+        assert manager.status().state == "saved"
+        assert len(list(recovery_dir.glob("*.recovery.json"))) == 3
+    finally:
+        manager.shutdown(wait=True)
+
+
 def test_autosave_rotation_isolated_between_sessions_for_same_project(tmp_path):
     source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
     recovery_dir = tmp_path / "recovery"

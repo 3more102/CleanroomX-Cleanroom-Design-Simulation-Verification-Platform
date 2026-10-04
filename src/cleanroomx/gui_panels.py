@@ -63,6 +63,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
             side="left", padx=2
         )
+        self.navigate_button = ttk.Button(
+            toolbar,
+            text="Go to issue",
+            command=self._navigate_selected,
+            state="disabled",
+        )
+        self.navigate_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
             side="left", padx=2
         )
@@ -299,6 +306,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
+        self.navigate_button.configure(
+            state="normal" if issue is not None else "disabled"
+        )
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:
@@ -325,6 +335,24 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     )
                 )
             self.detail.insert("1.0", "\n".join(lines))
+        elif not isinstance(self.last_result, dict):
+            self.detail.insert(
+                "1.0",
+                "Project diagnostics have not been evaluated yet. "
+                "Select Refresh to inspect the current project.",
+            )
+        elif self.last_result.get("issues"):
+            self.detail.insert(
+                "1.0",
+                "No diagnostics match the current Search and Severity filters. "
+                "Adjust or clear the filters to show project issues.",
+            )
+        else:
+            self.detail.insert(
+                "1.0",
+                "No project problems detected. "
+                "The current diagnostic scan is clear.",
+            )
         self.detail.configure(state="disabled")
 
     def _navigate_selected(self, event=None):

@@ -17,17 +17,40 @@ class PaletteCommand:
 
 
 def _subsequence_gap(needle: str, haystack: str) -> int | None:
-    """Return the gap cost for an ordered fuzzy match, or None when unmatched."""
-    cursor = -1
-    gap = 0
-    for character in needle:
-        next_cursor = haystack.find(character, cursor + 1)
-        if next_cursor < 0:
+    """Return the minimum gap cost for an ordered fuzzy match, or None."""
+    if not needle:
+        return 0
+
+    # Keep every possible end position for the current prefix. A greedy
+    # left-most match can miss a much tighter later subsequence (for example,
+    # "aa" inside "analysis"), which in turn makes palette ranking surprising.
+    costs = {
+        index: 0
+        for index, character in enumerate(haystack)
+        if character == needle[0]
+    }
+    if not costs:
+        return None
+
+    for character in needle[1:]:
+        next_costs: dict[int, int] = {}
+        for index, candidate in enumerate(haystack):
+            if candidate != character:
+                continue
+            best: int | None = None
+            for previous_index, previous_cost in costs.items():
+                if previous_index >= index:
+                    continue
+                cost = previous_cost + index - previous_index - 1
+                if best is None or cost < best:
+                    best = cost
+            if best is not None:
+                next_costs[index] = best
+        if not next_costs:
             return None
-        if cursor >= 0:
-            gap += next_cursor - cursor - 1
-        cursor = next_cursor
-    return gap
+        costs = next_costs
+
+    return min(costs.values())
 
 
 def _command_match_score(command: PaletteCommand, token: str) -> int | None:
@@ -221,6 +244,7 @@ class CommandPalette(tk.Toplevel):
             last = children[-1]
             self.tree.selection_set(last)
             self.tree.focus(last)
+            self.tree.see(last)
             self.tree.focus_set()
         return "break"
 

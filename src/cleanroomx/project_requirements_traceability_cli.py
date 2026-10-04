@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from .cli_output import CliStateError
 from .project import (
     atomic_write_text,
     capture_project_file_revision,
@@ -72,7 +73,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = build_project_requirements_traceability(project)
         revision_after = capture_project_file_revision(source)
         if not project_file_revision_matches(revision_before, revision_after):
-            raise RuntimeError(
+            raise CliStateError(
                 "project file changed during requirements-traceability inspection; "
                 "report was discarded"
             )
@@ -112,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             sys.stdout.write(text)
         return 0
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, CliStateError, ValueError) as exc:
         print(f"cleanroomx-project-traceability: error: {exc}", file=sys.stderr)
         return 2
 

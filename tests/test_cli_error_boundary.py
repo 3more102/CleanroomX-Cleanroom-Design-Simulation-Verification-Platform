@@ -3,7 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+import cleanroomx.bim_ifc_cli as bim_ifc_cli
 import cleanroomx.cli_output as cli_output
+import cleanroomx.project_diagnostics_cli as project_diagnostics_cli
+import cleanroomx.project_dossier_cli as project_dossier_cli
+import cleanroomx.project_requirements_traceability_cli as project_requirements_traceability_cli
+import cleanroomx.project_verify_cli as project_verify_cli
+import cleanroomx.verification_history_cli as verification_history_cli
+from cleanroomx.project import (
+    ProjectFileBusyError,
+    ProjectFileRevision,
+    ProjectSaveDurabilityError,
+    ProjectWriteConflictError,
+)
 import cleanroomx.fan_curve_cli as fan_curve_cli
 import cleanroomx.hvac_cli as hvac_cli
 import pytest
@@ -148,3 +160,124 @@ def test_all_file_loader_clis_use_structural_input_boundary() -> None:
         source = path.read_text(encoding="utf-8")
         assert "load_cli_input" in source, path.name
         assert "load_cli_input(" in source, path.name
+
+@pytest.mark.parametrize(
+    ("module", "attribute", "argv"),
+    [
+        (
+            project_diagnostics_cli,
+            "load_project_document_with_revision",
+            ["broken.cleanroomx.json"],
+        ),
+        (
+            project_dossier_cli,
+            "load_project_document_with_revision",
+            ["broken.cleanroomx.json"],
+        ),
+        (
+            project_verify_cli,
+            "load_project_document_with_revision",
+            ["status", "broken.cleanroomx.json", "analysis-a"],
+        ),
+        (
+            project_requirements_traceability_cli,
+            "load_project_document_with_revision",
+            ["broken.cleanroomx.json"],
+        ),
+        (
+            verification_history_cli,
+            "_load_stable_project",
+            ["list", "broken.cleanroomx.json"],
+        ),
+        (
+            bim_ifc_cli,
+            "_load_current_project",
+            ["plan", "broken.cleanroomx.json", "model.ifc"],
+        ),
+    ],
+    ids=[
+        "project-check",
+        "project-dossier",
+        "project-verify",
+        "project-traceability",
+        "verification-history",
+        "ifc",
+    ],
+)
+def test_project_level_cli_boundaries_do_not_hide_unexpected_runtime_errors(
+    monkeypatch,
+    module,
+    attribute,
+    argv,
+) -> None:
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("programming defect")
+
+    monkeypatch.setattr(module, attribute, fail)
+    with pytest.raises(RuntimeError, match="programming defect"):
+        module.main(argv)
+
+def _project_revision(path: str, digest: str) -> ProjectFileRevision:
+    return ProjectFileRevision(
+        path=path,
+        exists=True,
+        size=1,
+        mtime_ns=1,
+        sha256=digest,
+    )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ProjectFileBusyError("project.cleanroomx.json", "project.cleanroomx.json.lock"),
+        ProjectWriteConflictError(
+            "project.cleanroomx.json",
+            _project_revision("project.cleanroomx.json", "a" * 64),
+            _project_revision("project.cleanroomx.json", "b" * 64),
+        ),
+        ProjectSaveDurabilityError(
+            "project.cleanroomx.json",
+            _project_revision("project.cleanroomx.json", "c" * 64),
+        ),
+    ],
+    ids=["busy", "write-conflict", "durability"],
+)
+@pytest.mark.parametrize(
+    ("module", "attribute", "argv", "command"),
+    [
+        (
+            project_verify_cli,
+            "run_project_requirements_workflow",
+            ["run", "project.cleanroomx.json", "analysis-a"],
+            "cleanroomx-project-verify",
+        ),
+        (
+            bim_ifc_cli,
+            "_initial_import",
+            ["import", "project.cleanroomx.json", "model.ifc"],
+            "cleanroomx-ifc",
+        ),
+    ],
+    ids=["project-verify", "ifc"],
+)
+def test_guarded_save_state_errors_remain_clean_cli_failures(
+    monkeypatch,
+    capsys,
+    module,
+    attribute,
+    argv,
+    command,
+    error,
+) -> None:
+    def fail(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(module, attribute, fail)
+
+    assert module.main(argv) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith(f"{command}: error: ")
+    assert "Traceback" not in captured.err
+

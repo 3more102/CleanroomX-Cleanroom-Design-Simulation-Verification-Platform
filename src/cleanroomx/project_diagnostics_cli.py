@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from .cli_output import CliStateError
 from .application import _external_dependency_references, _resolve_relative
 from .project import (
     atomic_write_text,
@@ -143,7 +144,7 @@ def _assert_project_publication_safe(
     """Revalidate exact source revision and protected output identity before commit."""
     current = capture_project_file_revision(source)
     if not project_file_revision_matches(revision, current):
-        raise RuntimeError(
+        raise CliStateError(
             "project source changed before report publication; output was discarded"
         )
     guard = _assert_project_output_is_safe if output_guard is None else output_guard
@@ -168,7 +169,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = analyze_project_diagnostics(project, base_dir=source.parent)
         revision_after = capture_project_file_revision(source)
         if not project_file_revision_matches(revision_before, revision_after):
-            raise RuntimeError(
+            raise CliStateError(
                 "project file changed during diagnostics; report was discarded"
             )
         result = _attach_source_evidence(result, source, revision_after)
@@ -204,7 +205,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             sys.stdout.write(text)
         return project_diagnostics_exit_code(result)
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, CliStateError, ValueError) as exc:
         print(f"cleanroomx-project-check: error: {exc}", file=sys.stderr)
         return 2
 

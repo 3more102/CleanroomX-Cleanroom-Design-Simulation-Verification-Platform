@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
+from .cli_output import CliStateError
 from .project import (
     capture_project_file_revision,
     load_project_document_with_revision,
@@ -114,7 +115,7 @@ def _load_stable_project(path: Path):
     )
     revision_after = capture_project_file_revision(path)
     if not project_file_revision_matches(revision_before, revision_after):
-        raise RuntimeError(
+        raise CliStateError(
             "project file changed during verification-history inspection; "
             "inspection result was discarded"
         )
@@ -215,7 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         )
         return 0
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, CliStateError, ValueError) as exc:
         print(
             f"cleanroomx-verification-history: error: {exc}",
             file=sys.stderr,

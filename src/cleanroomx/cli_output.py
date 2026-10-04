@@ -41,6 +41,10 @@ class CliInputError(ValueError):
     """Raised when file-backed CLI input has an invalid user-supplied structure."""
 
 
+class CliStateError(RuntimeError):
+    """Raised for expected CLI state/revision failures, not programming defects."""
+
+
 def load_cli_input(
     loader: Callable[[str | Path], _T],
     path: str | Path,

@@ -6,7 +6,11 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
+from .cli_output import CliStateError
 from .project import (
+    ProjectFileBusyError,
+    ProjectSaveDurabilityError,
+    ProjectWriteConflictError,
     atomic_write_text,
     capture_project_file_revision,
     load_project_document_with_revision,
@@ -17,10 +21,12 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
 )
 from .project_requirements_workflow import (
+    ProjectRequirementsWorkflowError,
     ProjectRequirementsWorkflowRun,
     run_project_requirements_workflow,
 )
 from .project_verification_persistence import (
+    ProjectVerificationPersistenceError,
     persist_project_requirements_workflow_run,
 )
 from .verification_currency import assess_project_verification_currency
@@ -139,7 +145,7 @@ def _write_run_output(
     """Publish a workflow artifact only while its exact project revision remains current."""
     project, revision_before = load_project_document_with_revision(source)
     if revision_before.sha256 != workflow.source_revision:
-        raise RuntimeError(
+        raise CliStateError(
             "project changed after requirements verification; workflow output was discarded"
         )
     _assert_project_output_is_safe(
@@ -150,7 +156,7 @@ def _write_run_output(
     text = _strict_json_text(workflow.to_dict())
     revision_after = capture_project_file_revision(source)
     if not project_file_revision_matches(revision_before, revision_after):
-        raise RuntimeError(
+        raise CliStateError(
             "project changed during verification artifact publication; output was discarded"
         )
     _assert_project_publication_safe(
@@ -197,7 +203,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             revision_after = capture_project_file_revision(source)
             if not project_file_revision_matches(revision_before, revision_after):
-                raise RuntimeError(
+                raise CliStateError(
                     "project changed during verification-status inspection; "
                     "status result was discarded"
                 )
@@ -249,7 +255,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return exit_code
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (
+        OSError,
+        CliStateError,
+        ProjectFileBusyError,
+        ProjectRequirementsWorkflowError,
+        ProjectSaveDurabilityError,
+        ProjectVerificationPersistenceError,
+        ProjectWriteConflictError,
+        ValueError,
+    ) as exc:
         print(f"cleanroomx-project-verify: error: {exc}", file=sys.stderr)
         return 2
 

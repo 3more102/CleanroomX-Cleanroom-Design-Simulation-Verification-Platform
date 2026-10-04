@@ -9,9 +9,10 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Callable
+import uuid
 
 from . import __version__
-from .persistence import atomic_write_bytes, atomic_write_text
+from .persistence import atomic_write_bytes, atomic_write_text, stable_file_sha256
 from .project import (
     PROJECT_FILE_MAX_BYTES,
     ProjectDocument,
@@ -67,6 +68,8 @@ class ProjectRevisionRecord:
     source_sha256: str
     source_size: int
     application_version: str
+    artifact_size: int
+    artifact_sha256: str
 
 
 @dataclass(frozen=True)
@@ -334,10 +337,25 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
     issues: list[ProjectRevisionIssue] = []
     for artifact in sorted(directory.glob("*.cleanroomx.revision.json")):
         try:
+            artifact_before, artifact_sha256_before = stable_file_sha256(
+                artifact,
+                max_bytes=_project_revision_max_bytes(),
+            )
             snapshot = load_project_revision(
                 artifact,
                 expected_source_path=source,
             )
+            artifact_after, artifact_sha256_after = stable_file_sha256(
+                artifact,
+                max_bytes=_project_revision_max_bytes(),
+            )
+            if (
+                artifact_before.st_size != artifact_after.st_size
+                or artifact_sha256_before != artifact_sha256_after
+            ):
+                raise ProjectRevisionError(
+                    "project revision artifact changed while scanning"
+                )
         except (OSError, ProjectRevisionError) as exc:
             issues.append(ProjectRevisionIssue(path=artifact, error=str(exc)))
             continue
@@ -349,6 +367,8 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
                 source_sha256=snapshot.source_sha256,
                 source_size=len(snapshot.source_bytes),
                 application_version=snapshot.application_version,
+                artifact_size=artifact_after.st_size,
+                artifact_sha256=artifact_sha256_after,
             )
         )
     revisions.sort(
@@ -359,20 +379,100 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
     return ProjectRevisionScan(tuple(revisions), tuple(issues))
 
 
+def _revision_record_is_verified(
+    revision: ProjectRevisionRecord,
+    *,
+    expected_source_path: Path,
+    artifact_path: Path | None = None,
+) -> bool:
+    """Return whether one artifact still represents the scanned revision."""
+    artifact = revision.path if artifact_path is None else artifact_path
+    try:
+        current = load_project_revision(
+            artifact,
+            expected_source_path=expected_source_path,
+        )
+    except (OSError, ProjectRevisionError):
+        return False
+    if not (
+        current.created_at_utc == revision.created_at_utc
+        and current.project.name == revision.project_name
+        and current.source_sha256 == revision.source_sha256
+        and len(current.source_bytes) == revision.source_size
+        and current.application_version == revision.application_version
+    ):
+        return False
+    try:
+        artifact_stat, artifact_sha256 = stable_file_sha256(
+            artifact,
+            max_bytes=_project_revision_max_bytes(),
+        )
+    except OSError:
+        return False
+    return (
+        artifact_stat.st_size == revision.artifact_size
+        and artifact_sha256 == revision.artifact_sha256
+    )
+
+
+def _restore_revision_prune_stage(staged_path: Path, original_path: Path) -> None:
+    """Restore staged revision evidence without clobbering a recreated path."""
+    try:
+        os.link(staged_path, original_path)
+    except OSError:
+        # If another process recreated the public path, preserve both revisions:
+        # the new public entry and the private staged evidence.
+        return
+    try:
+        staged_path.unlink()
+    except OSError:
+        # The hard link already restored the original public name. Leaving a
+        # private duplicate is safer than deleting evidence after cleanup failure.
+        return
+
+
+def _stage_revision_for_pruning(path: Path) -> Path | None:
+    """Detach the exact pathname revision selected for retention pruning."""
+    # Keep staged evidence discoverable by the normal revision scanner if a
+    # concurrent replacement prevents no-clobber restoration.
+    staged = path.with_name(
+        f".retention-stage-{uuid.uuid4().hex}-{path.name}"
+    )
+    try:
+        os.replace(path, staged)
+    except OSError:
+        return None
+    return staged
+
+
 def rotate_project_revisions(
     project_path: str | Path,
     limit: int = DEFAULT_PROJECT_REVISION_HISTORY_LIMIT,
 ) -> None:
     if type(limit) is not int or limit < 0:
         raise ValueError("project revision history limit must be non-negative")
-    scan = scan_project_revisions(project_path)
+    source = _normalized_path(project_path)
+    scan = scan_project_revisions(source)
     for revision in scan.revisions[limit:]:
+        # Detach the exact pathname revision first. Any replacement that wins
+        # before this atomic move is captured by the private stage and must pass
+        # full semantic + byte-identity verification before it can be deleted.
+        staged = _stage_revision_for_pruning(revision.path)
+        if staged is None:
+            continue
+        if not _revision_record_is_verified(
+            revision,
+            expected_source_path=source,
+            artifact_path=staged,
+        ):
+            _restore_revision_prune_stage(staged, revision.path)
+            continue
         try:
-            revision.path.unlink(missing_ok=True)
+            staged.unlink()
         except OSError:
-            # Retention cleanup is best effort after a committed save.
-            pass
-
+            # Retention cleanup is best effort after a committed save. Restore the
+            # verified bytes when possible; never overwrite a concurrent replacement.
+            _restore_revision_prune_stage(staged, revision.path)
 
 def discard_project_revision(path: str | Path | None) -> None:
     if path is None:

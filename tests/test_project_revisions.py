@@ -95,6 +95,240 @@ def test_project_revision_history_is_bounded_newest_first(tmp_path):
     assert descriptions == ["v5", "v4", "v3"]
 
 
+def test_revision_scan_rejects_artifact_replaced_between_parse_and_fingerprint(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+
+    baseline = revision_module.scan_project_revisions(path)
+    assert len(baseline.revisions) == 1
+    artifact = baseline.revisions[0].path
+    original = artifact.read_bytes()
+
+    real_loader = revision_module.load_project_revision
+    raced = False
+
+    def load_then_replace(artifact_path, *, expected_source_path=None):
+        nonlocal raced
+        snapshot = real_loader(
+            artifact_path,
+            expected_source_path=expected_source_path,
+        )
+        if not raced and Path(artifact_path) == artifact:
+            payload = json.loads(original.decode("utf-8"))
+            rewritten = json.dumps(payload, separators=(",", ":")) + "\n"
+            artifact.write_text(rewritten, encoding="utf-8")
+            assert artifact.read_bytes() != original
+            raced = True
+        return snapshot
+
+    monkeypatch.setattr(
+        revision_module,
+        "load_project_revision",
+        load_then_replace,
+    )
+
+    scan = revision_module.scan_project_revisions(path)
+
+    assert raced is True
+    assert scan.revisions == ()
+    assert len(scan.issues) == 1
+    assert scan.issues[0].path == artifact
+    assert "changed while scanning" in scan.issues[0].error
+
+
+def test_revision_retention_preserves_artifact_changed_after_scan(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    real_scan = revision_module.scan_project_revisions
+    before = real_scan(path)
+    assert len(before.revisions) == 3
+    newest = before.revisions[0].path
+    other_stale = before.revisions[1].path
+    changed_stale = before.revisions[2].path
+
+    def scan_then_change(project_path):
+        scan = real_scan(project_path)
+        payload = json.loads(changed_stale.read_text(encoding="utf-8"))
+        changed_stale.write_text(
+            json.dumps(payload, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        return scan
+
+    monkeypatch.setattr(
+        revision_module,
+        "scan_project_revisions",
+        scan_then_change,
+    )
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert newest.exists()
+    assert not other_stale.exists()
+    assert changed_stale.exists()
+
+    after = real_scan(path)
+    assert [item.path for item in after.revisions] == [newest, changed_stale]
+    assert after.issues == ()
+    assert (
+        load_project_revision(
+            changed_stale,
+            expected_source_path=path,
+        ).source_sha256
+        == before.revisions[2].source_sha256
+    )
+
+
+def test_revision_retention_preserves_replacement_at_prune_staging(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    replacement_bytes = {}
+    raced_paths: list[Path] = []
+    real_replace = revision_module.os.replace
+
+    def replace_with_race(source, destination):
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            not raced_paths
+            and source_path.name.endswith(".cleanroomx.revision.json")
+            and destination_path.name.startswith(".retention-stage-")
+            and destination_path.name.endswith(".cleanroomx.revision.json")
+        ):
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
+            rewritten = json.dumps(payload, separators=(",", ":")) + "\n"
+            source_path.write_text(rewritten, encoding="utf-8")
+            replacement_bytes["payload"] = rewritten.encode("utf-8")
+            raced_paths.append(source_path)
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(revision_module.os, "replace", replace_with_race)
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert raced_paths
+    raced = raced_paths[0]
+    assert raced.read_bytes() == replacement_bytes["payload"]
+    assert not any(
+        item.name.startswith(".retention-stage-")
+        for item in project_revision_dir(path).iterdir()
+    )
+
+
+def test_revision_retention_does_not_delete_path_recreated_after_staging(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    replacement = b"concurrent replacement after retention staging\n"
+    recreated_paths: list[Path] = []
+    real_verify = revision_module._revision_record_is_verified
+
+    def verify_then_recreate(
+        revision,
+        *,
+        expected_source_path,
+        artifact_path=None,
+    ):
+        verified = real_verify(
+            revision,
+            expected_source_path=expected_source_path,
+            artifact_path=artifact_path,
+        )
+        if verified and artifact_path is not None and not recreated_paths:
+            assert not revision.path.exists()
+            revision.path.write_bytes(replacement)
+            recreated_paths.append(revision.path)
+        return verified
+
+    monkeypatch.setattr(
+        revision_module,
+        "_revision_record_is_verified",
+        verify_then_recreate,
+    )
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert recreated_paths
+    recreated = recreated_paths[0]
+    assert recreated.read_bytes() == replacement
+    assert not any(
+        item.name.startswith(".retention-stage-")
+        for item in project_revision_dir(path).iterdir()
+    )
+
+
+def test_revision_retention_unrestored_stage_remains_discoverable(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    replacement = b"concurrent invalid replacement\n"
+    staged_paths: list[Path] = []
+    real_verify = revision_module._revision_record_is_verified
+
+    def reject_staged_once(
+        revision,
+        *,
+        expected_source_path,
+        artifact_path=None,
+    ):
+        if artifact_path is not None and not staged_paths:
+            staged_paths.append(Path(artifact_path))
+            revision.path.write_bytes(replacement)
+            return False
+        return real_verify(
+            revision,
+            expected_source_path=expected_source_path,
+            artifact_path=artifact_path,
+        )
+
+    monkeypatch.setattr(
+        revision_module,
+        "_revision_record_is_verified",
+        reject_staged_once,
+    )
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert staged_paths
+    staged = staged_paths[0]
+    assert staged.exists()
+    assert staged.name.endswith(".cleanroomx.revision.json")
+
+    scan = revision_module.scan_project_revisions(path)
+    assert staged in {item.path for item in scan.revisions}
+    assert any(issue.path.read_bytes() == replacement for issue in scan.issues)
+
+
 def test_revision_envelope_budget_preserves_valid_large_project_name(
     tmp_path, monkeypatch
 ):

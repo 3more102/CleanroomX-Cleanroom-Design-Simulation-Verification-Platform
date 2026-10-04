@@ -1825,9 +1825,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
+        inspector_header = ttk.Frame(
+            inspector,
+            style="CX.PanelHeader.TFrame",
+        )
+        inspector_header.pack(fill="x", pady=(0, 5))
         ttk.Label(
-            inspector, text="PROPERTIES", style="CX.Section.TLabel"
-        ).pack(anchor="w")
+            inspector_header,
+            text="PROPERTIES",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        self._inspector_close_button = ttk.Button(
+            inspector_header,
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=lambda: self.set_inspector_visible(False),
+        )
+        self._inspector_close_button.pack(side="right")
         ttk.Label(
             inspector,
             textvariable=self._selection_var,

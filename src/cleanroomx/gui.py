@@ -1507,6 +1507,104 @@ class CleanroomXApp:
         topbar.columnconfigure(1, weight=1)
         topbar.columnconfigure(2, weight=2)
 
+        commandbar = ttk.Frame(
+            self.root,
+            style="CX.Toolbar.TFrame",
+            padding=(10, 5),
+        )
+        self.commandbar = commandbar
+        commandbar.pack(fill="x", padx=10, pady=(0, 4))
+
+        # Reserve the right-side global actions first so critical controls
+        # cannot be clipped when the window is at the supported minimum width.
+        self.toolbar_commands_button = ttk.Button(
+            commandbar,
+            text="Commands…",
+            width=10,
+            style="CX.Compact.TButton",
+            command=self.show_command_palette,
+        )
+        self.toolbar_commands_button.pack(side="right", padx=1)
+        self.toolbar_problems_button = ttk.Button(
+            commandbar,
+            text="Problems",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.show_problems_panel,
+        )
+        self.toolbar_problems_button.pack(side="right", padx=1)
+
+        self.toolbar_new_button = ttk.Button(
+            commandbar,
+            text="New",
+            width=5,
+            style="CX.Compact.TButton",
+            command=self.new_project,
+        )
+        self.toolbar_new_button.pack(side="left", padx=1)
+        self.toolbar_open_button = ttk.Button(
+            commandbar,
+            text="Open",
+            width=5,
+            style="CX.Compact.TButton",
+            command=self.open_project,
+        )
+        self.toolbar_open_button.pack(side="left", padx=1)
+        self.toolbar_save_button = ttk.Button(
+            commandbar,
+            text="Save",
+            width=5,
+            style="CX.Compact.TButton",
+            command=self.save_project,
+        )
+        self.toolbar_save_button.pack(side="left", padx=1)
+        ttk.Separator(commandbar, orient="vertical").pack(
+            side="left", fill="y", padx=4
+        )
+
+        self.toolbar_undo_button = ttk.Button(
+            commandbar,
+            text="Undo",
+            width=5,
+            style="CX.Compact.TButton",
+            command=self.undo_project_edit,
+            state="disabled",
+        )
+        self.toolbar_undo_button.pack(side="left", padx=1)
+        self.toolbar_redo_button = ttk.Button(
+            commandbar,
+            text="Redo",
+            width=5,
+            style="CX.Compact.TButton",
+            command=self.redo_project_edit,
+            state="disabled",
+        )
+        self.toolbar_redo_button.pack(side="left", padx=1)
+        ttk.Separator(commandbar, orient="vertical").pack(
+            side="left", fill="y", padx=4
+        )
+
+        for label, mode, width in (
+            ("2D", "2d", 4),
+            ("3D", "3d", 4),
+            ("Split", "split", 5),
+        ):
+            ttk.Button(
+                commandbar,
+                text=label,
+                width=width,
+                style="CX.Compact.TButton",
+                command=lambda selected=mode: self._activate_spatial_workspace(selected),
+            ).pack(side="left", padx=1)
+        self.toolbar_fit_button = ttk.Button(
+            commandbar,
+            text="Fit",
+            width=4,
+            style="CX.Compact.TButton",
+            command=lambda: self.spatial_workspace.fit_views(),
+        )
+        self.toolbar_fit_button.pack(side="left", padx=1)
+
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
@@ -1514,9 +1612,24 @@ class CleanroomXApp:
         navigator = ttk.Frame(panes, padding=(8, 7))
         self.navigator_panel = navigator
         panes.add(navigator, weight=1)
+        navigator_header = ttk.Frame(
+            navigator,
+            style="CX.PanelHeader.TFrame",
+        )
+        navigator_header.pack(fill="x", pady=(0, 6))
         ttk.Label(
-            navigator, text="PROJECT NAVIGATOR", style="CX.Section.TLabel"
-        ).pack(anchor="w", pady=(0, 6))
+            navigator_header,
+            text="PROJECT NAVIGATOR",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        self.navigator_close_button = ttk.Button(
+            navigator_header,
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=self.hide_navigator_panel,
+        )
+        self.navigator_close_button.pack(side="right")
         filter_row = ttk.Frame(navigator)
         filter_row.pack(fill="x", pady=(0, 6))
         ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
@@ -1655,17 +1768,28 @@ class CleanroomXApp:
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
-        output_header = ttk.Frame(output_host, padding=(8, 3))
+        output_header = ttk.Frame(
+            output_host,
+            style="CX.PanelHeader.TFrame",
+        )
         output_header.pack(fill="x")
         ttk.Label(
             output_header,
             text="OUTPUT / VERIFICATION",
-            style="CX.Section.TLabel",
+            style="CX.PanelHeader.TLabel",
         ).pack(side="left")
-        ttk.Label(
+        self.output_close_button = ttk.Button(
             output_header,
-            text="Canonical diagnostics, verification currency, evidence, and run output",
-        ).pack(side="right")
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=self.hide_output_panel,
+        )
+        self.output_close_button.pack(side="right")
+        ttk.Label(
+            output_host,
+            text="Diagnostics · verification currency · evidence · analysis output",
+        ).pack(fill="x", padx=8, pady=(4, 2))
 
         self.output_notebook = ttk.Notebook(output_host)
         self.output_notebook.pack(fill="both", expand=True)
@@ -1983,17 +2107,34 @@ class CleanroomXApp:
         state = "shown" if visible else "hidden"
         self.status_var.set(f"Output / Verification {state}")
 
+    def hide_navigator_panel(self) -> None:
+        self.navigator_panel_visible_var.set(False)
+        self._sync_navigator_panel_visibility()
+
     def toggle_navigator_panel(self) -> None:
         self.navigator_panel_visible_var.set(
             not bool(self.navigator_panel_visible_var.get())
         )
         self._sync_navigator_panel_visibility()
 
+    def hide_output_panel(self) -> None:
+        self.output_panel_visible_var.set(False)
+        self._sync_output_panel_visibility()
+
     def toggle_output_panel(self) -> None:
         self.output_panel_visible_var.set(
             not bool(self.output_panel_visible_var.get())
         )
         self._sync_output_panel_visibility()
+
+    def show_problems_panel(self) -> None:
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+        panel = getattr(self, "problems_panel", None)
+        notebook = getattr(self, "output_notebook", None)
+        if panel is not None and notebook is not None:
+            notebook.select(panel)
+        self.status_var.set("Output: Problems")
 
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -2682,6 +2823,17 @@ class CleanroomXApp:
                 ),
                 state="normal" if history.can_redo else "disabled",
             )
+        toolbar_undo = getattr(self, "toolbar_undo_button", None)
+        if toolbar_undo is not None:
+            toolbar_undo.configure(
+                state="normal" if history.can_undo else "disabled"
+            )
+        toolbar_redo = getattr(self, "toolbar_redo_button", None)
+        if toolbar_redo is not None:
+            toolbar_redo.configure(
+                state="normal" if history.can_redo else "disabled"
+            )
+
         workspace = getattr(self, "spatial_workspace", None)
         setter = getattr(workspace, "set_history_availability", None)
         if callable(setter):

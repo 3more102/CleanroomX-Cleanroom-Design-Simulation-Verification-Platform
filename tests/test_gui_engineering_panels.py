@@ -133,3 +133,21 @@ def test_completed_run_selects_results_in_bottom_workspace(app):
     assert run.result
     assert app.output_notebook.select() == str(app.result_text.master)
     assert app.problems_panel.last_result is not None
+
+
+def test_fit_selected_preserves_engineering_geometry(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    geometry_before = {
+        "rooms": copy.deepcopy(workspace.layout["rooms"]),
+        "devices": copy.deepcopy(workspace.layout["devices"]),
+    }
+
+    assert workspace.select_item("room", room["id"])
+    assert workspace.fit_selected()
+    app.root.update()
+
+    assert workspace.layout["rooms"] == geometry_before["rooms"]
+    assert workspace.layout["devices"] == geometry_before["devices"]
+    assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
+    assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0

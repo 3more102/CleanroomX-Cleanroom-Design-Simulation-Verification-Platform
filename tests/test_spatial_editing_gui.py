@@ -740,6 +740,31 @@ def test_guided_save_and_verify_saves_dirty_project_before_verification(
     assert app.workflow_verify_button.cget("text") == "5  Save & Verify"
 
 
+def test_navigator_quick_actions_route_to_existing_commands(app, monkeypatch):
+    calls: list[str] = []
+
+    monkeypatch.setattr(app, "add_analysis", lambda: calls.append("analysis"))
+    monkeypatch.setattr(
+        app.spatial_workspace,
+        "add_room",
+        lambda: calls.append("room"),
+    )
+    monkeypatch.setattr(
+        app,
+        "import_ifc_spatial_layout",
+        lambda: calls.append("ifc"),
+    )
+
+    app.navigator_add_analysis_button.invoke()
+    app.navigator_add_room_button.invoke()
+    app.navigator_import_ifc_button.invoke()
+
+    assert calls == ["analysis", "room", "ifc"]
+    assert app.navigator_add_analysis_button.cget("text") == "+ Analysis"
+    assert app.navigator_add_room_button.cget("text") == "+ Room"
+    assert "Import IFC" in app.navigator_import_ifc_button.cget("text")
+
+
 def test_panel_header_close_controls_and_problems_navigation(app):
     workspace = app.spatial_workspace
 

@@ -2144,6 +2144,99 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_y"] = pan_3d_y
         self._persist("Fit spatial views")
 
+    def fit_selected(self) -> bool:
+        """Fit the current selection in both views without changing model geometry."""
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            self._status_setter("Fit selected: no spatial object selected")
+            return False
+
+        if self.selected.kind == "room":
+            min_x = item["x_m"]
+            min_y = item["y_m"]
+            max_x = min_x + item["length_m"]
+            max_y = min_y + item["width_m"]
+        else:
+            half = max(0.5, float(item.get("width_m", 0.4)))
+            min_x = item["x_m"] - half
+            max_x = item["x_m"] + half
+            min_y = item["y_m"] - half
+            max_y = item["y_m"] + half
+
+        width_m = max(0.5, max_x - min_x)
+        height_m = max(0.5, max_y - min_y)
+        canvas_width = max(200, self.canvas_2d.winfo_width())
+        canvas_height = max(200, self.canvas_2d.winfo_height())
+        zoom_2d = max(
+            0.2,
+            min(
+                8.0,
+                0.70
+                * min(
+                    canvas_width / (BASE_2D_PIXELS_PER_M * width_m),
+                    canvas_height / (BASE_2D_PIXELS_PER_M * height_m),
+                ),
+            ),
+        )
+        self.layout["view"]["zoom_2d"] = zoom_2d
+        scale = BASE_2D_PIXELS_PER_M * zoom_2d
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        self.layout["view"]["pan_x"] = -center_x * scale
+        self.layout["view"]["pan_y"] = -center_y * scale
+
+        model_min_x, model_min_y, model_max_x, model_max_y = self._bounds()
+        model_center_x = (model_min_x + model_max_x) / 2.0
+        model_center_y = (model_min_y + model_max_y) / 2.0
+        floor_z = self.layout["floor"]["elevation_m"]
+        points_3d: list[tuple[float, float, float]] = []
+
+        if self.selected.kind == "room":
+            z0 = item.get("floor_elevation_m", floor_z)
+            z1 = z0 + item["height_m"]
+            for x in (min_x, max_x):
+                for y in (min_y, max_y):
+                    points_3d.append(
+                        (x - model_center_x, y - model_center_y, z0)
+                    )
+                    points_3d.append(
+                        (x - model_center_x, y - model_center_y, z1)
+                    )
+        else:
+            room = next(
+                (
+                    room
+                    for room in self.layout["rooms"]
+                    if room["id"] == item.get("room_id")
+                ),
+                None,
+            )
+            z = (
+                (room.get("floor_elevation_m", floor_z) if room else floor_z)
+                + float(item.get("z_m", 0.0))
+            )
+            radius = max(0.25, half)
+            for x in (item["x_m"] - radius, item["x_m"] + radius):
+                for y in (item["y_m"] - radius, item["y_m"] + radius):
+                    for dz in (-radius, radius):
+                        points_3d.append(
+                            (x - model_center_x, y - model_center_y, z + dz)
+                        )
+
+        zoom_3d, pan_3d_x, pan_3d_y = fit_3d_view(
+            points_3d,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            max_zoom=8.0,
+        )
+        self.layout["view"]["zoom_3d"] = zoom_3d
+        self.layout["view"]["pan_3d_x"] = pan_3d_x
+        self.layout["view"]["pan_3d_y"] = pan_3d_y
+        self._persist("Fit selected spatial item")
+        return True
+
     def reset_2d(self) -> None:
         """Restore the 2D viewport without changing model geometry."""
         self.layout["view"]["zoom_2d"] = 1.0

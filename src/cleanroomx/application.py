@@ -1773,27 +1773,58 @@ def _restore_external_dependency_result_paths(
     result: Any,
     execution_path_aliases: dict[str, str],
 ) -> Any:
-    """Remove execution-only paths from durable dossier evidence."""
-    if kind != "dossier" or not execution_path_aliases:
+    """Remove execution-only private snapshot paths from durable analysis results."""
+    if not execution_path_aliases:
         return result
-    if not isinstance(result, dict):
-        raise RuntimeError("dossier backend returned a non-object result")
-    source_files = result.get("source_files")
-    if not isinstance(source_files, list):
-        raise RuntimeError("dossier result is missing source_files")
-    restored = 0
-    for source in source_files:
-        if not isinstance(source, dict):
-            continue
-        source_path = source.get("path")
-        if isinstance(source_path, str) and source_path in execution_path_aliases:
-            source["path"] = execution_path_aliases[source_path]
-            restored += 1
-    if restored != len(execution_path_aliases):
-        raise RuntimeError(
-            "dossier result did not preserve every execution snapshot source reference"
-        )
-    return result
+
+    if kind == "dossier":
+        if not isinstance(result, dict):
+            raise RuntimeError("dossier backend returned a non-object result")
+        source_files = result.get("source_files")
+        if not isinstance(source_files, list):
+            raise RuntimeError("dossier result is missing source_files")
+        restored = 0
+        for source in source_files:
+            if not isinstance(source, dict):
+                continue
+            source_path = source.get("path")
+            if isinstance(source_path, str) and source_path in execution_path_aliases:
+                source["path"] = execution_path_aliases[source_path]
+                restored += 1
+        if restored != len(execution_path_aliases):
+            raise RuntimeError(
+                "dossier result did not preserve every execution snapshot source reference"
+            )
+        return result
+
+    spec = ANALYSIS_SPECS.get(kind)
+    if spec is None or spec.source != "plugin":
+        return result
+
+    normalized = _normalize_result(result)
+
+    def restore(value: Any) -> Any:
+        if isinstance(value, str):
+            return execution_path_aliases.get(value, value)
+        if isinstance(value, list):
+            return [restore(item) for item in value]
+        if isinstance(value, dict):
+            restored: dict[Any, Any] = {}
+            for key, item in value.items():
+                restored_key = (
+                    execution_path_aliases.get(key, key)
+                    if isinstance(key, str)
+                    else key
+                )
+                if restored_key in restored:
+                    raise RuntimeError(
+                        "plugin result path restoration produced a duplicate object key"
+                    )
+                restored[restored_key] = restore(item)
+            return restored
+        return value
+
+    return restore(normalized)
 
 
 def _application_execution_provenance(

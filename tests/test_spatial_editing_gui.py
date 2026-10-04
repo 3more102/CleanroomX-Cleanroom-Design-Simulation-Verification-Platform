@@ -275,8 +275,18 @@ def test_engineering_output_is_docked_below_primary_workspace(app):
     assert "Input" in primary_tabs
     assert "Plot" in primary_tabs
     assert "Results" not in primary_tabs
-    assert output_tabs == ["Results", "Diagnostics", "Report"]
+    assert output_tabs == [
+        "Problems",
+        "Diagnostics",
+        "Verification",
+        "Console",
+        "Evidence",
+        "Results",
+        "Report",
+    ]
 
+    assert app.problems_panel.master == app.output_notebook
+    assert app.verification_panel.master == app.output_notebook
     assert app.result_text.master.master == app.output_notebook
     assert app.diagnostics_text.master.master == app.output_notebook
     assert app.report_text.master.master == app.output_notebook
@@ -300,4 +310,49 @@ def test_project_navigator_search_filters_without_changing_active_analysis(app):
         app.spatial_workspace.layout["rooms"]
     )
     assert app.project.active_analysis_id == active_before
+
+def test_canonical_project_diagnostics_populate_problems_and_verification(app):
+    report = app._refresh_project_diagnostics()
+    app.root.update()
+
+    assert isinstance(report, dict)
+    assert isinstance(report.get("issues"), list)
+    assert app.problems_panel._report == report
+    assert app.verification_panel.summary_var.get().startswith(
+        "Verification currency"
+    )
+    assert app.evidence_text.get("1.0", "end").strip()
+
+
+def test_problem_navigation_selects_and_fits_spatial_object(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.set_workspace_mode("split")
+
+    issue = {
+        "rule": "test_navigation",
+        "element": {
+            "type": "room",
+            "id": room["id"],
+            "name": room["name"],
+        },
+    }
+    assert app._navigate_project_diagnostic(issue)
+    app.root.update()
+
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(workspace)
+    assert app.analysis_tree.selection() == (f"room:{room['id']}",)
+    assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
+    assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_verification_navigation_opens_analysis_without_reimplementing_verifier(app):
+    analysis = app.project.analyses[0]
+    assert app._navigate_analysis(analysis.id)
+    app.root.update()
+
+    assert app.project.active_analysis_id == analysis.id
+    assert app.analysis_tree.selection() == (analysis.id,)
+    assert app._editor_analysis_id == analysis.id
 

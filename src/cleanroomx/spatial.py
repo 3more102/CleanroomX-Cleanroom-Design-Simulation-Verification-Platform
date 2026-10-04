@@ -1617,8 +1617,14 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _hit_key(kind: str, item_id: str) -> str:
         return f"{kind}:{item_id}"
 
+    def _current_tool_mode(self) -> str:
+        variable = getattr(self, "_tool_mode", None)
+        return variable.get() if variable is not None else "select"
+
     def _is_item_visible(self, kind: str, item_id: str) -> bool:
-        if self._hit_key(kind, item_id) in self._hidden_item_ids:
+        hidden_item_ids = getattr(self, "_hidden_item_ids", set())
+        isolated_item = getattr(self, "_isolated_item", None)
+        if self._hit_key(kind, item_id) in hidden_item_ids:
             return False
 
         if kind == "device":
@@ -1627,30 +1633,30 @@ class SpatialDesignWorkspace(ttk.Frame):
                 None,
             )
             room_id = str(device.get("room_id") or "") if device else ""
-            if room_id and self._hit_key("room", room_id) in self._hidden_item_ids:
+            if room_id and self._hit_key("room", room_id) in hidden_item_ids:
                 return False
 
-        if self._isolated_item is None:
+        if isolated_item is None:
             return True
-        if self._isolated_item == _Hit(kind, item_id):
+        if isolated_item == _Hit(kind, item_id):
             return True
 
-        if self._isolated_item.kind == "room" and kind == "device":
+        if isolated_item.kind == "room" and kind == "device":
             device = next(
                 (item for item in self.layout["devices"] if item["id"] == item_id),
                 None,
             )
             return bool(
                 device
-                and str(device.get("room_id") or "") == self._isolated_item.item_id
+                and str(device.get("room_id") or "") == isolated_item.item_id
             )
 
-        if self._isolated_item.kind == "device" and kind == "room":
+        if isolated_item.kind == "device" and kind == "room":
             device = next(
                 (
                     item
                     for item in self.layout["devices"]
-                    if item["id"] == self._isolated_item.item_id
+                    if item["id"] == isolated_item.item_id
                 ),
                 None,
             )
@@ -1712,7 +1718,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _handle_measure_click(self, x: float, y: float) -> None:
         world = self._canvas_to_world(x, y)
-        mode = self._tool_mode.get()
+        mode = self._current_tool_mode()
         if mode not in {"distance", "area"}:
             return
         if len(self._measurement_points) >= 2:
@@ -1734,10 +1740,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _draw_measurement_overlay(self) -> None:
-        if not self._measurement_points:
+        measurement_points = getattr(self, "_measurement_points", None)
+        if not measurement_points:
             return
         canvas = self.canvas_2d
-        points = [self._world_to_canvas(x, y) for x, y in self._measurement_points]
+        points = [self._world_to_canvas(x, y) for x, y in measurement_points]
         for px, py in points:
             canvas.create_line(
                 px - 5, py, px + 5, py,
@@ -1750,7 +1757,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if len(points) != 2:
             return
         (x0, y0), (x1, y1) = points
-        if self._tool_mode.get() == "area":
+        if self._current_tool_mode() == "area":
             canvas.create_rectangle(
                 x0, y0, x1, y1,
                 outline="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
@@ -3137,7 +3144,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
-        if self._tool_mode.get() in {"distance", "area"}:
+        if self._current_tool_mode() in {"distance", "area"}:
             self._handle_measure_click(event.x, event.y)
             return
         current = self.canvas_2d.find_withtag("current")
@@ -3173,7 +3180,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_left_drag(self, event: tk.Event) -> None:
-        if self._tool_mode.get() != "select":
+        if self._current_tool_mode() != "select":
             return
         item = self._selected_object()
         if item is None or self._drag_anchor is None:
@@ -3226,7 +3233,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_left_up(self, event: tk.Event) -> None:
-        if self._tool_mode.get() != "select":
+        if self._current_tool_mode() != "select":
             return
         if (
             self._drag_anchor is not None

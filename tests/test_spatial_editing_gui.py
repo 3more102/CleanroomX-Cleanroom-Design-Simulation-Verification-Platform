@@ -778,3 +778,48 @@ def test_manual_panel_toggle_exits_focus_workspace_cleanly(app):
     assert app._paned_contains(app.workspace_panes, app.output_panel)
     assert workspace.inspector_visible()
 
+def test_status_bar_uses_human_readable_spatial_selection_context(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+    room = workspace.layout["rooms"][0]
+
+    assert workspace.select_item("room", room["id"], notify=True)
+    app.root.update()
+    room_status = app.selection_status_var.get()
+    assert room_status.startswith("Room: ")
+    assert str(room["name"]) in room_status
+    classification = str(room.get("classification") or "").strip()
+    if classification:
+        assert classification in room_status
+
+    if workspace.layout["devices"]:
+        device = workspace.layout["devices"][0]
+        assert workspace.select_item("device", device["id"], notify=True)
+        app.root.update()
+        device_status = app.selection_status_var.get()
+        assert str(device.get("name") or device["id"]) in device_status
+        assert str(device.get("type") or "device").replace("_", " ").title() in device_status
+
+    assert app.project.to_dict() == project_before
+
+
+def test_status_bar_tracks_live_viewport_mode_zoom_and_projection(app):
+    workspace = app.spatial_workspace
+    workspace.layout["view"]["zoom_2d"] = 1.25
+    workspace.layout["view"]["zoom_3d"] = 1.50
+    workspace.layout["view"]["projection_mode"] = "perspective"
+
+    workspace.set_workspace_mode("split")
+    app.root.update()
+
+    status = app.view_status_var.get()
+    assert status == "Split · 2D 125% · 3D 150% · Perspective"
+
+    workspace.set_workspace_mode("2d")
+    app.root.update()
+    assert app.view_status_var.get().startswith("2D · 2D 125%")
+
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    assert app.view_status_var.get().startswith("3D · 2D 125%")
+

@@ -175,3 +175,65 @@ def test_guarded_project_save_runs_caller_publication_guard_before_replace(tmp_p
 
     assert destination.read_bytes() == before
     assert guarded_targets == [destination.resolve(strict=False)]
+
+def test_gui_save_as_treats_tilde_dependency_as_project_relative(
+    monkeypatch,
+    tmp_path,
+):
+    project_dir = tmp_path / "project-dir"
+    project_dir.mkdir()
+    tilde_dir = project_dir / "~"
+    tilde_dir.mkdir()
+    dependency = tilde_dir / "hvac.json"
+    verification = project_dir / "verification.json"
+    verification.write_text("{}\n", encoding="utf-8")
+    dependency.write_text('{"engineering": "input"}\n', encoding="utf-8")
+    project_path = save_project_document(
+        project_dir / "project.cleanroomx.json",
+        ProjectDocument(
+            name="Tilde dependency",
+            analyses=[
+                AnalysisDocument(
+                    id="consistency",
+                    name="Consistency",
+                    kind="consistency",
+                    input={
+                        "verification_project": verification.name,
+                        "hvac_project": "~/hvac.json",
+                        "room_airflow_abs_tolerance_m3_h": 0.0,
+                        "require_same_room_set": True,
+                    },
+                )
+            ],
+            active_analysis_id="consistency",
+        ),
+    )
+    before = dependency.read_bytes()
+    app = _saved_app(project_path)
+    errors = []
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **_kwargs: str(dependency),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "save_project_document_guarded",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("project-relative tilde dependency must be rejected")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message, parent)),
+    )
+
+    app.save_project_as()
+
+    assert dependency.read_bytes() == before
+    assert app.status_var.value == "Save blocked"
+    assert errors
+    assert "external dependency" in errors[-1][1]
+

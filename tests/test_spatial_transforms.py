@@ -36,6 +36,7 @@ def _workspace() -> SpatialDesignWorkspace:
     workspace.redraw = lambda: None
     workspace._draw_3d = lambda: None
     workspace._persist = lambda message: None
+    workspace._status_setter = lambda message: None
     return workspace
 
 
@@ -235,3 +236,38 @@ def test_shift_drag_orbit_changes_camera_and_clamps_elevation():
     workspace._on_orbit_3d_down(_Event(0, 0))
     workspace._on_orbit_3d_drag(_Event(0, 1000))
     assert workspace.layout["view"]["elevation_deg"] == 5.0
+
+
+def test_3d_view_presets_are_deterministic():
+    workspace = _workspace()
+    workspace.layout["view"].update(
+        {
+            "azimuth_deg": 211.0,
+            "elevation_deg": 41.0,
+            "zoom_3d": 4.0,
+            "pan_3d_x": 55.0,
+            "pan_3d_y": -31.0,
+        }
+    )
+
+    workspace.set_3d_view_preset("top")
+    assert workspace.layout["view"]["azimuth_deg"] == 0.0
+    assert workspace.layout["view"]["elevation_deg"] == 90.0
+    assert workspace.layout["view"]["zoom_3d"] == 1.0
+    assert workspace.layout["view"]["pan_3d_x"] == 0.0
+    assert workspace.layout["view"]["pan_3d_y"] == 0.0
+
+    workspace.set_3d_view_preset("front")
+    assert workspace.layout["view"]["azimuth_deg"] == 0.0
+    assert workspace.layout["view"]["elevation_deg"] == 0.0
+
+    workspace.set_3d_view_preset("right")
+    assert workspace.layout["view"]["azimuth_deg"] == 90.0
+    assert workspace.layout["view"]["elevation_deg"] == 0.0
+
+    workspace.set_3d_view_preset("iso")
+    assert workspace.layout["view"]["azimuth_deg"] == 35.0
+    assert workspace.layout["view"]["elevation_deg"] == 28.0
+
+    with pytest.raises(ValueError, match="3D view preset"):
+        workspace.set_3d_view_preset("perspective")

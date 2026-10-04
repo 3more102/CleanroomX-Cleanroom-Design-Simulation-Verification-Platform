@@ -114,7 +114,11 @@ def test_revision_retention_preserves_artifact_changed_after_scan(
 
     def scan_then_change(project_path):
         scan = real_scan(project_path)
-        changed_stale.write_bytes(b"changed revision evidence after scan")
+        payload = json.loads(changed_stale.read_text(encoding="utf-8"))
+        changed_stale.write_text(
+            json.dumps(payload, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
         return scan
 
     monkeypatch.setattr(
@@ -130,8 +134,15 @@ def test_revision_retention_preserves_artifact_changed_after_scan(
     assert changed_stale.exists()
 
     after = real_scan(path)
-    assert [item.path for item in after.revisions] == [newest]
-    assert [item.path for item in after.issues] == [changed_stale]
+    assert [item.path for item in after.revisions] == [newest, changed_stale]
+    assert after.issues == ()
+    assert (
+        load_project_revision(
+            changed_stale,
+            expected_source_path=path,
+        ).source_sha256
+        == before.revisions[2].source_sha256
+    )
 
 
 def test_revision_envelope_budget_preserves_valid_large_project_name(

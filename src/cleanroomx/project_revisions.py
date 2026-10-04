@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import __version__
-from .persistence import atomic_write_bytes, atomic_write_text
+from .persistence import atomic_write_bytes, atomic_write_text, stable_file_sha256
 from .project import (
     PROJECT_FILE_MAX_BYTES,
     ProjectDocument,
@@ -67,6 +67,8 @@ class ProjectRevisionRecord:
     source_sha256: str
     source_size: int
     application_version: str
+    artifact_size: int
+    artifact_sha256: str
 
 
 @dataclass(frozen=True)
@@ -338,6 +340,10 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
                 artifact,
                 expected_source_path=source,
             )
+            artifact_stat, artifact_sha256 = stable_file_sha256(
+                artifact,
+                max_bytes=_project_revision_max_bytes(),
+            )
         except (OSError, ProjectRevisionError) as exc:
             issues.append(ProjectRevisionIssue(path=artifact, error=str(exc)))
             continue
@@ -349,6 +355,8 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
                 source_sha256=snapshot.source_sha256,
                 source_size=len(snapshot.source_bytes),
                 application_version=snapshot.application_version,
+                artifact_size=artifact_stat.st_size,
+                artifact_sha256=artifact_sha256,
             )
         )
     revisions.sort(
@@ -372,12 +380,24 @@ def _revision_record_is_verified(
         )
     except (OSError, ProjectRevisionError):
         return False
-    return (
+    if not (
         current.created_at_utc == revision.created_at_utc
         and current.project.name == revision.project_name
         and current.source_sha256 == revision.source_sha256
         and len(current.source_bytes) == revision.source_size
         and current.application_version == revision.application_version
+    ):
+        return False
+    try:
+        artifact_stat, artifact_sha256 = stable_file_sha256(
+            revision.path,
+            max_bytes=_project_revision_max_bytes(),
+        )
+    except OSError:
+        return False
+    return (
+        artifact_stat.st_size == revision.artifact_size
+        and artifact_sha256 == revision.artifact_sha256
     )
 
 

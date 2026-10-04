@@ -145,6 +145,48 @@ def test_revision_retention_preserves_artifact_changed_after_scan(
     )
 
 
+def test_revision_retention_preserves_replacement_at_prune_staging(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    replacement_bytes = {}
+    raced_paths: list[Path] = []
+    real_replace = revision_module.os.replace
+
+    def replace_with_race(source, destination):
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            not raced_paths
+            and source_path.name.endswith(".cleanroomx.revision.json")
+            and destination_path.name.endswith(".retention-stage")
+        ):
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
+            rewritten = json.dumps(payload, separators=(",", ":")) + "\n"
+            source_path.write_text(rewritten, encoding="utf-8")
+            replacement_bytes["payload"] = rewritten.encode("utf-8")
+            raced_paths.append(source_path)
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(revision_module.os, "replace", replace_with_race)
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert raced_paths
+    raced = raced_paths[0]
+    assert raced.read_bytes() == replacement_bytes["payload"]
+    assert not any(
+        item.name.endswith(".retention-stage")
+        for item in project_revision_dir(path).iterdir()
+    )
+
+
 def test_revision_envelope_budget_preserves_valid_large_project_name(
     tmp_path, monkeypatch
 ):

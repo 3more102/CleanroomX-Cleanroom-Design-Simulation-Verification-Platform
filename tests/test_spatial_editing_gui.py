@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import os
 import tkinter as tk
+from types import SimpleNamespace
 from tkinter import ttk
 
 import pytest
@@ -185,3 +186,64 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
     assert workspace._property_rows["room_id"].winfo_manager() == "pack"
     assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
     assert workspace._property_rows["classification"].winfo_manager() == ""
+
+
+def test_measurement_and_visibility_tools_are_display_only(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("split")
+    room = workspace.layout["rooms"][0]
+    other_rooms = workspace.layout["rooms"][1:]
+    before = copy.deepcopy(workspace.layout)
+
+    assert workspace.select_item("room", room["id"])
+    workspace.isolate_selected()
+    app.root.update()
+
+    assert workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    assert workspace.canvas_3d.find_withtag(f"room:{room['id']}")
+    for other in other_rooms:
+        assert not workspace.canvas_2d.find_withtag(f"room:{other['id']}")
+        assert not workspace.canvas_3d.find_withtag(f"room:{other['id']}")
+
+    workspace.show_all_objects()
+    app.root.update()
+    for other in other_rooms:
+        assert workspace.canvas_2d.find_withtag(f"room:{other['id']}")
+        assert workspace.canvas_3d.find_withtag(f"room:{other['id']}")
+
+    start = workspace._world_to_canvas(0.0, 0.0)
+    end = workspace._world_to_canvas(3.0, 4.0)
+    workspace._measure_mode.set(True)
+    workspace._toggle_measure_mode()
+    workspace._on_measure_click(SimpleNamespace(x=start[0], y=start[1]))
+    workspace._on_measure_click(SimpleNamespace(x=end[0], y=end[1]))
+    app.root.update()
+
+    assert workspace._measure_var.get() == "Distance: 5.000 m"
+    assert workspace.canvas_2d.find_withtag("measurement")
+    assert workspace.layout == before
+
+    workspace._measure_mode.set(False)
+    workspace._toggle_measure_mode()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag("measurement")
+
+
+def test_fit_selected_centers_the_selected_room_without_changing_geometry(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    assert workspace.select_item("room", room["id"])
+    geometry_before = copy.deepcopy(workspace.layout["rooms"])
+
+    workspace.layout["view"]["zoom_2d"] = 0.2
+    workspace.layout["view"]["pan_x"] = 800.0
+    workspace.layout["view"]["pan_y"] = -600.0
+    workspace.fit_selected()
+    app.root.update()
+
+    center_x = room["x_m"] + room["length_m"] / 2.0
+    center_y = room["y_m"] + room["width_m"] / 2.0
+    screen_center = workspace._world_to_canvas(center_x, center_y)
+    assert screen_center[0] == pytest.approx(workspace.canvas_2d.winfo_width() / 2.0)
+    assert screen_center[1] == pytest.approx(workspace.canvas_2d.winfo_height() / 2.0)
+    assert workspace.layout["rooms"] == geometry_before

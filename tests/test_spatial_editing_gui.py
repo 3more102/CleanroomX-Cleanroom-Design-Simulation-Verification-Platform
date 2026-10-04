@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import os
 import tkinter as tk
+from types import SimpleNamespace
 from tkinter import ttk
 
 import pytest
@@ -185,3 +186,93 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
     assert workspace._property_rows["room_id"].winfo_manager() == "pack"
     assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
     assert workspace._property_rows["classification"].winfo_manager() == ""
+
+
+def test_viewport_visibility_controls_keep_room_context(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    other = workspace.layout["rooms"][1]
+    room_devices = [
+        device for device in workspace.layout["devices"]
+        if device.get("room_id") == room["id"]
+    ]
+    workspace.select_item("room", room["id"])
+
+    workspace.isolate_selected()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    assert not workspace.canvas_2d.find_withtag(f"room:{other['id']}")
+    for device in room_devices:
+        assert workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+
+    workspace.hide_selected()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    for device in room_devices:
+        assert not workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+
+    workspace.show_all()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    assert workspace.canvas_2d.find_withtag(f"room:{other['id']}")
+
+
+@pytest.mark.parametrize(
+    ("preset", "azimuth", "elevation"),
+    [
+        ("top", 0.0, 89.0),
+        ("front", 0.0, 5.0),
+        ("right", 90.0, 5.0),
+        ("iso", 35.0, 28.0),
+    ],
+)
+def test_3d_camera_presets_are_deterministic(app, preset, azimuth, elevation):
+    workspace = app.spatial_workspace
+    workspace.set_3d_view_preset(preset)
+    assert workspace.layout["view"]["azimuth_deg"] == azimuth
+    assert workspace.layout["view"]["elevation_deg"] == elevation
+
+
+def test_distance_and_area_measurements_are_view_only(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    workspace.set_measurement_tool("distance")
+    start = workspace._world_to_canvas(0.0, 0.0)
+    end = workspace._world_to_canvas(3.0, 4.0)
+    workspace._on_left_down(SimpleNamespace(x=start[0], y=start[1]))
+    workspace._on_left_down(SimpleNamespace(x=end[0], y=end[1]))
+    app.root.update()
+    assert workspace._measurement_result_var.get() == "Distance 5.000 m"
+    assert workspace.canvas_2d.find_withtag("measurement")
+
+    workspace.set_measurement_tool("area")
+    start = workspace._world_to_canvas(1.0, 1.0)
+    end = workspace._world_to_canvas(3.0, 4.0)
+    workspace._on_left_down(SimpleNamespace(x=start[0], y=start[1]))
+    workspace._on_left_down(SimpleNamespace(x=end[0], y=end[1]))
+    app.root.update()
+    assert workspace._measurement_result_var.get() == "Area 6.000 m²"
+    assert workspace.canvas_2d.find_withtag("measurement")
+
+    workspace.clear_measurement()
+    assert workspace._tool_mode.get() == "select"
+    assert app.project.to_dict() == project_before
+
+
+def test_fit_selected_centers_selected_room_without_geometry_changes(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    geometry_before = copy.deepcopy(workspace.layout["rooms"])
+    workspace.select_item("room", room["id"])
+    workspace.fit_selected()
+    app.root.update()
+
+    bbox = workspace.canvas_2d.bbox(f"room:{room['id']}")
+    assert bbox is not None
+    width = workspace.canvas_2d.winfo_width()
+    height = workspace.canvas_2d.winfo_height()
+    x0, y0, x1, y1 = bbox
+    assert 0 <= x0 < x1 <= width
+    assert 0 <= y0 < y1 <= height
+    assert workspace.layout["rooms"] == geometry_before

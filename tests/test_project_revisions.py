@@ -329,6 +329,94 @@ def test_revision_retention_unrestored_stage_remains_discoverable(
     assert any(issue.path.read_bytes() == replacement for issue in scan.issues)
 
 
+def test_revision_retention_preserves_byte_identical_replacement_before_staging(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    _guarded_save(path, _project("v2"), history_limit=10)
+    _guarded_save(path, _project("v3"), history_limit=10)
+
+    baseline = revision_module.scan_project_revisions(path)
+    assert len(baseline.revisions) == 3
+    stale = baseline.revisions[-1].path
+    original_bytes = stale.read_bytes()
+    replacement = stale.with_name("byte-identical-replacement.tmp")
+    replacement.write_bytes(original_bytes)
+    replacement_identity = (
+        replacement.stat().st_dev,
+        replacement.stat().st_ino,
+    )
+
+    real_replace = revision_module.os.replace
+    replaced = False
+
+    def replace_at_stage(source, destination):
+        nonlocal replaced
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            not replaced
+            and source_path == stale
+            and destination_path.name.startswith(".retention-stage-")
+        ):
+            real_replace(replacement, stale)
+            replaced = True
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(revision_module.os, "replace", replace_at_stage)
+
+    revision_module.rotate_project_revisions(path, limit=1)
+
+    assert replaced is True
+    assert stale.exists()
+    assert stale.read_bytes() == original_bytes
+    if stale.stat().st_ino != 0 and replacement_identity[1] != 0:
+        assert (stale.stat().st_dev, stale.stat().st_ino) == replacement_identity
+
+
+def test_revision_scan_rejects_byte_identical_replacement_during_validation(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+    artifact = revision_module.scan_project_revisions(path).revisions[0].path
+
+    original_load = revision_module.load_project_revision
+    real_replace = revision_module.os.replace
+    replacement = artifact.with_name("scan-identical-replacement.tmp")
+    replacement.write_bytes(artifact.read_bytes())
+    replaced = False
+
+    def replace_during_load(candidate, *, expected_source_path=None):
+        nonlocal replaced
+        candidate_path = Path(candidate)
+        if candidate_path == artifact and not replaced:
+            real_replace(replacement, artifact)
+            replaced = True
+        return original_load(
+            candidate,
+            expected_source_path=expected_source_path,
+        )
+
+    monkeypatch.setattr(
+        revision_module,
+        "load_project_revision",
+        replace_during_load,
+    )
+
+    scan = revision_module.scan_project_revisions(path)
+
+    assert replaced is True
+    assert scan.revisions == ()
+    assert len(scan.issues) == 1
+    assert "changed while scanning" in scan.issues[0].error
+
+
 def test_revision_envelope_budget_preserves_valid_large_project_name(
     tmp_path, monkeypatch
 ):

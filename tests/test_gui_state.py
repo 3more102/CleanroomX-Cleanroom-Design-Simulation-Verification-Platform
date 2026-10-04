@@ -23,6 +23,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,
+        "workspace_mode": "split",
         "navigator_fraction": 0.20,
         "output_fraction": 0.72,
         "inspector_fraction": 0.78,
@@ -50,6 +51,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             ],
             "window_width": 640,
             "window_height": "broken",
+            "workspace_mode": "quad",
             "navigator_fraction": 0.31,
             "output_fraction": 2.0,
             "inspector_fraction": float("nan"),
@@ -68,6 +70,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     ]
     assert state["window_width"] == 1440
     assert state["window_height"] == 900
+    assert state["workspace_mode"] == "split"
     assert state["navigator_fraction"] == 0.31
     assert state["output_fraction"] == 0.72
     assert state["inspector_fraction"] == 0.78
@@ -89,6 +92,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             ],
             "window_width": 1680,
             "window_height": 1050,
+            "workspace_mode": "3d",
             "navigator_fraction": 0.25,
             "output_fraction": 0.67,
             "inspector_fraction": 0.81,
@@ -107,6 +111,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     ]
     assert payload["window_width"] == 1680
     assert payload["window_height"] == 1050
+    assert payload["workspace_mode"] == "3d"
     assert load_gui_layout_state(path) == payload
 
 

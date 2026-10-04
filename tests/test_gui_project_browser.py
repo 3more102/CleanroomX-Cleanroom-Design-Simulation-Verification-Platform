@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import os
 import tkinter as tk
+from tkinter import ttk
 
 import pytest
 
@@ -29,7 +30,7 @@ def app():
         root.destroy()
 
 
-def _all_tree_ids(tree: tk.ttk.Treeview, parent: str = "") -> list[str]:
+def _all_tree_ids(tree: ttk.Treeview, parent: str = "") -> list[str]:
     result: list[str] = []
     for iid in tree.get_children(parent):
         result.append(iid)

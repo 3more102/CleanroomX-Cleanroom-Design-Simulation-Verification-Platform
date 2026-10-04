@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import normalize_theme_name, theme_palette
 from .project_diagnostics import analyze_project_diagnostics
 
 
@@ -31,6 +32,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self._theme_name = "dark"
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
@@ -162,6 +164,36 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
 
+    def apply_theme(self, value: Any) -> None:
+        """Retheme diagnostics presentation without changing diagnostic results."""
+        self._theme_name = normalize_theme_name(value)
+        palette = theme_palette(self._theme_name)
+        self.tree.tag_configure(
+            "error",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure("warning", foreground=palette["warning"])
+        self.tree.tag_configure("info", foreground=palette["info"])
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+
+    @staticmethod
+    def _severity_label(value: Any) -> str:
+        severity = str(value or "info").strip().casefold()
+        if severity == "error":
+            return "✕ ERROR"
+        if severity == "warning":
+            return "⚠ WARNING"
+        if severity == "info":
+            return "ⓘ INFO"
+        return severity.upper()
+
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
         element = issue.get("element")
@@ -245,7 +277,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 "end",
                 iid=iid,
                 values=(
-                    severity.upper(),
+                    self._severity_label(severity),
                     issue.get("rule", ""),
                     issue.get("message", ""),
                     self._element_text(issue),
@@ -303,7 +335,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.delete("1.0", "end")
         if issue is not None:
             lines = [
-                f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
+                f"{self._severity_label(issue.get('severity', 'info'))} · {issue.get('rule', '')}",
                 str(issue.get("message", "")),
                 "",
                 "Suggested action:",

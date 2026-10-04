@@ -8,13 +8,14 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 2
+GUI_LAYOUT_STATE_VERSION = 3
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
     "theme": "light",
+    "recent_projects": [],
     "navigator_fraction": 0.20,
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
@@ -38,6 +39,24 @@ def _bounded_fraction(value: Any, default: float) -> float:
     return number
 
 
+def _normalize_recent_projects(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    recent: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        path = item.strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        recent.append(path)
+        if len(recent) >= 8:
+            break
+    return recent
+
+
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
@@ -59,6 +78,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
         "theme": normalize_theme_name(source.get("theme")),
+        "recent_projects": _normalize_recent_projects(
+            source.get("recent_projects")
+        ),
         "navigator_fraction": _bounded_fraction(
             source.get("navigator_fraction"),
             _DEFAULT_GUI_LAYOUT_STATE["navigator_fraction"],

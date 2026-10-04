@@ -62,6 +62,8 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
+from .gui_components import DiagnosticsPanel, VerificationPanel
+from .project_diagnostics import analyze_project_diagnostics
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
     _assert_project_publication_safe,
@@ -1318,6 +1320,11 @@ class CleanroomXApp:
             label="Verify & Persist Project Requirements",
             command=self.persist_project_requirements_verification,
         )
+        verify_menu.add_command(
+            label="Refresh Project Diagnostics",
+            accelerator="F8",
+            command=self._refresh_project_diagnostics,
+        )
         verify_menu.add_separator()
         verify_menu.add_command(
             label="Requirements Traceability...",
@@ -1387,6 +1394,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
         self.root.bind("<F5>", lambda event: self.run_current())
+        self.root.bind("<F8>", lambda event: self._refresh_project_diagnostics())
 
     def _build_layout(self) -> None:
         topbar = ttk.Frame(self.root, padding=(12, 10, 12, 7))
@@ -1557,10 +1565,31 @@ class CleanroomXApp:
         ).pack(side="right")
         self.output_notebook = ttk.Notebook(output_host)
         self.output_notebook.pack(fill="both", expand=True)
-        self.result_text = self._add_text_tab("Results", notebook=self.output_notebook)
+
+        self.problems_panel = DiagnosticsPanel(
+            self.output_notebook,
+            on_navigate=self._navigate_project_diagnostic,
+            on_refresh=self._refresh_project_diagnostics,
+        )
+        self.output_notebook.add(self.problems_panel, text="Problems")
+
         self.diagnostics_text = self._add_text_tab(
             "Diagnostics", notebook=self.output_notebook
         )
+
+        self.verification_panel = VerificationPanel(
+            self.output_notebook,
+            on_navigate_analysis=self._navigate_analysis,
+        )
+        self.output_notebook.add(self.verification_panel, text="Verification")
+
+        self.console_text = self._add_text_tab(
+            "Console", notebook=self.output_notebook
+        )
+        self.evidence_text = self._add_text_tab(
+            "Evidence", notebook=self.output_notebook
+        )
+        self.result_text = self._add_text_tab("Results", notebook=self.output_notebook)
         self.report_text = self._add_text_tab("Report", notebook=self.output_notebook)
 
         status_bar = ttk.Frame(self.root, padding=(8, 4))
@@ -1599,6 +1628,105 @@ class CleanroomXApp:
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
 
+    def _refresh_project_diagnostics(self) -> dict | None:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return None
+        try:
+            report = analyze_project_diagnostics(
+                self.project,
+                base_dir=self._base_dir(),
+            )
+        except Exception as exc:
+            panel.set_error(str(exc))
+            verification_panel = getattr(self, "verification_panel", None)
+            if verification_panel is not None:
+                verification_panel.summary_var.set(
+                    f"Verification state unavailable: {exc}"
+                )
+            return None
+
+        self._project_diagnostics_report = report
+        panel.set_report(report)
+        verification_panel = getattr(self, "verification_panel", None)
+        if verification_panel is not None:
+            verification_panel.set_report(report)
+
+        evidence_text = getattr(self, "evidence_text", None)
+        if evidence_text is not None:
+            evidence = {
+                "verification_history": report.get("verification_history", {}),
+                "verification_currency": report.get("verification_currency", {}),
+            }
+            self._set_text(
+                evidence_text,
+                json.dumps(
+                    evidence,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            )
+        return report
+
+    def _navigate_analysis(self, analysis_id: str) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(analysis_id):
+            return False
+        previous_guard = self._selection_guard
+        self._selection_guard = True
+        try:
+            tree.selection_set(analysis_id)
+            tree.focus(analysis_id)
+            tree.see(analysis_id)
+        finally:
+            self._selection_guard = previous_guard
+        self._on_analysis_selected()
+        if hasattr(self, "notebook"):
+            self.notebook.select(1)
+        analysis = self._editor_analysis()
+        if analysis is not None:
+            self.selection_status_var.set(f"Selected: {analysis.name}")
+        return True
+
+    def _navigate_project_diagnostic(self, issue: dict) -> bool:
+        element = issue.get("element") if isinstance(issue, dict) else None
+        if not isinstance(element, dict):
+            element = {}
+        element_type = str(element.get("type") or "project")
+        element_id = str(element.get("id") or "")
+        rule = str(issue.get("rule") or "diagnostic")
+
+        if element_type == "analysis" and element_id:
+            if self._navigate_analysis(element_id):
+                self.status_var.set(f"Diagnostic {rule}: opened analysis {element_id}")
+                return True
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None and element_id:
+            if element_type == "room":
+                candidates = ("room",)
+            elif element_type == "device":
+                candidates = ("device",)
+            elif element_type == "spatial_element":
+                candidates = ("room", "device")
+            else:
+                candidates = ()
+            for kind in candidates:
+                if workspace.select_item(kind, element_id, notify=True):
+                    self._activate_spatial_workspace()
+                    workspace.fit_selected()
+                    self.status_var.set(
+                        f"Diagnostic {rule}: opened {kind} {element_id}"
+                    )
+                    return True
+
+        self.status_var.set(
+            f"Diagnostic {rule}: no directly navigable model object is attached"
+        )
+        return False
+
     def _add_text_tab(
         self,
         title: str,
@@ -1621,7 +1749,12 @@ class CleanroomXApp:
 
     def _apply_wrap_setting(self) -> None:
         wrap = "word" if self.wrap_outputs_var.get() else "none"
-        for widget in (self.result_text, self.report_text, self.diagnostics_text):
+        widgets = [self.result_text, self.report_text, self.diagnostics_text]
+        for name in ("console_text", "evidence_text"):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widgets.append(widget)
+        for widget in widgets:
             widget.configure(wrap=wrap)
 
     def _set_text(self, widget: tk.Text, value: str) -> None:
@@ -2651,6 +2784,7 @@ class CleanroomXApp:
             self.refresh_structure(silent=True)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+        self._refresh_project_diagnostics()
 
     def _refresh_spatial_navigator(self) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -2832,6 +2966,7 @@ class CleanroomXApp:
     def _on_spatial_changed(self) -> None:
         self._update_title()
         self._refresh_spatial_navigator()
+        self._refresh_project_diagnostics()
 
     def _select_ifc_source(self, *, title: str) -> Path | None:
         path = filedialog.askopenfilename(
@@ -4474,12 +4609,23 @@ class CleanroomXApp:
             self.diagnostics_text,
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
+        console_text = getattr(self, "console_text", None)
+        if console_text is not None:
+            self._set_text(
+                console_text,
+                (
+                    f"Analysis: {run.title}\n"
+                    f"Kind: {run.kind}\n"
+                    f"Status: {run.status}\n"
+                ),
+            )
         self._draw_plot()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.redraw()
             self.spatial_workspace._load_property_panel()
-        if select_results:
-            self.notebook.select(1)
+        self._refresh_project_diagnostics()
+        if select_results and hasattr(self, "output_notebook"):
+            self.output_notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

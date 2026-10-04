@@ -36,6 +36,9 @@ def _workspace() -> SpatialDesignWorkspace:
     workspace.redraw = lambda: None
     workspace._draw_3d = lambda: None
     workspace._persist = lambda message: None
+    workspace._status_setter = lambda message: None
+    workspace._hidden_item_keys = set()
+    workspace._isolated_item_key = None
     return workspace
 
 
@@ -235,3 +238,71 @@ def test_shift_drag_orbit_changes_camera_and_clamps_elevation():
     workspace._on_orbit_3d_down(_Event(0, 0))
     workspace._on_orbit_3d_drag(_Event(0, 1000))
     assert workspace.layout["view"]["elevation_deg"] == 5.0
+
+
+
+def test_3d_view_presets_cover_standard_engineering_views():
+    workspace = _workspace()
+    expected = {
+        "top": (0.0, 90.0),
+        "front": (0.0, 0.0),
+        "back": (180.0, 0.0),
+        "left": (270.0, 0.0),
+        "right": (90.0, 0.0),
+        "iso": (35.0, 28.0),
+    }
+
+    for preset, (azimuth, elevation) in expected.items():
+        workspace.layout["view"].update(
+            {
+                "azimuth_deg": 211.0,
+                "elevation_deg": 41.0,
+                "zoom_3d": 4.0,
+                "pan_3d_x": 55.0,
+                "pan_3d_y": -31.0,
+            }
+        )
+        workspace.set_3d_view_preset(preset)
+        assert workspace.layout["view"]["azimuth_deg"] == azimuth
+        assert workspace.layout["view"]["elevation_deg"] == elevation
+        assert workspace.layout["view"]["zoom_3d"] == 1.0
+        assert workspace.layout["view"]["pan_3d_x"] == 0.0
+        assert workspace.layout["view"]["pan_3d_y"] == 0.0
+
+    with pytest.raises(ValueError, match="3D view preset"):
+        workspace.set_3d_view_preset("perspective")
+
+
+def test_fit_3d_fits_visible_model_without_touching_2d_camera():
+    workspace = _workspace()
+    workspace.layout["rooms"] = [
+        {
+            "id": "large-room",
+            "name": "Large Room",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 40.0,
+            "width_m": 20.0,
+            "height_m": 4.0,
+            "floor_elevation_m": 1.5,
+        }
+    ]
+    workspace.layout["view"].update(
+        {"zoom_2d": 2.5, "pan_x": 42.0, "pan_y": -19.0}
+    )
+    before_2d = (
+        workspace.layout["view"]["zoom_2d"],
+        workspace.layout["view"]["pan_x"],
+        workspace.layout["view"]["pan_y"],
+    )
+
+    workspace.fit_3d()
+
+    assert workspace.layout["view"]["zoom_3d"] < 1.0
+    assert math.isfinite(workspace.layout["view"]["pan_3d_x"])
+    assert math.isfinite(workspace.layout["view"]["pan_3d_y"])
+    assert (
+        workspace.layout["view"]["zoom_2d"],
+        workspace.layout["view"]["pan_x"],
+        workspace.layout["view"]["pan_y"],
+    ) == before_2d

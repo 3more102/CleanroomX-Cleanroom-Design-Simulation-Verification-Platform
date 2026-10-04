@@ -272,6 +272,104 @@ def test_quarantine_retention_is_bounded(tmp_path):
     assert len(list(quarantine_dir.glob("*.quarantined.manifest.json"))) == 2
     assert len(list(quarantine_dir.glob("*.quarantined"))) == 2
 
+@pytest.mark.parametrize("malformation", ("boolean-version", "missing-reason"))
+def test_quarantine_retention_requires_complete_typed_manifest(
+    tmp_path, malformation
+):
+    source = tmp_path / f"{malformation}.recovery.json"
+    source.write_bytes(b"broken forensic bytes")
+    quarantined = quarantine_recovery_artifact(
+        source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+    manifest = json.loads(
+        quarantined.manifest_path.read_text(encoding="utf-8")
+    )
+    if malformation == "boolean-version":
+        manifest["schema_version"] = True
+    else:
+        del manifest["reason"]
+    quarantined.manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        autosave_module._quarantine_pair_revision(
+            quarantined.manifest_path,
+            quarantined.path,
+        )
+        is None
+    )
+
+
+def test_quarantine_retention_stages_exact_verified_revision_before_pruning(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "raced.recovery.json"
+    source.write_bytes(b"original forensic bytes")
+    quarantined = quarantine_recovery_artifact(
+        source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+    expected = autosave_module._quarantine_pair_revision(
+        quarantined.manifest_path,
+        quarantined.path,
+    )
+    assert expected is not None
+
+    replacement = b"concurrent replacement forensic bytes"
+    real_replace = autosave_module.os.replace
+    raced = False
+
+    def replace_after_revision_selection(source_path, destination_path):
+        nonlocal raced
+        source_path = autosave_module.Path(source_path)
+        destination_path = autosave_module.Path(destination_path)
+        if (
+            not raced
+            and source_path == quarantined.path
+            and destination_path.parent.name.startswith(".retention-prune-")
+        ):
+            raced = True
+            quarantined.path.write_bytes(replacement)
+            manifest = json.loads(
+                quarantined.manifest_path.read_text(encoding="utf-8")
+            )
+            manifest["size_bytes"] = len(replacement)
+            manifest["sha256"] = sha256(replacement).hexdigest()
+            quarantined.manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        return real_replace(source_path, destination_path)
+
+    monkeypatch.setattr(autosave_module.os, "replace", replace_after_revision_selection)
+
+    autosave_module._prune_verified_quarantine_pair(
+        quarantined.path.parent,
+        quarantined.manifest_path,
+        quarantined.path,
+        expected,
+    )
+
+    assert raced is True
+    assert quarantined.path.read_bytes() == replacement
+    assert quarantined.manifest_path.exists()
+    assert (
+        autosave_module._quarantine_pair_revision(
+            quarantined.manifest_path,
+            quarantined.path,
+        )
+        is not None
+    )
+    assert list(quarantined.path.parent.glob(".retention-prune-*")) == []
+
+
 def test_quarantine_retention_preserves_unverified_forensic_pair(tmp_path):
     first_source = tmp_path / "broken-first.recovery.json"
     first_source.write_bytes(b"broken-first")

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 
 from .calculations import decay_concentration, recovery_time_minutes
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input
 from .io import load_project, load_room
 from .project_verification import verify_project
 from .verification import verify_room
@@ -51,24 +51,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@cli_error_boundary("cleanroomx")
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "verify":
-        report = verify_room(load_room(args.file))
-        print(json.dumps(report.to_dict(), indent=2))
+        report = verify_room(load_cli_input(load_room, args.file))
+        print(dumps_strict_json(report.to_dict()))
         accepted = report.verified if args.require_verified else report.passed
         return 0 if accepted else 2
     if args.command == "verify-project":
-        report = verify_project(load_project(args.file))
-        print(json.dumps(report.to_dict(), indent=2))
+        report = verify_project(load_cli_input(load_project, args.file))
+        print(dumps_strict_json(report.to_dict()))
         accepted = report.verified if args.require_verified else report.passed
         return 0 if accepted else 2
     if args.command == "decay":
         value = decay_concentration(args.initial, args.ach, args.minutes, args.efficiency)
-        print(json.dumps({"concentration_per_m3": value}, indent=2))
+        print(dumps_strict_json({"concentration_per_m3": value}))
         return 0
     value = recovery_time_minutes(args.initial, args.target, args.ach, args.efficiency)
-    print(json.dumps({"recovery_time_minutes": value}, indent=2))
+    print(dumps_strict_json({"recovery_time_minutes": value}))
     return 0
 
 

@@ -742,6 +742,38 @@ def test_guided_workflow_analysis_selector_uses_canonical_selection(app):
     assert combo.current() == target_index
 
 
+def test_guided_workflow_analysis_selector_disambiguates_same_kind_duplicates(app):
+    analyses = list(app.project.analyses)
+    assert len(analyses) >= 2
+    first, second = analyses[:2]
+    second.name = first.name
+    second.kind = first.kind
+
+    app._refresh_workflow_analysis_selector(select_id=first.id)
+
+    values = tuple(app.workflow_analysis_combo.cget("values"))
+    assert values[0] != values[1]
+    assert values[0].endswith("#1")
+    assert values[1].endswith("#2")
+
+
+def test_rename_analysis_refreshes_guided_selector_labels(app, monkeypatch):
+    analysis = app._current_analysis()
+    assert analysis is not None
+    monkeypatch.setattr(
+        "cleanroomx.gui.simpledialog.askstring",
+        lambda *args, **kwargs: "Renamed analysis",
+    )
+
+    app.rename_analysis()
+    app.root.update()
+
+    values = tuple(app.workflow_analysis_combo.cget("values"))
+    index = [item.id for item in app.project.analyses].index(analysis.id)
+    assert values[index] == "Renamed analysis"
+    assert app.workflow_analysis_var.get() == "Renamed analysis"
+
+
 def test_guided_save_and_verify_saves_dirty_project_before_verification(
     app, monkeypatch, tmp_path
 ):

@@ -70,6 +70,7 @@ class ProjectRevisionRecord:
     application_version: str
     artifact_size: int
     artifact_sha256: str
+    artifact_identity: tuple[str, int, int]
 
 
 @dataclass(frozen=True)
@@ -328,6 +329,25 @@ def load_project_revision(
     )
 
 
+def _revision_artifact_identity(
+    metadata: os.stat_result,
+) -> tuple[str, int, int] | None:
+    """Return rename-stable artifact identity, or None when unavailable."""
+    inode = int(metadata.st_ino)
+    if inode != 0:
+        return ("file-id", int(metadata.st_dev), inode)
+    if os.name == "nt":
+        birthtime_ns = getattr(metadata, "st_birthtime_ns", None)
+        if birthtime_ns is not None:
+            return ("windows-birthtime", 0, int(birthtime_ns))
+        # On Windows versions without st_birthtime_ns, st_ctime_ns is creation
+        # time and remains stable across a same-volume rename.
+        return ("windows-creation-time", 0, int(metadata.st_ctime_ns))
+    # Destructive retention must fail closed when the filesystem exposes no
+    # stable identity that survives rename.
+    return None
+
+
 def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
     source = _normalized_path(project_path)
     directory = project_revision_dir(source)
@@ -349,8 +369,13 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
                 artifact,
                 max_bytes=_project_revision_max_bytes(),
             )
+            artifact_identity_before = _revision_artifact_identity(artifact_before)
+            artifact_identity_after = _revision_artifact_identity(artifact_after)
             if (
-                artifact_before.st_size != artifact_after.st_size
+                artifact_identity_before is None
+                or artifact_identity_after is None
+                or artifact_identity_before != artifact_identity_after
+                or artifact_before.st_size != artifact_after.st_size
                 or artifact_sha256_before != artifact_sha256_after
             ):
                 raise ProjectRevisionError(
@@ -369,6 +394,7 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
                 application_version=snapshot.application_version,
                 artifact_size=artifact_after.st_size,
                 artifact_sha256=artifact_sha256_after,
+                artifact_identity=artifact_identity_after,
             )
         )
     revisions.sort(
@@ -409,8 +435,11 @@ def _revision_record_is_verified(
         )
     except OSError:
         return False
+    artifact_identity = _revision_artifact_identity(artifact_stat)
     return (
-        artifact_stat.st_size == revision.artifact_size
+        artifact_identity is not None
+        and artifact_identity == revision.artifact_identity
+        and artifact_stat.st_size == revision.artifact_size
         and artifact_sha256 == revision.artifact_sha256
     )
 

@@ -1749,6 +1749,35 @@ class CleanroomXApp:
             width=3,
             command=lambda: self.navigator_filter_var.set(""),
         ).pack(side="left", padx=(4, 0))
+
+        navigator_actions = ttk.Frame(navigator)
+        navigator_actions.pack(fill="x", pady=(0, 6))
+        self.navigator_add_analysis_button = ttk.Button(
+            navigator_actions,
+            text="+ Analysis",
+            style="CX.Compact.TButton",
+            command=lambda: self.add_analysis(),
+        )
+        self.navigator_add_analysis_button.pack(
+            side="left", fill="x", expand=True, padx=(0, 2)
+        )
+        self.navigator_add_room_button = ttk.Button(
+            navigator_actions,
+            text="+ Room",
+            style="CX.Compact.TButton",
+            command=lambda: self.spatial_workspace.add_room(),
+        )
+        self.navigator_add_room_button.pack(
+            side="left", fill="x", expand=True, padx=(2, 0)
+        )
+        self.navigator_import_ifc_button = ttk.Button(
+            navigator,
+            text="Import IFC spatial layout…",
+            style="CX.Compact.TButton",
+            command=lambda: self.import_ifc_spatial_layout(),
+        )
+        self.navigator_import_ifc_button.pack(fill="x", pady=(0, 6))
+
         self.analysis_tree = ttk.Treeview(
             navigator,
             columns=("kind",),

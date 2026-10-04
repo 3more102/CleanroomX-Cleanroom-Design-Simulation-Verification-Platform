@@ -199,6 +199,27 @@ def test_project_batch_cli_cancel_file_emits_report_without_running_analysis(tmp
     assert payload["analyses"] == []
 
 
+def test_project_batch_cli_refuses_cancel_file_as_output(tmp_path, capsys):
+    project_path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
+    cancel_path = tmp_path / "stop.batch"
+    cancel_path.write_text("stop\n", encoding="utf-8")
+    before = cancel_path.read_bytes()
+
+    code = main(
+        [
+            str(project_path),
+            "--cancel-file",
+            str(cancel_path),
+            "--output",
+            str(cancel_path),
+        ]
+    )
+
+    assert code == 2
+    assert cancel_path.read_bytes() == before
+    assert "output path must be different from the cancel file" in capsys.readouterr().err
+
+
 def test_project_batch_stops_scheduling_when_source_changes_mid_run(tmp_path, monkeypatch):
     path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
     original_run_analysis = project_batch.run_analysis
@@ -458,6 +479,45 @@ def test_project_batch_cli_rechecks_dependency_alias_before_publication(
     assert output_path.read_bytes() == before
 
 
+def test_project_batch_cli_rechecks_cancel_file_alias_before_publication(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    cancel_path = tmp_path / "stop.batch"
+    output_path = tmp_path / "batch-result.json"
+    original_run = project_batch._run_loaded_project
+
+    def create_cancel_alias_before_publication(*args, **kwargs):
+        batch = original_run(*args, **kwargs)
+        cancel_path.write_text("stop\n", encoding="utf-8")
+        output_path.hardlink_to(cancel_path)
+        return batch
+
+    monkeypatch.setattr(
+        project_batch,
+        "_run_loaded_project",
+        create_cancel_alias_before_publication,
+    )
+
+    code = main(
+        [
+            str(project_path),
+            "--cancel-file",
+            str(cancel_path),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert code == 2
+    assert cancel_path.read_text(encoding="utf-8") == "stop\n"
+    assert output_path.read_text(encoding="utf-8") == "stop\n"
+    assert "output path must be different from the cancel file" in capsys.readouterr().err
+
+
 def test_project_batch_cli_rechecks_source_revision_before_publication(
     tmp_path, monkeypatch, capsys
 ):
@@ -579,6 +639,53 @@ def test_project_batch_cli_rechecks_dependency_alias_at_atomic_replace_boundary(
     assert code == 2
     assert dependency.read_bytes() == before
     assert output_path.read_bytes() == before
+
+
+def test_project_batch_cli_rechecks_cancel_file_alias_at_atomic_replace_boundary(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    cancel_path = tmp_path / "stop.batch"
+    output_path = tmp_path / "batch-result.json"
+    real_atomic_write_text = project_batch.atomic_write_text
+
+    def create_cancel_alias_after_staging(path, text, *, before_replace=None):
+        assert before_replace is not None
+
+        def race_then_validate():
+            cancel_path.write_text("stop\n", encoding="utf-8")
+            output_path.hardlink_to(cancel_path)
+            before_replace()
+
+        return real_atomic_write_text(
+            path,
+            text,
+            before_replace=race_then_validate,
+        )
+
+    monkeypatch.setattr(
+        project_batch,
+        "atomic_write_text",
+        create_cancel_alias_after_staging,
+    )
+
+    code = main(
+        [
+            str(project_path),
+            "--cancel-file",
+            str(cancel_path),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert code == 2
+    assert cancel_path.read_text(encoding="utf-8") == "stop\n"
+    assert output_path.read_text(encoding="utf-8") == "stop\n"
+    assert "output path must be different from the cancel file" in capsys.readouterr().err
 
 
 def test_project_batch_cli_rechecks_source_revision_at_atomic_replace_boundary(

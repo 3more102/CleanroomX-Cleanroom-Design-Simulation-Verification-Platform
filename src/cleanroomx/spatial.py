@@ -1260,6 +1260,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
         self._resize_room_id: str | None = None
+        # View-only interaction state. These never mutate the canonical project model.
+        self._hovered: _Hit | None = None
+        self._hidden_items: set[tuple[str, str]] = set()
+        self._isolated_item: _Hit | None = None
 
         self._build()
         self.refresh()
@@ -1400,6 +1404,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         measure_menu.add_separator()
         measure_menu.add_command(label="Clear", command=self.clear_measurement)
         measure_button.pack(side="left", padx=(8, 2))
+        visibility_button = ttk.Menubutton(viewbar, text="Visibility")
+        visibility_menu = tk.Menu(visibility_button, tearoff=False)
+        visibility_button.configure(menu=visibility_menu)
+        visibility_menu.add_command(
+            label="Isolate Selected", command=self.isolate_selected
+        )
+        visibility_menu.add_command(
+            label="Hide Selected", command=self.hide_selected
+        )
+        visibility_menu.add_separator()
+        visibility_menu.add_command(label="Show All", command=self.show_all_items)
+        visibility_button.pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._measure_var).pack(side="left", padx=(4, 2))
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
@@ -1547,13 +1563,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
         self.canvas_2d.bind("<Motion>", self._on_motion)
+        self.canvas_3d.bind("<Motion>", self._on_motion_3d)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
         self.canvas_2d.bind("<B1-Motion>", self._on_left_drag)
         self.canvas_2d.bind("<ButtonRelease-1>", self._on_left_up)
         self.canvas_2d.bind("<Button-2>", self._on_pan_down)
         self.canvas_2d.bind("<B2-Motion>", self._on_pan_drag)
-        self.canvas_2d.bind("<Button-3>", self._on_pan_down)
-        self.canvas_2d.bind("<B3-Motion>", self._on_pan_drag)
+        self.canvas_2d.bind("<Button-3>", self._on_context_menu_2d)
+        self.canvas_2d.bind("<Shift-Button-3>", self._on_pan_down)
+        self.canvas_2d.bind("<Shift-B3-Motion>", self._on_pan_drag)
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
         self.canvas_2d.bind(
             "<Button-4>", lambda event: self._zoom_at(1.1, event.x, event.y)
@@ -1569,8 +1587,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
-        self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
-        self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
+        self.canvas_3d.bind("<Button-3>", self._on_context_menu_3d)
+        self.canvas_3d.bind("<Shift-Button-3>", self._on_pan_3d_down)
+        self.canvas_3d.bind("<Shift-B3-Motion>", self._on_pan_3d_drag)
         for canvas in (self.canvas_2d, self.canvas_3d):
             canvas.bind("<Control-z>", self._on_undo_shortcut)
             canvas.bind("<Control-y>", self._on_redo_shortcut)
@@ -1621,6 +1640,67 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self.selected is None or self._on_selection_change is None:
             return
         self._on_selection_change(self.selected.kind, self.selected.item_id)
+
+    def _is_item_visible(self, kind: str, item: dict) -> bool:
+        item_id = str(item.get("id") or "")
+        if (kind, item_id) in self._hidden_items:
+            return False
+        if kind == "device":
+            room_id = str(item.get("room_id") or "")
+            if room_id and ("room", room_id) in self._hidden_items:
+                return False
+
+        isolated = self._isolated_item
+        if isolated is None:
+            return True
+        if kind == isolated.kind and item_id == isolated.item_id:
+            return True
+        if isolated.kind == "room" and kind == "device":
+            return str(item.get("room_id") or "") == isolated.item_id
+        if isolated.kind == "device" and kind == "room":
+            device = next(
+                (
+                    candidate
+                    for candidate in self.layout["devices"]
+                    if str(candidate.get("id") or "") == isolated.item_id
+                ),
+                None,
+            )
+            return (
+                device is not None
+                and item_id == str(device.get("room_id") or "")
+            )
+        return False
+
+    def hide_selected(self) -> bool:
+        if self.selected is None:
+            self._status_setter("Hide selected: no spatial object selected")
+            return False
+        self._hidden_items.add((self.selected.kind, self.selected.item_id))
+        if self._isolated_item == self.selected:
+            self._isolated_item = None
+        self._hovered = None
+        self._status_setter("Selected object hidden in the current view")
+        self.redraw()
+        return True
+
+    def isolate_selected(self) -> bool:
+        if self.selected is None:
+            self._status_setter("Isolate selected: no spatial object selected")
+            return False
+        self._hidden_items.discard((self.selected.kind, self.selected.item_id))
+        self._isolated_item = self.selected
+        self._hovered = None
+        self._status_setter("Selected object isolated in the current view")
+        self.redraw()
+        return True
+
+    def show_all_items(self) -> None:
+        self._hidden_items.clear()
+        self._isolated_item = None
+        self._hovered = None
+        self._status_setter("All spatial objects visible")
+        self.redraw()
 
     def refresh(self) -> None:
         # A refresh may replace the canonical project/layout beneath an active
@@ -2566,16 +2646,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         warning_ids = self._warning_item_ids()
 
         for room in (self.layout["rooms"] if self._show_rooms.get() else []):
+            if not self._is_item_visible("room", room):
+                continue
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(
                 room["x_m"] + room["length_m"],
                 room["y_m"] + room["width_m"],
             )
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hovered == _Hit("room", room["id"])
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else (
+                    "#0284c7"
+                    if hovered
+                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                )
             )
             fill = (
                 overlay_by_room[room["id"]]["fill"]
@@ -2652,12 +2739,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 "transfer": "T",
             }
             for device in self.layout["devices"]:
+                if not self._is_item_visible("device", device):
+                    continue
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
                 selected = self.selected == _Hit("device", device["id"])
+                hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
                     "#c0392b"
                     if selected
-                    else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                    else (
+                        "#0284c7"
+                        if hovered
+                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                    )
                 )
                 tag = f"device:{device['id']}"
                 if device["type"] in {"door", "window", "opening", "transfer"}:
@@ -2760,7 +2854,11 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
-            self.layout["rooms"],
+            [
+                room
+                for room in self.layout["rooms"]
+                if self._is_item_visible("room", room)
+            ],
             key=lambda room: (
                 (room["x_m"] - cx) * math.sin(az)
                 + (room["y_m"] - cy) * math.cos(az)
@@ -2791,10 +2889,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else "#dfe7ef"
             )
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hovered == _Hit("room", room["id"])
             outline = (
                 "#7dd3fc"
                 if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                else (
+                    "#38bdf8"
+                    if hovered
+                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                )
             )
             tag = f"room:{room['id']}"
             canvas.create_polygon(
@@ -2830,6 +2933,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._show_devices.get():
             room_by_id = {room["id"]: room for room in self.layout["rooms"]}
             for device in self.layout["devices"]:
+                if not self._is_item_visible("device", device):
+                    continue
                 room = room_by_id.get(str(device.get("room_id") or ""))
                 room_floor = (
                     room.get("floor_elevation_m", floor_z)
@@ -2838,10 +2943,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
                 tag = f"device:{device['id']}"
                 selected = self.selected == _Hit("device", device["id"])
+                hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
                     "#ffffff"
                     if selected
-                    else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+                    else (
+                        "#38bdf8"
+                        if hovered
+                        else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+                    )
                 )
                 if device["type"] in {"door", "window", "opening", "transfer"}:
                     bottom = self._project_3d(
@@ -2880,6 +2990,53 @@ class SpatialDesignWorkspace(ttk.Frame):
             if tag.startswith("device:"):
                 return _Hit("device", tag.split(":", 1)[1])
         return None
+
+    def _hit_at(self, canvas: tk.Canvas, x: int, y: int) -> _Hit | None:
+        for item_id in reversed(
+            canvas.find_overlapping(x - 2, y - 2, x + 2, y + 2)
+        ):
+            hit = self._parse_hit(canvas.gettags(item_id))
+            if hit is not None:
+                return hit
+        return None
+
+    def _show_context_menu(self, canvas: tk.Canvas, event: tk.Event) -> str:
+        hit = self._hit_at(canvas, event.x, event.y)
+        if hit is not None:
+            self.selected = hit
+            self._load_property_panel()
+            self._notify_selection_change()
+            self.redraw()
+
+        menu = tk.Menu(self, tearoff=False)
+        menu.add_command(
+            label="Fit Selected",
+            command=self.fit_selected,
+            state="normal" if self.selected is not None else "disabled",
+        )
+        menu.add_command(
+            label="Isolate Selected",
+            command=self.isolate_selected,
+            state="normal" if self.selected is not None else "disabled",
+        )
+        menu.add_command(
+            label="Hide Selected",
+            command=self.hide_selected,
+            state="normal" if self.selected is not None else "disabled",
+        )
+        menu.add_separator()
+        menu.add_command(label="Show All", command=self.show_all_items)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    def _on_context_menu_2d(self, event: tk.Event) -> str:
+        return self._show_context_menu(self.canvas_2d, event)
+
+    def _on_context_menu_3d(self, event: tk.Event) -> str:
+        return self._show_context_menu(self.canvas_3d, event)
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
@@ -3018,6 +3175,16 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        hovered = self._hit_at(self.canvas_2d, event.x, event.y)
+        if hovered != self._hovered:
+            self._hovered = hovered
+            self.redraw()
+
+    def _on_motion_3d(self, event: tk.Event) -> None:
+        hovered = self._hit_at(self.canvas_3d, event.x, event.y)
+        if hovered != self._hovered:
+            self._hovered = hovered
+            self.redraw()
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

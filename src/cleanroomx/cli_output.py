@@ -54,7 +54,9 @@ def resolve_cli_path(
     try:
         return Path(path).expanduser().resolve(strict=False)
     except (OSError, RuntimeError) as exc:
-        raise CliInputError(\n            f"could not resolve {label} path: {path}: {exc}"\n        ) from exc
+        raise CliInputError(
+            f"could not resolve {label} path: {path}: {exc}"
+        ) from exc
 
 
 def load_cli_input(

@@ -1646,40 +1646,6 @@ class CleanroomXApp:
         )
         self.toolbar_fit_button.pack(side="left", padx=1)
 
-        modebar = ttk.Frame(
-            self.root,
-            style="CX.Toolbar.TFrame",
-            padding=(10, 3),
-        )
-        self.modebar = modebar
-        modebar.pack(fill="x", padx=10, pady=(0, 4))
-        ttk.Label(
-            modebar,
-            text="WORKSPACE",
-            style="CX.Section.TLabel",
-        ).pack(side="left", padx=(0, 8))
-        ttk.Separator(modebar, orient="vertical").pack(
-            side="left", fill="y", padx=(0, 6)
-        )
-        self.workspace_mode_buttons: dict[str, ttk.Button] = {}
-        for key, label in (
-            ("design", "DESIGN"),
-            ("analyze", "ANALYZE"),
-            ("verify", "VERIFY"),
-            ("evidence", "EVIDENCE"),
-            ("release", "RELEASE"),
-        ):
-            button = ttk.Button(
-                modebar,
-                text=label,
-                width=10,
-                style="CX.Mode.TButton",
-                command=lambda selected=key: self._activate_primary_workspace(selected),
-            )
-            button.pack(side="left", padx=1)
-            self.workspace_mode_buttons[key] = button
-        self._set_primary_workspace_mode("design")
-
         workflowbar = ttk.Frame(
             self.root,
             style="CX.Toolbar.TFrame",
@@ -1769,6 +1735,38 @@ class CleanroomXApp:
             command=self.hide_navigator_panel,
         )
         self.navigator_close_button.pack(side="right")
+
+        modebar = ttk.Frame(navigator, style="CX.Panel.TFrame")
+        self.modebar = modebar
+        modebar.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            modebar,
+            text="WORKSPACE",
+            style="CX.Section.TLabel",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 3))
+        self.workspace_mode_buttons: dict[str, ttk.Button] = {}
+        for index, (key, label) in enumerate((
+            ("design", "DESIGN"),
+            ("analyze", "ANALYZE"),
+            ("verify", "VERIFY"),
+            ("evidence", "EVIDENCE"),
+            ("release", "RELEASE"),
+        )):
+            row = 1 + index // 3
+            column = index % 3
+            button = ttk.Button(
+                modebar,
+                text=label,
+                width=8,
+                style="CX.Mode.TButton",
+                command=lambda selected=key: self._activate_primary_workspace(selected),
+            )
+            button.grid(row=row, column=column, sticky="ew", padx=1, pady=1)
+            self.workspace_mode_buttons[key] = button
+        for column in range(3):
+            modebar.columnconfigure(column, weight=1)
+        self._set_primary_workspace_mode("design")
+
         filter_row = ttk.Frame(navigator)
         filter_row.pack(fill="x", pady=(0, 6))
         ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))

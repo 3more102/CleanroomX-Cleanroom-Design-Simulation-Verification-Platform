@@ -165,7 +165,8 @@ def test_revision_retention_preserves_replacement_at_prune_staging(
         if (
             not raced_paths
             and source_path.name.endswith(".cleanroomx.revision.json")
-            and destination_path.name.endswith(".retention-stage")
+            and destination_path.name.startswith(".retention-stage-")
+            and destination_path.name.endswith(".cleanroomx.revision.json")
         ):
             payload = json.loads(source_path.read_text(encoding="utf-8"))
             rewritten = json.dumps(payload, separators=(",", ":")) + "\n"
@@ -182,7 +183,7 @@ def test_revision_retention_preserves_replacement_at_prune_staging(
     raced = raced_paths[0]
     assert raced.read_bytes() == replacement_bytes["payload"]
     assert not any(
-        item.name.endswith(".retention-stage")
+        item.name.startswith(".retention-stage-")
         for item in project_revision_dir(path).iterdir()
     )
 
@@ -230,7 +231,7 @@ def test_revision_retention_does_not_delete_path_recreated_after_staging(
     recreated = recreated_paths[0]
     assert recreated.read_bytes() == replacement
     assert not any(
-        item.name.endswith(".retention-stage")
+        item.name.startswith(".retention-stage-")
         for item in project_revision_dir(path).iterdir()
     )
 

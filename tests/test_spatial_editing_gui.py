@@ -665,3 +665,57 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+def test_application_command_strip_remains_visible_at_minimum_window(app):
+    app.root.geometry("1050x680")
+    app.root.update()
+
+    buttons = (
+        app.toolbar_new_button,
+        app.toolbar_open_button,
+        app.toolbar_save_button,
+        app.toolbar_undo_button,
+        app.toolbar_redo_button,
+        app.toolbar_fit_button,
+        app.toolbar_problems_button,
+        app.toolbar_commands_button,
+    )
+    for button in buttons:
+        assert button.winfo_ismapped(), button.cget("text")
+        assert button.winfo_x() + button.winfo_width() <= app.commandbar.winfo_width()
+
+
+def test_panel_header_close_controls_and_problems_navigation(app):
+    workspace = app.spatial_workspace
+
+    app.navigator_close_button.invoke()
+    app.root.update()
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+
+    app.output_close_button.invoke()
+    app.root.update()
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.show_problems_panel()
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    workspace._inspector_close_button.invoke()
+    app.root.update()
+    assert not workspace.inspector_visible()
+
+
+def test_command_strip_undo_redo_states_follow_project_history(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    assert str(app.toolbar_undo_button.cget("state")) == "disabled"
+
+    workspace.duplicate_selected()
+    app.root.update()
+    assert str(app.toolbar_undo_button.cget("state")) == "normal"
+
+    assert app.undo_project_edit()
+    app.root.update()
+    assert str(app.toolbar_redo_button.cget("state")) == "normal"
+

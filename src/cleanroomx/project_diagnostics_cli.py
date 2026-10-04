@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-from .cli_output import CliStateError
+from .cli_output import CliStateError, resolve_cli_path
 from .application import _external_dependency_references, _resolve_relative
 from .project import (
     atomic_write_text,
@@ -58,19 +58,21 @@ def _attach_source_evidence(result: dict, path: Path, revision) -> dict:
 
 def _paths_alias(protected: Path, output: str | Path) -> bool:
     """Return whether output refers to a protected input path."""
-    protected = protected.expanduser().resolve(strict=False)
-    destination = Path(output).expanduser()
+    destination = Path(output)
     try:
-        if destination.resolve(strict=False) == protected:
+        protected_path = protected.expanduser()
+        destination = destination.expanduser()
+        protected_resolved = protected_path.resolve(strict=False)
+        if destination.resolve(strict=False) == protected_resolved:
             return True
     except (OSError, RuntimeError) as exc:
         raise OSError(
             f"could not verify diagnostics output path: {destination}"
         ) from exc
     try:
-        if not destination.exists() or not protected.exists():
+        if not destination.exists() or not protected_resolved.exists():
             return False
-        return destination.samefile(protected)
+        return destination.samefile(protected_resolved)
     except FileNotFoundError:
         # A path disappearing between the existence and identity checks cannot
         # still be the existing file that would be overwritten. Lexical aliases
@@ -110,7 +112,7 @@ def _assert_output_is_distinct_from_dependencies(
                 raise ValueError(
                     "diagnostics output path must be different from external dependency "
                     f"{field!r} for analysis {analysis.id!r}: "
-                    f"{dependency.expanduser().resolve(strict=False)}"
+                    f"{dependency}"
                 )
 
 
@@ -157,8 +159,8 @@ def _assert_project_publication_safe(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = resolve_cli_path(args.project, label="project")
         project, revision_before = load_project_document_with_revision(source)
         if args.output:
             _assert_project_output_is_safe(

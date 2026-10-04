@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-from .cli_output import CliStateError
+from .cli_output import CliStateError, resolve_cli_path
 from .project import (
     atomic_write_text,
     capture_project_file_revision,
@@ -48,8 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = resolve_cli_path(args.project, label="project")
         project, revision_before = load_project_document_with_revision(source)
         if args.output:
             _assert_project_output_is_safe(

@@ -261,3 +261,23 @@ def test_2d_distance_and_area_measurement_do_not_change_geometry(app):
     assert workspace._measure_mode.get() == "none"
     assert not workspace.canvas_2d.find_withtag("measurement")
 
+def test_engineering_output_is_docked_below_primary_workspace(app):
+    app.root.update()
+    panes = tuple(str(item) for item in app.workspace_panes.panes())
+    assert len(panes) == 2
+
+    primary_tabs = [app.notebook.tab(tab_id, "text") for tab_id in app.notebook.tabs()]
+    output_tabs = [
+        app.output_notebook.tab(tab_id, "text")
+        for tab_id in app.output_notebook.tabs()
+    ]
+    assert "Design" in primary_tabs
+    assert "Input" in primary_tabs
+    assert "Plot" in primary_tabs
+    assert "Results" not in primary_tabs
+    assert output_tabs == ["Results", "Diagnostics", "Report"]
+
+    assert app.result_text.master.master == app.output_notebook
+    assert app.diagnostics_text.master.master == app.output_notebook
+    assert app.report_text.master.master == app.output_notebook
+

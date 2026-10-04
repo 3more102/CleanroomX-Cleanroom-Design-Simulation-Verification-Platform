@@ -143,6 +143,73 @@ def test_pure_3d_projection_is_deterministic_and_elevation_moves_upward():
     assert elevated[1] < floor[1]
 
 
+def test_perspective_projection_is_explicit_and_orthographic_default_is_stable():
+    args = {
+        "width_px": 900,
+        "height_px": 600,
+        "azimuth_deg": 35,
+        "elevation_deg": 28,
+        "zoom": 1.2,
+        "pan_x_px": 10,
+        "pan_y_px": -5,
+    }
+    point = (4.0, 7.0, 2.0)
+
+    default_projection = project_3d(*point, **args)
+    orthographic = project_3d(
+        *point,
+        **args,
+        projection_mode="orthographic",
+    )
+    perspective = project_3d(
+        *point,
+        **args,
+        projection_mode="perspective",
+    )
+
+    assert default_projection == pytest.approx(orthographic)
+    assert perspective != pytest.approx(orthographic)
+    with pytest.raises(ValueError, match="projection_mode"):
+        project_3d(*point, **args, projection_mode="fisheye")
+
+
+def test_perspective_fit_keeps_model_inside_requested_padding():
+    points = [
+        (x, y, z)
+        for x in (-6.0, 6.0)
+        for y in (-4.0, 4.0)
+        for z in (0.0, 3.0)
+    ]
+    width = 1200
+    height = 760
+    zoom, pan_x, pan_y = fit_3d_view(
+        points,
+        width_px=width,
+        height_px=height,
+        azimuth_deg=35,
+        elevation_deg=28,
+        padding_fraction=0.10,
+        projection_mode="perspective",
+    )
+    projected = [
+        project_3d(
+            *point,
+            width_px=width,
+            height_px=height,
+            azimuth_deg=35,
+            elevation_deg=28,
+            zoom=zoom,
+            pan_x_px=pan_x,
+            pan_y_px=pan_y,
+            projection_mode="perspective",
+        )
+        for point in points
+    ]
+
+    assert all(width * 0.10 - 1e-9 <= x <= width * 0.90 + 1e-9 for x, _ in projected)
+    assert all(height * 0.10 - 1e-9 <= y <= height * 0.90 + 1e-9 for _, y in projected)
+
+
 def test_fit_3d_view_keeps_room_extents_inside_requested_padding():
     points = [
         (x, y, z)

@@ -1264,7 +1264,7 @@ def external_dependency_fingerprints_state(
             continue
         try:
             current = _stable_file_fingerprint(_resolve_relative(base, declared_path))
-        except (OSError, RuntimeError, ValueError):
+        except (OSError, ValueError):
             unverifiable = True
             continue
         if (
@@ -1402,7 +1402,7 @@ def _capture_external_dependencies(
                     "limit": exc.limit,
                 }]
             ) from exc
-        except (OSError, RuntimeError) as exc:
+        except OSError as exc:
             raise ExternalDependencyChangedError(
                 [{
                     "field": field,
@@ -1534,7 +1534,7 @@ def _prepare_external_dependency_snapshot(
                             "limit": size_exc.limit,
                         }]
                     ) from size_exc
-                except (OSError, RuntimeError):
+                except OSError:
                     changes.append({
                         "field": field,
                         "declared_path": declared_path,
@@ -1570,7 +1570,7 @@ def _prepare_external_dependency_snapshot(
                     "private snapshot exceeds supported size limit during verification "
                     f"({exc.observed_size} > {exc.limit} bytes)",
                 ) from exc
-            except (OSError, RuntimeError) as exc:
+            except OSError as exc:
                 raise ExternalDependencySnapshotError(
                     field,
                     declared_path,
@@ -1623,7 +1623,7 @@ def _verify_external_dependency_snapshot(
                 "private snapshot exceeds supported size limit during backend execution "
                 f"({exc.observed_size} > {exc.limit} bytes)",
             ) from exc
-        except (OSError, RuntimeError) as exc:
+        except OSError as exc:
             raise ExternalDependencySnapshotError(
                 field,
                 expected["declared_path"],

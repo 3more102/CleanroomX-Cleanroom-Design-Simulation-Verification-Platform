@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
+
+- Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.
+- Covers initial capture, snapshot-copy retry rechecks, private-copy verification, backend snapshot verification, and later freshness revalidation; unexpected `RuntimeError` defects now propagate instead of being mislabeled as ordinary source instability, snapshot unavailability, or unverifiable evidence.
+- Adds paired regressions proving expected I/O behavior is preserved while unexpected runtime defects remain visible at each boundary; solver equations, engineering tolerances, schemas, requirements, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — protect GUI revision restore destinations — 2026-10-04
 
 - Applies the shared project/dependency output-identity guard before the desktop restores a saved project revision as a copy.

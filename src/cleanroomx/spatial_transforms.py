@@ -114,6 +114,53 @@ def project_3d(
     )
 
 
+def project_3d_perspective(
+    x_m: float,
+    y_m: float,
+    z_m: float,
+    *,
+    width_px: float,
+    height_px: float,
+    azimuth_deg: float,
+    elevation_deg: float,
+    zoom: float,
+    pan_x_px: float,
+    pan_y_px: float,
+    camera_distance_m: float = 50.0,
+) -> tuple[float, float]:
+    """Project model coordinates with a bounded perspective camera.
+
+    This is a presentation-only transform. It does not alter model geometry or
+    engineering coordinates. The camera distance must remain greater than zero;
+    points approaching the camera plane are clamped so unusually large models
+    cannot create non-finite canvas coordinates.
+    """
+    distance = float(camera_distance_m)
+    if not math.isfinite(distance) or distance <= 0:
+        raise ValueError("camera_distance_m must be a finite positive number")
+
+    azimuth = math.radians(float(azimuth_deg))
+    elevation = math.radians(float(elevation_deg))
+    x = float(x_m)
+    y = float(y_m)
+    z = float(z_m)
+    if not all(math.isfinite(value) for value in (x, y, z)):
+        raise ValueError("3D coordinates must be finite")
+
+    xr = x * math.cos(azimuth) - y * math.sin(azimuth)
+    yr = x * math.sin(azimuth) + y * math.cos(azimuth)
+    sy = yr * math.sin(elevation) - z * math.cos(elevation)
+    depth = yr * math.cos(elevation) + z * math.sin(elevation)
+
+    denominator = max(distance * 0.10, distance + depth)
+    perspective_scale = distance / denominator
+    scale = BASE_3D_PIXELS_PER_M * clamp_zoom(zoom) * perspective_scale
+    return (
+        width_px / 2.0 + pan_x_px + xr * scale,
+        height_px * 0.66 + pan_y_px + sy * scale,
+    )
+
+
 def fit_3d_view(
     points_m: list[tuple[float, float, float]],
     *,

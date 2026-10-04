@@ -1611,23 +1611,33 @@ class SpatialDesignWorkspace(ttk.Frame):
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
-        ttk.Label(viewbar, text="Overlay").pack(side="left", padx=(10, 3))
+        ttk.Label(viewbar, textvariable=self._zoom_var).pack(
+            side="right", padx=(8, 2)
+        )
+
+        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar.pack(fill="x")
+        ttk.Label(overlaybar, text="Engineering overlay").pack(
+            side="left", padx=(2, 4)
+        )
         overlay_combo = ttk.Combobox(
-            viewbar,
+            overlaybar,
             textvariable=self._engineering_overlay_mode,
             values=("Pressure", "ACH", "Airflow", "Verification", "None"),
             state="readonly",
             width=12,
         )
-        overlay_combo.pack(side="left", padx=(0, 4))
+        overlay_combo.pack(side="left", padx=(0, 6))
         overlay_combo.bind("<<ComboboxSelected>>", lambda _event: self.redraw())
-        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(6, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
-        )
+        ttk.Button(
+            overlaybar,
+            text="Validate",
+            command=self.report_validation,
+        ).pack(side="left", padx=2)
+        ttk.Label(
+            overlaybar,
+            textvariable=self._validation_var,
+        ).pack(side="right", padx=(10, 2))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))

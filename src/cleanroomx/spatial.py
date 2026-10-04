@@ -111,6 +111,9 @@ def empty_layout() -> dict:
             "show_devices": True,
             "show_relationships": True,
             "overlay_mode": "pressure",
+            "projection_mode": "orthographic",
+            "section_enabled": False,
+            "section_height_m": 2.4,
         },
     }
 
@@ -282,6 +285,19 @@ def normalize_layout(value: Any) -> dict:
                 "show_devices": bool(view.get("show_devices", True)),
                 "show_relationships": bool(view.get("show_relationships", True)),
             }
+        )
+        projection_mode = str(
+            view.get("projection_mode", "orthographic")
+        ).strip().lower()
+        if projection_mode not in {"orthographic", "perspective"}:
+            projection_mode = "orthographic"
+        result["view"]["projection_mode"] = projection_mode
+        result["view"]["section_enabled"] = bool(
+            view.get("section_enabled", False)
+        )
+        result["view"]["section_height_m"] = _finite_number(
+            view.get("section_height_m"),
+            result["floor"]["elevation_m"] + 2.4,
         )
         overlay_mode = str(
             view.get(
@@ -1517,6 +1533,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._isolated_item: _Hit | None = None
         self._hovered_3d: _Hit | None = None
         self._xray_3d = tk.BooleanVar(value=False)
+        self._projection_mode = tk.StringVar(value="Orthographic")
+        self._section_enabled = tk.BooleanVar(value=False)
+        self._section_height_var = tk.StringVar(value="2.40")
 
         self._build()
         self.refresh()
@@ -1738,6 +1757,37 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
             side="left", padx=2
         )
+        projection_picker = ttk.Combobox(
+            header3,
+            textvariable=self._projection_mode,
+            values=("Orthographic", "Perspective"),
+            state="readonly",
+            width=12,
+        )
+        projection_picker.pack(side="left", padx=(4, 2))
+        projection_picker.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.set_3d_projection(self._projection_mode.get()),
+        )
+        ttk.Checkbutton(
+            header3,
+            text="Section",
+            variable=self._section_enabled,
+            command=self._toggle_section_plane,
+        ).pack(side="left", padx=(4, 2))
+        section_height = ttk.Spinbox(
+            header3,
+            textvariable=self._section_height_var,
+            from_=-100.0,
+            to=1000.0,
+            increment=0.25,
+            width=6,
+            command=self._apply_section_height,
+        )
+        section_height.pack(side="left", padx=(0, 2))
+        section_height.bind("<Return>", self._apply_section_height)
+        section_height.bind("<FocusOut>", self._apply_section_height)
+        ttk.Label(header3, text="Z m").pack(side="left", padx=(0, 4))
         ttk.Checkbutton(
             header3,
             text="X-Ray",
@@ -2126,11 +2176,82 @@ class SpatialDesignWorkspace(ttk.Frame):
             }[overlay_mode]
         )
         self._show_pressure.set(overlay_mode == "pressure")
+        projection_mode = str(
+            view.get("projection_mode") or "orthographic"
+        ).strip().lower()
+        if projection_mode not in {"orthographic", "perspective"}:
+            projection_mode = "orthographic"
+        self._projection_mode.set(
+            "Perspective" if projection_mode == "perspective" else "Orthographic"
+        )
+        self._section_enabled.set(bool(view.get("section_enabled", False)))
+        self._section_height_var.set(
+            f"{_finite_number(view.get('section_height_m'), self.layout['floor']['elevation_m'] + 2.4):.2f}"
+        )
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
+
+    def set_3d_projection(self, value: str) -> None:
+        mode = str(value or "orthographic").strip().lower()
+        if mode not in {"orthographic", "perspective"}:
+            raise ValueError(
+                "3D projection must be orthographic or perspective"
+            )
+        self.layout.setdefault("view", {})["projection_mode"] = mode
+        self._projection_mode.set(
+            "Perspective" if mode == "perspective" else "Orthographic"
+        )
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._on_change()
+        self._status_setter(f"3D projection: {mode.title()}")
+        self.fit_3d()
+
+    def _active_section_height(self) -> float | None:
+        if not self._section_enabled.get():
+            return None
+        value = _finite_number(
+            self.layout.get("view", {}).get("section_height_m"),
+            self.layout["floor"]["elevation_m"] + 2.4,
+        )
+        return value
+
+    def _toggle_section_plane(self) -> None:
+        enabled = bool(self._section_enabled.get())
+        self.layout.setdefault("view", {})["section_enabled"] = enabled
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._on_change()
+        self._status_setter(
+            "3D section plane enabled" if enabled else "3D section plane disabled"
+        )
+        self.redraw()
+
+    def _apply_section_height(self, _event=None):
+        current = _finite_number(
+            self.layout.get("view", {}).get("section_height_m"),
+            self.layout["floor"]["elevation_m"] + 2.4,
+        )
+        try:
+            value = float(self._section_height_var.get())
+        except (TypeError, ValueError):
+            value = current
+        if not math.isfinite(value):
+            value = current
+        self.layout.setdefault("view", {})["section_height_m"] = value
+        self._section_height_var.set(f"{value:.2f}")
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._on_change()
+        self._status_setter(f"3D section plane: Z {value:.2f} m")
+        self.redraw()
+        return "break" if _event is not None else None
 
     def _set_overlay_mode(self, value: str) -> None:
         mode = str(value or "none").strip().lower()
@@ -2703,6 +2824,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 height_px=max(200, self.canvas_3d.winfo_height()),
                 azimuth_deg=self.layout["view"]["azimuth_deg"],
                 elevation_deg=self.layout["view"]["elevation_deg"],
+                projection_mode=self.layout["view"].get(
+                    "projection_mode", "orthographic"
+                ),
             )
             self.layout["view"]["zoom_3d"] = zoom_3d
             self.layout["view"]["pan_3d_x"] = pan_3d_x
@@ -2728,6 +2852,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self.layout["floor"]["elevation_m"],
             )
             z1 = z0 + room["height_m"]
+            section_height = self._active_section_height()
+            if section_height is not None:
+                if z0 >= section_height:
+                    continue
+                z1 = min(z1, section_height)
             for x in (x0, x1):
                 for y in (y0, y1):
                     for z in (z0, z1):
@@ -2745,6 +2874,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             height_px=max(200, self.canvas_3d.winfo_height()),
             azimuth_deg=self.layout["view"]["azimuth_deg"],
             elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
         )
         self.layout["view"]["zoom_3d"] = zoom
         self.layout["view"]["pan_3d_x"] = pan_x
@@ -2797,6 +2929,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             height_px=max(200, self.canvas_3d.winfo_height()),
             azimuth_deg=self.layout["view"]["azimuth_deg"],
             elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
         )
         self.layout["view"]["zoom_3d"] = zoom_3d
         self.layout["view"]["pan_3d_x"] = pan_3d_x
@@ -3341,6 +3476,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             zoom=self.layout["view"]["zoom_3d"],
             pan_x_px=self.layout["view"]["pan_3d_x"],
             pan_y_px=self.layout["view"]["pan_3d_y"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
         )
 
     def _draw_3d(self) -> None:
@@ -3370,6 +3508,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             *sum(floor_points, ()),
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
+
+        section_height = self._active_section_height()
+        if section_height is not None:
+            section_points = [
+                self._project_3d(min_x - cx - pad, min_y - cy - pad, section_height),
+                self._project_3d(max_x - cx + pad, min_y - cy - pad, section_height),
+                self._project_3d(max_x - cx + pad, max_y - cy + pad, section_height),
+                self._project_3d(min_x - cx - pad, max_y - cy + pad, section_height),
+            ]
+            canvas.create_polygon(
+                *sum(section_points, ()),
+                fill="#334155",
+                outline="#38bdf8",
+                stipple="gray50",
+                width=1,
+                tags=("section_plane",),
+            )
 
         overlay_mode = self._overlay_mode.get().strip().lower()
         overlay = engineering_overlay_state(
@@ -3401,6 +3556,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             y1 = y0 + room["width_m"]
             z0 = room.get("floor_elevation_m", floor_z)
             z1 = z0 + room["height_m"]
+            if section_height is not None:
+                if z0 >= section_height:
+                    continue
+                z1 = min(z1, section_height)
             base = [
                 self._project_3d(x0, y0, z0),
                 self._project_3d(x1, y0, z0),
@@ -3503,16 +3662,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                         else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
                     )
                 )
+                device_bottom_z = room_floor + device["z_m"]
+                if section_height is not None and device_bottom_z >= section_height:
+                    continue
                 if device["type"] in {"door", "window", "opening", "transfer"}:
+                    device_top_z = (
+                        device_bottom_z + device.get("height_m", 0.4)
+                    )
+                    if section_height is not None:
+                        device_top_z = min(device_top_z, section_height)
                     bottom = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
-                        room_floor + device["z_m"],
+                        device_bottom_z,
                     )
                     top = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
-                        room_floor + device["z_m"] + device.get("height_m", 0.4),
+                        device_top_z,
                     )
                     canvas.create_line(
                         *bottom, *top,
@@ -3524,7 +3691,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     x, y = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
-                        room_floor + device["z_m"],
+                        device_bottom_z,
                     )
                     radius = 5 if (selected or hovered) else 4
                     canvas.create_oval(

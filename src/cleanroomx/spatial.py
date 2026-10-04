@@ -1262,6 +1262,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._measurement_result_var = tk.StringVar(value="Ready")
         self._hidden_item_ids: set[str] = set()
         self._isolated_item: _Hit | None = None
+        self._hovered_3d: _Hit | None = None
+        self._xray_3d = tk.BooleanVar(value=False)
 
         self._build()
         self.refresh()
@@ -1441,13 +1443,31 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             header3, text="3D MODEL", style="CX.ViewTitle.TLabel"
         ).pack(side="left")
-        for preset in ("Top", "Front", "Right", "Iso"):
-            ttk.Button(
-                header3,
-                text=preset,
-                width=5,
-                command=lambda p=preset.lower(): self.set_3d_view_preset(p),
-            ).pack(side="left", padx=(5 if preset == "Top" else 1, 1))
+        camera_button = ttk.Menubutton(header3, text="Views")
+        camera_menu = tk.Menu(camera_button, tearoff=False)
+        camera_button.configure(menu=camera_menu)
+        for preset, label in (
+            ("top", "Top"),
+            ("front", "Front"),
+            ("back", "Back"),
+            ("left", "Left"),
+            ("right", "Right"),
+            ("iso", "Isometric"),
+        ):
+            camera_menu.add_command(
+                label=label,
+                command=lambda p=preset: self.set_3d_view_preset(p),
+            )
+        camera_button.pack(side="left", padx=(5, 2))
+        ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
+            side="left", padx=2
+        )
+        ttk.Checkbutton(
+            header3,
+            text="X-Ray",
+            variable=self._xray_3d,
+            command=self._draw_3d,
+        ).pack(side="left", padx=(4, 2))
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
                 header3,
@@ -1570,6 +1590,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind(
             "<Button-5>", lambda event: self._zoom_at(1 / 1.1, event.x, event.y)
         )
+        self.canvas_3d.bind("<Motion>", self._on_3d_motion)
+        self.canvas_3d.bind("<Leave>", self._on_3d_leave)
         self.canvas_3d.bind("<MouseWheel>", self._on_wheel_3d)
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
@@ -1805,6 +1827,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._measurement_result_var.set("Ready")
         self._hidden_item_ids.clear()
         self._isolated_item = None
+        self._hovered_3d = None
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
@@ -2383,6 +2406,47 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._status_setter("View fitted to selected object")
         self.redraw()
+
+    def _visible_3d_points(self) -> list[tuple[float, float, float]]:
+        min_x, min_y, max_x, max_y = self._bounds()
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        points: list[tuple[float, float, float]] = []
+        for room in self.layout["rooms"]:
+            if not self._is_item_visible("room", room["id"]):
+                continue
+            x0 = room["x_m"] - center_x
+            x1 = x0 + room["length_m"]
+            y0 = room["y_m"] - center_y
+            y1 = y0 + room["width_m"]
+            z0 = room.get(
+                "floor_elevation_m",
+                self.layout["floor"]["elevation_m"],
+            )
+            z1 = z0 + room["height_m"]
+            for x in (x0, x1):
+                for y in (y0, y1):
+                    for z in (z0, z1):
+                        points.append((x, y, z))
+        return points
+
+    def fit_3d(self) -> None:
+        points = self._visible_3d_points()
+        if not points:
+            self._status_setter("No visible 3D geometry to fit")
+            return
+        zoom, pan_x, pan_y = fit_3d_view(
+            points,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+        )
+        self.layout["view"]["zoom_3d"] = zoom
+        self.layout["view"]["pan_3d_x"] = pan_x
+        self.layout["view"]["pan_3d_y"] = pan_y
+        self._status_setter("3D model fitted to visible geometry")
+        self._draw_3d()
 
     def fit_views(self) -> None:
         min_x, min_y, max_x, max_y = self._bounds()
@@ -3050,23 +3114,42 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else "#dfe7ef"
             )
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
                 "#7dd3fc"
                 if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                else (
+                    "#38bdf8"
+                    if hovered
+                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                )
             )
             tag = f"room:{room['id']}"
+            stipple = "gray50" if self._xray_3d.get() else ""
+            polygon_width = 3 if selected else (2 if hovered else 1)
             canvas.create_polygon(
-                *sum(top, ()), fill=fill, outline=outline, width=2,
+                *sum(top, ()),
+                fill=fill,
+                outline=outline,
+                width=polygon_width,
+                stipple=stipple,
                 tags=(tag, "room3d"),
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92", outline=outline, tags=(tag, "room3d"),
+                fill="#6c7f92",
+                outline=outline,
+                width=polygon_width,
+                stipple=stipple,
+                tags=(tag, "room3d"),
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c", outline=outline, tags=(tag, "room3d"),
+                fill="#53687c",
+                outline=outline,
+                width=polygon_width,
+                stipple=stipple,
+                tags=(tag, "room3d"),
             )
             for start, end in zip(base, top):
                 canvas.create_line(
@@ -3099,10 +3182,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
                 tag = f"device:{device['id']}"
                 selected = self.selected == _Hit("device", device["id"])
+                hovered = self._hovered_3d == _Hit("device", device["id"])
                 device_outline = (
                     "#ffffff"
                     if selected
-                    else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+                    else (
+                        "#38bdf8"
+                        if hovered
+                        else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+                    )
                 )
                 if device["type"] in {"door", "window", "opening", "transfer"}:
                     bottom = self._project_3d(
@@ -3118,7 +3206,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(
                         *bottom, *top,
                         fill=device_outline,
-                        width=7 if selected else 5,
+                        width=7 if (selected or hovered) else 5,
                         tags=(tag, "device3d"),
                     )
                 else:
@@ -3127,7 +3215,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                         device["y_m"] - cy,
                         room_floor + device["z_m"],
                     )
-                    radius = 5 if selected else 4
+                    radius = 5 if (selected or hovered) else 4
                     canvas.create_oval(
                         x - radius, y - radius, x + radius, y + radius,
                         fill="#fbbf24", outline=device_outline,
@@ -3346,13 +3434,17 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def set_3d_view_preset(self, preset: str) -> None:
         presets = {
-            "top": (0.0, 89.0),
-            "front": (0.0, 5.0),
-            "right": (90.0, 5.0),
+            "top": (0.0, 90.0),
+            "front": (0.0, 0.0),
+            "back": (180.0, 0.0),
+            "left": (270.0, 0.0),
+            "right": (90.0, 0.0),
             "iso": (35.0, 28.0),
         }
         if preset not in presets:
-            raise ValueError("3D preset must be top, front, right, or iso")
+            raise ValueError(
+                "3D preset must be top, front, back, left, right, or iso"
+            )
         azimuth, elevation = presets[preset]
         self.layout["view"]["azimuth_deg"] = azimuth
         self.layout["view"]["elevation_deg"] = elevation
@@ -3402,6 +3494,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         self.layout["view"]["pan_3d_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
+        self._draw_3d()
+
+    def _on_3d_motion(self, event: tk.Event) -> None:
+        current = self.canvas_3d.find_withtag("current")
+        hovered = (
+            self._parse_hit(self.canvas_3d.gettags(current[0]))
+            if current
+            else None
+        )
+        if hovered != self._hovered_3d:
+            self._hovered_3d = hovered
+            self._draw_3d()
+
+    def _on_3d_leave(self, event: tk.Event | None = None) -> None:
+        if self._hovered_3d is None:
+            return
+        self._hovered_3d = None
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:

@@ -9,12 +9,13 @@ from tkinter import ttk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_state import load_gui_layout_state
 from cleanroomx.project import save_project_document
 from cleanroomx.spatial import _Hit
 
 
 @pytest.fixture
-def app():
+def app(tmp_path):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -23,7 +24,11 @@ def app():
         pytest.skip(f"Tk display unavailable: {exc}")
     callback_errors = []
     root.report_callback_exception = lambda *args: callback_errors.append(args)
-    application = CleanroomXApp(root, autosave_interval_seconds=0)
+    application = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
     application.load_project_path(bundled_demo_project_path())
     application.notebook.select(application.spatial_workspace)
     root.update()

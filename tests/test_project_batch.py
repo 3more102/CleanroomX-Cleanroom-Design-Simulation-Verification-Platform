@@ -333,7 +333,13 @@ def test_project_batch_cli_reports_project_path_resolution_errors(monkeypatch, c
     code = main(["broken.cleanroomx.json"])
 
     assert code == 2
-    assert "cannot resolve project path" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert (
+        captured.err
+        == "cleanroomx-project-run: error: could not resolve project path: "
+        "broken.cleanroomx.json\n"
+    )
+    assert "Traceback" not in captured.err
 
 
 def test_project_batch_cli_refuses_project_source_as_output(tmp_path, capsys):

@@ -9,32 +9,19 @@ import cleanroomx.hvac_cli as hvac_cli
 import pytest
 
 
-STANDALONE_FILE_OUTPUT_CLIS = (
-    "consistency_cli.py",
-    "damper_study_cli.py",
-    "dossier_cli.py",
-    "duct_flow_cli.py",
-    "fan_curve_cli.py",
-    "fan_duct_network_cli.py",
-    "fan_loop_network_cli.py",
-    "fan_loop_speed_cli.py",
-    "fan_loop_uncertainty_cli.py",
-    "fan_network_cli.py",
-    "fan_speed_cli.py",
-    "fan_uncertainty_cli.py",
-    "fan_variable_friction_loop_cli.py",
-    "fan_variable_friction_speed_cli.py",
-    "fan_variable_friction_uncertainty_cli.py",
-    "hvac_cli.py",
-    "loop_network_cli.py",
-    "pressure_network_cli.py",
-    "psychrometric_uncertainty_cli.py",
-    "qualification_cli.py",
-    "recovery_cli.py",
-    "thermal_uncertainty_cli.py",
-    "uncertainty_cli.py",
-    "variable_friction_loop_cli.py",
+CUSTOM_INPUT_BOUNDARY_CLIS = frozenset(
+    {"consistency_cli.py", "dossier_cli.py"}
 )
+
+
+def _discover_standalone_file_output_clis() -> tuple[Path, ...]:
+    package_dir = Path(cli_output.__file__).resolve().parent
+    discovered: list[Path] = []
+    for path in sorted(package_dir.glob("*_cli.py")):
+        source = path.read_text(encoding="utf-8")
+        if "publish_cli_output(" in source:
+            discovered.append(path)
+    return tuple(discovered)
 
 
 def test_cli_error_boundary_reports_value_error_without_traceback(capsys) -> None:
@@ -144,22 +131,20 @@ def test_hvac_cli_wrong_root_shape_is_clean(monkeypatch, tmp_path, capsys) -> No
     assert "Traceback" not in captured.err
 
 def test_all_standalone_file_output_clis_use_shared_error_boundary() -> None:
-    package_dir = Path(cli_output.__file__).resolve().parent
-    for filename in STANDALONE_FILE_OUTPUT_CLIS:
-        source = (package_dir / filename).read_text(encoding="utf-8")
-        assert "from .cli_output import cli_error_boundary" in source, filename
-        assert "@cli_error_boundary(" in source, filename
-
-
-FILE_LOADER_CLIS = tuple(
-    name for name in STANDALONE_FILE_OUTPUT_CLIS
-    if name not in {"consistency_cli.py", "dossier_cli.py"}
-)
+    candidates = _discover_standalone_file_output_clis()
+    assert candidates
+    for path in candidates:
+        source = path.read_text(encoding="utf-8")
+        assert "from .cli_output import cli_error_boundary" in source, path.name
+        assert "@cli_error_boundary(" in source, path.name
 
 
 def test_all_file_loader_clis_use_structural_input_boundary() -> None:
-    package_dir = Path(cli_output.__file__).resolve().parent
-    for filename in FILE_LOADER_CLIS:
-        source = (package_dir / filename).read_text(encoding="utf-8")
-        assert "load_cli_input" in source, filename
-        assert "load_cli_input(" in source, filename
+    candidates = _discover_standalone_file_output_clis()
+    assert candidates
+    for path in candidates:
+        if path.name in CUSTOM_INPUT_BOUNDARY_CLIS:
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert "load_cli_input" in source, path.name
+        assert "load_cli_input(" in source, path.name

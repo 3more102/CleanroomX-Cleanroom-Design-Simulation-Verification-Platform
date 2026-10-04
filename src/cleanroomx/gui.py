@@ -1218,6 +1218,8 @@ class CleanroomXApp:
         self.model_status_var = tk.StringVar(value="Model: ready")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
+        self.navigator_filter_var = tk.StringVar(value="")
+        self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
 
         self._configure_styles()
         self._build_menu()
@@ -1447,6 +1449,20 @@ class CleanroomXApp:
         ttk.Label(
             navigator, text="PROJECT NAVIGATOR", style="CX.Section.TLabel"
         ).pack(anchor="w", pady=(0, 6))
+        filter_row = ttk.Frame(navigator)
+        filter_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
+        navigator_filter = ttk.Entry(
+            filter_row,
+            textvariable=self.navigator_filter_var,
+        )
+        navigator_filter.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            filter_row,
+            text="×",
+            width=3,
+            command=lambda: self.navigator_filter_var.set(""),
+        ).pack(side="left", padx=(4, 0))
         self.analysis_tree = ttk.Treeview(
             navigator,
             columns=("kind",),
@@ -1462,7 +1478,12 @@ class CleanroomXApp:
         self.analysis_tree.pack(side="left", fill="both", expand=True)
         nav_scroll.pack(side="right", fill="y")
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_navigator_selected)
+        self.analysis_tree.bind("<Button-3>", self._show_navigator_context_menu)
         self.analysis_tree.tag_configure("section", font=("TkDefaultFont", 9, "bold"))
+        self.navigator_filter_var.trace_add(
+            "write",
+            lambda *_: self._apply_navigator_filter(),
+        )
 
         content = ttk.Frame(panes)
         panes.add(content, weight=5)
@@ -3039,6 +3060,155 @@ class CleanroomXApp:
             self.refresh_structure(silent=True)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+        self._capture_navigator_tree()
+        self._apply_navigator_filter()
+
+    def _capture_navigator_tree(self) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            self._navigator_tree_snapshot = []
+            return
+        snapshot: list[tuple[str, str, int]] = []
+
+        def visit(parent: str) -> None:
+            for index, iid in enumerate(tree.get_children(parent)):
+                snapshot.append((iid, parent, index))
+                visit(iid)
+
+        visit("")
+        self._navigator_tree_snapshot = snapshot
+
+    def _apply_navigator_filter(self) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        snapshot = list(getattr(self, "_navigator_tree_snapshot", []))
+        if tree is None or not snapshot:
+            return
+
+        for iid, parent, index in snapshot:
+            if tree.exists(iid):
+                tree.move(iid, parent, index)
+
+        query = self.navigator_filter_var.get().strip().casefold()
+        if not query:
+            return
+
+        children: dict[str, list[str]] = {}
+        for iid, parent, _index in snapshot:
+            children.setdefault(parent, []).append(iid)
+
+        visible: set[str] = set()
+
+        def include_subtree(iid: str) -> None:
+            visible.add(iid)
+            for child in children.get(iid, []):
+                include_subtree(child)
+
+        def match(iid: str) -> bool:
+            if not tree.exists(iid):
+                return False
+            item = tree.item(iid)
+            text = str(item.get("text") or "")
+            values = " ".join(str(value) for value in item.get("values") or ())
+            own_match = query in f"{text} {values}".casefold()
+            if own_match:
+                include_subtree(iid)
+                return True
+            child_match = False
+            for child in children.get(iid, []):
+                child_match = match(child) or child_match
+            if child_match:
+                visible.add(iid)
+            return child_match
+
+        for root_iid in children.get("", []):
+            match(root_iid)
+
+        for iid, _parent, _index in reversed(snapshot):
+            if tree.exists(iid) and iid not in visible:
+                tree.detach(iid)
+
+        selection = tree.selection()
+        if selection and selection[0] not in visible:
+            tree.selection_remove(selection[0])
+
+    def _build_navigator_context_menu(self, item_id: str) -> tk.Menu | None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not item_id or not tree.exists(item_id):
+            return None
+        menu = tk.Menu(self.root, tearoff=False)
+        if item_id.startswith("room:") or item_id.startswith("device:"):
+            kind, spatial_id = item_id.split(":", 1)
+
+            def select_spatial() -> None:
+                self.spatial_workspace.select_item(kind, spatial_id)
+                self._activate_spatial_workspace()
+
+            menu.add_command(label="Open / Properties", command=select_spatial)
+            menu.add_command(
+                label="Fit Selected",
+                command=lambda: (
+                    select_spatial(),
+                    self.spatial_workspace.fit_selected(),
+                ),
+            )
+            menu.add_separator()
+            menu.add_command(
+                label="Isolate",
+                command=lambda: (
+                    select_spatial(),
+                    self.spatial_workspace.isolate_selected(),
+                ),
+            )
+            menu.add_command(
+                label="Hide",
+                command=lambda: (
+                    select_spatial(),
+                    self.spatial_workspace.hide_selected(),
+                ),
+            )
+            menu.add_command(
+                label="Show All",
+                command=self.spatial_workspace.show_all,
+            )
+            return menu
+        if item_id == "nav-proofgraph":
+            menu.add_command(
+                label="Open ProofGraph",
+                command=self._activate_proofgraph_workspace,
+            )
+            return menu
+        if not item_id.startswith("nav-"):
+            menu.add_command(
+                label="Open Analysis",
+                command=lambda: self._on_navigator_selected(),
+            )
+            menu.add_command(label="Run Analysis", command=self.run_current)
+            return menu
+        menu.add_command(
+            label="Expand",
+            command=lambda: tree.item(item_id, open=True),
+        )
+        menu.add_command(
+            label="Collapse",
+            command=lambda: tree.item(item_id, open=False),
+        )
+        return menu
+
+    def _show_navigator_context_menu(self, event: tk.Event):
+        tree = self.analysis_tree
+        item_id = tree.identify_row(event.y)
+        if not item_id:
+            return "break"
+        tree.selection_set(item_id)
+        tree.focus(item_id)
+        menu = self._build_navigator_context_menu(item_id)
+        if menu is None:
+            return "break"
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
 
     def _refresh_spatial_navigator(self) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -3114,6 +3284,8 @@ class CleanroomXApp:
             model_status.set(
                 f"Spatial: {len(rooms)} rooms · {len(devices)} devices"
             )
+        self._capture_navigator_tree()
+        self._apply_navigator_filter()
 
     def _on_navigator_selected(self, event=None) -> None:
         if self._selection_guard:

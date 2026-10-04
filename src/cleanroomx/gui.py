@@ -1832,7 +1832,7 @@ class CleanroomXApp:
                 self._ui_state_path,
                 self._capture_ui_layout_state(),
             )
-        except (OSError, ValueError, TypeError):
+        except Exception:
             return
 
     def _restore_ui_layout_state(self) -> None:
@@ -5726,6 +5726,7 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        self._save_ui_layout_state()
         self._discard_current_autosave()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:

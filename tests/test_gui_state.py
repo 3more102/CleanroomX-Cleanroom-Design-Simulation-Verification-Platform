@@ -41,6 +41,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
                 "alpha.cleanroomx.json",
                 "",
                 12,
+                "bad\\x00path",
                 "alpha.cleanroomx.json",
                 "beta.cleanroomx.json",
             ],

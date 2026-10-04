@@ -2530,14 +2530,38 @@ class CleanroomXApp:
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
-        for analysis in self.project.analyses:
+
+        sections = (
+            ("nav-building", "Building"),
+            ("nav-hvac", "HVAC Systems"),
+            ("nav-devices", "Devices"),
+            ("nav-pressure", "Pressure Network"),
+            ("nav-analyses", "Analyses"),
+            ("nav-requirements", "Requirements"),
+            ("nav-proofgraph", "ProofGraph"),
+            ("nav-evidence", "Evidence"),
+            ("nav-reports", "Reports"),
+        )
+        for iid, label in sections:
             self.analysis_tree.insert(
                 "",
+                "end",
+                iid=iid,
+                text=label,
+                tags=("section",),
+                open=iid in {"nav-building", "nav-analyses"},
+            )
+
+        for analysis in self.project.analyses:
+            self.analysis_tree.insert(
+                "nav-analyses",
                 "end",
                 iid=analysis.id,
                 text=analysis.name,
                 values=(analysis.kind,),
             )
+        self._refresh_spatial_navigator()
+
         target = select_id or self.project.active_analysis_id
         if target and self.analysis_tree.exists(target):
             self.analysis_tree.selection_set(target)
@@ -2549,6 +2573,7 @@ class CleanroomXApp:
             self.project.active_analysis_id = first
             self.analysis_tree.selection_set(first)
             self.analysis_tree.focus(first)
+            self.analysis_tree.see(first)
             self._load_analysis_into_editor(self.project.analyses[0])
         else:
             self._editor_analysis_id = None
@@ -2557,6 +2582,121 @@ class CleanroomXApp:
             self.refresh_structure(silent=True)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+
+    def _refresh_spatial_navigator(self) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if not isinstance(layout, dict):
+            layout = {}
+        rooms = layout.get("rooms", [])
+        devices = layout.get("devices", [])
+        if not isinstance(rooms, list):
+            rooms = []
+        if not isinstance(devices, list):
+            devices = []
+
+        previous_selection = tree.selection()
+        previous_guard = self._selection_guard
+        self._selection_guard = True
+        try:
+            if tree.exists("nav-building"):
+                for child in tree.get_children("nav-building"):
+                    tree.delete(child)
+                floor = layout.get("floor", {})
+                floor_name = (
+                    str(floor.get("name", "Floor 01"))
+                    if isinstance(floor, dict)
+                    else "Floor 01"
+                )
+                tree.insert(
+                    "nav-building",
+                    "end",
+                    iid="nav-floor",
+                    text=floor_name,
+                    open=True,
+                )
+                for room in rooms:
+                    if not isinstance(room, dict) or not room.get("id"):
+                        continue
+                    room_id = str(room["id"])
+                    tree.insert(
+                        "nav-floor",
+                        "end",
+                        iid=f"room:{room_id}",
+                        text=str(room.get("name") or room_id),
+                    )
+
+            if tree.exists("nav-devices"):
+                for child in tree.get_children("nav-devices"):
+                    tree.delete(child)
+                for device in devices:
+                    if not isinstance(device, dict) or not device.get("id"):
+                        continue
+                    device_id = str(device["id"])
+                    device_type = str(device.get("type") or "device")
+                    name = str(device.get("name") or device_id)
+                    tree.insert(
+                        "nav-devices",
+                        "end",
+                        iid=f"device:{device_id}",
+                        text=f"{name}  [{device_type}]",
+                    )
+
+            if previous_selection:
+                selected_iid = previous_selection[0]
+                if tree.exists(selected_iid):
+                    tree.selection_set(selected_iid)
+                    tree.focus(selected_iid)
+        finally:
+            self._selection_guard = previous_guard
+
+        model_status = getattr(self, "model_status_var", None)
+        if model_status is not None:
+            model_status.set(
+                f"Spatial: {len(rooms)} rooms · {len(devices)} devices"
+            )
+
+    def _on_navigator_selected(self, event=None) -> None:
+        if self._selection_guard:
+            return
+        selection = self.analysis_tree.selection()
+        if not selection:
+            return
+        item_id = selection[0]
+        if item_id.startswith("room:") or item_id.startswith("device:"):
+            kind, spatial_id = item_id.split(":", 1)
+            if hasattr(self, "spatial_workspace"):
+                self.spatial_workspace.select_item(kind, spatial_id)
+                self._activate_spatial_workspace()
+            self.selection_status_var.set(f"Selected: {kind} {spatial_id}")
+            return
+        if item_id.startswith("nav-"):
+            return
+        self._on_analysis_selected(event)
+        analysis = self._current_analysis()
+        if analysis is not None:
+            self.selection_status_var.set(f"Selected: {analysis.name}")
+
+    def _on_workspace_selection_change(self, kind: str, item_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+        navigator_id = f"{kind}:{item_id}"
+        self.selection_status_var.set(f"Selected: {kind} {item_id}")
+        if not tree.exists(navigator_id):
+            self._refresh_spatial_navigator()
+        if not tree.exists(navigator_id):
+            return
+        previous_guard = self._selection_guard
+        self._selection_guard = True
+        try:
+            tree.selection_set(navigator_id)
+            tree.focus(navigator_id)
+            tree.see(navigator_id)
+        finally:
+            self._selection_guard = previous_guard
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:
@@ -2616,6 +2756,7 @@ class CleanroomXApp:
 
     def _on_spatial_changed(self) -> None:
         self._update_title()
+        self._refresh_spatial_navigator()
 
     def _select_ifc_source(self, *, title: str) -> Path | None:
         path = filedialog.askopenfilename(

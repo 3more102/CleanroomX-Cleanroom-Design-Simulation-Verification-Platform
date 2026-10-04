@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — host-managed plugin dependency snapshots — 2026-10-04
+
+- Introduces plugin API v2 while retaining API v1 compatibility; v2 plugins may optionally declare external engineering-file references through a deterministic `external_dependencies` resolver.
+- Captures declared plugin files through the canonical bounded stable-file snapshot authority before plugin parsing, rewrites only the isolated execution payload to verified private snapshots, and retains the original submitted dependency identity in durable input/provenance evidence.
+- Re-verifies private snapshots and live sources, preserves safe source suffixes for format-aware parsers, removes exact private snapshot paths from durable plugin results, and rejects resolver/parser mutation, duplicate fields, mismatched paths, malformed declarations, and unsupported v1 dependency declarations.
+- Adds API compatibility and adversarial execution regressions; built-in solver equations, engineering tolerances, project schemas, requirement criteria, and ProofGraph verdict semantics are unchanged.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

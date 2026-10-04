@@ -422,3 +422,54 @@ def test_3d_xray_and_hover_are_view_only(app):
 def test_invalid_3d_preset_is_rejected(app):
     with pytest.raises(ValueError, match="3D preset"):
         app.spatial_workspace.set_3d_view_preset("perspective")
+
+
+
+def test_engineering_overlay_selector_renders_fresh_result_values_in_2d_and_3d(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("split")
+    rooms = workspace.layout["rooms"]
+    assert rooms
+    result_rooms = [
+        {
+            "room": str(room.get("analysis_room_name") or room["name"]),
+            "ach": 24.0 + index,
+            "status": "pass",
+            "findings": [
+                {
+                    "code": "ACH",
+                    "status": "pass",
+                    "actual": 24.0 + index,
+                    "unit": "1/h",
+                }
+            ],
+        }
+        for index, room in enumerate(rooms)
+    ]
+    workspace._result_getter = lambda: {"rooms": result_rooms}
+    workspace._engineering_overlay_mode.set("ACH")
+    workspace.redraw()
+    app.root.update()
+
+    assert workspace.canvas_2d.find_withtag("engineering_overlay_legend")
+    assert workspace.canvas_3d.find_withtag("engineering_overlay_legend")
+
+    first_tag = f"room:{rooms[0]['id']}"
+    texts_2d = [
+        workspace.canvas_2d.itemcget(item, "text")
+        for item in workspace.canvas_2d.find_withtag(first_tag)
+        if workspace.canvas_2d.type(item) == "text"
+    ]
+    texts_3d = [
+        workspace.canvas_3d.itemcget(item, "text")
+        for item in workspace.canvas_3d.find_withtag(first_tag)
+        if workspace.canvas_3d.type(item) == "text"
+    ]
+    assert any("ACH: 24" in text for text in texts_2d)
+    assert any("ACH 24" in text for text in texts_3d)
+
+    geometry_before = copy.deepcopy(workspace.layout)
+    workspace._engineering_overlay_mode.set("Verification")
+    workspace.redraw()
+    app.root.update()
+    assert workspace.layout == geometry_before

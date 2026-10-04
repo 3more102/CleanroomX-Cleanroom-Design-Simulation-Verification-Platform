@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -196,3 +197,21 @@ def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
 
     assert app.proofgraph_viewer._documents == []
     assert "unavailable" in app.evidence_text.get("1.0", "end").casefold()
+
+
+def test_proofgraph_rethemes_with_app_and_keeps_status_textual(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    viewer = app.proofgraph_viewer
+    viewer.set_documents([_room_graph(room["id"])])
+    viewer._select_key("finding:FIND-GUI-PRESSURE")
+
+    app.set_theme("dark", persist=False)
+    app.root.update_idletasks()
+    dark = theme_palette("dark")
+    assert viewer.canvas.cget("background").lower() == dark["plot"].lower()
+    assert "✓ PASS" in viewer.detail.get("1.0", "end")
+
+    app.set_theme("light", persist=False)
+    app.root.update_idletasks()
+    light = theme_palette("light")
+    assert viewer.canvas.cget("background").lower() == light["plot"].lower()

@@ -918,11 +918,13 @@ def test_window_size_persists_across_application_restart(tmp_path):
     root2.update_idletasks()
     root2.update()
     try:
-        assert root2.winfo_width() == 1220
-        assert root2.winfo_height() == 760
+        expected_width = min(1220, root2.winfo_screenwidth())
+        expected_height = min(760, root2.winfo_screenheight())
+        assert root2.winfo_width() == expected_width
+        assert root2.winfo_height() == expected_height
         state = load_gui_layout_state(state_path)
-        assert state["window_width"] == 1220
-        assert state["window_height"] == 760
+        assert state["window_width"] == expected_width
+        assert state["window_height"] == expected_height
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()

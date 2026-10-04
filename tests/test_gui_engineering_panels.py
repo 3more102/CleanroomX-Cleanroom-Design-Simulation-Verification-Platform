@@ -102,7 +102,10 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     )
     panel.tree.selection_set(target_iid)
     panel.tree.focus(target_iid)
-    panel._navigate_selected()
+    app.root.update_idletasks()
+
+    assert str(panel.navigate_button.cget("state")) == "normal"
+    panel.navigate_button.invoke()
     app.root.update()
 
     assert app.spatial_workspace.selected == _Hit(
@@ -110,6 +113,18 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
         issue["element"]["id"],
     )
     assert app.notebook.select() == str(app.spatial_workspace)
+
+
+def test_problem_panel_explains_when_filters_hide_all_issues(app):
+    _result, _issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    panel.search_var.set("__no_matching_cleanroomx_diagnostic__")
+    app.root.update()
+
+    assert not panel.tree.get_children()
+    assert str(panel.navigate_button.cget("state")) == "disabled"
+    assert "No diagnostics match" in panel.detail.get("1.0", "end").strip()
 
 
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):

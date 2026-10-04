@@ -422,7 +422,11 @@ def _restore_revision_prune_stage(staged_path: Path, original_path: Path) -> Non
 
 def _stage_revision_for_pruning(path: Path) -> Path | None:
     """Detach the exact pathname revision selected for retention pruning."""
-    staged = path.with_name(f".{path.name}.{uuid.uuid4().hex}.retention-stage")
+    # Keep staged evidence discoverable by the normal revision scanner if a
+    # concurrent replacement prevents no-clobber restoration.
+    staged = path.with_name(
+        f".retention-stage-{uuid.uuid4().hex}-{path.name}"
+    )
     try:
         os.replace(path, staged)
     except OSError:

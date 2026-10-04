@@ -1227,6 +1227,8 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
+        self._hovered: _Hit | None = None
+        self._snap_indicator_world: tuple[float, float] | None = None
         self._drag_anchor: tuple[float, float] | None = None
         self._drag_item_origin: tuple[float, float] | None = None
         self._pan_anchor: tuple[int, int] | None = None
@@ -1249,6 +1251,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
+        self._property_entries: dict[str, ttk.Entry] = {}
         self._workspace_mode = tk.StringVar(value="split")
         self._history_can_undo = False
         self._history_can_redo = False
@@ -1487,7 +1490,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
-                ttk.Entry(value_frame, textvariable=var, width=16).pack(side="left")
+                entry = ttk.Entry(value_frame, textvariable=var, width=16)
+                entry.pack(side="left")
+                self._property_entries[key] = entry
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
                         side="left", padx=(4, 0)
@@ -1513,8 +1518,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<ButtonRelease-1>", self._on_left_up)
         self.canvas_2d.bind("<Button-2>", self._on_pan_down)
         self.canvas_2d.bind("<B2-Motion>", self._on_pan_drag)
-        self.canvas_2d.bind("<Button-3>", self._on_pan_down)
-        self.canvas_2d.bind("<B3-Motion>", self._on_pan_drag)
+        self.canvas_2d.bind("<Button-3>", self._on_context_menu_2d)
+        self.canvas_2d.bind("<Control-Button-1>", self._on_context_menu_2d)
+        self.canvas_2d.bind("<Leave>", self._on_canvas_leave)
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
         self.canvas_2d.bind(
             "<Button-4>", lambda event: self._zoom_at(1.1, event.x, event.y)
@@ -2357,10 +2363,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["y_m"] + room["width_m"],
             )
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hovered == _Hit("room", room["id"])
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else (
+                    "#0ea5e9"
+                    if hovered
+                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                )
             )
             fill = (
                 overlay_by_room[room["id"]]["fill"]
@@ -2369,7 +2380,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                fill=fill,
+                outline=outline,
+                width=3 if (selected or hovered) else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
@@ -2397,6 +2410,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     tags=(f"room:{room['id']}", "room"),
                 )
             if selected:
+                self._draw_room_dimensions_2d(room, x0, y0, x1, y1)
                 handle = 6
                 canvas.create_rectangle(
                     x1 - handle, y1 - handle, x1 + handle, y1 + handle,
@@ -2439,10 +2453,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             for device in self.layout["devices"]:
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
                 selected = self.selected == _Hit("device", device["id"])
+                hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
                     "#c0392b"
                     if selected
-                    else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                    else (
+                        "#0ea5e9"
+                        if hovered
+                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                    )
                 )
                 tag = f"device:{device['id']}"
                 if device["type"] in {"door", "window", "opening", "transfer"}:
@@ -2457,7 +2476,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(
                         *p0, *p1,
                         fill=device_outline,
-                        width=7 if selected else 5,
+                        width=7 if (selected or hovered) else 5,
                         tags=(tag, "device"),
                     )
                     if self._show_labels.get():
@@ -2467,11 +2486,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                             tags=(tag, "device"),
                         )
                 else:
-                    radius = 9 if selected else 7
+                    radius = 9 if (selected or hovered) else 7
                     canvas.create_oval(
                         x - radius, y - radius, x + radius, y + radius,
                         fill="#ffffff", outline=device_outline,
-                        width=3 if selected else 2,
+                        width=3 if (selected or hovered) else 2,
                         tags=(tag, "device"),
                     )
                     canvas.create_text(
@@ -2490,6 +2509,148 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 fill="#667788",
             )
+
+    def _draw_room_dimensions_2d(
+        self,
+        room: dict,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+    ) -> None:
+        """Draw engineering dimensions for the selected room without changing geometry."""
+        canvas = self.canvas_2d
+        offset = 18
+        tick = 4
+        color = "#475569"
+        tags = ("room_dimension", f"room:{room['id']}")
+
+        y = min(y0, y1) - offset
+        left, right = sorted((x0, x1))
+        canvas.create_line(left, y, right, y, fill=color, tags=tags)
+        canvas.create_line(left, y - tick, left, y + tick, fill=color, tags=tags)
+        canvas.create_line(right, y - tick, right, y + tick, fill=color, tags=tags)
+        canvas.create_line(left, min(y0, y1), left, y + tick, fill="#94a3b8", tags=tags)
+        canvas.create_line(right, min(y0, y1), right, y + tick, fill="#94a3b8", tags=tags)
+        canvas.create_text(
+            (left + right) / 2,
+            y - 9,
+            text=f"{room['length_m']:g} m",
+            fill=color,
+            tags=tags,
+        )
+
+        x = min(x0, x1) - offset
+        top, bottom = sorted((y0, y1))
+        canvas.create_line(x, top, x, bottom, fill=color, tags=tags)
+        canvas.create_line(x - tick, top, x + tick, top, fill=color, tags=tags)
+        canvas.create_line(x - tick, bottom, x + tick, bottom, fill=color, tags=tags)
+        canvas.create_line(min(x0, x1), top, x + tick, top, fill="#94a3b8", tags=tags)
+        canvas.create_line(min(x0, x1), bottom, x + tick, bottom, fill="#94a3b8", tags=tags)
+        canvas.create_text(
+            x - 11,
+            (top + bottom) / 2,
+            text=f"{room['width_m']:g} m",
+            fill=color,
+            angle=90,
+            tags=tags,
+        )
+
+    def _draw_snap_indicator_2d(self, event_x: float, event_y: float) -> None:
+        canvas = self.canvas_2d
+        canvas.delete("snap_indicator")
+        self._snap_indicator_world = None
+        if not self._snap_to_grid.get():
+            return
+        grid = max(0.01, float(self.layout["grid_m"]))
+        world_x, world_y = self._canvas_to_world(event_x, event_y)
+        snapped = (
+            round(world_x / grid) * grid,
+            round(world_y / grid) * grid,
+        )
+        self._snap_indicator_world = snapped
+        x, y = self._world_to_canvas(*snapped)
+        radius = 6
+        canvas.create_line(
+            x - radius,
+            y,
+            x + radius,
+            y,
+            fill="#0284c7",
+            width=2,
+            tags=("snap_indicator",),
+        )
+        canvas.create_line(
+            x,
+            y - radius,
+            x,
+            y + radius,
+            fill="#0284c7",
+            width=2,
+            tags=("snap_indicator",),
+        )
+
+    def _focus_property(self, key: str) -> None:
+        entry = self._property_entries.get(key)
+        if entry is not None and entry.winfo_manager():
+            entry.focus_set()
+            entry.selection_range(0, "end")
+
+    def _build_context_menu_2d(self, hit: _Hit) -> tk.Menu:
+        menu = tk.Menu(self, tearoff=False)
+        menu.add_command(label="Properties", command=lambda: self._focus_property("name"))
+        menu.add_command(label="Duplicate", command=self.duplicate_selected)
+        menu.add_command(label="Delete", command=self.delete_selected)
+        if hit.kind == "room":
+            menu.add_separator()
+            menu.add_command(label="Add Door", command=lambda: self.add_device("door"))
+            menu.add_command(label="Add Opening", command=lambda: self.add_device("opening"))
+            device_menu = tk.Menu(menu, tearoff=False)
+            for device_type, label in (
+                ("window", "Window"),
+                ("ffu", "FFU"),
+                ("supply", "Supply"),
+                ("return", "Return"),
+                ("exhaust", "Exhaust"),
+                ("equipment", "Equipment"),
+                ("sensor", "Sensor"),
+                ("transfer", "Transfer"),
+            ):
+                device_menu.add_command(
+                    label=label,
+                    command=lambda t=device_type: self.add_device(t),
+                )
+            menu.add_cascade(label="Add Device", menu=device_menu)
+            menu.add_separator()
+            menu.add_command(
+                label="Link Analysis…",
+                command=lambda: self._focus_property("analysis_room_name"),
+            )
+        return menu
+
+    def _on_context_menu_2d(self, event: tk.Event) -> str:
+        self.canvas_2d.focus_set()
+        current = self.canvas_2d.find_withtag("current")
+        hit = self._parse_hit(self.canvas_2d.gettags(current[0])) if current else None
+        if hit is None:
+            return "break"
+        self.selected = hit
+        self._load_property_panel()
+        self._notify_selection_change()
+        self.redraw()
+        menu = self._build_context_menu_2d(hit)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    def _on_canvas_leave(self, event: tk.Event | None = None) -> None:
+        if self._hovered is not None:
+            self._hovered = None
+            self._draw_2d()
+        self._snap_indicator_world = None
+        self.canvas_2d.delete("snap_indicator")
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
         return project_3d(
@@ -2798,6 +2959,16 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        current = self.canvas_2d.find_withtag("current")
+        hovered = (
+            self._parse_hit(self.canvas_2d.gettags(current[0]))
+            if current
+            else None
+        )
+        if hovered != self._hovered:
+            self._hovered = hovered
+            self._draw_2d()
+        self._draw_snap_indicator_2d(event.x, event.y)
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

@@ -1522,6 +1522,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
         self._workspace_mode = tk.StringVar(value="split")
+        self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
         self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
@@ -1678,6 +1679,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
 
         views = ttk.Frame(self._body)
+        self._views_frame = views
         self._body.add(views, weight=6)
 
         self._view_panes = ttk.Panedwindow(views, orient="horizontal")
@@ -1819,6 +1821,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.pack(fill="both", expand=True)
 
         inspector = ttk.Frame(self._body, padding=(10, 8))
+        self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
         ttk.Label(
             inspector, text="PROPERTIES", style="CX.Section.TLabel"
@@ -1960,6 +1963,34 @@ class SpatialDesignWorkspace(ttk.Frame):
             raise ValueError("workspace mode must be '2d', '3d', or 'split'")
         self._workspace_mode.set(mode)
         self._apply_workspace_mode()
+
+    def inspector_visible(self) -> bool:
+        frame = getattr(self, "_inspector_frame", None)
+        body = getattr(self, "_body", None)
+        if frame is None or body is None:
+            return False
+        return str(frame) in {str(item) for item in body.panes()}
+
+    def set_inspector_visible(self, visible: bool) -> None:
+        frame = getattr(self, "_inspector_frame", None)
+        body = getattr(self, "_body", None)
+        if frame is None or body is None:
+            return
+        requested = bool(visible)
+        present = self.inspector_visible()
+        self._inspector_visible.set(requested)
+        if requested and not present:
+            body.add(frame, weight=2)
+        elif not requested and present:
+            body.forget(frame)
+        state = "shown" if requested else "hidden"
+        self._status_setter(f"Design Inspector {state}")
+
+    def toggle_inspector(self) -> None:
+        self.set_inspector_visible(not self.inspector_visible())
+
+    def show_inspector(self) -> None:
+        self.set_inspector_visible(True)
 
     @staticmethod
     def _hit_key(kind: str, item_id: str) -> str:
@@ -3397,6 +3428,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def _focus_property(self, key: str) -> None:
+        self.show_inspector()
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
             entry.focus_set()

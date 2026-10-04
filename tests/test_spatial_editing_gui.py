@@ -512,3 +512,53 @@ def test_reset_panel_layout_restores_shell_panels(app):
     assert app._paned_contains(app.main_panes, app.navigator_panel)
     assert app._paned_contains(app.workspace_panes, app.output_panel)
 
+def test_design_inspector_collapses_restores_and_is_view_only(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    assert workspace.inspector_visible()
+
+    app.toggle_design_inspector()
+    app.root.update()
+    assert app.notebook.select() == str(workspace)
+    assert not workspace.inspector_visible()
+
+    app.toggle_design_inspector()
+    app.root.update()
+    assert workspace.inspector_visible()
+    assert tuple(str(item) for item in workspace._body.panes())[-1] == str(
+        workspace._inspector_frame
+    )
+    assert app.project.to_dict() == project_before
+
+
+def test_properties_action_reveals_hidden_design_inspector(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    workspace.set_inspector_visible(False)
+    app.root.update()
+    assert not workspace.inspector_visible()
+
+    workspace._focus_property("name")
+    app.root.update()
+
+    assert workspace.inspector_visible()
+    assert workspace._property_entries["name"].focus_get() is not None
+
+
+def test_reset_panel_layout_restores_design_inspector_too(app):
+    workspace = app.spatial_workspace
+    workspace.set_inspector_visible(False)
+    app.toggle_navigator_panel()
+    app.toggle_output_panel()
+    app.root.update()
+
+    app.reset_panel_layout()
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert workspace.inspector_visible()
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+

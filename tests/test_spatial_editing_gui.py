@@ -22,7 +22,7 @@ from cleanroomx.proofgraph_models import (
     RequirementSet,
     VerificationRun,
 )
-from cleanroomx.spatial import _Hit
+from cleanroomx.spatial import _Hit, engineering_overlay_state
 
 
 def _proofgraph_document(subject_ref: str) -> dict:
@@ -546,4 +546,81 @@ def test_hover_state_has_distinct_2d_feedback(app):
     workspace._on_motion(event)
 
     assert workspace._hovered == _Hit("room", room["id"])
+
+def test_engineering_overlay_projects_existing_result_and_input_evidence_only(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    room["analysis_room_name"] = "Overlay Room"
+    analysis = SimpleNamespace(
+        input={
+            "rooms": [
+                {
+                    "name": "Overlay Room",
+                    "supply_airflow_m3_h": 2400.0,
+                }
+            ]
+        }
+    )
+    result = {
+        "rooms": [
+            {
+                "room": "Overlay Room",
+                "ach": 32.5,
+                "status": "pass",
+                "findings": [
+                    {
+                        "code": "PRESSURE",
+                        "status": "pass",
+                        "actual": 15.0,
+                    }
+                ],
+            }
+        ]
+    }
+
+    ach = engineering_overlay_state(workspace.layout, analysis, result, mode="ACH")
+    airflow = engineering_overlay_state(
+        workspace.layout, analysis, result, mode="Airflow"
+    )
+    verification = engineering_overlay_state(
+        workspace.layout, analysis, result, mode="Verification"
+    )
+
+    ach_row = next(item for item in ach["rooms"] if item["room_id"] == room["id"])
+    airflow_row = next(
+        item for item in airflow["rooms"] if item["room_id"] == room["id"]
+    )
+    verification_row = next(
+        item for item in verification["rooms"] if item["room_id"] == room["id"]
+    )
+
+    assert ach_row["ach"] == pytest.approx(32.5)
+    assert ach_row["value"] == pytest.approx(32.5)
+    assert ach_row["source"] == "result"
+    assert airflow_row["supply_airflow_m3_h"] == pytest.approx(2400.0)
+    assert airflow_row["source"] == "analysis input"
+    assert verification_row["verification_status"] == "pass"
+
+
+def test_overlay_mode_changes_display_without_changing_engineering_geometry(app):
+    workspace = app.spatial_workspace
+    geometry_before = copy.deepcopy(
+        {
+            "floor": workspace.layout["floor"],
+            "rooms": workspace.layout["rooms"],
+            "devices": workspace.layout["devices"],
+        }
+    )
+
+    workspace._overlay_mode.set("ACH")
+    workspace._set_overlay_mode()
+    app.root.update()
+
+    assert workspace.layout["view"]["overlay_mode"] == "ACH"
+    assert workspace.canvas_2d.find_withtag("overlay_legend")
+    assert {
+        "floor": workspace.layout["floor"],
+        "rooms": workspace.layout["rooms"],
+        "devices": workspace.layout["devices"],
+    } == geometry_before
 

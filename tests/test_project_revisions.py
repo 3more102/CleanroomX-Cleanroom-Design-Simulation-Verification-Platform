@@ -95,6 +95,51 @@ def test_project_revision_history_is_bounded_newest_first(tmp_path):
     assert descriptions == ["v5", "v4", "v3"]
 
 
+def test_revision_scan_rejects_artifact_replaced_between_parse_and_fingerprint(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=10)
+
+    baseline = revision_module.scan_project_revisions(path)
+    assert len(baseline.revisions) == 1
+    artifact = baseline.revisions[0].path
+    original = artifact.read_bytes()
+
+    real_loader = revision_module.load_project_revision
+    raced = False
+
+    def load_then_replace(artifact_path, *, expected_source_path=None):
+        nonlocal raced
+        snapshot = real_loader(
+            artifact_path,
+            expected_source_path=expected_source_path,
+        )
+        if not raced and Path(artifact_path) == artifact:
+            payload = json.loads(original.decode("utf-8"))
+            rewritten = json.dumps(payload, separators=(",", ":")) + "\n"
+            artifact.write_text(rewritten, encoding="utf-8")
+            assert artifact.read_bytes() != original
+            raced = True
+        return snapshot
+
+    monkeypatch.setattr(
+        revision_module,
+        "load_project_revision",
+        load_then_replace,
+    )
+
+    scan = revision_module.scan_project_revisions(path)
+
+    assert raced is True
+    assert scan.revisions == ()
+    assert len(scan.issues) == 1
+    assert scan.issues[0].path == artifact
+    assert "changed while scanning" in scan.issues[0].error
+
+
 def test_revision_retention_preserves_artifact_changed_after_scan(
     tmp_path,
     monkeypatch,

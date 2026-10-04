@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
-from .cli_output import CliStateError
+from .cli_output import CliStateError, resolve_cli_path
 from .project import (
     capture_project_file_revision,
     load_project_document_with_revision,
@@ -146,8 +146,8 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = resolve_cli_path(args.project, label="project")
         project, revision, history_summary, records, currency = _load_stable_project(source)
         currency_by_analysis = {
             item["analysis_id"]: item

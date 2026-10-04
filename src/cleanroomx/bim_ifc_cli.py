@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-from .cli_output import CliStateError
+from .cli_output import CliStateError, resolve_cli_path
 from .bim_ifc import (
     IFC_LINK_METADATA_KEY,
     IfcImportError,
@@ -129,8 +129,8 @@ def _base_result(
 
 
 def _initial_import(args) -> int:
-    project_path = Path(args.project).expanduser().resolve(strict=False)
-    ifc_path = Path(args.ifc).expanduser().resolve(strict=False)
+    project_path = resolve_cli_path(args.project, label="project")
+    ifc_path = resolve_cli_path(args.ifc, label="IFC source")
     project, revision = _load_current_project(project_path)
 
     if IFC_LINK_METADATA_KEY in project.metadata:
@@ -181,8 +181,8 @@ def _initial_import(args) -> int:
 
 
 def _plan(args) -> int:
-    project_path = Path(args.project).expanduser().resolve(strict=False)
-    ifc_path = Path(args.ifc).expanduser().resolve(strict=False)
+    project_path = resolve_cli_path(args.project, label="project")
+    ifc_path = resolve_cli_path(args.ifc, label="IFC source")
     project, revision = _load_current_project(project_path)
     semantics, provenance = _extract(ifc_path)
     report = plan_ifc_semantic_reimport(
@@ -211,8 +211,8 @@ def _plan(args) -> int:
 
 
 def _reimport(args) -> int:
-    project_path = Path(args.project).expanduser().resolve(strict=False)
-    ifc_path = Path(args.ifc).expanduser().resolve(strict=False)
+    project_path = resolve_cli_path(args.project, label="project")
+    ifc_path = resolve_cli_path(args.ifc, label="IFC source")
     project, revision = _load_current_project(project_path)
     semantics, provenance = _extract(ifc_path)
     report = reimport_ifc_semantics_to_project(

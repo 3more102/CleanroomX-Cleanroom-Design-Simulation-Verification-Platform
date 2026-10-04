@@ -45,6 +45,20 @@ class CliStateError(RuntimeError):
     """Raised for expected CLI state/revision failures, not programming defects."""
 
 
+def resolve_cli_path(
+    path: str | Path,
+    *,
+    label: str = "input",
+) -> Path:
+    """Resolve one user-supplied path while preserving unrelated runtime defects."""
+    try:
+        return Path(path).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise CliInputError(
+            f"could not resolve {label} path: {path}: {exc}"
+        ) from exc
+
+
 def load_cli_input(
     loader: Callable[[str | Path], _T],
     path: str | Path,

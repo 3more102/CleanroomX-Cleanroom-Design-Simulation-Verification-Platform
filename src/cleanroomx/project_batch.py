@@ -10,6 +10,7 @@ from typing import Callable, Sequence
 
 from . import __version__
 from .application import run_analysis
+from .cli_output import resolve_cli_path
 from .markdown import markdown_text
 from .persistence import atomic_write_text
 from .project import (
@@ -459,9 +460,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        source = Path(args.project).expanduser().resolve(strict=False)
+        source = resolve_cli_path(args.project, label="project")
         cancel_file = (
-            Path(args.cancel_file).expanduser().resolve(strict=False)
+            resolve_cli_path(args.cancel_file, label="cancellation sentinel")
             if args.cancel_file
             else None
         )

@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
-from .cli_output import CliStateError
+from .cli_output import CliStateError, resolve_cli_path
 from .project import (
     ProjectFileBusyError,
     ProjectSaveDurabilityError,
@@ -181,8 +181,8 @@ def _write_run_output(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = resolve_cli_path(args.project, label="project")
         if args.command == "status":
             project, revision_before = load_project_document_with_revision(source)
             currency = assess_project_verification_currency(

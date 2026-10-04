@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — recovery comparison source-state classification — 2026-10-04
+
+- Removes the separate source-path existence precheck from semantic recovery comparison and lets the canonical stable project loader determine source state.
+- Classifies only a real `FileNotFoundError` at load time as a missing original source; permission and other read/validation failures remain unreadable evidence instead of being flattened by a racy precheck.
+- Adds regressions for disappearance at the load boundary and non-missing access failure; recovery artifacts, project schema, solver behavior, requirements, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — deterministic portable-bundle private-snapshot diagnostics — 2026-10-04
 
 - Preserves private stable-snapshot verification evidence at the portable-bundle inspection boundary without exposing random temporary-snapshot paths.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import cleanroomx.recovery_diff as recovery_diff
 from cleanroomx.autosave import AutosaveManager, scan_recovery_artifacts
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.recovery_diff import (
@@ -158,6 +159,38 @@ def test_missing_source_is_reported_without_guessing_changes(tmp_path):
     assert comparison.source_analysis_count is None
     assert "missing" in summary.lower()
     assert "no automatic reconstruction" in details[0].lower()
+
+
+def test_source_disappearing_at_load_is_reported_missing(tmp_path, monkeypatch):
+    source, candidate = _recovery(tmp_path, _project())
+
+    def missing_at_load(path):
+        assert path == source
+        raise FileNotFoundError(source)
+
+    monkeypatch.setattr(recovery_diff, "load_project_document", missing_at_load)
+
+    comparison = compare_recovery_to_source(candidate)
+
+    assert comparison.source_state == "missing"
+    assert comparison.source_error is None
+    assert comparison.source_analysis_count is None
+
+
+def test_source_access_error_at_load_is_reported_unreadable(tmp_path, monkeypatch):
+    source, candidate = _recovery(tmp_path, _project())
+
+    def blocked_at_load(path):
+        assert path == source
+        raise PermissionError("source access denied")
+
+    monkeypatch.setattr(recovery_diff, "load_project_document", blocked_at_load)
+
+    comparison = compare_recovery_to_source(candidate)
+
+    assert comparison.source_state == "unreadable"
+    assert comparison.source_error == "source access denied"
+    assert comparison.source_analysis_count is None
 
 
 def test_unreadable_source_is_reported_without_mutating_recovery(tmp_path):

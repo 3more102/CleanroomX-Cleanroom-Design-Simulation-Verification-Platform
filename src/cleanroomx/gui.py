@@ -2656,9 +2656,14 @@ class CleanroomXApp:
                 )
                 return
 
-        if element_type == "spatial_element" and element_id:
+        if element_type in {"spatial_element", "room", "device"} and element_id:
             workspace = self.spatial_workspace
-            for kind in ("room", "device"):
+            kinds = (
+                (element_type,)
+                if element_type in {"room", "device"}
+                else ("room", "device")
+            )
+            for kind in kinds:
                 if workspace.select_item(kind, element_id, notify=True):
                     self._activate_spatial_workspace()
                     workspace.fit_selected()

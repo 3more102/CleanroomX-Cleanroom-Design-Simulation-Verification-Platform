@@ -1184,6 +1184,246 @@ def pressure_overlay_state(
     }
 
 
+ENGINEERING_OVERLAY_MODES = ("none", "pressure", "ach", "airflow", "status")
+
+
+def _engineering_status(value: Any) -> str:
+    token = str(value or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "passed": "pass",
+        "verified": "pass",
+        "failed": "fail",
+        "error": "fail",
+        "warn": "warning",
+        "not_verified": "not_checked",
+        "missing_evidence": "not_checked",
+        "unverified": "not_checked",
+    }
+    return aliases.get(token, token or "unavailable")
+
+
+def _status_fill(status: str) -> str:
+    normalized = _engineering_status(status)
+    if normalized == "pass":
+        return "#dcfce7"
+    if normalized == "fail":
+        return "#fee2e2"
+    if normalized == "warning":
+        return "#fef3c7"
+    if normalized == "not_checked":
+        return "#e2e8f0"
+    return "#dfe7ef"
+
+
+def _scalar_fill(
+    value: float | None,
+    minimum: float | None,
+    maximum: float | None,
+    *,
+    low_rgb: tuple[int, int, int] = (224, 242, 254),
+    high_rgb: tuple[int, int, int] = (14, 116, 144),
+) -> str:
+    if value is None or minimum is None or maximum is None:
+        return "#dfe7ef"
+    ratio = 0.5 if maximum <= minimum else (value - minimum) / (maximum - minimum)
+    ratio = max(0.0, min(1.0, ratio))
+    rgb = tuple(
+        int(round(low + (high - low) * ratio))
+        for low, high in zip(low_rgb, high_rgb)
+    )
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def engineering_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+    *,
+    mode: str = "pressure",
+) -> dict:
+    """Project canonical run/spatial results into display-only room overlays.
+
+    This function never evaluates engineering requirements. It only maps values and
+    statuses already present in fresh analysis results or explicit spatial evidence.
+    """
+    normalized_mode = str(mode or "none").strip().lower()
+    if normalized_mode not in ENGINEERING_OVERLAY_MODES:
+        normalized_mode = "none"
+
+    normalized = normalize_layout(layout)
+    result_dict = result if isinstance(result, dict) else {}
+
+    if normalized_mode == "pressure":
+        pressure = pressure_overlay_state(normalized, analysis, result_dict)
+        rooms = []
+        for item in pressure["rooms"]:
+            value = item.get("pressure_pa")
+            status = _engineering_status(item.get("status"))
+            label = (
+                "Pressure: unavailable"
+                if value is None
+                else f"Pressure: {value:+g} Pa"
+            )
+            if status not in {"unavailable", "spatial"}:
+                label += f" · {status.upper()}"
+            rooms.append({**item, "label": label})
+        return {
+            "mode": "pressure",
+            "title": "Pressure",
+            "unit": "Pa",
+            "minimum": pressure.get("minimum_pressure_pa"),
+            "maximum": pressure.get("maximum_pressure_pa"),
+            "rooms": rooms,
+        }
+
+    raw_reports = _result_room_reports(result_dict)
+    report_by_name: dict[str, dict] = {}
+    for report in raw_reports:
+        name = str(report.get("room") or report.get("name") or "").strip().casefold()
+        if name:
+            report_by_name[name] = report
+    node_by_name = {
+        str(node.get("name") or "").strip().casefold(): node
+        for node in result_dict.get("nodes", [])
+        if isinstance(node, dict) and str(node.get("name") or "").strip()
+    }
+
+    rooms: list[dict] = []
+    scalar_values: list[float] = []
+    for room in normalized["rooms"]:
+        linked_name = str(
+            room.get("analysis_room_name") or room.get("name") or ""
+        ).strip()
+        report = report_by_name.get(linked_name.casefold()) if linked_name else None
+        node = node_by_name.get(linked_name.casefold()) if linked_name else None
+
+        value: float | None = None
+        status = "unavailable"
+        label = f"{normalized_mode.title()}: unavailable"
+        details: dict[str, Any] = {}
+
+        if normalized_mode == "ach" and isinstance(report, dict):
+            raw_ach = _geometry_number(report.get("ach"))
+            if math.isfinite(raw_ach):
+                value = raw_ach
+                scalar_values.append(raw_ach)
+                findings = report.get("findings")
+                if isinstance(findings, list):
+                    ach_finding = next(
+                        (
+                            item
+                            for item in findings
+                            if isinstance(item, dict)
+                            and str(item.get("code") or "").upper() == "ACH"
+                        ),
+                        None,
+                    )
+                    if ach_finding is not None:
+                        status = _engineering_status(ach_finding.get("status"))
+                label = f"ACH: {raw_ach:.2f} 1/h"
+                if status != "unavailable":
+                    label += f" · {status.upper()}"
+
+        elif normalized_mode == "airflow":
+            source = report if isinstance(report, dict) else node
+            if isinstance(source, dict):
+                air_balance = source.get("air_balance")
+                if not isinstance(air_balance, dict):
+                    air_balance = source
+                supply = _geometry_number(
+                    air_balance.get("supply_airflow_m3_h")
+                    if "supply_airflow_m3_h" in air_balance
+                    else air_balance.get("supply_m3_h")
+                )
+                if not math.isfinite(supply):
+                    supply = _geometry_number(source.get("governing_airflow_m3_h"))
+                returned = _geometry_number(
+                    air_balance.get("return_airflow_m3_h")
+                    if "return_airflow_m3_h" in air_balance
+                    else air_balance.get("return_m3_h")
+                )
+                exhausted = _geometry_number(
+                    air_balance.get("exhaust_airflow_m3_h")
+                    if "exhaust_airflow_m3_h" in air_balance
+                    else air_balance.get("exhaust_m3_h")
+                )
+                if math.isfinite(supply):
+                    value = supply
+                    scalar_values.append(supply)
+                    details["supply_m3_h"] = supply
+                if math.isfinite(returned):
+                    details["return_m3_h"] = returned
+                if math.isfinite(exhausted):
+                    details["exhaust_m3_h"] = exhausted
+                if "passes_minimum_surplus" in air_balance:
+                    status = "pass" if air_balance.get("passes_minimum_surplus") else "fail"
+                if details:
+                    parts = []
+                    if "supply_m3_h" in details:
+                        parts.append(f"S {details['supply_m3_h']:.0f}")
+                    if "return_m3_h" in details:
+                        parts.append(f"R {details['return_m3_h']:.0f}")
+                    if "exhaust_m3_h" in details:
+                        parts.append(f"E {details['exhaust_m3_h']:.0f}")
+                    label = "Airflow: " + " / ".join(parts) + " m³/h"
+                    if status != "unavailable":
+                        label += f" · {status.upper()}"
+
+        elif normalized_mode == "status":
+            if isinstance(report, dict):
+                status = _engineering_status(report.get("status"))
+                if status == "unavailable":
+                    air_balance = report.get("air_balance")
+                    if isinstance(air_balance, dict) and "passes_minimum_surplus" in air_balance:
+                        status = (
+                            "pass"
+                            if air_balance.get("passes_minimum_surplus")
+                            else "fail"
+                        )
+            if status == "unavailable" and isinstance(node, dict):
+                raw_status = node.get("status")
+                if raw_status is not None:
+                    status = _engineering_status(raw_status)
+            label = (
+                "Status: NOT VERIFIED"
+                if status in {"unavailable", "not_checked"}
+                else f"Status: {status.upper()}"
+            )
+
+        rooms.append(
+            {
+                "room_id": room["id"],
+                "value": value,
+                "status": status,
+                "label": label,
+                "fill": "#dfe7ef",
+                "details": details,
+            }
+        )
+
+    minimum = min(scalar_values) if scalar_values else None
+    maximum = max(scalar_values) if scalar_values else None
+    for item in rooms:
+        if normalized_mode == "status":
+            item["fill"] = _status_fill(item["status"])
+        elif normalized_mode in {"ach", "airflow"}:
+            item["fill"] = _scalar_fill(item["value"], minimum, maximum)
+
+    return {
+        "mode": normalized_mode,
+        "title": {
+            "none": "No overlay",
+            "ach": "Air Changes per Hour",
+            "airflow": "Airflow",
+            "status": "Verification Status",
+        }.get(normalized_mode, normalized_mode.title()),
+        "unit": {"ach": "1/h", "airflow": "m³/h"}.get(normalized_mode, ""),
+        "minimum": minimum,
+        "maximum": maximum,
+        "rooms": rooms,
+    }
+
+
 @dataclass
 class _Hit:
     kind: str

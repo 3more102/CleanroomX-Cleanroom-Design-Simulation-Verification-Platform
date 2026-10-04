@@ -422,3 +422,44 @@ def test_3d_xray_and_hover_are_view_only(app):
 def test_invalid_3d_preset_is_rejected(app):
     with pytest.raises(ValueError, match="3D preset"):
         app.spatial_workspace.set_3d_view_preset("perspective")
+
+
+def test_3d_projection_and_section_plane_are_display_only(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    room = workspace.layout["rooms"][0]
+    geometry_before = {
+        "rooms": copy.deepcopy(workspace.layout["rooms"]),
+        "devices": copy.deepcopy(workspace.layout["devices"]),
+    }
+
+    workspace.set_3d_projection("Perspective")
+    app.root.update()
+    assert workspace.layout["view"]["projection_mode"] == "perspective"
+    assert workspace._projection_mode.get() == "Perspective"
+    assert workspace.canvas_3d.find_withtag(f"room:{room['id']}")
+
+    z0 = room.get(
+        "floor_elevation_m",
+        workspace.layout["floor"]["elevation_m"],
+    )
+    section_z = z0 + room["height_m"] / 2.0
+    workspace._section_height_var.set(f"{section_z:.2f}")
+    workspace._apply_section_height()
+    workspace._section_enabled.set(True)
+    workspace._toggle_section_plane()
+    app.root.update()
+
+    assert workspace.layout["view"]["section_enabled"] is True
+    assert workspace.layout["view"]["section_height_m"] == pytest.approx(section_z)
+    assert workspace.canvas_3d.find_withtag("section_plane")
+    visible_points = workspace._visible_3d_points()
+    assert visible_points
+    assert max(point[2] for point in visible_points) <= section_z + 1e-9
+    assert workspace.layout["rooms"] == geometry_before["rooms"]
+    assert workspace.layout["devices"] == geometry_before["devices"]
+
+
+def test_invalid_3d_projection_is_rejected(app):
+    with pytest.raises(ValueError, match="projection"):
+        app.spatial_workspace.set_3d_projection("fisheye")

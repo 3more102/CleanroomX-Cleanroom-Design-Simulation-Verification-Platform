@@ -7,6 +7,7 @@ BASE_2D_PIXELS_PER_M = 55.0
 BASE_3D_PIXELS_PER_M = 34.0
 MIN_ZOOM = 0.2
 MAX_ZOOM = 8.0
+PERSPECTIVE_DISTANCE_M = 25.0
 
 
 def clamp_zoom(value: float) -> float:
@@ -89,6 +90,47 @@ def zoom_2d_at(
     )
 
 
+def _project_3d_axes(
+    x_m: float,
+    y_m: float,
+    z_m: float,
+    *,
+    azimuth_deg: float,
+    elevation_deg: float,
+    projection_mode: str = "orthographic",
+) -> tuple[float, float]:
+    """Project model coordinates into camera-plane metres.
+
+    Orthographic mode preserves the historical CleanroomX projection exactly.
+    Perspective mode applies a bounded pinhole-style depth factor for display only.
+    """
+    mode = str(projection_mode or "orthographic").strip().lower()
+    if mode not in {"orthographic", "perspective"}:
+        raise ValueError("projection_mode must be 'orthographic' or 'perspective'")
+
+    values = (float(x_m), float(y_m), float(z_m))
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("3D projection coordinates must be finite")
+
+    azimuth = math.radians(float(azimuth_deg))
+    elevation = math.radians(float(elevation_deg))
+    x, y, z = values
+    xr = x * math.cos(azimuth) - y * math.sin(azimuth)
+    yr = x * math.sin(azimuth) + y * math.cos(azimuth)
+    sy = yr * math.sin(elevation) - z * math.cos(elevation)
+    if mode == "orthographic":
+        return xr, sy
+
+    depth = yr * math.cos(elevation) + z * math.sin(elevation)
+    denominator = max(
+        PERSPECTIVE_DISTANCE_M * 0.20,
+        PERSPECTIVE_DISTANCE_M + depth,
+    )
+    factor = PERSPECTIVE_DISTANCE_M / denominator
+    factor = max(0.25, min(4.0, factor))
+    return xr * factor, sy * factor
+
+
 def project_3d(
     x_m: float,
     y_m: float,
@@ -101,16 +143,20 @@ def project_3d(
     zoom: float,
     pan_x_px: float,
     pan_y_px: float,
+    projection_mode: str = "orthographic",
 ) -> tuple[float, float]:
-    azimuth = math.radians(float(azimuth_deg))
-    elevation = math.radians(float(elevation_deg))
-    xr = x_m * math.cos(azimuth) - y_m * math.sin(azimuth)
-    yr = x_m * math.sin(azimuth) + y_m * math.cos(azimuth)
-    sy = yr * math.sin(elevation) - z_m * math.cos(elevation)
+    projected_x, projected_y = _project_3d_axes(
+        x_m,
+        y_m,
+        z_m,
+        azimuth_deg=azimuth_deg,
+        elevation_deg=elevation_deg,
+        projection_mode=projection_mode,
+    )
     scale = BASE_3D_PIXELS_PER_M * clamp_zoom(zoom)
     return (
-        width_px / 2.0 + pan_x_px + xr * scale,
-        height_px * 0.66 + pan_y_px + sy * scale,
+        width_px / 2.0 + pan_x_px + projected_x * scale,
+        height_px * 0.66 + pan_y_px + projected_y * scale,
     )
 
 
@@ -123,6 +169,7 @@ def fit_3d_view(
     elevation_deg: float,
     padding_fraction: float = 0.10,
     max_zoom: float = 5.0,
+    projection_mode: str = "orthographic",
 ) -> tuple[float, float, float]:
     """Return zoom and pan that fit model-space points in the 3D viewport."""
     if not points_m:
@@ -139,17 +186,19 @@ def fit_3d_view(
     if not math.isfinite(zoom_limit) or zoom_limit < MIN_ZOOM:
         raise ValueError("max_zoom must be finite and at least MIN_ZOOM")
 
-    azimuth = math.radians(float(azimuth_deg))
-    elevation = math.radians(float(elevation_deg))
     projected_m: list[tuple[float, float]] = []
     for x_m, y_m, z_m in points_m:
         values = (float(x_m), float(y_m), float(z_m))
         if not all(math.isfinite(value) for value in values):
             raise ValueError("3D fit points must be finite")
-        x, y, z = values
-        xr = x * math.cos(azimuth) - y * math.sin(azimuth)
-        yr = x * math.sin(azimuth) + y * math.cos(azimuth)
-        projected_m.append((xr, yr * math.sin(elevation) - z * math.cos(elevation)))
+        projected_m.append(
+            _project_3d_axes(
+                *values,
+                azimuth_deg=azimuth_deg,
+                elevation_deg=elevation_deg,
+                projection_mode=projection_mode,
+            )
+        )
 
     min_x = min(x for x, _ in projected_m)
     max_x = max(x for x, _ in projected_m)

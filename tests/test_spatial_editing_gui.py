@@ -877,6 +877,8 @@ def test_recent_projects_persist_across_application_restart(tmp_path):
 def test_forget_recent_project_updates_persisted_preferences(app, tmp_path):
     project_a = tmp_path / "alpha.cleanroomx.json"
     project_b = tmp_path / "beta.cleanroomx.json"
+    app._recent_project_paths.clear()
+    app._save_ui_layout_state()
     app._remember_recent_project(project_a)
     app._remember_recent_project(project_b)
 

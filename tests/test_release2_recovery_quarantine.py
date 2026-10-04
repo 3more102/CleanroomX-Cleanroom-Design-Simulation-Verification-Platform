@@ -271,3 +271,43 @@ def test_quarantine_retention_is_bounded(tmp_path):
     quarantine_dir = tmp_path / "quarantine"
     assert len(list(quarantine_dir.glob("*.quarantined.manifest.json"))) == 2
     assert len(list(quarantine_dir.glob("*.quarantined"))) == 2
+
+def test_quarantine_retention_preserves_unverified_forensic_pair(tmp_path):
+    first_source = tmp_path / "broken-first.recovery.json"
+    first_source.write_bytes(b"broken-first")
+    first = quarantine_recovery_artifact(
+        first_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    second_source = tmp_path / "broken-second.recovery.json"
+    second_source.write_bytes(b"broken-second")
+    second = quarantine_recovery_artifact(
+        second_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=10,
+    )
+
+    # Simulate post-quarantine corruption. Retention must preserve this pair for
+    # operator review instead of trusting stale manifest metadata and deleting it.
+    first.path.write_bytes(b"tampered forensic bytes")
+
+    third_source = tmp_path / "broken-third.recovery.json"
+    third_source.write_bytes(b"broken-third")
+    third = quarantine_recovery_artifact(
+        third_source,
+        recovery_dir=tmp_path,
+        reason="parse failure",
+        history_limit=1,
+    )
+
+    assert first.path.exists()
+    assert first.manifest_path.exists()
+    assert third.path.exists()
+    assert third.manifest_path.exists()
+    assert not second.path.exists()
+    assert not second.manifest_path.exists()
+

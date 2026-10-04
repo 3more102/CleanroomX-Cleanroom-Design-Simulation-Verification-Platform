@@ -62,11 +62,13 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
+from .project_diagnostics import markdown_project_diagnostics_report
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
     _assert_project_publication_safe,
     _paths_alias,
 )
+from .gui_panels import ProjectDiagnosticsPanel
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -1191,6 +1193,7 @@ class CleanroomXApp:
         self._autosave_manager.begin_project(None)
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
+        self._project_diagnostics_after_id = None
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -1216,6 +1219,7 @@ class CleanroomXApp:
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
+        self._refresh_engineering_panels()
         self._capture_saved_state()
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
@@ -1318,6 +1322,11 @@ class CleanroomXApp:
             label="Verify & Persist Project Requirements",
             command=self.persist_project_requirements_verification,
         )
+        verify_menu.add_command(
+            label="Refresh Project Diagnostics",
+            accelerator="F8",
+            command=self._refresh_engineering_panels,
+        )
         verify_menu.add_separator()
         verify_menu.add_command(
             label="Requirements Traceability...",
@@ -1387,6 +1396,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
         self.root.bind("<F5>", lambda event: self.run_current())
+        self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
     def _build_layout(self) -> None:
         topbar = ttk.Frame(self.root, padding=(12, 10, 12, 7))
@@ -1448,7 +1458,13 @@ class CleanroomXApp:
 
         content = ttk.Frame(panes)
         panes.add(content, weight=5)
-        self.notebook = ttk.Notebook(content)
+
+        self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
+        self.workspace_panes.pack(fill="both", expand=True)
+
+        workspace_host = ttk.Frame(self.workspace_panes)
+        self.workspace_panes.add(workspace_host, weight=5)
+        self.notebook = ttk.Notebook(workspace_host)
         self.notebook.pack(fill="both", expand=True)
 
         self.spatial_workspace = SpatialDesignWorkspace(
@@ -1467,9 +1483,9 @@ class CleanroomXApp:
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
-        input_tab = ttk.Frame(self.notebook)
-        self.notebook.add(input_tab, text="Input")
-        input_notebook = ttk.Notebook(input_tab)
+        self.input_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.input_tab, text="Input")
+        input_notebook = ttk.Notebook(self.input_tab)
         input_notebook.pack(fill="both", expand=True)
 
         structured_tab = ttk.Frame(input_notebook)
@@ -1515,16 +1531,56 @@ class CleanroomXApp:
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
-        self.result_text = self._add_text_tab("Results")
-        self.diagnostics_text = self._add_text_tab("Diagnostics")
-
         plot_tab = ttk.Frame(self.notebook)
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
-        self.report_text = self._add_text_tab("Report")
+        output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        self.workspace_panes.add(output_host, weight=1)
+        output_header = ttk.Frame(output_host, padding=(8, 3))
+        output_header.pack(fill="x")
+        ttk.Label(
+            output_header,
+            text="OUTPUT / VERIFICATION",
+            style="CX.Section.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            output_header,
+            text="Canonical diagnostics, verification currency, evidence, and run output",
+        ).pack(side="right")
+
+        self.output_notebook = ttk.Notebook(output_host)
+        self.output_notebook.pack(fill="both", expand=True)
+
+        self.problems_panel = ProjectDiagnosticsPanel(
+            self.output_notebook,
+            project_getter=lambda: self.project,
+            base_dir_getter=self._base_dir,
+            navigate_callback=self._navigate_project_diagnostic,
+            export_callback=self.export_project_diagnostics,
+            status_setter=self.status_var.set,
+        )
+        self.output_notebook.add(self.problems_panel, text="Problems")
+        self.diagnostics_text = self._add_text_tab(
+            "Diagnostics", notebook=self.output_notebook
+        )
+        self.verification_text = self._add_text_tab(
+            "Verification", notebook=self.output_notebook
+        )
+        self.console_text = self._add_text_tab(
+            "Console", notebook=self.output_notebook
+        )
+        self.evidence_text = self._add_text_tab(
+            "Evidence", notebook=self.output_notebook
+        )
+        self.result_text = self._add_text_tab(
+            "Results", notebook=self.output_notebook
+        )
+        self.report_text = self._add_text_tab(
+            "Report", notebook=self.output_notebook
+        )
 
         status_bar = ttk.Frame(self.root, padding=(8, 4))
         status_bar.pack(fill="x", side="bottom")
@@ -1554,6 +1610,206 @@ class CleanroomXApp:
             anchor="e",
         ).pack(side="right")
 
+    def _refresh_engineering_panels(self) -> dict | None:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return None
+        diagnostics = panel.refresh()
+
+        try:
+            currency = assess_project_verification_currency(
+                self.project,
+                base_dir=self._base_dir(),
+            )
+            summary = currency.get("summary", {})
+            lines = [
+                "CURRENT VERIFICATION CURRENCY",
+                "",
+                f"Configured analyses: {summary.get('configured_analysis_count', 0)}",
+                f"Current: {summary.get('current_count', 0)}",
+                f"Stale: {summary.get('stale_count', 0)}",
+                f"Not verified: {summary.get('not_verified_count', 0)}",
+                f"Not configured: {summary.get('not_configured_count', 0)}",
+                (
+                    "Dependency freshness unverifiable: "
+                    f"{summary.get('dependency_freshness_unverifiable_count', 0)}"
+                ),
+                "",
+            ]
+            for item in currency.get("analyses", []):
+                lines.append(
+                    "{name} [{kind}] — {state}".format(
+                        name=item.get("analysis_name")
+                        or item.get("analysis_id")
+                        or "analysis",
+                        kind=item.get("analysis_kind", "unknown"),
+                        state=item.get("state", "unknown"),
+                    )
+                )
+            self._set_text(
+                self.verification_text,
+                "\n".join(lines).rstrip() + "\n",
+            )
+        except Exception as exc:
+            self._set_text(
+                self.verification_text,
+                f"Verification currency unavailable: {exc}\n",
+            )
+
+        try:
+            records = verification_run_history_records(self.project.metadata)
+            lines = [
+                "PERSISTED VERIFICATION EVIDENCE",
+                "",
+                f"Retained records: {len(records)}",
+            ]
+            if not records:
+                lines.append("No persisted project-verification evidence.")
+            else:
+                for record in reversed(records[-20:]):
+                    verification = record.get("verification", {})
+                    lines.append(
+                        "#{sequence} · {analysis} · {status} · {completed}".format(
+                            sequence=record.get("sequence", "?"),
+                            analysis=record.get("analysis_name")
+                            or record.get("analysis_id")
+                            or "analysis",
+                            status=verification.get("status", "unknown"),
+                            completed=record.get("completed_at_utc", ""),
+                        )
+                    )
+            self._set_text(
+                self.evidence_text,
+                "\n".join(lines).rstrip() + "\n",
+            )
+        except Exception as exc:
+            self._set_text(
+                self.evidence_text,
+                f"Verification evidence unavailable: {exc}\n",
+            )
+
+        summary = (
+            diagnostics.get("summary", {})
+            if isinstance(diagnostics, dict)
+            else {}
+        )
+        location = str(self.project_path) if self.project_path else "Unsaved project"
+        console_lines = [
+            f"CleanroomX {__version__}",
+            f"Project: {self.project.name}",
+            f"Location: {location}",
+            f"Analyses: {len(self.project.analyses)}",
+            "Project diagnostics: "
+            + str(summary.get("status", "unavailable")).upper(),
+        ]
+        if self.last_run is not None:
+            console_lines.append(
+                f"Last run: {self.last_run.title} — {self.last_run.status}"
+            )
+        self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+        return diagnostics
+
+    def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
+        if getattr(self, "problems_panel", None) is None:
+            return
+        pending = getattr(self, "_project_diagnostics_after_id", None)
+        if pending is not None:
+            try:
+                self.root.after_cancel(pending)
+            except tk.TclError:
+                pass
+        self._project_diagnostics_after_id = self.root.after(
+            delay_ms,
+            self._run_scheduled_engineering_refresh,
+        )
+
+    def _run_scheduled_engineering_refresh(self) -> None:
+        self._project_diagnostics_after_id = None
+        self._refresh_engineering_panels()
+
+    def _navigate_project_diagnostic(self, issue: dict) -> None:
+        element = issue.get("element", {})
+        if not isinstance(element, dict):
+            element = {}
+        element_type = str(element.get("type") or "")
+        element_id = str(element.get("id") or "")
+
+        if element_type == "analysis" and element_id:
+            if self.analysis_tree.exists(element_id):
+                self.analysis_tree.selection_set(element_id)
+                self.analysis_tree.focus(element_id)
+                self.analysis_tree.see(element_id)
+                self._on_analysis_selected()
+                self.notebook.select(self.input_tab)
+                self.selection_status_var.set(
+                    f"Selected: analysis {element_id}"
+                )
+                return
+
+        if element_type == "spatial_element" and element_id:
+            workspace = self.spatial_workspace
+            for kind in ("room", "device"):
+                if workspace.select_item(kind, element_id, notify=True):
+                    self._activate_spatial_workspace()
+                    workspace.fit_selected()
+                    self.selection_status_var.set(
+                        f"Selected: {kind} {element_id}"
+                    )
+                    return
+
+        self.status_var.set(
+            f"Diagnostic {issue.get('rule', '')}: no spatial navigation target"
+        )
+
+    def export_project_diagnostics(self, _result: dict | None = None) -> None:
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot export project diagnostics",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        result = self._refresh_engineering_panels()
+        if result is None:
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX project diagnostics",
+            defaultextension=".json",
+            filetypes=[
+                ("CleanroomX diagnostics JSON", "*.json"),
+                ("Markdown report", "*.md"),
+            ],
+        )
+        if not path:
+            return
+
+        destination = Path(path)
+        if destination.suffix.lower() in {".md", ".markdown"}:
+            content = markdown_project_diagnostics_report(result)
+        else:
+            content = (
+                json.dumps(
+                    result,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+                + "\n"
+            )
+        self._write_export_file(
+            path,
+            content,
+            label="Project diagnostics",
+        )
+
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
@@ -1562,9 +1818,15 @@ class CleanroomXApp:
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
 
-    def _add_text_tab(self, title: str) -> tk.Text:
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text=title)
+    def _add_text_tab(
+        self,
+        title: str,
+        *,
+        notebook: ttk.Notebook | None = None,
+    ) -> tk.Text:
+        target = self.notebook if notebook is None else notebook
+        frame = ttk.Frame(target)
+        target.add(frame, text=title)
         text = tk.Text(frame, wrap="none", state="disabled")
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
@@ -1578,7 +1840,14 @@ class CleanroomXApp:
 
     def _apply_wrap_setting(self) -> None:
         wrap = "word" if self.wrap_outputs_var.get() else "none"
-        for widget in (self.result_text, self.report_text, self.diagnostics_text):
+        for widget in (
+            self.result_text,
+            self.report_text,
+            self.diagnostics_text,
+            self.verification_text,
+            self.console_text,
+            self.evidence_text,
+        ):
             widget.configure(wrap=wrap)
 
     def _set_text(self, widget: tk.Text, value: str) -> None:
@@ -1779,6 +2048,7 @@ class CleanroomXApp:
 
         self._update_project_history_controls()
         self._update_title()
+        self._schedule_project_diagnostics_refresh()
 
     def _prepare_project_history_action(self, action: str) -> bool:
         try:
@@ -2757,6 +3027,7 @@ class CleanroomXApp:
     def _on_spatial_changed(self) -> None:
         self._update_title()
         self._refresh_spatial_navigator()
+        self._schedule_project_diagnostics_refresh()
 
     def _select_ifc_source(self, *, title: str) -> Path | None:
         path = filedialog.askopenfilename(
@@ -3384,6 +3655,7 @@ class CleanroomXApp:
         self._clear_run_cache()
         self._clear_project_history()
         self._refresh_analysis_list()
+        self._refresh_engineering_panels()
         self._capture_saved_state()
         self.status_var.set("New project")
         self._update_title()
@@ -3686,6 +3958,7 @@ class CleanroomXApp:
         self._clear_run_cache()
         self._clear_project_history()
         self._refresh_analysis_list()
+        self._refresh_engineering_panels()
         if migration_info.migrated:
             # Keep the current-schema conversion explicitly unsaved so the first
             # normal Save cannot destroy the only pre-migration source.
@@ -4403,8 +4676,9 @@ class CleanroomXApp:
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.redraw()
             self.spatial_workspace._load_property_panel()
+        self._refresh_engineering_panels()
         if select_results:
-            self.notebook.select(1)
+            self.output_notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

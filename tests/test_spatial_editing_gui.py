@@ -374,3 +374,43 @@ def test_verification_panel_navigation_opens_analysis_without_changing_verdicts(
     assert app.project.active_analysis_id == analysis.id
     assert app._editor_analysis_id == analysis.id
     assert app.analysis_tree.selection() == (analysis.id,)
+
+
+
+def test_view_only_isolate_hide_show_all_and_hover_do_not_mutate_project_geometry(app):
+    workspace = app.spatial_workspace
+    assert len(workspace.layout["rooms"]) >= 2
+    before = copy.deepcopy(workspace.layout)
+
+    first = workspace.layout["rooms"][0]
+    second = workspace.layout["rooms"][1]
+    workspace.select_item("room", first["id"])
+    assert workspace.isolate_selected()
+    app.root.update()
+
+    assert workspace.canvas_2d.find_withtag(f"room:{first['id']}")
+    assert not workspace.canvas_2d.find_withtag(f"room:{second['id']}")
+    assert workspace.canvas_3d.find_withtag(f"room:{first['id']}")
+    assert not workspace.canvas_3d.find_withtag(f"room:{second['id']}")
+    assert workspace.layout == before
+
+    workspace.show_all_items()
+    workspace.select_item("room", second["id"])
+    assert workspace.hide_selected()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag(f"room:{second['id']}")
+    assert not workspace.canvas_3d.find_withtag(f"room:{second['id']}")
+    assert workspace.layout == before
+
+    workspace.show_all_items()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag(f"room:{second['id']}")
+    assert workspace.canvas_3d.find_withtag(f"room:{second['id']}")
+
+    center_x = first["x_m"] + first["length_m"] / 2.0
+    center_y = first["y_m"] + first["width_m"] / 2.0
+    px, py = workspace._world_to_canvas(center_x, center_y)
+    workspace._on_motion(SimpleNamespace(x=int(px), y=int(py)))
+    app.root.update()
+    assert workspace._hovered == _Hit("room", first["id"])
+    assert workspace.layout == before

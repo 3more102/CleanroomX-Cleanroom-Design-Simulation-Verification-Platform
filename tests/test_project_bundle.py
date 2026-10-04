@@ -923,14 +923,25 @@ def test_bundle_verifier_rejects_corrupted_private_snapshot(
     bundle = tmp_path / "corrupt-private-snapshot.cleanroomx.zip"
     export_project_bundle(bundle, _consistency_project(), source_base=source)
 
+    private_snapshot = (
+        tmp_path
+        / "cleanroomx-stable-file-private"
+        / "snapshot.cleanroomx.zip"
+    )
+    expected_size = bundle.stat().st_size
+    expected_sha256 = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    actual_size = 1
+    actual_sha256 = "0" * 64
+
     @contextmanager
     def fail_snapshot(path, *, attempts=3, max_bytes=None, suffix=""):
+        assert Path(path) == bundle
         raise persistence_module.StableFileSnapshotVerificationError(
-            path,
-            expected_size=bundle.stat().st_size,
-            expected_sha256=hashlib.sha256(bundle.read_bytes()).hexdigest(),
-            actual_size=1,
-            actual_sha256="0" * 64,
+            private_snapshot,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_size=actual_size,
+            actual_sha256=actual_sha256,
         )
         yield
 
@@ -938,14 +949,22 @@ def test_bundle_verifier_rejects_corrupted_private_snapshot(
 
     with pytest.raises(
         ProjectBundleError,
-        match="could not verify private bundle verification snapshot",
+        match="private bundle snapshot verification failed",
     ) as exc_info:
         inspect_project_bundle(bundle)
 
+    message = str(exc_info.value)
+    assert str(bundle) in message
+    assert str(private_snapshot) not in message
+    assert str(expected_size) in message
+    assert expected_sha256 in message
+    assert str(actual_size) in message
+    assert actual_sha256 in message
     assert isinstance(
         exc_info.value.__cause__,
         persistence_module.StableFileSnapshotVerificationError,
     )
+    assert exc_info.value.__cause__.path == private_snapshot
 
 
 def test_bundle_snapshot_does_not_reclassify_consumer_oserror(tmp_path):

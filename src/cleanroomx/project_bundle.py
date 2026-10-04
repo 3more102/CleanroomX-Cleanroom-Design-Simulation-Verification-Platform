@@ -683,7 +683,9 @@ def _stable_bundle_snapshot(
             )
         except StableFileSnapshotVerificationError as exc:
             raise ProjectBundleError(
-                "could not verify private bundle verification snapshot"
+                f"private bundle snapshot verification failed for {source}: "
+                f"expected {exc.expected_size} bytes / sha256 {exc.expected_sha256}; "
+                f"got {exc.actual_size!r} bytes / sha256 {exc.actual_sha256!r}"
             ) from exc
         except StableFileSizeError as exc:
             raise ProjectBundleError(

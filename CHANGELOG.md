@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — deterministic portable-bundle private-snapshot diagnostics — 2026-10-04
+
+- Preserves private stable-snapshot verification evidence at the portable-bundle inspection boundary without exposing random temporary-snapshot paths.
+- Reports the original bundle path plus expected/actual byte size and SHA-256 evidence while preserving the existing `ProjectBundleError` API and typed `StableFileSnapshotVerificationError` cause.
+- Adds a focused regression proving deterministic diagnostics; bundle schema, archive limits, extraction semantics, solver equations, engineering tolerances, requirement criteria, and verdict behavior are unchanged.
+
 ## Unreleased Release 3 — integrity boundary hardening — 2026-10-03
 
 - Reuses the canonical stable-file revision identity and Windows path/handle binding policy for runtime Python-source provenance, rejecting same-size path/handle substitutions without changing the source-tree digest algorithm.

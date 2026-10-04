@@ -1210,6 +1210,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ] | None = None,
         on_undo_requested: Callable[[], bool] | None = None,
         on_redo_requested: Callable[[], bool] | None = None,
+        on_selection_change: Callable[[str, str], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1222,6 +1223,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
         self._on_redo_requested = on_redo_requested
+        self._on_selection_change = on_selection_change
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1246,6 +1248,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
+        self._property_rows: dict[str, ttk.Frame] = {}
+        self._workspace_mode = tk.StringVar(value="split")
         self._history_can_undo = False
         self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
@@ -1255,55 +1259,92 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(6, 6, 6, 3))
-        toolbar.pack(fill="x")
+        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar.pack(fill="x")
 
-        ttk.Button(toolbar, text="+ Room", width=8, command=self.add_room).pack(side="left", padx=2)
-        device_button = ttk.Menubutton(toolbar, text="+ Device / opening")
+        ttk.Label(
+            commandbar,
+            text="DESIGN",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
+            side="left", padx=2
+        )
+        device_button = ttk.Menubutton(commandbar, text="+ Device / opening")
         device_menu = tk.Menu(device_button, tearoff=False)
         device_button.configure(menu=device_menu)
         device_button.pack(side="left", padx=2)
         for device_type, label in (
-            ("door", "+ Door"),
-            ("window", "+ Window"),
-            ("opening", "+ Opening"),
-            ("ffu", "+ FFU"),
-            ("supply", "+ Supply"),
-            ("return", "+ Return"),
-            ("exhaust", "+ Exhaust"),
-            ("equipment", "+ Equipment"),
-            ("sensor", "+ Sensor"),
-            ("transfer", "+ Transfer"),
+            ("door", "Door"),
+            ("window", "Window"),
+            ("opening", "Opening"),
+            ("ffu", "FFU"),
+            ("supply", "Supply"),
+            ("return", "Return"),
+            ("exhaust", "Exhaust"),
+            ("equipment", "Equipment"),
+            ("sensor", "Sensor"),
+            ("transfer", "Transfer"),
         ):
             device_menu.add_command(
-                label=label.removeprefix("+ "),
+                label=label,
                 command=lambda t=device_type: self.add_device(t),
             )
-        ttk.Button(toolbar, text="Duplicate", command=self.duplicate_selected).pack(side="left", padx=2)
-        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        self._undo_button = ttk.Button(toolbar, text="Undo", width=6, command=self.undo_edit, state="disabled")
+        ttk.Button(commandbar, text="Duplicate", command=self.duplicate_selected).pack(
+            side="left", padx=2
+        )
+        ttk.Button(commandbar, text="Delete", width=7, command=self.delete_selected).pack(
+            side="left", padx=2
+        )
+        ttk.Separator(commandbar, orient="vertical").pack(
+            side="left", fill="y", padx=7
+        )
+        self._undo_button = ttk.Button(
+            commandbar, text="Undo", width=7, command=self.undo_edit, state="disabled"
+        )
         self._undo_button.pack(side="left", padx=2)
-        self._redo_button = ttk.Button(toolbar, text="Redo", width=6, command=self.redo_edit, state="disabled")
+        self._redo_button = ttk.Button(
+            commandbar, text="Redo", width=7, command=self.redo_edit, state="disabled"
+        )
         self._redo_button.pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Delete", width=6, command=self.delete_selected).pack(side="left", padx=2)
-        navigation = ttk.Frame(self, padding=(6, 0, 6, 3))
-        navigation.pack(fill="x")
-        ttk.Button(navigation, text="Fit", width=5, command=self.fit_views).pack(side="left", padx=2)
-        ttk.Button(navigation, text="Reset 2D", width=8, command=self.reset_2d).pack(side="left", padx=2)
-        ttk.Button(navigation, text="Floor…", width=6, command=self.edit_floor).pack(side="left", padx=2)
+
+        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar.pack(fill="x")
+        ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
+        for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
+            ttk.Radiobutton(
+                modebar,
+                text=label,
+                value=value,
+                variable=self._workspace_mode,
+                command=self._apply_workspace_mode,
+                style="Toolbutton",
+            ).pack(side="left", padx=1)
+        ttk.Separator(modebar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
+            side="left", padx=2
+        )
+        ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
+            side="left", padx=2
+        )
+        ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
+            side="left", padx=2
+        )
         ttk.Button(
-            navigation,
+            modebar,
             text="Push to analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
         ttk.Button(
-            navigation,
+            modebar,
             text="Pull from analysis",
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
+        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1321,92 +1362,149 @@ class SpatialDesignWorkspace(ttk.Frame):
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
-        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(8, 2))
+        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
-        summarybar = ttk.Frame(self, padding=(6, 0, 6, 3))
-        summarybar.pack(fill="x")
-        ttk.Label(summarybar, textvariable=self._validation_var).pack(
-            side="left", padx=(8, 2)
-        )
-        ttk.Label(summarybar, textvariable=self._sync_var, wraplength=420).pack(
-            side="left", padx=(12, 2)
+        ttk.Label(viewbar, textvariable=self._validation_var).pack(
+            side="right", padx=(10, 2)
         )
 
-        body = ttk.Panedwindow(self, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
+        self._body = ttk.Panedwindow(self, orient="horizontal")
+        self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
 
-        two_d = ttk.Frame(body)
-        body.add(two_d, weight=4)
-        ttk.Label(two_d, text="2D Layout", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", padx=4, pady=(2, 4)
+        views = ttk.Frame(self._body)
+        self._body.add(views, weight=6)
+
+        self._view_panes = ttk.Panedwindow(views, orient="horizontal")
+        self._view_panes.pack(fill="both", expand=True)
+
+        self._two_d_frame = ttk.Frame(self._view_panes)
+        header2 = ttk.Frame(self._two_d_frame)
+        header2.pack(fill="x", padx=4, pady=(3, 4))
+        ttk.Label(
+            header2, text="2D PLAN", style="CX.ViewTitle.TLabel"
+        ).pack(side="left")
+        ttk.Label(header2, textvariable=self._coord_var).pack(side="right")
+        self.canvas_2d = tk.Canvas(
+            self._two_d_frame,
+            background="#f7f9fb",
+            highlightthickness=1,
+            highlightbackground="#c7d0d9",
         )
-        self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
         self.canvas_2d.pack(fill="both", expand=True)
-        ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=(2, 0))
-        ttk.Label(two_d, textvariable=self._metrics_var, anchor="w").pack(fill="x", padx=4, pady=(0, 2))
-
-        right = ttk.Panedwindow(body, orient="vertical")
-        body.add(right, weight=4)
-
-        three_d = ttk.Frame(right)
-        right.add(three_d, weight=3)
-        header3 = ttk.Frame(three_d)
-        header3.pack(fill="x")
-        ttk.Label(header3, text="3D View", font=("TkDefaultFont", 10, "bold")).pack(
-            side="left", padx=4, pady=(2, 4)
+        footer2 = ttk.Frame(self._two_d_frame)
+        footer2.pack(fill="x", padx=4, pady=(3, 0))
+        ttk.Label(footer2, textvariable=self._metrics_var, anchor="w").pack(
+            side="left", fill="x", expand=True
         )
+
+        self._three_d_frame = ttk.Frame(self._view_panes)
+        header3 = ttk.Frame(self._three_d_frame)
+        header3.pack(fill="x", padx=4, pady=(3, 4))
+        ttk.Label(
+            header3, text="3D MODEL", style="CX.ViewTitle.TLabel"
+        ).pack(side="left")
         for label, delta in (("↺", -15), ("↻", 15)):
-            ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
-                side="right", padx=2
-            )
-        ttk.Button(header3, text="↓", width=3, command=lambda: self.tilt_3d(-5)).pack(side="right", padx=2)
-        ttk.Button(header3, text="↑", width=3, command=lambda: self.tilt_3d(5)).pack(side="right", padx=2)
-        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(side="right", padx=2)
-        self.canvas_3d = tk.Canvas(three_d, background="#111820", highlightthickness=1)
+            ttk.Button(
+                header3,
+                text=label,
+                width=3,
+                command=lambda d=delta: self.rotate_3d(d),
+            ).pack(side="right", padx=2)
+        ttk.Button(
+            header3, text="↓", width=3, command=lambda: self.tilt_3d(-5)
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            header3, text="↑", width=3, command=lambda: self.tilt_3d(5)
+        ).pack(side="right", padx=2)
+        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(
+            side="right", padx=2
+        )
+        self.canvas_3d = tk.Canvas(
+            self._three_d_frame,
+            background="#111820",
+            highlightthickness=1,
+            highlightbackground="#314150",
+        )
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(right, padding=6)
-        right.add(inspector, weight=2)
-        ttk.Label(inspector, text="Properties", font=("TkDefaultFont", 10, "bold")).grid(
-            row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
+        inspector = ttk.Frame(self._body, padding=(10, 8))
+        self._body.add(inspector, weight=2)
+        ttk.Label(
+            inspector, text="PROPERTIES", style="CX.Section.TLabel"
+        ).pack(anchor="w")
+        ttk.Label(
+            inspector,
+            textvariable=self._selection_var,
+            wraplength=310,
+        ).pack(fill="x", pady=(3, 8))
+
+        property_groups = (
+            (
+                "Geometry",
+                (
+                    ("x_m", "X", "m"),
+                    ("y_m", "Y", "m"),
+                    ("z_m", "Elevation / Z", "m"),
+                    ("length_m", "Length", "m"),
+                    ("width_m", "Width", "m"),
+                    ("height_m", "Height", "m"),
+                    ("floor_elevation_m", "Floor elevation", "m"),
+                ),
+            ),
+            (
+                "Cleanroom",
+                (
+                    ("classification", "Classification", ""),
+                    ("pressure_pa", "Design pressure", "Pa"),
+                    ("analysis_room_name", "Analysis link", ""),
+                ),
+            ),
+            (
+                "Identity",
+                (
+                    ("name", "Name", ""),
+                    ("room_id", "Room ID", ""),
+                ),
+            ),
+            (
+                "Opening / placement",
+                (
+                    ("orientation_deg", "Orientation", "deg"),
+                    ("wall_side", "Wall side", ""),
+                    ("swing", "Swing", ""),
+                ),
+            ),
         )
-        ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+        for group_name, fields in property_groups:
+            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section.pack(fill="x", pady=(0, 7))
+            for key, label, unit in fields:
+                row = ttk.Frame(section)
+                row.pack(fill="x", pady=2)
+                ttk.Label(row, text=label).pack(side="left")
+                value_frame = ttk.Frame(row)
+                value_frame.pack(side="right")
+                var = tk.StringVar()
+                self._property_vars[key] = var
+                ttk.Entry(value_frame, textvariable=var, width=16).pack(side="left")
+                if unit:
+                    ttk.Label(value_frame, text=unit, width=4).pack(
+                        side="left", padx=(4, 0)
+                    )
+                self._property_rows[key] = row
+        ttk.Button(
+            inspector,
+            text="Apply properties",
+            command=self.apply_properties,
+        ).pack(anchor="e", pady=(2, 6))
+        ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
+        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
+            fill="x", pady=(3, 0)
         )
-        fields = (
-            ("name", "Name"),
-            ("x_m", "X (m)"),
-            ("y_m", "Y (m)"),
-            ("z_m", "Z (m)"),
-            ("length_m", "Length (m)"),
-            ("width_m", "Width (m)"),
-            ("height_m", "Height (m)"),
-            ("pressure_pa", "Pressure (Pa)"),
-            ("floor_elevation_m", "Floor elev. (m)"),
-            ("classification", "Classification"),
-            ("analysis_room_name", "Analysis room"),
-            ("room_id", "Room ID"),
-            ("orientation_deg", "Orientation (deg)"),
-            ("wall_side", "Wall side"),
-            ("swing", "Swing"),
-        )
-        for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
-            column = (index % 2) * 2
-            ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
-            var = tk.StringVar()
-            self._property_vars[key] = var
-            ttk.Entry(inspector, textvariable=var, width=18).grid(
-                row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
-            )
-        button_row = 2 + (len(fields) + 1) // 2
-        ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
-            row=button_row, column=3, sticky="e", pady=(8, 0)
-        )
-        inspector.columnconfigure(1, weight=1)
-        inspector.columnconfigure(3, weight=1)
+
+        self._apply_workspace_mode()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
@@ -1419,8 +1517,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Button-3>", self._on_pan_down)
         self.canvas_2d.bind("<B3-Motion>", self._on_pan_drag)
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
-        self.canvas_2d.bind("<Button-4>", lambda event: self._zoom_at(1.1, event.x, event.y))
-        self.canvas_2d.bind("<Button-5>", lambda event: self._zoom_at(1 / 1.1, event.x, event.y))
+        self.canvas_2d.bind(
+            "<Button-4>", lambda event: self._zoom_at(1.1, event.x, event.y)
+        )
+        self.canvas_2d.bind(
+            "<Button-5>", lambda event: self._zoom_at(1 / 1.1, event.x, event.y)
+        )
         self.canvas_3d.bind("<MouseWheel>", self._on_wheel_3d)
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
@@ -1441,6 +1543,46 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+    def _apply_workspace_mode(self) -> None:
+        mode = self._workspace_mode.get()
+        if mode not in {"2d", "3d", "split"}:
+            mode = "split"
+            self._workspace_mode.set(mode)
+        for frame in (self._two_d_frame, self._three_d_frame):
+            try:
+                self._view_panes.forget(frame)
+            except tk.TclError:
+                pass
+        if mode in {"2d", "split"}:
+            self._view_panes.add(self._two_d_frame, weight=5 if mode == "split" else 1)
+        if mode in {"3d", "split"}:
+            self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
+        self.redraw()
+
+    def set_workspace_mode(self, mode: str) -> None:
+        if mode not in {"2d", "3d", "split"}:
+            raise ValueError("workspace mode must be '2d', '3d', or 'split'")
+        self._workspace_mode.set(mode)
+        self._apply_workspace_mode()
+
+    def select_item(self, kind: str, item_id: str, *, notify: bool = False) -> bool:
+        if kind not in {"room", "device"}:
+            return False
+        collection = self.layout["rooms"] if kind == "room" else self.layout["devices"]
+        if not any(str(item.get("id")) == item_id for item in collection):
+            return False
+        self.selected = _Hit(kind, item_id)
+        self._load_property_panel()
+        self.redraw()
+        if notify:
+            self._notify_selection_change()
+        return True
+
+    def _notify_selection_change(self) -> None:
+        if self.selected is None or self._on_selection_change is None:
+            return
+        self._on_selection_change(self.selected.kind, self.selected.item_id)
 
     def refresh(self) -> None:
         # A refresh may replace the canonical project/layout beneath an active
@@ -1692,8 +1834,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
-            for var in self._property_vars.values():
+            for key, var in self._property_vars.items():
                 var.set("")
+                row = self._property_rows.get(key)
+                if row is not None:
+                    row.pack_forget()
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         selection_text = f"{prefix}: {item.get('name', '')}"
@@ -1710,7 +1855,42 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        room_fields = {
+            "name",
+            "x_m",
+            "y_m",
+            "length_m",
+            "width_m",
+            "height_m",
+            "floor_elevation_m",
+            "pressure_pa",
+            "classification",
+            "analysis_room_name",
+        }
+        device_fields = {
+            "name",
+            "x_m",
+            "y_m",
+            "z_m",
+            "width_m",
+            "height_m",
+            "room_id",
+            "orientation_deg",
+            "wall_side",
+            "swing",
+        }
+        visible_fields = (
+            room_fields
+            if self.selected and self.selected.kind == "room"
+            else device_fields
+        )
         for key, var in self._property_vars.items():
+            row = self._property_rows.get(key)
+            if row is not None:
+                if key in visible_fields:
+                    row.pack(fill="x", pady=2)
+                else:
+                    row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
 
@@ -2516,6 +2696,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._drag_item_origin = None
             self._drag_history_before = None
         self._load_property_panel()
+        self._notify_selection_change()
         self.redraw()
 
     def _on_left_drag(self, event: tk.Event) -> None:
@@ -2723,4 +2904,5 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         self.selected = hit
         self._load_property_panel()
+        self._notify_selection_change()
         self.redraw()

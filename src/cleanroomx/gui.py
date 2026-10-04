@@ -1510,42 +1510,48 @@ class CleanroomXApp:
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
     def _build_layout(self) -> None:
-        topbar = ttk.Frame(self.root, padding=(12, 10, 12, 7))
+        # Keep the application chrome compact enough that the engineering
+        # workspace remains fully usable at the supported 1050×680 minimum.
+        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
-            row=0, column=0, rowspan=2, sticky="w", padx=(0, 16)
+            row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(row=0, column=1, sticky="w")
-        ttk.Entry(topbar, textvariable=self.name_var, width=28).grid(
-            row=1, column=1, sticky="ew", padx=(0, 10)
+        ttk.Label(topbar, text="Project").grid(
+            row=0, column=1, sticky="w", padx=(0, 5)
         )
-        ttk.Label(topbar, text="Description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(topbar, textvariable=self.description_var).grid(
-            row=1, column=2, sticky="ew", padx=(0, 12)
+        ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
+            row=0, column=2, sticky="ew", padx=(0, 10)
+        )
+        ttk.Label(topbar, text="Description").grid(
+            row=0, column=3, sticky="w", padx=(0, 5)
+        )
+        ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
+            row=0, column=4, sticky="ew", padx=(0, 10)
         )
         ttk.Button(
             topbar,
             text="Validate",
             command=self.validate_current,
-        ).grid(row=0, column=3, rowspan=2, padx=3)
+        ).grid(row=0, column=5, padx=2)
         self.run_button = ttk.Button(
             topbar,
             text="▶ Run",
             command=self.run_current,
             style="CX.Primary.TButton",
         )
-        self.run_button.grid(row=0, column=4, rowspan=2, padx=3)
+        self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
             topbar, text="Abandon", command=self.cancel_run, state="disabled"
         )
-        self.cancel_button.grid(row=0, column=5, rowspan=2, padx=(3, 0))
-        topbar.columnconfigure(1, weight=1)
-        topbar.columnconfigure(2, weight=2)
+        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+        topbar.columnconfigure(2, weight=1)
+        topbar.columnconfigure(4, weight=2)
 
         commandbar = ttk.Frame(
             self.root,
             style="CX.Toolbar.TFrame",
-            padding=(10, 5),
+            padding=(10, 3),
         )
         self.commandbar = commandbar
         commandbar.pack(fill="x", padx=10, pady=(0, 4))
@@ -1643,7 +1649,7 @@ class CleanroomXApp:
         workflowbar = ttk.Frame(
             self.root,
             style="CX.Toolbar.TFrame",
-            padding=(10, 5),
+            padding=(10, 3),
         )
         self.workflowbar = workflowbar
         workflowbar.pack(fill="x", padx=10, pady=(0, 4))

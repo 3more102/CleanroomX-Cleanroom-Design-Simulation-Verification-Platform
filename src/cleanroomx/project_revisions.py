@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Callable
+import uuid
 
 from . import __version__
 from .persistence import atomic_write_bytes, atomic_write_text, stable_file_sha256
@@ -371,11 +372,13 @@ def _revision_record_is_verified(
     revision: ProjectRevisionRecord,
     *,
     expected_source_path: Path,
+    artifact_path: Path | None = None,
 ) -> bool:
-    """Return whether a scanned revision still represents the same verified evidence."""
+    """Return whether one artifact still represents the scanned revision."""
+    artifact = revision.path if artifact_path is None else artifact_path
     try:
         current = load_project_revision(
-            revision.path,
+            artifact,
             expected_source_path=expected_source_path,
         )
     except (OSError, ProjectRevisionError):
@@ -390,7 +393,7 @@ def _revision_record_is_verified(
         return False
     try:
         artifact_stat, artifact_sha256 = stable_file_sha256(
-            revision.path,
+            artifact,
             max_bytes=_project_revision_max_bytes(),
         )
     except OSError:
@@ -399,6 +402,32 @@ def _revision_record_is_verified(
         artifact_stat.st_size == revision.artifact_size
         and artifact_sha256 == revision.artifact_sha256
     )
+
+
+def _restore_revision_prune_stage(staged_path: Path, original_path: Path) -> None:
+    """Restore staged revision evidence without clobbering a recreated path."""
+    try:
+        os.link(staged_path, original_path)
+    except OSError:
+        # If another process recreated the public path, preserve both revisions:
+        # the new public entry and the private staged evidence.
+        return
+    try:
+        staged_path.unlink()
+    except OSError:
+        # The hard link already restored the original public name. Leaving a
+        # private duplicate is safer than deleting evidence after cleanup failure.
+        return
+
+
+def _stage_revision_for_pruning(path: Path) -> Path | None:
+    """Detach the exact pathname revision selected for retention pruning."""
+    staged = path.with_name(f".{path.name}.{uuid.uuid4().hex}.retention-stage")
+    try:
+        os.replace(path, staged)
+    except OSError:
+        return None
+    return staged
 
 
 def rotate_project_revisions(
@@ -410,20 +439,25 @@ def rotate_project_revisions(
     source = _normalized_path(project_path)
     scan = scan_project_revisions(source)
     for revision in scan.revisions[limit:]:
-        # A revision may be changed, replaced, or corrupted after the initial
-        # scan. Retention must preserve anything that is no longer the exact
-        # verified evidence we selected for pruning.
+        # Detach the exact pathname revision first. Any replacement that wins
+        # before this atomic move is captured by the private stage and must pass
+        # full semantic + byte-identity verification before it can be deleted.
+        staged = _stage_revision_for_pruning(revision.path)
+        if staged is None:
+            continue
         if not _revision_record_is_verified(
             revision,
             expected_source_path=source,
+            artifact_path=staged,
         ):
+            _restore_revision_prune_stage(staged, revision.path)
             continue
         try:
-            revision.path.unlink(missing_ok=True)
+            staged.unlink()
         except OSError:
-            # Retention cleanup is best effort after a committed save.
-            pass
-
+            # Retention cleanup is best effort after a committed save. Restore the
+            # verified bytes when possible; never overwrite a concurrent replacement.
+            _restore_revision_prune_stage(staged, revision.path)
 
 def discard_project_revision(path: str | Path | None) -> None:
     if path is None:

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — discovered CLI output publication guards — 2026-10-04
+
+- Replaces the manually maintained standalone file-output CLI filename list with source discovery of every CLI module that exposes a `--output` option.
+- Requires discovered output-capable commands to use either the shared protected `publish_cli_output` path with explicit protected inputs or a revision-bound atomic writer with a pre-replace guard.
+- Extends the completeness gate to future output-capable CLIs automatically; solver equations, project schemas, engineering tolerances, requirement criteria, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — standalone CLI input error boundaries — 2026-10-04
 
 - Adds one shared `cli_error_boundary` so expected standalone command `OSError` / `ValueError` failures return concise stderr and exit code 1 instead of a Python traceback.

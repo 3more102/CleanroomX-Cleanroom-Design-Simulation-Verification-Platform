@@ -106,6 +106,7 @@ def empty_layout() -> dict:
             "pan_3d_x": 0.0,
             "pan_3d_y": 0.0,
             "snap_to_grid": True,
+            "show_rooms": True,
             "show_pressure": True,
             "show_labels": True,
             "show_devices": True,
@@ -276,6 +277,7 @@ def normalize_layout(value: Any) -> dict:
                 "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
                 "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),
                 "snap_to_grid": bool(view.get("snap_to_grid", True)),
+                "show_rooms": bool(view.get("show_rooms", True)),
                 "show_pressure": bool(view.get("show_pressure", True)),
                 "show_labels": bool(view.get("show_labels", True)),
                 "show_devices": bool(view.get("show_devices", True)),
@@ -1235,6 +1237,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._orbit_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
         self._snap_to_grid = tk.BooleanVar(value=True)
+        self._show_rooms = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
         self._show_labels = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
@@ -1245,6 +1248,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
+        self._measure_mode = tk.StringVar(value="none")
+        self._measure_points: list[tuple[float, float]] = []
+        self._measure_var = tk.StringVar(value="Measure: off")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
@@ -1325,6 +1331,25 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
+        ttk.Button(
+            modebar, text="Fit selected", width=11, command=self.fit_selected
+        ).pack(side="left", padx=2)
+        view3d_button = ttk.Menubutton(modebar, text="3D View")
+        view3d_menu = tk.Menu(view3d_button, tearoff=False)
+        view3d_button.configure(menu=view3d_menu)
+        for preset, label in (
+            ("top", "Top"),
+            ("front", "Front"),
+            ("right", "Right"),
+            ("iso", "Isometric"),
+        ):
+            view3d_menu.add_command(
+                label=label,
+                command=lambda p=preset: self.set_3d_view_preset(p),
+            )
+        view3d_menu.add_separator()
+        view3d_menu.add_command(label="Reset camera", command=self.reset_3d)
+        view3d_button.pack(side="left", padx=2)
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
@@ -1349,6 +1374,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
         ).pack(side="left", padx=(2, 6))
         for label, variable, key in (
+            ("Rooms", self._show_rooms, "show_rooms"),
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Pressure", self._show_pressure, "show_pressure"),
             ("Labels", self._show_labels, "show_labels"),
@@ -1362,6 +1388,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
+        measure_button = ttk.Menubutton(viewbar, text="Measure")
+        measure_menu = tk.Menu(measure_button, tearoff=False)
+        measure_button.configure(menu=measure_menu)
+        measure_menu.add_command(
+            label="Distance", command=lambda: self.start_measurement("distance")
+        )
+        measure_menu.add_command(
+            label="Area (rectangle)", command=lambda: self.start_measurement("area")
+        )
+        measure_menu.add_separator()
+        measure_menu.add_command(label="Clear", command=self.clear_measurement)
+        measure_button.pack(side="left", padx=(8, 2))
+        ttk.Label(viewbar, textvariable=self._measure_var).pack(side="left", padx=(4, 2))
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
@@ -1595,6 +1634,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout = ensure_project_layout(project, analysis)
         view = self.layout.get("view", {})
         self._snap_to_grid.set(bool(view.get("snap_to_grid", True)))
+        self._show_rooms.set(bool(view.get("show_rooms", True)))
         self._show_pressure.set(bool(view.get("show_pressure", True)))
         self._show_labels.set(bool(view.get("show_labels", True)))
         self._show_devices.set(bool(view.get("show_devices", True)))
@@ -2138,6 +2178,181 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_y"] = pan_3d_y
         self._persist("Fit spatial views")
 
+    def fit_selected(self) -> bool:
+        """Fit the current selection in both 2D and 3D without changing geometry."""
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            self._status_setter("Fit selected: no spatial object selected")
+            return False
+
+        if self.selected.kind == "room":
+            min_x = item["x_m"]
+            min_y = item["y_m"]
+            max_x = min_x + item["length_m"]
+            max_y = min_y + item["width_m"]
+        else:
+            half = max(0.5, float(item.get("width_m", 0.4)))
+            min_x = item["x_m"] - half
+            max_x = item["x_m"] + half
+            min_y = item["y_m"] - half
+            max_y = item["y_m"] + half
+
+        width_m = max(0.5, max_x - min_x)
+        height_m = max(0.5, max_y - min_y)
+        cw = max(200, self.canvas_2d.winfo_width())
+        ch = max(200, self.canvas_2d.winfo_height())
+        zoom = max(
+            0.2,
+            min(
+                8.0,
+                0.70
+                * min(
+                    cw / (BASE_2D_PIXELS_PER_M * width_m),
+                    ch / (BASE_2D_PIXELS_PER_M * height_m),
+                ),
+            ),
+        )
+        self.layout["view"]["zoom_2d"] = zoom
+        scale = BASE_2D_PIXELS_PER_M * zoom
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        self.layout["view"]["pan_x"] = -center_x * scale
+        self.layout["view"]["pan_y"] = -center_y * scale
+
+        model_min_x, model_min_y, model_max_x, model_max_y = self._bounds()
+        model_cx = (model_min_x + model_max_x) / 2.0
+        model_cy = (model_min_y + model_max_y) / 2.0
+        floor_z = self.layout["floor"]["elevation_m"]
+        points_3d: list[tuple[float, float, float]] = []
+        if self.selected.kind == "room":
+            z0 = item.get("floor_elevation_m", floor_z)
+            z1 = z0 + item["height_m"]
+            for x in (min_x, max_x):
+                for y in (min_y, max_y):
+                    points_3d.append((x - model_cx, y - model_cy, z0))
+                    points_3d.append((x - model_cx, y - model_cy, z1))
+        else:
+            room = next(
+                (
+                    room
+                    for room in self.layout["rooms"]
+                    if room["id"] == item.get("room_id")
+                ),
+                None,
+            )
+            z = (
+                (room.get("floor_elevation_m", floor_z) if room else floor_z)
+                + float(item.get("z_m", 0.0))
+            )
+            radius = max(0.25, half)
+            for x in (item["x_m"] - radius, item["x_m"] + radius):
+                for y in (item["y_m"] - radius, item["y_m"] + radius):
+                    for dz in (-radius, radius):
+                        points_3d.append((x - model_cx, y - model_cy, z + dz))
+
+        zoom_3d, pan_3d_x, pan_3d_y = fit_3d_view(
+            points_3d,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            max_zoom=8.0,
+        )
+        self.layout["view"]["zoom_3d"] = zoom_3d
+        self.layout["view"]["pan_3d_x"] = pan_3d_x
+        self.layout["view"]["pan_3d_y"] = pan_3d_y
+        self._persist("Fit selected spatial item")
+        return True
+
+    def set_3d_view_preset(self, preset: str) -> None:
+        presets = {
+            "top": (0.0, 75.0),
+            "front": (0.0, 5.0),
+            "right": (90.0, 5.0),
+            "iso": (35.0, 28.0),
+        }
+        if preset not in presets:
+            raise ValueError("3D preset must be top, front, right, or iso")
+        azimuth, elevation = presets[preset]
+        self.layout["view"]["azimuth_deg"] = azimuth
+        self.layout["view"]["elevation_deg"] = elevation
+        self.fit_views()
+        self._status_setter(f"3D view: {preset}")
+
+    def start_measurement(self, mode: str) -> None:
+        if mode not in {"distance", "area"}:
+            raise ValueError("measurement mode must be distance or area")
+        self._measure_mode.set(mode)
+        self._measure_points = []
+        label = "distance" if mode == "distance" else "rectangular area"
+        self._measure_var.set(f"Measure: {label} — pick two points")
+        self.canvas_2d.focus_set()
+        self.redraw()
+
+    def clear_measurement(self) -> None:
+        self._measure_mode.set("none")
+        self._measure_points = []
+        self._measure_var.set("Measure: off")
+        self.redraw()
+
+    def _capture_measure_point(self, event: tk.Event) -> None:
+        point = self._canvas_to_world(event.x, event.y)
+        if self._snap_to_grid.get():
+            grid = self.layout["grid_m"]
+            point = (
+                round(point[0] / grid) * grid,
+                round(point[1] / grid) * grid,
+            )
+        if len(self._measure_points) >= 2:
+            self._measure_points = []
+        self._measure_points.append(point)
+        if len(self._measure_points) == 1:
+            self._measure_var.set("Measure: pick second point")
+        else:
+            (x0, y0), (x1, y1) = self._measure_points
+            if self._measure_mode.get() == "distance":
+                value = math.hypot(x1 - x0, y1 - y0)
+                self._measure_var.set(f"Distance: {value:.3f} m")
+            else:
+                value = abs((x1 - x0) * (y1 - y0))
+                self._measure_var.set(f"Area: {value:.3f} m²")
+        self.redraw()
+
+    def _draw_measurement_2d(self) -> None:
+        if not self._measure_points:
+            return
+        canvas_points = [self._world_to_canvas(*point) for point in self._measure_points]
+        x0, y0 = canvas_points[0]
+        canvas = self.canvas_2d
+        canvas.create_oval(
+            x0 - 4, y0 - 4, x0 + 4, y0 + 4,
+            fill="#0f766e", outline="#ffffff", tags=("measurement",),
+        )
+        if len(canvas_points) < 2:
+            return
+        x1, y1 = canvas_points[1]
+        if self._measure_mode.get() == "area":
+            canvas.create_rectangle(
+                x0, y0, x1, y1,
+                outline="#0f766e", width=2, dash=(5, 3), tags=("measurement",),
+            )
+        else:
+            canvas.create_line(
+                x0, y0, x1, y1,
+                fill="#0f766e", width=2, arrow="both", tags=("measurement",),
+            )
+        canvas.create_oval(
+            x1 - 4, y1 - 4, x1 + 4, y1 + 4,
+            fill="#0f766e", outline="#ffffff", tags=("measurement",),
+        )
+        canvas.create_text(
+            (x0 + x1) / 2.0,
+            (y0 + y1) / 2.0 - 12,
+            text=self._measure_var.get().replace("Measure: ", ""),
+            fill="#0f766e",
+            tags=("measurement",),
+        )
+
     def reset_2d(self) -> None:
         """Restore the 2D viewport without changing model geometry."""
         self.layout["view"]["zoom_2d"] = 1.0
@@ -2350,7 +2565,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
-        for room in self.layout["rooms"]:
+        for room in (self.layout["rooms"] if self._show_rooms.get() else []):
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(
                 room["x_m"] + room["length_m"],
@@ -2479,6 +2694,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                         tags=(tag, "device"),
                     )
 
+        self._draw_measurement_2d()
+
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
                 w / 2,
@@ -2549,7 +2766,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 + (room["y_m"] - cy) * math.cos(az)
             ),
         )
-        for room in ordered:
+        for room in (ordered if self._show_rooms.get() else []):
             x0 = room["x_m"] - cx
             y0 = room["y_m"] - cy
             x1 = x0 + room["length_m"]
@@ -2666,6 +2883,9 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
+        if self._measure_mode.get() in {"distance", "area"}:
+            self._capture_measure_point(event)
+            return
         current = self.canvas_2d.find_withtag("current")
         hit = None
         self._resize_room_id = None

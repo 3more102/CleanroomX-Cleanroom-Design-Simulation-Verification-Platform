@@ -239,6 +239,10 @@ def test_room_context_menu_exposes_real_editing_actions(app):
         menu.destroy()
 
     assert "Properties" in labels
+    assert "Fit selected" in labels
+    assert "Isolate" in labels
+    assert "Hide" in labels
+    assert "Show all" in labels
     assert "Duplicate" in labels
     assert "Delete" in labels
     assert "Add Door" in labels
@@ -261,3 +265,160 @@ def test_hover_state_has_distinct_2d_feedback(app):
     workspace._on_motion(event)
 
     assert workspace._hovered == _Hit("room", room["id"])
+
+
+def test_viewport_visibility_controls_keep_room_context(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    other = workspace.layout["rooms"][1]
+    room_devices = [
+        device
+        for device in workspace.layout["devices"]
+        if device.get("room_id") == room["id"]
+    ]
+    workspace.select_item("room", room["id"])
+
+    workspace.isolate_selected()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    assert not workspace.canvas_2d.find_withtag(f"room:{other['id']}")
+    for device in room_devices:
+        assert workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+
+    workspace.hide_selected()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    for device in room_devices:
+        assert not workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+
+    workspace.show_all()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag(f"room:{room['id']}")
+    assert workspace.canvas_2d.find_withtag(f"room:{other['id']}")
+
+
+@pytest.mark.parametrize(
+    ("preset", "azimuth", "elevation"),
+    [
+        ("top", 0.0, 90.0),
+        ("front", 0.0, 0.0),
+        ("back", 180.0, 0.0),
+        ("left", 270.0, 0.0),
+        ("right", 90.0, 0.0),
+        ("iso", 35.0, 28.0),
+    ],
+)
+def test_3d_camera_presets_are_deterministic(app, preset, azimuth, elevation):
+    workspace = app.spatial_workspace
+    workspace.set_3d_view_preset(preset)
+    assert workspace.layout["view"]["azimuth_deg"] == azimuth
+    assert workspace.layout["view"]["elevation_deg"] == elevation
+
+
+def test_distance_and_area_measurements_are_view_only(app):
+    workspace = app.spatial_workspace
+    metadata_before = copy.deepcopy(app.project.metadata)
+
+    workspace.set_measurement_tool("distance")
+    start = workspace._world_to_canvas(0.0, 0.0)
+    end = workspace._world_to_canvas(3.0, 4.0)
+    workspace._handle_measure_click(*start)
+    workspace._handle_measure_click(*end)
+    app.root.update()
+    assert workspace._measurement_result_var.get() == "Distance 5.000 m"
+    assert workspace.canvas_2d.find_withtag("measurement")
+
+    workspace.set_measurement_tool("area")
+    start = workspace._world_to_canvas(1.0, 1.0)
+    end = workspace._world_to_canvas(3.0, 4.0)
+    workspace._handle_measure_click(*start)
+    workspace._handle_measure_click(*end)
+    app.root.update()
+    assert workspace._measurement_result_var.get() == "Area 6.000 m²"
+    assert workspace.canvas_2d.find_withtag("measurement")
+
+    workspace.clear_measurement()
+    assert workspace._tool_mode.get() == "select"
+    assert app.project.metadata == metadata_before
+
+
+def test_fit_selected_centers_selected_room_without_geometry_changes(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    geometry_before = copy.deepcopy(workspace.layout["rooms"])
+    workspace.select_item("room", room["id"])
+    workspace.fit_selected()
+    app.root.update()
+
+    center_x = room["x_m"] + room["length_m"] / 2.0
+    center_y = room["y_m"] + room["width_m"] / 2.0
+    screen_x, screen_y = workspace._world_to_canvas(center_x, center_y)
+    assert screen_x == pytest.approx(workspace.canvas_2d.winfo_width() / 2.0, abs=2.0)
+    assert screen_y == pytest.approx(workspace.canvas_2d.winfo_height() / 2.0, abs=2.0)
+    assert workspace.layout["rooms"] == geometry_before
+
+
+
+def test_3d_fit_changes_only_3d_camera(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    workspace.layout["view"].update(
+        {
+            "zoom_2d": 2.5,
+            "pan_x": 42.0,
+            "pan_y": -19.0,
+            "zoom_3d": 0.2,
+            "pan_3d_x": 500.0,
+            "pan_3d_y": -400.0,
+        }
+    )
+    before_2d = (
+        workspace.layout["view"]["zoom_2d"],
+        workspace.layout["view"]["pan_x"],
+        workspace.layout["view"]["pan_y"],
+    )
+
+    workspace.fit_3d()
+
+    assert workspace.layout["view"]["zoom_3d"] > 0.2
+    assert (
+        workspace.layout["view"]["zoom_2d"],
+        workspace.layout["view"]["pan_x"],
+        workspace.layout["view"]["pan_y"],
+    ) == before_2d
+
+
+def test_3d_xray_and_hover_are_view_only(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    room = workspace.layout["rooms"][0]
+    metadata_before = copy.deepcopy(app.project.metadata)
+
+    workspace._xray_3d.set(True)
+    workspace._draw_3d()
+    app.root.update()
+
+    room_items = workspace.canvas_3d.find_withtag(f"room:{room['id']}")
+    polygons = [
+        item_id
+        for item_id in room_items
+        if workspace.canvas_3d.type(item_id) == "polygon"
+    ]
+    assert polygons
+    assert any(
+        workspace.canvas_3d.itemcget(item_id, "stipple") == "gray50"
+        for item_id in polygons
+    )
+
+    workspace.canvas_3d.addtag_withtag("current", polygons[0])
+    workspace._on_3d_motion(type("Event", (), {"x": 0, "y": 0})())
+    assert workspace._hovered_3d == _Hit("room", room["id"])
+
+    workspace._on_3d_leave()
+    assert workspace._hovered_3d is None
+    assert app.project.metadata == metadata_before
+
+
+def test_invalid_3d_preset_is_rejected(app):
+    with pytest.raises(ValueError, match="3D preset"):
+        app.spatial_workspace.set_3d_view_preset("perspective")

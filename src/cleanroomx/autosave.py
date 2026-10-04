@@ -409,23 +409,80 @@ def _resolve_recovery_artifact_path(
     return resolved_artifact, resolved_directory
 
 
-def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bool:
-    """Return whether one quarantine manifest still binds to its exact artifact bytes."""
+def _quarantine_pair_fingerprint(
+    manifest_path: Path,
+    artifact_path: Path,
+) -> tuple[int, int, str, int, int, int, str, int] | None:
+    """Return content plus stable file identity for a complete quarantine pair."""
     try:
+        manifest_before, manifest_sha256_before = stable_file_sha256(
+            manifest_path,
+            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
+        )
         manifest = load_strict_json(
             manifest_path,
             max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
         )
+        manifest_after, manifest_sha256_after = stable_file_sha256(
+            manifest_path,
+            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
+        )
     except (OSError, ValueError):
-        return False
-    if not isinstance(manifest, dict):
-        return False
+        return None
+
+    manifest_identity_before = (manifest_before.st_dev, manifest_before.st_ino)
+    manifest_identity_after = (manifest_after.st_dev, manifest_after.st_ino)
+    if (
+        manifest_before.st_ino == 0
+        or manifest_after.st_ino == 0
+        or manifest_identity_before != manifest_identity_after
+        or manifest_before.st_size != manifest_after.st_size
+        or manifest_sha256_before != manifest_sha256_after
+        or not isinstance(manifest, dict)
+    ):
+        # A filesystem without stable inode identity cannot support safe
+        # revision-bound retention deletion. Fail closed and preserve evidence.
+        return None
+
+    expected_fields = {
+        "schema",
+        "schema_version",
+        "quarantined_at_utc",
+        "original_name",
+        "quarantined_name",
+        "reason",
+        "size_bytes",
+        "sha256",
+    }
+    if set(manifest) != expected_fields:
+        return None
+
+    version = manifest.get("schema_version")
     if (
         manifest.get("schema") != RECOVERY_QUARANTINE_SCHEMA
-        or manifest.get("schema_version") != RECOVERY_QUARANTINE_SCHEMA_VERSION
+        or type(version) is not int
+        or version != RECOVERY_QUARANTINE_SCHEMA_VERSION
         or manifest.get("quarantined_name") != artifact_path.name
     ):
-        return False
+        return None
+
+    original_name = manifest.get("original_name")
+    reason = manifest.get("reason")
+    quarantined_at_utc = manifest.get("quarantined_at_utc")
+    if (
+        not isinstance(original_name, str)
+        or not original_name
+        or Path(original_name).name != original_name
+        or not isinstance(reason, str)
+        or not reason.strip()
+        or not isinstance(quarantined_at_utc, str)
+        or not quarantined_at_utc
+    ):
+        return None
+    try:
+        _parse_utc(quarantined_at_utc)
+    except RecoveryFormatError:
+        return None
 
     size_bytes = manifest.get("size_bytes")
     digest = manifest.get("sha256")
@@ -437,25 +494,133 @@ def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bo
         or len(digest) != 64
         or any(character not in "0123456789abcdef" for character in digest)
     ):
-        return False
+        return None
 
     try:
-        stat_result, actual_sha256 = stable_file_sha256(
+        artifact_stat, artifact_sha256 = stable_file_sha256(
             artifact_path,
             max_bytes=RECOVERY_FILE_MAX_BYTES,
         )
     except OSError:
-        return False
-    return stat_result.st_size == size_bytes and actual_sha256 == digest
+        return None
+    if (
+        artifact_stat.st_ino == 0
+        or artifact_stat.st_size != size_bytes
+        or artifact_sha256 != digest
+    ):
+        return None
+
+    return (
+        manifest_after.st_dev,
+        manifest_after.st_ino,
+        manifest_sha256_after,
+        manifest_after.st_size,
+        artifact_stat.st_dev,
+        artifact_stat.st_ino,
+        artifact_sha256,
+        artifact_stat.st_size,
+    )
+
+
+def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bool:
+    """Return whether one quarantine manifest still binds to its exact artifact bytes."""
+    return _quarantine_pair_fingerprint(manifest_path, artifact_path) is not None
+
+
+def _restore_staged_quarantine_path(staged_path: Path, original_path: Path) -> None:
+    """Restore a staged path without overwriting a concurrent replacement."""
+    try:
+        os.link(staged_path, original_path)
+    except OSError:
+        return
+    try:
+        staged_path.unlink()
+    except OSError:
+        pass
+
+
+def _prune_verified_quarantine_pair(
+    manifest_path: Path,
+    artifact_path: Path,
+    expected_fingerprint: tuple[int, int, str, int, int, int, str, int],
+) -> None:
+    """Stage one verified pair privately, re-verify its revision, then delete it."""
+    staging_dir = manifest_path.parent / f".retention-{uuid.uuid4().hex}"
+    try:
+        staging_dir.mkdir(mode=0o700)
+    except OSError:
+        return
+
+    staged_artifact = staging_dir / artifact_path.name
+    staged_manifest = staging_dir / manifest_path.name
+    artifact_staged = False
+    manifest_staged = False
+    try:
+        os.replace(artifact_path, staged_artifact)
+        artifact_staged = True
+        os.replace(manifest_path, staged_manifest)
+        manifest_staged = True
+    except OSError:
+        if manifest_staged:
+            _restore_staged_quarantine_path(staged_manifest, manifest_path)
+        if artifact_staged:
+            _restore_staged_quarantine_path(staged_artifact, artifact_path)
+        try:
+            staging_dir.rmdir()
+        except OSError:
+            pass
+        return
+
+    staged_fingerprint = _quarantine_pair_fingerprint(
+        staged_manifest,
+        staged_artifact,
+    )
+    if staged_fingerprint != expected_fingerprint:
+        _restore_staged_quarantine_path(staged_manifest, manifest_path)
+        _restore_staged_quarantine_path(staged_artifact, artifact_path)
+        try:
+            staging_dir.rmdir()
+        except OSError:
+            pass
+        return
+
+    try:
+        staged_artifact.unlink()
+    except OSError:
+        _restore_staged_quarantine_path(staged_manifest, manifest_path)
+        _restore_staged_quarantine_path(staged_artifact, artifact_path)
+        try:
+            staging_dir.rmdir()
+        except OSError:
+            pass
+        return
+
+    try:
+        staged_manifest.unlink()
+    except OSError:
+        pass
+    try:
+        staging_dir.rmdir()
+    except OSError:
+        pass
 
 
 def _rotate_quarantine(directory: Path, history_limit: int) -> None:
-    manifests: list[tuple[int, str, Path, Path]] = []
+    manifests: list[
+        tuple[
+            int,
+            str,
+            Path,
+            Path,
+            tuple[int, int, str, int, int, int, str, int],
+        ]
+    ] = []
     for manifest in directory.glob("*.quarantined.manifest.json"):
         artifact = manifest.with_name(
             manifest.name[: -len(".manifest.json")]
         )
-        if not _quarantine_pair_is_verified(manifest, artifact):
+        fingerprint = _quarantine_pair_fingerprint(manifest, artifact)
+        if fingerprint is None:
             # Retention must never destroy forensic evidence whose manifest or
             # suspect bytes are no longer trustworthy. Preserve the pair for
             # explicit operator review instead of counting it as rotatable history.
@@ -464,20 +629,22 @@ def _rotate_quarantine(directory: Path, history_limit: int) -> None:
             modified_ns = manifest.stat().st_mtime_ns
         except OSError:
             continue
-        manifests.append((modified_ns, manifest.name, manifest, artifact))
+        manifests.append(
+            (modified_ns, manifest.name, manifest, artifact, fingerprint)
+        )
 
-    for _modified, _name, stale_manifest, stale_artifact in sorted(
-        manifests, reverse=True
-    )[history_limit:]:
-        # Re-verify immediately before deletion so a pair that changed after
-        # discovery is preserved rather than silently discarded.
-        if not _quarantine_pair_is_verified(stale_manifest, stale_artifact):
-            continue
-        try:
-            stale_artifact.unlink(missing_ok=True)
-            stale_manifest.unlink(missing_ok=True)
-        except OSError:
-            continue
+    for (
+        _modified,
+        _name,
+        stale_manifest,
+        stale_artifact,
+        expected_fingerprint,
+    ) in sorted(manifests, reverse=True)[history_limit:]:
+        _prune_verified_quarantine_pair(
+            stale_manifest,
+            stale_artifact,
+            expected_fingerprint,
+        )
 
 
 def quarantine_recovery_artifact(

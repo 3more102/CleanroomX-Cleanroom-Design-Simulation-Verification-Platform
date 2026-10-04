@@ -78,7 +78,7 @@ def test_engineering_output_workspace_exposes_first_class_panels(app):
 
 def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     result, issue = _force_room_overlap(app)
-    assert result["summary"]["warning_count"] >= 1
+    assert result["summary"]["issue_count"] >= 1
     assert issue["element"]["type"] == "spatial_element"
 
     panel = app.problems_panel

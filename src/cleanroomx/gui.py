@@ -1214,6 +1214,10 @@ class CleanroomXApp:
             else default_gui_layout_state_path()
         )
         self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
+        self.root.geometry(
+            f"{self._ui_layout_state['window_width']}x"
+            f"{self._ui_layout_state['window_height']}"
+        )
         self._recent_project_paths = [
             Path(value)
             for value in self._ui_layout_state["recent_projects"]
@@ -1985,6 +1989,12 @@ class CleanroomXApp:
             }
         else:
             visibility = dict(focus_snapshot)
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        if width < 1050:
+            width = int(state.get("window_width", 1440))
+        if height < 680:
+            height = int(state.get("window_height", 900))
         state.update(
             {
                 **visibility,
@@ -1993,6 +2003,8 @@ class CleanroomXApp:
                     str(path)
                     for path in self._recent_project_paths[:8]
                 ],
+                "window_width": width,
+                "window_height": height,
             }
         )
         self._ui_layout_state = normalize_gui_layout_state(state)

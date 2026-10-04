@@ -1005,3 +1005,39 @@ def test_window_size_persists_across_application_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+def test_primary_workspace_modes_route_existing_surfaces_without_model_mutation(app):
+    before = copy.deepcopy(app.project.to_dict())
+
+    app._activate_primary_workspace("design")
+    app.root.update()
+    assert app.notebook.select() == str(app.spatial_workspace)
+
+    app._activate_primary_workspace("analyze")
+    app.root.update()
+    assert app.notebook.select() == str(app.input_tab)
+
+    app._activate_primary_workspace("verify")
+    app.root.update()
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    app._activate_primary_workspace("evidence")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+
+    app._activate_primary_workspace("release")
+    app.root.update()
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert app.project.to_dict() == before
+    assert app.workspace_mode_buttons["release"].cget("style") == "CX.ModeActive.TButton"
+
+
+def test_primary_workspace_mode_bar_fits_supported_minimum_window(app):
+    app.root.geometry("1050x680")
+    app.root.update()
+
+    assert app.modebar.winfo_ismapped()
+    for button in app.workspace_mode_buttons.values():
+        assert button.winfo_ismapped()
+        assert button.winfo_x() + button.winfo_width() <= app.modebar.winfo_width()

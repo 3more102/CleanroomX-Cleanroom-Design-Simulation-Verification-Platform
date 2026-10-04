@@ -689,6 +689,23 @@ def test_application_command_strip_remains_visible_at_minimum_window(app):
         assert button.winfo_x() + button.winfo_width() <= app.commandbar.winfo_width()
 
 
+def test_command_strip_highlights_active_workspace_mode(app):
+    buttons = app.toolbar_workspace_buttons
+    assert buttons["split"].instate(["selected"])
+    assert not buttons["2d"].instate(["selected"])
+    assert not buttons["3d"].instate(["selected"])
+
+    app._activate_spatial_workspace("2d")
+    app.root.update()
+    assert buttons["2d"].instate(["selected"])
+    assert not buttons["split"].instate(["selected"])
+
+    app.spatial_workspace.set_workspace_mode("3d")
+    app.root.update()
+    assert buttons["3d"].instate(["selected"])
+    assert not buttons["2d"].instate(["selected"])
+
+
 def test_panel_header_close_controls_and_problems_navigation(app):
     workspace = app.spatial_workspace
 
@@ -819,14 +836,59 @@ def test_status_bar_tracks_live_viewport_mode_zoom_and_projection(app):
 
     status = app.view_status_var.get()
     assert status == "Split · 2D 125% · 3D 150% · Perspective"
+    assert app.workspace_status_var.get() == "Workspace: Split"
 
     workspace.set_workspace_mode("2d")
     app.root.update()
     assert app.view_status_var.get().startswith("2D · 2D 125%")
+    assert app.workspace_status_var.get() == "Workspace: 2D"
 
     workspace.set_workspace_mode("3d")
     app.root.update()
     assert app.view_status_var.get().startswith("3D · 2D 125%")
+    assert app.workspace_status_var.get() == "Workspace: 3D"
+
+
+def test_workspace_mode_persists_across_application_restart(tmp_path):
+    state_path = tmp_path / "gui-layout.json"
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.update()
+    first.spatial_workspace.set_workspace_mode("3d")
+    first._save_ui_layout_state()
+    assert first.workspace_status_var.get() == "Workspace: 3D"
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        workspace = second.spatial_workspace
+        panes = tuple(str(item) for item in workspace._view_panes.panes())
+        assert workspace.workspace_mode() == "3d"
+        assert second.workspace_status_var.get() == "Workspace: 3D"
+        assert str(workspace._three_d_frame) in panes
+        assert str(workspace._two_d_frame) not in panes
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()
+
 
 def test_recent_projects_persist_across_application_restart(tmp_path):
     state_path = tmp_path / "gui-layout.json"

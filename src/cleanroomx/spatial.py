@@ -1480,6 +1480,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_workspace_mode_change: Callable[[str], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1494,6 +1495,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_workspace_mode_change = on_workspace_mode_change
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1976,6 +1978,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         if mode in {"3d", "split"}:
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
         self.redraw()
+        callback = self._on_workspace_mode_change
+        if callback is not None:
+            callback(mode)
+
+    def workspace_mode(self) -> str:
+        mode = self._workspace_mode.get()
+        return mode if mode in {"2d", "3d", "split"} else "split"
 
     def set_workspace_mode(self, mode: str) -> None:
         if mode not in {"2d", "3d", "split"}:

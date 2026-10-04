@@ -695,6 +695,125 @@ def test_external_dependency_fingerprint_rejects_oversized_json_before_read(
         application_module._stable_file_fingerprint(target)
 
 
+def test_external_dependency_freshness_keeps_expected_io_failure_unverifiable(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    recorded = [
+        {
+            "field": "verification_project",
+            "declared_path": "dependency.json",
+            "sha256_after": hashlib.sha256(dependency.read_bytes()).hexdigest(),
+            "size_bytes_after": dependency.stat().st_size,
+            "stable_during_run": True,
+        }
+    ]
+
+    def fail_with_io(_path):
+        raise OSError("dependency unavailable")
+
+    monkeypatch.setattr(
+        application_module,
+        "_stable_file_fingerprint",
+        fail_with_io,
+    )
+
+    assert (
+        application_module.external_dependency_fingerprints_state(
+            recorded,
+            base_dir=tmp_path,
+        )
+        == "unverifiable"
+    )
+
+
+def test_external_dependency_freshness_does_not_hide_unexpected_runtime_error(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    recorded = [
+        {
+            "field": "verification_project",
+            "declared_path": "dependency.json",
+            "sha256_after": hashlib.sha256(dependency.read_bytes()).hexdigest(),
+            "size_bytes_after": dependency.stat().st_size,
+            "stable_during_run": True,
+        }
+    ]
+
+    def fail_with_runtime_defect(_path):
+        raise RuntimeError("programming defect")
+
+    monkeypatch.setattr(
+        application_module,
+        "_stable_file_fingerprint",
+        fail_with_runtime_defect,
+    )
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        application_module.external_dependency_fingerprints_state(
+            recorded,
+            base_dir=tmp_path,
+        )
+
+
+def test_external_dependency_capture_keeps_expected_io_failure_unavailable(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+
+    def fail_with_io(_path):
+        raise OSError("dependency unavailable")
+
+    monkeypatch.setattr(
+        application_module,
+        "_stable_file_fingerprint",
+        fail_with_io,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        application_module._capture_external_dependencies(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+        )
+
+    assert raised.value.changes == (
+        {
+            "field": "verification_project",
+            "declared_path": "dependency.json",
+            "status": "unavailable_or_unstable",
+        },
+    )
+    assert isinstance(raised.value.__cause__, OSError)
+
+
+def test_external_dependency_capture_does_not_hide_unexpected_runtime_error(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+
+    def fail_with_runtime_defect(_path):
+        raise RuntimeError("capture programming defect")
+
+    monkeypatch.setattr(
+        application_module,
+        "_stable_file_fingerprint",
+        fail_with_runtime_defect,
+    )
+
+    with pytest.raises(RuntimeError, match="capture programming defect"):
+        application_module._capture_external_dependencies(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+        )
+
+
 def test_external_dependency_capture_preserves_typed_size_failure(
     tmp_path, monkeypatch
 ):
@@ -847,6 +966,94 @@ def test_external_dependency_snapshot_preserves_typed_size_failure_after_io_retr
 
 
 
+def test_external_dependency_snapshot_retry_keeps_expected_io_failure_fail_closed(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    metadata = dependency.stat()
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+    calls = 0
+
+    def fingerprint(path):
+        nonlocal calls
+        assert Path(path) == dependency
+        calls += 1
+        if calls % 2:
+            return {
+                "size_bytes": metadata.st_size,
+                "mtime_ns": metadata.st_mtime_ns,
+                "sha256": digest,
+            }
+        raise OSError("dependency disappeared during snapshot retry")
+
+    @contextmanager
+    def fail_snapshot(path, *, attempts, max_bytes, suffix=""):
+        raise OSError("snapshot copy failed")
+        yield
+
+    monkeypatch.setattr(application_module, "_stable_file_fingerprint", fingerprint)
+    monkeypatch.setattr(application_module, "stable_file_snapshot", fail_snapshot)
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+    assert raised.value.changes == (
+        {
+            "field": "verification_project",
+            "declared_path": "dependency.json",
+            "status": "unavailable_or_unstable",
+        },
+    )
+
+
+def test_external_dependency_snapshot_retry_does_not_hide_runtime_defect(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    metadata = dependency.stat()
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+    calls = 0
+
+    def fingerprint(path):
+        nonlocal calls
+        assert Path(path) == dependency
+        calls += 1
+        if calls == 1:
+            return {
+                "size_bytes": metadata.st_size,
+                "mtime_ns": metadata.st_mtime_ns,
+                "sha256": digest,
+            }
+        raise RuntimeError("snapshot retry programming defect")
+
+    @contextmanager
+    def fail_snapshot(path, *, attempts, max_bytes, suffix=""):
+        raise OSError("snapshot copy failed")
+        yield
+
+    monkeypatch.setattr(application_module, "_stable_file_fingerprint", fingerprint)
+    monkeypatch.setattr(application_module, "stable_file_snapshot", fail_snapshot)
+
+    with pytest.raises(RuntimeError, match="snapshot retry programming defect"):
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+
 def test_external_dependency_copy_verification_preserves_typed_size_failure(
     tmp_path, monkeypatch
 ):
@@ -900,6 +1107,89 @@ def test_external_dependency_copy_verification_preserves_typed_size_failure(
     assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
 
 
+def test_external_dependency_copy_verification_keeps_expected_io_failure_typed(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    destination = snapshot_dir / "dependency-0000.json"
+    metadata = dependency.stat()
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+
+    def fingerprint(path):
+        candidate = Path(path)
+        if candidate == dependency:
+            return {
+                "size_bytes": metadata.st_size,
+                "mtime_ns": metadata.st_mtime_ns,
+                "sha256": digest,
+            }
+        if candidate == destination:
+            raise OSError("private copy unreadable")
+        raise AssertionError(f"unexpected fingerprint path: {candidate}")
+
+    @contextmanager
+    def stable_snapshot(path, *, attempts, max_bytes, suffix=""):
+        yield dependency, metadata, digest
+
+    monkeypatch.setattr(application_module, "_stable_file_fingerprint", fingerprint)
+    monkeypatch.setattr(application_module, "stable_file_snapshot", stable_snapshot)
+
+    with pytest.raises(
+        ExternalDependencySnapshotError,
+        match="private snapshot verification failed",
+    ) as raised:
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+    assert isinstance(raised.value.__cause__, OSError)
+
+
+def test_external_dependency_copy_verification_does_not_hide_runtime_defect(
+    tmp_path, monkeypatch
+):
+    dependency = tmp_path / "dependency.json"
+    dependency.write_text('{"value":1}\n', encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+    destination = snapshot_dir / "dependency-0000.json"
+    metadata = dependency.stat()
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+
+    def fingerprint(path):
+        candidate = Path(path)
+        if candidate == dependency:
+            return {
+                "size_bytes": metadata.st_size,
+                "mtime_ns": metadata.st_mtime_ns,
+                "sha256": digest,
+            }
+        if candidate == destination:
+            raise RuntimeError("private copy verification defect")
+        raise AssertionError(f"unexpected fingerprint path: {candidate}")
+
+    @contextmanager
+    def stable_snapshot(path, *, attempts, max_bytes, suffix=""):
+        yield dependency, metadata, digest
+
+    monkeypatch.setattr(application_module, "_stable_file_fingerprint", fingerprint)
+    monkeypatch.setattr(application_module, "stable_file_snapshot", stable_snapshot)
+
+    with pytest.raises(RuntimeError, match="private copy verification defect"):
+        application_module._prepare_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": "dependency.json"},
+            tmp_path,
+            snapshot_dir,
+        )
+
+
 def test_external_dependency_backend_verification_preserves_typed_size_failure(
     tmp_path, monkeypatch
 ):
@@ -937,6 +1227,65 @@ def test_external_dependency_backend_verification_preserves_typed_size_failure(
     assert raised.value.field == "verification_project"
     assert raised.value.declared_path == "dependency.json"
     assert isinstance(raised.value.__cause__, application_module.StableFileSizeError)
+
+
+def test_external_dependency_backend_verification_keeps_expected_io_failure_typed(
+    tmp_path, monkeypatch
+):
+    snapshot = tmp_path / "dependency-0000.json"
+    snapshot.write_text('{"value":1}\n', encoding="utf-8")
+
+    def fail_with_io(path):
+        assert Path(path) == snapshot
+        raise OSError("snapshot unreadable during backend verification")
+
+    monkeypatch.setattr(application_module, "_stable_file_fingerprint", fail_with_io)
+
+    with pytest.raises(
+        ExternalDependencySnapshotError,
+        match="private snapshot became unavailable or unstable during backend execution",
+    ) as raised:
+        application_module._verify_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": str(snapshot)},
+            [{
+                "field": "verification_project",
+                "declared_path": "dependency.json",
+                "sha256": "0" * 64,
+                "size_bytes": 0,
+            }],
+        )
+
+    assert isinstance(raised.value.__cause__, OSError)
+
+
+def test_external_dependency_backend_verification_does_not_hide_runtime_defect(
+    tmp_path, monkeypatch
+):
+    snapshot = tmp_path / "dependency-0000.json"
+    snapshot.write_text('{"value":1}\n', encoding="utf-8")
+
+    def fail_with_runtime_defect(path):
+        assert Path(path) == snapshot
+        raise RuntimeError("backend snapshot verification defect")
+
+    monkeypatch.setattr(
+        application_module,
+        "_stable_file_fingerprint",
+        fail_with_runtime_defect,
+    )
+
+    with pytest.raises(RuntimeError, match="backend snapshot verification defect"):
+        application_module._verify_external_dependency_snapshot(
+            "dossier",
+            {"verification_project": str(snapshot)},
+            [{
+                "field": "verification_project",
+                "declared_path": "dependency.json",
+                "sha256": "0" * 64,
+                "size_bytes": 0,
+            }],
+        )
 
 
 def test_external_dependency_snapshot_preserves_private_verification_failure(

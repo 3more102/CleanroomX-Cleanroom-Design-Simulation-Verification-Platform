@@ -62,7 +62,12 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
-from .gui_components import DiagnosticsPanel, ProofGraphViewer, VerificationPanel
+from .gui_components import (
+    DiagnosticsPanel,
+    ProofGraphViewer,
+    StartCenter,
+    VerificationPanel,
+)
 from .project_diagnostics import analyze_project_diagnostics
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
@@ -1219,6 +1224,8 @@ class CleanroomXApp:
         self._build_layout()
         self._refresh_analysis_list()
         self._capture_saved_state()
+        if hasattr(self, "start_center"):
+            self.notebook.select(self.start_center)
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
         self._update_title()
@@ -1558,6 +1565,15 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
+        self.start_center = StartCenter(
+            self.notebook,
+            on_new=self.new_project,
+            on_open=self.open_project,
+            on_import_ifc=self.import_ifc_spatial_layout,
+            on_open_demo=self._open_demo_project,
+        )
+        self.notebook.add(self.start_center, text="Start")
+
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(output_host, padding=(8, 3))
@@ -1633,6 +1649,30 @@ class CleanroomXApp:
             self.spatial_workspace.set_workspace_mode(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
+
+    def _open_demo_project(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before opening the example project.",
+                parent=self.root,
+            )
+            return
+        if not self._confirm_project_replacement():
+            return
+        try:
+            self.load_project_path(bundled_demo_project_path())
+        except Exception as exc:
+            messagebox.showerror(
+                "Open example failed",
+                str(exc),
+                parent=self.root,
+            )
+
+    def _show_start_center(self) -> None:
+        if hasattr(self, "start_center"):
+            self.notebook.select(self.start_center)
+            self.selection_status_var.set("Selected: Start")
 
     def _refresh_project_diagnostics(self) -> dict | None:
         panel = getattr(self, "problems_panel", None)
@@ -3663,6 +3703,7 @@ class CleanroomXApp:
         self._capture_saved_state()
         self.status_var.set("New project")
         self._update_title()
+        self._show_start_center()
 
     def open_project(self) -> None:
         if self._running:
@@ -3975,6 +4016,8 @@ class CleanroomXApp:
             self._capture_saved_state()
             self.status_var.set(f"Opened {project_path.name}")
             self._update_title()
+        if hasattr(self, "spatial_workspace"):
+            self._activate_spatial_workspace()
 
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()

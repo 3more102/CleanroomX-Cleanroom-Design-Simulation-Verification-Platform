@@ -624,3 +624,24 @@ def test_overlay_mode_changes_display_without_changing_engineering_geometry(app)
         "devices": workspace.layout["devices"],
     } == geometry_before
 
+def test_start_center_is_available_and_project_load_returns_to_design(app):
+    app._show_start_center()
+    app.root.update()
+    assert app.notebook.select() == str(app.start_center)
+
+    buttons = [
+        child.cget("text")
+        for frame in app.start_center.winfo_children()
+        if isinstance(frame, ttk.LabelFrame)
+        for child in frame.winfo_children()
+        if isinstance(child, ttk.Button)
+    ]
+    assert "New Project" in buttons
+    assert "Open Project" in buttons
+    assert "Import IFC" in buttons
+    assert "Open Example Project" in buttons
+
+    app.load_project_path(bundled_demo_project_path())
+    app.root.update()
+    assert app.notebook.select() == str(app.spatial_workspace)
+

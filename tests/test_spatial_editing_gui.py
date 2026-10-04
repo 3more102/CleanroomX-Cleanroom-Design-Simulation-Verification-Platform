@@ -5,6 +5,7 @@ import copy
 import os
 import tkinter as tk
 from tkinter import ttk
+from types import SimpleNamespace
 
 import pytest
 
@@ -185,3 +186,78 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
     assert workspace._property_rows["room_id"].winfo_manager() == "pack"
     assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
     assert workspace._property_rows["classification"].winfo_manager() == ""
+
+def test_fit_selected_and_3d_view_presets_are_deterministic(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    assert workspace.select_item("room", room["id"])
+
+    workspace.set_3d_view_preset("top")
+    app.root.update()
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(0.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(75.0)
+    assert workspace.layout["view"]["zoom_3d"] > 0
+
+    workspace.set_3d_view_preset("front")
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(0.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(5.0)
+
+    workspace.set_3d_view_preset("right")
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(90.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(5.0)
+
+    workspace.set_3d_view_preset("iso")
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(35.0)
+    assert workspace.layout["view"]["elevation_deg"] == pytest.approx(28.0)
+    assert workspace.fit_selected()
+    assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
+    assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_room_layer_visibility_is_persisted_and_applied(app):
+    workspace = app.spatial_workspace
+    assert workspace.canvas_2d.find_withtag("room")
+    assert workspace.canvas_3d.find_withtag("room3d")
+
+    workspace._show_rooms.set(False)
+    workspace._set_view_flag("show_rooms", False)
+    app.root.update()
+    assert workspace.layout["view"]["show_rooms"] is False
+    assert not workspace.canvas_2d.find_withtag("room")
+    assert not workspace.canvas_3d.find_withtag("room3d")
+
+    workspace._show_rooms.set(True)
+    workspace._set_view_flag("show_rooms", True)
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag("room")
+    assert workspace.canvas_3d.find_withtag("room3d")
+
+
+def test_2d_distance_and_area_measurement_do_not_change_geometry(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+
+    p0 = workspace._world_to_canvas(0.0, 0.0)
+    p1 = workspace._world_to_canvas(3.0, 4.0)
+
+    workspace.start_measurement("distance")
+    workspace._capture_measure_point(SimpleNamespace(x=p0[0], y=p0[1]))
+    workspace._capture_measure_point(SimpleNamespace(x=p1[0], y=p1[1]))
+    app.root.update()
+    assert workspace._measure_var.get() == "Distance: 5.000 m"
+    assert workspace.canvas_2d.find_withtag("measurement")
+    assert workspace.layout == before
+
+    p2 = workspace._world_to_canvas(2.0, 3.0)
+    workspace.start_measurement("area")
+    workspace._capture_measure_point(SimpleNamespace(x=p0[0], y=p0[1]))
+    workspace._capture_measure_point(SimpleNamespace(x=p2[0], y=p2[1]))
+    app.root.update()
+    assert workspace._measure_var.get() == "Area: 6.000 m²"
+    assert workspace.layout == before
+
+    workspace.clear_measurement()
+    app.root.update()
+    assert workspace._measure_mode.get() == "none"
+    assert not workspace.canvas_2d.find_withtag("measurement")
+

@@ -463,3 +463,52 @@ def test_3d_projection_and_section_plane_are_display_only(app):
 def test_invalid_3d_projection_is_rejected(app):
     with pytest.raises(ValueError, match="projection"):
         app.spatial_workspace.set_3d_projection("fisheye")
+
+def test_shell_panels_collapse_and_restore_without_mutating_project(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.toggle_navigator_panel()
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is False
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+
+    app.toggle_navigator_panel()
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is True
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert tuple(str(item) for item in app.main_panes.panes())[0] == str(
+        app.navigator_panel
+    )
+
+    app.toggle_output_panel()
+    app.root.update()
+    assert app.output_panel_visible_var.get() is False
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.toggle_output_panel()
+    app.root.update()
+    assert app.output_panel_visible_var.get() is True
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+
+    assert app.project.to_dict() == project_before
+
+
+def test_reset_panel_layout_restores_shell_panels(app):
+    app.toggle_navigator_panel()
+    app.toggle_output_panel()
+    app.root.update()
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.reset_panel_layout()
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+

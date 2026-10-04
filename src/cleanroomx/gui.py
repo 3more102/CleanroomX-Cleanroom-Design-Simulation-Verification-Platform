@@ -1221,6 +1221,8 @@ class CleanroomXApp:
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.navigator_filter_var = tk.StringVar(value="")
+        self.navigator_panel_visible_var = tk.BooleanVar(value=True)
+        self.output_panel_visible_var = tk.BooleanVar(value=True)
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
 
         self._configure_styles()
@@ -1392,6 +1394,23 @@ class CleanroomXApp:
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
         view_menu.add_separator()
+        view_menu.add_checkbutton(
+            label="Project Navigator",
+            accelerator="Ctrl+B",
+            variable=self.navigator_panel_visible_var,
+            command=self._sync_navigator_panel_visibility,
+        )
+        view_menu.add_checkbutton(
+            label="Output / Verification",
+            accelerator="Ctrl+J",
+            variable=self.output_panel_visible_var,
+            command=self._sync_output_panel_visibility,
+        )
+        view_menu.add_command(
+            label="Reset Panel Layout",
+            command=self.reset_panel_layout,
+        )
+        view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
             label="Refresh Spatial Workspace",
@@ -1415,6 +1434,8 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-1>", lambda event: self._activate_spatial_workspace("2d"))
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
+        self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
+        self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -1453,9 +1474,11 @@ class CleanroomXApp:
         topbar.columnconfigure(2, weight=2)
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
+        self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
         navigator = ttk.Frame(panes, padding=(8, 7))
+        self.navigator_panel = navigator
         panes.add(navigator, weight=1)
         ttk.Label(
             navigator, text="PROJECT NAVIGATOR", style="CX.Section.TLabel"
@@ -1497,6 +1520,7 @@ class CleanroomXApp:
         )
 
         content = ttk.Frame(panes)
+        self.content_panel = content
         panes.add(content, weight=5)
 
         self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
@@ -1595,6 +1619,7 @@ class CleanroomXApp:
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(output_host, padding=(8, 3))
         output_header.pack(fill="x")
@@ -1666,6 +1691,80 @@ class CleanroomXApp:
             textvariable=self.autosave_status_var,
             anchor="e",
         ).pack(side="right")
+
+    @staticmethod
+    def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
+        return str(child) in {str(item) for item in paned.panes()}
+
+    def _sync_navigator_panel_visibility(self) -> None:
+        panes = getattr(self, "main_panes", None)
+        panel = getattr(self, "navigator_panel", None)
+        if panes is None or panel is None:
+            return
+        visible = bool(self.navigator_panel_visible_var.get())
+        present = self._paned_contains(panes, panel)
+        if visible and not present:
+            panes.insert(0, panel, weight=1)
+        elif not visible and present:
+            panes.forget(panel)
+        state = "shown" if visible else "hidden"
+        self.status_var.set(f"Project Navigator {state}")
+
+    def _sync_output_panel_visibility(self) -> None:
+        panes = getattr(self, "workspace_panes", None)
+        panel = getattr(self, "output_panel", None)
+        if panes is None or panel is None:
+            return
+        visible = bool(self.output_panel_visible_var.get())
+        present = self._paned_contains(panes, panel)
+        if visible and not present:
+            panes.add(panel, weight=1)
+        elif not visible and present:
+            panes.forget(panel)
+        state = "shown" if visible else "hidden"
+        self.status_var.set(f"Output / Verification {state}")
+
+    def toggle_navigator_panel(self) -> None:
+        self.navigator_panel_visible_var.set(
+            not bool(self.navigator_panel_visible_var.get())
+        )
+        self._sync_navigator_panel_visibility()
+
+    def toggle_output_panel(self) -> None:
+        self.output_panel_visible_var.set(
+            not bool(self.output_panel_visible_var.get())
+        )
+        self._sync_output_panel_visibility()
+
+    def _apply_default_panel_sashes(self) -> None:
+        if (
+            self.navigator_panel_visible_var.get()
+            and self._paned_contains(self.main_panes, self.navigator_panel)
+        ):
+            width = self.main_panes.winfo_width()
+            if width > 1:
+                self.main_panes.sashpos(
+                    0,
+                    min(360, max(240, int(width * 0.20))),
+                )
+        if (
+            self.output_panel_visible_var.get()
+            and self._paned_contains(self.workspace_panes, self.output_panel)
+        ):
+            height = self.workspace_panes.winfo_height()
+            if height > 1:
+                self.workspace_panes.sashpos(
+                    0,
+                    max(320, int(height * 0.72)),
+                )
+
+    def reset_panel_layout(self) -> None:
+        self.navigator_panel_visible_var.set(True)
+        self.output_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        self.root.after_idle(self._apply_default_panel_sashes)
+        self.status_var.set("Panel layout reset")
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)

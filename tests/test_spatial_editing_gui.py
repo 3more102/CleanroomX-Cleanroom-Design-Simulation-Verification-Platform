@@ -888,3 +888,42 @@ def test_forget_recent_project_updates_persisted_preferences(app, tmp_path):
     state = load_gui_layout_state(app._ui_state_path)
     assert state["recent_projects"] == [str(project_a.resolve())]
 
+def test_window_size_persists_across_application_restart(tmp_path):
+    state_path = tmp_path / "gui-window-layout.json"
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.geometry("1220x760")
+    root.update_idletasks()
+    root.update()
+    first._save_ui_layout_state()
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        assert root2.winfo_width() == 1220
+        assert root2.winfo_height() == 760
+        state = load_gui_layout_state(state_path)
+        assert state["window_width"] == 1220
+        assert state["window_height"] == 760
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()
+

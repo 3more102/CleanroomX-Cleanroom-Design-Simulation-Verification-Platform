@@ -66,6 +66,29 @@ def test_filter_commands_ranks_direct_label_matches_ahead_of_keyword_matches():
     ]
 
 
+def test_filter_commands_prefers_tighter_later_fuzzy_subsequence():
+    noop = lambda: None
+    commands = [
+        PaletteCommand(
+            "fit",
+            "Fit Spatial Views",
+            "View",
+            noop,
+        ),
+        PaletteCommand(
+            "validate",
+            "Validate Current Analysis Input",
+            "Analysis",
+            noop,
+        ),
+    ]
+
+    assert [item.id for item in filter_commands(commands, "aa")] == [
+        "validate",
+        "fit",
+    ]
+
+
 def test_filter_commands_supports_low_priority_ordered_fuzzy_queries():
     noop = lambda: None
     commands = [
@@ -175,8 +198,13 @@ def test_command_palette_up_from_search_focuses_last_result(root):
     )
     root.update()
 
+    last = palette.tree.get_children()[-1]
+    palette.tree.yview_moveto(0.0)
     assert palette._focus_last_result() == "break"
-    assert palette.tree.selection() == (palette.tree.get_children()[-1],)
+    root.update()
+    assert palette.tree.selection() == (last,)
+    assert palette.tree.focus() == last
+    assert palette.tree.bbox(last)
     palette._close()
 
 

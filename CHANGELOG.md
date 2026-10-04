@@ -12,6 +12,12 @@
 - Narrows six project-level command boundaries so unexpected runtime defects propagate for debugging while expected source-change, migrated-project, publication-state, guarded-save lock/conflict/durability failures, and typed project-verification workflow/persistence failures retain deterministic stderr/exit-code handling.
 - Adds regression coverage across project diagnostics, project dossier, project verification, requirements traceability, verification history, and IFC planning; solver equations, schemas, tolerances, requirements, and verdict semantics are unchanged.
 
+## Unreleased Release 3 — root CLI strict input/output boundary — 2026-10-04
+
+- Routes the top-level `cleanroomx` verification commands through the shared structural input normalizer and expected user-error boundary, so missing files and malformed user JSON fail with concise stderr instead of Python tracebacks.
+- Serializes root verification and screening-calculator results through the canonical strict-JSON serializer, rejecting non-finite or otherwise non-JSON results instead of emitting permissive JSON tokens.
+- Preserves explicit engineering verification exit code `2` and leaves unexpected runtime/programming defects visible; solver equations, schemas, tolerances, requirements, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — discovered CLI output publication guards — 2026-10-04
 
 - Derives the completeness gate from every configured `[project.scripts]` entry point, then uses the Python AST to identify commands that expose a `--output` option.

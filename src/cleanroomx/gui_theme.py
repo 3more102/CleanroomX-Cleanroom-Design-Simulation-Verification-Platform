@@ -340,6 +340,27 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
         foreground=[("disabled", palette["disabled"])],
     )
+    style.configure(
+        "CX.WorkspaceMode.TButton",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        bordercolor=palette["border"],
+        padding=(6, 3),
+    )
+    style.map(
+        "CX.WorkspaceMode.TButton",
+        background=[
+            ("selected", palette["accent"]),
+            ("pressed", palette["selection"]),
+            ("active", palette["surface"]),
+            ("disabled", palette["surface_alt"]),
+        ],
+        foreground=[
+            ("selected", palette["selection_text"]),
+            ("disabled", palette["disabled"]),
+            ("!disabled", palette["text"]),
+        ],
+    )
 
     # Defaults for Tk-native widgets created after this call.
     root.option_add("*Text.background", palette["field"])

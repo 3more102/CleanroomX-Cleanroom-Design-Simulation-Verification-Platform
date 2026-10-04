@@ -1662,14 +1662,14 @@ class CleanroomXApp:
             workflowbar,
             textvariable=self.workflow_analysis_var,
             state="readonly",
-            width=20,
+            width=12,
         )
-        self.workflow_analysis_combo.pack(side="right", padx=(4, 0))
+        self.workflow_analysis_combo.pack(side="right", padx=(3, 0))
         self.workflow_analysis_combo.bind(
             "<<ComboboxSelected>>",
             self._on_workflow_analysis_selected,
         )
-        ttk.Label(workflowbar, text="Analysis").pack(side="right", padx=(8, 0))
+        ttk.Label(workflowbar, text="Active").pack(side="right", padx=(5, 0))
 
         ttk.Label(
             workflowbar,

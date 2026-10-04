@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — bundle extraction destination-state guard — 2026-10-04
+
+- Captures whether the portable-bundle extraction destination was absent or the exact empty-directory revision observed before extraction work begins.
+- Revalidates that state immediately before publication and fails closed if another process creates, replaces, removes, or populates the destination, preventing extraction from deleting a concurrently owned empty directory.
+- Adds regressions for both newly-created and replaced-empty destination races; bundle schema, archive verification, solver equations, engineering tolerances, requirement criteria, and verdict semantics are unchanged.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

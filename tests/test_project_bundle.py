@@ -1097,6 +1097,79 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
     assert observed_limits == [bundle_module._MAX_BUNDLE_ARCHIVE_BYTES]
 
 
+def test_bundle_extraction_rejects_destination_created_before_publication(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    destination = tmp_path / "extracted"
+    original_sync = bundle_module._fsync_staged_directory_tree
+
+    def create_destination_after_staging(stage):
+        original_sync(stage)
+        destination.mkdir()
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_fsync_staged_directory_tree",
+        create_destination_after_staging,
+    )
+
+    with pytest.raises(
+        ProjectBundleError,
+        match="extraction destination changed before publication",
+    ):
+        extract_project_bundle(bundle, destination)
+
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+    assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
+def test_bundle_extraction_rejects_replaced_empty_destination_before_publication(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    destination = tmp_path / "extracted"
+    destination.mkdir()
+    original_sync = bundle_module._fsync_staged_directory_tree
+
+    def replace_destination_after_staging(stage):
+        original_sync(stage)
+        destination.rmdir()
+        destination.mkdir()
+        marker = destination / "concurrent-owner.marker"
+        marker.write_text("owned\n", encoding="utf-8")
+        marker.unlink()
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_fsync_staged_directory_tree",
+        replace_destination_after_staging,
+    )
+
+    with pytest.raises(
+        ProjectBundleError,
+        match="extraction destination changed before publication",
+    ):
+        extract_project_bundle(bundle, destination)
+
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+    assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
 
 def test_bundle_extraction_fsyncs_staged_directories_before_publish(
     tmp_path, monkeypatch

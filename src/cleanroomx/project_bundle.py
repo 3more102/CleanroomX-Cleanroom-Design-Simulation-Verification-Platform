@@ -906,6 +906,66 @@ def _fsync_staged_directory_tree(root: Path) -> None:
     _fsync_directory(root)
 
 
+def _extraction_destination_revision(path: Path) -> tuple[int, ...]:
+    """Capture one empty extraction directory revision for publication checks."""
+    metadata = path.stat()
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+        int(getattr(metadata, "st_birthtime_ns", 0)),
+    )
+
+
+def _capture_extraction_destination(path: Path) -> tuple[int, ...] | None:
+    """Capture the exact empty destination state observed before extraction work."""
+    if not os.path.lexists(path):
+        return None
+    if not path.is_dir():
+        raise ProjectBundleError(f"extraction destination is not a directory: {path}")
+    try:
+        if any(path.iterdir()):
+            raise ProjectBundleError(
+                f"extraction destination must be empty: {path}"
+            )
+        return _extraction_destination_revision(path)
+    except OSError as exc:
+        raise ProjectBundleError(
+            f"could not capture extraction destination state: {path}"
+        ) from exc
+
+
+def _assert_extraction_destination_unchanged(
+    path: Path,
+    expected_revision: tuple[int, ...] | None,
+) -> None:
+    """Fail closed if another writer changed the destination before publication."""
+    if expected_revision is None:
+        if os.path.lexists(path):
+            raise ProjectBundleError(
+                f"extraction destination changed before publication: {path}"
+            )
+        return
+
+    if not os.path.lexists(path) or not path.is_dir():
+        raise ProjectBundleError(
+            f"extraction destination changed before publication: {path}"
+        )
+    try:
+        current_revision = _extraction_destination_revision(path)
+        remains_empty = not any(path.iterdir())
+    except OSError as exc:
+        raise ProjectBundleError(
+            f"could not verify extraction destination before publication: {path}"
+        ) from exc
+    if current_revision != expected_revision or not remains_empty:
+        raise ProjectBundleError(
+            f"extraction destination changed before publication: {path}"
+        )
+
+
 def _extract_project_bundle_snapshot(
     source: Path,
     snapshot: BinaryIO,
@@ -914,13 +974,7 @@ def _extract_project_bundle_snapshot(
 ) -> Path:
     """Transactionally extract one already-verified private bundle snapshot."""
     target = Path(destination).expanduser().resolve(strict=False)
-    if target.exists():
-        if not target.is_dir():
-            raise ProjectBundleError(f"extraction destination is not a directory: {target}")
-        if any(target.iterdir()):
-            raise ProjectBundleError(
-                f"extraction destination must be empty: {target}"
-            )
+    destination_revision = _capture_extraction_destination(target)
     _ensure_directory_durable(target.parent)
     stage = Path(
         tempfile.mkdtemp(
@@ -995,7 +1049,11 @@ def _extract_project_bundle_snapshot(
                 f"staged bundle extraction could not be made durable: {target}"
             ) from exc
 
-        if target.exists():
+        _assert_extraction_destination_unchanged(
+            target,
+            destination_revision,
+        )
+        if destination_revision is not None:
             target.rmdir()
         os.replace(stage, target)
         published = True

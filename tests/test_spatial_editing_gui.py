@@ -562,3 +562,48 @@ def test_reset_panel_layout_restores_design_inspector_too(app):
     assert app._paned_contains(app.main_panes, app.navigator_panel)
     assert app._paned_contains(app.workspace_panes, app.output_panel)
 
+def test_shell_panel_visibility_persists_across_app_restart(tmp_path):
+    state_path = tmp_path / "gui-layout.json"
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.update()
+    first.navigator_panel_visible_var.set(False)
+    first._sync_navigator_panel_visibility()
+    first.output_panel_visible_var.set(False)
+    first._sync_output_panel_visibility()
+    first.spatial_workspace.set_inspector_visible(False)
+    first._save_ui_layout_state()
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        assert second.navigator_panel_visible_var.get() is False
+        assert second.output_panel_visible_var.get() is False
+        assert not second._paned_contains(second.main_panes, second.navigator_panel)
+        assert not second._paned_contains(
+            second.workspace_panes,
+            second.output_panel,
+        )
+        assert not second.spatial_workspace.inspector_visible()
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()
+

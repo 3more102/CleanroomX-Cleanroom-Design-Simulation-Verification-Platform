@@ -2,116 +2,160 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.proofgraph_models import (
+    CalculationEvidence,
+    ComplianceCheck,
+    ComplianceFinding,
+    ComplianceVerdict,
+    EvidenceSource,
+    ProofGraph,
+    ProvenanceRecord,
+    Requirement,
+    RequirementSet,
+    VerificationRun,
+)
 
 
 def _sample_graph() -> dict:
-    return {
-        "schema": "cleanroomx.proofgraph",
-        "schema_version": 1,
-        "id": "graph-room-pressure",
-        "graph_sha256": "a" * 64,
-        "requirement_set": {
-            "id": "requirements",
-            "version": "1",
-            "title": "Project Requirements",
-            "source": "project",
-            "requirements": [
-                {
-                    "id": "REQ-PRESSURE",
-                    "title": "Room pressure",
-                    "source": "project",
-                    "reference": None,
-                    "scope": ["room-a"],
-                    "criteria": {"min_pa": 15.0},
-                }
-            ],
-        },
-        "evidence_sources": [
-            {
-                "id": "source-project",
-                "kind": "project",
-                "reference": "project.cleanroomx.json",
-                "revision": "rev-1",
-            }
-        ],
-        "evidence": [
-            {
-                "id": "evidence-pressure",
-                "kind": "calculation",
-                "property_name": "pressure_pa",
-                "value": 12.0,
-                "unit": "Pa",
-                "source_id": "source-project",
-                "version": None,
-                "timestamp": None,
-                "project_id": "project-a",
-                "subject_ref": "room-a",
-                "provenance": [
-                    {
-                        "id": "prov-pressure",
-                        "source_id": "source-project",
-                        "origin": "solver",
-                        "upstream_evidence_ids": [],
-                        "ifc_global_id": "3IFC",
-                        "cleanroomx_entity_id": "room-a",
-                        "originating_file": None,
-                        "originating_calculation": "pressure_solver",
-                        "method": "pressure cascade",
-                    }
-                ],
-                "confidence": None,
-            }
-        ],
-        "checks": [
-            {
-                "id": "check-pressure",
-                "requirement_id": "REQ-PRESSURE",
-                "evidence_ids": ["evidence-pressure"],
-                "required_evidence_kinds": ["calculation"],
-            }
-        ],
-        "findings": [
-            {
-                "id": "finding-pressure",
-                "check_id": "check-pressure",
-                "requirement_id": "REQ-PRESSURE",
-                "status": "fail",
-                "reason": "Pressure below target",
-                "evidence_ids": ["evidence-pressure"],
-                "evidence_present": True,
-                "expected": 15.0,
-                "actual": 12.0,
-                "unit": "Pa",
-                "delta": -3.0,
-            }
-        ],
-        "verdicts": [
-            {
-                "id": "verdict-pressure",
-                "requirement_id": "REQ-PRESSURE",
-                "status": "fail",
-                "finding_ids": ["finding-pressure"],
-                "reason": "Requirement not satisfied",
-                "confidence": None,
-            }
-        ],
-        "corrective_actions": [],
-        "verification_runs": [
-            {
-                "id": "run-1",
-                "requirement_set_id": "requirements",
-                "check_ids": ["check-pressure"],
-                "verdict_ids": ["verdict-pressure"],
-                "timestamp": None,
-                "input_sha256": None,
-                "metadata": {},
-            }
-        ],
-    }
+    requirement = Requirement(
+        id="REQ-PRESSURE",
+        title="Room pressure",
+        source="project",
+        scope=("room-a",),
+        criteria={"min_pa": 15.0},
+    )
+    requirement_set = RequirementSet(
+        id="requirements",
+        version="1",
+        title="Project Requirements",
+        source="project",
+        requirements=(requirement,),
+    )
+    source = EvidenceSource(
+        id="source-ifc",
+        kind="ifc",
+        reference="facility.ifc",
+        revision="rev-1",
+    )
+    evidence = CalculationEvidence(
+        id="evidence-pressure",
+        property_name="pressure_pa",
+        value=12.0,
+        unit="Pa",
+        source_id=source.id,
+        project_id="project-a",
+        subject_ref="room-a",
+        provenance=(
+            ProvenanceRecord(
+                id="prov-pressure",
+                source_id=source.id,
+                origin="solver",
+                ifc_global_id="3IFC",
+                cleanroomx_entity_id="room-a",
+                originating_calculation="pressure_solver",
+                method="pressure cascade",
+            ),
+        ),
+    )
+    check = ComplianceCheck(
+        id="check-pressure",
+        requirement_id=requirement.id,
+        evidence_ids=(evidence.id,),
+        required_evidence_kinds=("calculation",),
+    )
+    finding = ComplianceFinding(
+        id="finding-pressure",
+        check_id=check.id,
+        requirement_id=requirement.id,
+        status="fail",
+        reason="Pressure below target",
+        evidence_ids=(evidence.id,),
+        evidence_present=True,
+        expected=15.0,
+        actual=12.0,
+        unit="Pa",
+        delta=-3.0,
+    )
+    verdict = ComplianceVerdict(
+        id="verdict-pressure",
+        requirement_id=requirement.id,
+        status="fail",
+        finding_ids=(finding.id,),
+        reason="Requirement not satisfied",
+    )
+    run = VerificationRun(
+        id="run-1",
+        requirement_set_id=requirement_set.id,
+        check_ids=(check.id,),
+        verdict_ids=(verdict.id,),
+    )
+    return ProofGraph(
+        id="graph-room-pressure",
+        requirement_set=requirement_set,
+        evidence_sources=(source,),
+        evidence=(evidence,),
+        checks=(check,),
+        findings=(finding,),
+        verdicts=(verdict,),
+        verification_runs=(run,),
+    ).to_dict()
 
 
-def test_proofgraph_projection_preserves_canonical_document_and_builds_trace_chain():
+def _unresolved_graph() -> dict:
+    requirement = Requirement(
+        id="REQ-EVIDENCE",
+        title="Qualification evidence",
+        source="project",
+    )
+    requirement_set = RequirementSet(
+        id="requirements-unresolved",
+        version="1",
+        title="Evidence Requirements",
+        source="project",
+        requirements=(requirement,),
+    )
+    check = ComplianceCheck(
+        id="check-evidence",
+        requirement_id=requirement.id,
+        evidence_ids=(),
+        required_evidence_kinds=("commissioning",),
+    )
+    finding = ComplianceFinding(
+        id="finding-evidence",
+        check_id=check.id,
+        requirement_id=requirement.id,
+        status="not_checked",
+        reason="Required commissioning evidence is missing.",
+        evidence_ids=(),
+        evidence_present=False,
+    )
+    verdict = ComplianceVerdict(
+        id="verdict-evidence",
+        requirement_id=requirement.id,
+        status="not_checked",
+        finding_ids=(finding.id,),
+        reason="Required commissioning evidence is missing.",
+    )
+    run = VerificationRun(
+        id="run-unresolved",
+        requirement_set_id=requirement_set.id,
+        check_ids=(check.id,),
+        verdict_ids=(verdict.id,),
+    )
+    return ProofGraph(
+        id="graph-unresolved-evidence",
+        requirement_set=requirement_set,
+        checks=(check,),
+        findings=(finding,),
+        verdicts=(verdict,),
+        verification_runs=(run,),
+    ).to_dict()
+
+
+def test_proofgraph_projection_validates_and_builds_trace_chain():
     document = _sample_graph()
     before = copy.deepcopy(document)
 
@@ -153,6 +197,14 @@ def test_proofgraph_projection_preserves_canonical_document_and_builds_trace_cha
     ) in edges
 
 
+def test_proofgraph_projection_fails_closed_on_tampered_digest():
+    document = _sample_graph()
+    document["evidence"][0]["value"] = 13.0
+
+    with pytest.raises(ValueError, match="graph_sha256 does not match"):
+        proofgraph_projection(document)
+
+
 def test_proofgraph_filters_keep_immediate_context_without_deriving_new_verdicts():
     projection = proofgraph_projection(_sample_graph())
 
@@ -172,3 +224,14 @@ def test_proofgraph_filters_keep_immediate_context_without_deriving_new_verdicts
     calculation_keys = {node["key"] for node in calculations["nodes"]}
     assert "calculation:pressure_solver" in calculation_keys
     assert "evidence:evidence-pressure" in calculation_keys
+
+
+def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
+    projection = proofgraph_projection(_unresolved_graph())
+
+    unresolved = _filtered_projection(projection, "Unresolved Evidence")
+    unresolved_keys = {node["key"] for node in unresolved["nodes"]}
+
+    assert "finding:finding-evidence" in unresolved_keys
+    assert "check:check-evidence" in unresolved_keys
+    assert "verdict:verdict-evidence" not in unresolved_keys

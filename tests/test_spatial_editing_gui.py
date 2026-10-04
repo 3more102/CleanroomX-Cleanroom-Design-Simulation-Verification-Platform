@@ -275,8 +275,18 @@ def test_engineering_output_is_docked_below_primary_workspace(app):
     assert "Input" in primary_tabs
     assert "Plot" in primary_tabs
     assert "Results" not in primary_tabs
-    assert output_tabs == ["Results", "Diagnostics", "Report"]
+    assert output_tabs == [
+        "Problems",
+        "Diagnostics",
+        "Verification",
+        "Console",
+        "Evidence",
+        "Results",
+        "Report",
+    ]
 
+    assert app.problems_panel.master == app.output_notebook
+    assert app.verification_panel.master == app.output_notebook
     assert app.result_text.master.master == app.output_notebook
     assert app.diagnostics_text.master.master == app.output_notebook
     assert app.report_text.master.master == app.output_notebook
@@ -301,3 +311,66 @@ def test_project_navigator_search_filters_without_changing_active_analysis(app):
     )
     assert app.project.active_analysis_id == active_before
 
+
+
+def test_project_problems_panel_uses_canonical_diagnostics_and_navigates_room(app):
+    report = app._refresh_project_diagnostics()
+
+    assert report is not None
+    assert report["schema"] == "cleanroomx.project-diagnostics"
+    assert app.problems_panel._report == report
+
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    issue = {
+        "rule": "spatial.test-navigation",
+        "category": "spatial",
+        "severity": "warning",
+        "element": {
+            "type": "room",
+            "id": room["id"],
+            "name": room["name"],
+        },
+        "message": "Navigate to this room.",
+        "suggested_action": "Review the room.",
+    }
+
+    assert app._navigate_project_diagnostic(issue)
+    app.root.update()
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(workspace)
+    assert app.analysis_tree.selection() == (f"room:{room['id']}",)
+
+
+def test_verification_panel_navigation_opens_analysis_without_changing_verdicts(app):
+    analysis = app.project.analyses[0]
+    synthetic = {
+        "verification_currency": {
+            "summary": {
+                "current_count": 0,
+                "stale_count": 1,
+                "not_verified_count": 0,
+            },
+            "analyses": [
+                {
+                    "analysis_id": analysis.id,
+                    "analysis_name": analysis.name,
+                    "state": "stale",
+                    "current": False,
+                    "complete": True,
+                    "mismatch_reasons": ["input_sha256"],
+                    "latest_record": {"sequence": 3, "status": "FAIL"},
+                }
+            ],
+        }
+    }
+
+    app.verification_panel.set_report(synthetic)
+    row = app.verification_panel.tree.get_children()[0]
+    app.verification_panel.tree.selection_set(row)
+    app.verification_panel._activate_selected()
+    app.root.update()
+
+    assert app.project.active_analysis_id == analysis.id
+    assert app._editor_analysis_id == analysis.id
+    assert app.analysis_tree.selection() == (analysis.id,)

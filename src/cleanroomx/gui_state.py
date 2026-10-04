@@ -4,15 +4,17 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 1
+GUI_LAYOUT_STATE_VERSION = 2
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
+    "theme": "light",
     "navigator_fraction": 0.20,
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
@@ -56,6 +58,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             if isinstance(source.get("inspector_visible"), bool)
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
+        "theme": normalize_theme_name(source.get("theme")),
         "navigator_fraction": _bounded_fraction(
             source.get("navigator_fraction"),
             _DEFAULT_GUI_LAYOUT_STATE["navigator_fraction"],

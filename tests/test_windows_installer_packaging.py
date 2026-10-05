@@ -72,6 +72,9 @@ def test_installer_lifecycle_gate_covers_install_upgrade_launch_and_uninstall():
     assert "install -> launch -> upgrade -> launch -> uninstall" in text
 
     assert "runs-on: windows-2025" in workflow
+    assert 'pip install -e ".[release]"' in workflow
+    assert 'pip install -e ".[bim]"' not in workflow
+    assert 'pip install "pyinstaller==' not in workflow
     assert "build_windows_standalone.ps1" in workflow
     assert "build_windows_installer.ps1" in workflow
     assert "test_windows_installer_lifecycle.ps1" in workflow

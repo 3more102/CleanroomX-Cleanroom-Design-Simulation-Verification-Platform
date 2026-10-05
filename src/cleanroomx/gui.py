@@ -1894,6 +1894,11 @@ class CleanroomXApp:
 
         self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
         self.workspace_panes.pack(fill="both", expand=True)
+        self.workspace_panes.bind(
+            "<Configure>",
+            self._clamp_workspace_vertical_split,
+            add="+",
+        )
 
         workspace_host = ttk.Frame(self.workspace_panes)
         self.workspace_panes.add(workspace_host, weight=5)
@@ -2101,6 +2106,46 @@ class CleanroomXApp:
             textvariable=self.autosave_status_var,
             anchor="e",
         ).pack(side="right")
+
+    def _clamp_workspace_vertical_split(self, _event=None) -> None:
+        """Keep the primary engineering workspace usable on short displays.
+
+        The lower Output / Verification console remains available, but on a
+        laptop-height window it yields vertical space before design toolbars can
+        be clipped. This changes presentation geometry only.
+        """
+        paned = getattr(self, "workspace_panes", None)
+        output = getattr(self, "output_panel", None)
+        visible = getattr(self, "output_panel_visible_var", None)
+        if (
+            paned is None
+            or output is None
+            or visible is None
+            or not visible.get()
+            or not self._paned_contains(paned, output)
+            or len(paned.panes()) < 2
+        ):
+            return
+        extent = int(paned.winfo_height())
+        if extent <= 1:
+            return
+        try:
+            position = int(paned.sashpos(0))
+        except tk.TclError:
+            return
+
+        # Preserve a useful console at normal sizes. Under vertical pressure,
+        # keep at least a compact console strip while guaranteeing enough room
+        # for the Design workspace chrome and viewport.
+        compact_console = min(110, max(44, extent // 4))
+        minimum_workspace = min(260, max(130, extent - compact_console))
+        maximum_workspace = max(minimum_workspace, extent - compact_console)
+        bounded = max(minimum_workspace, min(position, maximum_workspace))
+        if bounded != position:
+            try:
+                paned.sashpos(0, bounded)
+            except tk.TclError:
+                return
 
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:

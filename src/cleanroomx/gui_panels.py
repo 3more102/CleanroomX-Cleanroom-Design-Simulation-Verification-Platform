@@ -20,10 +20,13 @@ def _engineering_detail_pairs(value: Any, *, prefix: str = "") -> list[tuple[str
         item = value[key]
         label = f"{prefix}{str(key).replace('_', ' ').strip().title()}"
         if isinstance(item, dict):
+            pairs.append((label, f"{len(item)} field(s)"))
             pairs.extend(_engineering_detail_pairs(item, prefix=f"{label} / "))
         elif isinstance(item, (list, tuple)):
             if all(not isinstance(entry, (dict, list, tuple)) for entry in item):
-                pairs.append((label, ", ".join(str(entry) for entry in item)))
+                values = ", ".join(str(entry) for entry in item)
+                summary = f"{len(item)} item(s)"
+                pairs.append((label, f"{summary} · {values}" if values else summary))
             else:
                 pairs.append((label, f"{len(item)} structured item(s)"))
         elif item not in (None, ""):
@@ -36,7 +39,7 @@ def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
     """Render one canonical diagnostic as a compact engineering inspector summary."""
     severity = str(issue.get("severity") or "info").upper()
     rule = str(issue.get("rule") or "UNSPECIFIED")
-    category = str(issue.get("category") or "General").replace("_", " ").title()
+    category = str(issue.get("category") or "General").replace("_", " ")
     element = issue.get("element")
     if isinstance(element, dict):
         target = str(
@@ -57,7 +60,7 @@ def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
     ]
     action = str(issue.get("suggested_action") or "").strip()
     if action:
-        lines.extend(("", "RECOMMENDED RECOVERY", action))
+        lines.extend(("", "RECOMMENDED ACTION", action))
 
     details = _engineering_detail_pairs(issue.get("details"))
     if details:

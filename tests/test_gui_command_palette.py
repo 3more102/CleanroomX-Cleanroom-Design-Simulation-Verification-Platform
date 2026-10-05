@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from tkinter import ttk
 
 import pytest
 
@@ -198,3 +199,24 @@ def test_global_engineering_search_finds_and_opens_real_project_entities(root, t
     root.update()
     assert app.project.active_analysis_id == analysis.id
     assert app.notebook.select() == str(app.input_tab)
+
+
+def test_application_density_switch_updates_ttk_metrics_without_project_mutation(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    before = app.project.to_dict()
+    style = ttk.Style(root)
+
+    app.set_density("compact", persist=False)
+    root.update()
+    assert app.density_var.get() == "compact"
+    assert int(style.lookup("Treeview", "rowheight")) == 20
+
+    app.set_density("comfortable", persist=False)
+    root.update()
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == 24
+    assert app.project.to_dict() == before

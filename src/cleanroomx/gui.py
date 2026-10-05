@@ -133,6 +133,7 @@ from .spatial import (
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
 PROJECT_HISTORY_LIMIT = 100
+NAVIGATOR_DIAGNOSTIC_PREVIEW_LIMIT = 200
 
 WORKSPACE_LABELS = {
     "start": "Start",
@@ -1284,6 +1285,7 @@ class CleanroomXApp:
             value=bool(self._ui_layout_state["output_visible"])
         )
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
+        self._navigator_diagnostic_issues: dict[str, dict] = {}
         self._focus_workspace_snapshot: dict[str, bool] | None = None
 
         self._configure_styles()
@@ -2771,6 +2773,7 @@ class CleanroomXApp:
                 self.diagnostics_status_var.set("Problems: Clear")
         else:
             self.diagnostics_status_var.set("Problems: unavailable")
+        self._refresh_navigator_diagnostics(diagnostics)
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",
@@ -4248,6 +4251,7 @@ class CleanroomXApp:
             ("nav-pressure", "Pressure Network"),
             ("nav-analyses", "Analyses"),
             ("nav-requirements", "Requirements"),
+            ("nav-diagnostics", "Diagnostics"),
             ("nav-proofgraph", "ProofGraph"),
             ("nav-evidence", "Evidence"),
             ("nav-reports", "Reports"),
@@ -4368,6 +4372,85 @@ class CleanroomXApp:
         if selection and selection[0] not in visible:
             tree.selection_remove(selection[0])
 
+    def _refresh_navigator_diagnostics(
+        self,
+        diagnostics: dict | None,
+    ) -> None:
+        """Project canonical diagnostics into a bounded navigator preview."""
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists("nav-diagnostics"):
+            return
+
+        self._restore_navigator_tree()
+        for child in tree.get_children("nav-diagnostics"):
+            tree.delete(child)
+        self._navigator_diagnostic_issues.clear()
+
+        if not isinstance(diagnostics, dict):
+            tree.item("nav-diagnostics", text="Diagnostics · unavailable")
+            self._capture_navigator_tree()
+            self._apply_navigator_filter()
+            return
+
+        issues = diagnostics.get("issues", [])
+        if not isinstance(issues, list):
+            issues = []
+        issues = [item for item in issues if isinstance(item, dict)]
+        summary = diagnostics.get("summary", {})
+        if not isinstance(summary, dict):
+            summary = {}
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        info = int(summary.get("info_count", 0) or 0)
+        if errors or warnings or info:
+            tree.item(
+                "nav-diagnostics",
+                text=f"Diagnostics · {errors}E {warnings}W {info}I",
+            )
+        else:
+            tree.item("nav-diagnostics", text="Diagnostics · Clear")
+
+        preview = issues[:NAVIGATOR_DIAGNOSTIC_PREVIEW_LIMIT]
+        for index, issue in enumerate(preview, start=1):
+            sequence = issue.get("sequence", index)
+            iid = f"diag:{sequence}"
+            if tree.exists(iid):
+                iid = f"{iid}:{index}"
+            severity = str(issue.get("severity", "info")).upper()
+            rule = str(issue.get("rule", "diagnostic"))
+            element = issue.get("element", {})
+            if not isinstance(element, dict):
+                element = {}
+            affected = str(
+                element.get("name")
+                or element.get("id")
+                or element.get("type")
+                or "project"
+            )
+            category = str(issue.get("category", ""))
+            message = str(issue.get("message", ""))
+            tree.insert(
+                "nav-diagnostics",
+                "end",
+                iid=iid,
+                text=f"[{severity}] {rule} — {affected}",
+                values=(f"{category} {message}".strip(),),
+            )
+            self._navigator_diagnostic_issues[iid] = issue
+
+        hidden_count = max(0, len(issues) - len(preview))
+        if hidden_count:
+            tree.insert(
+                "nav-diagnostics",
+                "end",
+                iid="nav-diagnostics-more",
+                text=f"… {hidden_count} more findings · open Problems for full list",
+                values=("diagnostics full list",),
+            )
+
+        self._capture_navigator_tree()
+        self._apply_navigator_filter()
+
     def _build_navigator_context_menu(self, item_id: str) -> tk.Menu | None:
         tree = getattr(self, "analysis_tree", None)
         if tree is None or not item_id or not tree.exists(item_id):
@@ -4407,6 +4490,27 @@ class CleanroomXApp:
                 label="Show All",
                 command=self.spatial_workspace.show_all,
             )
+            return menu
+        if item_id == "nav-diagnostics" or item_id == "nav-diagnostics-more":
+            menu.add_command(label="Open Problems", command=self.show_problems_panel)
+            menu.add_command(
+                label="Refresh Diagnostics",
+                command=self._refresh_engineering_panels,
+            )
+            menu.add_command(
+                label="Export Diagnostics…",
+                command=self.export_project_diagnostics,
+            )
+            return menu
+        if item_id.startswith("diag:"):
+            issue = self._navigator_diagnostic_issues.get(item_id)
+            if issue is None:
+                return None
+            menu.add_command(
+                label="Go to Affected Object",
+                command=lambda selected=issue: self._navigate_project_diagnostic(selected),
+            )
+            menu.add_command(label="Open Problems", command=self.show_problems_panel)
             return menu
         if item_id == "nav-proofgraph":
             menu.add_command(
@@ -4545,6 +4649,19 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+            return
+        if item_id == "nav-diagnostics" or item_id == "nav-diagnostics-more":
+            self.show_problems_panel()
+            self.selection_status_var.set("Selected: Diagnostics")
+            return
+        if item_id.startswith("diag:"):
+            issue = self._navigator_diagnostic_issues.get(item_id)
+            if issue is not None:
+                self.show_problems_panel()
+                self._navigate_project_diagnostic(issue)
+                self.selection_status_var.set(
+                    f"Selected: {issue.get('rule', 'Diagnostic')}"
+                )
             return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()

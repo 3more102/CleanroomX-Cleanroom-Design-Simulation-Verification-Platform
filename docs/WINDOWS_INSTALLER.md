@@ -6,7 +6,9 @@ built from the already-smoke-tested self-contained workstation distribution.
 The installer is an Inno Setup package with a stable application identity. It
 installs under the current user's local application data, creates a Start Menu
 entry, registers an uninstaller, and does not require a separate Python
-installation.
+installation. The installer and installed workstation use the repository-owned
+CleanroomX application icon, and installer version metadata is populated from
+the same project version passed to the registered package.
 
 ## Release gate
 
@@ -14,15 +16,17 @@ The `Windows Installer Lifecycle` workflow uses a fresh `windows-2025`
 GitHub-hosted runner and performs the complete lifecycle:
 
 1. build the self-contained PyInstaller workstation;
-2. compile a registered installer;
-3. install a baseline package silently;
-4. execute installed `CleanroomX.exe --check`;
-5. install the current package over the baseline installation;
-6. verify the registered `DisplayVersion` changed to the current project
+2. validate the frozen executable's icon/version-resource build inputs and
+   Windows product metadata;
+3. compile a registered, branded installer;
+4. install a baseline package silently;
+5. execute installed `CleanroomX.exe --check`;
+6. install the current package over the baseline installation;
+7. verify the registered `DisplayVersion` changed to the current project
    version;
-7. execute the upgraded `CleanroomX.exe --check`;
-8. run the registered uninstaller;
-9. verify the executable and uninstall registration are removed.
+8. execute the upgraded `CleanroomX.exe --check`;
+9. run the registered uninstaller;
+10. verify the executable and uninstall registration are removed.
 
 This gate validates application installation mechanics and startup readiness. It
 does not replace engineering regression tests, native IFC validation, or the

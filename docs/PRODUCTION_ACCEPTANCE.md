@@ -4,7 +4,7 @@ This document defines the minimum release gates for a CleanroomX production cand
 
 ## Release identity
 
-A production release must be tied to one **exact tested commit SHA**. The tree published as a release must be the same tree that passed the required release checks. Historical immutable release workflows remain SHA-pinned.
+A production release must be tied to one **exact tested commit SHA**. The tree published as a release must be the same tree that passed the required release checks. Historical immutable release workflows remain SHA-pinned. Required CI, Security, and Production Acceptance gates use fixed runner labels, pinned GitHub Action revisions, and `pip==26.2.1` so release qualification does not silently move with floating CI toolchains.
 
 ## Required automated gates
 

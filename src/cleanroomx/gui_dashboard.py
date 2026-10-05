@@ -5,20 +5,11 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import status_style_name
+
 
 def _status_style(value: Any) -> str:
-    token = str(value or "").strip().lower().replace(" ", "_")
-    if token in {"pass", "passed", "ok", "ready", "current", "healthy", "verified"}:
-        return "CX.Status.Pass.TLabel"
-    if token in {"fail", "failed", "error", "critical"}:
-        return "CX.Status.Fail.TLabel"
-    if token in {"warning", "warn", "stale", "incomplete", "degraded"}:
-        return "CX.Status.Warning.TLabel"
-    if token in {"running", "simulation"}:
-        return "CX.Status.Simulation.TLabel"
-    if token in {"info", "informational"}:
-        return "CX.Status.Info.TLabel"
-    return "CX.Status.Neutral.TLabel"
+    return status_style_name(value)
 
 
 def _count(summary: dict[str, Any], *keys: str) -> int:

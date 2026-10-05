@@ -6324,10 +6324,35 @@ class CleanroomXApp:
         self._remember_recent_project(project_path)
         self._activate_spatial_workspace()
 
+    def _update_model_status(self, *, dirty: bool | None = None) -> None:
+        target = getattr(self, "model_status_var", None)
+        if target is None:
+            return
+        is_dirty = self._has_unsaved_changes() if dirty is None else bool(dirty)
+        revision = getattr(self, "_project_file_revision", None)
+        digest = getattr(revision, "sha256", None)
+        revision_text = f" · rev {digest[:10]}" if isinstance(digest, str) and digest else ""
+
+        if getattr(self, "_migration_source_path", None) is not None:
+            text = "Project: migrated · Save As required"
+        elif (
+            getattr(self, "_restored_recovery_artifact", None) is not None
+            and self.project_path is None
+        ):
+            text = "Project: recovered · unsaved"
+        elif self.project_path is None:
+            text = "Project: new · not saved"
+        elif is_dirty:
+            text = f"Project: modified{revision_text}"
+        else:
+            text = f"Project: saved{revision_text}"
+        target.set(text)
+
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()
         if has_unsaved_changes:
             self._schedule_recovery_checkpoint()
+        self._update_model_status(dirty=has_unsaved_changes)
 
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
@@ -6420,6 +6445,7 @@ class CleanroomXApp:
             return
         except ProjectSaveDurabilityError as exc:
             self._project_file_revision = exc.committed_revision
+            self._update_title()
             self._report_save_durability_uncertain(self.project_path)
             return
         except ProjectWriteConflictError:

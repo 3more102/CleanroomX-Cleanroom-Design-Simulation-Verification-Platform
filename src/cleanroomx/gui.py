@@ -72,6 +72,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
+from .gui_results import AnalysisResultPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -2020,6 +2021,8 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.output_notebook.add(self.problems_panel, text="Problems")
+        self.analysis_result_panel = AnalysisResultPanel(self.output_notebook)
+        self.output_notebook.add(self.analysis_result_panel, text="Analysis")
         self.diagnostics_text = self._add_text_tab(
             "Diagnostics", notebook=self.output_notebook
         )
@@ -2314,6 +2317,10 @@ class CleanroomXApp:
         proofgraph = getattr(self, "proofgraph_viewer", None)
         if proofgraph is not None:
             proofgraph.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        result_panel = getattr(self, "analysis_result_panel", None)
+        if result_panel is not None and hasattr(result_panel, "apply_theme"):
+            result_panel.apply_theme(self.theme_var.get())
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -3236,6 +3243,8 @@ class CleanroomXApp:
     def _clear_rendered_run(self) -> None:
         self.last_run = None
         self.last_run_analysis_id = None
+        if hasattr(self, "analysis_result_panel"):
+            self.analysis_result_panel.clear()
         self._set_text(self.result_text, "")
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
@@ -6284,6 +6293,8 @@ class CleanroomXApp:
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
+        if hasattr(self, "analysis_result_panel"):
+            self.analysis_result_panel.refresh(run)
         self._set_text(
             self.result_text,
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),
@@ -6299,7 +6310,12 @@ class CleanroomXApp:
             self.spatial_workspace._load_property_panel()
         self._refresh_engineering_panels()
         if select_results:
-            self.output_notebook.select(self.result_text.master)
+            target = (
+                self.analysis_result_panel
+                if hasattr(self, "analysis_result_panel")
+                else self.result_text.master
+            )
+            self.output_notebook.select(target)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

@@ -20,6 +20,9 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "output_visible": True,
         "inspector_visible": True,
         "theme": "dark",
+        "density": "compact",
+        "workspace_profile": "design",
+        "saved_layouts": {},
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,
@@ -40,6 +43,21 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "output_visible": "no",
             "inspector_visible": True,
             "theme": "neon",
+            "density": "huge",
+            "workspace_profile": "unknown",
+            "saved_layouts": {
+                "Verification review": {
+                    "navigator_visible": True,
+                    "output_visible": True,
+                    "inspector_visible": False,
+                    "workspace_profile": "verification",
+                    "navigator_fraction": 0.24,
+                    "output_fraction": 0.66,
+                    "inspector_fraction": 0.80,
+                },
+                "": {"workspace_profile": "design"},
+                " verification REVIEW ": {"workspace_profile": "reporting"},
+            },
             "recent_projects": [
                 "alpha.cleanroomx.json",
                 "",
@@ -62,6 +80,11 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["output_visible"] is True
     assert state["inspector_visible"] is True
     assert state["theme"] == "light"
+    assert state["density"] == "compact"
+    assert state["workspace_profile"] == "design"
+    assert tuple(state["saved_layouts"]) == ("Verification review",)
+    assert state["saved_layouts"]["Verification review"]["workspace_profile"] == "verification"
+    assert state["saved_layouts"]["Verification review"]["output_fraction"] == 0.66
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
@@ -83,6 +106,19 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "output_visible": True,
             "inspector_visible": False,
             "theme": "dark",
+            "density": "comfortable",
+            "workspace_profile": "reporting",
+            "saved_layouts": {
+                "Release": {
+                    "navigator_visible": False,
+                    "output_visible": True,
+                    "inspector_visible": False,
+                    "workspace_profile": "reporting",
+                    "navigator_fraction": 0.22,
+                    "output_fraction": 0.64,
+                    "inspector_fraction": 0.79,
+                }
+            },
             "recent_projects": [
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
@@ -101,6 +137,10 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     assert payload["navigator_visible"] is False
     assert payload["inspector_visible"] is False
     assert payload["theme"] == "dark"
+    assert payload["density"] == "comfortable"
+    assert payload["workspace_profile"] == "reporting"
+    assert payload["saved_layouts"]["Release"]["navigator_visible"] is False
+    assert payload["saved_layouts"]["Release"]["output_fraction"] == 0.64
     assert payload["recent_projects"] == [
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",
@@ -127,3 +167,24 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_gui_layout_state_limits_named_layouts_to_eight_and_normalizes_names():
+    state = normalize_gui_layout_state(
+        {
+            "saved_layouts": {
+                f"  Layout   {index}  ": {
+                    "workspace_profile": "simulation",
+                    "navigator_fraction": 0.25,
+                }
+                for index in range(12)
+            }
+        }
+    )
+    assert len(state["saved_layouts"]) == 8
+    assert tuple(state["saved_layouts"])[0] == "Layout 0"
+    assert tuple(state["saved_layouts"])[-1] == "Layout 7"
+    assert all(
+        layout["workspace_profile"] == "simulation"
+        for layout in state["saved_layouts"].values()
+    )

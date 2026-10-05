@@ -17,14 +17,17 @@ GitHub-hosted runner and performs the complete lifecycle:
 2. compile a registered installer;
 3. install a baseline package silently;
 4. execute installed `CleanroomX.exe --check`;
-5. install the current package over the baseline installation;
-6. verify the registered `DisplayVersion` changed to the current project
+5. launch the installed workstation with `CleanroomX.exe --demo --smoke` and
+   require the bundled project, analysis, 2D view, and 3D view to initialize;
+6. install the current package over the baseline installation;
+7. verify the registered `DisplayVersion` changed to the current project
    version;
-7. execute the upgraded `CleanroomX.exe --check`;
-8. run the registered uninstaller;
-9. verify the executable and uninstall registration are removed.
+8. execute the upgraded `CleanroomX.exe --check`;
+9. repeat the installed `--demo --smoke` workstation launch after upgrade;
+10. run the registered uninstaller;
+11. verify the executable and uninstall registration are removed.
 
-This gate validates application installation mechanics and startup readiness. It
+This gate validates application installation mechanics, headless readiness, and an actual installed Tk workstation startup on both the baseline install and upgraded install. It
 does not replace engineering regression tests, native IFC validation, or the
 full Tk suite.
 

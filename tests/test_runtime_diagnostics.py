@@ -7,10 +7,12 @@ from types import SimpleNamespace
 import cleanroomx.gui as gui_module
 from cleanroomx.runtime_diagnostics import (
     GUI_LOG_FILENAME,
+    GuiErrorReport,
     close_gui_runtime_logging,
     configure_gui_runtime_logging,
     default_gui_log_dir,
     install_tk_exception_handler,
+    record_gui_exception,
 )
 
 
@@ -167,3 +169,43 @@ def test_gui_smoke_does_not_install_runtime_callback_boundary(monkeypatch, capsy
     assert gui_module.main(["--smoke"]) == 0
     assert root.destroyed is True
     assert "CleanroomX GUI smoke: PASS" in capsys.readouterr().out
+
+def test_record_gui_exception_reuses_bounded_runtime_log_and_returns_safe_reference(
+    tmp_path: Path,
+):
+    logger_name = "cleanroomx.tests.contained-error"
+    logger, log_path = configure_gui_runtime_logging(
+        tmp_path,
+        logger_name=logger_name,
+    )
+    try:
+        try:
+            raise RuntimeError("synthetic contained failure")
+        except RuntimeError as exc:
+            report = record_gui_exception(
+                "Refresh project diagnostics",
+                exc,
+                logger_name=logger_name,
+            )
+
+        for handler in logger.handlers:
+            handler.flush()
+
+        assert isinstance(report, GuiErrorReport)
+        assert report.reference.startswith("CX-")
+        assert report.operation == "Refresh project diagnostics"
+        assert report.exception_type == "RuntimeError"
+        assert report.summary == "synthetic contained failure"
+        assert report.log_path == log_path
+        message = report.user_message()
+        assert "Refresh project diagnostics did not complete." in message
+        assert f"Error reference: {report.reference}" in message
+        assert str(log_path) in message
+
+        content = log_path.read_text(encoding="utf-8")
+        assert report.reference in content
+        assert "RuntimeError: synthetic contained failure" in content
+    finally:
+        close_gui_runtime_logging(logger)
+        logging.Logger.manager.loggerDict.pop(logger_name, None)
+

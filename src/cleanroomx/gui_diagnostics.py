@@ -11,6 +11,7 @@ from .gui_panels import (
     diagnostic_filter_options,
     diagnostic_matches_filters,
 )
+from .gui_table import TreeviewTableBehavior
 from .gui_theme import attach_tooltip, status_style_name
 
 
@@ -242,6 +243,12 @@ class DiagnosticsWorkspace(ttk.Frame):
         yscroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(table_host, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self._table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=columns,
+            copy_columns=columns,
+            bind_copy=False,
+        )
         self.tree.grid(row=0, column=0, sticky="nsew")
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
@@ -407,6 +414,7 @@ class DiagnosticsWorkspace(ttk.Frame):
                 tags=(f"severity_{severity}",),
             )
             self._issues_by_iid[iid] = issue
+        self._table_behavior.reapply_sort()
         total = len(diagnostics_workspace_projection(self._result)["issues"])
         self.visible_var.set(f"{len(visible)} / {total} visible")
 

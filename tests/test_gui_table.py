@@ -84,3 +84,39 @@ def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
     )
     tree.selection_set(("a", "b"))
     assert behavior.selected_tsv() == "Alpha\t2\nBeta\t10"
+
+
+
+def test_table_behavior_can_copy_headers_and_select_all(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+        copy_columns=("name", "value"),
+    )
+
+    assert behavior.select_all() is True
+    assert behavior.selected_tsv(include_headers=True) == (
+        "Name\tValue\nBeta\t10\nMissing\t—\nAlpha\t2"
+    )
+
+
+def test_table_behavior_supports_column_visibility_and_order(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    assert behavior.visible_columns() == ("name", "value")
+    assert behavior.set_column_visible("value", False) is True
+    assert behavior.visible_columns() == ("name",)
+    assert behavior.set_column_visible("name", False) is False
+    assert behavior.visible_columns() == ("name",)
+
+    assert behavior.set_column_visible("value", True) is True
+    assert behavior.set_column_order(("value", "name")) is True
+    assert behavior.visible_columns() == ("value", "name")
+
+    behavior.show_all_columns()
+    assert behavior.visible_columns() == ("name", "value")

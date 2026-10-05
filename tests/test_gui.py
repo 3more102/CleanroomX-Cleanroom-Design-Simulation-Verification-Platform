@@ -2416,3 +2416,94 @@ def test_worker_poll_reschedules_after_unexpected_result_processing_failure():
     assert callback.__self__ is app
     assert callback.__func__ is CleanroomXApp._poll_worker
 
+def test_worker_failure_keeps_traceback_for_runtime_incident_and_stays_operator_safe(
+    monkeypatch,
+):
+    import queue
+    from types import SimpleNamespace
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    failure = RuntimeError("synthetic solver failure")
+    app._queue = queue.Queue()
+    app._queue.put(("error", 11, "analysis-a", failure))
+    app._run_generation = 11
+    app._abandon_requested = False
+    app._running = True
+    app.status_var = Status()
+    app.root = Root()
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    recorded = []
+    report = SimpleNamespace(
+        reference="CX-RUN-1234",
+        user_message=lambda: (
+            "Run engineering analysis analysis-a did not complete.\n\n"
+            "synthetic solver failure\n\nError reference: CX-RUN-1234"
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert recorded == [("Run engineering analysis analysis-a", failure)]
+    assert app.status_var.value == "Analysis failed · CX-RUN-1234"
+    assert errors and errors[0][0] == "Analysis failed"
+    assert "synthetic solver failure" in errors[0][1]
+    assert "CX-RUN-1234" in errors[0][1]
+    assert "Traceback" not in errors[0][1]
+    assert "No completed result" in errors[0][1]
+    assert app.root.delay == 100
+
+
+def test_worker_poll_reschedules_after_unexpected_result_processing_failure():
+    import queue
+
+    class Root:
+        def __init__(self):
+            self.calls = []
+
+        def after(self, delay, callback):
+            self.calls.append((delay, callback))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._queue = queue.Queue()
+    app._queue.put(("success", 12, "analysis-a", object()))
+    app._run_generation = 12
+    app._abandon_requested = False
+    app._running = True
+    app.root = Root()
+
+    def fail_set_running(_running):
+        raise RuntimeError("synthetic result-processing failure")
+
+    app._set_running = fail_set_running
+
+    with pytest.raises(RuntimeError, match="synthetic result-processing failure"):
+        app._poll_worker()
+
+    assert len(app.root.calls) == 1
+    delay, callback = app.root.calls[0]
+    assert delay == 100
+    assert callback.__self__ is app
+    assert callback.__func__ is CleanroomXApp._poll_worker
+

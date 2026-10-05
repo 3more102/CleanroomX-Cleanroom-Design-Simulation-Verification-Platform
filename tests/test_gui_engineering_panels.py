@@ -374,3 +374,29 @@ def test_evidence_panel_navigation_reveals_output_and_selects_evidence(app):
 
     assert app.output_panel_visible_var.get()
     assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Evidence"
+
+
+def test_global_engineering_search_indexes_navigator_and_current_diagnostics(app):
+    _force_room_overlap(app)
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    items = app._engineering_search_items()
+
+    assert any(item.category == "Model / Project" for item in items)
+    diagnostic_items = [item for item in items if item.category == "Diagnostic"]
+    assert diagnostic_items
+    assert any("spatial" in " ".join(item.keywords).casefold() for item in diagnostic_items)
+
+
+def test_problem_panel_can_reveal_issue_from_global_navigation(app):
+    _force_room_overlap(app)
+    result = app.problems_panel.refresh()
+    issue = result["issues"][0]
+    app.problems_panel.severity_var.set("Info")
+    app.problems_panel.search_var.set("definitely-not-present")
+
+    assert app.problems_panel.select_issue(issue) is True
+    assert app.problems_panel.selected_issue()["sequence"] == issue["sequence"]
+    assert app.problems_panel.severity_var.get() == "All"
+    assert app.problems_panel.search_var.get() == ""

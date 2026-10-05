@@ -78,7 +78,8 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_theme import canonical_status, configure_ttk_theme, normalize_theme_name
+from .gui_dashboard import EngineeringDashboard, engineering_dashboard_snapshot
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1260,6 +1261,10 @@ class CleanroomXApp:
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
+        self.shell_save_var = tk.StringVar(value="UNSAVED")
+        self.shell_model_var = tk.StringVar(value="MODEL NOT EVALUATED")
+        self.shell_problems_var = tk.StringVar(value="PROBLEMS —")
+        self.shell_verification_var = tk.StringVar(value="VERIFY UNKNOWN")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1512,9 +1517,13 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(
+            self.root,
+            style="CX.Topbar.TFrame",
+            padding=(10, 5, 10, 4),
+        )
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
+        ttk.Label(topbar, text="CLEANROOMX", style="CX.Topbar.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
         ttk.Label(topbar, text="Project").grid(
@@ -1542,11 +1551,57 @@ class CleanroomXApp:
         )
         self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Danger.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
+
+        statebar = ttk.Frame(
+            self.root,
+            style="CX.Toolbar.TFrame",
+            padding=(10, 4),
+        )
+        self.statebar = statebar
+        statebar.pack(fill="x", padx=10, pady=(0, 4))
+        ttk.Label(
+            statebar,
+            text="ENGINEERING STATE",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        self._shell_save_label = ttk.Label(
+            statebar,
+            textvariable=self.shell_save_var,
+            style="CX.Status.unknown.TLabel",
+        )
+        self._shell_save_label.pack(side="left", padx=2)
+        self._shell_model_label = ttk.Label(
+            statebar,
+            textvariable=self.shell_model_var,
+            style="CX.Status.unknown.TLabel",
+        )
+        self._shell_model_label.pack(side="left", padx=2)
+        self._shell_problems_label = ttk.Label(
+            statebar,
+            textvariable=self.shell_problems_var,
+            style="CX.Status.unknown.TLabel",
+        )
+        self._shell_problems_label.pack(side="left", padx=2)
+        self._shell_verification_label = ttk.Label(
+            statebar,
+            textvariable=self.shell_verification_var,
+            style="CX.Status.unknown.TLabel",
+        )
+        self._shell_verification_label.pack(side="left", padx=2)
+        ttk.Label(
+            statebar,
+            text="PROFILE: ENGINEERING",
+            style="CX.Topbar.Meta.TLabel",
+        ).pack(side="right", padx=(8, 0))
 
         commandbar = ttk.Frame(
             self.root,
@@ -1821,6 +1876,14 @@ class CleanroomXApp:
             on_open_recent=self._open_recent_project_from_start,
         )
         self.notebook.add(self.start_center, text="Start")
+
+        self.dashboard = EngineeringDashboard(
+            self.notebook,
+            on_open_design=lambda: self._activate_spatial_workspace("split"),
+            on_open_problems=self.show_problems_panel,
+            on_verify=self.run_project_requirements_verification,
+        )
+        self.notebook.add(self.dashboard, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -2888,6 +2951,12 @@ class CleanroomXApp:
             self._refresh_start_center()
             self.notebook.select(self.start_center)
             self.workspace_status_var.set("Workspace: Start")
+
+    def _activate_dashboard_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "dashboard"):
+            self.notebook.select(self.dashboard)
+            self.workspace_status_var.set("Workspace: Dashboard")
+            self._refresh_engineering_panels()
 
     def _recent_project_records(self) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []
@@ -4019,6 +4088,7 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
+            ("nav-dashboard", "Dashboard"),
             ("nav-building", "Building"),
             ("nav-hvac", "HVAC Systems"),
             ("nav-devices", "Devices"),
@@ -4150,6 +4220,10 @@ class CleanroomXApp:
         if tree is None or not item_id or not tree.exists(item_id):
             return None
         menu = tk.Menu(self.root, tearoff=False)
+        if item_id == "nav-dashboard":
+            self._activate_dashboard_workspace()
+            self.selection_status_var.set("Selected: Dashboard")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
 

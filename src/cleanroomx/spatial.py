@@ -1630,17 +1630,35 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
             side="left", padx=2
         )
+
+        # Keep synchronization commands on their own compact row.  Combining
+        # them with view-mode controls caused the Fit action to be clipped at
+        # the supported 1050x680 workstation minimum once the industrial
+        # styling increased control padding.
+        syncbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 3),
+        )
+        syncbar.pack(fill="x")
+        ttk.Label(
+            syncbar,
+            text="ENGINEERING SYNC",
+            style="CX.Toolbar.TLabel",
+        ).pack(side="left", padx=(0, 8))
         ttk.Button(
-            modebar,
-            text="Push to analysis",
+            syncbar,
+            text="Push geometry to analysis",
+            style="CX.Compact.TButton",
             command=self._on_sync_requested,
-        ).pack(side="right", padx=2)
+        ).pack(side="left", padx=2)
         ttk.Button(
-            modebar,
-            text="Pull from analysis",
+            syncbar,
+            text="Pull geometry from analysis",
+            style="CX.Compact.TButton",
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
-        ).pack(side="right", padx=2)
+        ).pack(side="left", padx=2)
 
         viewbar = ttk.Frame(
             self,

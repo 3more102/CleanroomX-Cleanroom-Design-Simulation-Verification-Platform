@@ -722,7 +722,7 @@ def test_guided_workflow_is_visible_at_minimum_window_and_opens_design(app):
     app.workflow_input_button.invoke()
     app.root.update()
     assert app.notebook.select() == str(app.input_tab)
-    assert app.workspace_status_var.get() == "Workspace: Analysis Inputs"
+    assert app.workspace_status_var.get() == "Workspace: Simulation / Inputs"
     assert app.project.to_dict() == project_before
 
 

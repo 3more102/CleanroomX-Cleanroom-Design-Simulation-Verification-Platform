@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install --upgrade pip
+      - run: python -m pip install "pip==26.2.1"
       - run: pip install -e .[dev]
       - name: Verify production acceptance contract
         run: python -m pytest -q tests/test_production_acceptance_contract.py
@@ -326,7 +326,7 @@ jobs:
           PY
 
   windows-launcher-smoke:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -337,7 +337,7 @@ jobs:
       - name: Install checkout
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install "pip==26.2.1"
           pip install -e .[dev]
       - name: Smoke PowerShell checkout launcher
         shell: pwsh
@@ -362,7 +362,7 @@ jobs:
           }
 
   native-bim-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -372,7 +372,7 @@ jobs:
           python-version: "3.12"
       - name: Install checkout with native BIM dependency
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install "pip==26.2.1"
           pip install -e .[dev,bim]
       - name: Run native IfcOpenShell parser smoke
         run: python -m pytest -q tests/test_bim_ifc_native.py
@@ -384,7 +384,7 @@ jobs:
       - test
       - windows-launcher-smoke
       - native-bim-smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Verify all required CI jobs succeeded
         env:

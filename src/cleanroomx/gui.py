@@ -7714,11 +7714,10 @@ class CleanroomXApp:
                 output=path,
             )
         except Exception as exc:
-            self.status_var.set("Project dossier export failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project dossier export failed",
-                str(exc),
-                parent=self.root,
+                "Build and validate project engineering dossier",
+                exc,
             )
             return
 

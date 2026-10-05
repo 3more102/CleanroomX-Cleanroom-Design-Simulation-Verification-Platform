@@ -62,8 +62,9 @@ def _force_room_overlap(app: CleanroomXApp) -> tuple[dict, dict]:
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):
     tabs = _tab_texts(app.output_notebook)
-    assert tabs[:5] == [
+    assert tabs[:6] == [
         "Problems",
+        "Analysis",
         "Diagnostics",
         "Verification",
         "Console",
@@ -135,7 +136,7 @@ def test_completed_run_selects_results_in_bottom_workspace(app):
     app.root.update()
 
     assert run.result
-    assert app.output_notebook.select() == str(app.result_text.master)
+    assert app.output_notebook.select() == str(app.analysis_result_panel)
     assert app.problems_panel.last_result is not None
 
 

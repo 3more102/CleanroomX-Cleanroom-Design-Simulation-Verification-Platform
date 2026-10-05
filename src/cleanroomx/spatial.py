@@ -1824,7 +1824,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(self._body, padding=(10, 8))
+        inspector = ttk.Frame(self._body, style="CX.Card.TFrame", padding=(10, 8))
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
         inspector_header = ttk.Frame(
@@ -1849,6 +1849,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
+            style="CX.CardTitle.TLabel",
         ).pack(fill="x", pady=(3, 8))
 
         property_groups = (
@@ -1889,13 +1890,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(
+                inspector,
+                text=group_name.upper(),
+                padding=(8, 6),
+                style="CX.Card.TLabelframe",
+            )
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
-                row = ttk.Frame(section)
+                row = ttk.Frame(section, style="CX.Card.TFrame")
                 row.pack(fill="x", pady=2)
-                ttk.Label(row, text=label).pack(side="left")
-                value_frame = ttk.Frame(row)
+                ttk.Label(row, text=label, style="CX.CardMuted.TLabel").pack(side="left")
+                value_frame = ttk.Frame(row, style="CX.Card.TFrame")
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
@@ -1903,19 +1909,23 @@ class SpatialDesignWorkspace(ttk.Frame):
                 entry.pack(side="left")
                 self._property_entries[key] = entry
                 if unit:
-                    ttk.Label(value_frame, text=unit, width=4).pack(
+                    ttk.Label(value_frame, text=unit, width=4, style="CX.CardMuted.TLabel").pack(
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
         ttk.Button(
             inspector,
             text="Apply properties",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
-        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
-        )
+        ttk.Label(
+            inspector,
+            textvariable=self._sync_var,
+            wraplength=310,
+            style="CX.InfoBadge.TLabel",
+        ).pack(fill="x", pady=(3, 0))
 
         self._apply_workspace_mode()
 

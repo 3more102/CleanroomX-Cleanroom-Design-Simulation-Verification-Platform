@@ -71,6 +71,7 @@ def test_engineering_output_workspace_exposes_first_class_panels(app):
     ]
     assert "Results" in tabs
     assert "Report" in tabs
+    assert "Tasks" in tabs
 
     result = app.problems_panel.last_result
     assert result is not None
@@ -199,3 +200,19 @@ def test_problem_browser_supports_engineering_filters_sorting_and_relative_navig
     assert selected is not None
     if len(all_items) > 1:
         assert selected is not panel._issues_by_iid[all_items[0]]
+
+
+def test_task_center_is_a_first_class_output_surface(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.hide_output_panel()
+    app.root.update()
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.show_task_center()
+    app.root.update()
+
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.task_center)
+    assert app.task_status_var.get() == "Tasks: idle"
+    assert app.project.to_dict() == project_before

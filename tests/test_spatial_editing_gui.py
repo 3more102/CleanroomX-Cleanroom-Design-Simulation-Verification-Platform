@@ -148,6 +148,7 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
 
     workspace.set_workspace_mode("2d")
     app.root.update()
+    assert app.workspace_status_var.get() == "Workspace: 2D"
     panes = tuple(str(item) for item in workspace._view_panes.panes())
     assert str(workspace._two_d_frame) in panes
     assert str(workspace._three_d_frame) not in panes
@@ -155,6 +156,7 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
 
     workspace.set_workspace_mode("3d")
     app.root.update()
+    assert app.workspace_status_var.get() == "Workspace: 3D"
     panes = tuple(str(item) for item in workspace._view_panes.panes())
     assert str(workspace._two_d_frame) not in panes
     assert str(workspace._three_d_frame) in panes
@@ -162,6 +164,7 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
 
     workspace.set_workspace_mode("split")
     app.root.update()
+    assert app.workspace_status_var.get() == "Workspace: Split"
     panes = tuple(str(item) for item in workspace._view_panes.panes())
     assert str(workspace._two_d_frame) in panes
     assert str(workspace._three_d_frame) in panes
@@ -661,6 +664,7 @@ def test_workspace_context_persists_across_app_restart(tmp_path):
     try:
         assert second.spatial_workspace.workspace_mode() == "3d"
         assert second.notebook.tab(second.notebook.select(), "text") == "ProofGraph"
+        assert second.workspace_status_var.get() == "Workspace: ProofGraph"
         assert (
             second.output_notebook.tab(second.output_notebook.select(), "text")
             == "Evidence"

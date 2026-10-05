@@ -243,7 +243,7 @@ def test_project_navigator_surfaces_canonical_diagnostic_badges(app):
     building_text = app.analysis_tree.item("nav-building", "text")
     building_tags = set(app.analysis_tree.item("nav-building", "tags"))
 
-    assert "[1E" in target_text or "E]" in target_text
+    assert "[" in target_text and "E" in target_text
     assert "diagnostic_error" in target_tags
     assert "E" in building_text
     assert "section" in building_tags

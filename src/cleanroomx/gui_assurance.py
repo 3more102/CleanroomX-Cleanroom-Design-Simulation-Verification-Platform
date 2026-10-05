@@ -551,6 +551,16 @@ class EvidenceWorkspace(ttk.Frame):
             return None
         return self._records_by_iid.get(selection[0])
 
+    def select_sequence(self, sequence: Any) -> bool:
+        for iid, record in self._records_by_iid.items():
+            if record.get("sequence") == sequence:
+                self.tree.selection_set(iid)
+                self.tree.focus(iid)
+                self.tree.see(iid)
+                self._show_selected()
+                return True
+        return False
+
     def _show_selected(self, _event=None) -> None:
         item = self.selected_record()
         if item is None:

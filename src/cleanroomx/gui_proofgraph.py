@@ -376,6 +376,65 @@ def _filtered_projection(
     }
 
 
+
+def _node_detail_lines(node: dict[str, Any]) -> list[str]:
+    """Format a ProofGraph node for engineering review without raw JSON dumping."""
+    node_type = str(node.get("type") or "node").replace("_", " ").upper()
+    label = str(node.get("label") or node.get("id") or "Unnamed")
+    lines = [node_type, label]
+    status = str(node.get("status") or "").strip()
+    if status:
+        lines.append(f"Status: {status.upper()}")
+
+    raw = node.get("raw")
+    raw = raw if isinstance(raw, dict) else {}
+    preferred = (
+        "id",
+        "title",
+        "kind",
+        "property_name",
+        "subject_ref",
+        "requirement_id",
+        "check_id",
+        "source_id",
+        "reason",
+        "comparison",
+        "unit",
+        "value",
+        "reference",
+        "created_at_utc",
+    )
+    shown: set[str] = set()
+    detail_rows: list[str] = []
+    for key in preferred:
+        value = raw.get(key)
+        if value in (None, "", [], {}):
+            continue
+        shown.add(key)
+        label_key = key.replace("_", " ").title()
+        if isinstance(value, (list, tuple)):
+            rendered = f"{len(value)} item(s)"
+        elif isinstance(value, dict):
+            rendered = f"{len(value)} field(s)"
+        else:
+            rendered = str(value)
+        detail_rows.append(f"{label_key}: {rendered}")
+
+    for key, value in sorted(raw.items()):
+        if key in shown or value in (None, "", [], {}):
+            continue
+        if not isinstance(value, (dict, list, tuple)):
+            detail_rows.append(f"{key.replace('_', ' ').title()}: {value}")
+
+    if detail_rows:
+        lines.extend(("", "TRACEABILITY DETAILS", *detail_rows))
+
+    flags = tuple(node.get("flags") or ())
+    if flags:
+        lines.extend(("", "Markers: " + ", ".join(str(flag).upper() for flag in flags)))
+    return lines
+
+
 class ProofGraphViewer(ttk.Frame):
     """Read-only tree + interactive graph view over canonical ProofGraph documents."""
 
@@ -451,6 +510,17 @@ class ProofGraphViewer(ttk.Frame):
         panes.add(graph_host, weight=5)
         panes.add(detail_host, weight=2)
 
+        legend = ttk.Frame(graph_host, style="CX.PanelHeader.TFrame", padding=(6, 4))
+        legend.grid(row=0, column=0, sticky="ew")
+        for text, style_name in (
+            ("REQ", "CX.Status.Info.TLabel"),
+            ("CALC", "CX.Status.Simulation.TLabel"),
+            ("EVIDENCE", "CX.Status.Pass.TLabel"),
+            ("CHECK", "CX.Status.Warning.TLabel"),
+            ("FAIL", "CX.Status.Fail.TLabel"),
+        ):
+            ttk.Label(legend, text=text, style=style_name).pack(side="left", padx=(0, 5))
+
         self.tree = ttk.Treeview(tree_host, show="tree", selectmode="browse")
         tree_scroll = ttk.Scrollbar(tree_host, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
@@ -469,20 +539,28 @@ class ProofGraphViewer(ttk.Frame):
         graph_y = ttk.Scrollbar(graph_host, orient="vertical", command=self.canvas.yview)
         graph_x = ttk.Scrollbar(graph_host, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=graph_y.set, xscrollcommand=graph_x.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        graph_y.grid(row=0, column=1, sticky="ns")
-        graph_x.grid(row=1, column=0, sticky="ew")
-        graph_host.rowconfigure(0, weight=1)
+        self.canvas.grid(row=1, column=0, sticky="nsew")
+        graph_y.grid(row=1, column=1, sticky="ns")
+        graph_x.grid(row=2, column=0, sticky="ew")
+        graph_host.rowconfigure(1, weight=1)
         graph_host.columnconfigure(0, weight=1)
         self.canvas.bind("<Button-1>", self._on_canvas_selected)
         self.canvas.bind("<Double-1>", self._navigate_selected)
         self.canvas.bind("<Configure>", lambda _event: self._draw_graph())
 
+        detail_header = ttk.Frame(detail_host, style="CX.PanelHeader.TFrame")
+        detail_header.pack(fill="x", padx=6, pady=(6, 3))
         ttk.Label(
-            detail_host,
-            text="NODE DETAILS",
-            style="CX.Section.TLabel",
-        ).pack(anchor="w", padx=7, pady=(6, 3))
+            detail_header,
+            text="TRACEABILITY INSPECTOR",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Button(
+            detail_header,
+            text="Open target",
+            style="CX.Compact.TButton",
+            command=self._navigate_selected,
+        ).pack(side="right")
         self.detail = tk.Text(
             detail_host,
             wrap="word",
@@ -779,22 +857,11 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.delete("1.0", "end")
         node = self._nodes_by_key.get(self._selected_key or "")
         if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
-            )
-            if node.get("status"):
-                header += f"Status: {node['status'].upper()}\n"
-            self.detail.insert("1.0", header + "\n")
+            self.detail.insert("1.0", "\n".join(_node_detail_lines(node)))
+        else:
             self.detail.insert(
-                "end",
-                json.dumps(
-                    node.get("raw", {}),
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                ),
+                "1.0",
+                "No traceability node selected. Select a node to inspect its persisted engineering evidence.",
             )
         self.detail.configure(state="disabled")
 

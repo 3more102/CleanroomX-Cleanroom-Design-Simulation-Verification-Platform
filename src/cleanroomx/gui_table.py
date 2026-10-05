@@ -9,7 +9,7 @@ from tkinter import ttk
 
 
 _MISSING_TEXT = {"", "—", "-", "n/a", "none", "unknown"}
-_NATURAL_PART = re.compile(r"(\\d+)")
+_NATURAL_PART = re.compile(r"(\d+)")
 
 
 def engineering_table_sort_value(value: Any) -> tuple[int, Any] | None:

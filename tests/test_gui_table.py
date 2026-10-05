@@ -165,3 +165,21 @@ def test_table_behavior_preserves_tree_column_sort_and_header_copy(root) -> None
     assert tree.get_children("") == ("a", "b")
     tree.selection_set("a")
     assert behavior.selected_tsv(include_headers=True) == "Task\tState\nAlpha\tDONE"
+
+
+def test_table_behavior_reorders_only_currently_visible_columns(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    assert behavior.set_column_order(("value", "name")) is True
+    assert behavior.visible_columns == ("value", "name")
+    assert behavior.set_column_order(("name",)) is False
+    assert behavior.set_column_order(("missing", "value")) is False
+    assert behavior.visible_columns == ("value", "name")
+
+    assert behavior.set_column_visible("value", False) is True
+    assert behavior.visible_columns == ("name",)
+    assert behavior.set_column_order(("name",)) is True

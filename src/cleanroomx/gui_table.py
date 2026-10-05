@@ -92,7 +92,10 @@ class TreeviewTableBehavior:
         self._bind_context_menu = bool(bind_context_menu)
         self._sort_key_overrides = dict(sort_key_overrides or {})
         self._on_layout_change = on_layout_change
-        show_tokens = str(tree.cget("show")).split()
+        try:
+            show_tokens = set(tree.tk.splitlist(tree.cget("show")))
+        except tk.TclError:
+            show_tokens = set()
         self._width_columns = (
             (("#0",) if "tree" in show_tokens else ()) + self.data_columns
         )

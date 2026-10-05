@@ -116,6 +116,8 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open Verification Workspace" in labels
     assert "Open Evidence Workspace" in labels
     assert "Open Reporting Workspace" in labels
+    assert "Open Engineering Search" in labels
+    assert "Open Task Center" in labels
 
     app.show_command_palette()
     root.update()

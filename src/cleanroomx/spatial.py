@@ -2977,10 +2977,14 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _property_dirty_values(self) -> dict[str, str]:
         visible = self._property_fields_for_selection()
+        loaded_values = getattr(self, "_property_loaded_values", {})
         changed: dict[str, str] = {}
         for key in visible:
-            current = self._property_vars[key].get()
-            loaded = self._property_loaded_values.get(key, "")
+            variable = self._property_vars.get(key)
+            if variable is None:
+                continue
+            current = variable.get()
+            loaded = loaded_values.get(key, "")
             if current != loaded:
                 changed[key] = current
         return changed
@@ -4451,7 +4455,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_left_drag(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
             return
-        if self._box_select_anchor_world is not None:
+        if getattr(self, "_box_select_anchor_world", None) is not None:
             self._box_select_current_world = self._canvas_to_world(event.x, event.y)
             self.redraw()
             return
@@ -4508,7 +4512,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_left_up(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
             return
-        if self._box_select_anchor_world is not None:
+        if getattr(self, "_box_select_anchor_world", None) is not None:
             self._box_select_current_world = self._canvas_to_world(event.x, event.y)
             anchor_canvas = self._box_select_anchor_canvas
             moved = (

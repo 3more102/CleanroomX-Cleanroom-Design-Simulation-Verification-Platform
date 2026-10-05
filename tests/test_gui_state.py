@@ -21,6 +21,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "inspector_visible": True,
         "theme": "light",
         "workspace_profile": "start",
+        "density": "comfortable",
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,
@@ -42,6 +43,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "inspector_visible": True,
             "theme": "neon",
             "workspace_profile": "unsupported",
+            "density": "ultra-dense",
             "recent_projects": [
                 "alpha.cleanroomx.json",
                 "",
@@ -65,6 +67,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["inspector_visible"] is True
     assert state["theme"] == "light"
     assert state["workspace_profile"] == "start"
+    assert state["density"] == "comfortable"
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
@@ -87,6 +90,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "inspector_visible": False,
             "theme": "dark",
             "workspace_profile": "evidence",
+            "density": "compact",
             "recent_projects": [
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
@@ -106,6 +110,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     assert payload["inspector_visible"] is False
     assert payload["theme"] == "dark"
     assert payload["workspace_profile"] == "evidence"
+    assert payload["density"] == "compact"
     assert payload["recent_projects"] == [
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",

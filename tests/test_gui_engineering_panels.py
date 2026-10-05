@@ -9,6 +9,12 @@ import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
+from cleanroomx.project_requirements import (
+    PROJECT_REQUIREMENTS_METADATA_KEY,
+    ProjectRequirement,
+    ProjectRequirementSet,
+    ProjectRequirements,
+)
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
 
 
@@ -277,3 +283,84 @@ def test_problem_browser_can_focus_global_search_result(app):
     selected = panel.selected_issue()
     assert selected is not None
     assert selected["sequence"] == issue["sequence"]
+
+
+def test_project_navigator_projects_requirements_and_diagnostic_state(app, monkeypatch):
+    requirement = ProjectRequirement(
+        id="req-nav-ach",
+        title="Navigator minimum ACH",
+        description="Navigator regression requirement.",
+        discipline="HVAC",
+        category="air_change_rate",
+        source="GUI regression",
+        source_revision="R1",
+        unit="1/h",
+        minimum=15.0,
+        applicability="applicable",
+        scope=("room-a",),
+        verification_method="analysis",
+        required_evidence=("analysis_result",),
+        status="approved",
+    )
+    requirements = ProjectRequirements(
+        sets=(
+            ProjectRequirementSet(
+                id="set-nav",
+                title="Navigator requirements",
+                source="GUI regression",
+                source_revision="R1",
+                requirements=(requirement,),
+            ),
+        )
+    )
+    app.project.metadata[PROJECT_REQUIREMENTS_METADATA_KEY] = requirements.to_dict()
+    result, issue = _force_room_overlap(app)
+    app.root.update()
+
+    assert app.analysis_tree.item("nav-requirements", "text") == "Requirements (1)"
+    requirement_iid = "requirement:req-nav-ach"
+    assert app.analysis_tree.exists(requirement_iid)
+    assert "APPROVED" in app.analysis_tree.item(requirement_iid, "text")
+
+    summary = result["summary"]
+    diagnostics_label = app.analysis_tree.item("nav-diagnostics", "text")
+    assert f"{summary['error_count']} E" in diagnostics_label
+    assert f"{summary['warning_count']} W" in diagnostics_label
+    severity_iid = f"nav-diagnostics:{issue['severity']}"
+    assert app.analysis_tree.exists(severity_iid)
+
+    opened: list[str] = []
+    monkeypatch.setattr(
+        app,
+        "_open_requirement_search_result",
+        lambda requirement_id: opened.append(requirement_id),
+    )
+    app.analysis_tree.selection_set(requirement_iid)
+    app._on_navigator_selected()
+    assert opened == ["req-nav-ach"]
+
+    app.analysis_tree.selection_set(severity_iid)
+    app._on_navigator_selected()
+    app.root.update()
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.problems_panel.severity_var.get() == str(issue["severity"]).title()
+
+
+def test_navigator_evidence_and_report_sections_reveal_hidden_output(app):
+    app.output_panel_visible_var.set(False)
+    app._sync_output_panel_visibility()
+    app.root.update()
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.analysis_tree.selection_set("nav-evidence")
+    app._on_navigator_selected()
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+
+    app.hide_output_panel()
+    app.analysis_tree.selection_set("nav-reports")
+    app._on_navigator_selected()
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.report_text.master)

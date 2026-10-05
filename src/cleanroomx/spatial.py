@@ -2110,7 +2110,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
         self.canvas_2d.bind("<Motion>", self._on_motion)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
-        self.canvas_2d.bind("<Escape>", self._on_escape)
         self.canvas_2d.bind("<B1-Motion>", self._on_left_drag)
         self.canvas_2d.bind("<ButtonRelease-1>", self._on_left_up)
         self.canvas_2d.bind("<Button-2>", self._on_pan_down)
@@ -2138,6 +2137,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
         for canvas in (self.canvas_2d, self.canvas_3d):
+            canvas.bind("<Escape>", self._on_escape)
             canvas.bind("<Control-z>", self._on_undo_shortcut)
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
@@ -2313,7 +2313,16 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_escape(self, event=None):
-        self.clear_measurement()
+        if self._current_tool_mode() != "select" or self._measurement_points:
+            self.clear_measurement()
+            self._status_setter("Measurement cancelled")
+            return "break"
+        if self.selected is not None:
+            self.selected = None
+            self._load_property_panel()
+            self._notify_selection_change()
+            self.redraw()
+            self._status_setter("Selection cleared")
         return "break"
 
     def _handle_measure_click(self, x: float, y: float) -> None:
@@ -4622,6 +4631,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         hit = (
             self._parse_hit(self.canvas_3d.gettags(current[0]))

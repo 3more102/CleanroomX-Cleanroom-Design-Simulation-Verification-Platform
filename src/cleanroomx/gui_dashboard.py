@@ -53,7 +53,7 @@ class EngineeringDashboard(ttk.Frame):
         self.issue_summary_var = tk.StringVar(value="No project diagnostics evaluated")
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(4, weight=1)
 
         self._build_header()
         self._build_instruments()

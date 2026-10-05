@@ -74,7 +74,12 @@ from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_diagnostics import DiagnosticsWorkspace
-from .gui_simulation import SimulationWorkspace
+from .gui_simulation import (
+    SimulationWorkspace,
+    filter_run_history_records,
+    run_history_diff_rows,
+    run_history_filter_options,
+)
 from .gui_tasks import TaskCenter
 from .gui_assurance import EvidenceWorkspace, VerificationWorkspace
 from .gui_reporting import ReportingWorkspace
@@ -461,36 +466,212 @@ class AnalysisPicker(tk.Toplevel):
         self.destroy()
 
 
-class RunHistoryDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Misc, metadata: dict):
+class RunHistoryCompareDialog(tk.Toplevel):
+    """Read-only comparison of two retained canonical analysis-run records."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        left: dict[str, Any],
+        right: dict[str, Any],
+    ):
         super().__init__(parent)
-        self.title("Analysis Run History")
-        self.geometry("1180x680")
-        self.minsize(900, 520)
+        left_sequence = left.get("sequence", "?")
+        right_sequence = right.get("sequence", "?")
+        self.title(f"Compare Analysis Runs #{left_sequence} ↔ #{right_sequence}")
+        self.geometry("1320x720")
+        self.minsize(960, 520)
         self.transient(parent)
 
-        summary = validate_run_history(metadata)
-        self.records = run_history_records(metadata)
+        header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(10, 7))
+        header.pack(fill="x", padx=10, pady=(10, 6))
+        ttk.Label(
+            header,
+            text=f"RUN #{left_sequence}",
+            style="CX.PanelHeader.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            header,
+            text=f"RUN #{right_sequence}",
+            style="CX.PanelHeader.TLabel",
+        ).grid(row=0, column=2, sticky="w")
+        ttk.Label(
+            header,
+            text=(
+                f"{left.get('analysis_name', '')} · {left.get('status', '')} · "
+                f"{left.get('completed_at_utc', '')}"
+            ),
+            style="CX.PanelMuted.TLabel",
+        ).grid(row=1, column=0, sticky="w", padx=(0, 16))
+        ttk.Label(
+            header,
+            text=(
+                f"{right.get('analysis_name', '')} · {right.get('status', '')} · "
+                f"{right.get('completed_at_utc', '')}"
+            ),
+            style="CX.PanelMuted.TLabel",
+        ).grid(row=1, column=2, sticky="w")
+        ttk.Separator(header, orient="vertical").grid(
+            row=0, column=1, rowspan=2, sticky="ns", padx=12
+        )
+        header.columnconfigure(0, weight=1)
+        header.columnconfigure(2, weight=1)
+
         ttk.Label(
             self,
             text=(
-                f"Verified retained digest chain — {summary['record_count']} record(s). "
-                "Digests detect accidental corruption; they are not authenticity signatures."
+                "Changed persisted input, result, diagnostic, and run-identification fields. "
+                "No solver or verification calculation is rerun for this comparison."
             ),
-        ).pack(fill="x", padx=10, pady=(10, 6))
+            style="CX.PanelMuted.TLabel",
+        ).pack(fill="x", padx=12, pady=(0, 6))
+
+        frame = ttk.Frame(self)
+        frame.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        columns = ("path", "left", "right")
+        self.tree = ttk.Treeview(
+            frame,
+            columns=columns,
+            show="headings",
+            selectmode="browse",
+        )
+        self.tree.heading("path", text="Canonical field")
+        self.tree.heading("left", text=f"Run #{left_sequence}")
+        self.tree.heading("right", text=f"Run #{right_sequence}")
+        self.tree.column("path", width=330, minwidth=180, stretch=False)
+        self.tree.column("left", width=440, minwidth=220, stretch=True)
+        self.tree.column("right", width=440, minwidth=220, stretch=True)
+        yscroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+
+        rows = run_history_diff_rows(left, right)
+        for index, (path, left_value, right_value) in enumerate(rows):
+            self.tree.insert(
+                "",
+                "end",
+                iid=f"diff:{index}",
+                values=(path, left_value, right_value),
+            )
+
+        footer = ttk.Frame(self)
+        footer.pack(fill="x", padx=10, pady=(0, 10))
+        message = (
+            f"{len(rows)} changed field(s) shown"
+            if rows
+            else "No differences in the compared persisted input/result/diagnostic fields"
+        )
+        ttk.Label(
+            footer,
+            text=message,
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="left")
+        ttk.Button(
+            footer,
+            text="Close",
+            style="CX.Compact.TButton",
+            command=self.destroy,
+        ).pack(side="right")
+
+
+class RunHistoryDialog(tk.Toplevel):
+    """Professional read-only browser over validated retained analysis-run evidence."""
+
+    def __init__(self, parent: tk.Misc, metadata: dict):
+        super().__init__(parent)
+        self.title("Analysis Run History")
+        self.geometry("1360x780")
+        self.minsize(980, 560)
+        self.transient(parent)
+
+        self.history_summary = validate_run_history(metadata)
+        self.records = run_history_records(metadata)
+        self.search_var = tk.StringVar()
+        self.analysis_var = tk.StringVar(value="All")
+        self.kind_var = tk.StringVar(value="All")
+        self.status_var = tk.StringVar(value="All")
+        self.summary_var = tk.StringVar()
+        self._records_by_iid: dict[str, dict[str, Any]] = {}
+
+        header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(10, 7))
+        header.pack(fill="x", padx=10, pady=(10, 6))
+        ttk.Label(
+            header,
+            text="RETAINED ANALYSIS RUNS",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            header,
+            textvariable=self.summary_var,
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="right")
+
+        ttk.Label(
+            self,
+            text=(
+                "The retained digest chain is validated before display. Digests detect "
+                "accidental corruption; they are not signer-authentication signatures."
+            ),
+            style="CX.PanelMuted.TLabel",
+        ).pack(fill="x", padx=12, pady=(0, 6))
+
+        filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
+        filters.pack(fill="x", padx=10, pady=(0, 8))
+        ttk.Label(filters, text="Search").pack(side="left")
+        ttk.Entry(filters, textvariable=self.search_var, width=24).pack(
+            side="left", padx=(4, 8)
+        )
+        ttk.Label(filters, text="Analysis").pack(side="left")
+        self.analysis_combo = ttk.Combobox(
+            filters,
+            textvariable=self.analysis_var,
+            values=run_history_filter_options(self.records, "analysis_name"),
+            state="readonly",
+            width=20,
+        )
+        self.analysis_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Kind").pack(side="left")
+        self.kind_combo = ttk.Combobox(
+            filters,
+            textvariable=self.kind_var,
+            values=run_history_filter_options(self.records, "analysis_kind"),
+            state="readonly",
+            width=18,
+        )
+        self.kind_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Status").pack(side="left")
+        self.status_combo = ttk.Combobox(
+            filters,
+            textvariable=self.status_var,
+            values=run_history_filter_options(self.records, "status"),
+            state="readonly",
+            width=12,
+        )
+        self.status_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Reset",
+            style="CX.Compact.TButton",
+            command=self._reset_filters,
+        ).pack(side="left")
 
         body = ttk.Panedwindow(self, orient="vertical")
-        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 8))
         list_frame = ttk.Frame(body)
         detail_frame = ttk.Frame(body)
-        body.add(list_frame, weight=1)
-        body.add(detail_frame, weight=2)
+        body.add(list_frame, weight=2)
+        body.add(detail_frame, weight=3)
 
         self.tree = ttk.Treeview(
             list_frame,
             columns=("time", "analysis", "kind", "status", "input"),
             show="tree headings",
+            selectmode="extended",
             height=10,
         )
         self.tree.heading("#0", text="#")
@@ -501,31 +682,134 @@ class RunHistoryDialog(tk.Toplevel):
         self.tree.heading("input", text="Input SHA-256")
         self.tree.column("#0", width=55, stretch=False)
         self.tree.column("time", width=185, stretch=False)
-        self.tree.column("analysis", width=230)
+        self.tree.column("analysis", width=240)
         self.tree.column("kind", width=190)
         self.tree.column("status", width=120, stretch=False)
         self.tree.column("input", width=165, stretch=False)
-        list_scroll = ttk.Scrollbar(
+        list_scroll_y = ttk.Scrollbar(
             list_frame, orient="vertical", command=self.tree.yview
         )
-        self.tree.configure(yscrollcommand=list_scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        list_scroll.pack(side="right", fill="y")
-
-        self.detail = tk.Text(detail_frame, wrap="none")
-        detail_scroll = ttk.Scrollbar(
-            detail_frame, orient="vertical", command=self.detail.yview
+        list_scroll_x = ttk.Scrollbar(
+            list_frame, orient="horizontal", command=self.tree.xview
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        self.tree.configure(
+            yscrollcommand=list_scroll_y.set,
+            xscrollcommand=list_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        list_scroll_y.grid(row=0, column=1, sticky="ns")
+        list_scroll_x.grid(row=1, column=0, sticky="ew")
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
 
-        for record in reversed(self.records):
+        self.detail_tabs = ttk.Notebook(detail_frame)
+        self.detail_tabs.pack(fill="both", expand=True)
+        self.summary_text = self._text_tab("Summary", wrap="word")
+        self.input_text = self._text_tab("Input Snapshot", wrap="none")
+        self.result_text = self._text_tab("Result", wrap="none")
+        self.diagnostics_text = self._text_tab("Diagnostics", wrap="none")
+        self.report_text = self._text_tab("Report", wrap="word")
+        self.record_text = self._text_tab("Canonical Record", wrap="none")
+
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        self.compare_button = ttk.Button(
+            buttons,
+            text="Compare 2 Selected",
+            style="CX.Primary.TButton",
+            command=self._compare_selected,
+            state="disabled",
+        )
+        self.compare_button.pack(side="left")
+        ttk.Label(
+            buttons,
+            text="Select exactly two retained runs to compare canonical persisted fields.",
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="left", padx=(8, 0))
+        ttk.Button(
+            buttons,
+            text="Close",
+            style="CX.Compact.TButton",
+            command=self.destroy,
+        ).pack(side="right")
+
+        self.search_var.trace_add("write", lambda *_: self._populate())
+        self.analysis_var.trace_add("write", lambda *_: self._populate())
+        self.kind_var.trace_add("write", lambda *_: self._populate())
+        self.status_var.trace_add("write", lambda *_: self._populate())
+
+        self._populate()
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children[0])
+            self.tree.focus(children[0])
+            self._show_selected()
+
+    def _text_tab(self, title: str, *, wrap: str) -> tk.Text:
+        frame = ttk.Frame(self.detail_tabs)
+        self.detail_tabs.add(frame, text=title)
+        text = tk.Text(frame, wrap=wrap, state="disabled", borderwidth=0)
+        yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=yscroll.set)
+        text.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        if wrap == "none":
+            xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
+            text.configure(xscrollcommand=xscroll.set)
+            xscroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        return text
+
+    @staticmethod
+    def _set_text(widget: tk.Text, value: str) -> None:
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        widget.insert("1.0", value)
+        widget.configure(state="disabled")
+
+    @staticmethod
+    def _json_text(value: Any, *, unavailable: str) -> str:
+        if value is None:
+            return unavailable
+        return json.dumps(
+            value,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+
+    def _filtered_records(self) -> list[dict[str, Any]]:
+        return filter_run_history_records(
+            self.records,
+            query=self.search_var.get(),
+            analysis=self.analysis_var.get(),
+            kind=self.kind_var.get(),
+            status=self.status_var.get(),
+        )
+
+    def _populate(self) -> None:
+        selected_sequences = {
+            self._records_by_iid[iid].get("sequence")
+            for iid in self.tree.selection()
+            if iid in self._records_by_iid
+        }
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._records_by_iid.clear()
+
+        visible = list(reversed(self._filtered_records()))
+        for record in visible:
+            sequence = record["sequence"]
+            iid = f"run:{sequence}"
             self.tree.insert(
                 "",
                 "end",
-                iid=str(record["sequence"]),
-                text=str(record["sequence"]),
+                iid=iid,
+                text=str(sequence),
                 values=(
                     record["completed_at_utc"],
                     record["analysis_name"],
@@ -534,33 +818,133 @@ class RunHistoryDialog(tk.Toplevel):
                     record["input_sha256"][:16] + "…",
                 ),
             )
-        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+            self._records_by_iid[iid] = record
+            if sequence in selected_sequences:
+                self.tree.selection_add(iid)
 
-        buttons = ttk.Frame(self)
-        buttons.pack(fill="x", padx=10, pady=(0, 10))
-        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+        self.summary_var.set(
+            f"{len(visible)} / {len(self.records)} visible · "
+            f"ledger head #{self.history_summary.get('last_sequence') or '—'}"
+        )
+        self._show_selected()
 
-        children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
-            self._show_selected()
+    def _reset_filters(self) -> None:
+        self.search_var.set("")
+        self.analysis_var.set("All")
+        self.kind_var.set("All")
+        self.status_var.set("All")
+
+    def _focused_record(self) -> dict[str, Any] | None:
+        focus = self.tree.focus()
+        if focus in self._records_by_iid:
+            return self._records_by_iid[focus]
+        selection = self.tree.selection()
+        if selection:
+            return self._records_by_iid.get(selection[0])
+        return None
 
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
-        if not selection:
+        self.compare_button.configure(
+            state="normal" if len(selection) == 2 else "disabled"
+        )
+        record = self._focused_record()
+        if record is None:
+            message = (
+                "No retained run matches the current filters."
+                if self.records
+                else "No retained analysis-run evidence is available."
+            )
+            for widget in (
+                self.summary_text,
+                self.input_text,
+                self.result_text,
+                self.diagnostics_text,
+                self.report_text,
+                self.record_text,
+            ):
+                self._set_text(widget, message)
             return
-        sequence = int(selection[0])
-        record = next(
-            item for item in self.records if item["sequence"] == sequence
+
+        has_full_evidence = all(
+            key in record for key in ("result", "diagnostics", "report_markdown", "plot")
         )
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
-        self.detail.insert(
-            "1.0",
-            json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
+        lines = [
+            f"Run #{record.get('sequence')} · {str(record.get('status', '')).upper()}",
+            f"Analysis: {record.get('analysis_name', '')}",
+            f"Kind: {record.get('analysis_kind', '')}",
+            f"Completed UTC: {record.get('completed_at_utc', '')}",
+            f"Run title: {record.get('run_title', '')}",
+            f"CleanroomX version: {record.get('cleanroomx_version', '')}",
+            "",
+            "Retained evidence",
+            f"Reopenable payload: {'yes' if has_full_evidence else 'legacy digest-only record'}",
+            f"Input SHA-256: {record.get('input_sha256', '')}",
+            f"Result SHA-256: {record.get('result_sha256', '')}",
+            f"Diagnostics SHA-256: {record.get('diagnostics_sha256', '')}",
+            f"Report SHA-256: {record.get('report_sha256', '')}",
+            f"Record SHA-256: {record.get('record_sha256', '')}",
+        ]
+        if len(selection) > 1:
+            lines.extend(
+                (
+                    "",
+                    f"{len(selection)} runs selected. The focused run is shown here; "
+                    "select exactly two and use Compare 2 Selected for field-level comparison.",
+                )
+            )
+        self._set_text(self.summary_text, "\n".join(lines))
+        self._set_text(
+            self.input_text,
+            self._json_text(
+                record.get("input_snapshot"),
+                unavailable="Input snapshot unavailable in this retained record.",
+            ),
         )
-        self.detail.configure(state="disabled")
+        self._set_text(
+            self.result_text,
+            self._json_text(
+                record.get("result"),
+                unavailable="Result payload unavailable in this legacy digest-only record.",
+            ),
+        )
+        self._set_text(
+            self.diagnostics_text,
+            self._json_text(
+                record.get("diagnostics"),
+                unavailable="Diagnostics payload unavailable in this legacy digest-only record.",
+            ),
+        )
+        report = record.get("report_markdown")
+        self._set_text(
+            self.report_text,
+            str(report)
+            if isinstance(report, str)
+            else "Report payload unavailable in this legacy digest-only record.",
+        )
+        self._set_text(
+            self.record_text,
+            json.dumps(
+                record,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            ),
+        )
+
+    def _compare_selected(self) -> None:
+        selection = self.tree.selection()
+        if len(selection) != 2:
+            self.summary_var.set("Select exactly two visible retained runs to compare")
+            return
+        left = self._records_by_iid.get(selection[0])
+        right = self._records_by_iid.get(selection[1])
+        if left is None or right is None:
+            return
+        if int(left.get("sequence", 0)) > int(right.get("sequence", 0)):
+            left, right = right, left
+        RunHistoryCompareDialog(self, left, right)
 
 
 class VerificationHistoryDialog(tk.Toplevel):
@@ -2111,6 +2495,7 @@ class CleanroomXApp:
             on_validate=self.validate_current,
             on_open_inputs=self._activate_analysis_input_workspace,
             on_open_results=self._activate_analysis_results_workspace,
+            on_open_history=self.show_run_history,
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 

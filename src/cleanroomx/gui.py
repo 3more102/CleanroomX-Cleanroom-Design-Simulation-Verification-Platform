@@ -80,6 +80,7 @@ from .gui_state import (
 )
 from .gui_theme import (\n    configure_ttk_theme,\n    normalize_density_name,\n    normalize_theme_name,\n)
 from .gui_proofgraph import ProofGraphViewer
+from .gui_reporting import ReportingWorkspace
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -2817,6 +2818,17 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
+        self.reporting_workspace = ReportingWorkspace(
+            self.notebook,
+            export_dossier=self.export_project_engineering_dossier,
+            export_result_json=self.export_result_json,
+            export_run_bundle=self.export_run_bundle_json,
+            export_markdown=self.export_report_markdown,
+            export_html=self.export_report_html,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.reporting_workspace, text="Reports")
+
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
@@ -3147,6 +3159,10 @@ class CleanroomXApp:
         proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
         if proofgraph_viewer is not None:
             proofgraph_viewer.apply_theme(palette)
+
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            reporting_workspace.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -4094,20 +4110,34 @@ class CleanroomXApp:
         self.workspace_status_var.set("Workspace: Evidence")
         self.status_var.set("Evidence workspace: ProofGraph and retained evidence")
 
+    def _refresh_reporting_workspace(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        try:
+            unsaved = self._has_unsaved_changes()
+        except Exception:
+            unsaved = True
+        run = self._current_fresh_run()
+        workspace.set_context(
+            project_name=self.project.name,
+            project_path=self.project_path,
+            unsaved_changes=unsaved,
+            run=run,
+        )
+
     def _activate_reporting_workspace(self) -> None:
         self._prepare_workspace_preset(
             navigator=False,
             output=True,
             inspector=False,
         )
+        self._refresh_reporting_workspace()
+        self.notebook.select(self.reporting_workspace)
         self.output_notebook.select(self.report_text.master)
-        if self.last_run is not None:
-            self.notebook.select(self.plot_canvas.master)
-        else:
-            self.notebook.select(self.input_tab)
         self.workspace_status_var.set("Workspace: Reporting")
         self.status_var.set(
-            "Reporting workspace: review generated output and export engineering reports"
+            "Reporting workspace: review canonical report output and export verified artifacts"
         )
 
     def _activate_analysis_input_workspace(self) -> None:
@@ -6672,6 +6702,7 @@ class CleanroomXApp:
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self._remember_recent_project(self.project_path)
+        self._refresh_reporting_workspace()
         self.status_var.set(f"Saved {self.project_path.name}")
 
     def _assert_save_as_destination_safe(self, target: str | Path) -> None:
@@ -7268,6 +7299,7 @@ class CleanroomXApp:
             self.spatial_workspace.redraw()
             self.spatial_workspace._load_property_panel()
         self._refresh_engineering_panels()
+        self._refresh_reporting_workspace()
         if select_results:
             self.output_notebook.select(self.result_text.master)
 

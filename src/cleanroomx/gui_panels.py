@@ -95,6 +95,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             show="headings",
             selectmode="browse",
             height=7,
+            style="CX.Industrial.Treeview",
         )
         headings = {
             "severity": "Severity",

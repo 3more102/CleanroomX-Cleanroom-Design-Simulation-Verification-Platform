@@ -2479,7 +2479,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return False
 
     def hide_selected(self) -> None:
-        hits = list(self._selected_hits)
+        hits = list(self.selected_hits())
         if not hits and self.selected is not None:
             hits = [self.selected]
         if not hits:
@@ -2610,10 +2610,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._selected_hits = [] if hit is None else [hit]
 
     def _is_selected_hit(self, hit: _Hit) -> bool:
-        return hit in self._selected_hits
+        hits = getattr(self, "_selected_hits", None)
+        if hits is None:
+            return self.selected == hit
+        return hit in hits
 
     def selected_hits(self) -> tuple[_Hit, ...]:
-        return tuple(self._selected_hits)
+        hits = getattr(self, "_selected_hits", None)
+        if hits is None:
+            selected = getattr(self, "selected", None)
+            return (selected,) if selected is not None else ()
+        return tuple(hits)
 
     def _set_selected_hits(self, hits: list[_Hit] | tuple[_Hit, ...]) -> None:
         ordered: list[_Hit] = []
@@ -2667,8 +2674,8 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         name = str(item.get("name") or self.selected.item_id)
         count_prefix = (
-            f"Selected: {len(self._selected_hits)} objects · "
-            if len(self._selected_hits) > 1
+            f"Selected: {len(self.selected_hits())} objects · "
+            if len(self.selected_hits()) > 1
             else ""
         )
         if self.selected.kind == "room":
@@ -2727,7 +2734,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return f"{cursor} · Grid {grid_m:g} m · {snap_state}"
 
     def _notify_engineering_context(self) -> None:
-        callback = self._on_engineering_context_change
+        callback = getattr(self, "_on_engineering_context_change", None)
         if callback is not None:
             callback(self.engineering_context_text())
 
@@ -2787,7 +2794,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             f"{_finite_number(view.get('section_height_m'), self.layout['floor']['elevation_m'] + 2.4):.2f}"
         )
         self._selected_hits = [
-            hit for hit in self._selected_hits if self._hit_exists(hit)
+            hit
+            for hit in getattr(self, "_selected_hits", ())
+            if self._hit_exists(hit)
         ]
         if self.selected and not self._selected_object():
             self.selected = None
@@ -3635,7 +3644,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def delete_selected(self) -> None:
-        hits = list(self._selected_hits)
+        hits = list(self.selected_hits())
         if not hits and self.selected is not None:
             hits = [self.selected]
         if not hits:

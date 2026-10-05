@@ -2057,6 +2057,7 @@ class CleanroomXApp:
         self.dashboard = EngineeringDashboard(
             self.notebook,
             on_issue=self._navigate_project_diagnostic,
+            on_module=self._open_dashboard_module,
         )
         self.dashboard.apply_theme(self.theme_var.get())
         self.notebook.add(self.dashboard, text="Dashboard")
@@ -2894,6 +2895,18 @@ class CleanroomXApp:
         self.status_var.set(f"{label} workspace layout applied")
         if persist:
             self._save_ui_layout_state()
+
+    def _open_dashboard_module(self, module: str) -> None:
+        actions = {
+            "diagnostics": self._activate_diagnostics_workspace,
+            "verification": self._activate_verification_workspace,
+            "design": lambda: self._activate_spatial_workspace("split"),
+            "analysis": self._activate_simulation_workspace,
+            "evidence": self._activate_evidence_workspace,
+        }
+        action = actions.get(str(module or "").strip().lower())
+        if action is not None:
+            action()
 
     def _activate_diagnostics_workspace(self) -> None:
         workspace = getattr(self, "diagnostics_workspace", None)

@@ -153,6 +153,83 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     assert str(workspace._three_d_frame) in panes
 
 
+def test_plural_selection_add_toggle_and_single_selection_compatibility(app):
+    workspace = app.spatial_workspace
+    room_a = workspace.layout["rooms"][0]
+    room_b = workspace.layout["rooms"][1]
+    device = workspace.layout["devices"][0]
+
+    hit_a = _Hit("room", room_a["id"])
+    hit_b = _Hit("room", room_b["id"])
+    hit_device = _Hit("device", device["id"])
+
+    workspace._select_hit(hit_a, mode="replace")
+    workspace._select_hit(hit_b, mode="add")
+    workspace._select_hit(hit_device, mode="add")
+
+    assert workspace.selected == hit_a
+    assert workspace.selected_hits() == (hit_a, hit_b, hit_device)
+    status = workspace.selection_status_text()
+    assert "Selected: 3 objects" in status
+    assert "2 rooms" in status
+    assert "1 device" in status
+
+    workspace._select_hit(hit_a, mode="toggle")
+    assert workspace.selected == hit_b
+    assert workspace.selected_hits() == (hit_b, hit_device)
+
+    # Existing callers that assign the primary selection must retain the old
+    # single-selection contract and clear any additive selection.
+    workspace.selected = hit_a
+    assert workspace.selected_hits() == (hit_a,)
+
+
+def test_box_selection_respects_visible_spatial_objects(app):
+    workspace = app.spatial_workspace
+    room_a = workspace.layout["rooms"][0]
+    room_b = workspace.layout["rooms"][1]
+    hit_a = _Hit("room", room_a["id"])
+    hit_b = _Hit("room", room_b["id"])
+
+    def bounds(room):
+        margin = 0.05
+        return (
+            (room["x_m"] - margin, room["y_m"] - margin),
+            (
+                room["x_m"] + room["length_m"] + margin,
+                room["y_m"] + room["width_m"] + margin,
+            ),
+        )
+
+    start_a, end_a = bounds(room_a)
+    workspace._apply_box_selection(start_a, end_a, mode="replace")
+    assert hit_a in workspace.selected_hits()
+
+    start_b, end_b = bounds(room_b)
+    workspace._apply_box_selection(start_b, end_b, mode="add")
+    assert hit_a in workspace.selected_hits()
+    assert hit_b in workspace.selected_hits()
+
+    workspace._apply_box_selection(start_a, end_a, mode="toggle")
+    assert hit_a not in workspace.selected_hits()
+    assert hit_b in workspace.selected_hits()
+
+    workspace._hidden_item_ids.add(room_b["id"])
+    workspace._apply_box_selection(start_b, end_b, mode="replace")
+    assert hit_b not in workspace.selected_hits()
+
+
+def test_selection_modifier_mapping_is_deterministic():
+    class Event:
+        def __init__(self, state):
+            self.state = state
+
+    assert spatial_module.SpatialDesignWorkspace._selection_mode_from_event(Event(0)) == "replace"
+    assert spatial_module.SpatialDesignWorkspace._selection_mode_from_event(Event(0x0001)) == "add"
+    assert spatial_module.SpatialDesignWorkspace._selection_mode_from_event(Event(0x0004)) == "toggle"
+    assert spatial_module.SpatialDesignWorkspace._selection_mode_from_event(Event(0x0005)) == "toggle"
+
+
 def test_project_navigator_and_workspace_selection_stay_synchronized(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

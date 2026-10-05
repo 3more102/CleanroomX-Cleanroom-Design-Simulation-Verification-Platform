@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .project_diagnostics import analyze_project_diagnostics
+from .gui_theme import theme_palette
 
 
 class ProjectDiagnosticsPanel(ttk.Frame):
@@ -31,6 +32,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self._theme_name = "dark"
+        self._palette = theme_palette(self._theme_name)
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
@@ -41,7 +44,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(7, 5))
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
         toolbar.pack(fill="x")
 
         ttk.Label(toolbar, text="PROBLEMS", style="CX.Section.TLabel").pack(
@@ -60,12 +63,25 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
-            side="left", padx=2
+        ttk.Button(
+            toolbar,
+            text="Refresh",
+            style="CX.Compact.TButton",
+            command=self.refresh,
+        ).pack(side="left", padx=2)
+        self.locate_button = ttk.Button(
+            toolbar,
+            text="Locate",
+            style="CX.Primary.TButton",
+            command=self._navigate_selected,
         )
-        ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
-            side="left", padx=2
-        )
+        self.locate_button.pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Copy",
+            style="CX.Compact.TButton",
+            command=self.copy_selected,
+        ).pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
@@ -74,11 +90,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         )
         self.export_button.pack(side="left", padx=2)
 
-        ttk.Label(
+        self.summary_label = ttk.Label(
             toolbar,
             textvariable=self.summary_var,
             anchor="e",
-        ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.summary_label.pack(side="right", padx=(12, 0))
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -141,26 +159,103 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self._configure_tree_tags()
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
 
-        self.detail = tk.Text(
+        detail_header = ttk.Frame(
             detail_frame,
+            style="CX.PanelHeader.TFrame",
+        )
+        detail_header.pack(fill="x", padx=6, pady=(4, 0))
+        ttk.Label(
+            detail_header,
+            text="DIAGNOSTIC DETAIL",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            detail_header,
+            text="Double-click a row or use Locate to focus its engineering object.",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="right")
+
+        detail_body = ttk.Frame(detail_frame)
+        detail_body.pack(fill="both", expand=True)
+        self.detail = tk.Text(
+            detail_body,
             wrap="word",
             height=4,
             state="disabled",
             borderwidth=0,
         )
         detail_scroll = ttk.Scrollbar(
-            detail_frame,
+            detail_body,
             orient="vertical",
             command=self.detail.yview,
         )
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+
+    def _configure_tree_tags(self) -> None:
+        palette = self._palette
+        self.tree.tag_configure(
+            "row_even",
+            background=palette["tree"],
+        )
+        self.tree.tag_configure(
+            "row_odd",
+            background=palette["surface_alt"],
+        )
+        self.tree.tag_configure(
+            "critical",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "error",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground=palette["warning"],
+        )
+        self.tree.tag_configure(
+            "info",
+            foreground=palette["info"],
+        )
+
+    def apply_theme(self, value: Any) -> None:
+        self._theme_name = str(value or "dark")
+        self._palette = theme_palette(self._theme_name)
+        self._configure_tree_tags()
+        self.detail.configure(
+            background=self._palette["field"],
+            foreground=self._palette["field_text"],
+            insertbackground=self._palette["text"],
+            selectbackground=self._palette["selection"],
+            selectforeground=self._palette["selection_text"],
+        )
+        self._update_summary_style()
+
+    def _update_summary_style(self) -> None:
+        result = self.last_result if isinstance(self.last_result, dict) else {}
+        summary = result.get("summary", {})
+        summary = summary if isinstance(summary, dict) else {}
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        status = str(summary.get("status") or "").strip().lower()
+        if errors or status in {"fail", "failed", "error"}:
+            style = "CX.Status.Fail.TLabel"
+        elif warnings or status in {"warning", "warn"}:
+            style = "CX.Status.Warning.TLabel"
+        elif status in {"pass", "passed", "ok", "healthy"}:
+            style = "CX.Status.Pass.TLabel"
+        else:
+            style = "CX.Status.Neutral.TLabel"
+        self.summary_label.configure(style=style)
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
@@ -240,6 +335,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             if self.tree.exists(iid):
                 iid = f"{iid}:{index}"
             severity = str(issue.get("severity", "info")).lower()
+            row_tag = "row_even" if index % 2 == 0 else "row_odd"
             self.tree.insert(
                 "",
                 "end",
@@ -252,7 +348,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     self._level_text(issue),
                     issue.get("category", ""),
                 ),
-                tags=(severity,),
+                tags=(row_tag, severity),
             )
             self._issues_by_iid[iid] = issue
 
@@ -276,6 +372,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.summary_var.set(f"Diagnostics unavailable: {exc}")
             self._status_setter("Project diagnostics failed")
             self._populate()
+            self._update_summary_style()
             return None
 
         self.last_result = result
@@ -289,6 +386,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             )
         )
         self._populate()
+        self._update_summary_style()
         return result
 
     def selected_issue(self) -> dict[str, Any] | None:
@@ -302,12 +400,17 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:
+            element = self._element_text(issue)
+            category = str(issue.get("category", "") or "General")
             lines = [
-                f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
+                f"{str(issue.get('severity', 'info')).upper()}  |  {issue.get('rule', '')}",
+                f"Engineering domain: {category}",
+                f"Affected object: {element}",
+                "",
                 str(issue.get("message", "")),
                 "",
-                "Suggested action:",
-                str(issue.get("suggested_action", "")),
+                "Recommended recovery",
+                str(issue.get("suggested_action", "") or "Review the affected engineering object and rerun validation."),
             ]
             details = issue.get("details")
             if isinstance(details, dict) and details:
@@ -325,6 +428,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     )
                 )
             self.detail.insert("1.0", "\n".join(lines))
+        else:
+            self.detail.insert(
+                "1.0",
+                "No diagnostic selected. Select an issue to inspect its engineering context.",
+            )
         self.detail.configure(state="disabled")
 
     def _navigate_selected(self, event=None):

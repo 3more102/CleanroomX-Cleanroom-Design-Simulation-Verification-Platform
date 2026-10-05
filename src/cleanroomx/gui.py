@@ -3214,6 +3214,14 @@ class CleanroomXApp:
         if self.import_ifc_spatial_layout():
             self._activate_spatial_workspace("split")
 
+    def _activate_dashboard_workspace(self) -> None:
+        dashboard = getattr(self, "dashboard", None)
+        notebook = getattr(self, "notebook", None)
+        if dashboard is not None and notebook is not None:
+            self._refresh_engineering_panels()
+            notebook.select(dashboard)
+            self.workspace_status_var.set("Workspace: Dashboard")
+
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
@@ -4553,14 +4561,56 @@ class CleanroomXApp:
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
             return
+        if item_id == "nav-dashboard":
+            self._activate_dashboard_workspace()
+            self.selection_status_var.set("Selected: Dashboard")
+            return
+        if item_id in {"nav-building", "nav-devices"}:
+            self._activate_spatial_workspace("split")
+            self.selection_status_var.set(
+                "Selected: Building" if item_id == "nav-building" else "Selected: Devices"
+            )
+            return
+        if item_id in {"nav-hvac", "nav-pressure"}:
+            self._activate_spatial_workspace("split")
+            workspace = getattr(self, "spatial_workspace", None)
+            if workspace is not None:
+                workspace._set_overlay_mode(
+                    "Airflow" if item_id == "nav-hvac" else "Pressure"
+                )
+            self.selection_status_var.set(
+                "Selected: HVAC Systems"
+                if item_id == "nav-hvac"
+                else "Selected: Pressure Network"
+            )
+            return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
+            self._restore_focus_workspace_snapshot(status=False)
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
+            return
+        if item_id == "nav-requirements":
+            self._restore_focus_workspace_snapshot(status=False)
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            if hasattr(self, "output_notebook") and hasattr(self, "verification_text"):
+                self.output_notebook.select(self.verification_text.master)
+            self.selection_status_var.set("Selected: Requirements / Verification")
+            return
+        if item_id == "nav-reports":
+            self._restore_focus_workspace_snapshot(status=False)
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+                self.output_notebook.select(self.report_text.master)
+            self.selection_status_var.set("Selected: Reports")
             return
         if item_id.startswith("nav-"):
             return

@@ -26,6 +26,7 @@ def test_production_acceptance_contract_passes_and_emits_evidence(tmp_path: Path
     assert payload["schema_version"] == 1
     assert payload["status"] == "pass"
     assert payload["summary"]["fail_count"] == 0
-    assert payload["summary"]["check_count"] >= 8
+    assert payload["summary"]["check_count"] >= 10
     assert all(item["passed"] is True for item in payload["checks"])
     assert "does not establish regulatory certification" in payload["boundary"]
+    assert "independent penetration-test certification" in payload["boundary"]

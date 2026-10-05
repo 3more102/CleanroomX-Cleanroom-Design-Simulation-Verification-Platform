@@ -72,3 +72,12 @@ def test_recent_project_list_is_deduplicated(app):
 
     recent = app.start_center.recent_tree.get_children()
     assert len(recent) == 1
+
+
+def test_start_center_recent_workspace_keeps_engineering_table_contract(app):
+    tree = app.start_center.recent_tree
+
+    assert tree.heading("#0", "text") == "Project"
+    assert tree.heading("path", "text") == "Location"
+    assert tree.heading("modified", "text") == "Modified"
+    assert "No recent projects" in app.start_center.recent_hint.cget("text")

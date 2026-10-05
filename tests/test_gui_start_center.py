@@ -44,6 +44,8 @@ def test_loading_project_switches_to_design_and_updates_recent_projects(app):
     app.root.update()
 
     assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.workspace_profile_var.get() == "design"
+    assert app.workspace_status_var.get() == "Workspace: Design"
     recent = app.start_center.recent_tree.get_children()
     assert len(recent) == 1
     values = app.start_center.recent_tree.item(recent[0], "values")
@@ -273,4 +275,17 @@ def test_start_center_keyboard_focus_tracks_recent_project_state(app):
     app.root.update_idletasks()
     app.root.update()
     assert app.root.focus_get() == app.start_center.recent_search_entry
+
+def test_spatial_focus_from_non_design_workspace_enters_design_profile(app):
+    app.load_project_path(bundled_demo_project_path())
+    app.activate_workspace_profile("evidence", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "evidence"
+
+    app._activate_spatial_workspace()
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "design"
+    assert app.workspace_status_var.get() == "Workspace: Design"
+    assert app.notebook.select() == str(app.spatial_workspace)
 

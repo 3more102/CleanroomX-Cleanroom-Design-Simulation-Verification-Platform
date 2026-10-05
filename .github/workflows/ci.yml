@@ -223,6 +223,7 @@ jobs:
         if: matrix.python-version == '3.13'
         run: >-
           xvfb-run -a python -m pytest -q
+          tests/test_gui_display.py
           tests/test_gui_theme.py
           tests/test_gui_dashboard.py
           tests/test_gui_results.py

@@ -147,6 +147,9 @@ jobs:
           tests/test_project_verify_cli.py
           tests/test_verification_history_cli.py
           tests/test_golden_reference_project.py
+          tests/test_golden_facility_reference.py
+          tests/test_proofgraph_change_impact.py
+          tests/test_proofgraph_change_impact_cli.py
       - name: Install virtual display for GUI release gates
         if: matrix.python-version == '3.13'
         run: |
@@ -175,6 +178,7 @@ jobs:
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-verify --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-traceability --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-verification-history --help
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-proofgraph-diff --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-assurance-snapshot --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-assurance-snapshot create examples/design_assurance_demo.json /tmp/cleanroomx-assurance.snapshot.json
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-assurance-snapshot verify /tmp/cleanroomx-assurance.snapshot.json > /tmp/cleanroomx-assurance-verify.json

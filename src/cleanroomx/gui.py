@@ -1438,6 +1438,11 @@ class CleanroomXApp:
         menubar.add_cascade(label="Design", menu=design_menu)
 
         analyze_menu = tk.Menu(menubar, tearoff=False)
+        analyze_menu.add_command(
+            label="Open Simulation Workspace",
+            command=self._activate_simulation_workspace,
+        )
+        analyze_menu.add_separator()
         analyze_menu.add_command(label="Validate Input", command=self.validate_current)
         analyze_menu.add_command(
             label="Run Analysis", accelerator="F5", command=self.run_current
@@ -1445,7 +1450,7 @@ class CleanroomXApp:
         analyze_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analyze_menu.add_separator()
         analyze_menu.add_command(label="Run History...", command=self.show_run_history)
-        menubar.add_cascade(label="Analyze", menu=analyze_menu)
+        menubar.add_cascade(label="Simulation", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
         verify_menu.add_command(
@@ -1470,7 +1475,27 @@ class CleanroomXApp:
             label="Verification History...",
             command=self.show_verification_history,
         )
-        menubar.add_cascade(label="Verify", menu=verify_menu)
+        menubar.add_cascade(label="Verification", menu=verify_menu)
+
+        evidence_menu = tk.Menu(menubar, tearoff=False)
+        evidence_menu.add_command(
+            label="Open ProofGraph Explorer",
+            command=self._activate_proofgraph_workspace,
+        )
+        evidence_menu.add_command(
+            label="Open Evidence Browser",
+            command=self._activate_evidence_output_workspace,
+        )
+        evidence_menu.add_separator()
+        evidence_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
+        evidence_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
+        menubar.add_cascade(label="Evidence", menu=evidence_menu)
 
         bim_menu = tk.Menu(menubar, tearoff=False)
         bim_menu.add_command(
@@ -1503,7 +1528,13 @@ class CleanroomXApp:
         report_menu.add_command(
             label="Export Portable HTML Report...", command=self.export_report_html
         )
-        menubar.add_cascade(label="Report", menu=report_menu)
+        report_menu.insert_command(
+            0,
+            label="Open Reporting Workspace",
+            command=self._activate_reporting_workspace,
+        )
+        report_menu.insert_separator(1)
+        menubar.add_cascade(label="Reports", menu=report_menu)
 
         tools_menu = tk.Menu(menubar, tearoff=False)
         tools_menu.add_command(
@@ -2847,6 +2878,14 @@ class CleanroomXApp:
             return
         self.notebook.select(viewer)
         self.workspace_status_var.set("Workspace: ProofGraph")
+
+    def _activate_evidence_output_workspace(self) -> None:
+        panel = getattr(self, "evidence_panel", None)
+        if panel is None:
+            return
+        self.show_output_panel()
+        self.output_notebook.select(panel)
+        self.workspace_status_var.set("Workspace: Evidence")
 
     def _navigate_proofgraph_node(self, node: dict) -> bool:
         raw = node.get("raw", {}) if isinstance(node, dict) else {}

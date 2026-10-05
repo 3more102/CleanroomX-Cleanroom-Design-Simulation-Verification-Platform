@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, theme_palette
+from cleanroomx.gui_theme import normalize_theme_name, status_style_name, theme_palette
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -36,6 +36,14 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "canvas_3d",
         "plot",
         "grid",
+        "success",
+        "success_surface",
+        "warning",
+        "warning_surface",
+        "error",
+        "error_surface",
+        "info",
+        "info_surface",
     }
     assert set(light) == required
     assert set(dark) == required
@@ -49,3 +57,13 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_status_style_name_maps_engineering_states_without_data_interpretation():
+    assert status_style_name("pass") == "CX.Status.Pass.TLabel"
+    assert status_style_name("completed") == "CX.Status.Pass.TLabel"
+    assert status_style_name("warning") == "CX.Status.Warning.TLabel"
+    assert status_style_name("abandon requested") == "CX.Status.Warning.TLabel"
+    assert status_style_name("failed") == "CX.Status.Fail.TLabel"
+    assert status_style_name("running") == "CX.Status.Running.TLabel"
+    assert status_style_name("unknown") == "CX.Status.Neutral.TLabel"

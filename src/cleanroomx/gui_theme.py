@@ -749,6 +749,22 @@ def configure_ttk_theme(
         borderwidth=1,
         relief="solid",
     )
+    style.configure(
+        "CX.Notification.TFrame",
+        background=palette["surface_alt"],
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "CX.Notification.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+    )
+    style.configure(
+        "CX.NotificationDetail.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+    )
 
     _configure_status_style(
         style,

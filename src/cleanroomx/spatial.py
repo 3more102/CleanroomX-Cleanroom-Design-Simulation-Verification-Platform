@@ -1710,38 +1710,38 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         viewbar.pack(fill="x")
 
-        # Reserve the critical validation action before flexible view controls.
-        # This keeps the primary engineering check reachable at the supported
-        # 1050 px minimum window width even when navigator/inspector panes are open.
-        ttk.Button(
-            viewbar,
-            text="Validate",
-            style="CX.Primary.TButton",
-            command=self.report_validation,
-        ).pack(side="right", padx=(6, 2))
+        # Reserve verification controls before optional view toggles. Tk's
+        # packer otherwise lets the left-side controls consume the row at the
+        # supported 1050 px minimum application width.
         ttk.Label(
             viewbar,
             textvariable=self._validation_var,
-            anchor="e",
-            width=20,
-        ).pack(side="right", padx=(6, 0))
+            style="CX.Muted.TLabel",
+        ).pack(side="right", padx=(8, 2))
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.report_validation,
+        ).pack(side="right", padx=(4, 2))
 
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
-        ).pack(side="left", padx=(2, 6))
+        ).pack(side="left", padx=(2, 4))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Labels", self._show_labels, "show_labels"),
             ("Devices", self._show_devices, "show_devices"),
-            ("Relations", self._show_relationships, "show_relationships"),
+            ("Links", self._show_relationships, "show_relationships"),
         ):
             ttk.Checkbutton(
                 viewbar,
                 text=label,
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
-            ).pack(side="left", padx=2)
-        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
+            ).pack(side="left", padx=1)
+        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(6, 2))
 
         overlaybar = ttk.Frame(
             self,

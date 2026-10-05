@@ -205,7 +205,7 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     app.proofgraph_viewer.set_documents([document])
     app.root.update()
 
-    assert "Evidence links: 1/1 checks" in app.proofgraph_viewer.readiness_var.get()
+    assert "Evidence: 1/1 checks linked" in app.proofgraph_viewer.readiness_var.get()
     assert "unresolved findings 0" in app.proofgraph_viewer.readiness_var.get()
 
     app.proofgraph_viewer.search_var.set("pressure_solver")

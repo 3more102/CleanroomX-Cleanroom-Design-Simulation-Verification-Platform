@@ -57,7 +57,7 @@ class StartCenter(ttk.Frame):
         ttk.Label(
             operations,
             text="PROJECT OPERATIONS",
-            style="CX.Section.TLabel",
+            style="CX.PanelSection.TLabel",
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
         ttk.Button(
             operations,
@@ -89,7 +89,7 @@ class StartCenter(ttk.Frame):
                 "Start with project-native geometry or import IFC semantics, then keep "
                 "design, analysis, diagnostics, verification, and evidence linked."
             ),
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
             wraplength=650,
             justify="left",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
@@ -100,7 +100,7 @@ class StartCenter(ttk.Frame):
         ttk.Label(
             workflow,
             text="ENGINEERING FLOW",
-            style="CX.Section.TLabel",
+            style="CX.SurfaceSection.TLabel",
         ).grid(row=0, column=0, sticky="w", pady=(0, 8))
         stages = (
             ("01  DESIGN", "2D / 3D cleanroom geometry, rooms, devices, IFC context"),
@@ -112,13 +112,13 @@ class StartCenter(ttk.Frame):
             stage = ttk.Frame(workflow, style="CX.Card.TFrame", padding=(8, 6))
             stage.grid(row=row, column=0, sticky="ew", pady=2)
             stage.columnconfigure(1, weight=1)
-            ttk.Label(stage, text=title, style="CX.Secondary.TLabel").grid(
+            ttk.Label(stage, text=title, style="CX.PanelSecondary.TLabel").grid(
                 row=0, column=0, sticky="nw", padx=(0, 8)
             )
             ttk.Label(
                 stage,
                 text=detail,
-                style="CX.Muted.TLabel",
+                style="CX.PanelMuted.TLabel",
                 wraplength=420,
                 justify="left",
             ).grid(row=0, column=1, sticky="w")
@@ -150,7 +150,7 @@ class StartCenter(ttk.Frame):
         ttk.Label(
             recent,
             text="Double-click a project to return to active engineering work.",
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(0, 5))
         ttk.Button(
             recent,
@@ -191,7 +191,7 @@ class StartCenter(ttk.Frame):
         ttk.Label(
             example,
             text="BUNDLED ENGINEERING DEMO",
-            style="CX.Section.TLabel",
+            style="CX.SurfaceSection.TLabel",
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
             example,
@@ -199,7 +199,7 @@ class StartCenter(ttk.Frame):
                 "Explore the navigator, spatial workspace, analysis overlays, "
                 "diagnostics, verification, ProofGraph, and evidence traceability."
             ),
-            style="CX.Muted.TLabel",
+            style="CX.SurfaceMuted.TLabel",
             wraplength=820,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(3, 0))

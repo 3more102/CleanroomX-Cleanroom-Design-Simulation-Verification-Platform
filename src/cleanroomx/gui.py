@@ -4244,7 +4244,7 @@ class CleanroomXApp:
         )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -4500,7 +4500,27 @@ class CleanroomXApp:
                 self.show_recovery_center,
                 keywords=("autosave", "restore"),
             ),
+            PaletteCommand(
+                "workspace.save_layout",
+                "Save Current Workspace Layout",
+                "Workspace",
+                self.prompt_save_current_layout,
+                keywords=("layout", "panels", "preset", "save"),
+            ),
         ]
+        saved = self._ui_layout_state.get("saved_layouts", {})
+        if isinstance(saved, dict):
+            for index, name in enumerate(sorted(saved, key=str.casefold)):
+                commands.append(
+                    PaletteCommand(
+                        f"workspace.saved.{index}",
+                        f"Apply Saved Layout: {name}",
+                        "Workspace",
+                        lambda selected=name: self.apply_saved_layout(selected),
+                        keywords=("layout", "panels", "preset", name),
+                    )
+                )
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

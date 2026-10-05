@@ -6,7 +6,13 @@ from tkinter import ttk
 
 import pytest
 
-from cleanroomx.gui_theme import configure_ttk_theme, normalize_theme_name, status_style_name, theme_palette
+from cleanroomx.gui_theme import (
+    configure_ttk_theme,
+    normalize_density_name,
+    normalize_theme_name,
+    status_style_name,
+    theme_palette,
+)
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -15,6 +21,14 @@ def test_theme_name_normalization_is_strict_and_deterministic():
     assert normalize_theme_name("") == "light"
     assert normalize_theme_name("system") == "light"
     assert normalize_theme_name(None) == "light"
+
+
+def test_density_name_normalization_defaults_to_compact_engineering_mode():
+    assert normalize_density_name("compact") == "compact"
+    assert normalize_density_name(" COMFORTABLE ") == "comfortable"
+    assert normalize_density_name("") == "compact"
+    assert normalize_density_name("dense-ish") == "compact"
+    assert normalize_density_name(None) == "compact"
 
 
 def test_light_and_dark_palettes_are_complete_and_distinct():
@@ -107,6 +121,40 @@ def test_status_style_name_is_canonical_across_engineering_states():
     assert status_style_name("unverified") == "CX.Status.Unverified.TLabel"
     assert status_style_name("available") == "CX.Status.Info.TLabel"
     assert status_style_name("not checked") == "CX.Status.Neutral.TLabel"
+
+
+def test_density_changes_tree_and_notebook_metrics_without_changing_palette():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    try:
+        compact_palette = configure_ttk_theme(root, "dark", density="compact")
+        style = ttk.Style(root)
+        compact_rowheight = int(style.lookup("Treeview", "rowheight"))
+        compact_nav_rowheight = int(style.lookup("CX.Navigator.Treeview", "rowheight"))
+        compact_tab_padding = str(style.lookup("TNotebook.Tab", "padding"))
+
+        comfortable_palette = configure_ttk_theme(
+            root,
+            "dark",
+            density="comfortable",
+        )
+        comfortable_rowheight = int(style.lookup("Treeview", "rowheight"))
+        comfortable_nav_rowheight = int(
+            style.lookup("CX.Navigator.Treeview", "rowheight")
+        )
+        comfortable_tab_padding = str(style.lookup("TNotebook.Tab", "padding"))
+
+        assert compact_palette == comfortable_palette
+        assert compact_rowheight < comfortable_rowheight
+        assert compact_nav_rowheight < comfortable_nav_rowheight
+        assert compact_tab_padding != comfortable_tab_padding
+    finally:
+        root.destroy()
 
 
 def test_surface_aware_label_styles_match_parent_surfaces():

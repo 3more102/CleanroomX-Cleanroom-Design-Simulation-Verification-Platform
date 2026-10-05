@@ -22,12 +22,12 @@ def test_diagnostic_detail_lines_prioritize_engineering_context_without_raw_json
     rendered = "\n".join(_diagnostic_detail_lines(issue))
 
     assert "WARNING  |  CRX-AIR-017" in rendered
-    assert "Engineering domain: airflow" in rendered
+    assert "Engineering domain: Airflow" in rendered
     assert "Affected object: CR-104" in rendered
     assert "Insufficient ACH" in rendered
-    assert "RECOMMENDED ACTION" in rendered
-    assert "Required Ach: 20" in rendered
-    assert "Calculated Ach: 17.6" in rendered
-    assert "Provenance: 1 field(s)" in rendered
-    assert "Related Checks: 2 item(s)" in rendered
+    assert "RECOMMENDED RECOVERY" in rendered
+    assert "• Required Ach: 20" in rendered
+    assert "• Calculated Ach: 17.6" in rendered
+    assert "• Provenance / Source: solver" in rendered
+    assert "• Related Checks: ach, air-balance" in rendered
     assert "{\"" not in rendered

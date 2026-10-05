@@ -186,3 +186,66 @@ def test_reset_property_edits_clears_invalid_draft(app):
     assert workspace._property_draft_var.get() == "Draft: matches stored values"
     assert workspace._property_apply_button.instate(["disabled"])
     assert workspace._property_reset_button.instate(["disabled"])
+
+
+def test_spatial_inspector_preserves_valid_draft_across_selection_changes(app):
+    workspace = app.spatial_workspace
+    first = workspace.layout["rooms"][0]
+    second = workspace.layout["rooms"][1]
+
+    workspace.select_item("room", first["id"])
+    workspace._property_vars["name"].set("Unapplied preserved name")
+    app.root.update()
+    assert workspace._property_draft_is_dirty
+
+    workspace.select_item("room", second["id"])
+    app.root.update()
+    assert workspace._property_vars["name"].get() == str(second["name"])
+
+    workspace.select_item("room", first["id"])
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == "Unapplied preserved name"
+    assert workspace._property_draft_var.get() == "Draft: valid · unapplied changes"
+    assert not workspace._property_apply_button.instate(["disabled"])
+
+
+def test_spatial_inspector_preserves_invalid_draft_across_selection_changes(app):
+    workspace = app.spatial_workspace
+    first = workspace.layout["rooms"][0]
+    second = workspace.layout["rooms"][1]
+
+    workspace.select_item("room", first["id"])
+    workspace._property_vars["length_m"].set("-1")
+    app.root.update()
+    assert workspace._property_draft_error is not None
+
+    workspace.select_item("room", second["id"])
+    workspace.select_item("room", first["id"])
+    app.root.update()
+
+    assert workspace._property_vars["length_m"].get() == "-1"
+    assert workspace._property_draft_var.get().startswith("Draft: INVALID")
+    assert workspace._property_apply_button.instate(["disabled"])
+    assert not workspace._property_reset_button.instate(["disabled"])
+
+
+def test_spatial_inspector_discards_stale_cached_draft_when_canonical_object_changes(app):
+    workspace = app.spatial_workspace
+    first = workspace.layout["rooms"][0]
+    second = workspace.layout["rooms"][1]
+
+    workspace.select_item("room", first["id"])
+    workspace._property_vars["name"].set("Draft based on old room")
+    app.root.update()
+    assert workspace._property_draft_is_dirty
+
+    workspace.select_item("room", second["id"])
+    first["name"] = "Canonical room changed"
+
+    workspace.select_item("room", first["id"])
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == "Canonical room changed"
+    assert workspace._property_draft_var.get() == "Draft: matches stored values"
+    assert workspace._property_apply_button.instate(["disabled"])

@@ -13,6 +13,7 @@ from .compliance_rulepack import (
     compliance_check_from_dict,
 )
 from .project import ProjectDocument
+from .runtime_diagnostics import record_gui_exception
 
 
 _OPERATORS = ("exists", "equals", "min", "max", "range", "one_of")
@@ -530,8 +531,19 @@ class ConstraintManagerDialog(tk.Toplevel):
     def _apply(self, description: str, mutation: Callable[[ProjectDocument], Any], *, select: str | None = None) -> bool:
         try:
             result = self._apply_project_edit(description, mutation)
-        except Exception as exc:
+        except ValueError as exc:
             messagebox.showerror("Constraint update failed", str(exc), parent=self)
+            return False
+        except Exception as exc:
+            report = record_gui_exception(
+                f"Constraint editor: {description}",
+                exc,
+            )
+            messagebox.showerror(
+                "Constraint update failed",
+                report.user_message(),
+                parent=self,
+            )
             return False
         selected = result if isinstance(result, str) else select
         self.refresh(select_analysis_id=selected)

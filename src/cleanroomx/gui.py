@@ -2705,6 +2705,7 @@ class CleanroomXApp:
             on_redo_requested=self.redo_project_edit,
             on_selection_change=self._on_workspace_selection_change,
             on_view_status_change=self.view_status_var.set,
+            on_workspace_mode_change=self._on_design_workspace_mode_change,
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
@@ -2825,6 +2826,11 @@ class CleanroomXApp:
         )
         self.report_text = self._add_text_tab(
             "Report", notebook=self.output_notebook
+        )
+        self.notebook.bind(
+            "<<NotebookTabChanged>>",
+            self._on_workspace_tab_changed,
+            add="+",
         )
 
         status_bar = ttk.Frame(self.root, padding=(8, 4))
@@ -3943,13 +3949,36 @@ class CleanroomXApp:
         if self.import_ifc_spatial_layout():
             self._activate_spatial_workspace("split")
 
+    def _on_design_workspace_mode_change(self, mode: str) -> None:
+        if not hasattr(self, "workspace_status_var"):
+            return
+        if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
+            if self.notebook.select() != str(self.spatial_workspace):
+                return
+        label = {"2d": "2D", "3d": "3D", "split": "Split"}.get(mode, "Split")
+        self.workspace_status_var.set(f"Workspace: {label}")
+
+    def _on_workspace_tab_changed(self, _event=None) -> None:
+        if not hasattr(self, "notebook") or not self.notebook.select():
+            return
+        label = str(self.notebook.tab(self.notebook.select(), "text")).strip()
+        if label == "Design":
+            mode = self.spatial_workspace.workspace_mode()
+            self._on_design_workspace_mode_change(mode)
+        elif label == "Input":
+            self.workspace_status_var.set("Workspace: Analysis Inputs")
+        elif label == "Start":
+            self.workspace_status_var.set("Workspace: Start")
+        elif label:
+            self.workspace_status_var.set(f"Workspace: {label}")
+
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
         if mode is not None and hasattr(self, "spatial_workspace"):
             self.spatial_workspace.set_workspace_mode(mode)
-            label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
-            self.workspace_status_var.set(f"Workspace: {label}")
+        else:
+            self._on_workspace_tab_changed()
 
     def _activate_analysis_input_workspace(self) -> None:
         """Open the current analysis input editor without changing engineering data."""

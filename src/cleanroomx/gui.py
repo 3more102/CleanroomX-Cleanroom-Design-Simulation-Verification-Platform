@@ -2386,6 +2386,8 @@ class CleanroomXApp:
                     selectbackground=palette["selection"],
                     selectforeground=palette["selection_text"],
                 )
+        if problems_panel is not None and hasattr(problems_panel, "apply_theme"):
+            problems_panel.apply_theme(self.theme_var.get())
 
         plot_canvas = getattr(self, "plot_canvas", None)
         if isinstance(plot_canvas, tk.Canvas):

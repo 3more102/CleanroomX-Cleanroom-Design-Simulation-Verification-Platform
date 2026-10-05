@@ -111,6 +111,11 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open ProofGraph Explorer" in labels
     assert "Verify Project Requirements" in labels
     assert "Import IFC Spatial Layout" in labels
+    assert "Open Design Workspace" in labels
+    assert "Open Simulation Workspace" in labels
+    assert "Open Verification Workspace" in labels
+    assert "Open Evidence Workspace" in labels
+    assert "Open Reporting Workspace" in labels
 
     app.show_command_palette()
     root.update()

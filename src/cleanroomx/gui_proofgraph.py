@@ -571,7 +571,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
+        self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.coverage_var = tk.StringVar(value="TRACEABILITY —")
 
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         toolbar.pack(fill="x")
@@ -606,11 +608,15 @@ class ProofGraphViewer(ttk.Frame):
             width=20,
         )
         self.filter_picker.pack(side="left", padx=(5, 10))
+        ttk.Label(toolbar, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(toolbar, textvariable=self.search_var, width=22)
+        self.search_entry.pack(side="left", padx=(5, 10))
         ttk.Label(toolbar, textvariable=self.summary_var).pack(
             side="right", padx=(10, 0)
         )
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        self.search_var.trace_add("write", lambda *_: self._refresh())
 
         lifecycle = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(8, 5))
         lifecycle.pack(fill="x", padx=6, pady=(0, 5))
@@ -635,6 +641,11 @@ class ProofGraphViewer(ttk.Frame):
                     style="CX.SurfaceMuted.TLabel",
                 ).pack(side="left", padx=3)
             ttk.Label(lifecycle, text=label, style=style_name).pack(side="left", padx=1)
+        ttk.Label(
+            lifecycle,
+            textvariable=self.coverage_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).pack(side="right", padx=(10, 0))
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -682,6 +693,8 @@ class ProofGraphViewer(ttk.Frame):
         graph_host.columnconfigure(0, weight=1)
         self.canvas.bind("<Button-1>", self._on_canvas_selected)
         self.canvas.bind("<Double-1>", self._navigate_selected)
+        self.canvas.bind("<ButtonPress-2>", self._start_canvas_pan)
+        self.canvas.bind("<B2-Motion>", self._drag_canvas_pan)
         self.canvas.bind("<Configure>", lambda _event: self._draw_graph())
 
         detail_header = ttk.Frame(detail_host, style="CX.PanelHeader.TFrame")
@@ -748,7 +761,8 @@ class ProofGraphViewer(ttk.Frame):
 
     def _refresh(self) -> None:
         projection = proofgraph_projection(self._active_document())
-        self._projection = _filtered_projection(projection, self.filter_var.get())
+        filtered = _filtered_projection(projection, self.filter_var.get())
+        self._projection = _searched_projection(filtered, self.search_var.get())
         self._nodes_by_key = {
             node["key"]: node for node in self._projection.get("nodes", [])
         }
@@ -766,6 +780,16 @@ class ProofGraphViewer(ttk.Frame):
             if all_nodes
             else "No persisted ProofGraph evidence"
         )
+        summary = proofgraph_completeness_summary(projection)
+        if all_nodes:
+            self.coverage_var.set(
+                "TRACEABILITY "
+                f"{summary['requirements_with_checks']}/{summary['requirements']} req checked · "
+                f"{summary['checks_with_evidence']}/{summary['checks']} checks evidenced · "
+                f"{summary['unresolved_findings']} unresolved"
+            )
+        else:
+            self.coverage_var.set("TRACEABILITY —")
 
     def _populate_tree(self) -> None:
         for iid in self.tree.get_children():
@@ -979,6 +1003,12 @@ class ProofGraphViewer(ttk.Frame):
         key = self._tree_key_by_iid.get(selection[0])
         if key:
             self._select_key(key)
+
+    def _start_canvas_pan(self, event) -> None:
+        self.canvas.scan_mark(event.x, event.y)
+
+    def _drag_canvas_pan(self, event) -> None:
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
 
     def _on_canvas_selected(self, _event=None) -> None:
         current = self.canvas.find_withtag("current")

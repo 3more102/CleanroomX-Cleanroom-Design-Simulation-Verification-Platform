@@ -2,7 +2,7 @@
 
 ## Scope
 
-CleanroomX v0.102.1 is a local Python desktop/CLI engineering application. It is not a network service, authentication system, secret store, or sandbox for hostile code. The Python package declares no third-party runtime dependencies; the development/test extra adds pytest.
+CleanroomX is a local Python desktop/CLI engineering application. It is not a network service, authentication system, secret store, or sandbox for hostile code. The core Python package declares no third-party runtime dependencies; development, BIM, and release extras add purpose-specific tooling.
 
 ## Input and registry handling
 

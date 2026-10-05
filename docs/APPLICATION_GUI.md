@@ -160,6 +160,12 @@ Runtime implementation provenance fingerprints the installed CleanroomX Python s
 
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
+## Runtime diagnostics
+
+Interactive GUI startup installs a bounded per-user runtime log for unexpected Tk callback failures. The default log file is `cleanroomx-gui.log` under `%LOCALAPPDATA%\\CleanroomX\\Logs` on Windows, `~/Library/Logs/CleanroomX` on macOS, and the XDG user-state directory (or `~/.local/state/cleanroomx/logs`) on Linux. Operators may override the directory with `CLEANROOMX_LOG_DIR`.
+
+An unexpected callback failure receives a short incident ID. The status bar and first dialog for each distinct failure identify that incident and the exact log path, while the full Python traceback is retained in the rotating local log instead of being shown as raw stack-trace text to the operator. Repeated identical callback failures continue to be logged but do not repeatedly open the same modal dialog. Runtime logs are presentation/support diagnostics only; they do not change project save state, solver output, verification evidence, or engineering acceptance semantics.
+
 ## Validation and automated smoke
 
 Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.

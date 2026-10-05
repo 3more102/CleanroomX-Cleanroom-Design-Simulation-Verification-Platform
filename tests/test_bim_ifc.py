@@ -1588,3 +1588,101 @@ def test_ifc_reimport_rejects_tampered_identity_bindings():
             source_name="facility.ifc",
             source_sha256="a" * 64,
         )
+
+
+def test_ifc_direct_space_relation_classification_failure_is_not_silenced():
+    class BrokenStructure:
+        @staticmethod
+        def is_a(_name):
+            raise RuntimeError("corrupt IFC entity")
+
+    entity = types.SimpleNamespace(
+        GlobalId="DEVICE-BROKEN-DIRECT",
+        ContainedInStructure=(
+            types.SimpleNamespace(RelatingStructure=BrokenStructure()),
+        ),
+    )
+
+    class ElementUtil:
+        @staticmethod
+        def get_container(*_args, **_kwargs):
+            raise AssertionError("fallback must not hide malformed direct containment")
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to classify IFC spatial containment relation",
+    ):
+        bim_ifc_module._containing_space_global_id(entity, ElementUtil)
+
+
+def test_ifc_resolved_space_container_classification_failure_is_not_silenced():
+    class BrokenStructure:
+        @staticmethod
+        def is_a(_name):
+            raise RuntimeError("corrupt resolved IFC entity")
+
+    entity = types.SimpleNamespace(
+        GlobalId="DEVICE-BROKEN-FALLBACK",
+        ContainedInStructure=(),
+    )
+
+    class ElementUtil:
+        @staticmethod
+        def get_container(*_args, **_kwargs):
+            return BrokenStructure()
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to classify resolved IFC spatial container",
+    ):
+        bim_ifc_module._containing_space_global_id(entity, ElementUtil)
+
+
+def test_ifc_aggregate_parent_classification_failure_is_not_silenced():
+    class BrokenParent:
+        @staticmethod
+        def is_a(_name):
+            raise RuntimeError("corrupt aggregate parent")
+
+    space = types.SimpleNamespace(GlobalId="SPACE-BROKEN-AGGREGATE")
+
+    class ElementUtil:
+        @staticmethod
+        def get_aggregate(_entity):
+            return BrokenParent()
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to classify IFC aggregate parent",
+    ):
+        bim_ifc_module._containing_storey_metadata(
+            space,
+            1.0,
+            ElementUtil,
+            types.SimpleNamespace(),
+        )
+
+
+def test_ifc_resolved_storey_classification_failure_is_not_silenced():
+    class BrokenStorey:
+        @staticmethod
+        def is_a(_name):
+            raise RuntimeError("corrupt resolved storey")
+
+    space = types.SimpleNamespace(GlobalId="SPACE-BROKEN-CONTAINER")
+
+    class ElementUtil:
+        @staticmethod
+        def get_container(*_args, **_kwargs):
+            return BrokenStorey()
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to classify resolved IFC building storey",
+    ):
+        bim_ifc_module._containing_storey_metadata(
+            space,
+            1.0,
+            ElementUtil,
+            types.SimpleNamespace(),
+        )

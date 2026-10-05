@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Iterable
 
 import tkinter as tk
 from tkinter import ttk
 
 
-_MISSING_TOKENS = {"", "—", "-", "n/a", "na", "none", "null"}
+_MISSING_TOKENS = {"", "—", "-", "n/a", "na", "none", "null", "unknown"}
+_NATURAL_PART = re.compile(r"(\\d+)")
+
+
+def _natural_text_sort_key(text: str) -> tuple[tuple[int, Any], ...]:
+    parts: list[tuple[int, Any]] = []
+    for part in _NATURAL_PART.split(text.casefold()):
+        if not part:
+            continue
+        parts.append((0, int(part)) if part.isdigit() else (1, part))
+    return tuple(parts)
 
 
 def table_value_sort_key(value: Any) -> tuple[int, Any]:
@@ -21,9 +32,9 @@ def table_value_sort_key(value: Any) -> tuple[int, Any]:
     try:
         number = float(numeric)
     except (TypeError, ValueError, OverflowError):
-        return (1, text.casefold())
+        return (1, _natural_text_sort_key(text))
     if not math.isfinite(number):
-        return (1, text.casefold())
+        return (1, _natural_text_sort_key(text))
     return (0, number)
 
 
@@ -171,7 +182,7 @@ class TreeviewTableBehavior:
                 populated.append((key, index, iid))
 
         populated.sort(
-            key=lambda item: (item[0], item[1]),
+            key=lambda item: item[0],
             reverse=self.sort_descending,
         )
         ordered = [iid for _key, _index, iid in populated]

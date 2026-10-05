@@ -162,8 +162,12 @@ def compare_proofgraphs(
 
     stale_candidate_evidence_ids: set[str] = set()
     for evidence in candidate.evidence:
+        source_dependency_ids = {evidence.source_id}
+        source_dependency_ids.update(
+            provenance.source_id for provenance in evidence.provenance
+        )
         if (
-            evidence.source_id in changed_source_ids
+            source_dependency_ids & changed_source_ids
             and _candidate_unchanged(
                 evidence.id, baseline_evidence, candidate_evidence
             )

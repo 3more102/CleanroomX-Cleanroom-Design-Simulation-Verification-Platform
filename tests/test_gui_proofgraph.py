@@ -4,7 +4,12 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    _search_projection,
+    proofgraph_evidence_summary,
+    proofgraph_projection,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +240,51 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+def test_proofgraph_evidence_summary_reports_persisted_links_and_verdicts_only():
+    projection = proofgraph_projection(_sample_graph())
+
+    summary = proofgraph_evidence_summary(projection)
+
+    assert summary["source_count"] == 1
+    assert summary["evidence_count"] == 1
+    assert summary["check_count"] == 1
+    assert summary["linked_check_count"] == 1
+    assert summary["unlinked_check_count"] == 0
+    assert summary["unresolved_finding_count"] == 0
+    assert summary["fail_finding_count"] == 1
+    assert summary["fail_verdict_count"] == 1
+    assert summary["pass_verdict_count"] == 0
+
+
+def test_proofgraph_evidence_summary_keeps_missing_evidence_explicit():
+    projection = proofgraph_projection(_unresolved_graph())
+
+    summary = proofgraph_evidence_summary(projection)
+
+    assert summary["evidence_count"] == 0
+    assert summary["check_count"] == 1
+    assert summary["linked_check_count"] == 0
+    assert summary["unlinked_check_count"] == 1
+    assert summary["unresolved_finding_count"] == 1
+    assert summary["not_checked_finding_count"] == 1
+    assert summary["not_checked_verdict_count"] == 1
+
+
+def test_proofgraph_search_keeps_matching_nodes_and_immediate_trace_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _search_projection(projection, "pressure_solver")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+    assert "verdict:verdict-pressure" not in keys
+
+    searched = _search_projection(projection, "room-a")
+    keys = {node["key"] for node in searched["nodes"]}
+    assert "model_object:room-a" in keys
+    assert "evidence:evidence-pressure" in keys
+
+    assert _search_projection(projection, "   ") is projection

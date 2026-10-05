@@ -33,7 +33,7 @@ class BranchDuct:
         if self.upstream_node == self.downstream_node:
             raise ValueError("branch upstream and downstream nodes must differ")
 
-        # Reuse the validated v0.6 duct-section model with a placeholder positive flow.
+        # Reuse the validated duct-section input contract with a validation-only positive flow.
         DuctSection(
             name=self.name,
             length_m=self.length_m,

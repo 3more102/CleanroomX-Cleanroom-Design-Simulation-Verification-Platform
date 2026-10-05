@@ -20,38 +20,7 @@ New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
 
 $pyproject = Get-Content -Raw (Join-Path $repoRoot "pyproject.toml")
-if ($pyproject -notmatch '(?m)^version\s*=\s*"([^"]+)"\s* `
-    --noconfirm `
-    --clean `
-    --windowed `
-    --onedir `
-    --name CleanroomX `
-    --icon $iconPath `
-    --version-file $versionFile `
-    --paths (Join-Path $repoRoot "src") `
-    --collect-data cleanroomx `
-    --collect-all ifcopenshell `
-    --distpath $distRoot `
-    --workpath $buildRoot `
-    --specpath $buildRoot `
-    $entryPoint
-
-if ($LASTEXITCODE -ne 0) {
-    throw "PyInstaller failed with exit code $LASTEXITCODE"
-}
-
-$exe = Join-Path $distRoot "CleanroomX\CleanroomX.exe"
-if (-not (Test-Path $exe -PathType Leaf)) {
-    throw "Expected standalone executable was not produced: $exe"
-}
-
-$process = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
-if ($process.ExitCode -ne 0) {
-    throw "Frozen CleanroomX --check failed with exit code $($process.ExitCode)"
-}
-
-Write-Host "Standalone CleanroomX executable validated: $exe"
-) {
+if ($pyproject -notmatch '(?m)^version\s*=\s*"([^"]+)"\s*$') {
     throw "Unable to read project version from pyproject.toml"
 }
 $packageVersion = $Matches[1]
@@ -61,7 +30,7 @@ if ($packageVersion -notmatch '^(\d+)\.(\d+)\.(\d+)') {
 $major = [int]$Matches[1]
 $minor = [int]$Matches[2]
 $patch = [int]$Matches[3]
-@"
+$versionInfo = @"
 VSVersionInfo(
   ffi=FixedFileInfo(
     filevers=($major, $minor, $patch, 0),
@@ -91,7 +60,8 @@ VSVersionInfo(
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
 )
-"@ | Set-Content -Encoding ascii $versionFile
+"@
+Set-Content -Path $versionFile -Value $versionInfo -Encoding ascii
 
 python -m PyInstaller `
     --noconfirm `
@@ -99,6 +69,8 @@ python -m PyInstaller `
     --windowed `
     --onedir `
     --name CleanroomX `
+    --icon $iconPath `
+    --version-file $versionFile `
     --paths (Join-Path $repoRoot "src") `
     --collect-data cleanroomx `
     --collect-all ifcopenshell `

@@ -302,6 +302,137 @@ def test_restore_run_discards_cached_result_when_analysis_input_changed():
     assert "out of date" in app.status_var.value.lower()
 
 
+
+def test_background_analysis_failure_preserves_runtime_incident_provenance(monkeypatch):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    analysis = AnalysisDocument(
+        id="a", name="Room", kind="room_verification", input=payload
+    )
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Report:
+        reference = "CX-BACKGROUND"
+        summary = "synthetic backend failure"
+        log_path = Path("cleanroomx-gui.log")
+
+        def user_message(self):
+            return "synthetic backend failure\n\nError reference: CX-BACKGROUND"
+
+    report = Report()
+    recorded = []
+
+    def fail_run(*args, **kwargs):
+        raise RuntimeError("synthetic backend failure")
+
+    def record(operation, exc):
+        recorded.append((operation, exc, exc.__traceback__ is not None))
+        return report
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._queue = queue.Queue()
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    app.status_var = Status()
+
+    monkeypatch.setattr(gui_module, "run_analysis", fail_run)
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    kind, generation, analysis_id, payload_report = app._queue.get_nowait()
+    assert (kind, generation, analysis_id) == ("error", 1, "a")
+    assert payload_report is report
+    assert recorded[0][0] == "Run analysis a"
+    assert isinstance(recorded[0][1], RuntimeError)
+    assert recorded[0][2] is True
+
+
+def test_background_run_history_preparation_failure_preserves_incident_provenance(
+    monkeypatch,
+):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    analysis = AnalysisDocument(
+        id="a", name="Room", kind="room_verification", input=payload
+    )
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Report:
+        reference = "CX-AUDIT"
+        summary = "synthetic audit preparation failure"
+        log_path = Path("cleanroomx-gui.log")
+
+        def user_message(self):
+            return "synthetic audit preparation failure\n\nError reference: CX-AUDIT"
+
+    report = Report()
+    recorded = []
+
+    def fail_evidence(*args, **kwargs):
+        raise RuntimeError("synthetic audit preparation failure")
+
+    def record(operation, exc):
+        recorded.append((operation, exc, exc.__traceback__ is not None))
+        return report
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._queue = queue.Queue()
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    app.status_var = Status()
+
+    monkeypatch.setattr(gui_module, "run_analysis", lambda *args, **kwargs: run)
+    monkeypatch.setattr(gui_module, "build_run_history_evidence", fail_evidence)
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    kind, generation, analysis_id, worker_payload = app._queue.get_nowait()
+    assert (kind, generation, analysis_id) == ("success", 1, "a")
+    queued_run, evidence, history_report = worker_payload
+    assert queued_run is run
+    assert evidence is None
+    assert history_report is report
+    assert recorded[0][0] == "Prepare run-history audit evidence for a"
+    assert isinstance(recorded[0][1], RuntimeError)
+    assert recorded[0][2] is True
+
 def test_completed_run_is_discarded_if_analysis_input_changed_during_execution():
     import queue
 

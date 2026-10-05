@@ -155,3 +155,46 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+
+def test_problem_filters_and_relative_navigation_stay_on_canonical_issue_set(app):
+    result, overlap = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    category = str(overlap.get("category") or "General")
+    element_type = str(overlap.get("element", {}).get("type") or "project")
+    panel.category_var.set(category)
+    panel.element_type_var.set(element_type)
+    app.root.update()
+
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid].get("category") or "General") == category
+        for iid in visible
+    )
+    assert all(
+        str(panel._issues_by_iid[iid].get("element", {}).get("type") or "project")
+        == element_type
+        for iid in visible
+    )
+    assert panel.filter_summary_var.get().endswith(
+        f"· {len(result['issues'])} total"
+    )
+
+    panel.tree.selection_set(visible[0])
+    panel.tree.focus(visible[0])
+    panel._select_relative(1)
+    app.root.update()
+    selected = panel.tree.selection()
+    assert selected
+    assert selected[0] in visible
+
+    panel.clear_filters()
+    app.root.update()
+    assert panel.search_var.get() == ""
+    assert panel.severity_var.get() == "All"
+    assert panel.category_var.get() == "All"
+    assert panel.element_type_var.get() == "All"
+    assert len(panel.tree.get_children()) == len(result["issues"])

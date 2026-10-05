@@ -1247,6 +1247,7 @@ class CleanroomXApp:
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
         self.status_var = tk.StringVar(value="Ready")
+        self.run_state_var = tk.StringVar(value="IDLE")
         self.autosave_status_var = tk.StringVar(
             value=(
                 "Autosave: ready"
@@ -2070,6 +2071,22 @@ class CleanroomXApp:
             anchor="e",
             style="CX.StatusBar.TLabel",
         ).pack(side="right")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="right", fill="y", padx=8
+        )
+        self.run_state_badge = ttk.Label(
+            status_bar,
+            textvariable=self.run_state_var,
+            style="CX.InfoBadge.TLabel",
+        )
+        self.run_state_badge.pack(side="right")
+        self.run_progress = ttk.Progressbar(
+            status_bar,
+            mode="indeterminate",
+            length=76,
+            style="CX.Activity.Horizontal.TProgressbar",
+        )
+        self.run_progress.pack(side="right", padx=(0, 6))
 
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
@@ -6133,6 +6150,21 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        progress = getattr(self, "run_progress", None)
+        badge = getattr(self, "run_state_badge", None)
+        if running:
+            self.run_state_var.set("RUNNING")
+            if badge is not None:
+                badge.configure(style="CX.InfoBadge.TLabel")
+            if progress is not None:
+                progress.start(70)
+        else:
+            self.run_state_var.set("IDLE")
+            if badge is not None:
+                badge.configure(style="CX.SuccessBadge.TLabel")
+            if progress is not None:
+                progress.stop()
+                progress.configure(value=0)
 
     def _poll_worker(self) -> None:
         try:

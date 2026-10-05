@@ -537,6 +537,44 @@ def test_design_inspector_collapses_restores_and_is_view_only(app):
     assert app.project.to_dict() == project_before
 
 
+def test_room_inspector_surfaces_current_analysis_values_without_deriving_results(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    room_name = str(room.get("analysis_room_name") or room["name"])
+    workspace._result_getter = lambda: {
+        "rooms": [
+            {
+                "room": room_name,
+                "ach": 24.5,
+                "status": "pass",
+                "findings": [
+                    {
+                        "code": "ACH",
+                        "status": "pass",
+                        "actual": 24.5,
+                        "unit": "1/h",
+                    }
+                ],
+                "air_balance": {
+                    "supply_airflow_m3_h": 1250.0,
+                    "return_airflow_m3_h": 1100.0,
+                    "exhaust_airflow_m3_h": 100.0,
+                    "passes_minimum_surplus": True,
+                },
+            }
+        ]
+    }
+
+    workspace.select_item("room", room["id"])
+    workspace._load_property_panel()
+    text = workspace._inspector_summary_var.get()
+
+    assert "Area " in text
+    assert "ACH 24.5 1/h · PASS" in text
+    assert "Airflow S 1,250 · R 1,100 · E 100 m³/h" in text
+    assert "Verification PASS" in text
+
+
 def test_properties_action_reveals_hidden_design_inspector(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

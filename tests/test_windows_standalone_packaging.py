@@ -12,14 +12,27 @@ ICON = ROOT / "packaging" / "windows" / "CleanroomX.ico"
 VERSION_SCRIPT = ROOT / "scripts" / "write_windows_version_info.py"
 
 
-def test_windows_standalone_workflow_pins_builder_and_bundles_bim() -> None:
+def test_windows_standalone_workflow_uses_reproducible_release_dependencies() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
+    assert "runs-on: windows-2025" in workflow
     assert 'python-version: "3.12"' in workflow
-    assert 'pip install -e ".[bim]"' in workflow
-    assert 'pyinstaller==6.22.3' in workflow
+    assert 'pip install -e ".[release]"' in workflow
+    assert 'pip install -e ".[bim]"' not in workflow
+    assert 'pip install "pyinstaller==' not in workflow
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
     assert "CleanroomX-windows-x64.sha256" in workflow
+
+
+def test_release_extra_pins_all_frozen_build_dependencies() -> None:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        release_dependencies = tomllib.load(handle)["project"]["optional-dependencies"][
+            "release"
+        ]
+
+    assert "pyinstaller==6.22.3" in release_dependencies
+    assert "ifcopenshell==0.9.0" in release_dependencies
+    assert all("==" in dependency for dependency in release_dependencies)
 
 
 def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked() -> None:

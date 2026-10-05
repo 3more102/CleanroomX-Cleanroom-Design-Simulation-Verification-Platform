@@ -1538,3 +1538,44 @@ def test_shift_and_control_click_support_non_mutating_multi_selection(app):
     assert workspace.selected_hits() == ()
     assert app.selection_status_var.get() == "Selected: —"
     assert app.project.to_dict() == project_before
+
+
+def test_status_bar_tracks_live_cursor_grid_and_snap_context_without_model_mutation(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+    grid_m = workspace.layout["grid_m"]
+    world_x = workspace.layout["rooms"][0]["x_m"] + 0.37
+    world_y = workspace.layout["rooms"][0]["y_m"] + 0.41
+    canvas_x, canvas_y = workspace._world_to_canvas(world_x, world_y)
+    event = type("Event", (), {"x": int(canvas_x), "y": int(canvas_y)})()
+
+    workspace._on_motion(event)
+    app.root.update()
+
+    status = app.engineering_context_var.get()
+    assert f"Grid {grid_m:g} m" in status
+    assert "Snap ON" in status
+    assert "x " in status and " y " in status
+    assert app.project.to_dict() == project_before
+
+    workspace._set_view_flag("snap_to_grid", False)
+    app.root.update()
+    assert "Snap OFF" in app.engineering_context_var.get()
+
+
+def test_density_modes_change_only_presentation_metrics(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    style = ttk.Style(app.root)
+
+    app.set_density("comfortable", persist=False)
+    app.root.update_idletasks()
+    comfortable_height = int(float(style.lookup("Treeview", "rowheight")))
+    assert app.density_var.get() == "comfortable"
+
+    app.set_density("compact", persist=False)
+    app.root.update_idletasks()
+    compact_height = int(float(style.lookup("Treeview", "rowheight")))
+    assert app.density_var.get() == "compact"
+    assert compact_height < comfortable_height
+    assert app.project.to_dict() == project_before
+

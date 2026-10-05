@@ -152,6 +152,21 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     assert str(workspace._three_d_frame) in panes
 
 
+
+def test_model_badge_reflects_existing_spatial_validation_advisories(app, monkeypatch):
+    monkeypatch.setattr(
+        "cleanroomx.gui.validate_layout",
+        lambda _layout: [{"code": "room_overlap", "severity": "warning"}],
+    )
+    app._refresh_spatial_navigator()
+    assert app.shell_model_badge_var.get() == "MODEL WARN 1"
+    assert app.shell_model_badge.cget("style") == "CX.Status.Warning.TLabel"
+
+    monkeypatch.setattr("cleanroomx.gui.validate_layout", lambda _layout: [])
+    app._refresh_spatial_navigator()
+    assert app.shell_model_badge_var.get() == "MODEL READY"
+    assert app.shell_model_badge.cget("style") == "CX.Status.Pass.TLabel"
+
 def test_project_navigator_and_workspace_selection_stay_synchronized(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

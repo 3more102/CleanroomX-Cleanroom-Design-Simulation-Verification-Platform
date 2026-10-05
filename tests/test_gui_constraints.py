@@ -4,8 +4,10 @@ import copy
 
 import pytest
 
+import cleanroomx.gui_constraints as gui_constraints_module
 from cleanroomx.project import ProjectDocument, project_from_dict
 from cleanroomx.gui_constraints import (
+    ConstraintManagerDialog,
     add_constraint_rule,
     constraint_sets_snapshot,
     create_constraint_set,
@@ -179,3 +181,67 @@ def test_constraint_snapshot_surfaces_invalid_existing_input_without_crashing() 
     assert snapshot[0]["valid"] is False
     assert snapshot[0]["rules"] == []
     assert "non-empty array" in snapshot[0]["error"]
+
+
+def test_constraint_editor_records_unexpected_apply_failures(monkeypatch) -> None:
+    dialog = ConstraintManagerDialog.__new__(ConstraintManagerDialog)
+
+    def fail_apply(_description, _mutation):
+        raise RuntimeError("synthetic constraint editor failure")
+
+    dialog._apply_project_edit = fail_apply
+    incidents = []
+    messages = []
+
+    class Report:
+        def user_message(self):
+            return "Constraint editor failed.\n\nError reference: CX-CONSTRAINT"
+
+    def record(operation, exc):
+        incidents.append((operation, type(exc).__name__, str(exc)))
+        return Report()
+
+    monkeypatch.setattr(gui_constraints_module, "record_gui_exception", record)
+    monkeypatch.setattr(
+        gui_constraints_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: messages.append((title, message)),
+    )
+
+    assert dialog._apply("Update rule", lambda _project: None) is False
+    assert incidents == [
+        (
+            "Constraint editor: Update rule",
+            "RuntimeError",
+            "synthetic constraint editor failure",
+        )
+    ]
+    assert messages == [
+        (
+            "Constraint update failed",
+            "Constraint editor failed.\n\nError reference: CX-CONSTRAINT",
+        )
+    ]
+
+
+def test_constraint_editor_keeps_validation_failures_user_facing(monkeypatch) -> None:
+    dialog = ConstraintManagerDialog.__new__(ConstraintManagerDialog)
+
+    def fail_apply(_description, _mutation):
+        raise ValueError("minimum must be positive")
+
+    dialog._apply_project_edit = fail_apply
+    messages = []
+    monkeypatch.setattr(
+        gui_constraints_module,
+        "record_gui_exception",
+        lambda *_args, **_kwargs: pytest.fail("validation error must not become incident"),
+    )
+    monkeypatch.setattr(
+        gui_constraints_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: messages.append((title, message)),
+    )
+
+    assert dialog._apply("Update rule", lambda _project: None) is False
+    assert messages == [("Constraint update failed", "minimum must be positive")]

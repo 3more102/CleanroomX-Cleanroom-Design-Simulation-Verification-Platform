@@ -22,6 +22,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
     assert state["inspector_visible"] is True
     assert state["theme"] == "light"
     assert state["recent_projects"] == []
+    assert state["navigator_favorites"] == {}
     assert state["window_width"] == 1440
     assert state["window_height"] == 900
     assert state["navigator_fraction"] == 0.20
@@ -227,3 +228,42 @@ def test_gui_layout_state_keeps_workspace_layouts_independent():
     assert state["workspace_layouts"]["verification"]["navigator_visible"] is False
     assert state["workspace_layouts"]["verification"]["output_visible"] is True
     assert state["workspace_layouts"]["verification"]["output_fraction"] == 0.62
+
+
+def test_gui_layout_state_limits_and_sanitizes_navigator_favorites():
+    state = normalize_gui_layout_state(
+        {
+            "navigator_favorites": {
+                f"/projects/project-{project}.cleanroomx.json": [
+                    f"room:room-{item}" for item in range(30)
+                ]
+                + ["room:room-0", "", "bad" + chr(0) + "id"]
+                for project in range(20)
+            }
+        }
+    )
+
+    assert len(state["navigator_favorites"]) == 16
+    first = state["navigator_favorites"][
+        "/projects/project-0.cleanroomx.json"
+    ]
+    assert len(first) == 24
+    assert first[0] == "room:room-0"
+    assert first[-1] == "room:room-23"
+    assert len(first) == len(set(first))
+
+
+def test_gui_layout_state_rejects_invalid_navigator_favorite_containers():
+    state = normalize_gui_layout_state(
+        {
+            "navigator_favorites": {
+                "": ["room:a"],
+                "/valid/project.cleanroomx.json": "not-a-list",
+                "/valid/second.cleanroomx.json": ["", 7, "device:fan-1"],
+            }
+        }
+    )
+
+    assert state["navigator_favorites"] == {
+        "/valid/second.cleanroomx.json": ["device:fan-1"]
+    }

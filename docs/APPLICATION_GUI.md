@@ -102,6 +102,23 @@ The **Abandon** action suppresses the pending result but does not force-terminat
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
+## Project constraint manager
+
+**Verify → Project Constraints…** (Ctrl+Alt+C) edits project-owned engineering
+constraints through CleanroomX's existing versioned `compliance_check` rule-pack
+engine. A constraint set records an explicit pack identity/version/source and one
+or more rules with an RFC 6901 evidence path, operator, expected value, unit,
+tolerance, optional source override, and reference.
+
+Constraint edits use the same application-wide transaction boundary as other
+project edits: the proposed rule pack is parsed by the canonical compliance
+parser before it is committed, failed edits leave the project unchanged, and
+successful edits participate in Undo/Redo and autosave. Deleting the final rule
+from a set is rejected; remove the complete set instead. The manager does not
+invent regulatory limits or derive criteria from standards. Evidence remains
+explicit input to the compliance analysis and verdicts are produced only by the
+canonical backend runner.
+
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.

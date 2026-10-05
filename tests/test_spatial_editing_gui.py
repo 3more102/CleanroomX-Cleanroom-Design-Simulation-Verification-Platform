@@ -128,6 +128,46 @@ def test_editing_toolbar_controls_remain_visible(app, size):
 
 
 
+def test_engineering_workspace_presets_reconfigure_shell_without_model_mutation(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+
+    assert app.activate_workspace_profile("design")
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is False
+    assert workspace.inspector_visible()
+    assert app.notebook.select() == str(workspace)
+
+    assert app.activate_workspace_profile("simulation")
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert not workspace.inspector_visible()
+    assert app.notebook.select() == str(app.plot_tab)
+    assert app.output_notebook.select() == str(app.result_text.master)
+
+    assert app.activate_workspace_profile("verification")
+    app.root.update()
+    assert app.notebook.select() == str(workspace)
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    assert app.activate_workspace_profile("evidence")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+
+    assert app.activate_workspace_profile("reporting")
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is False
+    assert app.output_panel_visible_var.get() is True
+    assert app.notebook.select() == str(app.plot_tab)
+    assert app.output_notebook.select() == str(app.report_text.master)
+
+    assert app.activate_workspace_profile("unknown") is False
+    assert workspace.layout == before
+
+
 def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     workspace = app.spatial_workspace
 

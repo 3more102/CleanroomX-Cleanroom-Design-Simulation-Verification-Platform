@@ -1254,12 +1254,16 @@ class CleanroomXApp:
             )
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
-        self.model_status_var = tk.StringVar(value="Model: ready")
+        self.model_status_var = tk.StringVar(value="MODEL READY")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
+        self.project_state_var = tk.StringVar(value="UNSAVED")
+        self.diagnostics_status_var = tk.StringVar(value="DRC —")
+        self.verification_badge_var = tk.StringVar(value="VERIFY —")
+        self.evidence_badge_var = tk.StringVar(value="EVIDENCE —")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1296,6 +1300,33 @@ class CleanroomXApp:
             self.root,
             self.theme_var.get(),
         )
+
+    def _set_engineering_badge(
+        self,
+        widget_name: str,
+        variable_name: str,
+        text: str,
+        state: str = "neutral",
+    ) -> None:
+        variable = getattr(self, variable_name, None)
+        if variable is not None and hasattr(variable, "set"):
+            variable.set(text)
+        widget = getattr(self, widget_name, None)
+        if widget is None:
+            return
+        suffix = {
+            "success": "Success",
+            "warning": "Warning",
+            "error": "Error",
+            "info": "Info",
+            "purple": "Purple",
+            "orange": "Orange",
+            "neutral": "Neutral",
+        }.get(str(state).casefold(), "Neutral")
+        try:
+            widget.configure(style=f"CX.Status.{suffix}.TLabel")
+        except tk.TclError:
+            pass
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -1512,18 +1543,18 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(\n            self.root, style="CX.Topbar.TFrame", padding=(10, 5, 10, 4)\n        )
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
+        ttk.Label(topbar, text="Project", style="CX.TopbarMuted.TLabel").grid(
             row=0, column=1, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
+        ttk.Label(topbar, text="Description", style="CX.TopbarMuted.TLabel").grid(
             row=0, column=3, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
@@ -1547,6 +1578,50 @@ class CleanroomXApp:
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
+
+        healthbar = ttk.Frame(topbar, style="CX.Healthbar.TFrame")
+        healthbar.grid(
+            row=1,
+            column=1,
+            columnspan=7,
+            sticky="ew",
+            pady=(4, 0),
+        )
+        ttk.Label(
+            healthbar,
+            text="ENGINEERING STATE",
+            style="CX.TopbarMuted.TLabel",
+        ).pack(side="left", padx=(0, 7))
+        self.project_state_badge = ttk.Label(
+            healthbar,
+            textvariable=self.project_state_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.project_state_badge.pack(side="left", padx=(0, 4))
+        self.model_badge = ttk.Label(
+            healthbar,
+            textvariable=self.model_status_var,
+            style="CX.Status.Info.TLabel",
+        )
+        self.model_badge.pack(side="left", padx=(0, 4))
+        self.diagnostics_badge = ttk.Label(
+            healthbar,
+            textvariable=self.diagnostics_status_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.diagnostics_badge.pack(side="left", padx=(0, 4))
+        self.verification_badge = ttk.Label(
+            healthbar,
+            textvariable=self.verification_badge_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.verification_badge.pack(side="left", padx=(0, 4))
+        self.evidence_badge = ttk.Label(
+            healthbar,
+            textvariable=self.evidence_badge_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.evidence_badge.pack(side="left")
 
         commandbar = ttk.Frame(
             self.root,
@@ -1957,7 +2032,7 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(\n            self.root, style="CX.StatusBar.TFrame", padding=(8, 4)\n        )
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
@@ -2207,6 +2282,22 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+            apply_panel_theme = getattr(problems_panel, "apply_theme", None)
+            if callable(apply_panel_theme):
+                apply_panel_theme(palette)
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            apply_graph_theme = getattr(proofgraph_viewer, "apply_theme", None)
+            if callable(apply_graph_theme):
+                apply_graph_theme(self.theme_var.get(), redraw=redraw)
+        navigator = getattr(self, "analysis_tree", None)
+        if navigator is not None:
+            navigator.tag_configure(
+                "section",
+                foreground=palette["accent"],
+                background=palette["surface_alt"],
+                font=("TkDefaultFont", 9, "bold"),
+            )
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2514,6 +2605,41 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        diagnostic_summary = (
+            diagnostics.get("summary", {})
+            if isinstance(diagnostics, dict)
+            else {}
+        )
+        error_count = int(diagnostic_summary.get("error_count", 0) or 0)
+        warning_count = int(diagnostic_summary.get("warning_count", 0) or 0)
+        if diagnostics is None:
+            self._set_engineering_badge(
+                "diagnostics_badge",
+                "diagnostics_status_var",
+                "DRC UNKNOWN",
+                "neutral",
+            )
+        elif error_count:
+            self._set_engineering_badge(
+                "diagnostics_badge",
+                "diagnostics_status_var",
+                f"DRC {error_count} ERROR",
+                "error",
+            )
+        elif warning_count:
+            self._set_engineering_badge(
+                "diagnostics_badge",
+                "diagnostics_status_var",
+                f"DRC {warning_count} WARN",
+                "warning",
+            )
+        else:
+            self._set_engineering_badge(
+                "diagnostics_badge",
+                "diagnostics_status_var",
+                "DRC PASS",
+                "success",
+            )
 
         try:
             currency = assess_project_verification_currency(
@@ -2521,6 +2647,27 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            configured_count = int(summary.get("configured_analysis_count", 0) or 0)
+            current_count = int(summary.get("current_count", 0) or 0)
+            stale_count = int(summary.get("stale_count", 0) or 0)
+            not_verified_count = int(summary.get("not_verified_count", 0) or 0)
+            unverifiable_count = int(
+                summary.get("dependency_freshness_unverifiable_count", 0) or 0
+            )
+            if configured_count and current_count == configured_count and not (
+                stale_count or not_verified_count or unverifiable_count
+            ):
+                verification_state = "success"
+            elif configured_count:
+                verification_state = "warning"
+            else:
+                verification_state = "neutral"
+            self._set_engineering_badge(
+                "verification_badge",
+                "verification_badge_var",
+                f"VERIFY {current_count}/{configured_count}",
+                verification_state,
+            )
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -2550,6 +2697,12 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            self._set_engineering_badge(
+                "verification_badge",
+                "verification_badge_var",
+                "VERIFY UNKNOWN",
+                "neutral",
+            )
             self._set_text(
                 self.verification_text,
                 f"Verification currency unavailable: {exc}\n",
@@ -2557,6 +2710,27 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            latest_status = ""
+            if records:
+                latest_verification = records[-1].get("verification", {})
+                if isinstance(latest_verification, dict):
+                    latest_status = str(
+                        latest_verification.get("status") or ""
+                    ).casefold()
+            if not records:
+                evidence_state = "neutral"
+            elif latest_status in {"pass", "passed", "verified", "current", "success"}:
+                evidence_state = "success"
+            elif latest_status in {"fail", "failed", "error"}:
+                evidence_state = "error"
+            else:
+                evidence_state = "purple"
+            self._set_engineering_badge(
+                "evidence_badge",
+                "evidence_badge_var",
+                f"EVIDENCE {len(records)}",
+                evidence_state,
+            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents(
@@ -2587,6 +2761,12 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            self._set_engineering_badge(
+                "evidence_badge",
+                "evidence_badge_var",
+                "EVIDENCE UNKNOWN",
+                "neutral",
+            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
@@ -5372,6 +5552,12 @@ class CleanroomXApp:
         has_unsaved_changes = self._has_unsaved_changes()
         if has_unsaved_changes:
             self._schedule_recovery_checkpoint()
+        self._set_engineering_badge(
+            "project_state_badge",
+            "project_state_var",
+            "UNSAVED" if has_unsaved_changes else "SAVED",
+            "warning" if has_unsaved_changes else "success",
+        )
 
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):

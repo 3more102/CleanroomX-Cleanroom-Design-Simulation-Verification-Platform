@@ -193,6 +193,31 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
 
 
 
+def test_inspector_filter_dirty_state_and_reset_are_model_safe(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    workspace._property_filter_var.set("pressure")
+    app.root.update()
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["length_m"].winfo_manager() == ""
+
+    workspace._property_filter_var.set("")
+    original_name = str(room["name"])
+    workspace._property_vars["name"].set(original_name + " draft")
+    app.root.update()
+    assert workspace._property_status_var.get() == "Unsaved property edits"
+    assert workspace.layout["rooms"][0]["name"] == original_name
+
+    workspace.reset_property_editor()
+    app.root.update()
+    assert workspace._property_vars["name"].get() == original_name
+    assert workspace._property_status_var.get() == "Values match model"
+    assert workspace.layout["rooms"][0]["name"] == original_name
+
+
 def test_selected_room_shows_engineering_dimensions(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

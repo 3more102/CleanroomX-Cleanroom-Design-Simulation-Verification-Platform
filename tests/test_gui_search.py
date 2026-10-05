@@ -84,6 +84,9 @@ def test_build_engineering_search_entries_uses_only_present_canonical_data():
     assert ("diagnostic", "AIRFLOW_BALANCE") in targets
     assert ("requirement", "REQ-1") in targets
     assert ("evidence", "ev-1") in targets
+    evidence_entry = next(entry for entry in entries if entry.target_type == "evidence")
+    assert evidence_entry.payload["graph_id"] == "graph-1"
+    assert evidence_entry.payload["node"]["id"] == "ev-1"
 
 
 def test_build_engineering_search_entries_does_not_turn_missing_values_into_zero():

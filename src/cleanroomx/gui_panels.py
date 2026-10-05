@@ -34,6 +34,81 @@ def _engineering_detail_pairs(value: Any, *, prefix: str = "") -> list[tuple[str
     return pairs
 
 
+def _diagnostic_target_type(issue: dict[str, Any]) -> str:
+    element = issue.get("element")
+    if not isinstance(element, dict):
+        return "project"
+    return str(element.get("type") or "project").strip() or "project"
+
+
+def diagnostic_filter_options(
+    issues: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    field: str,
+) -> tuple[str, ...]:
+    """Return deterministic GUI filter choices from canonical diagnostic records."""
+    values: set[str] = set()
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        if field == "target_type":
+            value = _diagnostic_target_type(issue)
+        else:
+            value = str(issue.get(field) or "").strip()
+        if value:
+            values.add(value)
+    return ("All", *sorted(values, key=str.casefold))
+
+
+def diagnostic_matches_filters(
+    issue: dict[str, Any],
+    *,
+    severity: str = "All",
+    category: str = "All",
+    target_type: str = "All",
+    query: str = "",
+) -> bool:
+    """Evaluate diagnostics-panel filters without changing backend diagnostic data."""
+    severity_token = str(severity or "").strip().casefold()
+    category_token = str(category or "").strip().casefold()
+    target_token = str(target_type or "").strip().casefold()
+    issue_severity = str(issue.get("severity") or "").strip().casefold()
+    issue_category = str(issue.get("category") or "").strip().casefold()
+    issue_target = _diagnostic_target_type(issue).casefold()
+
+    if severity_token not in {"", "all"} and issue_severity != severity_token:
+        return False
+    if category_token not in {"", "all"} and issue_category != category_token:
+        return False
+    if target_token not in {"", "all"} and issue_target != target_token:
+        return False
+
+    query_token = str(query or "").strip().casefold()
+    if not query_token:
+        return True
+    element = issue.get("element")
+    if not isinstance(element, dict):
+        element = {}
+    haystack = " ".join(
+        (
+            str(issue.get("rule", "")),
+            str(issue.get("category", "")),
+            str(issue.get("severity", "")),
+            str(issue.get("message", "")),
+            str(issue.get("suggested_action", "")),
+            str(element.get("type", "")),
+            str(element.get("id", "")),
+            str(element.get("name", "")),
+            json.dumps(
+                issue.get("details", {}),
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            ),
+        )
+    ).casefold()
+    return all(token in haystack for token in query_token.split())
+
+
 def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
     """Render one canonical diagnostic as a compact engineering inspector summary."""
     severity = str(issue.get("severity") or "info").upper()
@@ -102,7 +177,10 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.category_var = tk.StringVar(value="All")
+        self.target_type_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self.visible_count_var = tk.StringVar(value="SHOWING 0 / 0")
         self.error_count_var = tk.StringVar(value="ERROR 0")
         self.warning_count_var = tk.StringVar(value="WARNING 0")
         self.info_count_var = tk.StringVar(value="INFO 0")
@@ -110,6 +188,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
+        self.target_type_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
@@ -119,7 +199,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             side="left", padx=(0, 8)
         )
         ttk.Label(toolbar, text="Search").pack(side="left")
-        ttk.Entry(toolbar, textvariable=self.search_var, width=28).pack(
+        ttk.Entry(toolbar, textvariable=self.search_var, width=22).pack(
             side="left", padx=(4, 8)
         )
         ttk.Label(toolbar, text="Severity").pack(side="left")
@@ -131,6 +211,24 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Domain").pack(side="left")
+        self.category_picker = ttk.Combobox(
+            toolbar,
+            textvariable=self.category_var,
+            values=("All",),
+            state="readonly",
+            width=16,
+        )
+        self.category_picker.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Target").pack(side="left")
+        self.target_picker = ttk.Combobox(
+            toolbar,
+            textvariable=self.target_type_var,
+            values=("All",),
+            state="readonly",
+            width=15,
+        )
+        self.target_picker.pack(side="left", padx=(4, 8))
         ttk.Button(
             toolbar,
             text="Refresh",
@@ -144,6 +242,18 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             command=self._navigate_selected,
         )
         self.locate_button.pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Previous",
+            style="CX.Compact.TButton",
+            command=self.select_previous,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Next",
+            style="CX.Compact.TButton",
+            command=self.select_next,
+        ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Copy",
@@ -189,7 +299,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         ).pack(side="left", padx=4)
         ttk.Label(
             counters,
-            text="Select a row to inspect · Double-click to locate",
+            textvariable=self.visible_count_var,
+            style="CX.Status.Neutral.TLabel",
+        ).pack(side="left", padx=(8, 0))
+        ttk.Label(
+            counters,
+            text="Select a row to inspect · Double-click to locate · Enter locates",
             style="CX.Muted.TLabel",
         ).pack(side="right")
 
@@ -215,7 +330,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "description": "Description",
             "object": "Object",
             "level": "Level",
-            "source": "Source",
+            "source": "Domain",
         }
         widths = {
             "severity": 90,
@@ -258,6 +373,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
+        self.tree.bind("<Control-c>", self._copy_selected_event)
+        self.tree.bind("<Alt-Up>", lambda _event: self._select_relative(-1, locate=True))
+        self.tree.bind("<Alt-Down>", lambda _event: self._select_relative(1, locate=True))
 
         detail_header = ttk.Frame(
             detail_frame,
@@ -374,36 +492,35 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         issues = self.last_result.get("issues")
         if not isinstance(issues, list):
             return []
+        return [
+            issue
+            for issue in issues
+            if isinstance(issue, dict)
+            and diagnostic_matches_filters(
+                issue,
+                severity=self.severity_var.get(),
+                category=self.category_var.get(),
+                target_type=self.target_type_var.get(),
+                query=self.search_var.get(),
+            )
+        ]
 
-        severity = self.severity_var.get().strip().casefold()
-        query = self.search_var.get().strip().casefold()
-        visible: list[dict[str, Any]] = []
-        for issue in issues:
-            if not isinstance(issue, dict):
-                continue
-            issue_severity = str(issue.get("severity", "")).casefold()
-            if severity and severity != "all" and issue_severity != severity:
-                continue
-            if query:
-                haystack = " ".join(
-                    (
-                        str(issue.get("rule", "")),
-                        str(issue.get("category", "")),
-                        str(issue.get("message", "")),
-                        str(issue.get("suggested_action", "")),
-                        self._element_text(issue),
-                        json.dumps(
-                            issue.get("details", {}),
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                ).casefold()
-                if query not in haystack:
-                    continue
-            visible.append(issue)
-        return visible
+    def _refresh_filter_choices(self) -> None:
+        issues = (
+            self.last_result.get("issues", [])
+            if isinstance(self.last_result, dict)
+            else []
+        )
+        if not isinstance(issues, list):
+            issues = []
+        categories = diagnostic_filter_options(issues, "category")
+        targets = diagnostic_filter_options(issues, "target_type")
+        self.category_picker.configure(values=categories)
+        self.target_picker.configure(values=targets)
+        if self.category_var.get() not in categories:
+            self.category_var.set("All")
+        if self.target_type_var.get() not in targets:
+            self.target_type_var.set("All")
 
     def _populate(self) -> None:
         selection = self.tree.selection()
@@ -417,7 +534,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.tree.delete(item)
         self._issues_by_iid.clear()
 
-        for index, issue in enumerate(self._filtered_issues(), start=1):
+        visible_issues = self._filtered_issues()
+        total_issues = (
+            len(self.last_result.get("issues", []))
+            if isinstance(self.last_result, dict)
+            and isinstance(self.last_result.get("issues"), list)
+            else 0
+        )
+        self.visible_count_var.set(f"SHOWING {len(visible_issues)} / {total_issues}")
+        for index, issue in enumerate(visible_issues, start=1):
             sequence = issue.get("sequence", index)
             iid = f"issue:{sequence}"
             if self.tree.exists(iid):
@@ -447,7 +572,46 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     self.tree.focus(iid)
                     self.tree.see(iid)
                     break
+        if selected_sequence is None and self.tree.get_children():
+            first = self.tree.get_children()[0]
+            self.tree.selection_set(first)
+            self.tree.focus(first)
         self._show_selected_detail()
+
+    def _select_relative(self, delta: int, *, locate: bool = False):
+        rows = list(self.tree.get_children())
+        if not rows:
+            self._status_setter("No diagnostics match the current filters")
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in rows:
+            index = rows.index(selection[0])
+            target_index = max(0, min(len(rows) - 1, index + int(delta)))
+        else:
+            target_index = 0 if delta >= 0 else len(rows) - 1
+        iid = rows[target_index]
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected_detail()
+        if locate:
+            issue = self._issues_by_iid.get(iid)
+            if issue is not None:
+                self._navigate_callback(issue)
+        self._status_setter(
+            f"Diagnostic {target_index + 1} of {len(rows)} in current filter"
+        )
+        return "break"
+
+    def select_previous(self) -> None:
+        self._select_relative(-1, locate=True)
+
+    def select_next(self) -> None:
+        self._select_relative(1, locate=True)
+
+    def _copy_selected_event(self, _event=None):
+        self.copy_selected()
+        return "break"
 
     def refresh(self) -> dict[str, Any] | None:
         try:
@@ -459,6 +623,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.last_result = None
             self.summary_var.set(f"Diagnostics unavailable: {exc}")
             self._status_setter("Project diagnostics failed")
+            self._refresh_filter_choices()
             self._populate()
             self._update_summary_style()
             return None
@@ -476,6 +641,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 info=summary.get("info_count", 0),
             )
         )
+        self._refresh_filter_choices()
         self._populate()
         self._update_summary_style()
         return result

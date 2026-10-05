@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Callable
 
 import tkinter as tk
@@ -435,6 +434,35 @@ class ProofGraphViewer(ttk.Frame):
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
 
+        legend = ttk.Frame(
+            self,
+            style="CX.SubtlePanel.TFrame",
+            padding=(8, 4),
+        )
+        legend.pack(fill="x", padx=6, pady=(0, 5))
+        ttk.Label(
+            legend,
+            text="TRACEABILITY",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 10))
+        for marker, label, style_name in (
+            ("R", "Requirement", "CX.DomainHVAC.TLabel"),
+            ("M", "Model", "CX.DomainGeometry.TLabel"),
+            ("C", "Calculation", "CX.DomainPressure.TLabel"),
+            ("V", "Verification", "CX.Warning.TLabel"),
+            ("E", "Evidence", "CX.DomainEvidence.TLabel"),
+        ):
+            ttk.Label(
+                legend,
+                text=f"{marker}  {label}",
+                style=style_name,
+            ).pack(side="left", padx=(0, 12))
+        ttk.Label(
+            legend,
+            text="Requirement → Model → Calculation → Verification → Evidence",
+            style="CX.Helper.TLabel",
+        ).pack(side="right")
+
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
 
@@ -648,6 +676,28 @@ class ProofGraphViewer(ttk.Frame):
             "verification_run": "#D1FAE5",
         }.get(node.get("type"), palette["surface"])
 
+    def _node_outline(self, node: dict[str, Any]) -> str:
+        palette = theme_palette(self._theme_name)
+        status = _text(node.get("status")).casefold()
+        if status in {"fail", "failed", "error"}:
+            return palette["error"]
+        if status in {"warning", "warn"}:
+            return palette["warning"]
+        if status in {"pass", "passed"}:
+            return palette["success"]
+        return {
+            "requirement": palette["domain_hvac"],
+            "model_object": palette["domain_geometry"],
+            "ifc": palette["info"],
+            "source": palette["evidence"],
+            "calculation": palette["simulation"],
+            "evidence": palette["evidence"],
+            "check": palette["warning"],
+            "finding": palette["attention"],
+            "verdict": palette["domain_verification"],
+            "verification_run": palette["success"],
+        }.get(node.get("type"), palette["border_strong"])
+
     def _draw_graph(self) -> None:
         canvas = self.canvas
         palette = theme_palette(self._theme_name)
@@ -708,8 +758,8 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = palette["accent"] if selected else palette["border"]
-            width = 3 if selected else 1
+            outline = palette["accent"] if selected else self._node_outline(node)
+            width = 3 if selected else 2
             rect = canvas.create_rectangle(
                 x,
                 y,
@@ -767,24 +817,72 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         node = self._nodes_by_key.get(self._selected_key or "")
-        if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
-            )
-            if node.get("status"):
-                header += f"Status: {self._status_label(node['status'])}\n"
-            self.detail.insert("1.0", header + "\n")
+        if node is None:
             self.detail.insert(
-                "end",
-                json.dumps(
-                    node.get("raw", {}),
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                ),
+                "1.0",
+                "No traceability node selected. Select a requirement, model object, "
+                "calculation, verification result, or evidence item to inspect its chain.",
             )
+            self.detail.configure(state="disabled")
+            return
+
+        lines = [
+            node["type"].replace("_", " ").upper(),
+            node["label"],
+            f"ID: {node['id']}",
+        ]
+        if node.get("status"):
+            lines.append(f"Status: {self._status_label(node['status'])}")
+        flags = tuple(node.get("flags") or ())
+        if flags:
+            lines.append("Flags: " + ", ".join(str(flag) for flag in flags))
+
+        raw = node.get("raw", {})
+        if isinstance(raw, dict):
+            preferred_fields = (
+                ("title", "Title"),
+                ("kind", "Kind"),
+                ("reference", "Source"),
+                ("requirement_id", "Requirement"),
+                ("subject_ref", "Subject"),
+                ("property_name", "Property"),
+                ("value", "Value"),
+                ("unit", "Unit"),
+                ("expected", "Expected"),
+                ("actual", "Actual"),
+                ("delta", "Delta"),
+                ("reason", "Reason"),
+                ("method", "Method"),
+                ("origin", "Origin"),
+            )
+            engineering_rows = []
+            for key, label in preferred_fields:
+                value = raw.get(key)
+                if value not in (None, "", [], {}):
+                    engineering_rows.append(f"{label}: {value}")
+            if engineering_rows:
+                lines.extend(("", "ENGINEERING RECORD", *engineering_rows))
+
+        connections: list[str] = []
+        for edge in self._projection.get("edges", []):
+            if edge.get("source") == node["key"]:
+                other = self._nodes_by_key.get(edge.get("target"))
+                if other is not None:
+                    connections.append(
+                        f"→ {edge.get('relation', 'links')} → "
+                        f"{other['type'].replace('_', ' ')}: {other['label']}"
+                    )
+            elif edge.get("target") == node["key"]:
+                other = self._nodes_by_key.get(edge.get("source"))
+                if other is not None:
+                    connections.append(
+                        f"← {edge.get('relation', 'links')} ← "
+                        f"{other['type'].replace('_', ' ')}: {other['label']}"
+                    )
+        if connections:
+            lines.extend(("", "TRACEABILITY LINKS", *connections))
+
+        self.detail.insert("1.0", "\n".join(lines))
         self.detail.configure(state="disabled")
 
     def selected_node(self) -> dict[str, Any] | None:

@@ -210,3 +210,55 @@ def test_start_center_health_semantics_distinguish_error_warning_and_missing_sta
     assert center.project_diagnostics_var.get() == "Problems: unavailable"
     assert center.project_verification_var.get() == "Verification: unavailable"
 
+def test_recent_projects_show_active_available_and_missing_state(app, tmp_path):
+    active = bundled_demo_project_path()
+    available = tmp_path / "Available.cleanroomx.json"
+    missing = tmp_path / "Missing.cleanroomx.json"
+    available.write_text("{}\n", encoding="utf-8")
+
+    app.load_project_path(active)
+    app._remember_recent_project(available)
+    app._remember_recent_project(missing)
+    app._activate_start_workspace()
+    app.root.update()
+
+    rows = {
+        app.start_center._recent_paths[iid]: app.start_center.recent_tree.item(
+            iid, "values"
+        )
+        for iid in app.start_center.recent_tree.get_children()
+    }
+    assert rows[str(active.resolve(strict=False))][1] == "Active"
+    assert rows[str(available.resolve(strict=False))][1] == "Available"
+    assert rows[str(missing.resolve(strict=False))][1] == "Missing"
+    assert rows[str(missing.resolve(strict=False))][2] == "Unavailable"
+
+
+def test_start_center_primary_controls_fit_supported_minimum_window(app):
+    app.root.geometry("1050x680")
+    app._activate_start_workspace()
+    app.root.update_idletasks()
+    app.root.update()
+
+    center = app.start_center
+    assert center.winfo_ismapped()
+    controls = [
+        *center.workspace_buttons.values(),
+        center.problems_button,
+        center.recovery_button,
+        center.recent_search_entry,
+        center.remove_recent_button,
+    ]
+    for control in controls:
+        assert control.winfo_ismapped(), control
+        assert control.winfo_rootx() >= center.winfo_rootx()
+        assert control.winfo_rooty() >= center.winfo_rooty()
+        assert (
+            control.winfo_rootx() + control.winfo_width()
+            <= center.winfo_rootx() + center.winfo_width()
+        ), control
+        assert (
+            control.winfo_rooty() + control.winfo_height()
+            <= center.winfo_rooty() + center.winfo_height()
+        ), control
+

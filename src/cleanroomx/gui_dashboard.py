@@ -29,9 +29,16 @@ class EngineeringDashboard(ttk.Frame):
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
 
         self.readiness_var = tk.StringVar(value="0%")
+        self.readiness_state_var = tk.StringVar(value="INCOMPLETE")
         self.readiness_detail_var = tk.StringVar(
             value="Open or configure a project to evaluate current engineering readiness."
         )
+        self.gate_vars = {
+            "Geometry": tk.StringVar(value="GEOMETRY · PENDING"),
+            "Diagnostics": tk.StringVar(value="DIAGNOSTICS · NOT CHECKED"),
+            "Verification": tk.StringVar(value="VERIFICATION · PENDING"),
+            "Evidence": tk.StringVar(value="EVIDENCE · PENDING"),
+        }
         self.geometry_var = tk.StringVar(value="0 rooms")
         self.diagnostics_var = tk.StringVar(value="NOT CHECKED")
         self.verification_var = tk.StringVar(value="0 / 0 current")
@@ -58,23 +65,69 @@ class EngineeringDashboard(ttk.Frame):
         readiness = ttk.Frame(self, style="CX.Card.TFrame", padding=(12, 10))
         readiness.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         readiness.columnconfigure(1, weight=1)
+        readiness_header = ttk.Frame(readiness, style="CX.Card.TFrame")
+        readiness_header.grid(row=0, column=0, columnspan=2, sticky="ew")
+        readiness_header.columnconfigure(1, weight=1)
         ttk.Label(
-            readiness,
+            readiness_header,
             text="PROJECT READINESS",
             style="CX.CardTitle.TLabel",
         ).grid(row=0, column=0, sticky="w")
+        self.readiness_badge = ttk.Label(
+            readiness_header,
+            textvariable=self.readiness_state_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.readiness_badge.grid(row=0, column=2, sticky="e")
+
         ttk.Label(
             readiness,
             textvariable=self.readiness_var,
             style="CX.CardValue.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
+        ).grid(row=1, column=0, sticky="w", pady=(5, 0))
         ttk.Label(
             readiness,
             textvariable=self.readiness_detail_var,
             style="CX.CardTitle.TLabel",
             wraplength=900,
             justify="left",
-        ).grid(row=0, column=1, rowspan=2, sticky="w", padx=(18, 0))
+        ).grid(row=1, column=1, sticky="w", padx=(18, 0), pady=(5, 0))
+
+        self.readiness_progress = ttk.Progressbar(
+            readiness,
+            orient="horizontal",
+            mode="determinate",
+            maximum=100,
+            value=0,
+            style="CX.Readiness.Neutral.Horizontal.TProgressbar",
+        )
+        self.readiness_progress.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(8, 7),
+        )
+
+        gate_strip = ttk.Frame(readiness, style="CX.Card.TFrame")
+        gate_strip.grid(row=3, column=0, columnspan=2, sticky="ew")
+        for column, name in enumerate(self.gate_vars):
+            gate_strip.columnconfigure(column, weight=1)
+        self.gate_labels: dict[str, ttk.Label] = {}
+        for column, (name, variable) in enumerate(self.gate_vars.items()):
+            label = ttk.Label(
+                gate_strip,
+                textvariable=variable,
+                style="CX.Status.Neutral.TLabel",
+                anchor="center",
+            )
+            label.grid(
+                row=0,
+                column=column,
+                sticky="ew",
+                padx=(0 if column == 0 else 3, 0 if column == 3 else 3),
+            )
+            self.gate_labels[name] = label
 
         cards = ttk.Frame(self)
         cards.grid(row=2, column=0, sticky="ew", pady=(0, 8))
@@ -244,6 +297,66 @@ class EngineeringDashboard(ttk.Frame):
         passed = sum(1 for state in gates.values() if state)
         readiness = round(100 * passed / len(gates))
         self.readiness_var.set(f"{readiness}%")
+        self.readiness_progress.configure(value=readiness)
+
+        if readiness == 100:
+            self.readiness_state_var.set("READY")
+            readiness_style = "Success"
+        elif readiness >= 50:
+            self.readiness_state_var.set("ATTENTION")
+            readiness_style = "Warning"
+        else:
+            self.readiness_state_var.set("INCOMPLETE")
+            readiness_style = "Neutral"
+        self.readiness_badge.configure(style=f"CX.Status.{readiness_style}.TLabel")
+        self.readiness_progress.configure(
+            style=f"CX.Readiness.{readiness_style}.Horizontal.TProgressbar"
+        )
+
+        gate_states = {
+            "Geometry": (
+                "READY" if gates["Geometry"] else "PENDING",
+                "Success" if gates["Geometry"] else "Neutral",
+            ),
+            "Diagnostics": (
+                "NOT CHECKED"
+                if diagnostics is None
+                else "ERROR"
+                if errors
+                else "WARNING"
+                if warnings
+                else "PASS",
+                "Neutral"
+                if diagnostics is None
+                else "Error"
+                if errors
+                else "Warning"
+                if warnings
+                else "Success",
+            ),
+            "Verification": (
+                "CURRENT"
+                if gates["Verification"]
+                else "PENDING"
+                if configured == 0
+                else "STALE / INCOMPLETE",
+                "Success"
+                if gates["Verification"]
+                else "Neutral"
+                if configured == 0
+                else "Warning",
+            ),
+            "Evidence": (
+                "RETAINED" if gates["Evidence"] else "PENDING",
+                "Success" if gates["Evidence"] else "Neutral",
+            ),
+        }
+        for name, (state, style_name) in gate_states.items():
+            self.gate_vars[name].set(f"{name.upper()} · {state}")
+            self.gate_labels[name].configure(
+                style=f"CX.Status.{style_name}.TLabel"
+            )
+
         missing = [name for name, state in gates.items() if not state]
         if missing:
             self.readiness_detail_var.set(

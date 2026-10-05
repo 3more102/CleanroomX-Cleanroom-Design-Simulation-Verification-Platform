@@ -7213,6 +7213,11 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
+                GUI_RUNTIME_LOGGER.exception(
+                    "Background analysis execution failed analysis_id=%s kind=%s",
+                    analysis_id,
+                    kind,
+                )
                 self._queue.put(("error", generation, analysis_id, str(exc)))
                 return
 
@@ -7221,6 +7226,11 @@ class CleanroomXApp:
             try:
                 history_evidence = build_run_history_evidence(payload, result)
             except Exception as exc:  # audit preparation must not hide a valid result
+                GUI_RUNTIME_LOGGER.exception(
+                    "Failed to prepare run-history evidence analysis_id=%s kind=%s",
+                    analysis_id,
+                    kind,
+                )
                 history_error = str(exc)
             self._queue.put(
                 (

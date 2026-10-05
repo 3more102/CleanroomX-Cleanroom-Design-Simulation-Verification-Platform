@@ -7,6 +7,7 @@ import pytest
 from cleanroomx.gui_proofgraph import (
     _filtered_projection,
     _node_detail_lines,
+    proofgraph_evidence_completeness,
     proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
@@ -256,3 +257,25 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "Status: FAIL" in rendered
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
+
+
+def test_proofgraph_evidence_completeness_uses_explicit_finding_flags():
+    complete = proofgraph_evidence_completeness(
+        proofgraph_projection(_sample_graph())
+    )
+    unresolved = proofgraph_evidence_completeness(
+        proofgraph_projection(_unresolved_graph())
+    )
+
+    assert complete == {
+        "total": 1,
+        "present": 1,
+        "unresolved": 0,
+        "unknown": 0,
+    }
+    assert unresolved == {
+        "total": 1,
+        "present": 0,
+        "unresolved": 1,
+        "unknown": 0,
+    }

@@ -11,6 +11,7 @@ from cleanroomx.runtime_diagnostics import (
     configure_gui_runtime_logging,
     default_gui_log_dir,
     install_tk_exception_handler,
+    record_gui_exception,
 )
 
 
@@ -167,3 +168,33 @@ def test_gui_smoke_does_not_install_runtime_callback_boundary(monkeypatch, capsy
     assert gui_module.main(["--smoke"]) == 0
     assert root.destroyed is True
     assert "CleanroomX GUI smoke: PASS" in capsys.readouterr().out
+
+
+def test_record_gui_exception_returns_reference_and_persists_traceback(tmp_path: Path):
+    logger_name = "cleanroomx.tests.handled-incident"
+    failure = RuntimeError("diagnostics backend failed")
+
+    report = record_gui_exception(
+        "Refresh project diagnostics",
+        failure,
+        log_dir=tmp_path,
+        logger_name=logger_name,
+    )
+    try:
+        assert report.reference.startswith("CX-")
+        assert report.operation == "Refresh project diagnostics"
+        assert report.exception_type == "RuntimeError"
+        assert report.summary == "diagnostics backend failed"
+        assert report.log_path == (tmp_path / GUI_LOG_FILENAME).resolve(strict=False)
+
+        logger = logging.getLogger(logger_name)
+        for handler in logger.handlers:
+            handler.flush()
+        content = report.log_path.read_text(encoding="utf-8")
+        assert report.reference.removeprefix("CX-") in content
+        assert "Refresh project diagnostics" in content
+        assert "RuntimeError: diagnostics backend failed" in content
+    finally:
+        logger = logging.getLogger(logger_name)
+        close_gui_runtime_logging(logger)
+        logging.Logger.manager.loggerDict.pop(logger_name, None)

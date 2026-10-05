@@ -7,6 +7,7 @@ import tkinter as tk
 
 import pytest
 
+import cleanroomx.gui as gui_module
 from cleanroomx.gui import (
     AnalysisPicker,
     CleanroomXApp,

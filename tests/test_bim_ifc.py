@@ -61,7 +61,7 @@ def _records():
 
 def _install_empty_ifcopenshell(monkeypatch):
     class Model:
-        def by_type(self, _ifc_class):
+        def by_type(self, _ifc_class, include_subtypes=True):
             return []
 
     ifcopenshell = types.ModuleType("ifcopenshell")
@@ -318,6 +318,29 @@ def test_ifc_extraction_fails_closed_when_device_type_enumeration_raises(
     assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
+def test_ifc_extraction_treats_missing_schema_device_class_as_absent(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcFan":
+                raise RuntimeError(
+                    "Entity with name 'IfcFan' not found in schema 'IFC2X3'"
+                )
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+
+    semantics, _provenance = extract_ifc_semantics(source)
+
+    assert semantics["records"] == []
+
+
 def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
 
@@ -332,7 +355,7 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcAirTerminal":
                 return [entity]
             return []
@@ -879,7 +902,7 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcSpace":
                 return [space]
             return []

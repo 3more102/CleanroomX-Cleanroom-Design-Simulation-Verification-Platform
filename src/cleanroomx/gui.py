@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_simulation import SimulationWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
     GlobalEngineeringSearch,
@@ -2858,6 +2859,18 @@ class CleanroomXApp:
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
+        self.simulation_workspace = SimulationWorkspace(
+            self.notebook,
+            on_run=self.run_current,
+            on_cancel=self.cancel_run,
+            on_validate=self.validate_current,
+            on_open_inputs=self._activate_analysis_input_workspace,
+            on_open_results=self._activate_analysis_results_workspace,
+            on_open_history=self.show_run_history,
+            on_select_analysis=self._select_analysis_from_simulation,
+        )
+        self.notebook.add(self.simulation_workspace, text="Simulation")
+
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
         input_notebook = ttk.Notebook(self.input_tab)
@@ -3189,7 +3202,8 @@ class CleanroomXApp:
         elif selected == "design":
             self.notebook.select(self.spatial_workspace)
         elif selected == "simulation":
-            self.notebook.select(self.input_tab)
+            self._refresh_simulation_workspace()
+            self.notebook.select(self.simulation_workspace)
             self.output_notebook.select(self.result_text.master)
         elif selected == "verification":
             self.notebook.select(self.spatial_workspace)
@@ -4399,9 +4413,77 @@ class CleanroomXApp:
     def _activate_analysis_input_workspace(self) -> None:
         """Open the current analysis input editor without changing engineering data."""
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
-            self.activate_workspace_profile("simulation")
             self.notebook.select(self.input_tab)
             self.workspace_status_var.set("Workspace: Analysis Inputs")
+
+    def _refresh_simulation_workspace(self) -> None:
+        """Project the active analysis/run into the simulation surface without mutation."""
+        workspace = getattr(self, "simulation_workspace", None)
+        if workspace is None:
+            return
+        active_id = getattr(self, "_editor_analysis_id", None) or self.project.active_analysis_id
+        workspace.set_analysis_options(
+            tuple((item.id, item.name, item.kind) for item in self.project.analyses),
+            active_id=active_id,
+        )
+        analysis = self._editor_analysis()
+        if analysis is None:
+            workspace.set_context(
+                analysis_name=None,
+                analysis_kind=None,
+                running=False,
+            )
+            return
+        history_available = True
+        retained_run_count: int | None = None
+        latest_retained_utc: str | None = None
+        try:
+            retained = [
+                record
+                for record in run_history_records(self.project.metadata)
+                if record.get("analysis_id") == analysis.id
+            ]
+        except RunHistoryIntegrityError:
+            history_available = False
+        else:
+            retained_run_count = len(retained)
+            if retained:
+                latest_retained_utc = (
+                    str(retained[-1].get("completed_at_utc") or "") or None
+                )
+        workspace.set_context(
+            analysis_name=analysis.name,
+            analysis_kind=analysis.kind,
+            analysis_input=analysis.input,
+            last_run=self._runs_by_analysis.get(analysis.id),
+            running=bool(self._running),
+            retained_run_count=retained_run_count,
+            latest_retained_utc=latest_retained_utc,
+            history_available=history_available,
+        )
+
+    def _select_analysis_from_simulation(self, analysis_id: str) -> None:
+        """Route Simulation scenario selection through the canonical navigator guard."""
+        target = str(analysis_id or "").strip()
+        if not target or not self.analysis_tree.exists(target):
+            self._refresh_simulation_workspace()
+            return
+        self.analysis_tree.selection_set(target)
+        self.analysis_tree.focus(target)
+        self.analysis_tree.see(target)
+        self._on_analysis_selected()
+        self._refresh_simulation_workspace()
+        if getattr(self, "_editor_analysis_id", None) == target:
+            self.notebook.select(self.simulation_workspace)
+            self.workspace_profile_var.set("simulation")
+            self.workspace_status_var.set("Workspace: Simulation")
+
+    def _activate_analysis_results_workspace(self) -> None:
+        if hasattr(self, "output_notebook") and hasattr(self, "result_text"):
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            self.output_notebook.select(self.result_text.master)
+            self.workspace_status_var.set("Workspace: Simulation Results")
 
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
@@ -5423,6 +5505,7 @@ class CleanroomXApp:
             ("nav-devices", "Devices"),
             ("nav-pressure", "Pressure Network"),
             ("nav-analyses", "Analyses"),
+            ("nav-simulation", "Simulation / Results"),
             ("nav-requirements", "Requirements"),
             ("nav-proofgraph", "ProofGraph"),
             ("nav-evidence", "Evidence"),
@@ -5468,6 +5551,7 @@ class CleanroomXApp:
             self.refresh_structure(silent=True)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+        self._refresh_simulation_workspace()
 
     def _restore_navigator_tree(self) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -5858,6 +5942,11 @@ class CleanroomXApp:
                 command=self.spatial_workspace.show_all,
             )
             return menu
+        if item_id == "nav-simulation":
+            self._remember_navigator_item(item_id)
+            self.activate_workspace_profile("simulation")
+            self.selection_status_var.set("Selected: Simulation / Results")
+            return
         if item_id == "nav-proofgraph":
             menu.add_command(
                 label="Open ProofGraph",
@@ -6103,6 +6192,7 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        self._refresh_simulation_workspace()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()
@@ -7619,6 +7709,11 @@ class CleanroomXApp:
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
         except Exception as exc:
             self.status_var.set("Cannot run — invalid input")
+            simulation = getattr(self, "simulation_workspace", None)
+            if simulation is not None:
+                simulation.set_blocked(
+                    "Input validation failed; the backend solver was not started."
+                )
             messagebox.showerror("Cannot run analysis", str(exc), parent=self.root)
             return
 
@@ -7630,6 +7725,15 @@ class CleanroomXApp:
         base_dir = self._base_dir()
         self._abandon_requested = False
         self._set_running(True)
+        simulation = getattr(self, "simulation_workspace", None)
+        if simulation is not None:
+            simulation.set_context(
+                analysis_name=analysis.name,
+                analysis_kind=analysis.kind,
+                analysis_input=analysis.input,
+                last_run=self._runs_by_analysis.get(analysis.id),
+                running=True,
+            )
         self.status_var.set(f"Running {analysis.name}...")
 
         def worker() -> None:
@@ -7661,6 +7765,9 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
+        simulation = getattr(self, "simulation_workspace", None)
+        if simulation is not None:
+            simulation.set_abandon_requested()
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
@@ -7680,10 +7787,16 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    simulation = getattr(self, "simulation_workspace", None)
+                    if simulation is not None:
+                        simulation.set_abandoned()
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    simulation = getattr(self, "simulation_workspace", None)
+                    if simulation is not None:
+                        simulation.set_failed(str(payload))
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -7752,6 +7865,8 @@ class CleanroomXApp:
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
+        if hasattr(self, "simulation_workspace"):
+            self.simulation_workspace.set_completed(run)
         self._set_text(
             self.result_text,
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),

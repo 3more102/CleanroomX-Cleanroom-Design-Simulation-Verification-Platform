@@ -8,6 +8,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_panels import diagnostic_domain, filter_project_diagnostics
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
 
@@ -221,3 +222,70 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_problem_filter_helpers_preserve_canonical_issue_payloads():
+    issues = [
+        {
+            "sequence": 1,
+            "severity": "error",
+            "rule": "spatial.room_overlap",
+            "category": "spatial",
+            "message": "Rooms overlap",
+            "suggested_action": "Move one room",
+            "element": {"type": "spatial_element", "id": "room-a", "name": "Room A"},
+            "details": {"floor": "Level 01"},
+        },
+        {
+            "sequence": 2,
+            "severity": "warning",
+            "rule": "analysis.result_stale",
+            "category": "analysis",
+            "message": "Result is stale",
+            "element": {"type": "analysis", "id": "analysis-a", "name": "ACH"},
+            "details": {},
+        },
+    ]
+    before = copy.deepcopy(issues)
+
+    assert diagnostic_domain(issues[0]) == "Spatial"
+    assert diagnostic_domain(issues[1]) == "Analysis"
+    assert filter_project_diagnostics(
+        issues,
+        severity="Error",
+        domain="Spatial",
+        query="room_overlap",
+    ) == [issues[0]]
+    assert filter_project_diagnostics(
+        issues,
+        severity="All",
+        domain="Analysis",
+        query="stale",
+    ) == [issues[1]]
+    assert issues == before
+
+
+def test_problem_panel_domain_and_relative_navigation(app):
+    _force_room_overlap(app)
+    panel = app.problems_panel
+    panel.domain_var.set("Spatial")
+    app.root.update()
+
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        diagnostic_domain(panel._issues_by_iid[iid]) == "Spatial"
+        for iid in visible
+    )
+    assert panel.visible_var.get() == f"{len(visible)} shown"
+
+    panel.tree.selection_remove(panel.tree.selection())
+    panel.select_relative(1)
+    assert panel.selected_issue() is not None
+    assert str(panel.locate_button.cget("state")) == "normal"
+
+    panel.clear_filters()
+    app.root.update()
+    assert panel.search_var.get() == ""
+    assert panel.severity_var.get() == "All"
+    assert panel.domain_var.get() == "All"

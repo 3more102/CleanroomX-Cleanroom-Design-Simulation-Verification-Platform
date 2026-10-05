@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import copy
 import os
+from types import SimpleNamespace
 import tkinter as tk
 
 import pytest
 
+from cleanroomx.application import AnalysisRun
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
@@ -255,3 +257,52 @@ def test_project_navigator_surfaces_canonical_diagnostic_badges(app):
         app.analysis_tree.tag_cget("diagnostic_error", "foreground")
         == app._theme_palette["error"]
     )
+
+
+def test_engineering_plot_exposes_grid_and_cursor_inspection(app):
+    app.last_run = AnalysisRun(
+        kind="gui-regression",
+        title="GUI regression plot",
+        status="complete",
+        result={"ok": True},
+        markdown="# GUI regression plot",
+        diagnostics={},
+        plot={
+            "title": "Pressure response",
+            "x_label": "Flow (m3/s)",
+            "y_label": "Pressure (Pa)",
+            "series": [
+                {
+                    "name": "Baseline",
+                    "x": [0.0, 1.0, 2.0],
+                    "y": [10.0, 14.0, 18.0],
+                },
+                {
+                    "name": "Modified",
+                    "x": [0.0, 1.0, 2.0],
+                    "y": [11.0, 15.0, 19.0],
+                },
+            ],
+            "markers": [
+                {"name": "Operating point", "x": 1.0, "y": 15.0},
+            ],
+        },
+    )
+    app.plot_canvas.configure(width=900, height=520)
+    app.root.update_idletasks()
+    app._draw_plot()
+    app.root.update()
+
+    assert len(app.plot_canvas.find_withtag("plot_grid")) >= 10
+    assert len(app._plot_hover_points) == 7
+    inspected = app._plot_hover_points[0]
+
+    app._on_plot_motion(
+        SimpleNamespace(
+            x=int(round(float(inspected["px"]))),
+            y=int(round(float(inspected["py"]))),
+        )
+    )
+    app.root.update()
+
+    assert app.plot_canvas.find_withtag("plot_cursor")

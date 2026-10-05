@@ -3386,10 +3386,13 @@ class CleanroomXApp:
                 f"Selected evidence: {entry.label}"
             )
             viewer = getattr(self, "proofgraph_viewer", None)
+            graph_id = ""
+            if isinstance(entry.payload, dict):
+                graph_id = str(entry.payload.get("graph_id") or "")
             selected = bool(
                 viewer is not None
                 and target_id
-                and viewer.select_node(target_id)
+                and viewer.select_node(target_id, graph_id=graph_id or None)
             )
             self.status_var.set(
                 (

@@ -245,35 +245,16 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=[("disabled", palette["disabled"])],
         bordercolor=[("focus", palette["accent"])],
     )
-    # Workstation modes use restrained, semantic accent rails so the shell reads
-    # like an industrial CAD/EDA console rather than a generic dark Tk theme.
-    # Color supplements the text labels; it is never the only mode indicator.
-    theme_name = normalize_theme_name(value)
-    mode_colors = {
-        "Design": palette["accent"],
-        "Analyze": palette["info"],
-        "Verify": palette["warning"],
-        "Evidence": "#A78BFA" if theme_name == "dark" else "#7C3AED",
-        "Release": palette["success"],
+    # Workstation modes use semantic industrial colors. Text remains explicit,
+    # so color reinforces hierarchy without becoming the only status signal.
+    mode_accents = {
+        "Design": palette["mode_design"],
+        "Analyze": palette["mode_analyze"],
+        "Verify": palette["mode_verify"],
+        "Evidence": palette["mode_evidence"],
+        "Release": palette["mode_release"],
     }
-    mode_active_surfaces = (
-        {
-            "Design": "#123A46",
-            "Analyze": "#17365D",
-            "Verify": "#4A3513",
-            "Evidence": "#35245A",
-            "Release": "#183D2A",
-        }
-        if theme_name == "dark"
-        else {
-            "Design": "#CFFAFE",
-            "Analyze": "#DBEAFE",
-            "Verify": "#FEF3C7",
-            "Evidence": "#EDE9FE",
-            "Release": "#DCFCE7",
-        }
-    )
-    for mode_name, mode_color in mode_colors.items():
+    for mode_name, mode_color in mode_accents.items():
         style.configure(
             f"CX.Mode{mode_name}.TButton",
             background=palette["background"],
@@ -287,7 +268,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             f"CX.Mode{mode_name}.TButton",
             background=[
                 ("active", palette["surface_alt"]),
-                ("pressed", mode_active_surfaces[mode_name]),
+                ("pressed", palette["surface_alt"]),
             ],
             foreground=[
                 ("active", mode_color),
@@ -300,8 +281,8 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         )
         style.configure(
             f"CX.Mode{mode_name}Active.TButton",
-            background=mode_active_surfaces[mode_name],
-            foreground=mode_color,
+            background=mode_color,
+            foreground=palette["accent_text"],
             bordercolor=mode_color,
             padding=(11, 5),
             font=("TkDefaultFont", 9, "bold"),
@@ -310,22 +291,21 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         style.map(
             f"CX.Mode{mode_name}Active.TButton",
             background=[
-                ("active", mode_active_surfaces[mode_name]),
-                ("pressed", mode_active_surfaces[mode_name]),
+                ("active", mode_color),
+                ("pressed", palette["surface_alt"]),
             ],
             foreground=[
-                ("active", mode_color),
+                ("active", palette["accent_text"]),
                 ("pressed", mode_color),
             ],
             bordercolor=[
                 ("focus", mode_color),
                 ("active", mode_color),
-                ("pressed", mode_color),
             ],
         )
 
-    # Keep generic names as compatibility aliases for extensions/tests that may
-    # still request them directly.
+    # Generic aliases remain for compatibility with extensions that use the
+    # pre-semantic style names directly.
     style.configure(
         "CX.Mode.TButton",
         background=palette["background"],
@@ -369,37 +349,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("active", palette["accent"]),
         ],
     )
-    mode_accents = {
-        "Design": palette["mode_design"],
-        "Analyze": palette["mode_analyze"],
-        "Verify": palette["mode_verify"],
-        "Evidence": palette["mode_evidence"],
-        "Release": palette["mode_release"],
-    }
-    for mode_name, mode_color in mode_accents.items():
-        style.configure(
-            f"CX.Mode{mode_name}Active.TButton",
-            background=mode_color,
-            foreground=palette["accent_text"],
-            bordercolor=mode_color,
-            padding=(11, 5),
-            font=("TkDefaultFont", 9, "bold"),
-        )
-        style.map(
-            f"CX.Mode{mode_name}Active.TButton",
-            background=[
-                ("active", mode_color),
-                ("pressed", palette["surface_alt"]),
-            ],
-            foreground=[
-                ("active", palette["accent_text"]),
-                ("pressed", mode_color),
-            ],
-            bordercolor=[
-                ("focus", mode_color),
-                ("active", mode_color),
-            ],
-        )
 
     style.configure(
         "CX.Step.TButton",
@@ -426,8 +375,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("active", palette["accent"]),
         ],
     )
-    for step_name in ("Design", "Analyze", "Verify", "Evidence", "Release"):
-        step_color = mode_colors[step_name]
+    for step_name, step_color in mode_accents.items():
         style.configure(
             f"CX.Step{step_name}.TButton",
             background=palette["surface"],
@@ -436,32 +384,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             padding=(9, 4),
             font=("TkDefaultFont", 8, "bold"),
             relief="flat",
-        )
-        style.map(
-            f"CX.Step{step_name}.TButton",
-            background=[
-                ("active", mode_active_surfaces[step_name]),
-                ("pressed", mode_active_surfaces[step_name]),
-                ("disabled", palette["surface"]),
-            ],
-            foreground=[
-                ("active", step_color),
-                ("pressed", step_color),
-                ("disabled", palette["disabled"]),
-            ],
-            bordercolor=[
-                ("focus", step_color),
-                ("active", step_color),
-            ],
-        )
-    for step_name, step_color in mode_accents.items():
-        style.configure(
-            f"CX.Step{step_name}.TButton",
-            background=palette["surface"],
-            foreground=step_color,
-            bordercolor=step_color,
-            padding=(9, 4),
-            font=("TkDefaultFont", 8, "bold"),
         )
         style.map(
             f"CX.Step{step_name}.TButton",

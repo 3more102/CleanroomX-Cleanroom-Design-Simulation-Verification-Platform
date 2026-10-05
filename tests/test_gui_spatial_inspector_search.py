@@ -86,3 +86,21 @@ def test_reset_edits_reloads_selected_object_without_mutating_layout(app):
 
     assert workspace._property_vars["name"].get() == original_name
     assert workspace.layout == layout_before
+
+
+def test_property_search_does_not_discard_unapplied_draft(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    workspace._property_vars["name"].set("Unapplied draft")
+    workspace._property_search_var.set("pressure")
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == "Unapplied draft"
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+
+    workspace.clear_property_filter()
+    app.root.update()
+    assert workspace._property_vars["name"].get() == "Unapplied draft"

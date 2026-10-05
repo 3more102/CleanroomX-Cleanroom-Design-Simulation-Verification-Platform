@@ -807,7 +807,7 @@ class VerificationHistoryDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1460x780")
+        self.geometry("1460x800")
         self.minsize(1080, 600)
         self.transient(parent)
 
@@ -822,6 +822,18 @@ class VerificationHistoryDialog(tk.Toplevel):
             item["analysis_id"]: item
             for item in currency.get("analyses", [])
         }
+        self._context_by_sequence = {
+            record["sequence"]: verification_history_record_currency_context(
+                record,
+                self.currency_by_analysis.get(record["analysis_id"]),
+            )
+            for record in self.records
+        }
+        self.search_var = tk.StringVar()
+        self.status_filter_var = tk.StringVar(value="All")
+        self.currency_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
+
         ttk.Label(
             self,
             text=(
@@ -837,6 +849,74 @@ class VerificationHistoryDialog(tk.Toplevel):
                 "labeled historical."
             ),
         ).pack(fill="x", padx=10, pady=(0, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=10, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=30,
+        )
+        self.search_entry.pack(side="left", padx=(4, 8))
+
+        statuses = sorted(
+            {
+                str(record.get("verification", {}).get("status", "")).strip()
+                for record in self.records
+                if isinstance(record.get("verification"), dict)
+                and str(record["verification"].get("status", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Historical status").pack(side="left")
+        self.status_combo = ttk.Combobox(
+            filters,
+            textvariable=self.status_filter_var,
+            values=("All", *statuses),
+            state="readonly",
+            width=14,
+        )
+        self.status_combo.pack(side="left", padx=(4, 8))
+
+        currencies = sorted(
+            {
+                str(context.get("state", "")).strip()
+                for context in self._context_by_sequence.values()
+                if str(context.get("state", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Currency").pack(side="left")
+        self.currency_combo = ttk.Combobox(
+            filters,
+            textvariable=self.currency_filter_var,
+            values=("All", *currencies),
+            state="readonly",
+            width=22,
+        )
+        self.currency_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Previous",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            filters,
+            text="Next",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            filters,
+            text="Copy record",
+            command=self._copy_selected,
+        ).pack(side="left", padx=2)
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -882,9 +962,20 @@ class VerificationHistoryDialog(tk.Toplevel):
             orient="vertical",
             command=self.tree.yview,
         )
-        self.tree.configure(yscrollcommand=list_scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        list_scroll.pack(side="right", fill="y")
+        list_scroll_x = ttk.Scrollbar(
+            list_frame,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
+        self.tree.configure(
+            yscrollcommand=list_scroll.set,
+            xscrollcommand=list_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        list_scroll.grid(row=0, column=1, sticky="ns")
+        list_scroll_x.grid(row=1, column=0, sticky="ew")
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
 
         detail_tabs = ttk.Notebook(detail_frame)
         detail_tabs.pack(fill="both", expand=True)
@@ -978,44 +1069,23 @@ class VerificationHistoryDialog(tk.Toplevel):
         record_tab.rowconfigure(0, weight=1)
         record_tab.columnconfigure(0, weight=1)
 
-        for record in reversed(self.records):
-            verification = record["verification"]
-            context = verification_history_record_currency_context(
-                record,
-                self.currency_by_analysis.get(record["analysis_id"]),
-            )
-            currency_text = str(context["state"])
-            mismatch_reasons = context.get("mismatch_reasons", [])
-            if mismatch_reasons:
-                currency_text += " (" + ", ".join(
-                    str(reason) for reason in mismatch_reasons
-                ) + ")"
-            self.tree.insert(
-                "",
-                "end",
-                iid=str(record["sequence"]),
-                text=str(record["sequence"]),
-                values=(
-                    record["completed_at_utc"],
-                    record["analysis_name"],
-                    record["analysis_kind"],
-                    verification["status"],
-                    currency_text,
-                    "yes" if verification["verified"] else "no",
-                    record["verification_identity_sha256"][:16] + "…",
-                ),
-            )
+        for variable in (
+            self.search_var,
+            self.status_filter_var,
+            self.currency_filter_var,
+        ):
+            variable.trace_add("write", lambda *_: self._populate_records())
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        self.tree.bind("<F4>", lambda event: self._select_relative(1))
+        self.tree.bind("<Shift-F4>", lambda event: self._select_relative(-1))
+        self.tree.bind("<Control-c>", lambda event: self._copy_selected())
+        self.bind("<Escape>", lambda event: self.destroy())
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=10, pady=(0, 10))
         ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
 
-        children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
-            self._show_selected()
+        self._populate_records()
 
     @staticmethod
     def _display_value(value) -> str:
@@ -1028,17 +1098,156 @@ class VerificationHistoryDialog(tk.Toplevel):
             separators=(",", ":"),
         )
 
-    def _show_selected(self, event=None) -> None:
+    @staticmethod
+    def _currency_text(context: dict) -> str:
+        text = str(context.get("state", "unknown"))
+        mismatch_reasons = context.get("mismatch_reasons", [])
+        if mismatch_reasons:
+            text += " (" + ", ".join(
+                str(reason) for reason in mismatch_reasons
+            ) + ")"
+        return text
+
+    def _filtered_records(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        status = self.status_filter_var.get().strip().casefold()
+        currency = self.currency_filter_var.get().strip().casefold()
+        visible = []
+        for record in reversed(self.records):
+            verification = record.get("verification")
+            if not isinstance(verification, dict):
+                continue
+            record_status = str(verification.get("status", ""))
+            context = self._context_by_sequence.get(record["sequence"], {})
+            context_state = str(context.get("state", ""))
+            if status and status != "all" and record_status.casefold() != status:
+                continue
+            if currency and currency != "all" and context_state.casefold() != currency:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(record.get("sequence", "")),
+                        str(record.get("completed_at_utc", "")),
+                        str(record.get("analysis_name", "")),
+                        str(record.get("analysis_kind", "")),
+                        record_status,
+                        self._currency_text(context),
+                        "verified" if verification.get("verified") else "not verified",
+                        str(record.get("verification_identity_sha256", "")),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(record)
+        return visible
+
+    def _populate_records(self) -> None:
+        selection = self.tree.selection()
+        selected = selection[0] if selection else None
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        visible = self._filtered_records()
+        for record in visible:
+            verification = record["verification"]
+            context = self._context_by_sequence.get(record["sequence"], {})
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(record["sequence"]),
+                text=str(record["sequence"]),
+                values=(
+                    record["completed_at_utc"],
+                    record["analysis_name"],
+                    record["analysis_kind"],
+                    verification["status"],
+                    self._currency_text(context),
+                    "yes" if verification["verified"] else "no",
+                    record["verification_identity_sha256"][:16] + "…",
+                ),
+            )
+        self.count_var.set(f"{len(visible)} of {len(self.records)} records")
+
+        children = self.tree.get_children()
+        if selected and self.tree.exists(selected):
+            target = selected
+        else:
+            target = children[0] if children else None
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self._show_selected()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.status_filter_var.set("All")
+        self.currency_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _selected_record(self) -> dict | None:
         selection = self.tree.selection()
         if not selection:
-            return
+            return None
         sequence = int(selection[0])
-        record = next(
-            item for item in self.records if item["sequence"] == sequence
+        return next(
+            (item for item in self.records if item["sequence"] == sequence),
+            None,
         )
+
+    def _select_relative(self, step: int):
+        children = list(self.tree.get_children())
+        if not children:
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in children:
+            index = children.index(selection[0])
+            target = children[(index + step) % len(children)]
+        else:
+            target = children[0 if step >= 0 else -1]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected()
+        return "break"
+
+    def _copy_selected(self) -> None:
+        record = self._selected_record()
+        if record is None:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(
+            json.dumps(
+                record,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+        )
+
+    def _show_selected(self, event=None) -> None:
+        record = self._selected_record()
 
         for item in self.requirement_tree.get_children():
             self.requirement_tree.delete(item)
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+
+        if record is None:
+            if self.records and not self._filtered_records():
+                self.detail.insert(
+                    "1.0",
+                    "No retained verification records match the active filters.",
+                )
+            else:
+                self.detail.insert(
+                    "1.0",
+                    "No retained verification records are available.",
+                )
+            self.detail.configure(state="disabled")
+            return
+
         for index, row in enumerate(verification_history_requirement_rows(record)):
             parent_id = f"finding:{index}"
             subject = row["subject_ref"] if row["subject_ref"] is not None else "project"
@@ -1115,8 +1324,6 @@ class VerificationHistoryDialog(tk.Toplevel):
                     ),
                 )
 
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
         self.detail.insert(
             "1.0",
             json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),

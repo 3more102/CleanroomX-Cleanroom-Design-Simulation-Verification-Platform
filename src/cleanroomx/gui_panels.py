@@ -148,21 +148,49 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
 
+        detail_header = ttk.Frame(detail_frame, style="CX.PanelHeader.TFrame")
+        detail_header.pack(fill="x", padx=4, pady=(4, 0))
+        ttk.Label(
+            detail_header,
+            text="ISSUE INSPECTOR",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        self.detail_copy_button = ttk.Button(
+            detail_header,
+            text="Copy JSON",
+            style="CX.Compact.TButton",
+            command=self.copy_selected,
+            state="disabled",
+        )
+        self.detail_copy_button.pack(side="right", padx=(4, 0))
+        self.locate_button = ttk.Button(
+            detail_header,
+            text="Locate",
+            style="CX.Compact.TButton",
+            command=self._navigate_selected,
+            state="disabled",
+        )
+        self.locate_button.pack(side="right")
+
+        detail_body = ttk.Frame(detail_frame)
+        detail_body.pack(fill="both", expand=True)
         self.detail = tk.Text(
-            detail_frame,
+            detail_body,
             wrap="word",
-            height=4,
+            height=5,
             state="disabled",
             borderwidth=0,
+            padx=8,
+            pady=6,
         )
         detail_scroll = ttk.Scrollbar(
-            detail_frame,
+            detail_body,
             orient="vertical",
             command=self.detail.yview,
         )
         self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
-        detail_scroll.pack(side="right", fill="y", pady=4)
+        self.detail.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
 
     def apply_theme(self, value: Any) -> None:
         """Retheme diagnostics presentation without changing diagnostic results."""
@@ -333,30 +361,48 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         issue = self.selected_issue()
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        if issue is not None:
-            lines = [
-                f"{self._severity_label(issue.get('severity', 'info'))} · {issue.get('rule', '')}",
-                str(issue.get("message", "")),
-                "",
-                "Suggested action:",
-                str(issue.get("suggested_action", "")),
-            ]
-            details = issue.get("details")
-            if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "Details:",
-                        json.dumps(
-                            details,
-                            indent=2,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
+        enabled = "normal" if issue is not None else "disabled"
+        self.locate_button.configure(state=enabled)
+        self.detail_copy_button.configure(state=enabled)
+        if issue is None:
+            self.detail.insert(
+                "1.0",
+                "No diagnostic selected. Select an engineering issue to inspect "
+                "its affected object, recovery guidance, and technical evidence.",
+            )
+            self.detail.configure(state="disabled")
+            return
+
+        object_text = self._element_text(issue)
+        domain = str(issue.get("category", "") or "project")
+        level = self._level_text(issue) or "—"
+        lines = [
+            f"{self._severity_label(issue.get('severity', 'info'))} · {issue.get('rule', '')}",
+            f"Object: {object_text}    Domain: {domain}    Level: {level}",
+            "",
+            "Engineering finding",
+            str(issue.get("message", "")),
+            "",
+            "Suggested recovery",
+            str(issue.get("suggested_action", "") or "No recovery action supplied."),
+        ]
+        details = issue.get("details")
+        if isinstance(details, dict) and details:
+            lines.extend(("", "Technical details"))
+            for key in sorted(details):
+                value = details[key]
+                if isinstance(value, (dict, list)):
+                    rendered = json.dumps(
+                        value,
+                        sort_keys=True,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                        separators=(",", ":"),
                     )
-                )
-            self.detail.insert("1.0", "\n".join(lines))
+                else:
+                    rendered = str(value)
+                lines.append(f"{key}: {rendered}")
+        self.detail.insert("1.0", "\n".join(lines))
         self.detail.configure(state="disabled")
 
     def _navigate_selected(self, event=None):

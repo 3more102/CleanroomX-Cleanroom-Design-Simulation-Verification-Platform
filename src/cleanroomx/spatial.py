@@ -1582,6 +1582,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_group_order: list[str] = []
         self._property_filter_var = tk.StringVar(value="")
         self._property_filter_summary_var = tk.StringVar(value="Editable properties")
+        self._property_error_var = tk.StringVar(value="")
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1616,7 +1617,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._build()
         self._property_filter_var.trace_add(
-            "write", lambda *_: self._load_property_panel()
+            "write", self._on_property_filter_changed
         )
         self.refresh()
 
@@ -1983,7 +1984,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._property_filter_summary_var,
             style="CX.Muted.TLabel",
-        ).pack(fill="x", pady=(0, 6))
+        ).pack(fill="x", pady=(0, 4))
+        self._property_error_label = ttk.Label(
+            inspector,
+            textvariable=self._property_error_var,
+            style="CX.ErrorText.TLabel",
+            wraplength=300,
+            justify="left",
+        )
+        self._property_error_label.pack(fill="x", pady=(0, 6))
+        self._property_error_label.pack_forget()
 
         engineering = ttk.LabelFrame(
             inspector,
@@ -2118,6 +2128,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._property_vars[key] = var
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
+                entry.bind(
+                    "<KeyRelease>",
+                    lambda _event: self._clear_property_error(),
+                    add="+",
+                )
+                entry.bind(
+                    "<Return>",
+                    lambda _event: (self.apply_properties(), "break")[1],
+                    add="+",
+                )
                 self._property_entries[key] = entry
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
@@ -2977,51 +2997,48 @@ class SpatialDesignWorkspace(ttk.Frame):
         haystack = " ".join((key, group, label, unit)).casefold()
         return all(token in haystack for token in tokens)
 
-    def _load_property_panel(self) -> None:
-        item = self._selected_object()
-        if item is None:
-            self._selection_var.set(
-                "No object selected — select a room, device, opening, or equipment item."
-            )
-            self._property_filter_summary_var.set("No editable properties")
-            self._load_engineering_inspector_snapshot()
-            for section in self._property_sections.values():
-                section.pack_forget()
-            for key, var in self._property_vars.items():
-                var.set("")
-                row = self._property_rows.get(key)
-                if row is not None:
-                    row.pack_forget()
-            return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
-        selection_text = f"{prefix}: {item.get('name', '')}"
+    @staticmethod
+    def _property_error_field(message: str) -> str | None:
+        """Resolve backend validation text to the inspector field that needs attention."""
+        text = str(message or "").strip().casefold()
+        labels = (
+            ("floor elevation", "floor_elevation_m"),
+            ("orientation", "orientation_deg"),
+            ("pressure", "pressure_pa"),
+            ("length", "length_m"),
+            ("width", "width_m"),
+            ("height", "height_m"),
+            ("room id", "room_id"),
+            ("wall side", "wall_side"),
+            ("name", "name"),
+            ("x (m)", "x_m"),
+            ("y (m)", "y_m"),
+            ("z (m)", "z_m"),
+        )
+        for label, key in labels:
+            if label in text:
+                return key
+        return None
+
+    def _on_property_filter_changed(self, *_args) -> None:
+        """Filter rows only; never reload the selected object over unsaved editor text."""
+        self._apply_property_filter()
+
+    def _editable_property_fields(self) -> set[str]:
         if self.selected and self.selected.kind == "room":
-            sync = engineering_sync_status(self.layout, self._analysis_getter())
-            room_sync = next(
-                (
-                    record
-                    for record in sync["rooms"]
-                    if record["room_id"] == self.selected.item_id
-                ),
-                None,
-            )
-            if room_sync is not None:
-                selection_text += " — " + room_sync["state"].replace("_", " ")
-        self._selection_var.set(selection_text)
-        self._load_engineering_inspector_snapshot()
-        room_fields = {
-            "name",
-            "x_m",
-            "y_m",
-            "length_m",
-            "width_m",
-            "height_m",
-            "floor_elevation_m",
-            "pressure_pa",
-            "classification",
-            "analysis_room_name",
-        }
-        device_fields = {
+            return {
+                "name",
+                "x_m",
+                "y_m",
+                "length_m",
+                "width_m",
+                "height_m",
+                "floor_elevation_m",
+                "pressure_pa",
+                "classification",
+                "analysis_room_name",
+            }
+        return {
             "name",
             "x_m",
             "y_m",
@@ -3033,16 +3050,66 @@ class SpatialDesignWorkspace(ttk.Frame):
             "wall_side",
             "swing",
         }
-        visible_fields = (
-            room_fields
-            if self.selected and self.selected.kind == "room"
-            else device_fields
-        )
+
+    def _clear_property_error(self) -> None:
+        self._property_error_var.set("")
+        label = getattr(self, "_property_error_label", None)
+        if label is not None:
+            try:
+                label.pack_forget()
+            except tk.TclError:
+                pass
+        for entry in self._property_entries.values():
+            try:
+                entry.state(["!invalid"])
+            except tk.TclError:
+                pass
+
+    def _show_property_error(self, message: str) -> None:
+        self._property_error_var.set(message)
+        label = getattr(self, "_property_error_label", None)
+        if label is not None:
+            try:
+                label.pack(fill="x", pady=(0, 6))
+            except tk.TclError:
+                pass
+        field = self._property_error_field(message)
+        for key, entry in self._property_entries.items():
+            try:
+                entry.state(["invalid"] if key == field else ["!invalid"])
+            except tk.TclError:
+                pass
+        entry = self._property_entries.get(field or "")
+        if entry is not None:
+            try:
+                entry.focus_set()
+                entry.selection_range(0, "end")
+            except tk.TclError:
+                pass
+
+    def _apply_property_filter(self) -> None:
+        item = self._selected_object()
+        if item is None:
+            self._property_filter_summary_var.set("No editable properties")
+            for section in self._property_sections.values():
+                section.pack_forget()
+            for row in self._property_rows.values():
+                row.pack_forget()
+            try:
+                self._property_apply_button.configure(state="disabled")
+            except tk.TclError:
+                pass
+            return
+
+        try:
+            self._property_apply_button.configure(state="normal")
+        except tk.TclError:
+            pass
+        visible_fields = self._editable_property_fields()
         query = self._property_filter_var.get()
         shown_fields: set[str] = set()
         shown_groups: set[str] = set()
-        for key, var in self._property_vars.items():
-            row = self._property_rows.get(key)
+        for key, row in self._property_rows.items():
             group, label, unit = self._property_meta.get(key, ("", key, ""))
             visible = key in visible_fields and self._property_matches_filter(
                 query,
@@ -3051,15 +3118,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 label=label,
                 unit=unit,
             )
-            if row is not None:
-                if visible:
-                    row.pack(fill="x", pady=2)
-                    shown_fields.add(key)
-                    shown_groups.add(group)
-                else:
-                    row.pack_forget()
-            value = item.get(key, "")
-            var.set("" if value is None else str(value))
+            if visible:
+                row.pack(fill="x", pady=2)
+                shown_fields.add(key)
+                shown_groups.add(group)
+            else:
+                row.pack_forget()
 
         for group_name in self._property_group_order:
             section = self._property_sections[group_name]
@@ -3082,10 +3146,48 @@ class SpatialDesignWorkspace(ttk.Frame):
                 f"{shown} editable properties"
             )
 
+    def _load_property_panel(self) -> None:
+        item = self._selected_object()
+        self._clear_property_error()
+        if item is None:
+            self._selection_var.set(
+                "No object selected — select a room, device, opening, or equipment item."
+            )
+            self._load_engineering_inspector_snapshot()
+            for var in self._property_vars.values():
+                var.set("")
+            self._apply_property_filter()
+            return
+        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+        selection_text = f"{prefix}: {item.get('name', '')}"
+        if self.selected and self.selected.kind == "room":
+            sync = engineering_sync_status(self.layout, self._analysis_getter())
+            room_sync = next(
+                (
+                    record
+                    for record in sync["rooms"]
+                    if record["room_id"] == self.selected.item_id
+                ),
+                None,
+            )
+            if room_sync is not None:
+                selection_text += " — " + room_sync["state"].replace("_", " ")
+        self._selection_var.set(selection_text)
+        self._load_engineering_inspector_snapshot()
+        visible_fields = self._editable_property_fields()
+        for key, var in self._property_vars.items():
+            if key in visible_fields:
+                value = item.get(key, "")
+                var.set("" if value is None else str(value))
+            else:
+                var.set("")
+        self._apply_property_filter()
+
     def apply_properties(self) -> None:
         item = self._selected_object()
         if item is None:
             return
+        self._clear_property_error()
         try:
             candidate = update_spatial_properties(
                 self.layout,
@@ -3094,8 +3196,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 {key: variable.get() for key, variable in self._property_vars.items()},
             )
         except ValueError as exc:
-            messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
-            self._status_setter("Properties not applied: " + str(exc))
+            message = str(exc)
+            self._show_property_error(message)
+            self._status_setter("Properties not applied: " + message)
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()

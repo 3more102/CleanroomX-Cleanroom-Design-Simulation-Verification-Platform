@@ -85,7 +85,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
-from .runtime_diagnostics import install_tk_exception_handler
+from .runtime_diagnostics import install_tk_exception_handler, record_gui_exception
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -7233,7 +7233,11 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+                failure = record_gui_exception(
+                    f"Run analysis {analysis_id}",
+                    exc,
+                )
+                self._queue.put(("error", generation, analysis_id, failure))
                 return
 
             history_evidence = None
@@ -7241,7 +7245,10 @@ class CleanroomXApp:
             try:
                 history_evidence = build_run_history_evidence(payload, result)
             except Exception as exc:  # audit preparation must not hide a valid result
-                history_error = str(exc)
+                history_error = record_gui_exception(
+                    f"Prepare run-history audit evidence for {analysis_id}",
+                    exc,
+                )
             self._queue.put(
                 (
                     "success",
@@ -7281,8 +7288,18 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
+                    reference = getattr(payload, "reference", "")
+                    if reference:
+                        self.status_var.set(f"Analysis failed · {reference}")
+                    else:
+                        self.status_var.set("Analysis failed")
+                    user_message = getattr(payload, "user_message", None)
+                    detail = (
+                        user_message()
+                        if callable(user_message)
+                        else str(payload)
+                    )
+                    messagebox.showerror("Analysis failed", detail, parent=self.root)
                 else:
                     history_evidence = None
                     history_error = None
@@ -7318,7 +7335,10 @@ class CleanroomXApp:
                                 analysis, run, history_evidence
                             )
                         except RunHistoryIntegrityError as exc:
-                            history_error = str(exc)
+                            history_error = record_gui_exception(
+                                "Finalize run-history audit evidence",
+                                exc,
+                            )
 
                     self._runs_by_analysis[analysis_id] = run
                     self.last_run = run
@@ -7329,8 +7349,21 @@ class CleanroomXApp:
                             f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
-                        self.status_var.set(
-                            f"Completed — {run.title}; run history was not updated."
+                        reference = getattr(history_error, "reference", "")
+                        if reference:
+                            self.status_var.set(
+                                f"Completed — {run.title}; run history was not updated · "
+                                f"{reference}"
+                            )
+                        else:
+                            self.status_var.set(
+                                f"Completed — {run.title}; run history was not updated."
+                            )
+                        user_message = getattr(history_error, "user_message", None)
+                        history_detail = (
+                            user_message()
+                            if callable(user_message)
+                            else str(history_error)
                         )
                         messagebox.showwarning(
                             "Run history not updated",
@@ -7340,7 +7373,7 @@ class CleanroomXApp:
                                 "evidence could not be prepared or the existing history failed "
                                 "integrity validation. Existing history was left unchanged. "
                                 "Export the run bundle if this result must be retained.\n\n"
-                                f"{history_error}"
+                                f"{history_detail}"
                             ),
                             parent=self.root,
                         )

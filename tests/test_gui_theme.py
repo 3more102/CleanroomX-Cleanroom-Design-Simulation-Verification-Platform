@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, theme_palette
+from cleanroomx.gui_theme import normalize_density_name, normalize_theme_name, theme_palette
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -49,3 +49,11 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_density_name_normalization_is_strict_and_deterministic():
+    assert normalize_density_name("comfortable") == "comfortable"
+    assert normalize_density_name(" COMPACT ") == "compact"
+    assert normalize_density_name("") == "comfortable"
+    assert normalize_density_name("dense") == "comfortable"
+    assert normalize_density_name(None) == "comfortable"

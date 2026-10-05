@@ -11,7 +11,18 @@ from .gui_panels import (
     diagnostic_filter_options,
     diagnostic_matches_filters,
 )
+from .gui_table import TreeviewTableBehavior
 from .gui_theme import attach_tooltip, status_style_name
+
+
+def _severity_sort_key(value: str) -> tuple[int, Any]:
+    token = str(value or "").strip().upper()
+    if not token:
+        return (2, "")
+    rank = {"ERROR": 0, "WARNING": 1, "INFO": 2}
+    if token in rank:
+        return (0, rank[token])
+    return (1, token.casefold())
 
 
 def _element_text(issue: dict[str, Any]) -> str:
@@ -78,6 +89,7 @@ class DiagnosticsWorkspace(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.rule_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.target_type_var = tk.StringVar(value="All")
         self.state_var = tk.StringVar(value="NOT CHECKED")
@@ -119,6 +131,15 @@ class DiagnosticsWorkspace(ttk.Frame):
             state="readonly",
             width=10,
         ).pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Rule").pack(side="left")
+        self.rule_combo = ttk.Combobox(
+            filters,
+            textvariable=self.rule_var,
+            values=("All",),
+            state="readonly",
+            width=22,
+        )
+        self.rule_combo.pack(side="left", padx=(4, 8))
         ttk.Label(filters, text="Domain").pack(side="left")
         self.category_combo = ttk.Combobox(
             filters,
@@ -137,6 +158,12 @@ class DiagnosticsWorkspace(ttk.Frame):
             width=16,
         )
         self.target_combo.pack(side="left", padx=(4, 0))
+        ttk.Button(
+            filters,
+            text="Reset",
+            style="CX.Compact.TButton",
+            command=self._reset_filters,
+        ).pack(side="right", padx=(8, 0))
 
         actions = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 4))
         actions.pack(fill="x", pady=(0, 8))
@@ -205,7 +232,7 @@ class DiagnosticsWorkspace(ttk.Frame):
             table_host,
             columns=columns,
             show="headings",
-            selectmode="browse",
+            selectmode="extended",
         )
         for key, title, width, stretch in (
             ("severity", "Severity", 85, False),
@@ -216,6 +243,12 @@ class DiagnosticsWorkspace(ttk.Frame):
         ):
             self.tree.heading(key, text=title)
             self.tree.column(key, width=width, minwidth=70, stretch=stretch)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=columns,
+            copy_columns=columns,
+            sort_key_by_column={"severity": _severity_sort_key},
+        )
         yscroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(table_host, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -247,6 +280,7 @@ class DiagnosticsWorkspace(ttk.Frame):
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.rule_var.trace_add("write", lambda *_: self._populate())
         self.category_var.trace_add("write", lambda *_: self._populate())
         self.target_type_var.trace_add("write", lambda *_: self._populate())
 
@@ -264,15 +298,30 @@ class DiagnosticsWorkspace(ttk.Frame):
             side="left", padx=(0, 14)
         )
 
+    def _reset_filters(self) -> None:
+        self.search_var.set("")
+        self.severity_var.set("All")
+        self.rule_var.set("All")
+        self.category_var.set("All")
+        self.target_type_var.set("All")
+        self._status_setter("Diagnostic filters reset")
+
     def _refresh_requested(self) -> None:
         self._on_refresh()
 
     def _export_requested(self) -> None:
         self._on_export(self._result)
 
+    def selected_issues(self) -> list[dict[str, Any]]:
+        return [
+            self._issues_by_iid[iid]
+            for iid in self.tree.selection()
+            if iid in self._issues_by_iid
+        ]
+
     def selected_issue(self) -> dict[str, Any] | None:
-        selection = self.tree.selection()
-        return self._issues_by_iid.get(selection[0]) if selection else None
+        selected = self.selected_issues()
+        return selected[0] if selected else None
 
     def select_issue_sequence(self, sequence: Any) -> bool:
         for iid, issue in self._issues_by_iid.items():
@@ -320,23 +369,28 @@ class DiagnosticsWorkspace(ttk.Frame):
         return "break"
 
     def _copy_selected(self) -> None:
-        issue = self.selected_issue()
-        if issue is None:
+        issues = self.selected_issues()
+        if not issues:
             self._status_setter("Select a diagnostic to copy")
             return
-        payload = json.dumps(
-            issue,
+        payload: Any = issues[0] if len(issues) == 1 else issues
+        rendered = json.dumps(
+            payload,
             indent=2,
             sort_keys=True,
             ensure_ascii=False,
             allow_nan=False,
         )
         self.clipboard_clear()
-        self.clipboard_append(payload)
-        self._status_setter("Diagnostic copied to clipboard")
+        self.clipboard_append(rendered)
+        if len(issues) == 1:
+            self._status_setter("Diagnostic copied to clipboard")
+        else:
+            self._status_setter(f"{len(issues)} diagnostics copied to clipboard")
 
     def _filtered_issues(self) -> list[dict[str, Any]]:
         state = diagnostics_workspace_projection(self._result)
+        selected_rule = self.rule_var.get().strip().casefold()
         return [
             issue
             for issue in state["issues"]
@@ -346,6 +400,10 @@ class DiagnosticsWorkspace(ttk.Frame):
                 category=self.category_var.get(),
                 target_type=self.target_type_var.get(),
                 query=self.search_var.get(),
+            )
+            and (
+                selected_rule in {"", "all"}
+                or str(issue.get("rule") or "").strip().casefold() == selected_rule
             )
         ]
 
@@ -374,6 +432,7 @@ class DiagnosticsWorkspace(ttk.Frame):
                 tags=(f"severity_{severity}",),
             )
             self._issues_by_iid[iid] = issue
+        self.table_behavior.reapply_sort()
         total = len(diagnostics_workspace_projection(self._result)["issues"])
         self.visible_var.set(f"{len(visible)} / {total} visible")
 
@@ -445,10 +504,14 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.warning_var.set(str(state["warning_count"]))
         self.info_var.set(str(state["info_count"]))
 
+        rules = diagnostic_filter_options(state["issues"], "rule")
         categories = diagnostic_filter_options(state["issues"], "category")
         targets = diagnostic_filter_options(state["issues"], "target_type")
+        self.rule_combo.configure(values=rules)
         self.category_combo.configure(values=categories)
         self.target_combo.configure(values=targets)
+        if self.rule_var.get() not in rules:
+            self.rule_var.set("All")
         if self.category_var.get() not in categories:
             self.category_var.set("All")
         if self.target_type_var.get() not in targets:

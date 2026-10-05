@@ -62,9 +62,10 @@ def _force_room_overlap(app: CleanroomXApp) -> tuple[dict, dict]:
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):
     tabs = _tab_texts(app.output_notebook)
-    assert tabs[:6] == [
+    assert tabs[:7] == [
         "Problems",
         "Analysis",
+        "Tasks",
         "Diagnostics",
         "Verification",
         "Console",

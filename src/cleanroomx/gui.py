@@ -80,6 +80,7 @@ from .gui_state import (
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .gui_windowing import fit_window_to_display
+from .gui_errors import make_gui_callback_exception_handler
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -7282,6 +7283,21 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke:
+        status_setter = getattr(
+            getattr(app, "status_var", None),
+            "set",
+            None,
+        )
+        root.report_callback_exception = make_gui_callback_exception_handler(
+            operation="Unhandled GUI callback",
+            status_setter=status_setter if callable(status_setter) else None,
+            notifier=lambda report: messagebox.showerror(
+                "Unexpected application error",
+                report.user_message(),
+                parent=root,
+            ),
+        )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]
         lines = [

@@ -219,9 +219,13 @@ jobs:
         run: |
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
           xvfb-run -a /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --demo --smoke
-      - name: Exercise spatial editing with real Tk widgets
+      - name: Exercise production GUI interactions with real Tk widgets
         if: matrix.python-version == '3.13'
-        run: xvfb-run -a python -m pytest -q tests/test_spatial_editing_gui.py
+        run: |
+          xvfb-run -a python -m pytest -q \
+            tests/test_spatial_editing_gui.py \
+            tests/test_gui_spatial_inspector_search.py \
+            tests/test_gui_proofgraph_interaction.py
       - name: Run representative v0.100 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

@@ -4380,6 +4380,32 @@ class CleanroomXApp:
             self.selection_status_var.set(f"Selected: {entry.label}")
             return
 
+        if target_type == "compliance_rule":
+            payload = entry.payload if isinstance(entry.payload, dict) else {}
+            analysis_id = str(payload.get("analysis_id") or "").strip()
+            if analysis_id and self.analysis_tree.exists(analysis_id):
+                self.analysis_tree.selection_set(analysis_id)
+                self.analysis_tree.focus(analysis_id)
+                self.analysis_tree.see(analysis_id)
+                self._on_analysis_selected()
+                if self._editor_analysis_id != analysis_id:
+                    self.status_var.set(
+                        "Compliance rule navigation was blocked by invalid current input"
+                    )
+                    return
+            self._activate_compliance_workspace()
+            panel = getattr(self, "compliance_panel", None)
+            if (
+                panel is not None
+                and target_id
+                and self._editor_analysis_id == analysis_id
+            ):
+                panel._select_rule_id(target_id)
+            self.selection_status_var.set(
+                f"Selected compliance rule: {target_id or entry.label}"
+            )
+            return
+
         if target_type == "requirement":
             self.show_requirements_traceability(target_id or None)
             self.selection_status_var.set(

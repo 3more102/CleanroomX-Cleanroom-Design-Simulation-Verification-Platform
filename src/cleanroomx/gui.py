@@ -76,6 +76,7 @@ from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
 from .gui_assurance import EvidenceWorkspace, VerificationWorkspace
 from .gui_reporting import ReportingWorkspace
+from .gui_notifications import NotificationCenter
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
     GlobalEngineeringSearch,
@@ -1319,6 +1320,30 @@ class CleanroomXApp:
             self.theme_var.get(),
         )
 
+    def _notify(
+        self,
+        message: str,
+        *,
+        level: str = "info",
+        detail: str = "",
+        persistent: bool | None = None,
+        timeout_ms: int | None = None,
+    ) -> None:
+        center = getattr(self, "notification_center", None)
+        if center is None:
+            status = getattr(self, "status_var", None)
+            setter = getattr(status, "set", None)
+            if callable(setter):
+                setter(message)
+            return
+        center.notify(
+            message,
+            level=level,
+            detail=detail,
+            persistent=persistent,
+            timeout_ms=timeout_ms,
+        )
+
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
 
@@ -1879,6 +1904,11 @@ class CleanroomXApp:
             command=self.export_project_engineering_dossier,
         )
         self.workflow_report_button.pack(side="left", padx=1)
+
+        self.notification_center = NotificationCenter(
+            self.root,
+            anchor=workflowbar,
+        )
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.main_panes = panes
@@ -4079,10 +4109,9 @@ class CleanroomXApp:
             )
             return False
         if summary["record_count"] == 0:
-            messagebox.showinfo(
-                "Analysis Run History",
+            self._notify(
                 "No completed analysis runs have been recorded in this project yet.",
-                parent=self.root,
+                level="info",
             )
             return False
         RunHistoryDialog(self.root, self.project.metadata)
@@ -4106,10 +4135,9 @@ class CleanroomXApp:
             )
             return False
         if summary["record_count"] == 0:
-            messagebox.showinfo(
-                "Project Verification History",
+            self._notify(
                 "No persisted project requirements verification records exist yet.",
-                parent=self.root,
+                level="info",
             )
             return False
         VerificationHistoryDialog(
@@ -4138,10 +4166,9 @@ class CleanroomXApp:
             snapshot["requirement_count"] == 0
             and snapshot["mapping_count"] == 0
         ):
-            messagebox.showinfo(
-                "Project Requirements Traceability",
+            self._notify(
                 "No persisted project requirements or evidence mappings exist yet.",
-                parent=self.root,
+                level="info",
             )
             return False
 
@@ -4273,10 +4300,10 @@ class CleanroomXApp:
             self.status_var.set(
                 f"Project requirements verified — {analysis.name}"
             )
-            messagebox.showinfo(
+            self._notify(
                 "Project requirements verified",
-                message,
-                parent=self.root,
+                level="success",
+                detail=message,
             )
         else:
             self.status_var.set(
@@ -4358,10 +4385,10 @@ class CleanroomXApp:
             self.status_var.set(
                 f"Project verification persisted — {analysis.name}"
             )
-            messagebox.showinfo(
+            self._notify(
                 "Project verification persisted",
-                message,
-                parent=self.root,
+                level="success",
+                detail=message,
             )
         else:
             self.status_var.set(
@@ -5326,16 +5353,16 @@ class CleanroomXApp:
             f"Imported IFC spatial layout — {len(layout['rooms'])} room(s), "
             f"{len(layout['devices'])} device(s); save the project to persist it."
         )
-        messagebox.showinfo(
+        self._notify(
             "IFC spatial layout imported",
-            (
-                f"Source: {provenance['source_name']}\n"
-                f"Rooms: {len(layout['rooms'])}\n"
-                f"Devices: {len(layout['devices'])}\n"
-                f"SHA-256: {provenance['source_sha256']}\n\n"
+            level="success",
+            detail=(
+                f"Source: {provenance['source_name']} · "
+                f"Rooms: {len(layout['rooms'])} · "
+                f"Devices: {len(layout['devices'])} · "
+                f"SHA-256: {provenance['source_sha256']} · "
                 "Engineering analysis inputs were not changed automatically."
             ),
-            parent=self.root,
         )
         return True
 
@@ -5933,14 +5960,14 @@ class CleanroomXApp:
             f"Portable project exported — {report['dependency_count']} "
             f"dependency file(s)"
         )
-        messagebox.showinfo(
+        self._notify(
             "Portable project exported",
-            (
-                f"Created {Path(path).name}.\n\n"
-                f"Dependencies packaged: {report['dependency_count']}\n"
+            level="success",
+            detail=(
+                f"Created {Path(path).name} · "
+                f"Dependencies packaged: {report['dependency_count']} · "
                 f"Bundle SHA-256: {report['bundle_sha256']}"
             ),
-            parent=self.root,
         )
 
     def export_project_engineering_dossier(self) -> None:
@@ -6082,14 +6109,14 @@ class CleanroomXApp:
             ),
         ):
             return
-        messagebox.showinfo(
+        self._notify(
             "Project dossier exported",
-            (
-                f"Created {Path(path).name}.\n\n"
-                f"Source project SHA-256: {dossier['source_project_revision']}\n"
+            level="success",
+            detail=(
+                f"Created {Path(path).name} · "
+                f"Source project SHA-256: {dossier['source_project_revision']} · "
                 f"Dossier SHA-256: {dossier['dossier_sha256']}"
             ),
-            parent=self.root,
         )
 
     def load_project_path(self, path: str | Path) -> None:
@@ -6698,7 +6725,11 @@ class CleanroomXApp:
             return
         self.refresh_structure(silent=True)
         self.status_var.set(f"Input valid — {analysis.name}")
-        messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
+        self._notify(
+            f"Input valid — {analysis.name}",
+            level="success",
+            detail="Input is valid for the selected backend workflow.",
+        )
 
     def _set_run_state_indicator(self, text: str, style: str) -> None:
         """Update optional run-state presentation without coupling worker logic to Tk."""

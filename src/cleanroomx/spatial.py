@@ -10,7 +10,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
-from .gui_theme import theme_palette
+from .gui_theme import engineering_status_style, theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1546,7 +1546,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4), style="CX.Toolbar.TFrame")
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1595,7 +1595,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(self, padding=(8, 4), style="CX.Toolbar.TFrame")
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1630,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(self, padding=(8, 4), style="CX.Toolbar.TFrame")
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1651,11 +1651,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
+        self._validation_badge = ttk.Label(
+            viewbar,
+            textvariable=self._validation_var,
+            style=engineering_status_style("pass"),
         )
+        self._validation_badge.pack(side="right", padx=(10, 2))
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(self, padding=(8, 4), style="CX.Toolbar.TFrame")
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
@@ -1824,7 +1827,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(self._body, padding=(10, 8))
+        inspector = ttk.Frame(self._body, padding=(10, 8), style="CX.Panel.TFrame")
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
         inspector_header = ttk.Frame(
@@ -1889,7 +1892,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(\n                inspector,\n                text=group_name.upper(),\n                padding=(8, 6),\n                style="CX.Card.TLabelframe",\n            )
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -1911,11 +1914,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             text="Apply properties",
             command=self.apply_properties,
+            style="CX.Primary.TButton",
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
-        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
-        )
+        ttk.Label(
+            inspector,
+            textvariable=self._sync_var,
+            wraplength=310,
+            style="CX.Muted.TLabel",
+        ).pack(fill="x", pady=(3, 0))
 
         self._apply_workspace_mode()
 
@@ -2586,6 +2593,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var.set(
             "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
         )
+        badge = getattr(self, "_validation_badge", None)
+        if badge is not None:
+            badge.configure(
+                style=engineering_status_style("pass" if count == 0 else "warning")
+            )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
         validation_key = _spatial_validation_key(self.layout)
@@ -3297,12 +3309,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered == _Hit("room", room["id"])
             outline = (
-                "#1d4ed8"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#0ea5e9"
+                    self._theme_palette["geometry"]
                     if hovered
-                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["strong_border"]
+                    )
                 )
             )
             fill = (
@@ -3358,11 +3374,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+                outline=self._theme_palette["error"],
+                width=2,
+                dash=(5, 3),
+                tags=("validation",),
             )
             canvas.create_text(
                 (x0 + x1) / 2, (y0 + y1) / 2,
-                text="OVERLAP", fill="#991b1b", tags=("validation",)
+                text="OVERLAP", fill=self._theme_palette["error"], tags=("validation",)
             )
 
         if self._show_devices.get():
@@ -3385,12 +3404,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 selected = self.selected == _Hit("device", device["id"])
                 hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
-                    "#c0392b"
+                    self._theme_palette["accent"]
                     if selected
                     else (
-                        "#0ea5e9"
+                        self._theme_palette["airflow"]
                         if hovered
-                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                        else (
+                            self._theme_palette["warning"]
+                            if device["id"] in warning_ids
+                            else self._theme_palette["strong_border"]
+                        )
                     )
                 )
                 tag = f"device:{device['id']}"
@@ -3649,7 +3672,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ]
         canvas.create_polygon(
             *sum(floor_points, ()),
-            fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
+            fill=self._theme_palette["surface_alt"],\n            outline=self._theme_palette["strong_border"],\n            width=1,\n            tags=("floor3d",),
         )
 
         section_height = self._active_section_height()
@@ -3662,8 +3685,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             canvas.create_polygon(
                 *sum(section_points, ()),
-                fill="#334155",
-                outline="#38bdf8",
+                fill=self._theme_palette["panel"],
+                outline=self._theme_palette["accent"],
                 stipple="gray50",
                 width=1,
                 tags=("section_plane",),
@@ -3718,17 +3741,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill = (
                 overlay_by_room[room["id"]]["fill"]
                 if overlay_mode != "none"
-                else "#dfe7ef"
+                else self._theme_palette["elevated"]
             )
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
-                "#7dd3fc"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#38bdf8"
+                    self._theme_palette["geometry"]
                     if hovered
-                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["strong_border"]
+                    )
                 )
             )
             tag = f"room:{room['id']}"
@@ -3744,7 +3771,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
+                fill=self._theme_palette["surface_alt"],
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3752,7 +3779,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
+                fill=self._theme_palette["surface"],
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3772,7 +3799,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
                     text=room["name"] + overlay_text,
-                    fill="#f0f6fc",
+                    fill=self._theme_palette["text"],
                     tags=(tag, "room3d"),
                 )
 

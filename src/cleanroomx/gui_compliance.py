@@ -339,6 +339,7 @@ class ComplianceWorkspace(ttk.Frame):
             sortable_columns=columns,
             copy_columns=columns,
         )
+        self._configure_tree_tags("dark")
         self.tree.bind("<<TreeviewSelect>>", self._show_detail, add="+")
 
         self.detail = tk.Text(
@@ -599,6 +600,7 @@ class ComplianceWorkspace(ttk.Frame):
                 "",
                 "end",
                 iid=iid,
+                tags=(f"state_{status}",),
                 values=(
                     status.upper().replace("_", " "),
                     rule_id,
@@ -640,6 +642,44 @@ class ComplianceWorkspace(ttk.Frame):
                 "No compliance criteria match the active search/state filters."
             )
 
+    def focus_rule(self, rule_id: str) -> bool:
+        """Clear presentation filters and focus one configured canonical criterion."""
+        target = str(rule_id or "").strip()
+        if not target:
+            return False
+        self.search_var.set("")
+        self.state_filter_var.set("All states")
+        for iid, row in self._rows_by_iid.items():
+            if str(row.get("id") or "") != target:
+                continue
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+            self.tree.see(iid)
+            self._show_detail()
+            return True
+        return False
+
+    def _configure_tree_tags(self, theme: str) -> None:
+        palette = theme_palette(theme)
+        self.tree.tag_configure(
+            "state_pass",
+            foreground=palette["success"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "state_fail",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "state_not_checked",
+            foreground=palette["warning"],
+        )
+        self.tree.tag_configure(
+            "state_not_run",
+            foreground=palette["muted"],
+        )
+
     def _show_detail(self, _event=None) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -675,6 +715,7 @@ class ComplianceWorkspace(ttk.Frame):
 
     def apply_theme(self, theme: str) -> None:
         palette = theme_palette(theme)
+        self._configure_tree_tags(theme)
         self.detail.configure(
             background=palette["field"],
             foreground=palette["field_text"],

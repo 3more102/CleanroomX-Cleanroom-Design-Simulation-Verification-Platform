@@ -2325,6 +2325,147 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
 
+def test_background_analysis_failure_preserves_runtime_traceback(monkeypatch):
+    import queue
+    import sys
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    class RecordingLogger:
+        def __init__(self):
+            self.calls = []
+
+        def exception(self, message, *args):
+            self.calls.append((message, args, sys.exc_info()[0]))
+
+    analysis = AnalysisDocument(
+        id="analysis-a",
+        name="Background failure",
+        kind="room_verification",
+        input={},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._abandon_requested = False
+    app._queue = queue.Queue()
+    app.status_var = Status()
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    logger = RecordingLogger()
+    monkeypatch.setattr(gui_module, "GUI_RUNTIME_LOGGER", logger)
+    monkeypatch.setattr(gui_module, "validate_analysis_input", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        gui_module,
+        "run_analysis",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic solver failure")
+        ),
+    )
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    assert app._queue.get_nowait() == (
+        "error",
+        1,
+        "analysis-a",
+        "synthetic solver failure",
+    )
+    assert logger.calls == [
+        (
+            "Background analysis execution failed analysis_id=%s kind=%s",
+            ("analysis-a", "room_verification"),
+            RuntimeError,
+        )
+    ]
+
+
+def test_run_history_preparation_failure_preserves_runtime_traceback(monkeypatch):
+    import queue
+    import sys
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    completed_run = run_analysis("room_verification", payload)
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    class RecordingLogger:
+        def __init__(self):
+            self.calls = []
+
+        def exception(self, message, *args):
+            self.calls.append((message, args, sys.exc_info()[0]))
+
+    analysis = AnalysisDocument(
+        id="analysis-a",
+        name="History evidence failure",
+        kind="room_verification",
+        input=payload,
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._abandon_requested = False
+    app._queue = queue.Queue()
+    app.status_var = Status()
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    logger = RecordingLogger()
+    monkeypatch.setattr(gui_module, "GUI_RUNTIME_LOGGER", logger)
+    monkeypatch.setattr(gui_module, "validate_analysis_input", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(gui_module, "run_analysis", lambda *_args, **_kwargs: completed_run)
+    monkeypatch.setattr(
+        gui_module,
+        "build_run_history_evidence",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("synthetic history evidence failure")
+        ),
+    )
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    kind, generation, analysis_id, queued = app._queue.get_nowait()
+    assert (kind, generation, analysis_id) == ("success", 1, "analysis-a")
+    run, history_evidence, history_error = queued
+    assert run is completed_run
+    assert history_evidence is None
+    assert history_error == "synthetic history evidence failure"
+    assert logger.calls == [
+        (
+            "Failed to prepare run-history evidence analysis_id=%s kind=%s",
+            ("analysis-a", "room_verification"),
+            ValueError,
+        )
+    ]
+
 def test_worker_failure_keeps_traceback_for_runtime_incident_and_stays_operator_safe(
     monkeypatch,
 ):

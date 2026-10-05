@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
+import cleanroomx.gui as gui_module
 from cleanroomx.runtime_diagnostics import (
     GUI_LOG_FILENAME,
     close_gui_runtime_logging,
@@ -125,3 +126,44 @@ def test_tk_exception_handler_logs_traceback_and_suppresses_duplicate_dialogs(
         logger = logging.getLogger(logger_name)
         close_gui_runtime_logging(logger)
         logging.Logger.manager.loggerDict.pop(logger_name, None)
+
+
+
+def test_gui_smoke_does_not_install_runtime_callback_boundary(monkeypatch, capsys):
+    class Root:
+        def __init__(self):
+            self.destroyed = False
+
+        def update_idletasks(self):
+            pass
+
+        def update(self):
+            pass
+
+        def destroy(self):
+            self.destroyed = True
+
+    class App:
+        def __init__(self, root, *, autosave_interval_seconds):
+            self.root = root
+            self.project = SimpleNamespace(analyses=[])
+
+    root = Root()
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "install_tk_exception_handler",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("smoke mode must expose escaped Tk callback failures")
+        ),
+    )
+
+    assert gui_module.main(["--smoke"]) == 0
+    assert root.destroyed is True
+    assert "CleanroomX GUI smoke: PASS" in capsys.readouterr().out

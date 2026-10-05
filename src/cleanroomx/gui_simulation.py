@@ -262,6 +262,7 @@ class SimulationWorkspace(ttk.Frame):
         self.diagnostics_var = tk.StringVar(value="—")
         self.convergence_var = tk.StringVar(value="NOT REPORTED")
         self.plot_var = tk.StringVar(value="—")
+        self.history_var = tk.StringVar(value="No retained runs")
         self.verification_var = tk.StringVar(value="Separate verification workspace")
 
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(10, 7))
@@ -435,6 +436,7 @@ class SimulationWorkspace(ttk.Frame):
         ).pack(anchor="w", pady=(0, 8))
         self._kv(result, "Calculated result fields", self.result_fields_var)
         self._kv(result, "Run diagnostics", self.diagnostics_var)
+        self._kv(result, "Retained run history", self.history_var)
         self._kv(result, "Compliance / verification", self.verification_var)
         ttk.Label(
             result,
@@ -464,6 +466,9 @@ class SimulationWorkspace(ttk.Frame):
         analysis_input: Any = None,
         last_run: Any = None,
         running: bool = False,
+        retained_run_count: int | None = None,
+        latest_retained_utc: str | None = None,
+        history_available: bool = True,
     ) -> None:
         if not analysis_name:
             self.analysis_var.set("No active analysis")
@@ -478,6 +483,7 @@ class SimulationWorkspace(ttk.Frame):
             self.diagnostics_var.set("—")
             self.convergence_var.set("NOT REPORTED")
             self.plot_var.set("—")
+            self.history_var.set("No retained runs")
             self.run_button.configure(state="disabled")
             self.cancel_button.configure(state="disabled")
             self.progress.stop()
@@ -488,6 +494,16 @@ class SimulationWorkspace(ttk.Frame):
         self.input_var.set(
             f"{len(analysis_input) if isinstance(analysis_input, dict) else 0} top-level fields"
         )
+        if not history_available:
+            self.history_var.set("UNAVAILABLE — ledger integrity")
+        elif retained_run_count is None:
+            self.history_var.set("Not evaluated")
+        elif retained_run_count <= 0:
+            self.history_var.set("0 retained runs")
+        else:
+            latest = str(latest_retained_utc or "").strip()
+            suffix = f" · latest {latest}" if latest else ""
+            self.history_var.set(f"{retained_run_count} retained run(s){suffix}")
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
 

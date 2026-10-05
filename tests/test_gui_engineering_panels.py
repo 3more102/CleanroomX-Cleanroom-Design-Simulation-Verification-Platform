@@ -275,3 +275,42 @@ def test_workspace_presets_rearrange_real_workspaces_without_model_mutation(app)
 def test_workspace_preset_rejects_unknown_layout(app):
     with pytest.raises(ValueError, match="unsupported workspace preset"):
         app.activate_workspace_preset("unknown")
+
+
+
+def test_problem_browser_domain_filter_sort_and_relative_navigation(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    category = str(issue.get("category") or "")
+    assert category
+    assert category in panel.category_picker.cget("values")
+
+    panel.clear_filters()
+    panel.category_var.set(category)
+    app.root.update()
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid].get("category") or "") == category
+        for iid in visible
+    )
+
+    panel.set_sort("code")
+    app.root.update()
+    codes = [
+        str(panel._issues_by_iid[iid].get("rule") or "").casefold()
+        for iid in panel.tree.get_children()
+    ]
+    assert codes == sorted(codes)
+
+    panel.tree.selection_remove(panel.tree.selection())
+    panel.select_relative(1)
+    selected = panel.tree.selection()
+    assert selected
+    first = selected[0]
+    panel.select_relative(1)
+    assert panel.tree.selection()
+    if len(panel.tree.get_children()) > 1:
+        assert panel.tree.selection()[0] != first
+
+    panel.clear_filters()

@@ -5,7 +5,8 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.spatial import _Hit
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     PaletteCommand,
@@ -158,3 +159,31 @@ def test_search_only_entries_are_lazy_until_query():
 
     assert [item.id for item in filter_commands(commands, "")] == ["save"]
     assert [item.id for item in filter_commands(commands, "ISO 7")] == ["room-a"]
+
+
+def test_application_palette_searches_and_focuses_real_model_objects(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout-search.json",
+    )
+    app.load_project_path(bundled_demo_project_path())
+    root.update()
+
+    room = app.spatial_workspace.layout["rooms"][0]
+    commands = app._command_palette_commands()
+    matches = filter_commands(commands, str(room["name"]))
+
+    room_commands = [
+        command
+        for command in matches
+        if command.id == f"search.room.{room['id']}"
+    ]
+    assert len(room_commands) == 1
+    assert room_commands[0].search_only is True
+
+    room_commands[0].callback()
+    root.update_idletasks()
+
+    assert app.spatial_workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(app.spatial_workspace)

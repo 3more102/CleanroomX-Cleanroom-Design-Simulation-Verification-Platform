@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_search import SearchEntry
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -180,6 +181,49 @@ def test_proofgraph_model_object_navigation_syncs_viewport_and_project_browser(a
     assert app.notebook.select() == str(workspace)
     assert workspace.layout["rooms"] == geometry_before["rooms"]
     assert workspace.layout["devices"] == geometry_before["devices"]
+
+
+
+def test_global_search_evidence_focuses_exact_persisted_proofgraph_node(
+    app,
+    monkeypatch,
+):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    monkeypatch.setattr(
+        "cleanroomx.gui.verification_run_history_records",
+        lambda _metadata: [{"proofgraphs": [document]}],
+    )
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    viewer = app.proofgraph_viewer
+    viewer.filter_var.set("Failures")
+    viewer.search_var.set("does-not-exist")
+    viewer._refresh()
+    assert "evidence:EVID-GUI-PRESSURE" not in viewer._nodes_by_key
+
+    entry = SearchEntry(
+        key="proof:GRAPH-GUI-PRESSURE:evidence:EVID-GUI-PRESSURE",
+        category="Evidence",
+        label="pressure_pa",
+        target_type="evidence",
+        target_id="EVID-GUI-PRESSURE",
+        payload={
+            "id": "EVID-GUI-PRESSURE",
+            "type": "evidence",
+            "_proofgraph_id": "GRAPH-GUI-PRESSURE",
+            "_proofgraph_key": "evidence:EVID-GUI-PRESSURE",
+        },
+    )
+    app._navigate_engineering_search_result(entry)
+    app.root.update()
+
+    assert app.notebook.select() == str(viewer)
+    assert viewer.filter_var.get() == "All"
+    assert viewer.search_var.get() == ""
+    assert viewer.selected_node()["key"] == "evidence:EVID-GUI-PRESSURE"
+    assert "focused on search result" in app.status_var.get()
 
 
 def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):

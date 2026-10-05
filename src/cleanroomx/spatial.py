@@ -1758,9 +1758,16 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.report_validation,
+        ).pack(side="left", padx=(2, 8))
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
-        ).pack(side="left", padx=(2, 6))
+        ).pack(side="left", padx=(0, 6))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Labels", self._show_labels, "show_labels"),
@@ -1773,12 +1780,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
-        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
+        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(8, 2))
         ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
+            side="right", padx=(8, 2)
         )
 
         overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))

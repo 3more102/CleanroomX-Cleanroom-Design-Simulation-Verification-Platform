@@ -1239,3 +1239,25 @@ def test_proofgraph_inspector_separates_engineering_summary_from_json(app):
     assert '"title": "Maintain room pressure"' in technical
     assert viewer.detail_notebook.tab(0, "text") == "Summary"
     assert viewer.detail_notebook.tab(1, "text") == "Technical JSON"
+
+
+def test_simulation_workbench_tracks_active_analysis_and_run_state(app):
+    analysis = app._editor_analysis()
+    assert analysis is not None
+
+    app._update_simulation_workbench(analysis)
+    app.root.update()
+
+    assert app.notebook.tab(app.input_tab, "text") == "Simulation"
+    assert app.simulation_analysis_var.get() == analysis.name
+    assert analysis.kind in app.simulation_kind_var.get()
+    assert app.simulation_state_var.get() == "READY"
+
+    app._set_running(True)
+    app.root.update()
+    assert app.simulation_state_var.get() == "RUNNING"
+    assert app.simulation_state_badge.cget("style") == "CX.Badge.Running.TLabel"
+
+    app._set_running(False)
+    app.root.update()
+    assert app.simulation_state_var.get() == "READY"

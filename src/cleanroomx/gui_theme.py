@@ -120,11 +120,19 @@ def status_style_name(value: Any) -> str:
         "verified",
         "completed",
         "success",
+        "saved",
     }:
         return "CX.Status.Pass.TLabel"
     if token in {"fail", "failed", "error", "critical", "blocked"}:
         return "CX.Status.Fail.TLabel"
-    if token in {"warning", "warn", "incomplete", "degraded"}:
+    if token in {
+        "warning",
+        "warn",
+        "incomplete",
+        "degraded",
+        "unsaved",
+        "dependency_freshness_unverifiable",
+    }:
         return "CX.Status.Warning.TLabel"
     if token in {"stale", "attention"}:
         return "CX.Status.Attention.TLabel"
@@ -132,9 +140,9 @@ def status_style_name(value: Any) -> str:
         return "CX.Status.Running.TLabel"
     if token in {"simulation"}:
         return "CX.Status.Simulation.TLabel"
-    if token in {"unverified"}:
+    if token in {"unverified", "not_verified"}:
         return "CX.Status.Unverified.TLabel"
-    if token in {"info", "informational", "available"}:
+    if token in {"info", "informational", "available", "historical"}:
         return "CX.Status.Info.TLabel"
     return "CX.Status.Neutral.TLabel"
 

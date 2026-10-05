@@ -707,6 +707,22 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
     rendered = []
     app._render_run = lambda value: rendered.append(value)
     warnings = []
+    history_report = GuiErrorReport(
+        reference="CX-TEST-HISTORY-INTEGRITY",
+        operation="Persist run-history audit record",
+        exception_type="RunHistoryIntegrityError",
+        summary="synthetic corrupt audit history",
+        log_path=None,
+    )
+    recorded_history_failures = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: (
+            recorded_history_failures.append((operation, exc))
+            or history_report
+        ),
+    )
     monkeypatch.setattr(
         gui_module.messagebox,
         "showwarning",
@@ -722,9 +738,13 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
     assert rendered == [current_run]
     assert app.project.metadata == corrupt_snapshot
     assert "run history was not updated" in app.status_var.value.lower()
+    assert "CX-TEST-HISTORY-INTEGRITY" in app.status_var.value
+    assert len(recorded_history_failures) == 1
+    assert recorded_history_failures[0][0] == "Persist run-history audit record"
     assert len(warnings) == 1
     assert warnings[0]["title"] == "Run history not updated"
     assert "left unchanged" in warnings[0]["message"].lower()
+    assert "CX-TEST-HISTORY-INTEGRITY" in warnings[0]["message"]
 
 
 def test_result_export_refuses_stale_cached_run(monkeypatch):

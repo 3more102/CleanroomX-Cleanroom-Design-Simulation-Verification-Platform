@@ -111,6 +111,10 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open ProofGraph Explorer" in labels
     assert "Verify Project Requirements" in labels
     assert "Import IFC Spatial Layout" in labels
+    assert "Save Project As" in labels
+    assert "Open Portable Project Bundle" in labels
+    assert "Open Project Problems" in labels
+    assert "Browse Saved Project Revisions" in labels
 
     app.show_command_palette()
     root.update()

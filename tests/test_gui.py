@@ -560,6 +560,48 @@ def test_result_export_refuses_stale_cached_run(monkeypatch):
     assert app.last_run is None
 
 
+def test_worker_error_routes_original_exception_to_gui_diagnostic_boundary():
+    import queue
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Report:
+        exception_type = "RuntimeError"
+        summary = "synthetic backend failure"
+        reference = "CX-TEST-RUN"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 8
+    app._queue = queue.Queue()
+    failure = RuntimeError("synthetic backend failure")
+    app._queue.put(("error", 8, "analysis-a", failure))
+    app.root = Root()
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    reports = []
+    app._show_operation_error = (
+        lambda title, operation, exc: reports.append((title, operation, exc))
+        or Report()
+    )
+    finished = []
+    app._finish_active_run_task = lambda **kwargs: finished.append(kwargs)
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert reports == [("Analysis failed", "Run analysis", failure)]
+    assert finished
+    assert finished[-1]["state"] == "failed"
+    assert "RuntimeError: synthetic backend failure" in finished[-1]["detail"]
+    assert "CX-TEST-RUN" in finished[-1]["detail"]
+    assert app.root.delay == 100
+
+
 def test_abandon_waits_for_worker_exit_before_reenabling_ui():
     import queue
 

@@ -398,3 +398,162 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         result = self.last_result or self.refresh()
         if result is not None:
             self._export_callback(result)
+
+
+class SimulationSummaryPanel(ttk.Frame):
+    """Readable primary surface for one analysis run; raw JSON remains an advanced tab."""
+
+    def __init__(self, master: tk.Misc) -> None:
+        super().__init__(master, padding=(8, 7))
+        header = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
+        header.pack(fill="x")
+        ttk.Label(
+            header,
+            text="SIMULATION / ANALYSIS",
+            style="CX.ToolbarGroup.TLabel",
+        ).pack(side="left")
+        self.status_var = tk.StringVar(value="NOT CHECKED")
+        self.status_label = ttk.Label(
+            header,
+            textvariable=self.status_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.status_label.pack(side="right")
+
+        identity = ttk.Frame(self, style="CX.Card.TFrame", padding=(10, 8))
+        identity.pack(fill="x", pady=(7, 6))
+        self.title_var = tk.StringVar(value="No analysis run in this session")
+        self.kind_var = tk.StringVar(value="Select an analysis and run it to inspect calculated results.")
+        ttk.Label(
+            identity,
+            textvariable=self.title_var,
+            style="CX.CardHeader.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            identity,
+            textvariable=self.kind_var,
+            style="CX.CardHint.TLabel",
+        ).pack(anchor="w", pady=(3, 0))
+
+        meta = ttk.Frame(self)
+        meta.pack(fill="x", pady=(0, 6))
+        self.result_count_var = tk.StringVar(value="Calculated values: —")
+        self.diagnostic_count_var = tk.StringVar(value="Diagnostic values: —")
+        self.visualization_var = tk.StringVar(value="Visualization: —")
+        for variable in (
+            self.result_count_var,
+            self.diagnostic_count_var,
+            self.visualization_var,
+        ):
+            ttk.Label(meta, textvariable=variable, style="CX.Section.TLabel").pack(
+                side="left", padx=(0, 16)
+            )
+
+        table_host = ttk.Frame(self)
+        table_host.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(
+            table_host,
+            columns=("value", "unit"),
+            show="tree headings",
+            selectmode="browse",
+        )
+        self.tree.heading("#0", text="Calculated result")
+        self.tree.heading("value", text="Value")
+        self.tree.heading("unit", text="Unit")
+        self.tree.column("#0", width=460, minwidth=220)
+        self.tree.column("value", width=220, minwidth=120)
+        self.tree.column("unit", width=90, minwidth=70, stretch=False)
+        yscroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(table_host, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        table_host.rowconfigure(0, weight=1)
+        table_host.columnconfigure(0, weight=1)
+
+        self.empty_var = tk.StringVar(
+            value="No calculated result is available. Run the selected analysis."
+        )
+        ttk.Label(
+            self,
+            textvariable=self.empty_var,
+            style="CX.Section.TLabel",
+            anchor="w",
+        ).pack(fill="x", pady=(5, 0))
+
+    @staticmethod
+    def _status_style(status: str) -> str:
+        key = str(status or "").strip().casefold()
+        if key in {"pass", "passed", "success", "completed", "ok"}:
+            return "CX.Status.Pass.TLabel"
+        if key in {"fail", "failed", "error"}:
+            return "CX.Status.Fail.TLabel"
+        if key in {"running", "queued"}:
+            return "CX.Status.Running.TLabel"
+        if key in {"warning", "warn", "abandoned"}:
+            return "CX.Status.Warning.TLabel"
+        return "CX.Status.Unknown.TLabel"
+
+    def _set_status(self, status: str) -> None:
+        text = str(status or "unknown").strip().upper()
+        self.status_var.set(text)
+        self.status_label.configure(style=self._status_style(text))
+
+    def _clear_rows(self) -> None:
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+
+    def set_running(self, *, title: str, kind: str) -> None:
+        self._set_status("RUNNING")
+        self.title_var.set(title or "Running analysis")
+        self.kind_var.set(f"{kind or 'analysis'} · solver execution in progress")
+        self.result_count_var.set("Calculated values: pending")
+        self.diagnostic_count_var.set("Diagnostic values: pending")
+        self.visualization_var.set("Visualization: pending")
+        self.empty_var.set("Solver running… calculated results will appear here when complete.")
+        self._clear_rows()
+
+    def set_failure(self, message: str) -> None:
+        self._set_status("FAILED")
+        self.empty_var.set(f"Analysis failed: {str(message).strip() or 'unknown error'}")
+        self.result_count_var.set("Calculated values: unavailable")
+        self.diagnostic_count_var.set("Diagnostic values: unavailable")
+        self.visualization_var.set("Visualization: unavailable")
+        self._clear_rows()
+
+    def set_run(
+        self,
+        *,
+        title: str,
+        kind: str,
+        status: str,
+        result_rows: list[tuple[str, str, str]],
+        diagnostic_row_count: int,
+        has_plot: bool,
+    ) -> None:
+        self._set_status(status)
+        self.title_var.set(title or "Analysis result")
+        self.kind_var.set(f"{kind or 'analysis'} · calculated result")
+        self.result_count_var.set(f"Calculated values: {len(result_rows)}")
+        self.diagnostic_count_var.set(
+            f"Diagnostic values: {max(0, int(diagnostic_row_count))}"
+        )
+        self.visualization_var.set(
+            "Visualization: plot available" if has_plot else "Visualization: no plot"
+        )
+        self._clear_rows()
+        for index, (path, value, unit) in enumerate(result_rows):
+            display_path = str(path).removeprefix("$.")
+            self.tree.insert(
+                "",
+                "end",
+                iid=f"result-{index}",
+                text=display_path or "$",
+                values=(value, unit or "—"),
+            )
+        self.empty_var.set(
+            "Select a row to inspect calculated engineering output."
+            if result_rows
+            else "The solver completed without scalar calculated values to display."
+        )

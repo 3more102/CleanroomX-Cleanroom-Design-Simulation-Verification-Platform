@@ -3057,11 +3057,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             pan_y_px=self.layout["view"]["pan_y"],
         )
 
-    def fit_selected(self) -> None:
+    def fit_selected(self) -> bool:
         item = self._selected_object()
         if item is None or self.selected is None:
             self._status_setter("Select a room or device to fit")
-            return
+            return False
 
         if self.selected.kind == "room":
             min_x = item["x_m"]
@@ -3141,6 +3141,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._status_setter("View fitted to selected object")
         self.redraw()
+        return True
 
     def _visible_3d_points(self) -> list[tuple[float, float, float]]:
         min_x, min_y, max_x, max_y = self._bounds()

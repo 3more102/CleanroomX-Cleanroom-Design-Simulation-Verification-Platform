@@ -14,13 +14,14 @@ administrators should enforce the following GitHub ruleset for `main`.
   against the current `main` base.
 - Do not allow a failing, skipped, or cancelled required gate to merge.
 
-The `Required CI Gate` job depends on both production CI surfaces:
+The `Required CI Gate` job depends on all three production CI surfaces:
 
 - the complete Linux test matrix on Python 3.11, 3.12, and 3.13;
-- the Windows PowerShell/CMD launcher smoke job.
+- the Windows PowerShell/CMD launcher smoke job;
+- the native IfcOpenShell ingestion smoke job on Python 3.12.
 
 The gate uses `if: always()` so it still executes when a dependency fails or is
-cancelled, and succeeds only when both dependency jobs report `success`.
+cancelled, and succeeds only when all three dependency jobs report `success`.
 
 ## Administrator break-glass
 
@@ -34,22 +35,20 @@ recovery, treat it as break-glass only:
 
 ## Release-publisher invariant
 
-The immutable release publishers remain downstream of the `CI` workflow on
-`main`. The current v0.102.1 publisher requires a successful `workflow_run`,
-checks out that exact successful CI SHA, verifies it still equals
-`refs/heads/main`, and repeats the current-main check before publication.
-
-Adding `Required CI Gate` therefore strengthens the CI workflow without
-changing the existing current-main release-publication identity check.
+Historical stable-release publishers are retained as manual `workflow_dispatch`
+workflows bound to their immutable validated target SHAs. They do not publish
+from the moving Release 3 integration head. Any future Release 3 publisher must
+be introduced with its own validated target identity and release gate rather
+than reusing a historical stable publisher.
 
 ## Verification after enabling the ruleset
 
 After repository administration applies the ruleset:
 
 1. open a small pull request and confirm GitHub requires `Required CI Gate`;
-2. confirm the gate remains pending until both the Python matrix and Windows
-   launcher smoke finish;
+2. confirm the gate remains pending until the Python matrix, Windows launcher,
+   and native BIM smoke jobs finish;
 3. confirm a deliberately failing required dependency makes the gate fail;
 4. confirm direct force-push and branch deletion are blocked;
-5. confirm a successful current-main CI run remains the only eligible input to
-   the immutable release publisher.
+5. confirm historical release publishers remain manual and fixed to their
+   immutable validated target SHAs.

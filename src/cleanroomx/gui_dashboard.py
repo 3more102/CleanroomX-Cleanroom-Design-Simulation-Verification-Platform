@@ -58,30 +58,30 @@ class EngineeringDashboardPanel(ttk.Frame):
         ttk.Label(
             header,
             text="Canonical health / traceability overview",
-            style="CX.Helper.TLabel",
+            style="CX.CardHelper.TLabel",
         ).pack(side="left", padx=(10, 0))
 
         identity = ttk.Frame(self, style="CX.Card.TFrame", padding=(10, 8))
         identity.pack(fill="x", pady=(0, 8))
         left = ttk.Frame(identity, style="CX.Card.TFrame")
         left.pack(side="left", fill="x", expand=True)
-        ttk.Label(left, text="ACTIVE PROJECT", style="CX.Section.TLabel").pack(
+        ttk.Label(left, text="ACTIVE PROJECT", style="CX.CardSection.TLabel").pack(
             anchor="w"
         )
         ttk.Label(
             left,
             textvariable=self.project_var,
-            style="CX.ViewTitle.TLabel",
+            style="CX.CardValue.TLabel",
         ).pack(anchor="w", pady=(2, 1))
         ttk.Label(
             left,
             textvariable=self.scope_var,
-            style="CX.Helper.TLabel",
+            style="CX.CardHelper.TLabel",
         ).pack(anchor="w")
 
         health = ttk.Frame(identity, style="CX.Card.TFrame")
         health.pack(side="right", padx=(12, 0))
-        ttk.Label(health, text="DIAGNOSTIC HEALTH", style="CX.Section.TLabel").pack(
+        ttk.Label(health, text="DIAGNOSTIC HEALTH", style="CX.CardSection.TLabel").pack(
             anchor="e"
         )
         self.health_badge = ttk.Label(
@@ -107,11 +107,11 @@ class EngineeringDashboardPanel(ttk.Frame):
                 sticky="nsew",
                 padx=(0 if column == 0 else 3, 0 if column == len(metric_specs) - 1 else 3),
             )
-            ttk.Label(card, text=title, style="CX.Section.TLabel").pack(anchor="w")
+            ttk.Label(card, text=title, style="CX.CardSection.TLabel").pack(anchor="w")
             ttk.Label(
                 card,
                 textvariable=variable,
-                style="CX.StatusPrimary.TLabel",
+                style="CX.CardValue.TLabel",
                 justify="left",
             ).pack(anchor="w", pady=(4, 0))
             metrics.columnconfigure(column, weight=1)
@@ -144,7 +144,7 @@ class EngineeringDashboardPanel(ttk.Frame):
         ttk.Label(
             actionbar,
             textvariable=self.activity_var,
-            style="CX.Helper.TLabel",
+            style="CX.ToolbarLabel.TLabel",
         ).pack(side="right", padx=(12, 0))
 
         body = ttk.Panedwindow(self, orient="vertical")
@@ -213,9 +213,11 @@ class EngineeringDashboardPanel(ttk.Frame):
             yscrollcommand=yscroll.set,
             xscrollcommand=xscroll.set,
         )
-        self.issue_tree.pack(side="left", fill="both", expand=True)
-        yscroll.pack(side="right", fill="y")
-        xscroll.pack(side="bottom", fill="x")
+        self.issue_tree.grid(row=1, column=0, sticky="nsew")
+        yscroll.grid(row=1, column=1, sticky="ns")
+        xscroll.grid(row=2, column=0, sticky="ew")
+        issues_host.rowconfigure(1, weight=1)
+        issues_host.columnconfigure(0, weight=1)
         self.issue_tree.bind("<<TreeviewSelect>>", self._show_detail)
         self.issue_tree.bind("<Double-1>", self._locate_selected)
         self.issue_tree.bind("<Return>", self._locate_selected)

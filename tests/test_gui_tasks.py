@@ -114,6 +114,7 @@ def test_application_exposes_task_center_and_controller_lifecycle(app):
         stage="Executing backend",
         started_at="10:00:00",
     )
+    assert app.task_status_var.get().startswith("Tasks: 1 active")
     app._active_run_task_id = "analysis:test"
     app._run_started_monotonic = None
     app._update_active_run_task(
@@ -133,6 +134,7 @@ def test_application_exposes_task_center_and_controller_lifecycle(app):
     assert record.stage == "Result accepted"
     assert record.result == "PASS"
     assert app._active_run_task_id is None
+    assert app.task_status_var.get().startswith("Tasks: idle")
 
     app.show_task_center()
     app.root.update_idletasks()

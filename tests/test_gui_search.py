@@ -14,7 +14,7 @@ from cleanroomx.proofgraph_models import (
 )
 
 
-def test_filter_search_entries_requires_all_tokens_and_ranks_label_hits():
+def test_filter_search_entries_requires_all_tokens_and_ranks_stronger_label_hits_first():
     entries = [
         SearchEntry("a", "Room", "ISO 7 Prep", "Level 01", target_type="room"),
         SearchEntry("b", "Analysis", "Prep ACH", "ach", target_type="analysis"),
@@ -22,7 +22,7 @@ def test_filter_search_entries_requires_all_tokens_and_ranks_label_hits():
     ]
 
     results = filter_search_entries(entries, "prep")
-    assert [item.key for item in results] == ["a", "b"]
+    assert [item.key for item in results] == ["b", "a"]
     assert [item.key for item in filter_search_entries(entries, "iso 7")] == ["a"]
     assert [
         item.key

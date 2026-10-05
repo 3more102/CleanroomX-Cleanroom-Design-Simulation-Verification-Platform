@@ -2737,15 +2737,7 @@ class CleanroomXApp:
                 else "CX.Status.Unknown.TLabel"
             )
         )
-        if self._running:
-            self.project_state_var.set("RUNNING")
-            self.project_state_badge.configure(style="CX.Status.Running.TLabel")
-        elif self._has_unsaved_changes():
-            self.project_state_var.set("UNSAVED")
-            self.project_state_badge.configure(style="CX.Status.Stale.TLabel")
-        else:
-            self.project_state_var.set("SAVED")
-            self.project_state_badge.configure(style="CX.Status.Pass.TLabel")
+        self._refresh_project_state_badge()
 
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
@@ -4026,6 +4018,26 @@ class CleanroomXApp:
     def _capture_saved_state(self) -> None:
         self._baseline_state = self._project_state_signature()
         self._update_title()
+        self._refresh_project_state_badge()
+
+    def _refresh_project_state_badge(self) -> None:
+        """Refresh only the shell save/run indicator without recomputing diagnostics."""
+        badge = getattr(self, "project_state_badge", None)
+        variable = getattr(self, "project_state_var", None)
+        if badge is None or variable is None:
+            return
+        if self._running:
+            variable.set("RUNNING")
+            badge.configure(style="CX.Status.Running.TLabel")
+        elif self._has_unsaved_changes():
+            variable.set("UNSAVED CHANGES")
+            badge.configure(style="CX.Status.Stale.TLabel")
+        elif self.project_path is None:
+            variable.set("UNSAVED PROJECT")
+            badge.configure(style="CX.Status.Warning.TLabel")
+        else:
+            variable.set("SAVED")
+            badge.configure(style="CX.Status.Pass.TLabel")
 
     def _build_recovery_snapshot(self) -> dict:
         project_data = copy.deepcopy(self.project.to_dict())

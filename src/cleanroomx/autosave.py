@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import stat
 import threading
 import time
 import uuid
@@ -147,8 +148,16 @@ def _ensure_recovery_dir(path: Path) -> Path:
     if os.name != "nt":
         try:
             path.chmod(0o700)
-        except OSError:
-            pass
+            permissions = stat.S_IMODE(path.stat().st_mode)
+        except OSError as exc:
+            raise PermissionError(
+                f"unable to secure recovery directory permissions: {path}"
+            ) from exc
+        if permissions & 0o077:
+            raise PermissionError(
+                f"recovery directory permissions are too broad: {path} "
+                f"has mode {permissions:#05o}; expected owner-only access"
+            )
     return path
 
 

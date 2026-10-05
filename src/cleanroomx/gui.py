@@ -3236,22 +3236,25 @@ class CleanroomXApp:
         )
 
     def export_project_diagnostics(self, _result: dict | None = None) -> None:
-        try:
-            if self._editor_analysis() is not None:
-                self._commit_editor()
-            else:
-                self._sync_metadata()
-        except Exception as exc:
-            messagebox.showerror(
-                "Cannot export project diagnostics",
-                str(exc),
-                parent=self.root,
-            )
-            return
+        if _result is None:
+            try:
+                if self._editor_analysis() is not None:
+                    self._commit_editor()
+                else:
+                    self._sync_metadata()
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot export project diagnostics",
+                    str(exc),
+                    parent=self.root,
+                )
+                return
 
-        result = self._refresh_engineering_panels()
-        if result is None:
-            return
+            result = self._refresh_engineering_panels()
+            if result is None:
+                return
+        else:
+            result = _result
         path = filedialog.asksaveasfilename(
             parent=self.root,
             title="Export CleanroomX project diagnostics",

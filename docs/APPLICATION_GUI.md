@@ -50,6 +50,16 @@ For CI or Linux automation with a virtual display:
 xvfb-run -a cleanroomx-gui --demo --smoke
 ```
 
+## Industrial engineering workstation shell
+
+The desktop shell uses a centralized CleanroomX industrial design system. New GUI state starts in the dark workstation theme with a deep navy workspace, cyan engineering action accent, semantic green/amber/red verification states, violet simulation/analysis accents, restrained borders, and information-dense controls. A saved user choice of light or dark theme remains authoritative.
+
+The application bar keeps the active project identity and execution controls visible while a second compact engineering-state row reports **SAVED / UNSAVED**, project diagnostics, and verification currency. Those badges are presentation projections over current application state; they do not create or alter engineering verdicts.
+
+The **Dashboard** workspace summarizes operational project readiness from existing project analyses, canonical project diagnostics, verification currency, retained verification evidence, the current-session analysis run, and retained ProofGraph documents. Its readiness percentage is explicitly an application/workflow readiness indicator, not a regulatory-compliance, qualification, commissioning, or certification score. The Project Navigator and Command Palette both provide direct access to the Dashboard.
+
+Diagnostics and ProofGraph use the same status language throughout the workstation. Problems prioritize severity visually and retain search/filter/navigation behavior. ProofGraph keeps requirement, model, calculation, verification, evidence, finding, verdict, and verification-run identities visually distinct while continuing to trust only the canonical persisted ProofGraph validator.
+
 ## Project format
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.

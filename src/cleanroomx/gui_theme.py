@@ -404,6 +404,55 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         )
 
     style.configure(
+        "CX.View.TButton",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+        bordercolor=palette["border"],
+        padding=(7, 3),
+        font=("TkDefaultFont", 8, "bold"),
+        relief="flat",
+    )
+    style.map(
+        "CX.View.TButton",
+        background=[
+            ("active", palette["surface"]),
+            ("pressed", palette["selection"]),
+        ],
+        foreground=[
+            ("active", palette["text"]),
+            ("pressed", palette["accent"]),
+        ],
+        bordercolor=[
+            ("focus", palette["accent"]),
+            ("active", palette["accent"]),
+        ],
+    )
+    style.configure(
+        "CX.ViewActive.TButton",
+        background=palette["selection"],
+        foreground=palette["accent"],
+        bordercolor=palette["accent"],
+        padding=(7, 3),
+        font=("TkDefaultFont", 8, "bold"),
+        relief="solid",
+    )
+    style.map(
+        "CX.ViewActive.TButton",
+        background=[
+            ("active", palette["selection"]),
+            ("pressed", palette["surface_alt"]),
+        ],
+        foreground=[
+            ("active", palette["accent_hover"]),
+            ("pressed", palette["accent"]),
+        ],
+        bordercolor=[
+            ("focus", palette["accent_hover"]),
+            ("active", palette["accent"]),
+        ],
+    )
+
+    style.configure(
         "CX.NavigatorAction.TButton",
         background=palette["surface_alt"],
         foreground=palette["accent"],
@@ -621,6 +670,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 8, "bold"),
     )
     style.configure(
+        "CX.ToolbarGroup.TLabel",
+        background=palette["surface"],
+        foreground=palette["disabled"],
+        font=("TkDefaultFont", 7, "bold"),
+    )
+    style.configure(
         "CX.WorkflowLabel.TLabel",
         background=palette["surface_alt"],
         foreground=palette["accent"],
@@ -659,6 +714,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["accent"],
         font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.PanelAccent.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 12, "bold"),
     )
     style.configure(
         "CX.StatusBar.TFrame",

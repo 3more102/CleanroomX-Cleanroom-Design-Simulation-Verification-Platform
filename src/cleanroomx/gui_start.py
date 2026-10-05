@@ -4,6 +4,8 @@ from collections.abc import Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewSortController
+
 
 class StartCenter(ttk.Frame):
     """Professional zero-state surface; all project actions stay in the app layer."""
@@ -135,6 +137,16 @@ class StartCenter(ttk.Frame):
         self.recent_tree.column("#0", width=220, minwidth=140)
         self.recent_tree.column("path", width=520, minwidth=240)
         self.recent_tree.column("modified", width=150, minwidth=110, stretch=False)
+        self.recent_sort = TreeviewSortController(
+            self.recent_tree,
+            {
+                "#0": "Project",
+                "path": "Path",
+                "modified": "Modified",
+            },
+            column="modified",
+            descending=True,
+        )
         scroll = ttk.Scrollbar(recent, orient="vertical", command=self.recent_tree.yview)
         self.recent_tree.configure(yscrollcommand=scroll.set)
         self.recent_tree.grid(row=1, column=0, sticky="nsew")
@@ -245,6 +257,7 @@ class StartCenter(ttk.Frame):
                 values=(record["path"], record["modified"]),
             )
 
+        self.recent_sort.reapply()
         total = len(self._recent_records)
         self.recent_count_var.set(f"{len(visible)} of {total} recent projects")
         self.recent_hint.configure(

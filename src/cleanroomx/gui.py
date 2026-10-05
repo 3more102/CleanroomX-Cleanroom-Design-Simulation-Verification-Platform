@@ -2446,6 +2446,550 @@ class CleanroomXApp:
         if result_panel is not None and hasattr(result_panel, "apply_theme"):
             result_panel.apply_theme(self.theme_var.get())
 
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None and hasattr(dashboard, "apply_theme"):
+            dashboard.apply_theme(self.theme_var.get())
+
+        navigator = getattr(self, "analysis_tree", None)
+        if isinstance(navigator, ttk.Treeview):
+            navigator.tag_configure(
+                "section",
+                foreground=palette["secondary_text"],
+                font=("TkDefaultFont", 9, "bold"),
+            )
+            navigator.tag_configure("domain_geometry", foreground=palette["accent"])
+            navigator.tag_configure("domain_hvac", foreground=palette["info"])
+            navigator.tag_configure("domain_pressure", foreground=palette["simulation"])
+            navigator.tag_configure("domain_simulation", foreground=palette["simulation"])
+            navigator.tag_configure("domain_attention", foreground=palette["attention"])
+            navigator.tag_configure("domain_requirements", foreground=palette["requirement"])
+            navigator.tag_configure("domain_verification", foreground=palette["success"])
+            navigator.tag_configure("domain_evidence", foreground=palette["evidence"])
+            navigator.tag_configure("domain_info", foreground=palette["secondary_text"])
+
+        menubar = getattr(self, "menubar", None)
+        if isinstance(menubar, tk.Menu):
+            self._apply_menu_theme(menubar)
+
+        if redraw and isinstance(plot_canvas, tk.Canvas):
+            self._draw_plot()
+
+    def set_theme(self, value: str, *, persist: bool = True) -> None:
+        theme = normalize_theme_name(value)
+        self.theme_var.set(theme)
+        self._theme_palette = configure_ttk_theme(self.root, theme)
+        self._apply_theme_to_native_widgets()
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["theme"] = theme
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(f"Theme: {theme.title()}")
+
+    def toggle_theme(self) -> None:
+        self.set_theme("dark" if self.theme_var.get() == "light" else "light")
+
+    def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
+        snapshot = getattr(self, "_focus_workspace_snapshot", None)
+        if snapshot is None:
+            self.focus_workspace_var.set(False)
+            return False
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
+        self.navigator_panel_visible_var.set(
+            bool(snapshot["navigator_visible"])
+        )
+        self.output_panel_visible_var.set(bool(snapshot["output_visible"]))
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(
+                bool(snapshot["inspector_visible"])
+            )
+        self.root.after_idle(self._apply_saved_panel_sashes)
+        if status:
+            self.status_var.set("Focus Workspace disabled")
+        return True
+
+    def set_focus_workspace(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        workspace = getattr(self, "spatial_workspace", None)
+        if enabled:
+            if self._focus_workspace_snapshot is None:
+                self._remember_current_panel_fractions()
+                self._focus_workspace_snapshot = {
+                    "navigator_visible": bool(
+                        self.navigator_panel_visible_var.get()
+                    ),
+                    "output_visible": bool(
+                        self.output_panel_visible_var.get()
+                    ),
+                    "inspector_visible": bool(
+                        workspace is not None and workspace.inspector_visible()
+                    ),
+                }
+            self.focus_workspace_var.set(True)
+            self.navigator_panel_visible_var.set(False)
+            self.output_panel_visible_var.set(False)
+            self._sync_navigator_panel_visibility()
+            self._sync_output_panel_visibility()
+            if workspace is not None:
+                workspace.set_inspector_visible(False)
+            self.status_var.set("Focus Workspace enabled")
+            return
+        self._restore_focus_workspace_snapshot()
+
+    def _sync_focus_workspace(self) -> None:
+        self.set_focus_workspace(bool(self.focus_workspace_var.get()))
+
+    def toggle_focus_workspace(self) -> None:
+        self.set_focus_workspace(
+            self._focus_workspace_snapshot is None
+        )
+
+    def _on_navigator_visibility_requested(self) -> None:
+        target = bool(self.navigator_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(target)
+        self._sync_navigator_panel_visibility()
+
+    def _on_output_visibility_requested(self) -> None:
+        target = bool(self.output_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(target)
+        self._sync_output_panel_visibility()
+
+    def _sync_navigator_panel_visibility(self) -> None:
+        panes = getattr(self, "main_panes", None)
+        panel = getattr(self, "navigator_panel", None)
+        if panes is None or panel is None:
+            return
+        visible = bool(self.navigator_panel_visible_var.get())
+        present = self._paned_contains(panes, panel)
+        if visible and not present:
+            panes.insert(0, panel, weight=1)
+            self.root.after_idle(self._apply_saved_panel_sashes)
+        elif not visible and present:
+            self._remember_current_panel_fractions()
+            panes.forget(panel)
+        state = "shown" if visible else "hidden"
+        self.status_var.set(f"Project Navigator {state}")
+
+    def _sync_output_panel_visibility(self) -> None:
+        panes = getattr(self, "workspace_panes", None)
+        panel = getattr(self, "output_panel", None)
+        if panes is None or panel is None:
+            return
+        visible = bool(self.output_panel_visible_var.get())
+        present = self._paned_contains(panes, panel)
+        if visible and not present:
+            panes.add(panel, weight=1)
+            self.root.after_idle(self._apply_saved_panel_sashes)
+        elif not visible and present:
+            self._remember_current_panel_fractions()
+            panes.forget(panel)
+        state = "shown" if visible else "hidden"
+        self.status_var.set(f"Output / Verification {state}")
+
+    def hide_navigator_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(False)
+        self._sync_navigator_panel_visibility()
+
+    def toggle_navigator_panel(self) -> None:
+        target = not bool(self.navigator_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(target)
+        self._sync_navigator_panel_visibility()
+
+    def hide_output_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(False)
+        self._sync_output_panel_visibility()
+
+    def toggle_output_panel(self) -> None:
+        target = not bool(self.output_panel_visible_var.get())
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(target)
+        self._sync_output_panel_visibility()
+
+    def show_problems_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+        panel = getattr(self, "problems_panel", None)
+        notebook = getattr(self, "output_notebook", None)
+        if panel is not None and notebook is not None:
+            notebook.select(panel)
+        self.status_var.set("Output: Problems")
+
+    def toggle_design_inspector(self) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            return
+        target = not workspace.inspector_visible()
+        self._restore_focus_workspace_snapshot(status=False)
+        self._activate_spatial_workspace()
+        if workspace.inspector_visible():
+            self._remember_current_panel_fractions()
+        workspace.set_inspector_visible(target)
+        if workspace.inspector_visible():
+            self.root.after_idle(self._apply_saved_panel_sashes)
+
+    def _apply_default_panel_sashes(self) -> None:
+        if (
+            self.navigator_panel_visible_var.get()
+            and self._paned_contains(self.main_panes, self.navigator_panel)
+        ):
+            width = self.main_panes.winfo_width()
+            if width > 1:
+                self.main_panes.sashpos(
+                    0,
+                    min(360, max(240, int(width * 0.20))),
+                )
+        if (
+            self.output_panel_visible_var.get()
+            and self._paned_contains(self.workspace_panes, self.output_panel)
+        ):
+            height = self.workspace_panes.winfo_height()
+            if height > 1:
+                self.workspace_panes.sashpos(
+                    0,
+                    max(320, int(height * 0.72)),
+                )
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None and workspace.inspector_visible():
+            width = workspace._body.winfo_width()
+            if width > 1:
+                workspace._body.sashpos(0, max(520, int(width * 0.78)))
+
+    def _select_workspace_output_view(self, view: str | None) -> None:
+        if view is None:
+            return
+        notebook = getattr(self, "output_notebook", None)
+        if notebook is None:
+            return
+        target = {
+            "analysis": getattr(self, "analysis_result_panel", None),
+            "problems": getattr(self, "problems_panel", None),
+            "evidence": getattr(getattr(self, "evidence_text", None), "master", None),
+            "report": getattr(getattr(self, "report_text", None), "master", None),
+            "verification": getattr(getattr(self, "verification_text", None), "master", None),
+        }.get(view)
+        if target is not None:
+            notebook.select(target)
+
+    def set_workspace_profile(
+        self,
+        value: str,
+        *,
+        persist: bool = True,
+        apply_visibility: bool = True,
+    ) -> None:
+        """Apply one coherent engineering workspace without changing project data."""
+        profile = workspace_profile_spec(value)
+        self.workspace_profile_var.set(profile.key)
+        self._restore_focus_workspace_snapshot(status=False)
+
+        if apply_visibility:
+            self.navigator_panel_visible_var.set(profile.navigator_visible)
+            self.output_panel_visible_var.set(profile.output_visible)
+            self._sync_navigator_panel_visibility()
+            self._sync_output_panel_visibility()
+            workspace = getattr(self, "spatial_workspace", None)
+            if workspace is not None:
+                workspace.set_inspector_visible(profile.inspector_visible)
+
+        if profile.primary_view == "design":
+            self._activate_spatial_workspace(profile.spatial_mode or "split")
+        elif profile.primary_view == "simulation":
+            self._activate_simulation_workspace()
+        elif profile.primary_view == "proofgraph":
+            self._activate_proofgraph_workspace()
+        elif profile.primary_view == "reporting":
+            self._activate_reporting_workspace()
+        elif profile.primary_view == "dashboard" and hasattr(self, "dashboard"):
+            self.notebook.select(self.dashboard)
+
+        self._select_workspace_output_view(profile.output_view)
+        self.workspace_status_var.set(f"Workspace: {profile.label}")
+
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["workspace_profile"] = profile.key
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(f"{profile.label} workspace activated")
+
+    def reset_panel_layout(self) -> None:
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
+        self.navigator_panel_visible_var.set(True)
+        self.output_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.show_inspector()
+        self._ui_layout_state = normalize_gui_layout_state({})
+        self.workspace_profile_var.set("design")
+        self.root.after_idle(self._apply_default_panel_sashes)
+        self.status_var.set("Panel layout reset")
+
+    def _activate_proofgraph_workspace(self) -> None:
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return
+        self.notebook.select(viewer)
+        self.workspace_status_var.set("Workspace: ProofGraph")
+
+    def _navigate_proofgraph_node(self, node: dict) -> bool:
+        raw = node.get("raw", {}) if isinstance(node, dict) else {}
+        if not isinstance(raw, dict):
+            raw = {}
+
+        candidates: list[str] = []
+        if node.get("type") == "model_object":
+            candidates.append(str(node.get("id") or ""))
+        for key in ("subject_ref", "cleanroomx_entity_id"):
+            value = str(raw.get(key) or "").strip()
+            if value:
+                candidates.append(value)
+
+        provenance = raw.get("provenance")
+        if isinstance(provenance, list):
+            for record in provenance:
+                if not isinstance(record, dict):
+                    continue
+                value = str(record.get("cleanroomx_entity_id") or "").strip()
+                if value:
+                    candidates.append(value)
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            for candidate in dict.fromkeys(value for value in candidates if value):
+                for kind in ("room", "device"):
+                    if workspace.select_item(kind, candidate, notify=True):
+                        self._activate_spatial_workspace()
+                        workspace.fit_selected()
+                        self.status_var.set(
+                            f"ProofGraph: opened {kind} {candidate}"
+                        )
+                        return True
+
+        if node.get("type") == "requirement":
+            self.status_var.set(
+                f"ProofGraph requirement selected: {node.get('label') or node.get('id')}"
+            )
+        else:
+            self.status_var.set(
+                "ProofGraph node has no directly navigable CleanroomX spatial object"
+            )
+        return False
+
+    @staticmethod
+    def _proofgraph_documents_from_records(records: list[dict]) -> list[dict]:
+        documents: list[dict] = []
+        seen: set[str] = set()
+        for record in reversed(records):
+            raw_graphs = record.get("proofgraphs", [])
+            if not isinstance(raw_graphs, list):
+                continue
+            for document in raw_graphs:
+                if not isinstance(document, dict):
+                    continue
+                digest = str(document.get("graph_sha256") or "")
+                identity = digest or str(document.get("id") or "")
+                if not identity or identity in seen:
+                    continue
+                seen.add(identity)
+                documents.append(document)
+        return documents
+
+    def _refresh_engineering_panels(self) -> dict | None:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return None
+        diagnostics = panel.refresh()
+        verification_summary: dict = {}
+        records: list[dict] = []
+
+        try:
+            currency = assess_project_verification_currency(
+                self.project,
+                base_dir=self._base_dir(),
+            )
+            summary = currency.get("summary", {})
+            verification_summary = summary if isinstance(summary, dict) else {}
+            lines = [
+                "CURRENT VERIFICATION CURRENCY",
+                "",
+                f"Configured analyses: {summary.get('configured_analysis_count', 0)}",
+                f"Current: {summary.get('current_count', 0)}",
+                f"Stale: {summary.get('stale_count', 0)}",
+                f"Not verified: {summary.get('not_verified_count', 0)}",
+                f"Not configured: {summary.get('not_configured_count', 0)}",
+                (
+                    "Dependency freshness unverifiable: "
+                    f"{summary.get('dependency_freshness_unverifiable_count', 0)}"
+                ),
+                "",
+            ]
+            for item in currency.get("analyses", []):
+                lines.append(
+                    "{name} [{kind}] — {state}".format(
+                        name=item.get("analysis_name")
+                        or item.get("analysis_id")
+                        or "analysis",
+                        kind=item.get("analysis_kind", "unknown"),
+                        state=item.get("state", "unknown"),
+                    )
+                )
+            self._set_text(
+                self.verification_text,
+                "\n".join(lines).rstrip() + "\n",
+            )
+        except Exception as exc:
+            self._set_text(
+                self.verification_text,
+                f"Verification currency unavailable: {exc}\n",
+            )
+
+        try:
+            records = verification_run_history_records(self.project.metadata)
+            viewer = getattr(self, "proofgraph_viewer", None)
+            if viewer is not None:
+                viewer.set_documents(
+                    self._proofgraph_documents_from_records(records)
+                )
+            lines = [
+                "PERSISTED VERIFICATION EVIDENCE",
+                "",
+                f"Retained records: {len(records)}",
+            ]
+            if not records:
+                lines.append("No persisted project-verification evidence.")
+            else:
+                for record in reversed(records[-20:]):
+                    verification = record.get("verification", {})
+                    lines.append(
+                        "#{sequence} · {analysis} · {status} · {completed}".format(
+                            sequence=record.get("sequence", "?"),
+                            analysis=record.get("analysis_name")
+                            or record.get("analysis_id")
+                            or "analysis",
+                            status=verification.get("status", "unknown"),
+                            completed=record.get("completed_at_utc", ""),
+                        )
+                    )
+            self._set_text(
+                self.evidence_text,
+                "\n".join(lines).rstrip() + "\n",
+            )
+        except Exception as exc:
+            viewer = getattr(self, "proofgraph_viewer", None)
+            if viewer is not None:
+                viewer.set_documents([])
+            self._set_text(
+                self.evidence_text,
+                f"Verification evidence unavailable: {exc}\n",
+            )
+
+        summary = (
+            diagnostics.get("summary", {})
+            if isinstance(diagnostics, dict)
+            else {}
+        )
+        location = str(self.project_path) if self.project_path else "Unsaved project"
+        console_lines = [
+            f"CleanroomX {__version__}",
+            f"Project: {self.project.name}",
+            f"Location: {location}",
+            f"Analyses: {len(self.project.analyses)}",
+            "Project diagnostics: "
+            + str(summary.get("status", "unavailable")).upper(),
+        ]
+        if self.last_run is not None:
+            console_lines.append(
+                f"Last run: {self.last_run.title} — {self.last_run.status}"
+            )
+        self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        diagnostic_status = str(summary.get("status", "unavailable")).lower()
+        issue_count = int(summary.get("issue_count", 0) or 0)
+        error_count = int(summary.get("error_count", 0) or 0)
+        warning_count = int(summary.get("warning_count", 0) or 0)
+        if error_count:
+            diagnostic_style = "CX.Status.Fail.TLabel"
+        elif warning_count:
+            diagnostic_style = "CX.Status.Warning.TLabel"
+        elif diagnostic_status in {"pass", "passed", "ok", "healthy"}:
+            diagnostic_style = "CX.Status.Pass.TLabel"
+        else:
+            diagnostic_style = "CX.Status.Neutral.TLabel"
+        self.shell_diagnostics_badge_var.set(
+            f"DIAGNOSTICS {issue_count}"
+        )
+        self.shell_diagnostics_badge.configure(style=diagnostic_style)
+
+        configured = int(verification_summary.get("configured_analysis_count", 0) or 0)
+        current = int(verification_summary.get("current_count", 0) or 0)
+        stale = int(verification_summary.get("stale_count", 0) or 0)
+        not_verified = int(verification_summary.get("not_verified_count", 0) or 0)
+        if configured and current == configured and not stale and not not_verified:
+            verify_style = "CX.Status.Pass.TLabel"
+        elif stale:
+            verify_style = "CX.Status.Warning.TLabel"
+        elif configured:
+            verify_style = "CX.Status.Info.TLabel"
+        else:
+            verify_style = "CX.Status.Neutral.TLabel"
+        self.shell_verification_badge_var.set(
+            f"VERIFY {current}/{configured}"
+        )
+        self.shell_verification_badge.configure(style=verify_style)
+
+        proofgraphs = self._proofgraph_documents_from_records(records)
+        self.shell_evidence_badge_var.set(f"EVIDENCE {len(records)}")
+        self.shell_evidence_badge.configure(
+            style=(
+                "CX.Status.Pass.TLabel"
+                if records
+                else "CX.Status.Neutral.TLabel"
+            )
+        )
+
+        notebook = getattr(self, "output_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.tab(
+                    self.problems_panel,
+                    text=f"Problems {issue_count}",
+                )
+                notebook.tab(
+                    self.diagnostics_text.master,
+                    text=f"Diagnostics {error_count + warning_count}",
+                )
+                notebook.tab(
+                    self.verification_text.master,
+                    text=(
+                        f"Verification {current}/{configured}"
+                        if configured
+                        else "Verification —"
+                    ),
+                )
+                notebook.tab(
+                    self.evidence_text.master,
+                    text=f"Evidence {len(records)}",
+                )
+                notebook.tab(
+                    self.analysis_result_panel,
+                    text="Analysis ●" if self.last_run is not None else "Analysis",
+                )
+            except tk.TclError:
+                pass
+
         metrics = layout_metrics(
             self.project.metadata.get(SPATIAL_METADATA_KEY, {})
         )

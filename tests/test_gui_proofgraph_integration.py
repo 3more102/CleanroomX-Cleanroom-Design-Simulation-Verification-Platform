@@ -209,7 +209,11 @@ def test_proofgraph_rethemes_with_app_and_keeps_status_textual(app):
     app.root.update_idletasks()
     dark = theme_palette("dark")
     assert viewer.canvas.cget("background").lower() == dark["plot"].lower()
-    assert "✓ PASS" in viewer.detail.get("1.0", "end")
+    detail = viewer.detail.get("1.0", "end")
+    assert "✓ PASS" in detail
+    assert "ENGINEERING RECORD" in detail
+    assert "TRACEABILITY LINKS" in detail
+    assert viewer._node_outline(viewer.selected_node()) == dark["success"]
 
     app.set_theme("light", persist=False)
     app.root.update_idletasks()

@@ -663,9 +663,9 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
-        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-        assert second.plot_canvas.cget("background") == "#131920"
+        assert second.spatial_workspace.canvas_2d.cget("background") == "#0B1526"
+        assert second.spatial_workspace.canvas_3d.cget("background") == "#08101D"
+        assert second.plot_canvas.cget("background") == "#0D1728"
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()

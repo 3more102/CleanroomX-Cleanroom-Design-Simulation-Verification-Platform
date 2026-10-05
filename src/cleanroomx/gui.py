@@ -73,6 +73,7 @@ from .project_diagnostics_cli import (
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
+from .gui_diagnostics import DiagnosticsWorkspace
 from .gui_simulation import SimulationWorkspace
 from .gui_verification import VerificationWorkspace
 from .gui_evidence import EvidenceWorkspace
@@ -1454,6 +1455,10 @@ class CleanroomXApp:
             label="Verification Workspace",
             command=self._activate_verification_workspace,
         )
+        verify_menu.add_command(
+            label="Diagnostics / DRC Workspace",
+            command=self._activate_diagnostics_workspace,
+        )
         verify_menu.add_separator()
         verify_menu.add_command(
             label="Verify Project Requirements",
@@ -1793,7 +1798,7 @@ class CleanroomXApp:
             text="Problems",
             width=8,
             style="CX.Compact.TButton",
-            command=self.show_problems_panel,
+            command=self._activate_diagnostics_workspace,
         )
         self.toolbar_problems_button.pack(side="right", padx=1)
 
@@ -2082,6 +2087,15 @@ class CleanroomXApp:
             on_open_results=self._activate_analysis_results_workspace,
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
+
+        self.diagnostics_workspace = DiagnosticsWorkspace(
+            self.notebook,
+            on_refresh=self._refresh_engineering_panels,
+            on_navigate=self._navigate_project_diagnostic,
+            on_export=self.export_project_diagnostics,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.diagnostics_workspace, text="Diagnostics")
 
         self.verification_workspace = VerificationWorkspace(
             self.notebook,
@@ -2535,6 +2549,9 @@ class CleanroomXApp:
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
             problems_panel.apply_theme(self.theme_var.get())
+        diagnostics_workspace = getattr(self, "diagnostics_workspace", None)
+        if diagnostics_workspace is not None:
+            diagnostics_workspace.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2878,6 +2895,14 @@ class CleanroomXApp:
         if persist:
             self._save_ui_layout_state()
 
+    def _activate_diagnostics_workspace(self) -> None:
+        workspace = getattr(self, "diagnostics_workspace", None)
+        if workspace is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(workspace)
+        self.workspace_status_var.set("Workspace: Diagnostics")
+
     def _activate_verification_workspace(self) -> None:
         workspace = getattr(self, "verification_workspace", None)
         if workspace is None:
@@ -3207,6 +3232,12 @@ class CleanroomXApp:
         if dashboard is not None:
             dashboard.refresh(engineering_snapshot)
 
+        diagnostics_workspace = getattr(self, "diagnostics_workspace", None)
+        if diagnostics_workspace is not None:
+            diagnostics_workspace.refresh(
+                diagnostics if isinstance(diagnostics, dict) else None
+            )
+
         verification_workspace = getattr(self, "verification_workspace", None)
         if verification_workspace is not None:
             verification_workspace.refresh(engineering_snapshot)
@@ -3484,6 +3515,13 @@ class CleanroomXApp:
                 self.run_current,
                 shortcut="F5",
                 keywords=("solver", "calculate"),
+            ),
+            PaletteCommand(
+                "workspace.diagnostics",
+                "Open Diagnostics / DRC Workspace",
+                "Verification",
+                self._activate_diagnostics_workspace,
+                keywords=("problems", "drc", "errors", "warnings", "issues"),
             ),
             PaletteCommand(
                 "verification.refresh",
@@ -5106,7 +5144,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Simulation / Results")
             return
         if item_id == "nav-diagnostics":
-            self.show_problems_panel()
+            self._activate_diagnostics_workspace()
             self.selection_status_var.set("Selected: DRC / Diagnostics")
             return
         if item_id == "nav-verification":

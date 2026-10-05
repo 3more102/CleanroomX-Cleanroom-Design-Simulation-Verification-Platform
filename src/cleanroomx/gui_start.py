@@ -122,7 +122,7 @@ class StartCenter(ttk.Frame):
             ttk.Label(
                 row,
                 text=description,
-                style="CX.ViewTitle.TLabel",
+                style="CX.PanelText.TLabel",
             ).pack(side="left", padx=(8, 0))
 
         recent = ttk.LabelFrame(

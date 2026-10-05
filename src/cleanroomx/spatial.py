@@ -8,10 +8,14 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
-from .gui_theme import theme_palette
-from .spatial_editing import duplicate_spatial_item, update_spatial_properties
+from .gui_theme import attach_tooltip, status_style_name, theme_palette
+from .spatial_editing import (
+    duplicate_spatial_item,
+    update_spatial_properties,
+    update_spatial_properties_bulk,
+)
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -27,6 +31,9 @@ from .spatial_transforms import (
     screen_to_model_2d,
     zoom_2d_at,
 )
+
+
+_MIXED_PROPERTY_VALUE = "— Mixed —"
 
 
 class SpatialSyncError(ValueError):
@@ -1107,15 +1114,40 @@ def validate_layout(value: Any) -> list[dict]:
     return _validate_normalized_layout(normalize_layout(value))
 
 
-def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
+def _interpolate_hex(low: str, high: str, ratio: float) -> str:
+    ratio = max(0.0, min(1.0, ratio))
+    low_rgb = tuple(int(low[index:index + 2], 16) for index in (1, 3, 5))
+    high_rgb = tuple(int(high[index:index + 2], 16) for index in (1, 3, 5))
+    rgb = tuple(
+        int(round(start + (end - start) * ratio))
+        for start, end in zip(low_rgb, high_rgb)
+    )
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def _pressure_fill(
+    pressure: Any,
+    min_pressure: float | None,
+    max_pressure: float | None,
+    *,
+    palette: dict[str, str] | None = None,
+) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
-        return "#dfe7ef"
+        return palette["surface_alt"] if palette is not None else "#dfe7ef"
     if max_pressure <= min_pressure:
         ratio = 0.5
     else:
-        ratio = (_finite_number(pressure, min_pressure) - min_pressure) / (max_pressure - min_pressure)
+        ratio = (_finite_number(pressure, min_pressure) - min_pressure) / (
+            max_pressure - min_pressure
+        )
     ratio = max(0.0, min(1.0, ratio))
-    # Low pressure: cool blue. High pressure: warm amber.
+    if palette is not None:
+        return _interpolate_hex(
+            palette["simulation"],
+            palette["accent"],
+            ratio,
+        )
+    # Legacy/default projection remains stable for non-GUI callers and tests.
     r = int(90 + 145 * ratio)
     g = int(150 + 55 * (1.0 - abs(ratio - 0.5) * 2.0))
     b = int(225 - 135 * ratio)
@@ -1135,6 +1167,8 @@ def pressure_overlay_state(
     layout: dict,
     analysis: Any = None,
     result: dict | None = None,
+    *,
+    palette: dict[str, str] | None = None,
 ) -> dict:
     """Describe pressure rendering from explicit fresh-result or spatial evidence."""
     normalized = normalize_layout(layout)
@@ -1203,7 +1237,9 @@ def pressure_overlay_state(
     minimum = min(pressures) if pressures else None
     maximum = max(pressures) if pressures else None
     for item in evidence:
-        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+        item["fill"] = _pressure_fill(
+            item["pressure_pa"], minimum, maximum, palette=palette
+        )
 
     return {
         "minimum_pressure_pa": minimum,
@@ -1230,8 +1266,20 @@ def _engineering_status(value: Any) -> str:
     return aliases.get(token, token or "unavailable")
 
 
-def _status_fill(status: str) -> str:
+def _status_fill(
+    status: str,
+    *,
+    palette: dict[str, str] | None = None,
+) -> str:
     normalized = _engineering_status(status)
+    if palette is not None:
+        if normalized == "pass":
+            return palette["success_surface"]
+        if normalized == "fail":
+            return palette["error_surface"]
+        if normalized == "warning":
+            return palette["warning_surface"]
+        return palette["surface_alt"]
     if normalized == "pass":
         return "#dcfce7"
     if normalized == "fail":
@@ -1250,11 +1298,18 @@ def _scalar_fill(
     *,
     low_rgb: tuple[int, int, int] = (224, 242, 254),
     high_rgb: tuple[int, int, int] = (14, 116, 144),
+    palette: dict[str, str] | None = None,
 ) -> str:
     if value is None or minimum is None or maximum is None:
-        return "#dfe7ef"
+        return palette["surface_alt"] if palette is not None else "#dfe7ef"
     ratio = 0.5 if maximum <= minimum else (value - minimum) / (maximum - minimum)
     ratio = max(0.0, min(1.0, ratio))
+    if palette is not None:
+        return _interpolate_hex(
+            palette["surface_alt"],
+            palette["accent"],
+            ratio,
+        )
     rgb = tuple(
         int(round(low + (high - low) * ratio))
         for low, high in zip(low_rgb, high_rgb)
@@ -1268,6 +1323,7 @@ def engineering_overlay_state(
     result: dict | None = None,
     *,
     mode: str = "pressure",
+    palette: dict[str, str] | None = None,
 ) -> dict:
     """Project canonical run/spatial results into display-only room overlays.
 
@@ -1282,7 +1338,9 @@ def engineering_overlay_state(
     result_dict = result if isinstance(result, dict) else {}
 
     if normalized_mode == "pressure":
-        pressure = pressure_overlay_state(normalized, analysis, result_dict)
+        pressure = pressure_overlay_state(
+            normalized, analysis, result_dict, palette=palette
+        )
         rooms = []
         for item in pressure["rooms"]:
             value = item.get("pressure_pa")
@@ -1424,7 +1482,7 @@ def engineering_overlay_state(
                 "value": value,
                 "status": status,
                 "label": label,
-                "fill": "#dfe7ef",
+                "fill": palette["surface_alt"] if palette is not None else "#dfe7ef",
                 "details": details,
             }
         )
@@ -1433,9 +1491,11 @@ def engineering_overlay_state(
     maximum = max(scalar_values) if scalar_values else None
     for item in rooms:
         if normalized_mode == "status":
-            item["fill"] = _status_fill(item["status"])
+            item["fill"] = _status_fill(item["status"], palette=palette)
         elif normalized_mode in {"ach", "airflow"}:
-            item["fill"] = _scalar_fill(item["value"], minimum, maximum)
+            item["fill"] = _scalar_fill(
+                item["value"], minimum, maximum, palette=palette
+            )
 
     return {
         "mode": normalized_mode,
@@ -1606,6 +1666,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_engineering_context_change: Callable[[str], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1620,13 +1681,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_engineering_context_change = on_engineering_context_change
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
+        self._selected_hits: list[_Hit] = []
         self._hovered: _Hit | None = None
         self._snap_indicator_world: tuple[float, float] | None = None
         self._drag_anchor: tuple[float, float] | None = None
         self._drag_item_origin: tuple[float, float] | None = None
+        self._box_select_anchor_canvas: tuple[int, int] | None = None
+        self._box_select_current_canvas: tuple[int, int] | None = None
+        self._box_select_state: int = 0
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._orbit_anchor: tuple[int, int] | None = None
@@ -1637,6 +1703,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_labels = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
         self._show_relationships = tk.BooleanVar(value=True)
+        self._device_type_visibility_vars = {
+            device_type: tk.BooleanVar(value=True) for device_type in DEVICE_TYPES
+        }
         self._overlay_mode = tk.StringVar(value="Pressure")
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
@@ -1650,10 +1719,16 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
-        self._property_labels: dict[str, str] = {}
-        self._property_units: dict[str, str] = {}
-        self._property_search_var = tk.StringVar()
-        self._property_filter_var = tk.StringVar(value="0 properties")
+        self._property_meta: dict[str, tuple[str, str, str]] = {}
+        self._property_sections: dict[str, ttk.LabelFrame] = {}
+        self._property_group_order: list[str] = []
+        self._property_filter_var = tk.StringVar(value="")
+        self._property_filter_summary_var = tk.StringVar(value="Editable properties")
+        self._property_error_var = tk.StringVar(value="")
+        self._property_drafts: dict[object, dict[str, str]] = {}
+        self._property_loaded_selection: object | None = None
+        self._property_loaded_model_values: dict[str, str] = {}
+        self._property_mixed_fields: set[str] = set()
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1670,13 +1745,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._projection_mode = tk.StringVar(value="Orthographic")
         self._section_enabled = tk.BooleanVar(value=False)
         self._section_height_var = tk.StringVar(value="2.40")
-        self._theme_palette = theme_palette("light")
+        self._inspector_analysis_var = tk.StringVar(
+            value="Select a room to inspect fresh engineering results."
+        )
+        self._inspector_geometry_var = tk.StringVar(value="Geometry: —")
+        self._inspector_pressure_var = tk.StringVar(value="Pressure: —")
+        self._inspector_airflow_var = tk.StringVar(value="Airflow / ACH: —")
+        self._inspector_compliance_var = tk.StringVar(value="Verification: —")
+        self._inspector_area_var = tk.StringVar(value="—")
+        self._inspector_volume_var = tk.StringVar(value="—")
+        self._inspector_pressure_metric_var = tk.StringVar(value="—")
+        self._inspector_airflow_metric_var = tk.StringVar(value="—")
+        self._inspector_ach_metric_var = tk.StringVar(value="—")
+        self._inspector_compliance_value_var = tk.StringVar(value="NOT CHECKED")
+        self._inspector_result_state_var = tk.StringVar(value="DESIGN INPUTS")
+        self._theme_palette = theme_palette("dark")
 
         self._build()
+        self._property_filter_var.trace_add(
+            "write", self._on_property_filter_changed
+        )
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 7, 8, 4),
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1710,9 +1806,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(commandbar, text="Duplicate", command=self.duplicate_selected).pack(
             side="left", padx=2
         )
-        ttk.Button(commandbar, text="Delete", width=7, command=self.delete_selected).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            commandbar,
+            text="Delete",
+            width=7,
+            style="CX.Danger.TButton",
+            command=self.delete_selected,
+        ).pack(side="left", padx=2)
         ttk.Separator(commandbar, orient="vertical").pack(
             side="left", fill="y", padx=7
         )
@@ -1725,7 +1825,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1751,6 +1855,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(
             modebar,
             text="Push to analysis",
+            style="CX.Primary.TButton",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
         ttk.Button(
@@ -1760,11 +1865,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
-        ).pack(side="left", padx=(2, 6))
+        ).pack(side="left", padx=(2, 4))
+        ttk.Checkbutton(
+            viewbar,
+            text="Rulers",
+            variable=self._show_rulers,
+            command=self.redraw,
+        ).pack(side="left", padx=(0, 6))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Labels", self._show_labels, "show_labels"),
@@ -1777,15 +1892,62 @@ class SpatialDesignWorkspace(ttk.Frame):
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
-        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
+
+        self._device_categories_button = ttk.Menubutton(
+            viewbar,
+            text=f"Categories {len(DEVICE_TYPES)}/{len(DEVICE_TYPES)}",
+            style="CX.Compact.TButton",
         )
+        category_menu = tk.Menu(self._device_categories_button, tearoff=False)
+        self._device_categories_button.configure(menu=category_menu)
+        self._device_categories_button.pack(side="left", padx=(7, 2))
+        category_labels = {
+            "door": "Doors",
+            "window": "Windows",
+            "opening": "Openings",
+            "supply": "Supply",
+            "return": "Return",
+            "exhaust": "Exhaust",
+            "ffu": "FFUs",
+            "equipment": "Equipment",
+            "sensor": "Sensors",
+            "transfer": "Transfer",
+        }
+        for device_type in DEVICE_TYPES:
+            category_menu.add_checkbutton(
+                label=category_labels.get(device_type, device_type.title()),
+                variable=self._device_type_visibility_vars[device_type],
+                command=lambda t=device_type: self._on_device_type_visibility_changed(t),
+            )
+        category_menu.add_separator()
+        category_menu.add_command(
+            label="Show all categories",
+            command=lambda: self.set_all_device_types_visible(True),
+        )
+        category_menu.add_command(
+            label="Hide all categories",
+            command=lambda: self.set_all_device_types_visible(False),
+        )
+        attach_tooltip(
+            self._device_categories_button,
+            "Control device/opening categories without changing project data.",
+        )
+        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            style="CX.Primary.TButton",
+            command=self.report_validation,
+        ).pack(side="left", padx=(10, 2))
         ttk.Label(viewbar, textvariable=self._validation_var).pack(
             side="right", padx=(10, 2)
         )
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
@@ -1800,6 +1962,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             width=13,
         )
         overlay_picker.pack(side="left")
+        attach_tooltip(
+            overlay_picker,
+            "Engineering overlay: pressure, ACH (Air Changes per Hour), airflow, or verification status.",
+        )
         overlay_picker.bind(
             "<<ComboboxSelected>>",
             lambda _event: self._set_overlay_mode(self._overlay_mode.get()),
@@ -1975,34 +2141,131 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_inspector_visible(False),
         )
         self._inspector_close_button.pack(side="right")
-        ttk.Label(
+        self._selection_label = ttk.Label(
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 6))
+            style="CX.ViewTitle.TLabel",
+        )
+        self._selection_label.pack(fill="x", pady=(3, 6))
 
         property_filter = ttk.Frame(inspector)
-        property_filter.pack(fill="x", pady=(0, 8))
-        ttk.Label(property_filter, text="Search").pack(side="left")
-        self._property_search_entry = ttk.Entry(
+        property_filter.pack(fill="x", pady=(0, 7))
+        ttk.Label(property_filter, text="Filter").pack(side="left", padx=(0, 5))
+        self._property_filter_entry = ttk.Entry(
             property_filter,
-            textvariable=self._property_search_var,
-            width=16,
+            textvariable=self._property_filter_var,
         )
-        self._property_search_entry.pack(side="left", fill="x", expand=True, padx=(5, 4))
+        self._property_filter_entry.pack(side="left", fill="x", expand=True)
+        self._property_filter_entry.bind(
+            "<Escape>",
+            lambda _event: (self._property_filter_var.set(""), "break")[1],
+        )
+        attach_tooltip(
+            self._property_filter_entry,
+            "Filter editable properties by field name, section, key, or engineering unit. Escape clears the filter.",
+        )
         ttk.Button(
             property_filter,
             text="×",
             width=3,
             style="CX.Compact.TButton",
-            command=self.clear_property_filter,
-        ).pack(side="left")
+            command=lambda: self._property_filter_var.set(""),
+        ).pack(side="left", padx=(4, 0))
         ttk.Label(
             inspector,
-            textvariable=self._property_filter_var,
-        ).pack(fill="x", pady=(0, 6))
-        self._property_search_entry.bind(
-            "<Escape>", lambda _event: self.clear_property_filter()
+            textvariable=self._property_filter_summary_var,
+            style="CX.Muted.TLabel",
+        ).pack(fill="x", pady=(0, 4))
+        self._property_error_label = ttk.Label(
+            inspector,
+            textvariable=self._property_error_var,
+            style="CX.ErrorText.TLabel",
+            wraplength=300,
+            justify="left",
+        )
+        self._property_error_label.pack(fill="x", pady=(0, 6))
+        self._property_error_label.pack_forget()
+
+        engineering = ttk.LabelFrame(
+            inspector,
+            text="Engineering snapshot",
+            padding=(8, 7),
+        )
+        engineering.pack(fill="x", pady=(0, 7))
+
+        snapshot_state = ttk.Frame(engineering)
+        snapshot_state.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            snapshot_state,
+            textvariable=self._inspector_analysis_var,
+            style="CX.Muted.TLabel",
+            wraplength=230,
+            justify="left",
+        ).pack(side="left", fill="x", expand=True)
+        self._inspector_result_state_label = ttk.Label(
+            snapshot_state,
+            textvariable=self._inspector_result_state_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self._inspector_result_state_label.pack(side="right", padx=(6, 0))
+
+        metrics = ttk.Frame(engineering)
+        metrics.pack(fill="x")
+        metrics.columnconfigure(0, weight=1)
+        metrics.columnconfigure(1, weight=1)
+
+        def metric_card(
+            row: int,
+            column: int,
+            title: str,
+            value_var: tk.StringVar,
+            *,
+            value_style: str = "CX.InstrumentValue.TLabel",
+        ) -> ttk.Frame:
+            card = ttk.Frame(
+                metrics,
+                style="CX.Instrument.TFrame",
+                padding=(8, 6),
+            )
+            card.grid(
+                row=row,
+                column=column,
+                sticky="nsew",
+                padx=(0, 3) if column == 0 else (3, 0),
+                pady=3,
+            )
+            ttk.Label(
+                card,
+                text=title,
+                style="CX.InstrumentName.TLabel",
+            ).pack(anchor="w")
+            value_label = ttk.Label(
+                card,
+                textvariable=value_var,
+                style=value_style,
+            )
+            value_label.pack(anchor="w", pady=(2, 0))
+            return card
+
+        metric_card(0, 0, "AREA", self._inspector_area_var)
+        metric_card(0, 1, "VOLUME", self._inspector_volume_var)
+        metric_card(1, 0, "PRESSURE", self._inspector_pressure_metric_var)
+        metric_card(1, 1, "AIRFLOW", self._inspector_airflow_metric_var)
+        metric_card(2, 0, "ACH", self._inspector_ach_metric_var)
+        compliance_card = metric_card(
+            2,
+            1,
+            "COMPLIANCE",
+            self._inspector_compliance_value_var,
+            value_style="CX.Status.Neutral.TLabel",
+        )
+        self._inspector_compliance_label = next(
+            child
+            for child in compliance_card.winfo_children()
+            if isinstance(child, ttk.Label)
+            and str(child.cget("textvariable"))
+            == str(self._inspector_compliance_value_var)
         )
 
         property_groups = (
@@ -2045,6 +2308,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         for group_name, fields in property_groups:
             section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
+            self._property_sections[group_name] = section
+            self._property_group_order.append(group_name)
             for key, label, unit in fields:
                 row = ttk.Frame(section)
                 row.pack(fill="x", pady=2)
@@ -2053,36 +2318,72 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
-                self._property_labels[key] = label
-                self._property_units[key] = unit
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
+                if unit == "m":
+                    attach_tooltip(
+                        entry,
+                        "Length input accepts metres directly or a registered compatible unit such as mm, cm, ft, or in.",
+                    )
+                elif unit == "Pa":
+                    attach_tooltip(
+                        entry,
+                        "Pressure input accepts Pa directly or a registered compatible unit such as kPa, mbar, psi, inH2O, or mmH2O.",
+                    )
+                entry.bind(
+                    "<KeyRelease>",
+                    self._on_property_edit,
+                    add="+",
+                )
+                entry.bind(
+                    "<Return>",
+                    lambda _event: (self.apply_properties(), "break")[1],
+                    add="+",
+                )
                 self._property_entries[key] = entry
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
-        inspector_actions = ttk.Frame(inspector)
-        inspector_actions.pack(fill="x", pady=(2, 6))
-        ttk.Button(
-            inspector_actions,
-            text="Reset edits",
-            command=self._load_property_panel,
-        ).pack(side="left")
-        ttk.Button(
-            inspector_actions,
+                self._property_meta[key] = (group_name, label, unit)
+        self._property_actions = ttk.Frame(inspector)
+        self._property_actions.pack(fill="x", pady=(2, 6))
+        self._property_revert_button = ttk.Button(
+            self._property_actions,
+            text="Revert",
+            style="CX.Compact.TButton",
+            command=self.revert_property_edits,
+            state="disabled",
+        )
+        self._property_revert_button.pack(side="right")
+        self._property_apply_button = ttk.Button(
+            self._property_actions,
             text="Apply properties",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
-        ).pack(side="right")
+        )
+        self._property_apply_button.pack(side="right", padx=(0, 5))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
-        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
+        sync_card = ttk.Frame(
+            inspector,
+            style="CX.SubtlePanel.TFrame",
+            padding=(8, 6),
         )
+        sync_card.pack(fill="x", pady=(3, 0))
+        ttk.Label(
+            sync_card,
+            text="ENGINEERING SYNCHRONIZATION",
+            style="CX.Section.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            sync_card,
+            textvariable=self._sync_var,
+            style="CX.Muted.TLabel",
+            wraplength=300,
+            justify="left",
+        ).pack(fill="x", pady=(2, 0))
 
-        self._property_search_var.trace_add(
-            "write", lambda *_: self._filter_property_rows()
-        )
         self._apply_workspace_mode()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
@@ -2095,7 +2396,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Button-2>", self._on_pan_down)
         self.canvas_2d.bind("<B2-Motion>", self._on_pan_drag)
         self.canvas_2d.bind("<Button-3>", self._on_context_menu_2d)
-        self.canvas_2d.bind("<Control-Button-1>", self._on_context_menu_2d)
+        self.canvas_2d.bind("<Control-Button-1>", self._on_left_down)
+        self.canvas_2d.bind("<Shift-Button-1>", self._on_left_down)
         self.canvas_2d.bind("<Leave>", self._on_canvas_leave)
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
         self.canvas_2d.bind(
@@ -2200,18 +2502,70 @@ class SpatialDesignWorkspace(ttk.Frame):
         variable = getattr(self, "_tool_mode", None)
         return variable.get() if variable is not None else "select"
 
+    def _visible_device_type_count(self) -> int:
+        variables = getattr(self, "_device_type_visibility_vars", {})
+        return sum(
+            1
+            for device_type in DEVICE_TYPES
+            if device_type in variables and bool(variables[device_type].get())
+        )
+
+    def _refresh_device_category_summary(self) -> None:
+        button = getattr(self, "_device_categories_button", None)
+        if button is None:
+            return
+        visible = self._visible_device_type_count()
+        try:
+            button.configure(text=f"Categories {visible}/{len(DEVICE_TYPES)}")
+        except tk.TclError:
+            pass
+
+    def _on_device_type_visibility_changed(self, device_type: str) -> None:
+        if device_type not in DEVICE_TYPES:
+            return
+        self._refresh_device_category_summary()
+        visible = self._visible_device_type_count()
+        self._status_setter(
+            f"Device categories: {visible}/{len(DEVICE_TYPES)} visible"
+        )
+        self.redraw()
+
+    def set_device_type_visible(self, device_type: str, visible: bool) -> None:
+        token = str(device_type or "").strip().lower()
+        if token not in DEVICE_TYPES:
+            raise ValueError(f"unsupported device category: {device_type}")
+        self._device_type_visibility_vars[token].set(bool(visible))
+        self._on_device_type_visibility_changed(token)
+
+    def set_all_device_types_visible(self, visible: bool) -> None:
+        requested = bool(visible)
+        for variable in self._device_type_visibility_vars.values():
+            variable.set(requested)
+        self._refresh_device_category_summary()
+        action = "shown" if requested else "hidden"
+        self._status_setter(f"All device categories {action}")
+        self.redraw()
+
     def _is_item_visible(self, kind: str, item_id: str) -> bool:
         hidden_item_ids = getattr(self, "_hidden_item_ids", set())
         isolated_item = getattr(self, "_isolated_item", None)
         if self._hit_key(kind, item_id) in hidden_item_ids:
             return False
 
+        device = None
         if kind == "device":
             device = next(
                 (item for item in self.layout["devices"] if item["id"] == item_id),
                 None,
             )
-            room_id = str(device.get("room_id") or "") if device else ""
+            if device is None:
+                return False
+            device_type = str(device.get("type") or "").strip().lower()
+            variables = getattr(self, "_device_type_visibility_vars", {})
+            visibility_var = variables.get(device_type)
+            if visibility_var is not None and not bool(visibility_var.get()):
+                return False
+            room_id = str(device.get("room_id") or "")
             if room_id and self._hit_key("room", room_id) in hidden_item_ids:
                 return False
 
@@ -2244,15 +2598,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         return False
 
     def hide_selected(self) -> None:
-        if self.selected is None:
+        hits = list(self.selected_hits())
+        if not hits and self.selected is not None:
+            hits = [self.selected]
+        if not hits:
             self._status_setter("Select a room or device to hide")
             return
-        self._hidden_item_ids.add(
-            self._hit_key(self.selected.kind, self.selected.item_id)
-        )
-        if self._isolated_item == self.selected:
+        for hit in hits:
+            self._hidden_item_ids.add(
+                self._hit_key(hit.kind, hit.item_id)
+            )
+        if self._isolated_item in hits:
             self._isolated_item = None
-        self._status_setter("Selection hidden from spatial views")
+        self._status_setter(
+            "Selection hidden from spatial views"
+            if len(hits) == 1
+            else f"{len(hits)} selected objects hidden from spatial views"
+        )
         self.redraw()
 
     def isolate_selected(self) -> None:
@@ -2292,6 +2654,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_escape(self, event=None):
+        self._box_select_anchor_canvas = None
+        self._box_select_current_canvas = None
+        self._box_select_state = 0
+        self.canvas_2d.delete("selection_box")
         self.clear_measurement()
         return "break"
 
@@ -2327,11 +2693,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         for px, py in points:
             canvas.create_line(
                 px - 5, py, px + 5, py,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, tags=("measurement",),
             )
             canvas.create_line(
                 px, py - 5, px, py + 5,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, tags=("measurement",),
             )
         if len(points) != 2:
             return
@@ -2339,28 +2705,81 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._current_tool_mode() == "area":
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                outline=self._theme_palette["simulation"], width=2, dash=(5, 3), tags=("measurement",),
             )
         else:
             canvas.create_line(
                 x0, y0, x1, y1,
-                fill="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, dash=(5, 3), tags=("measurement",),
             )
         canvas.create_text(
             (x0 + x1) / 2,
             (y0 + y1) / 2 - 10,
             text=self._measurement_result_var.get(),
-            fill="#5b21b6",
+            fill=self._theme_palette["simulation"],
             tags=("measurement",),
         )
+
+    def _hit_exists(self, hit: _Hit) -> bool:
+        collection = self.layout["rooms"] if hit.kind == "room" else self.layout["devices"]
+        return any(str(item.get("id")) == hit.item_id for item in collection)
+
+    def _replace_selection(self, hit: _Hit | None) -> None:
+        self.selected = hit
+        self._selected_hits = [] if hit is None else [hit]
+
+    def _is_selected_hit(self, hit: _Hit) -> bool:
+        hits = getattr(self, "_selected_hits", None)
+        if hits is None:
+            return self.selected == hit
+        return hit in hits
+
+    def selected_hits(self) -> tuple[_Hit, ...]:
+        hits = getattr(self, "_selected_hits", None)
+        if hits is None:
+            selected = getattr(self, "selected", None)
+            return (selected,) if selected is not None else ()
+        return tuple(hits)
+
+    def _set_selected_hits(self, hits: list[_Hit] | tuple[_Hit, ...]) -> None:
+        ordered: list[_Hit] = []
+        for hit in hits:
+            if hit not in ordered and self._hit_exists(hit):
+                ordered.append(hit)
+        self._selected_hits = ordered
+        self.selected = ordered[-1] if ordered else None
+
+    def _update_click_selection(self, hit: _Hit | None, state: int) -> None:
+        shift = bool(state & 0x0001)
+        control = bool(state & 0x0004)
+        if hit is None:
+            if not (shift or control):
+                self._replace_selection(None)
+            return
+        if control:
+            if hit in self._selected_hits:
+                self._selected_hits = [
+                    candidate for candidate in self._selected_hits if candidate != hit
+                ]
+                self.selected = self._selected_hits[-1] if self._selected_hits else None
+            else:
+                self._selected_hits.append(hit)
+                self.selected = hit
+            return
+        if shift:
+            if hit not in self._selected_hits:
+                self._selected_hits.append(hit)
+            self.selected = hit
+            return
+        self._replace_selection(hit)
 
     def select_item(self, kind: str, item_id: str, *, notify: bool = False) -> bool:
         if kind not in {"room", "device"}:
             return False
-        collection = self.layout["rooms"] if kind == "room" else self.layout["devices"]
-        if not any(str(item.get("id")) == item_id for item in collection):
+        hit = _Hit(kind, item_id)
+        if not self._hit_exists(hit):
             return False
-        self.selected = _Hit(kind, item_id)
+        self._replace_selection(hit)
         self._load_property_panel()
         self.redraw()
         if notify:
@@ -2373,6 +2792,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             return "Selected: —"
 
         name = str(item.get("name") or self.selected.item_id)
+        count_prefix = (
+            f"Selected: {len(self.selected_hits())} objects · "
+            if len(self.selected_hits()) > 1
+            else ""
+        )
         if self.selected.kind == "room":
             parts = [f"Room: {name}"]
             classification = str(item.get("classification") or "").strip()
@@ -2381,7 +2805,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             pressure = item.get("pressure_pa")
             if isinstance(pressure, (int, float)) and math.isfinite(float(pressure)):
                 parts.append(f"{float(pressure):g} Pa")
-            return " · ".join(parts)
+            detail = " · ".join(parts)
+            return count_prefix + detail if count_prefix else detail
 
         device_type = str(item.get("type") or "device").replace("_", " ").title()
         parts = [f"{device_type}: {name}"]
@@ -2396,7 +2821,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         if room is not None:
             parts.append(str(room.get("name") or room_id))
-        return " · ".join(parts)
+        detail = " · ".join(parts)
+        return count_prefix + detail if count_prefix else detail
 
     def viewport_status_text(self) -> str:
         mode = self._workspace_mode.get()
@@ -2419,8 +2845,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         if callback is not None:
             callback(self.viewport_status_text())
 
+    def engineering_context_text(self) -> str:
+        """Return live, presentation-only cursor/grid/snap context."""
+        cursor = self._coord_var.get().strip() or "x — m   y — m"
+        grid_m = _positive(self.layout.get("grid_m"), 0.5)
+        snap_state = "Snap ON" if self._snap_to_grid.get() else "Snap OFF"
+        return f"{cursor} · Grid {grid_m:g} m · {snap_state}"
+
+    def _notify_engineering_context(self) -> None:
+        callback = getattr(self, "_on_engineering_context_change", None)
+        if callback is not None:
+            callback(self.engineering_context_text())
+
     def _notify_selection_change(self) -> None:
-        if self.selected is None or self._on_selection_change is None:
+        if self._on_selection_change is None:
+            return
+        if self.selected is None:
+            self._on_selection_change("", "")
             return
         self._on_selection_change(self.selected.kind, self.selected.item_id)
 
@@ -2471,11 +2912,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._section_height_var.set(
             f"{_finite_number(view.get('section_height_m'), self.layout['floor']['elevation_m'] + 2.4):.2f}"
         )
+        self._selected_hits = [
+            hit
+            for hit in getattr(self, "_selected_hits", ())
+            if self._hit_exists(hit)
+        ]
         if self.selected and not self._selected_object():
             self.selected = None
+        if self.selected is None and self._selected_hits:
+            self.selected = self._selected_hits[-1]
+        elif self.selected is not None and self.selected not in self._selected_hits:
+            self._selected_hits = [self.selected]
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
+        self._notify_engineering_context()
 
     def set_3d_projection(self, value: str) -> None:
         mode = str(value or "orthographic").strip().lower()
@@ -2559,6 +3010,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change()
         self._status_setter("Spatial view settings updated")
         self.redraw()
+        if key == "snap_to_grid":
+            self._notify_engineering_context()
 
     def _update_metrics(self) -> None:
         metrics = layout_metrics(self.layout)
@@ -2615,9 +3068,9 @@ class SpatialDesignWorkspace(ttk.Frame):
     def restore_history_selection(
         self, selection: tuple[str, str] | None
     ) -> None:
-        self.selected = _Hit(*selection) if selection is not None else None
+        self._replace_selection(_Hit(*selection) if selection is not None else None)
         if self.selected and not self._selected_object():
-            self.selected = None
+            self._replace_selection(None)
         self._load_property_panel()
         self.redraw()
 
@@ -2691,6 +3144,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter(message)
         self._update_history_controls()
         self.redraw()
+        self._notify_engineering_context()
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:
@@ -2754,14 +3208,284 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
-    def clear_property_filter(self) -> None:
-        self._property_search_var.set("")
-        self._property_search_entry.focus_set()
+    def _load_engineering_inspector_snapshot(self) -> None:
+        selected_hits = self.selected_hits()
+        if len(selected_hits) > 1:
+            self._inspector_analysis_var.set(
+                f"{len(selected_hits)} objects selected. Engineering result cards are hidden during batch editing."
+            )
+            self._inspector_geometry_var.set("Geometry: multiple selection")
+            self._inspector_pressure_var.set("Pressure: —")
+            self._inspector_airflow_var.set("Airflow / ACH: —")
+            self._inspector_compliance_var.set("Verification: —")
+            self._inspector_area_var.set("—")
+            self._inspector_volume_var.set("—")
+            self._inspector_pressure_metric_var.set("—")
+            self._inspector_airflow_metric_var.set("—")
+            self._inspector_ach_metric_var.set("—")
+            self._inspector_compliance_value_var.set("MULTI EDIT")
+            self._inspector_result_state_var.set("BATCH EDIT")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            self._inspector_compliance_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            return
 
-    def _property_fields_for_selection(self) -> set[str]:
-        if self._selected_object() is None or self.selected is None:
+        selected = self.selected
+        item = self._selected_object()
+        if selected is None or item is None or selected.kind != "room":
+            self._inspector_analysis_var.set(
+                "Select a room to inspect fresh engineering results."
+            )
+            self._inspector_geometry_var.set("Geometry: —")
+            self._inspector_pressure_var.set("Pressure: —")
+            self._inspector_airflow_var.set("Airflow / ACH: —")
+            self._inspector_compliance_var.set("Verification: —")
+            self._inspector_area_var.set("—")
+            self._inspector_volume_var.set("—")
+            self._inspector_pressure_metric_var.set("—")
+            self._inspector_airflow_metric_var.set("—")
+            self._inspector_ach_metric_var.set("—")
+            self._inspector_compliance_value_var.set("NOT CHECKED")
+            self._inspector_result_state_var.set("DESIGN INPUTS")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            self._inspector_compliance_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            return
+
+        length_m = _finite_number(item.get("length_m"), 0.0)
+        width_m = _finite_number(item.get("width_m"), 0.0)
+        height_m = _finite_number(item.get("height_m"), 0.0)
+        area_m2 = max(0.0, length_m * width_m)
+        volume_m3 = max(0.0, area_m2 * height_m)
+        self._inspector_geometry_var.set(
+            f"Geometry: {area_m2:,.1f} m² · {volume_m3:,.1f} m³"
+        )
+        self._inspector_area_var.set(f"{area_m2:,.1f} m²")
+        self._inspector_volume_var.set(f"{volume_m3:,.1f} m³")
+
+        analysis = self._analysis_getter()
+        result = self._result_getter()
+        room_id = selected.item_id
+
+        def room_overlay(mode: str) -> dict | None:
+            state = engineering_overlay_state(
+                self.layout,
+                analysis=analysis,
+                result=result if isinstance(result, dict) else None,
+                mode=mode,
+            )
+            return next(
+                (
+                    record
+                    for record in state.get("rooms", [])
+                    if record.get("room_id") == room_id
+                ),
+                None,
+            )
+
+        pressure = room_overlay("pressure")
+        ach = room_overlay("ach")
+        airflow = room_overlay("airflow")
+        status = room_overlay("status")
+
+        if isinstance(result, dict):
+            self._inspector_analysis_var.set(
+                "Fresh active-analysis results projected into this room."
+            )
+            self._inspector_result_state_var.set("FRESH RESULT")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Pass.TLabel"
+            )
+        else:
+            self._inspector_analysis_var.set(
+                "No fresh active-analysis result is available; spatial values remain editable design inputs."
+            )
+            self._inspector_result_state_var.set("DESIGN INPUTS")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Attention.TLabel"
+            )
+
+        pressure_value = pressure.get("pressure_pa") if pressure else None
+        self._inspector_pressure_var.set(
+            "Pressure: —"
+            if pressure_value is None
+            else f"Pressure: {float(pressure_value):+.1f} Pa"
+        )
+        self._inspector_pressure_metric_var.set(
+            "—" if pressure_value is None else f"{float(pressure_value):+.1f} Pa"
+        )
+
+        ach_value = ach.get("value") if ach else None
+        airflow_value = airflow.get("value") if airflow else None
+        parts = []
+        if isinstance(airflow_value, (int, float)):
+            parts.append(f"{float(airflow_value):,.0f} m³/h")
+        if isinstance(ach_value, (int, float)):
+            parts.append(f"{float(ach_value):.1f} ACH")
+        self._inspector_airflow_var.set(
+            "Airflow / ACH: " + (" · ".join(parts) if parts else "—")
+        )
+        self._inspector_airflow_metric_var.set(
+            "—"
+            if not isinstance(airflow_value, (int, float))
+            else f"{float(airflow_value):,.0f} m³/h"
+        )
+        self._inspector_ach_metric_var.set(
+            "—"
+            if not isinstance(ach_value, (int, float))
+            else f"{float(ach_value):.1f} 1/h"
+        )
+
+        state = str((status or {}).get("status") or "not_checked").lower()
+        label = state.replace("_", " ").upper()
+        self._inspector_compliance_var.set(f"Verification: {label}")
+        self._inspector_compliance_value_var.set(label)
+        self._inspector_compliance_label.configure(
+            style=status_style_name(state)
+        )
+
+    @staticmethod
+    def _property_matches_filter(
+        query: str,
+        *,
+        key: str,
+        group: str,
+        label: str,
+        unit: str,
+    ) -> bool:
+        tokens = [token for token in str(query or "").strip().casefold().split() if token]
+        if not tokens:
+            return True
+        haystack = " ".join((key, group, label, unit)).casefold()
+        return all(token in haystack for token in tokens)
+
+    @staticmethod
+    def _property_error_field(message: str) -> str | None:
+        """Resolve backend validation text to the inspector field that needs attention."""
+        text = str(message or "").strip().casefold()
+        labels = (
+            ("floor elevation", "floor_elevation_m"),
+            ("orientation", "orientation_deg"),
+            ("pressure", "pressure_pa"),
+            ("length", "length_m"),
+            ("width", "width_m"),
+            ("height", "height_m"),
+            ("room id", "room_id"),
+            ("wall side", "wall_side"),
+            ("name", "name"),
+            ("x (m)", "x_m"),
+            ("y (m)", "y_m"),
+            ("z (m)", "z_m"),
+        )
+        for label, key in labels:
+            if label in text:
+                return key
+        return None
+
+    def _on_property_filter_changed(self, *_args) -> None:
+        """Filter rows only; never reload the selected object over unsaved editor text."""
+        self._apply_property_filter()
+
+    def _on_property_edit(self, _event=None) -> None:
+        self._clear_property_error()
+        self._apply_property_filter()
+
+    def _property_selection_key(self) -> object | None:
+        hits = self.selected_hits()
+        if not hits:
+            return None
+        if len(hits) == 1:
+            return hits[0].kind, hits[0].item_id
+        return tuple(sorted((hit.kind, hit.item_id) for hit in hits))
+
+    def _selected_property_objects(self) -> list[tuple[_Hit, dict]]:
+        selected: list[tuple[_Hit, dict]] = []
+        for hit in self.selected_hits():
+            collection = (
+                self.layout["rooms"] if hit.kind == "room" else self.layout["devices"]
+            )
+            item = next(
+                (candidate for candidate in collection if candidate["id"] == hit.item_id),
+                None,
+            )
+            if item is not None:
+                selected.append((hit, item))
+        return selected
+
+    @staticmethod
+    def _common_property_value(items: list[dict], key: str) -> tuple[str, bool]:
+        values = [
+            "" if item.get(key, "") is None else str(item.get(key, ""))
+            for item in items
+        ]
+        if not values:
+            return "", False
+        first = values[0]
+        mixed = any(value != first for value in values[1:])
+        return (_MIXED_PROPERTY_VALUE if mixed else first), mixed
+
+    def _property_dirty_values(self) -> dict[str, str]:
+        loaded = getattr(self, "_property_loaded_model_values", {})
+        if not loaded:
+            return {}
+        dirty: dict[str, str] = {}
+        variables = getattr(self, "_property_vars", {})
+        for key, model_value in loaded.items():
+            variable = variables.get(key)
+            if variable is None:
+                continue
+            current = str(variable.get())
+            if current != model_value:
+                dirty[key] = current
+        return dirty
+
+    def _stash_property_draft(self) -> None:
+        key = getattr(self, "_property_loaded_selection", None)
+        if key is None:
+            return
+        drafts = getattr(self, "_property_drafts", None)
+        if drafts is None:
+            self._property_drafts = {}
+            drafts = self._property_drafts
+        dirty = self._property_dirty_values()
+        if dirty:
+            drafts[key] = dirty
+        else:
+            drafts.pop(key, None)
+
+    def _editable_property_fields(self) -> set[str]:
+        hits = self.selected_hits()
+        if not hits:
             return set()
-        if self.selected.kind == "room":
+        kinds = {hit.kind for hit in hits}
+        if len(kinds) != 1:
+            return set()
+        kind = next(iter(kinds))
+        if len(hits) > 1:
+            if kind == "room":
+                return {
+                    "length_m",
+                    "width_m",
+                    "height_m",
+                    "floor_elevation_m",
+                    "pressure_pa",
+                    "classification",
+                }
+            return {
+                "z_m",
+                "width_m",
+                "height_m",
+                "orientation_deg",
+                "wall_side",
+                "swing",
+            }
+        if kind == "room":
             return {
                 "name",
                 "x_m",
@@ -2787,55 +3511,168 @@ class SpatialDesignWorkspace(ttk.Frame):
             "swing",
         }
 
-    def _filter_property_rows(self) -> None:
-        visible_fields = self._property_fields_for_selection()
-        if not visible_fields:
+    def _clear_property_error(self) -> None:
+        error_var = getattr(self, "_property_error_var", None)
+        if error_var is not None:
+            error_var.set("")
+        label = getattr(self, "_property_error_label", None)
+        if label is not None:
+            try:
+                label.pack_forget()
+            except tk.TclError:
+                pass
+        for entry in getattr(self, "_property_entries", {}).values():
+            try:
+                entry.state(["!invalid"])
+            except tk.TclError:
+                pass
+
+    def _show_property_error(self, message: str) -> None:
+        error_var = getattr(self, "_property_error_var", None)
+        if error_var is not None:
+            error_var.set(message)
+        label = getattr(self, "_property_error_label", None)
+        if label is not None:
+            try:
+                label.pack(fill="x", pady=(0, 6))
+            except tk.TclError:
+                pass
+        field = self._property_error_field(message)
+        for key, entry in getattr(self, "_property_entries", {}).items():
+            try:
+                entry.state(["invalid"] if key == field else ["!invalid"])
+            except tk.TclError:
+                pass
+        entry = getattr(self, "_property_entries", {}).get(field or "")
+        if entry is not None:
+            try:
+                entry.focus_set()
+                entry.selection_range(0, "end")
+            except tk.TclError:
+                pass
+
+    def _apply_property_filter(self) -> None:
+        item = self._selected_object()
+        if item is None:
+            self._property_filter_summary_var.set("No editable properties")
+            for section in self._property_sections.values():
+                section.pack_forget()
             for row in self._property_rows.values():
                 row.pack_forget()
-            self._property_filter_var.set("0 properties · select an object")
+            try:
+                self._property_apply_button.configure(state="disabled")
+                self._property_revert_button.configure(state="disabled")
+            except (AttributeError, tk.TclError):
+                pass
             return
 
-        tokens = [
-            token
-            for token in self._property_search_var.get().strip().casefold().split()
-            if token
-        ]
-        visible_count = 0
+        dirty = bool(self._property_dirty_values())
+        visible_fields = self._editable_property_fields()
+        selection_count = len(self.selected_hits())
+        try:
+            self._property_apply_button.configure(
+                state="normal" if visible_fields else "disabled",
+                text=(
+                    f"Apply to {selection_count} objects"
+                    if selection_count > 1 and visible_fields
+                    else "Apply properties"
+                ),
+            )
+            self._property_revert_button.configure(
+                state="normal" if dirty else "disabled"
+            )
+        except (AttributeError, tk.TclError):
+            pass
+        query = self._property_filter_var.get()
+        shown_fields: set[str] = set()
+        shown_groups: set[str] = set()
         for key, row in self._property_rows.items():
-            label = self._property_labels.get(key, key)
-            unit = self._property_units.get(key, "")
-            haystack = f"{label} {key} {unit}".casefold()
-            matches_filter = all(token in haystack for token in tokens)
-            if key in visible_fields and matches_filter:
+            group, label, unit = self._property_meta.get(key, ("", key, ""))
+            visible = key in visible_fields and self._property_matches_filter(
+                query,
+                key=key,
+                group=group,
+                label=label,
+                unit=unit,
+            )
+            if visible:
                 row.pack(fill="x", pady=2)
-                visible_count += 1
+                shown_fields.add(key)
+                shown_groups.add(group)
             else:
                 row.pack_forget()
 
-        total_count = len(visible_fields)
-        if tokens:
-            self._property_filter_var.set(
-                f"{visible_count} of {total_count} properties · filtered"
+        for group_name in self._property_group_order:
+            section = self._property_sections[group_name]
+            if group_name in shown_groups:
+                section.pack(
+                    fill="x",
+                    pady=(0, 7),
+                    before=self._property_actions,
+                )
+            else:
+                section.pack_forget()
+        total = len(visible_fields)
+        shown = len(shown_fields)
+        modified = " · modified" if dirty else ""
+        mixed_count = len(
+            set(getattr(self, "_property_mixed_fields", set())) & visible_fields
+        )
+        selection_note = (
+            f" · {selection_count} selected"
+            if selection_count > 1
+            else ""
+        )
+        mixed_note = f" · {mixed_count} mixed" if mixed_count else ""
+        if query.strip():
+            self._property_filter_summary_var.set(
+                f"{shown} of {total} editable properties match filter"
+                f"{selection_note}{mixed_note}{modified}"
             )
         else:
-            self._property_filter_var.set(f"{total_count} properties")
+            self._property_filter_summary_var.set(
+                f"{shown} editable properties{selection_note}{mixed_note}{modified}"
+            )
 
     def _load_property_panel(self) -> None:
+        current_key = self._property_selection_key()
+        previous_key = getattr(self, "_property_loaded_selection", None)
+        if previous_key is not None and previous_key != current_key:
+            self._stash_property_draft()
+
+        selected_objects = self._selected_property_objects()
         item = self._selected_object()
-        if item is None:
-            self._selection_var.set("No selection")
+        self._clear_property_error()
+        if item is None or not selected_objects:
+            self._selection_var.set(
+                "No object selected — select a room, device, opening, or equipment item."
+            )
+            self._load_engineering_inspector_snapshot()
             for var in self._property_vars.values():
                 var.set("")
-            self._filter_property_rows()
+            self._property_loaded_selection = None
+            self._property_loaded_model_values = {}
+            self._property_mixed_fields = set()
+            self._apply_property_filter()
             return
 
-        prefix = (
-            "Room"
-            if self.selected and self.selected.kind == "room"
-            else item.get("type", "Device").title()
-        )
-        selection_text = f"{prefix}: {item.get('name', '')}"
-        if self.selected and self.selected.kind == "room":
+        selected_hits = [hit for hit, _candidate in selected_objects]
+        selected_items = [candidate for _hit, candidate in selected_objects]
+        selected_kinds = {hit.kind for hit in selected_hits}
+        if len(selected_hits) > 1:
+            if len(selected_kinds) == 1:
+                noun = "rooms" if next(iter(selected_kinds)) == "room" else "devices"
+                selection_text = (
+                    f"{len(selected_hits)} {noun} selected — edit shared properties in one transaction."
+                )
+            else:
+                selection_text = (
+                    f"{len(selected_hits)} objects selected — batch editing requires only rooms or only devices."
+                )
+        else:
+            prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+            selection_text = f"{prefix}: {item.get('name', '')}"
+        if len(selected_hits) == 1 and self.selected and self.selected.kind == "room":
             sync = engineering_sync_status(self.layout, self._analysis_getter())
             room_sync = next(
                 (
@@ -2848,34 +3685,122 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        self._load_engineering_inspector_snapshot()
+        visible_fields = self._editable_property_fields()
+        model_values: dict[str, str] = {}
+        mixed_fields: set[str] = set()
+        for key in visible_fields:
+            value, mixed = self._common_property_value(selected_items, key)
+            model_values[key] = value
+            if mixed:
+                mixed_fields.add(key)
+        self._property_mixed_fields = mixed_fields
+
+        pending: dict[str, str] = {}
+        drafts = getattr(self, "_property_drafts", {})
+        if current_key is not None:
+            pending.update(drafts.get(current_key, {}))
+        if current_key == previous_key:
+            pending.update(self._property_dirty_values())
+        pending = {
+            key: value
+            for key, value in pending.items()
+            if key in model_values and value != model_values[key]
+        }
+        if current_key is not None:
+            if pending:
+                drafts[current_key] = dict(pending)
+            else:
+                drafts.pop(current_key, None)
 
         for key, var in self._property_vars.items():
-            value = item.get(key, "")
-            var.set("" if value is None else str(value))
-        self._filter_property_rows()
+            if key in visible_fields:
+                var.set(pending.get(key, model_values[key]))
+            else:
+                var.set("")
+        self._property_loaded_selection = current_key
+        self._property_loaded_model_values = model_values
+        self._apply_property_filter()
+
+    def revert_property_edits(self) -> None:
+        key = self._property_selection_key()
+        drafts = getattr(self, "_property_drafts", {})
+        if key is not None:
+            drafts.pop(key, None)
+        self._property_loaded_selection = None
+        self._property_loaded_model_values = {}
+        self._property_mixed_fields = set()
+        self._load_property_panel()
+        self._status_setter("Property edits reverted")
 
     def apply_properties(self) -> None:
-        item = self._selected_object()
-        if item is None:
+        selected_objects = self._selected_property_objects()
+        if not selected_objects:
             return
-        try:
-            candidate = update_spatial_properties(
-                self.layout,
-                self.selected.kind,
-                self.selected.item_id,
-                {key: variable.get() for key, variable in self._property_vars.items()},
+        visible_fields = self._editable_property_fields()
+        if not visible_fields:
+            self._status_setter(
+                "Batch properties not applied: select only rooms or only devices"
             )
+            return
+
+        loaded_values = getattr(self, "_property_loaded_model_values", {})
+        if loaded_values:
+            values = {
+                key: value
+                for key, value in self._property_dirty_values().items()
+                if key in visible_fields
+            }
+        else:
+            values = {
+                key: variable.get()
+                for key, variable in self._property_vars.items()
+                if key in visible_fields
+            }
+        if not values:
+            self._status_setter("No property changes to apply")
+            return
+
+        self._clear_property_error()
+        selected_hits = [hit for hit, _item in selected_objects]
+        try:
+            if len(selected_hits) == 1:
+                hit = selected_hits[0]
+                candidate = update_spatial_properties(
+                    self.layout,
+                    hit.kind,
+                    hit.item_id,
+                    values,
+                )
+            else:
+                candidate = update_spatial_properties_bulk(
+                    self.layout,
+                    [(hit.kind, hit.item_id) for hit in selected_hits],
+                    values,
+                )
         except ValueError as exc:
-            messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
-            self._status_setter("Properties not applied: " + str(exc))
+            message = str(exc)
+            self._show_property_error(message)
+            self._status_setter("Properties not applied: " + message)
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         if candidate != self.layout:
             self.layout = candidate
+        key = self._property_selection_key()
+        if key is not None:
+            getattr(self, "_property_drafts", {}).pop(key, None)
+        self._property_loaded_selection = None
+        self._property_loaded_model_values = {}
+        self._property_mixed_fields = set()
         self._load_property_panel()
+        description = (
+            f"Spatial properties updated for {len(selected_hits)} objects"
+            if len(selected_hits) > 1
+            else "Spatial properties updated"
+        )
         self._persist(
-            "Spatial properties updated",
+            description,
             history_before=history_before,
             selection_before=selection_before,
         )
@@ -2895,7 +3820,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         selection_before = self._selection_state()
         kind = self.selected.kind
         self.layout = candidate
-        self.selected = _Hit(kind, item_id)
+        self._replace_selection(_Hit(kind, item_id))
         self._load_property_panel()
         message = (
             "Duplicated room and devices; enter pressure and link analysis for the new room"
@@ -2926,7 +3851,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "floor_elevation_m": self.layout["floor"]["elevation_m"],
         }
         self.layout["rooms"].append(room)
-        self.selected = _Hit("room", room["id"])
+        self._replace_selection(_Hit("room", room["id"]))
         self._load_property_panel()
         self._persist(
             f"Added {room['name']}",
@@ -2985,7 +3910,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if device_type == "door":
             device["swing"] = "left"
         self.layout["devices"].append(device)
-        self.selected = _Hit("device", device["id"])
+        self._replace_selection(_Hit("device", device["id"]))
         self._load_property_panel()
         self._persist(
             f"Added {device_type}",
@@ -2994,21 +3919,37 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def delete_selected(self) -> None:
-        if self.selected is None:
+        hits = list(self.selected_hits())
+        if not hits and self.selected is not None:
+            hits = [self.selected]
+        if not hits:
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        collection_name = "rooms" if self.selected.kind == "room" else "devices"
-        item_id = self.selected.item_id
-        self.layout[collection_name] = [item for item in self.layout[collection_name] if item["id"] != item_id]
-        if self.selected.kind == "room":
-            self.layout["devices"] = [
-                item for item in self.layout["devices"] if item.get("room_id") != item_id
-            ]
-        self.selected = None
+        room_ids = {
+            hit.item_id for hit in hits if hit.kind == "room"
+        }
+        device_ids = {
+            hit.item_id for hit in hits if hit.kind == "device"
+        }
+        self.layout["rooms"] = [
+            item
+            for item in self.layout["rooms"]
+            if item["id"] not in room_ids
+        ]
+        self.layout["devices"] = [
+            item
+            for item in self.layout["devices"]
+            if item["id"] not in device_ids
+            and item.get("room_id") not in room_ids
+        ]
+        self._replace_selection(None)
         self._load_property_panel()
+        deleted_count = len(hits)
         self._persist(
-            "Deleted spatial item",
+            "Deleted spatial item"
+            if deleted_count == 1
+            else f"Deleted {deleted_count} selected spatial objects",
             history_before=history_before,
             selection_before=selection_before,
         )
@@ -3315,15 +4256,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             relationships.append((high, low, minimum, observed_delta, state))
         return relationships
 
-    @staticmethod
-    def _relationship_style(state: str) -> tuple[str, tuple[int, ...]]:
+    def _relationship_style(self, state: str) -> tuple[str, tuple[int, ...]]:
         if state == "pass":
-            return "#15803d", ()
+            return self._theme_palette["success"], ()
         if state == "fail":
-            return "#b91c1c", ()
+            return self._theme_palette["error"], ()
         if state == "available":
-            return "#7c3aed", (6, 3)
-        return "#64748b", (5, 4)
+            return self._theme_palette["simulation"], (6, 3)
+        return self._theme_palette["muted"], (5, 4)
 
     @staticmethod
     def _relationship_label(
@@ -3422,6 +4362,112 @@ class SpatialDesignWorkspace(ttk.Frame):
                     tags=("pressure_relationship_3d",),
                 )
 
+    @staticmethod
+    def _ruler_major_step(scale_px_per_m: float, target_px: float = 85.0) -> float:
+        """Choose a stable 1/2/5 engineering ruler interval for the current zoom."""
+        scale = float(scale_px_per_m)
+        if not math.isfinite(scale) or scale <= 0:
+            return 1.0
+        raw = max(1e-9, float(target_px) / scale)
+        exponent = 10.0 ** math.floor(math.log10(raw))
+        normalized = raw / exponent
+        if normalized <= 1.0:
+            factor = 1.0
+        elif normalized <= 2.0:
+            factor = 2.0
+        elif normalized <= 5.0:
+            factor = 5.0
+        else:
+            factor = 10.0
+        return factor * exponent
+
+    @staticmethod
+    def _ruler_label(value: float) -> str:
+        if abs(value) < 5e-12:
+            value = 0.0
+        magnitude = abs(value)
+        if magnitude >= 10000 or (0 < magnitude < 0.001):
+            return f"{value:.2e}"
+        return f"{value:g}"
+
+    def _draw_rulers_2d(self, canvas: tk.Canvas) -> None:
+        if not getattr(self, "_show_rulers", None) or not self._show_rulers.get():
+            return
+
+        width = max(1, canvas.winfo_width())
+        height = max(1, canvas.winfo_height())
+        top_h = 23
+        left_w = 48
+        palette = self._theme_palette
+        background = palette["surface_elevated"]
+        border = palette["border_strong"]
+        text_color = palette["secondary_text"]
+        tick_color = palette["muted"]
+
+        canvas.create_rectangle(
+            0, 0, width, top_h,
+            fill=background, outline=border, tags=("ruler", "ruler_x"),
+        )
+        canvas.create_rectangle(
+            0, 0, left_w, height,
+            fill=background, outline=border, tags=("ruler", "ruler_y"),
+        )
+        canvas.create_text(
+            left_w / 2,
+            top_h / 2,
+            text="m",
+            fill=text_color,
+            tags=("ruler", "ruler_unit"),
+        )
+
+        step = self._ruler_major_step(self._scale_2d())
+        x0, y0 = self._canvas_to_world(left_w, top_h)
+        x1, y1 = self._canvas_to_world(width, height)
+
+        start_x = math.floor(min(x0, x1) / step) * step
+        end_x = math.ceil(max(x0, x1) / step) * step
+        x_value = start_x
+        tick_budget = 0
+        while x_value <= end_x + step * 1e-9 and tick_budget < 200:
+            cx, _ = self._world_to_canvas(x_value, 0.0)
+            if left_w <= cx <= width:
+                canvas.create_line(
+                    cx, top_h - 7, cx, top_h,
+                    fill=tick_color, tags=("ruler", "ruler_x"),
+                )
+                canvas.create_text(
+                    cx + 3, 3,
+                    anchor="nw",
+                    text=self._ruler_label(x_value),
+                    fill=text_color,
+                    tags=("ruler", "ruler_x"),
+                )
+            x_value += step
+            tick_budget += 1
+
+        start_y = math.floor(min(y0, y1) / step) * step
+        end_y = math.ceil(max(y0, y1) / step) * step
+        y_value = start_y
+        tick_budget = 0
+        while y_value <= end_y + step * 1e-9 and tick_budget < 200:
+            _, cy = self._world_to_canvas(0.0, y_value)
+            if top_h <= cy <= height:
+                canvas.create_line(
+                    left_w - 7, cy, left_w, cy,
+                    fill=tick_color, tags=("ruler", "ruler_y"),
+                )
+                canvas.create_text(
+                    left_w - 9, cy,
+                    anchor="e",
+                    text=self._ruler_label(y_value),
+                    fill=text_color,
+                    tags=("ruler", "ruler_y"),
+                )
+            y_value += step
+            tick_budget += 1
+
+        canvas.tag_raise("ruler")
+
     def _draw_2d(self) -> None:
         canvas = self.canvas_2d
         canvas.delete("all")
@@ -3462,6 +4508,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._analysis_getter(),
             getattr(self, "_result_getter", lambda: None)(),
             mode=overlay_mode,
+            palette=self._theme_palette,
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
@@ -3475,15 +4522,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["x_m"] + room["length_m"],
                 room["y_m"] + room["width_m"],
             )
-            selected = self.selected == _Hit("room", room["id"])
+            selected = self._is_selected_hit(_Hit("room", room["id"]))
             hovered = self._hovered == _Hit("room", room["id"])
             outline = (
-                "#1d4ed8"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#0ea5e9"
+                    self._theme_palette["accent_hover"]
                     if hovered
-                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["border_strong"]
+                    )
                 )
             )
             fill = (
@@ -3539,11 +4590,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+                outline=self._theme_palette["error"], width=2, dash=(5, 3), tags=("validation",)
             )
             canvas.create_text(
                 (x0 + x1) / 2, (y0 + y1) / 2,
-                text="OVERLAP", fill="#991b1b", tags=("validation",)
+                text="OVERLAP", fill=self._theme_palette["error"], tags=("validation",)
             )
 
         if self._show_devices.get():
@@ -3563,15 +4614,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if not self._is_item_visible("device", device["id"]):
                     continue
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
-                selected = self.selected == _Hit("device", device["id"])
+                selected = self._is_selected_hit(_Hit("device", device["id"]))
                 hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
-                    "#c0392b"
+                    self._theme_palette["accent"]
                     if selected
                     else (
-                        "#0ea5e9"
+                        self._theme_palette["accent_hover"]
                         if hovered
-                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                        else (
+                            self._theme_palette["warning"]
+                            if device["id"] in warning_ids
+                            else self._theme_palette["border_strong"]
+                        )
                     )
                 )
                 tag = f"device:{device['id']}"
@@ -3613,6 +4668,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._draw_engineering_legend(canvas, overlay)
         self._draw_measurement_overlay()
+        self._draw_rulers_2d(canvas)
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -3704,7 +4760,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             y,
             x + radius,
             y,
-            fill="#0284c7",
+            fill=self._theme_palette["accent"],
             width=2,
             tags=("snap_indicator",),
         )
@@ -3713,7 +4769,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             y - radius,
             x,
             y + radius,
-            fill="#0284c7",
+            fill=self._theme_palette["accent"],
             width=2,
             tags=("snap_indicator",),
         )
@@ -3769,7 +4825,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = self._parse_hit(self.canvas_2d.gettags(current[0])) if current else None
         if hit is None:
             return "break"
-        self.selected = hit
+        self._replace_selection(hit)
         self._load_property_panel()
         self._notify_selection_change()
         self.redraw()
@@ -3830,7 +4886,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ]
         canvas.create_polygon(
             *sum(floor_points, ()),
-            fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
+            fill=self._theme_palette["surface_alt"], outline=self._theme_palette["border_strong"], width=1, tags=("floor3d",),
         )
 
         section_height = self._active_section_height()
@@ -3843,8 +4899,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             canvas.create_polygon(
                 *sum(section_points, ()),
-                fill="#334155",
-                outline="#38bdf8",
+                fill=self._theme_palette["surface_elevated"],
+                outline=self._theme_palette["accent"],
                 stipple="gray50",
                 width=1,
                 tags=("section_plane",),
@@ -3856,6 +4912,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._analysis_getter(),
             getattr(self, "_result_getter", lambda: None)(),
             mode=overlay_mode,
+            palette=self._theme_palette,
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
@@ -3899,17 +4956,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill = (
                 overlay_by_room[room["id"]]["fill"]
                 if overlay_mode != "none"
-                else "#dfe7ef"
+                else self._theme_palette["surface_alt"]
             )
-            selected = self.selected == _Hit("room", room["id"])
+            selected = self._is_selected_hit(_Hit("room", room["id"]))
             hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
-                "#7dd3fc"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#38bdf8"
+                    self._theme_palette["accent_hover"]
                     if hovered
-                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["border_strong"]
+                    )
                 )
             )
             tag = f"room:{room['id']}"
@@ -3925,7 +4986,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
+                fill=self._theme_palette["panel"],
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3933,7 +4994,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
+                fill=self._theme_palette["surface"],
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3953,7 +5014,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
                     text=room["name"] + overlay_text,
-                    fill="#f0f6fc",
+                    fill=self._theme_palette["text"],
                     tags=(tag, "room3d"),
                 )
 
@@ -3975,15 +5036,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                     else floor_z
                 )
                 tag = f"device:{device['id']}"
-                selected = self.selected == _Hit("device", device["id"])
+                selected = self._is_selected_hit(_Hit("device", device["id"]))
                 hovered = self._hovered_3d == _Hit("device", device["id"])
                 device_outline = (
-                    "#ffffff"
+                    self._theme_palette["accent"]
                     if selected
                     else (
-                        "#38bdf8"
+                        self._theme_palette["accent_hover"]
                         if hovered
-                        else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+                        else (
+                            self._theme_palette["warning"]
+                            if device["id"] in warning_ids
+                            else self._theme_palette["attention"]
+                        )
                     )
                 )
                 device_bottom_z = room_floor + device["z_m"]
@@ -4020,7 +5085,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     radius = 5 if (selected or hovered) else 4
                     canvas.create_oval(
                         x - radius, y - radius, x + radius, y + radius,
-                        fill="#fbbf24", outline=device_outline,
+                        fill=self._theme_palette["attention"], outline=device_outline,
                         width=2, tags=(tag, "device3d"),
                     )
 
@@ -4047,35 +5112,41 @@ class SpatialDesignWorkspace(ttk.Frame):
         mode = str(overlay.get("mode") or "none")
         if mode == "none":
             return
+        palette = self._theme_palette
         x0, y0 = 12, 12
         width = 188
         if mode == "status":
             height = 104
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + height,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=palette["surface_elevated"],
+                outline=palette["border_strong"],
+                tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text="Verification Status", fill="#0f172a",
+                text="Verification Status",
+                fill=palette["text"],
                 tags=("overlay_legend",),
             )
-            for index, (label, fill) in enumerate(
+            for index, (label, fill, outline) in enumerate(
                 (
-                    ("PASS", "#dcfce7"),
-                    ("WARNING", "#fef3c7"),
-                    ("FAIL", "#fee2e2"),
-                    ("NOT VERIFIED", "#e2e8f0"),
+                    ("PASS", palette["success_surface"], palette["success"]),
+                    ("WARNING", palette["warning_surface"], palette["warning"]),
+                    ("FAIL", palette["error_surface"], palette["error"]),
+                    ("NOT VERIFIED", palette["surface_alt"], palette["muted"]),
                 )
             ):
                 y = y0 + 30 + index * 17
                 canvas.create_rectangle(
                     x0 + 8, y, x0 + 20, y + 10,
-                    fill=fill, outline="#64748b", tags=("overlay_legend",),
+                    fill=fill, outline=outline, tags=("overlay_legend",),
                 )
                 canvas.create_text(
                     x0 + 28, y + 5, anchor="w",
-                    text=label, fill="#334155", tags=("overlay_legend",),
+                    text=label,
+                    fill=palette["secondary_text"],
+                    tags=("overlay_legend",),
                 )
         else:
             minimum = overlay.get("minimum")
@@ -4084,11 +5155,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             title = str(overlay.get("title") or mode.title())
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + 64,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=palette["surface_elevated"],
+                outline=palette["border_strong"],
+                tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text=title, fill="#0f172a", tags=("overlay_legend",),
+                text=title,
+                fill=palette["text"],
+                tags=("overlay_legend",),
             )
             if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
                 suffix = f" {unit}" if unit else ""
@@ -4097,7 +5172,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = "No result values available"
             canvas.create_text(
                 x0 + 8, y0 + 34, anchor="nw",
-                text=text, fill="#334155", tags=("overlay_legend",),
+                text=text,
+                fill=palette["secondary_text"],
+                tags=("overlay_legend",),
             )
         canvas.tag_raise("overlay_legend")
 
@@ -4111,6 +5188,10 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
+        self._box_select_anchor_canvas = None
+        self._box_select_current_canvas = None
+        self._box_select_state = 0
+        self.canvas_2d.delete("selection_box")
         if self._current_tool_mode() in {"distance", "area"}:
             self._handle_measure_click(event.x, event.y)
             return
@@ -4129,9 +5210,30 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._resize_room_id = room_id
             else:
                 hit = self._parse_hit(tags)
-        self.selected = hit
+        state = int(getattr(event, "state", 0) or 0)
+        modifier_selection = bool(state & (0x0001 | 0x0004))
+        if self._resize_room_id is not None:
+            self._replace_selection(hit)
+            modifier_selection = False
+        elif (
+            hit is not None
+            and not modifier_selection
+            and hit in self.selected_hits()
+            and len(self.selected_hits()) > 1
+        ):
+            self.selected = hit
+        else:
+            self._update_click_selection(hit, state)
+        if hit is None:
+            self._box_select_anchor_canvas = (int(event.x), int(event.y))
+            self._box_select_current_canvas = (int(event.x), int(event.y))
+            self._box_select_state = state
         item = self._selected_object()
-        if hit is not None and item is not None:
+        if (
+            hit is not None
+            and item is not None
+            and not modifier_selection
+        ):
             self._drag_anchor = self._canvas_to_world(event.x, event.y)
             self._drag_item_origin = (item["x_m"], item["y_m"])
             self._drag_history_before = (
@@ -4148,6 +5250,21 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_drag(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if getattr(self, "_box_select_anchor_canvas", None) is not None:
+            self._box_select_current_canvas = (int(event.x), int(event.y))
+            self.canvas_2d.delete("selection_box")
+            x0, y0 = self._box_select_anchor_canvas
+            self.canvas_2d.create_rectangle(
+                x0,
+                y0,
+                int(event.x),
+                int(event.y),
+                outline=self._theme_palette["accent"],
+                width=1,
+                dash=(4, 3),
+                tags=("selection_box",),
+            )
             return
         item = self._selected_object()
         if item is None or self._drag_anchor is None:
@@ -4183,24 +5300,121 @@ class SpatialDesignWorkspace(ttk.Frame):
                 grid_m=grid,
                 snap_to_grid=snap_to_grid,
             )
-            item["x_m"] = new_x
-            item["y_m"] = new_y
             actual_dx = new_x - old_x
             actual_dy = new_y - old_y
-            if (
-                self.selected is not None
-                and self.selected.kind == "room"
-                and (actual_dx or actual_dy)
-            ):
+            selected_hits = self.selected_hits()
+            if len(selected_hits) > 1 and (actual_dx or actual_dy):
+                selected_room_ids = {
+                    hit.item_id for hit in selected_hits if hit.kind == "room"
+                }
+                selected_device_ids = {
+                    hit.item_id for hit in selected_hits if hit.kind == "device"
+                }
+                for room in self.layout["rooms"]:
+                    if room["id"] in selected_room_ids:
+                        room["x_m"] += actual_dx
+                        room["y_m"] += actual_dy
                 for device in self.layout["devices"]:
-                    if device.get("room_id") == item["id"]:
+                    if (
+                        device["id"] in selected_device_ids
+                        or device.get("room_id") in selected_room_ids
+                    ):
                         device["x_m"] += actual_dx
                         device["y_m"] += actual_dy
+            else:
+                item["x_m"] = new_x
+                item["y_m"] = new_y
+                if (
+                    self.selected is not None
+                    and self.selected.kind == "room"
+                    and (actual_dx or actual_dy)
+                ):
+                    for device in self.layout["devices"]:
+                        if device.get("room_id") == item["id"]:
+                            device["x_m"] += actual_dx
+                            device["y_m"] += actual_dy
         self._load_property_panel()
         self.redraw()
 
+    def _box_selection_hits(
+        self,
+        x0: int,
+        y0: int,
+        x1: int,
+        y1: int,
+    ) -> list[_Hit]:
+        left, right = sorted((x0, x1))
+        top, bottom = sorted((y0, y1))
+        hits: list[_Hit] = []
+        for room in self.layout["rooms"]:
+            hit = _Hit("room", room["id"])
+            if not self._is_item_visible(hit.kind, hit.item_id):
+                continue
+            rx0, ry0 = self._world_to_canvas(room["x_m"], room["y_m"])
+            rx1, ry1 = self._world_to_canvas(
+                room["x_m"] + room["length_m"],
+                room["y_m"] + room["width_m"],
+            )
+            room_left, room_right = sorted((rx0, rx1))
+            room_top, room_bottom = sorted((ry0, ry1))
+            if (
+                room_right >= left
+                and room_left <= right
+                and room_bottom >= top
+                and room_top <= bottom
+            ):
+                hits.append(hit)
+        if self._show_devices.get():
+            for device in self.layout["devices"]:
+                hit = _Hit("device", device["id"])
+                if not self._is_item_visible(hit.kind, hit.item_id):
+                    continue
+                dx, dy = self._world_to_canvas(device["x_m"], device["y_m"])
+                if left <= dx <= right and top <= dy <= bottom:
+                    hits.append(hit)
+        return hits
+
+    def _apply_box_selection(
+        self,
+        hits: list[_Hit],
+        *,
+        state: int,
+    ) -> None:
+        if state & 0x0004:
+            updated = list(self._selected_hits)
+            for hit in hits:
+                if hit in updated:
+                    updated.remove(hit)
+                else:
+                    updated.append(hit)
+            self._set_selected_hits(updated)
+        elif state & 0x0001:
+            self._set_selected_hits([*self._selected_hits, *hits])
+        else:
+            self._set_selected_hits(hits)
+
     def _on_left_up(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if getattr(self, "_box_select_anchor_canvas", None) is not None:
+            x0, y0 = self._box_select_anchor_canvas
+            x1, y1 = (
+                self._box_select_current_canvas
+                or (int(event.x), int(event.y))
+            )
+            state = self._box_select_state
+            self._box_select_anchor_canvas = None
+            self._box_select_current_canvas = None
+            self._box_select_state = 0
+            self.canvas_2d.delete("selection_box")
+            if abs(x1 - x0) >= 4 or abs(y1 - y0) >= 4:
+                self._apply_box_selection(
+                    self._box_selection_hits(x0, y0, x1, y1),
+                    state=state,
+                )
+                self._load_property_panel()
+                self._notify_selection_change()
+                self.redraw()
             return
         if (
             self._drag_anchor is not None
@@ -4208,11 +5422,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             and self._drag_history_before is not None
         ):
             history_before, selection_before = self._drag_history_before
-            message = (
-                "Room resized"
-                if self._resize_room_id is not None
-                else "Spatial item moved"
-            )
+            if self._resize_room_id is not None:
+                message = "Room resized"
+            elif len(self.selected_hits()) > 1:
+                message = f"Moved {len(self.selected_hits())} selected spatial objects"
+            else:
+                message = "Spatial item moved"
             self._persist(
                 message,
                 history_before=history_before,
@@ -4250,6 +5465,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        self._notify_engineering_context()
         current = self.canvas_2d.find_withtag("current")
         hovered = (
             self._parse_hit(self.canvas_2d.gettags(current[0]))
@@ -4399,7 +5615,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
         if hit is None:
             return
-        self.selected = hit
+        self._replace_selection(hit)
         self._load_property_panel()
         self._notify_selection_change()
         self.redraw()

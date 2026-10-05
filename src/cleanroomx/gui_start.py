@@ -58,17 +58,19 @@ class StartCenter(ttk.Frame):
         ttk.Button(
             actions,
             text="Open Project",
-            style="CX.Primary.TButton",
+            style="CX.Info.TButton",
             command=on_open,
         ).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         ttk.Button(
             actions,
             text="Import IFC",
+            style="CX.Violet.TButton",
             command=on_import_ifc,
         ).grid(row=1, column=0, sticky="ew", padx=5, pady=5)
         ttk.Button(
             actions,
             text="Open Example Project",
+            style="CX.Success.TButton",
             command=on_open_demo,
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
@@ -123,6 +125,7 @@ class StartCenter(ttk.Frame):
         ttk.Button(
             footer,
             text="Open Selected",
+            style="CX.Info.TButton",
             command=self._open_selected_recent,
         ).pack(side="right")
 
@@ -148,9 +151,12 @@ class StartCenter(ttk.Frame):
             wraplength=760,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Button(examples, text="Open Demo", command=on_open_demo).grid(
-            row=0, column=1, rowspan=2, sticky="e", padx=(18, 0)
-        )
+        ttk.Button(
+            examples,
+            text="Open Demo",
+            style="CX.Success.TButton",
+            command=on_open_demo,
+        ).grid(row=0, column=1, rowspan=2, sticky="e", padx=(18, 0))
         examples.columnconfigure(0, weight=1)
 
     def set_recent_projects(self, records: list[dict[str, str]]) -> None:

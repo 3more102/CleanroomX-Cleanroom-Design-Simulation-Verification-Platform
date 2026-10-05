@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import tkinter as tk
 
@@ -244,3 +245,112 @@ def test_diagnostics_workspace_detail_uses_compact_engineering_fields(app):
     assert "Actual Airflow M3 H: 920" in rendered
     assert "Required Airflow M3 H: 1,000" in rendered
     assert '"actual_airflow_m3_h"' not in rendered
+
+
+def test_diagnostics_workspace_rule_filter_sort_and_reset(app):
+    result = {
+        "summary": {
+            "status": "error",
+            "issue_count": 3,
+            "error_count": 1,
+            "warning_count": 1,
+            "info_count": 1,
+        },
+        "issues": [
+            {
+                "sequence": 31,
+                "severity": "warning",
+                "category": "spatial",
+                "rule": "spatial.review",
+                "message": "Review spatial model.",
+            },
+            {
+                "sequence": 32,
+                "severity": "error",
+                "category": "analysis",
+                "rule": "analysis.invalid",
+                "message": "Invalid analysis input.",
+            },
+            {
+                "sequence": 33,
+                "severity": "info",
+                "category": "traceability",
+                "rule": "traceability.note",
+                "message": "Traceability note.",
+            },
+        ],
+    }
+    panel = app.diagnostics_workspace
+    panel.refresh(result)
+    app.root.update_idletasks()
+
+    assert tuple(panel.rule_combo.cget("values")) == (
+        "All",
+        "analysis.invalid",
+        "spatial.review",
+        "traceability.note",
+    )
+
+    panel.rule_var.set("spatial.review")
+    app.root.update_idletasks()
+    assert len(panel.tree.get_children()) == 1
+    assert next(iter(panel._issues_by_iid.values()))["sequence"] == 31
+
+    panel._reset_filters()
+    app.root.update_idletasks()
+    assert panel.rule_var.get() == "All"
+    assert panel.search_var.get() == ""
+    assert len(panel.tree.get_children()) == 3
+
+    panel.table_behavior.sort_by("severity")
+    ordered = [
+        panel._issues_by_iid[iid]["severity"]
+        for iid in panel.tree.get_children()
+    ]
+    assert ordered == ["error", "warning", "info"]
+
+    panel.table_behavior.sort_by("severity")
+    ordered = [
+        panel._issues_by_iid[iid]["severity"]
+        for iid in panel.tree.get_children()
+    ]
+    assert ordered == ["info", "warning", "error"]
+
+
+def test_diagnostics_workspace_multi_copy_preserves_canonical_records(app):
+    result = {
+        "summary": {
+            "status": "warning",
+            "issue_count": 2,
+            "error_count": 0,
+            "warning_count": 1,
+            "info_count": 1,
+        },
+        "issues": [
+            {
+                "sequence": 41,
+                "severity": "warning",
+                "category": "spatial",
+                "rule": "spatial.review",
+                "message": "Review spatial model.",
+            },
+            {
+                "sequence": 42,
+                "severity": "info",
+                "category": "analysis",
+                "rule": "analysis.note",
+                "message": "Analysis note.",
+            },
+        ],
+    }
+    panel = app.diagnostics_workspace
+    panel.refresh(result)
+    app.root.update_idletasks()
+    children = panel.tree.get_children()
+    panel.tree.selection_set(children)
+
+    panel._copy_selected()
+    copied = json.loads(app.root.clipboard_get())
+
+    assert [item["sequence"] for item in copied] == [41, 42]
+    assert copied == result["issues"]

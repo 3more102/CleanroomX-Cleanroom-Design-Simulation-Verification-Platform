@@ -493,6 +493,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 13, "bold"),
     )
     style.configure(
+        "CX.CardBody.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 9),
+    )
+    style.configure(
         "CX.Sidebar.TFrame",
         background=palette["surface"],
     )

@@ -117,6 +117,25 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     assert app.notebook.select() == str(app.spatial_workspace)
 
 
+def test_room_typed_diagnostic_navigation_focuses_spatial_room(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    issue = {
+        "rule": "engineering_sync.geometry_newer",
+        "element": {
+            "type": "room",
+            "id": room["id"],
+            "name": room["name"],
+        },
+    }
+
+    app._navigate_project_diagnostic(issue)
+    app.root.update()
+
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(workspace)
+
+
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     analysis = app.project.analyses[0]
     issue = {

@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_reporting import ReportingWorkspace, build_reporting_snapshot
 from .gui_simulation import (
     SimulationWorkspace,
     filter_run_history_records,
@@ -2368,6 +2369,11 @@ class CleanroomXApp:
 
         report_menu = tk.Menu(menubar, tearoff=False)
         report_menu.add_command(
+            label="Open Reporting Workspace",
+            command=lambda: self.activate_workspace_profile("reporting"),
+        )
+        report_menu.add_separator()
+        report_menu.add_command(
             label="Export Project Engineering Dossier...",
             command=self.export_project_engineering_dossier,
         )
@@ -2712,7 +2718,7 @@ class CleanroomXApp:
             text="6  Report",
             width=9,
             style="CX.Compact.TButton",
-            command=self.export_project_engineering_dossier,
+            command=lambda: self.activate_workspace_profile("reporting"),
         )
         self.workflow_report_button.pack(side="left", padx=1)
 
@@ -2969,6 +2975,17 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
+        self.reporting_workspace = ReportingWorkspace(
+            self.notebook,
+            snapshot_getter=self._reporting_workspace_snapshot,
+            export_dossier=self.export_project_engineering_dossier,
+            export_markdown=self.export_report_markdown,
+            export_html=self.export_report_html,
+            export_result=self.export_result_json,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.reporting_workspace, text="Reporting")
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
@@ -3249,7 +3266,8 @@ class CleanroomXApp:
             self.notebook.select(self.proofgraph_viewer)
             self.output_notebook.select(self.evidence_text.master)
         elif selected == "reporting":
-            self.notebook.select(self.plot_tab)
+            self.reporting_workspace.refresh()
+            self.notebook.select(self.reporting_workspace)
             self.output_notebook.select(self.report_text.master)
 
         label = WORKSPACE_LABELS[selected]
@@ -3366,6 +3384,9 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            text_widgets.append(getattr(reporting_workspace, "preview_text", None))
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -3702,6 +3723,43 @@ class CleanroomXApp:
                 documents.append(document)
         return documents
 
+    def _reporting_workspace_snapshot(self) -> dict:
+        """Return publication readiness without mutating engineering/project state."""
+        analysis = self._editor_analysis()
+        run = None
+        run_is_current = False
+        freshness_error = None
+        if (
+            analysis is not None
+            and self.last_run is not None
+            and self.last_run_analysis_id == analysis.id
+        ):
+            run = self.last_run
+            try:
+                run_is_current = analysis_run_is_current(
+                    run,
+                    analysis.kind,
+                    analysis.input,
+                    base_dir=self._base_dir(),
+                )
+            except Exception as exc:
+                freshness_error = str(exc)
+        diagnostics = getattr(getattr(self, "problems_panel", None), "last_result", None)
+        return build_reporting_snapshot(
+            project_name=self.project.name,
+            project_path=str(self.project_path) if self.project_path else None,
+            project_dirty=self._has_unsaved_changes(),
+            running=bool(self._running),
+            analysis_name=analysis.name if analysis is not None else None,
+            analysis_kind=analysis.kind if analysis is not None else None,
+            run_title=run.title if run is not None else None,
+            run_status=run.status if run is not None else None,
+            run_markdown=run.markdown if run is not None else None,
+            run_is_current=run_is_current,
+            freshness_error=freshness_error,
+            diagnostics=diagnostics if isinstance(diagnostics, dict) else None,
+        )
+
     def _refresh_engineering_panels(self) -> dict | None:
         panel = getattr(self, "problems_panel", None)
         if panel is None:
@@ -3818,6 +3876,9 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            reporting_workspace.refresh()
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -3860,9 +3921,14 @@ class CleanroomXApp:
                 )
                 return
 
-        if element_type == "spatial_element" and element_id:
+        if element_type in {"spatial_element", "room", "device"} and element_id:
             workspace = self.spatial_workspace
-            for kind in ("room", "device"):
+            kinds = {
+                "room": ("room",),
+                "device": ("device",),
+                "spatial_element": ("room", "device"),
+            }[element_type]
+            for kind in kinds:
                 if workspace.select_item(kind, element_id, notify=True):
                     self._activate_spatial_workspace()
                     workspace.fit_selected()
@@ -3870,7 +3936,7 @@ class CleanroomXApp:
                     return
 
         self.status_var.set(
-            f"Diagnostic {issue.get('rule', '')}: no spatial navigation target"
+            f"Diagnostic {issue.get('rule', '')}: no supported navigation target"
         )
 
     def export_project_diagnostics(self, _result: dict | None = None) -> None:
@@ -4586,6 +4652,9 @@ class CleanroomXApp:
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
         self._draw_plot()
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            reporting_workspace.refresh()
 
     def _clear_run_cache(self) -> None:
         self._runs_by_analysis.clear()
@@ -5627,7 +5696,7 @@ class CleanroomXApp:
     def _navigator_item_is_actionable(self, item_id: str) -> bool:
         if item_id.startswith(("room:", "device:")):
             return True
-        if item_id in {"nav-proofgraph", "nav-evidence"}:
+        if item_id in {"nav-proofgraph", "nav-evidence", "nav-reports"}:
             return True
         return bool(item_id and not item_id.startswith("nav-"))
 
@@ -5990,6 +6059,12 @@ class CleanroomXApp:
                 command=self._activate_proofgraph_workspace,
             )
             return menu
+        if item_id == "nav-reports":
+            menu.add_command(
+                label="Open Reporting Workspace",
+                command=lambda: self.activate_workspace_profile("reporting"),
+            )
+            return menu
         if not item_id.startswith("nav-"):
             menu.add_command(
                 label="Open Analysis",
@@ -6145,6 +6220,11 @@ class CleanroomXApp:
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
+            return
+        if item_id == "nav-reports":
+            self._remember_navigator_item(item_id)
+            self.activate_workspace_profile("reporting")
+            self.selection_status_var.set("Selected: Reports")
             return
         if item_id.startswith("nav-"):
             return
@@ -7814,6 +7894,9 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            reporting_workspace.refresh()
 
     def _poll_worker(self) -> None:
         try:

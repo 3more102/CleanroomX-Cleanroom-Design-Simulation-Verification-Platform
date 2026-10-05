@@ -3677,9 +3677,12 @@ class CleanroomXApp:
             }
         )
         self.workspace_profile_var.set("design")
-        self.root.after_idle(self._apply_default_panel_sashes)
-        self._save_ui_layout_state()
+        self.root.after_idle(self._finish_panel_layout_reset)
         self.status_var.set("Panel layout reset")
+
+    def _finish_panel_layout_reset(self) -> None:
+        self._apply_default_panel_sashes()
+        self._save_ui_layout_state()
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)

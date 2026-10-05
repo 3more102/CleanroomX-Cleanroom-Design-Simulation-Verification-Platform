@@ -2306,6 +2306,20 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for key, label, accelerator in (
+            ("design", "Design", "Ctrl+Alt+1"),
+            ("analysis", "Analysis / Simulation", "Ctrl+Alt+2"),
+            ("verification", "Verification", "Ctrl+Alt+3"),
+            ("evidence", "Evidence / ProofGraph", "Ctrl+Alt+4"),
+            ("reporting", "Reporting", "Ctrl+Alt+5"),
+        ):
+            workspace_menu.add_command(
+                label=label,
+                accelerator=accelerator,
+                command=lambda profile=key: self.activate_workspace_profile(profile),
+            )
+        view_menu.add_cascade(label="Workspace Layouts", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2368,6 +2382,26 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-1>", lambda event: self._activate_spatial_workspace("2d"))
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
+        self.root.bind(
+            "<Control-Alt-Key-1>",
+            lambda event: self.activate_workspace_profile("design"),
+        )
+        self.root.bind(
+            "<Control-Alt-Key-2>",
+            lambda event: self.activate_workspace_profile("analysis"),
+        )
+        self.root.bind(
+            "<Control-Alt-Key-3>",
+            lambda event: self.activate_workspace_profile("verification"),
+        )
+        self.root.bind(
+            "<Control-Alt-Key-4>",
+            lambda event: self.activate_workspace_profile("evidence"),
+        )
+        self.root.bind(
+            "<Control-Alt-Key-5>",
+            lambda event: self.activate_workspace_profile("reporting"),
+        )
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
@@ -2756,9 +2790,9 @@ class CleanroomXApp:
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
-        plot_tab = ttk.Frame(self.notebook)
-        self.notebook.add(plot_tab, text="Plot")
-        self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
+        self.plot_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.plot_tab, text="Plot")
+        self.plot_canvas = tk.Canvas(self.plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
@@ -3308,6 +3342,118 @@ class CleanroomXApp:
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 
+    def activate_workspace_profile(self, profile: str) -> None:
+        """Apply a professional panel/tab preset without changing project data."""
+        profiles = {
+            "design": {
+                "label": "Design",
+                "navigator": True,
+                "output": True,
+                "inspector": True,
+                "center": "design",
+                "output_tab": "problems",
+                "navigator_fraction": 0.20,
+                "output_fraction": 0.72,
+                "inspector_fraction": 0.78,
+            },
+            "analysis": {
+                "label": "Analysis / Simulation",
+                "navigator": True,
+                "output": True,
+                "inspector": False,
+                "center": "input",
+                "output_tab": "results",
+                "navigator_fraction": 0.20,
+                "output_fraction": 0.66,
+                "inspector_fraction": 0.78,
+            },
+            "verification": {
+                "label": "Verification",
+                "navigator": True,
+                "output": True,
+                "inspector": True,
+                "center": "design",
+                "output_tab": "problems",
+                "navigator_fraction": 0.20,
+                "output_fraction": 0.58,
+                "inspector_fraction": 0.76,
+            },
+            "evidence": {
+                "label": "Evidence / ProofGraph",
+                "navigator": True,
+                "output": True,
+                "inspector": False,
+                "center": "proofgraph",
+                "output_tab": "evidence",
+                "navigator_fraction": 0.18,
+                "output_fraction": 0.70,
+                "inspector_fraction": 0.78,
+            },
+            "reporting": {
+                "label": "Reporting",
+                "navigator": True,
+                "output": True,
+                "inspector": False,
+                "center": "plot",
+                "output_tab": "report",
+                "navigator_fraction": 0.18,
+                "output_fraction": 0.52,
+                "inspector_fraction": 0.78,
+            },
+        }
+        try:
+            spec = profiles[profile]
+        except KeyError as exc:
+            raise ValueError(f"unknown workspace profile: {profile}") from exc
+
+        self._restore_focus_workspace_snapshot(status=False)
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
+        self.navigator_panel_visible_var.set(bool(spec["navigator"]))
+        self.output_panel_visible_var.set(bool(spec["output"]))
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(bool(spec["inspector"]))
+
+        center = spec["center"]
+        if center == "design":
+            self._activate_spatial_workspace("split")
+        elif center == "input":
+            self.notebook.select(self.input_tab)
+        elif center == "proofgraph":
+            self._activate_proofgraph_workspace()
+        elif center == "plot":
+            self.notebook.select(self.plot_tab)
+
+        output_tabs = {
+            "problems": self.problems_panel,
+            "results": self.result_text,
+            "evidence": self.evidence_text,
+            "report": self.report_text,
+        }
+        self.output_notebook.select(output_tabs[spec["output_tab"]])
+
+        state = dict(self._ui_layout_state)
+        state.update(
+            {
+                "navigator_fraction": spec["navigator_fraction"],
+                "output_fraction": spec["output_fraction"],
+                "inspector_fraction": spec["inspector_fraction"],
+            }
+        )
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        self.root.after_idle(self._apply_saved_panel_sashes)
+
+        if profile in {"verification", "evidence"}:
+            self._refresh_engineering_panels()
+
+        label = str(spec["label"])
+        self.workspace_status_var.set(f"Workspace: {label}")
+        self.status_var.set(f"{label} workspace activated")
+
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
         if viewer is None:
@@ -3657,6 +3803,46 @@ class CleanroomXApp:
                 self.toggle_focus_workspace,
                 shortcut="Ctrl+Shift+F",
                 keywords=("fullscreen", "panels", "viewport", "zen"),
+            ),
+            PaletteCommand(
+                "workspace.profile.design",
+                "Activate Design Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("design"),
+                shortcut="Ctrl+Alt+1",
+                keywords=("layout", "navigator", "inspector", "problems"),
+            ),
+            PaletteCommand(
+                "workspace.profile.analysis",
+                "Activate Analysis / Simulation Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("analysis"),
+                shortcut="Ctrl+Alt+2",
+                keywords=("layout", "input", "results", "solver"),
+            ),
+            PaletteCommand(
+                "workspace.profile.verification",
+                "Activate Verification Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("verification"),
+                shortcut="Ctrl+Alt+3",
+                keywords=("layout", "problems", "diagnostics", "verify"),
+            ),
+            PaletteCommand(
+                "workspace.profile.evidence",
+                "Activate Evidence / ProofGraph Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("evidence"),
+                shortcut="Ctrl+Alt+4",
+                keywords=("layout", "proofgraph", "traceability", "evidence"),
+            ),
+            PaletteCommand(
+                "workspace.profile.reporting",
+                "Activate Reporting Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("reporting"),
+                shortcut="Ctrl+Alt+5",
+                keywords=("layout", "plot", "report", "export"),
             ),
             PaletteCommand(
                 "bim.import",

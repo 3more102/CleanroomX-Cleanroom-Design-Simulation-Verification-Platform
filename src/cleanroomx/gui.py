@@ -1550,7 +1550,7 @@ class CleanroomXApp:
             self.root, style="CX.Topbar.TFrame", padding=(10, 5, 10, 4)
         )
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
+        ttk.Label(topbar, text="CLEANROOMX", style="CX.TopbarBrand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
         ttk.Label(topbar, text="Project", style="CX.TopbarMuted.TLabel").grid(
@@ -2063,19 +2063,32 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.StatusBar.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.model_status_var,
+            style="CX.StatusBar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.selection_status_var,
+            style="CX.StatusBar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.workspace_status_var,
+            style="CX.StatusBar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -2084,6 +2097,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.StatusBar.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2092,6 +2106,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.StatusBar.TLabel",
         ).pack(side="right")
 
     @staticmethod

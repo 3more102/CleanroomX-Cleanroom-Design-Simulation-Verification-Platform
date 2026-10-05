@@ -1246,6 +1246,8 @@ class CleanroomXApp:
         self._run_generation = 0
         self._running = False
         self._abandon_requested = False
+        self._plot_hover_points: list[dict] = []
+        self._plot_bounds: tuple[float, float, float, float] | None = None
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -1929,6 +1931,8 @@ class CleanroomXApp:
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
+        self.plot_canvas.bind("<Motion>", self._on_plot_motion)
+        self.plot_canvas.bind("<Leave>", lambda _event: self._clear_plot_cursor())
 
         self.proofgraph_viewer = ProofGraphViewer(
             self.notebook,
@@ -6434,9 +6438,101 @@ class CleanroomXApp:
         if select_results:
             self.output_notebook.select(self.result_text.master)
 
+    def _clear_plot_cursor(self) -> None:
+        canvas = getattr(self, "plot_canvas", None)
+        if isinstance(canvas, tk.Canvas):
+            canvas.delete("plot_cursor")
+
+    def _on_plot_motion(self, event: tk.Event) -> None:
+        canvas = getattr(self, "plot_canvas", None)
+        points = getattr(self, "_plot_hover_points", [])
+        bounds = getattr(self, "_plot_bounds", None)
+        if not isinstance(canvas, tk.Canvas) or not points or bounds is None:
+            self._clear_plot_cursor()
+            return
+
+        nearest = min(
+            points,
+            key=lambda item: (
+                (float(item["px"]) - float(event.x)) ** 2
+                + (float(item["py"]) - float(event.y)) ** 2
+            ),
+        )
+        distance_sq = (
+            (float(nearest["px"]) - float(event.x)) ** 2
+            + (float(nearest["py"]) - float(event.y)) ** 2
+        )
+        if distance_sq > 14.0 ** 2:
+            self._clear_plot_cursor()
+            return
+
+        self._clear_plot_cursor()
+        left, top, right, bottom = bounds
+        px = float(nearest["px"])
+        py = float(nearest["py"])
+        palette = self._theme_palette
+        canvas.create_line(
+            px,
+            top,
+            px,
+            bottom,
+            fill=palette["muted"],
+            dash=(3, 4),
+            tags=("plot_cursor",),
+        )
+        canvas.create_line(
+            left,
+            py,
+            right,
+            py,
+            fill=palette["muted"],
+            dash=(3, 4),
+            tags=("plot_cursor",),
+        )
+        canvas.create_oval(
+            px - 4,
+            py - 4,
+            px + 4,
+            py + 4,
+            outline=palette["accent"],
+            width=2,
+            tags=("plot_cursor",),
+        )
+
+        name = str(nearest.get("name") or "Point")
+        x_value = float(nearest["x"])
+        y_value = float(nearest["y"])
+        label = f"{name}\nX = {x_value:.6g}   Y = {y_value:.6g}"
+        text_x = min(max(px + 12, left + 90), right - 90)
+        text_y = max(top + 24, min(py - 12, bottom - 24))
+        text_item = canvas.create_text(
+            text_x,
+            text_y,
+            text=label,
+            anchor="sw",
+            justify="left",
+            fill=palette["text"],
+            tags=("plot_cursor",),
+        )
+        bbox = canvas.bbox(text_item)
+        if bbox is not None:
+            x0, y0, x1, y1 = bbox
+            background = canvas.create_rectangle(
+                x0 - 6,
+                y0 - 4,
+                x1 + 6,
+                y1 + 4,
+                fill=palette["surface"],
+                outline=palette["border"],
+                tags=("plot_cursor",),
+            )
+            canvas.tag_lower(background, text_item)
+
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
         canvas.delete("all")
+        self._plot_hover_points = []
+        self._plot_bounds = None
         palette = getattr(
             self,
             "_theme_palette",
@@ -6446,6 +6542,12 @@ class CleanroomXApp:
                 "text": "#18212b",
                 "accent": "#0b6aa8",
                 "accent_hover": "#095786",
+                "grid": "#d7dee7",
+                "evidence": "#7c3aed",
+                "simulation": "#6d28d9",
+                "info": "#0b6aa8",
+                "surface": "#f6f8fa",
+                "border": "#c8d1dc",
             },
         )
         canvas.configure(background=palette["plot"])
@@ -6461,12 +6563,18 @@ class CleanroomXApp:
         plot = run.plot
         width = max(canvas.winfo_width(), 500)
         height = max(canvas.winfo_height(), 350)
-        left, right, top, bottom = 70, 30, 45, 60
+        left, right, top, bottom = 78, 30, 45, 64
         xs = [x for series in plot["series"] for x in series["x"]]
         ys = [y for series in plot["series"] for y in series["y"]]
         xs += [m["x"] for m in plot.get("markers", [])]
         ys += [m["y"] for m in plot.get("markers", [])]
         if not xs or not ys:
+            canvas.create_text(
+                width / 2,
+                height / 2,
+                text="Plot data is empty.",
+                fill=palette["muted"],
+            )
             return
         xmin, xmax = min(xs), max(xs)
         ymin, ymax = min(ys), max(ys)
@@ -6484,37 +6592,111 @@ class CleanroomXApp:
             py = height - bottom - (y - ymin) / (ymax - ymin) * (height - top - bottom)
             return px, py
 
+        plot_right = width - right
+        plot_bottom = height - bottom
+        self._plot_bounds = (left, top, plot_right, plot_bottom)
         axis = palette["muted"]
         text_color = palette["text"]
-        series_color = palette["accent"]
-        canvas.create_line(left, height - bottom, width - right, height - bottom, fill=axis)
-        canvas.create_line(left, top, left, height - bottom, fill=axis)
-        canvas.create_text(width / 2, 18, text=plot["title"], font=("TkDefaultFont", 11, "bold"), fill=text_color)
-        canvas.create_text(width / 2, height - 20, text=plot["x_label"], fill=text_color)
-        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90, fill=text_color)
-        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n", fill=axis)
-        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n", fill=axis)
-        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e", fill=axis)
-        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e", fill=axis)
 
+        tick_count = 5
+        for index in range(tick_count + 1):
+            fraction = index / tick_count
+            x_value = xmin + fraction * (xmax - xmin)
+            y_value = ymin + fraction * (ymax - ymin)
+            x_pixel, _ = point(x_value, ymin)
+            _, y_pixel = point(xmin, y_value)
+            canvas.create_line(
+                x_pixel,
+                top,
+                x_pixel,
+                plot_bottom,
+                fill=palette["grid"],
+                tags=("plot_grid",),
+            )
+            canvas.create_line(
+                left,
+                y_pixel,
+                plot_right,
+                y_pixel,
+                fill=palette["grid"],
+                tags=("plot_grid",),
+            )
+            canvas.create_text(
+                x_pixel,
+                plot_bottom + 18,
+                text=f"{x_value:.4g}",
+                anchor="n",
+                fill=axis,
+            )
+            canvas.create_text(
+                left - 9,
+                y_pixel,
+                text=f"{y_value:.4g}",
+                anchor="e",
+                fill=axis,
+            )
+
+        canvas.create_line(left, plot_bottom, plot_right, plot_bottom, fill=axis)
+        canvas.create_line(left, top, left, plot_bottom, fill=axis)
+        canvas.create_text(
+            width / 2,
+            18,
+            text=plot["title"],
+            font=("TkDefaultFont", 11, "bold"),
+            fill=text_color,
+        )
+        canvas.create_text(
+            width / 2,
+            height - 18,
+            text=plot["x_label"],
+            fill=text_color,
+        )
+        canvas.create_text(
+            18,
+            height / 2,
+            text=plot["y_label"],
+            angle=90,
+            fill=text_color,
+        )
+
+        series_colors = (
+            palette["accent"],
+            palette["simulation"],
+            palette["evidence"],
+            palette["info"],
+        )
         for index, series in enumerate(plot["series"]):
+            series_color = series_colors[index % len(series_colors)]
             coords = []
+            series_name = str(series.get("name", f"Series {index + 1}"))
             for x, y in zip(series["x"], series["y"]):
                 coords.extend(point(x, y))
             line_options = {"width": 2, "fill": series_color}
-            if index % 2:
+            if index >= len(series_colors):
                 line_options["dash"] = (6, 4)
             if len(coords) >= 4:
                 canvas.create_line(*coords, **line_options)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
                 canvas.create_oval(
-                    px - 2, py - 2, px + 2, py + 2,
+                    px - 2,
+                    py - 2,
+                    px + 2,
+                    py + 2,
                     fill=series_color,
                     outline=series_color,
                 )
+                self._plot_hover_points.append(
+                    {
+                        "px": px,
+                        "py": py,
+                        "x": x,
+                        "y": y,
+                        "name": series_name,
+                    }
+                )
 
-            legend_x = max(left + 20, width - right - 170)
+            legend_x = max(left + 20, width - right - 190)
             legend_y = top + index * 18
             canvas.create_line(
                 legend_x,
@@ -6526,23 +6708,37 @@ class CleanroomXApp:
             canvas.create_text(
                 legend_x + 34,
                 legend_y,
-                text=series.get("name", f"Series {index + 1}"),
+                text=series_name,
                 anchor="w",
                 fill=text_color,
             )
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])
+            marker_name = str(marker.get("name", "Marker"))
             canvas.create_oval(
-                px - 6, py - 6, px + 6, py + 6,
+                px - 6,
+                py - 6,
+                px + 6,
+                py + 6,
                 width=2,
                 outline=palette["accent_hover"],
             )
             canvas.create_text(
-                px + 8, py - 8,
-                text=marker["name"],
+                px + 8,
+                py - 8,
+                text=marker_name,
                 anchor="sw",
                 fill=text_color,
+            )
+            self._plot_hover_points.append(
+                {
+                    "px": px,
+                    "py": py,
+                    "x": marker["x"],
+                    "y": marker["y"],
+                    "name": marker_name,
+                }
             )
 
     def export_result_json(self) -> None:

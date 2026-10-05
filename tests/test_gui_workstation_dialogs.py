@@ -602,3 +602,49 @@ def test_engineering_panel_refresh_logs_verification_and_evidence_failures(
         "Refresh persisted verification evidence",
     ]
 
+def test_layout_persistence_handles_partial_app_without_preinitialized_error_state(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._ui_state_path = tmp_path / "gui-layout.json"
+    app._capture_ui_layout_state = lambda: {}
+    app.status_var = Status()
+    report = GuiErrorReport(
+        reference="CX-LAYOUT-PARTIAL",
+        operation="Save workstation layout",
+        exception_type="OSError",
+        summary="synthetic partial-app write failure",
+        log_path=tmp_path / "gui.log",
+    )
+
+    monkeypatch.setattr(
+        gui_module,
+        "save_gui_layout_state",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OSError("synthetic partial-app write failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: report,
+    )
+
+    app._save_ui_layout_state()
+
+    assert app._ui_layout_save_error_reference == "CX-LAYOUT-PARTIAL"
+    assert app.status_var.value == (
+        "Layout preferences not saved · CX-LAYOUT-PARTIAL"
+    )
+
+    app_without_preferences = CleanroomXApp.__new__(CleanroomXApp)
+    app_without_preferences._save_ui_layout_state()
+

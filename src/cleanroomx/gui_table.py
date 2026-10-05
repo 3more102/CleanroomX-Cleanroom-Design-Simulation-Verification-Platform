@@ -66,6 +66,7 @@ class TreeviewTableBehavior:
         self.sort_descending = False
         self._heading_text: dict[str, str] = {}
         self._column_vars: dict[str, tk.BooleanVar] = {}
+        self._context_column: str | None = None
 
         self._menu = tk.Menu(tree, tearoff=False)
         self._menu.add_command(
@@ -100,6 +101,19 @@ class TreeviewTableBehavior:
             label="Show all columns",
             command=self.show_all_columns,
         )
+        self._columns_menu.add_separator()
+        self._columns_menu.add_command(
+            label="Move column left",
+            command=lambda: self.move_column(self._context_column, -1),
+        )
+        self._columns_menu.add_command(
+            label="Move column right",
+            command=lambda: self.move_column(self._context_column, 1),
+        )
+        self._columns_menu.add_command(
+            label="Reset column order",
+            command=self.reset_column_order,
+        )
 
         for column in self.sortable_columns:
             try:
@@ -124,8 +138,10 @@ class TreeviewTableBehavior:
     def _context_menu(self, event: tk.Event):
         region = self.tree.identify_region(event.x, event.y)
         if region == "heading":
+            self._context_column = self._display_column_at_x(event.x)
             self._sync_column_vars()
         else:
+            self._context_column = None
             iid = self.tree.identify_row(event.y)
             if iid:
                 selection = set(self.tree.selection())
@@ -198,6 +214,21 @@ class TreeviewTableBehavior:
         except tk.TclError:
             return column
 
+    def _display_column_at_x(self, x: int) -> str | None:
+        token = str(self.tree.identify_column(x) or "")
+        if not token.startswith("#"):
+            return None
+        try:
+            display_index = int(token[1:]) - 1
+        except (TypeError, ValueError):
+            return None
+        if display_index < 0:
+            return None
+        columns = self.visible_columns()
+        if display_index >= len(columns):
+            return None
+        return columns[display_index]
+
     def visible_columns(self) -> tuple[str, ...]:
         raw = self.tree["displaycolumns"]
         if raw == "#all" or raw == ("#all",):
@@ -247,6 +278,33 @@ class TreeviewTableBehavior:
             or set(requested) != set(current)
             or any(item not in self.data_columns for item in requested)
         ):
+            return False
+        try:
+            self.tree.configure(displaycolumns=requested)
+        except tk.TclError:
+            return False
+        self._sync_column_vars()
+        return True
+
+    def move_column(self, column: str | None, offset: int) -> bool:
+        if column is None or offset == 0:
+            return False
+        current = list(self.visible_columns())
+        if column not in current:
+            return False
+        index = current.index(column)
+        target = index + (-1 if offset < 0 else 1)
+        if target < 0 or target >= len(current):
+            return False
+        current[index], current[target] = current[target], current[index]
+        return self.set_column_order(current)
+
+    def reset_column_order(self) -> bool:
+        visible = set(self.visible_columns())
+        requested = tuple(
+            column for column in self._default_display_columns if column in visible
+        )
+        if not requested:
             return False
         try:
             self.tree.configure(displaycolumns=requested)

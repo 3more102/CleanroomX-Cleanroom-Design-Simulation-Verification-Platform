@@ -8,6 +8,21 @@ The artifact contains a PyInstaller one-directory build of the production
 The build gate launches the frozen `CleanroomX.exe --check` process on a clean
 GitHub-hosted Windows runner before the artifact is published.
 
+## Windows identity
+
+The frozen executable is built with the repository-owned
+`packaging/windows/CleanroomX.ico` icon. A deterministic PyInstaller version
+resource is generated from `project.version` in `pyproject.toml` and embeds:
+
+- Product name: `CleanroomX`
+- File description: `CleanroomX Engineering Workstation`
+- Product/file version: the current project version
+- Original filename: `CleanroomX.exe`
+
+The build gate reads the produced executable's Windows version resource and
+fails if the product name, product version, or file description is inconsistent
+with the repository release identity.
+
 ## Release artifact
 
 The workflow publishes:
@@ -40,8 +55,6 @@ workflow run identify the remaining build inputs.
 
 ## Current boundary
 
-This artifact is a portable standalone distribution, not yet a registered
-Windows installer. It does not currently create Start Menu shortcuts, register
-an uninstaller, or perform in-place upgrades. Those installer lifecycle gates
-must be completed before claiming the Windows installation/uninstallation
-release gate is fully passed.
+The standalone artifact is portable. The registered Windows installer and its
+install/upgrade/uninstall validation are documented separately in
+`WINDOWS_INSTALLER.md`.

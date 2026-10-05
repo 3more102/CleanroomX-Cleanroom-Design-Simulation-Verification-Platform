@@ -289,3 +289,63 @@ def test_problem_panel_domain_and_relative_navigation(app):
     assert panel.search_var.get() == ""
     assert panel.severity_var.get() == "All"
     assert panel.domain_var.get() == "All"
+
+
+def test_task_workspace_profiles_route_existing_engineering_surfaces(app):
+    app.apply_workspace_profile("design", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "design"
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.navigator_panel_visible_var.get()
+    assert not app.output_panel_visible_var.get()
+    assert app.spatial_workspace.inspector_visible()
+
+    app.apply_workspace_profile("simulation", persist=False)
+    app.root.update()
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.output_panel_visible_var.get()
+    assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Simulation"
+    assert not app.spatial_workspace.inspector_visible()
+
+    app.apply_workspace_profile("verification", persist=False)
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Problems"
+
+    app.apply_workspace_profile("evidence", persist=False)
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Evidence"
+
+    app.apply_workspace_profile("reporting", persist=False)
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Report"
+
+
+def test_workspace_profile_capture_and_restore_preserves_saved_panel_visibility(app):
+    app.apply_workspace_profile("evidence", persist=False)
+    app.navigator_panel_visible_var.set(False)
+    app.output_panel_visible_var.set(True)
+    app.spatial_workspace.set_inspector_visible(True)
+    state = app._capture_ui_layout_state()
+
+    assert state["workspace_profile"] == "evidence"
+    assert state["navigator_visible"] is False
+    assert state["output_visible"] is True
+    assert state["inspector_visible"] is True
+
+    app.workspace_profile_var.set("start")
+    app.navigator_panel_visible_var.set(True)
+    app.output_panel_visible_var.set(False)
+    app.spatial_workspace.set_inspector_visible(False)
+    app._ui_layout_state = state
+    app._restore_ui_layout_state()
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "evidence"
+    assert not app.navigator_panel_visible_var.get()
+    assert app.output_panel_visible_var.get()
+    assert app.spatial_workspace.inspector_visible()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Evidence"

@@ -41,7 +41,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(7, 5))
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 6))
         toolbar.pack(fill="x")
 
         ttk.Label(toolbar, text="PROBLEMS", style="CX.Section.TLabel").pack(
@@ -141,7 +141,17 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self.tree.tag_configure(
+            "error",
+            foreground="#EF4444",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground="#F59E0B",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure("info", foreground="#38BDF8")
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)

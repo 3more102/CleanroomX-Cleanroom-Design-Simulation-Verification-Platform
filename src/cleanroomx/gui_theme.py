@@ -40,7 +40,7 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "border": "#263750",
         "accent": "#22d3ee",
         "accent_hover": "#38bdf8",
-        "accent_text": "#ffffff",
+        "accent_text": "#06141c",
         "selection": "#164e63",
         "selection_text": "#ffffff",
         "field": "#0f1a2b",
@@ -411,6 +411,16 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["background"],
         foreground=palette["accent"],
         font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.PanelText.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+    )
+    style.configure(
+        "CX.PanelMuted.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
     )
     for style_name, color in (
         ("Success", semantic["success"]),

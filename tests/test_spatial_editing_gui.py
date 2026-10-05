@@ -320,6 +320,66 @@ def test_room_context_menu_exposes_real_editing_actions(app):
     assert "Link Analysis…" in labels
 
 
+def test_shift_and_control_click_support_non_mutating_multi_selection(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first, second = rooms[:2]
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    assert workspace.select_item("room", first["id"], notify=True)
+    first_hit = _Hit("room", first["id"])
+    second_hit = _Hit("room", second["id"])
+    assert workspace.selected_hits() == (first_hit,)
+
+    second_item = workspace.canvas_2d.find_withtag(f"room:{second['id']}")[0]
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    workspace.canvas_2d.addtag_withtag("current", second_item)
+    sx, sy = workspace._world_to_canvas(
+        second["x_m"] + second["length_m"] / 2,
+        second["y_m"] + second["width_m"] / 2,
+    )
+    shift_event = type(
+        "Event",
+        (),
+        {"x": int(sx), "y": int(sy), "state": 0x0001},
+    )()
+
+    workspace._on_left_down(shift_event)
+    app.root.update()
+
+    assert workspace.selected == second_hit
+    assert workspace.selected_hits() == (first_hit, second_hit)
+    assert workspace.selection_status_text().startswith("Selected: 2 objects ·")
+    assert app.selection_status_var.get().startswith("Selected: 2 objects ·")
+    assert workspace._drag_anchor is None
+    assert app.project.to_dict() == project_before
+
+    control_event = type(
+        "Event",
+        (),
+        {"x": int(sx), "y": int(sy), "state": 0x0004},
+    )()
+    workspace._on_left_down(control_event)
+    app.root.update()
+
+    assert workspace.selected == first_hit
+    assert workspace.selected_hits() == (first_hit,)
+    assert app.project.to_dict() == project_before
+
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    clear_event = type("Event", (), {"x": 0, "y": 0, "state": 0})()
+    workspace._on_left_down(clear_event)
+    app.root.update()
+
+    assert workspace.selected is None
+    assert workspace.selected_hits() == ()
+    assert app.selection_status_var.get() == "Selected: —"
+    assert app.project.to_dict() == project_before
+
+
 def test_hover_state_has_distinct_2d_feedback(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

@@ -5,6 +5,7 @@ import math
 import pytest
 
 from cleanroomx.gui_display import (
+    configure_toplevel_geometry,
     detect_display_metrics,
     enable_windows_per_monitor_dpi_awareness,
     layout_scale_from_tk_scaling,
@@ -112,3 +113,59 @@ def test_nonfinite_scale_is_treated_as_one() -> None:
 
 def test_dpi_awareness_is_noop_off_windows() -> None:
     assert enable_windows_per_monitor_dpi_awareness(platform="linux") == "not-windows"
+
+
+class _FakeWindow(_FakeRoot):
+    def __init__(self, scaling, *, screen_width=1920, screen_height=1080):
+        super().__init__(scaling)
+        self._screen_width = screen_width
+        self._screen_height = screen_height
+        self.geometry_value = None
+        self.minsize_value = None
+
+    def winfo_screenwidth(self):
+        return self._screen_width
+
+    def winfo_screenheight(self):
+        return self._screen_height
+
+    def geometry(self, value):
+        self.geometry_value = value
+
+    def minsize(self, width, height):
+        self.minsize_value = (width, height)
+
+
+def test_configure_toplevel_geometry_bounds_and_applies_minimum() -> None:
+    window = _FakeWindow(
+        144.0 / 72.0,
+        screen_width=1920,
+        screen_height=1080,
+    )
+    assert configure_toplevel_geometry(
+        window,
+        1480,
+        760,
+        min_width=1080,
+        min_height=580,
+    ) == (1920, 1080)
+    assert window.geometry_value == "1920x1080"
+    assert window.minsize_value == (1620, 870)
+
+
+def test_configure_toplevel_geometry_does_not_double_scale_non_windows(
+    monkeypatch,
+) -> None:
+    import cleanroomx.gui_display as display
+
+    monkeypatch.setattr(display.sys, "platform", "linux")
+    window = _FakeWindow(2.0, screen_width=1920, screen_height=1080)
+    assert configure_toplevel_geometry(
+        window,
+        920,
+        590,
+        min_width=650,
+        min_height=400,
+    ) == (920, 590)
+    assert window.geometry_value == "920x590"
+    assert window.minsize_value == (650, 400)

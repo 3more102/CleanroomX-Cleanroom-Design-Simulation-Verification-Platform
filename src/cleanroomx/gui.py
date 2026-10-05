@@ -80,6 +80,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_widgets import attach_tooltip
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1604,6 +1605,22 @@ class CleanroomXApp:
         self.analysis_run_progress.grid(
             row=1, column=6, columnspan=2, padx=(0, 2), pady=(5, 0), sticky="ew"
         )
+        attach_tooltip(
+            self.save_state_label,
+            "Project save state. UNSAVED means the current engineering document differs from the last explicit save.",
+        )
+        attach_tooltip(
+            self.diagnostics_state_label,
+            "Project diagnostics status. Refresh engineering diagnostics with F8.",
+        )
+        attach_tooltip(
+            self.verification_state_label,
+            "Verification currency for configured analyses: current, stale, or not yet verified.",
+        )
+        attach_tooltip(
+            self.analysis_run_state_label,
+            "Current analysis execution state. The adjacent indicator runs while the solver is active.",
+        )
         topbar.columnconfigure(2, weight=2)
         topbar.columnconfigure(4, weight=3)
 
@@ -1625,6 +1642,10 @@ class CleanroomXApp:
             command=self.show_command_palette,
         )
         self.toolbar_commands_button.pack(side="right", padx=1)
+        attach_tooltip(
+            self.toolbar_commands_button,
+            "Search and run CleanroomX commands. Shortcut: Ctrl+Shift+P.",
+        )
         self.toolbar_problems_button = ttk.Button(
             commandbar,
             text="Problems",
@@ -1633,6 +1654,10 @@ class CleanroomXApp:
             command=self.show_problems_panel,
         )
         self.toolbar_problems_button.pack(side="right", padx=1)
+        attach_tooltip(
+            self.toolbar_problems_button,
+            "Open project diagnostics and engineering rule findings.",
+        )
 
         self.toolbar_new_button = ttk.Button(
             commandbar,
@@ -1836,6 +1861,10 @@ class CleanroomXApp:
             command=lambda: self.import_ifc_spatial_layout(),
         )
         self.navigator_import_ifc_button.pack(fill="x", pady=(0, 6))
+        attach_tooltip(
+            self.navigator_import_ifc_button,
+            "IFC = Industry Foundation Classes. Import the spatial model while preserving engineering identity and provenance.",
+        )
 
         self.analysis_tree = ttk.Treeview(
             navigator,
@@ -1990,6 +2019,10 @@ class CleanroomXApp:
             command=self.hide_output_panel,
         )
         self.output_close_button.pack(side="right")
+        attach_tooltip(
+            self.output_close_button,
+            "Hide the Output / Verification panel. Shortcut: Ctrl+J toggles it.",
+        )
         self.output_summary_var = tk.StringVar(
             value="Problems — · Errors — · Warnings — · Verification — · Evidence —"
         )

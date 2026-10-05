@@ -29,6 +29,14 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#111820",
         "plot": "#ffffff",
         "grid": "#d7dee7",
+        "success": "#15803d",
+        "success_surface": "#dcfce7",
+        "warning": "#b45309",
+        "warning_surface": "#fef3c7",
+        "error": "#dc2626",
+        "error_surface": "#fee2e2",
+        "info": "#0369a1",
+        "info_surface": "#e0f2fe",
     },
     "dark": {
         "background": "#14191f",
@@ -51,6 +59,14 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#0d1117",
         "plot": "#131920",
         "grid": "#33404c",
+        "success": "#22c55e",
+        "success_surface": "#123524",
+        "warning": "#f59e0b",
+        "warning_surface": "#3b2a10",
+        "error": "#ef4444",
+        "error_surface": "#3b171c",
+        "info": "#38bdf8",
+        "info_surface": "#102d42",
     },
 }
 
@@ -62,6 +78,39 @@ def normalize_theme_name(value: Any) -> str:
 
 def theme_palette(value: Any) -> dict[str, str]:
     return deepcopy(_THEME_PALETTES[normalize_theme_name(value)])
+
+
+def status_style_name(value: Any) -> str:
+    """Return the canonical semantic badge style for an engineering state."""
+    token = str(value or "").strip().lower().replace(" ", "_")
+    if token in {
+        "pass",
+        "passed",
+        "ok",
+        "ready",
+        "current",
+        "healthy",
+        "verified",
+        "completed",
+        "success",
+        "saved",
+    }:
+        return "CX.Status.Pass.TLabel"
+    if token in {"fail", "failed", "error", "critical", "blocked"}:
+        return "CX.Status.Fail.TLabel"
+    if token in {
+        "warning",
+        "warn",
+        "incomplete",
+        "degraded",
+        "abandoned",
+        "abandon_requested",
+        "discarded",
+    }:
+        return "CX.Status.Warning.TLabel"
+    if token in {"running", "calculating", "queued", "finalizing"}:
+        return "CX.Status.Running.TLabel"
+    return "CX.Status.Neutral.TLabel"
 
 
 def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
@@ -340,6 +389,25 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
         foreground=[("disabled", palette["disabled"])],
     )
+
+    for name, foreground, background in (
+        ("CX.Status.Pass.TLabel", palette["success"], palette["success_surface"]),
+        ("CX.Status.Warning.TLabel", palette["warning"], palette["warning_surface"]),
+        ("CX.Status.Fail.TLabel", palette["error"], palette["error_surface"]),
+        ("CX.Status.Running.TLabel", palette["info"], palette["info_surface"]),
+        ("CX.Status.Neutral.TLabel", palette["muted"], palette["surface_alt"]),
+    ):
+        style.configure(
+            name,
+            foreground=foreground,
+            background=background,
+            bordercolor=foreground,
+            lightcolor=foreground,
+            darkcolor=foreground,
+            relief="flat",
+            padding=(7, 2),
+            font=("TkDefaultFont", 8, "bold"),
+        )
 
     # Defaults for Tk-native widgets created after this call.
     root.option_add("*Text.background", palette["field"])

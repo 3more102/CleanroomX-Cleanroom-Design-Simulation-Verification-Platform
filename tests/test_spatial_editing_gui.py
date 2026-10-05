@@ -194,6 +194,75 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
 
 
 
+def test_properties_inspector_search_filters_context_without_losing_staged_edits(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    workspace._property_vars["name"].set("Pending unsaved room name")
+    workspace._property_search_var.set("pressure")
+    app.root.update()
+
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["name"].winfo_manager() == ""
+    assert workspace._property_rows["length_m"].winfo_manager() == ""
+    assert workspace._property_vars["name"].get() == "Pending unsaved room name"
+
+    visible_sections = [
+        section.cget("text")
+        for section, _keys in workspace._property_sections
+        if section.winfo_manager() == "pack"
+    ]
+    assert visible_sections == ["Cleanroom"]
+
+    workspace._property_search_var.set("")
+    app.root.update()
+
+    assert workspace._property_rows["name"].winfo_manager() == "pack"
+    assert workspace._property_rows["length_m"].winfo_manager() == "pack"
+    assert workspace._property_rows["room_id"].winfo_manager() == ""
+    assert workspace._property_vars["name"].get() == "Pending unsaved room name"
+
+
+def test_properties_inspector_search_respects_device_context(app):
+    workspace = app.spatial_workspace
+    device = workspace.layout["devices"][0]
+    workspace.select_item("device", device["id"])
+    workspace._property_search_var.set("pressure")
+    app.root.update()
+
+    assert all(
+        row.winfo_manager() == ""
+        for row in workspace._property_rows.values()
+    )
+    assert all(
+        section.winfo_manager() == ""
+        for section, _keys in workspace._property_sections
+    )
+
+    workspace._property_search_var.set("orientation")
+    app.root.update()
+    assert workspace._property_rows["orientation_deg"].winfo_manager() == "pack"
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
+
+
+def test_focus_property_clears_filter_and_reveals_requested_field(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    workspace._property_search_var.set("pressure")
+    app.root.update()
+    assert workspace._property_rows["name"].winfo_manager() == ""
+
+    workspace._focus_property("name")
+    app.root.update()
+
+    assert workspace._property_search_var.get() == ""
+    assert workspace._property_rows["name"].winfo_manager() == "pack"
+    assert workspace._property_entries["name"].focus_get() is not None
+
+
 def test_selected_room_shows_engineering_dimensions(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

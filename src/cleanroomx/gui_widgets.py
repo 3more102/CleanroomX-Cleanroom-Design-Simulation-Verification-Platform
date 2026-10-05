@@ -78,3 +78,74 @@ def attach_tooltip(widget: tk.Misc, text: str, *, delay_ms: int = 450) -> ToolTi
     tooltip = ToolTip(widget, text, delay_ms=delay_ms)
     setattr(widget, "_cleanroomx_tooltip", tooltip)
     return tooltip
+
+
+
+def engineering_sort_key(value) -> tuple[int, object]:
+    """Sort engineering table values numerically when possible, otherwise naturally."""
+    text = str(value if value is not None else "").strip()
+    severity_rank = {
+        "critical": 0,
+        "error": 1,
+        "fail": 1,
+        "failed": 1,
+        "warning": 2,
+        "warn": 2,
+        "stale": 3,
+        "info": 4,
+        "information": 4,
+        "pass": 5,
+        "passed": 5,
+    }
+    ranked = severity_rank.get(text.casefold())
+    if ranked is not None:
+        return (0, ranked)
+    numeric_text = text.replace(",", "")
+    try:
+        return (1, float(numeric_text))
+    except ValueError:
+        return (2, text.casefold())
+
+
+class TreeviewColumnSorter:
+    """Reusable click-to-sort behavior for flat professional engineering tables."""
+
+    def __init__(
+        self,
+        tree: ttk.Treeview,
+        columns: tuple[str, ...] | list[str],
+    ) -> None:
+        self.tree = tree
+        self.columns = tuple(columns)
+        self._reverse: dict[str, bool] = {}
+        self._base_headings: dict[str, str] = {}
+        for column in self.columns:
+            heading = str(tree.heading(column, "text"))
+            self._base_headings[column] = heading
+            tree.heading(
+                column,
+                command=lambda selected=column: self.sort(selected),
+            )
+
+    def sort(self, column: str) -> None:
+        if column not in self.columns:
+            return
+        reverse = self._reverse.get(column, False)
+        rows = list(self.tree.get_children(""))
+        rows.sort(
+            key=lambda iid: engineering_sort_key(
+                self.tree.item(iid, "text")
+                if column == "#0"
+                else self.tree.set(iid, column)
+            ),
+            reverse=reverse,
+        )
+        for index, iid in enumerate(rows):
+            self.tree.move(iid, "", index)
+
+        for candidate, heading in self._base_headings.items():
+            suffix = ""
+            if candidate == column:
+                suffix = " ▼" if reverse else " ▲"
+            self.tree.heading(candidate, text=heading + suffix)
+        self._reverse[column] = not reverse

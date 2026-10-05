@@ -314,3 +314,48 @@ def test_top_level_menus_follow_engineering_workflow_language(app):
     assert "Analyze" not in labels
     assert "Verify" not in labels
 
+def test_diagnostics_table_sorting_is_presentation_only(app):
+    panel = app.problems_panel
+    canonical = [
+        {
+            "sequence": 1,
+            "severity": "warning",
+            "rule": "z.rule",
+            "message": "Zulu issue",
+            "category": "HVAC",
+            "element": {"type": "project", "id": "z"},
+            "details": {},
+        },
+        {
+            "sequence": 2,
+            "severity": "error",
+            "rule": "a.rule",
+            "message": "Alpha issue",
+            "category": "Geometry",
+            "element": {"type": "project", "id": "a"},
+            "details": {},
+        },
+    ]
+    panel.last_result = {
+        "issues": canonical,
+        "summary": {"status": "fail", "error_count": 1, "warning_count": 1},
+    }
+    panel._refresh_domain_values()
+    panel._populate()
+
+    panel._set_sort_column("severity")
+    rows = panel.tree.get_children()
+    assert panel.tree.set(rows[0], "severity") == "ERROR"
+    assert panel.tree.set(rows[1], "severity") == "WARNING"
+    assert panel.last_result["issues"] == canonical
+
+    panel._set_sort_column("code")
+    rows = panel.tree.get_children()
+    assert panel.tree.set(rows[0], "code") == "a.rule"
+    assert "▲" in panel.tree.heading("code", "text")
+
+    panel._set_sort_column("code")
+    rows = panel.tree.get_children()
+    assert panel.tree.set(rows[0], "code") == "z.rule"
+    assert "▼" in panel.tree.heading("code", "text")
+

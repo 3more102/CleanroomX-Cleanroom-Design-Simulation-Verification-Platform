@@ -184,6 +184,20 @@ def unit_hint(path: str) -> str:
     return ""
 
 
+def spatial_navigator_issue_counts(layout: dict) -> dict[str, int]:
+    """Count canonical spatial validation warnings against their referenced items."""
+    counts: dict[str, int] = {}
+    for issue in validate_layout(layout):
+        item_ids = issue.get("item_ids", [])
+        if not isinstance(item_ids, list):
+            continue
+        for item_id in item_ids:
+            token = str(item_id or "").strip()
+            if token:
+                counts[token] = counts.get(token, 0) + 1
+    return counts
+
+
 
 def verification_history_requirement_rows(record: dict) -> list[dict]:
     """Project one validated retained record into read-only drill-down rows."""
@@ -2033,6 +2047,11 @@ class CleanroomXApp:
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_navigator_selected)
         self.analysis_tree.bind("<Button-3>", self._show_navigator_context_menu)
         self.analysis_tree.tag_configure("section", font=("TkDefaultFont", 9, "bold"))
+        self.analysis_tree.tag_configure(
+            "spatial_warning",
+            foreground=self._theme_palette["warning"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
         self.navigator_filter_var.trace_add(
             "write",
             lambda *_: self._apply_navigator_filter(),
@@ -2630,6 +2649,11 @@ class CleanroomXApp:
             navigator.tag_configure("domain_verification", foreground=palette["success"])
             navigator.tag_configure("domain_evidence", foreground=palette["evidence"])
             navigator.tag_configure("domain_info", foreground=palette["secondary_text"])
+            navigator.tag_configure(
+                "spatial_warning",
+                foreground=palette["warning"],
+                font=("TkDefaultFont", 9, "bold"),
+            )
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -5190,6 +5214,9 @@ class CleanroomXApp:
         if not isinstance(devices, list):
             devices = []
 
+        model_issues = validate_layout(layout)
+        item_issue_counts = spatial_navigator_issue_counts(layout)
+
         previous_selection = tree.selection()
         previous_guard = self._selection_guard
         self._selection_guard = True
@@ -5214,11 +5241,16 @@ class CleanroomXApp:
                     if not isinstance(room, dict) or not room.get("id"):
                         continue
                     room_id = str(room["id"])
+                    issue_count = item_issue_counts.get(room_id, 0)
+                    room_text = str(room.get("name") or room_id)
+                    if issue_count:
+                        room_text += f"  ⚠ {issue_count}"
                     tree.insert(
                         "nav-floor",
                         "end",
                         iid=f"room:{room_id}",
-                        text=str(room.get("name") or room_id),
+                        text=room_text,
+                        tags=("spatial_warning",) if issue_count else (),
                     )
 
             if tree.exists("nav-devices"):
@@ -5230,11 +5262,16 @@ class CleanroomXApp:
                     device_id = str(device["id"])
                     device_type = str(device.get("type") or "device")
                     name = str(device.get("name") or device_id)
+                    issue_count = item_issue_counts.get(device_id, 0)
+                    device_text = f"{name}  [{device_type}]"
+                    if issue_count:
+                        device_text += f"  ⚠ {issue_count}"
                     tree.insert(
                         "nav-devices",
                         "end",
                         iid=f"device:{device_id}",
-                        text=f"{name}  [{device_type}]",
+                        text=device_text,
+                        tags=("spatial_warning",) if issue_count else (),
                     )
 
             if previous_selection:
@@ -5251,7 +5288,6 @@ class CleanroomXApp:
                 f"Spatial: {len(rooms)} rooms · {len(devices)} devices"
             )
 
-        model_issues = validate_layout(layout)
         model_issue_count = len(model_issues)
         if hasattr(self, "shell_model_badge_var"):
             self.shell_model_badge_var.set(

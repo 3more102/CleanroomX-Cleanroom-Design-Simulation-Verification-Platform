@@ -4863,7 +4863,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_left_drag(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
             return
-        if self._box_select_anchor_canvas is not None:
+        if getattr(self, "_box_select_anchor_canvas", None) is not None:
             self._box_select_current_canvas = (int(event.x), int(event.y))
             self.canvas_2d.delete("selection_box")
             x0, y0 = self._box_select_anchor_canvas
@@ -4988,7 +4988,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_left_up(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
             return
-        if self._box_select_anchor_canvas is not None:
+        if getattr(self, "_box_select_anchor_canvas", None) is not None:
             x0, y0 = self._box_select_anchor_canvas
             x1, y1 = (
                 self._box_select_current_canvas

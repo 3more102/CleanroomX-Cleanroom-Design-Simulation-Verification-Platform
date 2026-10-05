@@ -264,6 +264,53 @@ def test_model_badge_reflects_existing_spatial_validation_advisories(app, monkey
     assert app.shell_model_badge_var.get() == "MODEL READY"
     assert app.shell_model_badge.cget("style") == "CX.Status.Pass.TLabel"
 
+def test_device_category_visibility_filters_canvas_without_mutating_project(app):
+    workspace = app.spatial_workspace
+    device = workspace.layout["devices"][0]
+    device_type = device["type"]
+    before = copy.deepcopy(workspace.layout)
+
+    assert workspace._is_item_visible("device", device["id"])
+    workspace.set_device_type_visible(device_type, False)
+    app.root.update()
+
+    assert not workspace._is_item_visible("device", device["id"])
+    assert not workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+    assert workspace.layout == before
+    assert f"/{len(workspace._device_type_visibility_vars)}" in str(
+        workspace._device_categories_button.cget("text")
+    )
+
+    workspace.set_device_type_visible(device_type, True)
+    app.root.update()
+
+    assert workspace._is_item_visible("device", device["id"])
+    assert workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+    assert workspace.layout == before
+
+
+def test_device_category_visibility_supports_show_hide_all(app):
+    workspace = app.spatial_workspace
+
+    workspace.set_all_device_types_visible(False)
+    app.root.update()
+    assert workspace._visible_device_type_count() == 0
+    assert all(
+        not workspace._is_item_visible("device", device["id"])
+        for device in workspace.layout["devices"]
+    )
+
+    workspace.set_all_device_types_visible(True)
+    app.root.update()
+    assert workspace._visible_device_type_count() == len(
+        workspace._device_type_visibility_vars
+    )
+    assert all(
+        workspace._is_item_visible("device", device["id"])
+        for device in workspace.layout["devices"]
+    )
+
+
 def test_project_navigator_and_workspace_selection_stay_synchronized(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

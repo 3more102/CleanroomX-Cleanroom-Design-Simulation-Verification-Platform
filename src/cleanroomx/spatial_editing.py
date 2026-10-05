@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import math
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from .spatial_integrity import validate_spatial_layout_document
 
@@ -162,6 +162,37 @@ def _offset_device(device: dict, layout: dict) -> None:
                 device[axis] += step
             elif current - step >= room[axis]:
                 device[axis] -= step
+
+
+def update_spatial_properties_bulk(
+    layout: dict,
+    selections: Sequence[tuple[str, str]],
+    values: Mapping[str, str],
+) -> dict:
+    """Apply one explicit property patch to a same-kind selection atomically.
+
+    The caller's layout is never mutated. Each intermediate replacement passes
+    the canonical spatial-layout validator, and no partially edited layout is
+    returned when any selected object rejects the patch.
+    """
+    ordered: list[tuple[str, str]] = []
+    for kind, item_id in selections:
+        key = (str(kind), str(item_id))
+        if key not in ordered:
+            ordered.append(key)
+    if not ordered:
+        raise ValueError("Select one or more rooms or devices first")
+    kinds = {kind for kind, _item_id in ordered}
+    if len(kinds) != 1:
+        raise ValueError("Bulk property editing requires rooms or devices, not a mixed selection")
+    if not values:
+        return copy.deepcopy(layout)
+
+    candidate = layout
+    for kind, item_id in ordered:
+        candidate = update_spatial_properties(candidate, kind, item_id, values)
+    return candidate
+
 
 
 def duplicate_spatial_item(layout: dict, kind: str, item_id: str) -> tuple[dict, str]:

@@ -156,3 +156,37 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+@pytest.mark.parametrize(
+    ("navigator_id", "overlay"),
+    (("nav-airflow", "Airflow"), ("nav-ach", "ACH"), ("nav-pressure", "Pressure")),
+)
+def test_engineering_navigator_opens_real_spatial_overlays(app, navigator_id, overlay):
+    assert app.analysis_tree.exists(navigator_id)
+    app.analysis_tree.selection_set(navigator_id)
+    app.analysis_tree.focus(navigator_id)
+
+    app._on_navigator_selected()
+    app.root.update()
+
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.spatial_workspace._workspace_mode.get() == "2d"
+    assert app.spatial_workspace._overlay_mode.get() == overlay
+    assert overlay in app.selection_status_var.get()
+
+
+def test_requirements_navigator_opens_traceability(app, monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        app,
+        "show_requirements_traceability",
+        lambda: opened.append(True) or True,
+    )
+    app.analysis_tree.selection_set("nav-requirements")
+    app.analysis_tree.focus("nav-requirements")
+
+    app._on_navigator_selected()
+
+    assert opened == [True]
+    assert app.selection_status_var.get() == "Selected: Requirements traceability"
+

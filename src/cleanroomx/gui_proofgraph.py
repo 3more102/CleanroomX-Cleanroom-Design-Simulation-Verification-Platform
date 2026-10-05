@@ -1031,6 +1031,33 @@ class ProofGraphViewer(ttk.Frame):
             )
         self.detail.configure(state="disabled")
 
+    def select_node(self, node_identity: str, *, node_type: str | None = None) -> bool:
+        """Select a persisted ProofGraph node by projection key or canonical id."""
+        identity = _text(node_identity)
+        requested_type = _text(node_type).casefold()
+        if not identity:
+            return False
+
+        for document in self._documents:
+            projection = proofgraph_projection(document)
+            for node in projection.get("nodes", []):
+                if not isinstance(node, dict):
+                    continue
+                node_key = _text(node.get("key"))
+                node_id = _text(node.get("id"))
+                current_type = _text(node.get("type")).casefold()
+                if requested_type and current_type != requested_type:
+                    continue
+                if identity not in {node_key, node_id}:
+                    continue
+                self.graph_var.set(self._document_label(document))
+                self.filter_var.set("All")
+                self.search_var.set("")
+                self._refresh()
+                self._select_key(node_key)
+                return True
+        return False
+
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None

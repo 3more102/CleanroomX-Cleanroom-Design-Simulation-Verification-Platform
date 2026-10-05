@@ -174,6 +174,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("readonly", palette["surface_alt"]),
         ],
         foreground=[("disabled", palette["disabled"])],
+        bordercolor=[("focus", palette["accent"])],
+        lightcolor=[("focus", palette["accent"])],
+        darkcolor=[("focus", palette["accent"])],
     )
     style.configure(
         "TCombobox",
@@ -194,6 +197,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=[("disabled", palette["disabled"])],
         selectbackground=[("readonly", palette["selection"])],
         selectforeground=[("readonly", palette["selection_text"])],
+        bordercolor=[("focus", palette["accent"])],
+        lightcolor=[("focus", palette["accent"])],
+        darkcolor=[("focus", palette["accent"])],
     )
     style.configure(
         "TSpinbox",
@@ -203,6 +209,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
+    )
+    style.map(
+        "TSpinbox",
+        bordercolor=[("focus", palette["accent"])],
+        lightcolor=[("focus", palette["accent"])],
+        darkcolor=[("focus", palette["accent"])],
     )
     style.configure(
         "TNotebook",
@@ -266,6 +278,26 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["border"],
     )
     style.configure(
+        "TScrollbar",
+        background=palette["surface_alt"],
+        troughcolor=palette["surface"],
+        arrowcolor=palette["muted"],
+        bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
+    )
+    style.map(
+        "TScrollbar",
+        background=[
+            ("active", palette["accent"]),
+            ("pressed", palette["accent_hover"]),
+        ],
+        arrowcolor=[
+            ("active", palette["accent_text"]),
+            ("pressed", palette["accent_text"]),
+        ],
+    )
+    style.configure(
         "TMenubutton",
         background=palette["surface_alt"],
         foreground=palette["text"],
@@ -294,8 +326,41 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface"],
     )
     style.configure(
+        "CX.Topbar.TFrame",
+        background=palette["panel"],
+        bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
+        relief="flat",
+        borderwidth=1,
+    )
+    style.configure(
+        "CX.Topbar.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.TopbarBrand.TLabel",
+        background=palette["panel"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 16, "bold"),
+    )
+    style.configure(
+        "CX.Sidebar.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
         "CX.Panel.TFrame",
         background=palette["panel"],
+    )
+    style.configure(
+        "CX.PanelHint.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
     )
     style.configure(
         "CX.Statusbar.TFrame",

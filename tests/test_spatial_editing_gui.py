@@ -1076,3 +1076,93 @@ def test_output_console_tabs_show_live_engineering_counts(app):
     assert problems_text.startswith("Problems ")
     assert verification_text.startswith("Verification ")
     assert evidence_text.startswith("Evidence ")
+
+
+def test_engineering_status_rail_uses_live_project_state(app):
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    assert app.save_state_var.get()
+    assert app.problems_state_var.get().startswith("PROBLEMS ")
+    assert app.verification_state_var.get().startswith("VERIFY ")
+    assert app.evidence_state_var.get().startswith("EVIDENCE ")
+    assert app.run_state_var.get() == "IDLE"
+
+    app._set_running(True)
+    app.root.update()
+    assert app.run_state_var.get() == "RUNNING"
+    assert app.run_state_badge.cget("style") == "CX.Badge.Running.TLabel"
+
+    app._set_running(False)
+    app.root.update()
+    assert app.run_state_var.get() == "IDLE"
+
+
+def test_extended_navigator_routes_simulation_and_assurance_surfaces(app):
+    app.navigator_simulation_button.invoke()
+    app.root.update()
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.navigator_simulation_button.cget("style") == "CX.NavActive.TButton"
+
+    app.hide_output_panel()
+    app.navigator_verification_button.invoke()
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.verification_text.master)
+
+    app.navigator_evidence_button.invoke()
+    app.root.update()
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+
+    app.navigator_report_button.invoke()
+    app.root.update()
+    assert app.output_notebook.select() == str(app.report_text.master)
+
+
+def test_dashboard_verification_coverage_and_issue_projection_are_grounded(app):
+    snapshot = {
+        "project_name": "Fab_A12",
+        "location": "project.cleanroomx.json",
+        "analysis_count": 4,
+        "diagnostic_status": "warning",
+        "diagnostic_errors": 1,
+        "diagnostic_warnings": 1,
+        "verification_configured": 4,
+        "verification_current": 3,
+        "verification_stale": 1,
+        "verification_not_verified": 0,
+        "evidence_count": 7,
+        "model_state": "ready",
+        "run_state": "idle",
+        "issues": [
+            {
+                "sequence": 2,
+                "severity": "warning",
+                "rule": "CRX-AIR-017",
+                "message": "Airflow margin approaching lower limit",
+                "category": "airflow",
+                "element": {"id": "CR-104", "type": "spatial_element"},
+            },
+            {
+                "sequence": 1,
+                "severity": "error",
+                "rule": "CRX-PRES-004",
+                "message": "Pressure requirement not met",
+                "category": "pressure",
+                "element": {"id": "CR-105", "type": "spatial_element"},
+            },
+        ],
+    }
+
+    app.dashboard.set_snapshot(snapshot)
+    app.root.update()
+
+    assert app.dashboard.verification_progress.cget("value") == 75.0
+    assert app.dashboard._vars["verification"].get() == "STALE"
+    assert len(app.dashboard.issue_tree.get_children()) == 2
+    first = app.dashboard.issue_tree.item(
+        app.dashboard.issue_tree.get_children()[0],
+        "values",
+    )
+    assert first[0] == "ERROR"
+    assert first[1] == "CRX-PRES-004"

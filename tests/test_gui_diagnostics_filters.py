@@ -1,4 +1,4 @@
-from cleanroomx.gui_panels import filter_diagnostic_issues
+from cleanroomx.gui_panels import diagnostic_sort_key, filter_diagnostic_issues
 
 
 ISSUES = [
@@ -69,3 +69,19 @@ def test_diagnostic_filter_preserves_issue_objects_and_order():
     visible = filter_diagnostic_issues(ISSUES, category="All", query="")
     assert visible == ISSUES
     assert visible[0] is ISSUES[0]
+
+
+def test_diagnostic_sort_keys_prioritize_severity_and_engineering_columns():
+    severity_sorted = sorted(ISSUES, key=lambda issue: diagnostic_sort_key(issue, "severity"))
+    assert [issue["severity"] for issue in severity_sorted] == [
+        "error",
+        "warning",
+        "info",
+    ]
+
+    rule_sorted = sorted(ISSUES, key=lambda issue: diagnostic_sort_key(issue, "code"))
+    assert [issue["rule"] for issue in rule_sorted] == [
+        "airflow.balance",
+        "spatial.room_overlap",
+        "verification.currency",
+    ]

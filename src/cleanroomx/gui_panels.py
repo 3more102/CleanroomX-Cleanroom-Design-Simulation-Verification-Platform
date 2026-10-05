@@ -552,3 +552,342 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         result = self.last_result or self.refresh()
         if result is not None:
             self._export_callback(result)
+
+def _evidence_value_text(value: Any) -> str:
+    """Render retained evidence values without exposing raw structured payloads."""
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "YES" if value else "NO"
+    if isinstance(value, int):
+        return f"{value:,}"
+    if isinstance(value, float):
+        return f"{value:,.4g}"
+    if isinstance(value, dict):
+        return f"{len(value)} field(s)"
+    if isinstance(value, (list, tuple)):
+        if all(not isinstance(item, (dict, list, tuple)) for item in value):
+            rendered = ", ".join(str(item) for item in value[:6])
+            if len(value) > 6:
+                rendered += f", … (+{len(value) - 6})"
+            return rendered or "Empty collection"
+        return f"{len(value)} structured item(s)"
+    text = str(value)
+    return text if len(text) <= 120 else text[:117] + "…"
+
+
+def verification_evidence_projection(records: Any) -> list[dict[str, Any]]:
+    """Project canonical verification history into engineer-facing evidence rows."""
+    if not isinstance(records, (list, tuple)):
+        return []
+    projected: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        verification = record.get("verification")
+        verification = verification if isinstance(verification, dict) else {}
+        evidence_items = record.get("evidence")
+        evidence_items = evidence_items if isinstance(evidence_items, list) else []
+        evidence_rows: list[dict[str, str]] = []
+        for item in evidence_items:
+            if not isinstance(item, dict):
+                continue
+            source = str(item.get("source") or "")
+            source_revision = str(item.get("source_revision") or "")
+            if source_revision:
+                source = f"{source} · {source_revision}" if source else source_revision
+            calculation_source = str(item.get("calculation_source") or "")
+            if calculation_source and calculation_source not in source:
+                source = (
+                    f"{source} · {calculation_source}"
+                    if source
+                    else calculation_source
+                )
+            evidence_rows.append(
+                {
+                    "id": str(item.get("id") or ""),
+                    "requirement": str(item.get("requirement_id") or ""),
+                    "subject": str(item.get("subject_ref") or "project"),
+                    "property": str(item.get("property_name") or ""),
+                    "value": _evidence_value_text(item.get("value")),
+                    "unit": str(item.get("unit") or ""),
+                    "freshness": str(item.get("freshness") or ""),
+                    "source": source,
+                    "locator": str(item.get("evidence_locator") or ""),
+                }
+            )
+        projected.append(
+            {
+                "sequence": record.get("sequence"),
+                "analysis": str(
+                    record.get("analysis_name")
+                    or record.get("analysis_id")
+                    or "analysis"
+                ),
+                "analysis_kind": str(record.get("analysis_kind") or ""),
+                "status": str(verification.get("status") or "unknown"),
+                "verified": bool(verification.get("verified")),
+                "completed": str(record.get("completed_at_utc") or ""),
+                "version": str(record.get("cleanroomx_version") or ""),
+                "evidence": evidence_rows,
+            }
+        )
+    return projected
+
+
+class VerificationEvidencePanel(ttk.Frame):
+    """Structured retained-evidence view for project verification history."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        on_open_proofgraph: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(master)
+        self._on_open_proofgraph = on_open_proofgraph
+        self._records: list[dict[str, Any]] = []
+        self._records_by_iid: dict[str, dict[str, Any]] = {}
+        self._palette = theme_palette("dark")
+        self.summary_var = tk.StringVar(value="No retained verification evidence")
+        self.detail_var = tk.StringVar(
+            value="Persist a project verification run to retain evidence and provenance."
+        )
+
+        header = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
+        header.pack(fill="x")
+        ttk.Label(
+            header,
+            text="VERIFICATION EVIDENCE",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        self.summary_label = ttk.Label(
+            header,
+            textvariable=self.summary_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.summary_label.pack(side="left")
+        self.open_graph_button = ttk.Button(
+            header,
+            text="Open ProofGraph",
+            style="CX.Compact.TButton",
+            command=self._open_proofgraph,
+            state="normal" if on_open_proofgraph is not None else "disabled",
+        )
+        self.open_graph_button.pack(side="right")
+
+        ttk.Label(
+            self,
+            textvariable=self.detail_var,
+            style="CX.Muted.TLabel",
+            anchor="w",
+        ).pack(fill="x", padx=8, pady=(5, 4))
+
+        panes = ttk.Panedwindow(self, orient="vertical")
+        panes.pack(fill="both", expand=True)
+
+        record_host = ttk.Frame(panes)
+        evidence_host = ttk.Frame(panes)
+        panes.add(record_host, weight=2)
+        panes.add(evidence_host, weight=3)
+
+        record_columns = ("analysis", "status", "evidence", "completed", "version")
+        self.record_tree = ttk.Treeview(
+            record_host,
+            columns=record_columns,
+            show="tree headings",
+            selectmode="browse",
+            height=6,
+        )
+        self.record_tree.heading("#0", text="#")
+        self.record_tree.heading("analysis", text="Analysis")
+        self.record_tree.heading("status", text="Verification")
+        self.record_tree.heading("evidence", text="Evidence")
+        self.record_tree.heading("completed", text="Completed UTC")
+        self.record_tree.heading("version", text="Version")
+        self.record_tree.column("#0", width=54, stretch=False, anchor="center")
+        self.record_tree.column("analysis", width=230, minwidth=140)
+        self.record_tree.column("status", width=105, stretch=False, anchor="center")
+        self.record_tree.column("evidence", width=85, stretch=False, anchor="e")
+        self.record_tree.column("completed", width=190, stretch=False)
+        self.record_tree.column("version", width=95, stretch=False)
+        record_y = ttk.Scrollbar(
+            record_host, orient="vertical", command=self.record_tree.yview
+        )
+        self.record_tree.configure(yscrollcommand=record_y.set)
+        self.record_tree.grid(row=0, column=0, sticky="nsew")
+        record_y.grid(row=0, column=1, sticky="ns")
+        record_host.rowconfigure(0, weight=1)
+        record_host.columnconfigure(0, weight=1)
+        self.record_tree.bind("<<TreeviewSelect>>", self._on_record_selected)
+
+        evidence_columns = (
+            "requirement",
+            "subject",
+            "property",
+            "value",
+            "unit",
+            "freshness",
+            "source",
+            "locator",
+        )
+        self.evidence_tree = ttk.Treeview(
+            evidence_host,
+            columns=evidence_columns,
+            show="tree headings",
+            selectmode="browse",
+        )
+        self.evidence_tree.heading("#0", text="Evidence ID")
+        headings = {
+            "requirement": "Requirement",
+            "subject": "Subject",
+            "property": "Property",
+            "value": "Value",
+            "unit": "Unit",
+            "freshness": "Freshness",
+            "source": "Source / provenance",
+            "locator": "Locator",
+        }
+        widths = {
+            "requirement": 140,
+            "subject": 130,
+            "property": 150,
+            "value": 130,
+            "unit": 75,
+            "freshness": 100,
+            "source": 290,
+            "locator": 220,
+        }
+        self.evidence_tree.column("#0", width=165, minwidth=110)
+        for column in evidence_columns:
+            self.evidence_tree.heading(column, text=headings[column])
+            self.evidence_tree.column(
+                column,
+                width=widths[column],
+                minwidth=70,
+                stretch=column in {"source", "locator"},
+            )
+
+        evidence_y = ttk.Scrollbar(
+            evidence_host, orient="vertical", command=self.evidence_tree.yview
+        )
+        evidence_x = ttk.Scrollbar(
+            evidence_host, orient="horizontal", command=self.evidence_tree.xview
+        )
+        self.evidence_tree.configure(
+            yscrollcommand=evidence_y.set,
+            xscrollcommand=evidence_x.set,
+        )
+        self.evidence_tree.grid(row=0, column=0, sticky="nsew")
+        evidence_y.grid(row=0, column=1, sticky="ns")
+        evidence_x.grid(row=1, column=0, sticky="ew")
+        evidence_host.rowconfigure(0, weight=1)
+        evidence_host.columnconfigure(0, weight=1)
+
+        self.apply_theme("dark")
+
+    def apply_theme(self, value: Any) -> None:
+        self._palette = theme_palette(value)
+        for tree in (self.record_tree, self.evidence_tree):
+            tree.tag_configure("row_even", background=self._palette["tree"])
+            tree.tag_configure("row_odd", background=self._palette["surface_alt"])
+        self.record_tree.tag_configure("pass", foreground=self._palette["success"])
+        self.record_tree.tag_configure("fail", foreground=self._palette["error"])
+        self.record_tree.tag_configure("warning", foreground=self._palette["warning"])
+        self.record_tree.tag_configure("stale", foreground=self._palette["attention"])
+        self.evidence_tree.tag_configure(
+            "fresh", foreground=self._palette["success"]
+        )
+        self.evidence_tree.tag_configure(
+            "stale", foreground=self._palette["attention"]
+        )
+
+    def set_records(self, records: Any) -> None:
+        self._records = verification_evidence_projection(records)
+        self._records_by_iid.clear()
+        for item in self.record_tree.get_children():
+            self.record_tree.delete(item)
+        for item in self.evidence_tree.get_children():
+            self.evidence_tree.delete(item)
+
+        for index, record in enumerate(reversed(self._records), start=1):
+            iid = f"record-{index}"
+            status = str(record.get("status") or "unknown").lower()
+            row_tag = "row_even" if index % 2 == 0 else "row_odd"
+            self.record_tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=str(record.get("sequence") or "—"),
+                values=(
+                    record.get("analysis", ""),
+                    status.upper().replace("_", " "),
+                    len(record.get("evidence", [])),
+                    record.get("completed", ""),
+                    record.get("version", ""),
+                ),
+                tags=(row_tag, status),
+            )
+            self._records_by_iid[iid] = record
+
+        if not self._records:
+            self.summary_var.set("NO RETAINED EVIDENCE")
+            self.summary_label.configure(style="CX.Status.Neutral.TLabel")
+            self.detail_var.set(
+                "Persist a project verification run to retain evidence, provenance, and ProofGraph traceability."
+            )
+            return
+
+        latest = self._records[-1]
+        status = str(latest.get("status") or "unknown")
+        total_evidence = sum(len(record.get("evidence", [])) for record in self._records)
+        self.summary_var.set(
+            f"{len(self._records)} RECORDS · {total_evidence} EVIDENCE ITEMS"
+        )
+        self.summary_label.configure(style=status_style_name(status))
+        children = self.record_tree.get_children()
+        if children:
+            self.record_tree.selection_set(children[0])
+            self.record_tree.focus(children[0])
+            self._on_record_selected()
+
+    def _on_record_selected(self, _event=None) -> None:
+        for item in self.evidence_tree.get_children():
+            self.evidence_tree.delete(item)
+        selection = self.record_tree.selection()
+        if not selection:
+            return
+        record = self._records_by_iid.get(selection[0])
+        if record is None:
+            return
+        evidence = record.get("evidence", [])
+        self.detail_var.set(
+            f"{record.get('analysis', 'Analysis')} · {str(record.get('status', 'unknown')).upper()} · "
+            f"{record.get('completed', '')} · {len(evidence)} retained evidence item(s)"
+        )
+        for index, item in enumerate(evidence, start=1):
+            freshness = str(item.get("freshness") or "")
+            row_tag = "row_even" if index % 2 == 0 else "row_odd"
+            freshness_tag = freshness.lower() if freshness.lower() in {"fresh", "stale"} else row_tag
+            self.evidence_tree.insert(
+                "",
+                "end",
+                iid=f"evidence-{index}",
+                text=item.get("id", ""),
+                values=(
+                    item.get("requirement", ""),
+                    item.get("subject", ""),
+                    item.get("property", ""),
+                    item.get("value", ""),
+                    item.get("unit", ""),
+                    freshness,
+                    item.get("source", ""),
+                    item.get("locator", ""),
+                ),
+                tags=(row_tag, freshness_tag),
+            )
+
+    def _open_proofgraph(self) -> None:
+        if self._on_open_proofgraph is not None:
+            self._on_open_proofgraph()
+

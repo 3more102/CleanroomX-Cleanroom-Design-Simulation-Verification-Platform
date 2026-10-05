@@ -78,7 +78,12 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import canonical_status, configure_ttk_theme, normalize_theme_name
+from .gui_theme import (
+    canonical_status,
+    configure_ttk_theme,
+    domain_accent,
+    normalize_theme_name,
+)
 from .gui_dashboard import EngineeringDashboard, engineering_dashboard_snapshot
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -1852,6 +1857,21 @@ class CleanroomXApp:
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_navigator_selected)
         self.analysis_tree.bind("<Button-3>", self._show_navigator_context_menu)
         self.analysis_tree.tag_configure("section", font=("TkDefaultFont", 9, "bold"))
+        for domain in (
+            "geometry",
+            "bim",
+            "hvac",
+            "pressure",
+            "simulation",
+            "requirements",
+            "safety",
+            "verification",
+            "evidence",
+        ):
+            self.analysis_tree.tag_configure(
+                f"domain-{domain}",
+                foreground=domain_accent(domain),
+            )
         self.navigator_filter_var.trace_add(
             "write",
             lambda *_: self._apply_navigator_filter(),
@@ -4211,24 +4231,27 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
-            ("nav-dashboard", "Dashboard"),
-            ("nav-building", "Building"),
-            ("nav-hvac", "HVAC Systems"),
-            ("nav-devices", "Devices"),
-            ("nav-pressure", "Pressure Network"),
-            ("nav-analyses", "Analyses"),
-            ("nav-requirements", "Requirements"),
-            ("nav-proofgraph", "ProofGraph"),
-            ("nav-evidence", "Evidence"),
-            ("nav-reports", "Reports"),
+            ("nav-dashboard", "Dashboard", "verification"),
+            ("nav-building", "Building / Layout", "geometry"),
+            ("nav-bim", "BIM / IFC", "bim"),
+            ("nav-hvac", "HVAC / Airflow", "hvac"),
+            ("nav-devices", "Devices / Equipment", "geometry"),
+            ("nav-pressure", "Pressure Network", "pressure"),
+            ("nav-analyses", "Simulation / Analyses", "simulation"),
+            ("nav-requirements", "Requirements", "requirements"),
+            ("nav-diagnostics", "DRC / ERC / Diagnostics", "safety"),
+            ("nav-verification", "Verification", "verification"),
+            ("nav-proofgraph", "ProofGraph", "simulation"),
+            ("nav-evidence", "Evidence", "evidence"),
+            ("nav-reports", "Reports / Handoff", "verification"),
         )
-        for iid, label in sections:
+        for iid, label, domain in sections:
             self.analysis_tree.insert(
                 "",
                 "end",
                 iid=iid,
                 text=label,
-                tags=("section",),
+                tags=("section", f"domain-{domain}"),
                 open=iid in {"nav-building", "nav-analyses"},
             )
 
@@ -4519,6 +4542,25 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+            return
+        if item_id in {"nav-building", "nav-bim", "nav-hvac", "nav-devices", "nav-pressure"}:
+            self._activate_spatial_workspace()
+            label = str(self.analysis_tree.item(item_id, "text") or "Design")
+            self.selection_status_var.set(f"Selected: {label}")
+            return
+        if item_id == "nav-diagnostics":
+            self.show_problems_panel()
+            self.selection_status_var.set("Selected: Diagnostics")
+            return
+        if item_id == "nav-verification":
+            if hasattr(self, "output_notebook") and hasattr(self, "verification_text"):
+                self.output_notebook.select(self.verification_text.master)
+            self.selection_status_var.set("Selected: Verification")
+            return
+        if item_id == "nav-reports":
+            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+                self.output_notebook.select(self.report_text.master)
+            self.selection_status_var.set("Selected: Reports / Handoff")
             return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()

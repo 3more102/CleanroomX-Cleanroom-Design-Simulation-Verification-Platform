@@ -1043,6 +1043,27 @@ class ProofGraphViewer(ttk.Frame):
             )
         self.detail.configure(state="disabled")
 
+    def searchable_nodes(self) -> list[dict[str, Any]]:
+        """Return nodes from the active canonical graph for global application search."""
+        projection = proofgraph_projection(self._active_document())
+        return [
+            dict(node)
+            for node in projection.get("nodes", [])
+            if isinstance(node, dict)
+        ]
+
+    def focus_node(self, key: str) -> bool:
+        """Reveal and select a node regardless of the current local filter/search."""
+        if not key:
+            return False
+        self.filter_var.set("All")
+        self.search_var.set("")
+        self._refresh()
+        if key not in self._nodes_by_key:
+            return False
+        self._select_key(key)
+        return True
+
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None

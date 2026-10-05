@@ -155,3 +155,84 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_problem_browser_filters_categories_and_sorts_without_mutating_result(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    original = copy.deepcopy(result)
+
+    panel.category_var.set(issue["category"])
+    app.root.update()
+    visible = panel.tree.get_children()
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid].get("category", "")) == issue["category"]
+        for iid in visible
+    )
+    assert f"showing {len(visible)}/{len(result['issues'])}" in panel.summary_var.get()
+
+    panel.clear_filters()
+    panel._set_sort("code")
+    ascending = [
+        str(panel._issues_by_iid[iid].get("rule", ""))
+        for iid in panel.tree.get_children()
+    ]
+    assert ascending == sorted(ascending, key=str.casefold)
+
+    panel._set_sort("code")
+    descending = [
+        str(panel._issues_by_iid[iid].get("rule", ""))
+        for iid in panel.tree.get_children()
+    ]
+    assert descending == sorted(descending, key=str.casefold, reverse=True)
+    assert result == original
+
+
+def test_problem_browser_previous_next_wrap_and_navigate_selected_issue(app):
+    panel = app.problems_panel
+    visited = []
+    panel._navigate_callback = lambda issue: visited.append(issue["sequence"])
+    panel.last_result = {
+        "issues": [
+            {
+                "sequence": 1,
+                "severity": "warning",
+                "rule": "demo.first",
+                "category": "design",
+                "message": "First",
+                "suggested_action": "Review first",
+                "element": {"type": "project", "id": "project", "name": "Project"},
+                "details": {},
+            },
+            {
+                "sequence": 2,
+                "severity": "error",
+                "rule": "demo.second",
+                "category": "verification",
+                "message": "Second",
+                "suggested_action": "Review second",
+                "element": {"type": "analysis", "id": "analysis", "name": "Analysis"},
+                "details": {"actual": 5, "required": 10, "unit": "Pa"},
+            },
+        ]
+    }
+    panel._base_summary = "ERROR · 1 error(s) · 1 warning(s) · 0 info"
+    panel._refresh_category_values()
+    panel._populate()
+    app.root.update()
+
+    # Default severity sorting selects the error first. Next wraps to warning.
+    assert panel.selected_issue()["sequence"] == 2
+    assert panel.next_issue()
+    assert panel.selected_issue()["sequence"] == 1
+    assert visited[-1] == 1
+
+    assert panel.previous_issue()
+    assert panel.selected_issue()["sequence"] == 2
+    assert visited[-1] == 2
+
+    detail = panel.detail.get("1.0", "end")
+    assert "Engineering values:" in detail
+    assert "Actual: 5" in detail
+    assert "Required: 10" in detail

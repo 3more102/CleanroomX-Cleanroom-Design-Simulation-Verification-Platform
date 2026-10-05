@@ -36,6 +36,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.category_var = tk.StringVar(value="All")
+        self._sort_column = "severity"
+        self._sort_descending = False
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.error_count_var = tk.StringVar(value="ERROR 0")
         self.warning_count_var = tk.StringVar(value="WARNING 0")
@@ -44,6 +47,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame")
@@ -59,31 +63,62 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             style="CX.Muted.TLabel",
         ).pack(side="right", padx=(10, 4))
 
-        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
-        toolbar.pack(fill="x", pady=(4, 4))
-
-        ttk.Label(toolbar, text="SEARCH", style="CX.Toolbar.TLabel").pack(
+        filterbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 4))
+        filterbar.pack(fill="x", pady=(4, 2))
+        ttk.Label(filterbar, text="SEARCH", style="CX.Toolbar.TLabel").pack(
             side="left", padx=(0, 5)
         )
-        ttk.Entry(toolbar, textvariable=self.search_var, width=28).pack(
+        ttk.Entry(filterbar, textvariable=self.search_var, width=28).pack(
             side="left", padx=(0, 8)
         )
-        ttk.Label(toolbar, text="SEVERITY", style="CX.Toolbar.TLabel").pack(
+        ttk.Label(filterbar, text="SEVERITY", style="CX.Toolbar.TLabel").pack(
             side="left", padx=(2, 5)
         )
         severity = ttk.Combobox(
-            toolbar,
+            filterbar,
             textvariable=self.severity_var,
             values=("All", "Error", "Warning", "Info"),
             state="readonly",
             width=10,
         )
         severity.pack(side="left", padx=(0, 8))
+        ttk.Label(filterbar, text="DOMAIN", style="CX.Toolbar.TLabel").pack(
+            side="left", padx=(2, 5)
+        )
+        self.category_picker = ttk.Combobox(
+            filterbar,
+            textvariable=self.category_var,
+            values=("All",),
+            state="readonly",
+            width=18,
+        )
+        self.category_picker.pack(side="left", padx=(0, 8))
+        ttk.Button(
+            filterbar,
+            text="Clear filters",
+            style="CX.Compact.TButton",
+            command=self.clear_filters,
+        ).pack(side="left", padx=2)
+
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 4))
+        toolbar.pack(fill="x", pady=(0, 4))
         ttk.Button(
             toolbar,
             text="Refresh",
             style="CX.Compact.TButton",
             command=self.refresh,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Previous",
+            style="CX.Compact.TButton",
+            command=lambda: self.select_relative(-1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Next",
+            style="CX.Compact.TButton",
+            command=lambda: self.select_relative(1),
         ).pack(side="left", padx=2)
         self.locate_button = ttk.Button(
             toolbar,
@@ -158,7 +193,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "source": 140,
         }
         for column in columns:
-            self.tree.heading(column, text=headings[column])
+            self.tree.heading(
+                column,
+                text=headings[column],
+                command=lambda selected=column: self.set_sort(selected),
+            )
             self.tree.column(
                 column,
                 width=widths[column],
@@ -253,6 +292,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -260,6 +300,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_category = str(issue.get("category", "")).strip().casefold()
+            if category and category != "all" and issue_category != category:
                 continue
             if query:
                 haystack = " ".join(
@@ -280,7 +323,64 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 if query not in haystack:
                     continue
             visible.append(issue)
+
+        severity_order = {"error": 0, "warning": 1, "info": 2}
+        def sort_key(issue: dict[str, Any]):
+            column = self._sort_column
+            if column == "severity":
+                return severity_order.get(
+                    str(issue.get("severity", "")).casefold(),
+                    9,
+                )
+            if column == "code":
+                return str(issue.get("rule", "")).casefold()
+            if column == "description":
+                return str(issue.get("message", "")).casefold()
+            if column == "object":
+                return self._element_text(issue).casefold()
+            if column == "level":
+                return self._level_text(issue).casefold()
+            if column == "source":
+                return str(issue.get("category", "")).casefold()
+            return str(issue.get("sequence", ""))
+
+        visible.sort(key=sort_key, reverse=self._sort_descending)
         return visible
+
+    def set_sort(self, column: str) -> None:
+        if column == self._sort_column:
+            self._sort_descending = not self._sort_descending
+        else:
+            self._sort_column = column
+            self._sort_descending = False
+        self._populate()
+
+    def clear_filters(self) -> None:
+        self.search_var.set("")
+        self.severity_var.set("All")
+        self.category_var.set("All")
+
+    def select_relative(self, direction: int) -> None:
+        rows = list(self.tree.get_children())
+        if not rows:
+            self._status_setter("No diagnostics match the current filters")
+            return
+        selection = self.tree.selection()
+        if selection and selection[0] in rows:
+            index = rows.index(selection[0])
+            index = (index + (1 if direction >= 0 else -1)) % len(rows)
+        else:
+            index = 0 if direction >= 0 else len(rows) - 1
+        iid = rows[index]
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected_detail()
+        issue = self._issues_by_iid.get(iid)
+        if issue is not None:
+            self._status_setter(
+                f"Diagnostic {index + 1}/{len(rows)} · {issue.get('rule', '')}"
+            )
 
     def _populate(self) -> None:
         selection = self.tree.selection()
@@ -342,6 +442,18 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
+        issues = result.get("issues", [])
+        categories = sorted(
+            {
+                str(issue.get("category", "")).strip()
+                for issue in issues
+                if isinstance(issue, dict) and str(issue.get("category", "")).strip()
+            },
+            key=str.casefold,
+        ) if isinstance(issues, list) else []
+        self.category_picker.configure(values=("All", *categories))
+        if self.category_var.get() not in {"All", *categories}:
+            self.category_var.set("All")
         summary = result.get("summary", {})
         status = str(summary.get("status", "unknown")).upper()
         errors = int(summary.get("error_count", 0) or 0)

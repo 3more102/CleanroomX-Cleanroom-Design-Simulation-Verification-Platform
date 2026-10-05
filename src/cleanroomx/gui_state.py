@@ -9,6 +9,7 @@ from .persistence import atomic_write_text
 
 
 GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_MAX_BYTES = 256 * 1024
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -145,10 +146,18 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
 
 
 def load_gui_layout_state(path: str | Path) -> dict[str, Any]:
-    """Load GUI-only layout state; missing or malformed files fall back safely."""
+    """Load bounded GUI-only state; missing or malformed files fall back safely."""
     source = Path(path)
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
+        if source.stat().st_size > GUI_LAYOUT_STATE_MAX_BYTES:
+            payload = {}
+        else:
+            with source.open("rb") as handle:
+                raw = handle.read(GUI_LAYOUT_STATE_MAX_BYTES + 1)
+            if len(raw) > GUI_LAYOUT_STATE_MAX_BYTES:
+                payload = {}
+            else:
+                payload = json.loads(raw.decode("utf-8"))
     except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
         payload = {}
     return normalize_gui_layout_state(payload)

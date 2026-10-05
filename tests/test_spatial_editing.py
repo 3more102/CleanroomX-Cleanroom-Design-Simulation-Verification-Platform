@@ -6,7 +6,11 @@ import pytest
 
 from cleanroomx.project import ProjectDocument, load_project_document, save_project_document
 from cleanroomx.spatial import SpatialDesignWorkspace, _Hit, empty_layout, normalize_layout
-from cleanroomx.spatial_editing import duplicate_spatial_item, update_spatial_properties
+from cleanroomx.spatial_editing import (
+    duplicate_spatial_item,
+    update_spatial_properties,
+    update_spatial_properties_bulk,
+)
 from cleanroomx.spatial_integrity import validate_spatial_layout_document
 
 
@@ -49,6 +53,37 @@ def test_invalid_room_properties_are_rejected_without_partial_changes(layout, fi
         update_spatial_properties(layout, "room", "process", {
             "name": "Edited name", "x_m": "10", field: value,
         })
+    assert layout == before
+
+
+def test_bulk_room_properties_apply_one_validated_patch_without_mutating_source(layout):
+    duplicated, copied_id = duplicate_spatial_item(layout, "room", "process")
+    before = copy.deepcopy(duplicated)
+
+    result = update_spatial_properties_bulk(
+        duplicated,
+        [("room", "process"), ("room", copied_id)],
+        {"height_m": "4.25", "pressure_pa": "18"},
+    )
+
+    assert duplicated == before
+    edited = {room["id"]: room for room in result["rooms"]}
+    assert edited["process"]["height_m"] == pytest.approx(4.25)
+    assert edited[copied_id]["height_m"] == pytest.approx(4.25)
+    assert edited["process"]["pressure_pa"] == pytest.approx(18)
+    assert edited[copied_id]["pressure_pa"] == pytest.approx(18)
+
+
+def test_bulk_properties_reject_mixed_object_kinds_without_partial_changes(layout):
+    before = copy.deepcopy(layout)
+
+    with pytest.raises(ValueError, match="requires rooms or devices"):
+        update_spatial_properties_bulk(
+            layout,
+            [("room", "process"), ("device", "door")],
+            {"height_m": "4.0"},
+        )
+
     assert layout == before
 
 

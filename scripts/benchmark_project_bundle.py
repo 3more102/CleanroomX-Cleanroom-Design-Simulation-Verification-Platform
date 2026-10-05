@@ -21,6 +21,14 @@ CASES = (
     ("stress", 32 * 1024 * 1024),
 )
 
+# These are intentionally conservative CI regression ceilings. The validated
+# 2026-10-05 Python 3.13 stress baseline was ~0.18 s export, ~0.10 s verify,
+# ~0.18 s extract, and ~68 MiB peak traced Python memory. The ceilings below
+# retain broad hosted-runner margin while still detecting catastrophic
+# recomputation or memory-growth regressions.
+STRESS_MAX_PHASE_SECONDS = 3.0
+STRESS_MAX_PEAK_PYTHON_BYTES = 256 * 1024 * 1024
+
 
 def _write_json_payload(path: Path, target_bytes: int) -> None:
     prefix = b'{"padding":"'
@@ -85,6 +93,37 @@ def main() -> int:
             extract_seconds = time.perf_counter() - start
             _, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
+
+            if verify_report["dependency_count"] != 1:
+                raise RuntimeError(
+                    f"{label} bundle verification expected one dependency, got "
+                    f"{verify_report['dependency_count']}"
+                )
+            extracted_dependency = extracted / dependency.name
+            if (
+                not extracted_dependency.is_file()
+                or extracted_dependency.stat().st_size != dependency.stat().st_size
+            ):
+                raise RuntimeError(
+                    f"{label} bundle extraction did not reproduce the dependency"
+                )
+            if label == "stress":
+                phase_times = {
+                    "export": export_seconds,
+                    "verify": verify_seconds,
+                    "extract": extract_seconds,
+                }
+                for phase, seconds in phase_times.items():
+                    if seconds > STRESS_MAX_PHASE_SECONDS:
+                        raise RuntimeError(
+                            f"stress bundle {phase} exceeded CI regression budget: "
+                            f"{seconds:.6f}s > {STRESS_MAX_PHASE_SECONDS:.6f}s"
+                        )
+                if peak > STRESS_MAX_PEAK_PYTHON_BYTES:
+                    raise RuntimeError(
+                        "stress bundle exceeded CI traced-memory regression budget: "
+                        f"{peak} > {STRESS_MAX_PEAK_PYTHON_BYTES} bytes"
+                    )
 
             results.append(
                 {

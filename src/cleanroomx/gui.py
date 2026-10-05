@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_table import TreeviewSortController
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -629,6 +630,19 @@ class RunHistoryDialog(tk.Toplevel):
         self.tree.column("kind", width=190)
         self.tree.column("status", width=120, stretch=False)
         self.tree.column("input", width=165, stretch=False)
+        self.table_sort = TreeviewSortController(
+            self.tree,
+            {
+                "#0": "#",
+                "time": "Completed UTC",
+                "analysis": "Analysis",
+                "kind": "Kind",
+                "status": "Status",
+                "input": "Input SHA-256",
+            },
+            column="time",
+            descending=True,
+        )
         list_scroll = ttk.Scrollbar(
             list_frame, orient="vertical", command=self.tree.yview
         )
@@ -721,6 +735,7 @@ class RunHistoryDialog(tk.Toplevel):
                     record["input_sha256"][:16] + "…",
                 ),
             )
+        self.table_sort.reapply()
         self.count_var.set(f"{len(visible)} of {len(self.records)} records")
 
         children = self.tree.get_children()
@@ -956,6 +971,21 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.tree.column("currency", width=245, stretch=False)
         self.tree.column("verified", width=80, stretch=False)
         self.tree.column("identity", width=175, stretch=False)
+        self.table_sort = TreeviewSortController(
+            self.tree,
+            {
+                "#0": "#",
+                "time": "Completed UTC",
+                "analysis": "Analysis",
+                "kind": "Kind",
+                "status": "Historical status",
+                "currency": "Current currency",
+                "verified": "Verified",
+                "identity": "Verification identity",
+            },
+            column="time",
+            descending=True,
+        )
 
         list_scroll = ttk.Scrollbar(
             list_frame,
@@ -1167,6 +1197,7 @@ class VerificationHistoryDialog(tk.Toplevel):
                     record["verification_identity_sha256"][:16] + "…",
                 ),
             )
+        self.table_sort.reapply()
         self.count_var.set(f"{len(visible)} of {len(self.records)} records")
 
         children = self.tree.get_children()

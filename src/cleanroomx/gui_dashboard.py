@@ -213,11 +213,9 @@ class EngineeringDashboardPanel(ttk.Frame):
             yscrollcommand=yscroll.set,
             xscrollcommand=xscroll.set,
         )
-        self.issue_tree.grid(row=1, column=0, sticky="nsew")
-        yscroll.grid(row=1, column=1, sticky="ns")
-        xscroll.grid(row=2, column=0, sticky="ew")
-        issues_host.rowconfigure(1, weight=1)
-        issues_host.columnconfigure(0, weight=1)
+        xscroll.pack(side="bottom", fill="x")
+        yscroll.pack(side="right", fill="y")
+        self.issue_tree.pack(side="left", fill="both", expand=True)
         self.issue_tree.bind("<<TreeviewSelect>>", self._show_detail)
         self.issue_tree.bind("<Double-1>", self._locate_selected)
         self.issue_tree.bind("<Return>", self._locate_selected)

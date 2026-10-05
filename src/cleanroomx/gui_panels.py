@@ -41,6 +41,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.object_var = tk.StringVar(value="All")
+        self.rule_var = tk.StringVar(value="All")
+        self.level_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.visible_var = tk.StringVar(value="0 visible")
         self._build()
@@ -50,6 +52,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.severity_var,
             self.category_var,
             self.object_var,
+            self.rule_var,
+            self.level_var,
         ):
             variable.trace_add("write", lambda *_: self._populate())
 
@@ -138,6 +142,32 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             anchor="e",
         ).pack(side="right", fill="x", expand=True, padx=(12, 0))
 
+        scope_row = ttk.Frame(toolbar)
+        scope_row.pack(fill="x", pady=(4, 0))
+        ttk.Label(scope_row, text="Rule").pack(side="left")
+        self.rule_combo = ttk.Combobox(
+            scope_row,
+            textvariable=self.rule_var,
+            values=("All",),
+            state="readonly",
+            width=22,
+        )
+        self.rule_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(scope_row, text="Level / floor").pack(side="left")
+        self.level_combo = ttk.Combobox(
+            scope_row,
+            textvariable=self.level_var,
+            values=("All",),
+            state="readonly",
+            width=18,
+        )
+        self.level_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(
+            scope_row,
+            text="Enter / double-click: focus object · F4 / Shift+F4: next / previous",
+            style="CX.Section.TLabel",
+        ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
 
@@ -204,6 +234,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.columnconfigure(0, weight=1)
 
         self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self.tree.tag_configure("warning")
+        self.tree.tag_configure("info")
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
@@ -226,6 +258,22 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+
+    def apply_theme(self, palette: dict[str, str]) -> None:
+        """Apply semantic diagnostic colors without encoding meaning by color alone."""
+        self.tree.tag_configure(
+            "error",
+            foreground=palette.get("error", palette.get("text", "")),
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground=palette.get("warning", palette.get("text", "")),
+        )
+        self.tree.tag_configure(
+            "info",
+            foreground=palette.get("info", palette.get("text", "")),
+        )
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
@@ -279,18 +327,42 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             {self._element_type(issue) for issue in issues},
             key=str.casefold,
         )
+        rules = sorted(
+            {
+                str(issue.get("rule", "")).strip()
+                for issue in issues
+                if str(issue.get("rule", "")).strip()
+            },
+            key=str.casefold,
+        )
+        levels = sorted(
+            {
+                self._level_text(issue).strip()
+                for issue in issues
+                if self._level_text(issue).strip()
+            },
+            key=str.casefold,
+        )
         self.category_combo.configure(values=("All", *categories))
         self.object_combo.configure(values=("All", *objects))
+        self.rule_combo.configure(values=("All", *rules))
+        self.level_combo.configure(values=("All", *levels))
         if self.category_var.get() not in {"All", *categories}:
             self.category_var.set("All")
         if self.object_var.get() not in {"All", *objects}:
             self.object_var.set("All")
+        if self.rule_var.get() not in {"All", *rules}:
+            self.rule_var.set("All")
+        if self.level_var.get() not in {"All", *levels}:
+            self.level_var.set("All")
 
     def _filtered_issues(self) -> list[dict[str, Any]]:
         issues = self._all_issues()
         severity = self.severity_var.get().strip().casefold()
         category = self.category_var.get().strip().casefold()
         object_type = self.object_var.get().strip().casefold()
+        rule = self.rule_var.get().strip().casefold()
+        level = self.level_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -306,6 +378,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 and object_type != "all"
                 and issue_object_type != object_type
             ):
+                continue
+            issue_rule = str(issue.get("rule", "")).strip().casefold()
+            if rule and rule != "all" and issue_rule != rule:
+                continue
+            issue_level = self._level_text(issue).strip().casefold()
+            if level and level != "all" and issue_level != level:
                 continue
             if query:
                 haystack = " ".join(
@@ -362,6 +440,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.set("All")
         self.category_var.set("All")
         self.object_var.set("All")
+        self.rule_var.set("All")
+        self.level_var.set("All")
         self.search_entry.focus_set()
 
     def _populate(self) -> None:

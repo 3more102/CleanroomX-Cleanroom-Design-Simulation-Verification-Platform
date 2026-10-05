@@ -129,6 +129,7 @@ from .spatial import (
     SpatialDesignWorkspace,
     SpatialSyncError,
     layout_metrics,
+    validate_layout,
     sync_analysis_to_layout,
     sync_layout_to_analysis,
 )
@@ -4535,6 +4536,23 @@ class CleanroomXApp:
         if model_status is not None:
             model_status.set(
                 f"Spatial: {len(rooms)} rooms · {len(devices)} devices"
+            )
+
+        model_issues = validate_layout(layout)
+        model_issue_count = len(model_issues)
+        if hasattr(self, "shell_model_badge_var"):
+            self.shell_model_badge_var.set(
+                f"MODEL WARN {model_issue_count}"
+                if model_issue_count
+                else "MODEL READY"
+            )
+        if hasattr(self, "shell_model_badge"):
+            self.shell_model_badge.configure(
+                style=(
+                    "CX.Status.Warning.TLabel"
+                    if model_issue_count
+                    else "CX.Status.Pass.TLabel"
+                )
             )
         self._capture_navigator_tree()
         self._apply_navigator_filter()

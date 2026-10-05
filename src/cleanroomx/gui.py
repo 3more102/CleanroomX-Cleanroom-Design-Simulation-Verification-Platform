@@ -75,6 +75,11 @@ from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_search import (
+    GlobalEngineeringSearch,
+    SearchEntry,
+    build_engineering_search_entries,
+)
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -1226,6 +1231,7 @@ class CleanroomXApp:
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
+        self._global_search_window: GlobalEngineeringSearch | None = None
         self._ui_state_path = (
             Path(ui_state_path)
             if ui_state_path is not None
@@ -1444,6 +1450,11 @@ class CleanroomXApp:
 
         tools_menu = tk.Menu(menubar, tearoff=False)
         tools_menu.add_command(
+            label="Global Engineering Search...",
+            accelerator="Ctrl+K",
+            command=self.show_global_search,
+        )
+        tools_menu.add_command(
             label="Command Palette...",
             accelerator="Ctrl+Shift+P",
             command=self.show_command_palette,
@@ -1520,6 +1531,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
+        self.root.bind("<Control-k>", lambda event: self.show_global_search())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -1675,6 +1687,14 @@ class CleanroomXApp:
             command=self.show_command_palette,
         )
         self.toolbar_commands_button.pack(side="right", padx=1)
+        self.toolbar_search_button = ttk.Button(
+            commandbar,
+            text="Search",
+            width=7,
+            style="CX.Compact.TButton",
+            command=self.show_global_search,
+        )
+        self.toolbar_search_button.pack(side="right", padx=1)
         self.toolbar_problems_button = ttk.Button(
             commandbar,
             text="Problems",
@@ -3034,6 +3054,129 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _engineering_search_entries(self) -> list[SearchEntry]:
+        """Index only canonical project data currently available in the workstation."""
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if not isinstance(layout, dict):
+            layout = {}
+
+        diagnostics = getattr(getattr(self, "problems_panel", None), "last_result", None)
+        if not isinstance(diagnostics, dict):
+            diagnostics = {}
+
+        requirement_snapshot: dict = {}
+        try:
+            requirement_snapshot = project_requirement_traceability_snapshot(self.project)
+        except Exception:
+            # Projects without configured requirement registries remain searchable;
+            # the unavailable domain is omitted rather than represented by fake data.
+            requirement_snapshot = {}
+
+        proofgraph_documents: list[dict] = []
+        try:
+            records = verification_run_history_records(self.project.metadata)
+            proofgraph_documents = self._proofgraph_documents_from_records(records)
+        except Exception:
+            proofgraph_documents = []
+
+        return build_engineering_search_entries(
+            project=self.project,
+            spatial_layout=layout,
+            diagnostics=diagnostics,
+            requirement_snapshot=requirement_snapshot,
+            proofgraph_documents=proofgraph_documents,
+        )
+
+    def _navigate_engineering_search_result(self, entry: SearchEntry) -> None:
+        target_type = entry.target_type
+        target_id = entry.target_id
+
+        if target_type == "project":
+            if hasattr(self, "dashboard"):
+                self.notebook.select(self.dashboard)
+                self.workspace_status_var.set("Workspace: Dashboard")
+            self.selection_status_var.set(f"Selected: {entry.label}")
+            return
+
+        if target_type == "analysis" and target_id:
+            if self.analysis_tree.exists(target_id):
+                self.analysis_tree.selection_set(target_id)
+                self.analysis_tree.focus(target_id)
+                self.analysis_tree.see(target_id)
+                self._on_analysis_selected()
+                if self._editor_analysis_id == target_id:
+                    self._activate_analysis_input_workspace()
+                    self.selection_status_var.set(f"Selected: {entry.label}")
+            return
+
+        if target_type in {"room", "device"} and target_id:
+            workspace = getattr(self, "spatial_workspace", None)
+            if workspace is not None and workspace.select_item(
+                target_type,
+                target_id,
+                notify=True,
+            ):
+                self._activate_spatial_workspace()
+                workspace.fit_selected()
+                self._sync_spatial_selection_status()
+                return
+
+        if target_type == "diagnostic" and isinstance(entry.payload, dict):
+            self.show_problems_panel()
+            self._navigate_project_diagnostic(entry.payload)
+            self.selection_status_var.set(f"Selected: {entry.label}")
+            return
+
+        if target_type == "requirement":
+            self.show_requirements_traceability()
+            self.selection_status_var.set(
+                f"Selected requirement: {target_id or entry.label}"
+            )
+            return
+
+        if target_type == "evidence":
+            self._activate_proofgraph_workspace()
+            self.selection_status_var.set(
+                f"Selected evidence: {entry.label}"
+            )
+            viewer = getattr(self, "proofgraph_viewer", None)
+            filter_var = getattr(viewer, "filter_var", None)
+            if filter_var is not None and target_id:
+                filter_var.set("All")
+            self.status_var.set(
+                f"ProofGraph opened for search result: {entry.label}"
+            )
+            return
+
+        self.status_var.set(
+            f"Search result has no direct navigation target: {entry.label}"
+        )
+
+    def show_global_search(self) -> None:
+        existing = getattr(self, "_global_search_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    existing.search.focus_set()
+                    return
+            except tk.TclError:
+                pass
+
+        def clear_reference() -> None:
+            self._global_search_window = None
+
+        entries = self._engineering_search_entries()
+        self._global_search_window = GlobalEngineeringSearch(
+            self.root,
+            entries=entries,
+            on_activate=self._navigate_engineering_search_result,
+            on_close=clear_reference,
+        )
+        self.status_var.set(
+            f"Global engineering search indexed {len(entries)} project entities"
+        )
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
         return [
             PaletteCommand(
@@ -3058,6 +3201,14 @@ class CleanroomXApp:
                 "File",
                 self.save_project,
                 shortcut="Ctrl+S",
+            ),
+            PaletteCommand(
+                "search.global",
+                "Global Engineering Search",
+                "Navigation",
+                self.show_global_search,
+                shortcut="Ctrl+K",
+                keywords=("find", "room", "device", "analysis", "diagnostic", "requirement", "evidence"),
             ),
             PaletteCommand(
                 "workspace.start",

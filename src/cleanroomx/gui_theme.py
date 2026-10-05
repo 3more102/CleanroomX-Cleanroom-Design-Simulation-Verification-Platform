@@ -195,6 +195,18 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["muted"],
         font=("TkDefaultFont", 8),
     )
+    style.configure(
+        "CX.ToolbarSection.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.ToolbarMuted.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
 
     style.configure(
         "TLabelframe",

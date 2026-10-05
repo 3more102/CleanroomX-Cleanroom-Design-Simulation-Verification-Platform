@@ -30,13 +30,19 @@ Validate package version plus the complete desktop application registry without 
 cleanroomx-gui --check
 ```
 
-Launch the desktop application:
+Launch the desktop application from a terminal:
 
 ```bash
 cleanroomx-gui
 ```
 
-Open the bundled demonstration project:
+On Windows, an installed package also provides `cleanroomx-desktop`, a
+`gui_scripts` launcher that starts the same desktop application without
+creating a console window. Keep `cleanroomx-gui` for command-line automation
+such as `--check` and `--smoke`, where console process semantics and output
+are useful.
+
+Open the bundled demonstration project from a terminal:
 
 ```bash
 cleanroomx-gui --demo
@@ -66,4 +72,4 @@ Deployment does not convert CleanroomX screening/numerical outputs into cleanroo
 
 ## Installed-wheel release verification
 
-The Release 2/v0.101 CI release gate builds a wheel on Python 3.11, 3.12, and 3.13, installs it into a clean virtual environment, runs `cleanroomx-gui --check`, verifies packaged demo resources, and on Python 3.13 launches the installed `cleanroomx-gui --demo --smoke` under Xvfb.
+The current CI release gate builds a wheel on Python 3.11, 3.12, and 3.13, installs it into a clean virtual environment, runs `cleanroomx-gui --check`, verifies packaged demo resources, and on Python 3.13 launches the installed `cleanroomx-gui --demo --smoke` under Xvfb. The Windows job also verifies that `cleanroomx-desktop` is installed through the `gui_scripts` group and that its `--check` path exits successfully.

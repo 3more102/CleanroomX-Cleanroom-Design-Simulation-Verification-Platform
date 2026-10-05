@@ -39,7 +39,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "navigator_visible": False,
             "output_visible": "no",
             "inspector_visible": True,
-            "theme": "neon",
+            "theme": "neon",\n            "density": "dense-but-invalid",
             "recent_projects": [
                 "alpha.cleanroomx.json",
                 "",
@@ -82,7 +82,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "navigator_visible": False,
             "output_visible": True,
             "inspector_visible": False,
-            "theme": "dark",
+            "theme": "dark",\n            "density": "compact",
             "recent_projects": [
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",

@@ -191,3 +191,16 @@ def test_engineering_health_badges_follow_current_project_state(app):
     assert app.evidence_badge_var.get().startswith("EVIDENCE ")
     assert str(app.project_state_badge.cget("style")).startswith("CX.Status.")
     assert str(app.diagnostics_badge.cget("style")).startswith("CX.Status.")
+
+
+def test_engineering_detail_values_use_compact_units_not_raw_structures():
+    assert _engineering_detail_value("supply_airflow_m3_h", 1250.0) == "1,250 m³/h"
+    assert _engineering_detail_value("pressure_pa", 12.5) == "12.5 Pa"
+    assert _engineering_detail_value("area_m2", 24.125000) == "24.125 m²"
+    rendered = _engineering_detail_value(
+        "context",
+        {"room_id": "CR-104", "margin_percent": -12.0},
+    )
+    assert "Room Id=CR-104" in rendered
+    assert "Margin Percent=-12%" in rendered
+    assert "{" not in rendered

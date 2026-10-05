@@ -1873,7 +1873,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
-        ).pack(side="left", padx=(2, 6))
+        ).pack(side="left", padx=(2, 4))
+        ttk.Checkbutton(
+            viewbar,
+            text="Rulers",
+            variable=self._show_rulers,
+            command=self.redraw,
+        ).pack(side="left", padx=(0, 6))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Labels", self._show_labels, "show_labels"),
@@ -4356,6 +4362,112 @@ class SpatialDesignWorkspace(ttk.Frame):
                     tags=("pressure_relationship_3d",),
                 )
 
+    @staticmethod
+    def _ruler_major_step(scale_px_per_m: float, target_px: float = 85.0) -> float:
+        """Choose a stable 1/2/5 engineering ruler interval for the current zoom."""
+        scale = float(scale_px_per_m)
+        if not math.isfinite(scale) or scale <= 0:
+            return 1.0
+        raw = max(1e-9, float(target_px) / scale)
+        exponent = 10.0 ** math.floor(math.log10(raw))
+        normalized = raw / exponent
+        if normalized <= 1.0:
+            factor = 1.0
+        elif normalized <= 2.0:
+            factor = 2.0
+        elif normalized <= 5.0:
+            factor = 5.0
+        else:
+            factor = 10.0
+        return factor * exponent
+
+    @staticmethod
+    def _ruler_label(value: float) -> str:
+        if abs(value) < 5e-12:
+            value = 0.0
+        magnitude = abs(value)
+        if magnitude >= 10000 or (0 < magnitude < 0.001):
+            return f"{value:.2e}"
+        return f"{value:g}"
+
+    def _draw_rulers_2d(self, canvas: tk.Canvas) -> None:
+        if not getattr(self, "_show_rulers", None) or not self._show_rulers.get():
+            return
+
+        width = max(1, canvas.winfo_width())
+        height = max(1, canvas.winfo_height())
+        top_h = 23
+        left_w = 48
+        palette = self._theme_palette
+        background = palette["surface_elevated"]
+        border = palette["border_strong"]
+        text_color = palette["secondary_text"]
+        tick_color = palette["muted"]
+
+        canvas.create_rectangle(
+            0, 0, width, top_h,
+            fill=background, outline=border, tags=("ruler", "ruler_x"),
+        )
+        canvas.create_rectangle(
+            0, 0, left_w, height,
+            fill=background, outline=border, tags=("ruler", "ruler_y"),
+        )
+        canvas.create_text(
+            left_w / 2,
+            top_h / 2,
+            text="m",
+            fill=text_color,
+            tags=("ruler", "ruler_unit"),
+        )
+
+        step = self._ruler_major_step(self._scale_2d())
+        x0, y0 = self._canvas_to_world(left_w, top_h)
+        x1, y1 = self._canvas_to_world(width, height)
+
+        start_x = math.floor(min(x0, x1) / step) * step
+        end_x = math.ceil(max(x0, x1) / step) * step
+        x_value = start_x
+        tick_budget = 0
+        while x_value <= end_x + step * 1e-9 and tick_budget < 200:
+            cx, _ = self._world_to_canvas(x_value, 0.0)
+            if left_w <= cx <= width:
+                canvas.create_line(
+                    cx, top_h - 7, cx, top_h,
+                    fill=tick_color, tags=("ruler", "ruler_x"),
+                )
+                canvas.create_text(
+                    cx + 3, 3,
+                    anchor="nw",
+                    text=self._ruler_label(x_value),
+                    fill=text_color,
+                    tags=("ruler", "ruler_x"),
+                )
+            x_value += step
+            tick_budget += 1
+
+        start_y = math.floor(min(y0, y1) / step) * step
+        end_y = math.ceil(max(y0, y1) / step) * step
+        y_value = start_y
+        tick_budget = 0
+        while y_value <= end_y + step * 1e-9 and tick_budget < 200:
+            _, cy = self._world_to_canvas(0.0, y_value)
+            if top_h <= cy <= height:
+                canvas.create_line(
+                    left_w - 7, cy, left_w, cy,
+                    fill=tick_color, tags=("ruler", "ruler_y"),
+                )
+                canvas.create_text(
+                    left_w - 9, cy,
+                    anchor="e",
+                    text=self._ruler_label(y_value),
+                    fill=text_color,
+                    tags=("ruler", "ruler_y"),
+                )
+            y_value += step
+            tick_budget += 1
+
+        canvas.tag_raise("ruler")
+
     def _draw_2d(self) -> None:
         canvas = self.canvas_2d
         canvas.delete("all")
@@ -4556,6 +4668,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._draw_engineering_legend(canvas, overlay)
         self._draw_measurement_overlay()
+        self._draw_rulers_2d(canvas)
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(

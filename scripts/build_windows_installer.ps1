@@ -22,6 +22,14 @@ if (-not (Test-Path $standaloneExe -PathType Leaf)) {
     throw "Standalone build is required before installer packaging: $standaloneExe"
 }
 
+$iconPath = Join-Path $repoRoot "build\pyinstaller\CleanroomX.ico"
+if (-not (Test-Path $iconPath -PathType Leaf)) {
+    python (Join-Path $repoRoot "scripts\write_windows_icon.py") --output $iconPath
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $iconPath -PathType Leaf)) {
+        throw "Windows installer icon generation failed"
+    }
+}
+
 if (-not $AppVersion) {
     $pyproject = Get-Content -Raw (Join-Path $repoRoot "pyproject.toml")
     if ($pyproject -notmatch '(?m)^version\s*=\s*"([^"]+)"\s*$') {

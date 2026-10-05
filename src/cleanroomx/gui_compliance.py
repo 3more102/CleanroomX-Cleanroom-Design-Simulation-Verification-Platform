@@ -135,6 +135,17 @@ class ComplianceWorkspace(ttk.Frame):
         self.rule_count_var = tk.StringVar(value="0 rules")
         self.summary_var = tk.StringVar(value="No canonical compliance result")
         self.digest_var = tk.StringVar(value="Rule/evidence digests unavailable until run")
+        self.boundary_var = tk.StringVar(
+            value=(
+                "A rule-pack check compares supplied evidence with supplied criteria; "
+                "it is not by itself regulatory approval or cleanroom certification."
+            )
+        )
+        self.search_var = tk.StringVar()
+        self.state_filter_var = tk.StringVar(value="All states")
+        self.visible_var = tk.StringVar(value="0 visible")
+        self._rules_current: list[dict[str, Any]] = []
+        self._findings_current: list[dict[str, Any]] = []
 
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(10, 7))
         header.pack(fill="x", pady=(0, 8))
@@ -222,6 +233,37 @@ class ComplianceWorkspace(ttk.Frame):
         self._kv(context, 2, "Configured criteria", self.rule_count_var)
         self._kv(context, 3, "Result summary", self.summary_var)
         self._kv(context, 4, "Trace digests", self.digest_var)
+        ttk.Label(
+            context,
+            textvariable=self.boundary_var,
+            wraplength=950,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(7, 0))
+
+        filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
+        filters.pack(fill="x", pady=(0, 8))
+        ttk.Label(filters, text="FILTER", style="CX.Section.TLabel").pack(
+            side="left", padx=(0, 5)
+        )
+        self.search_entry = ttk.Entry(filters, textvariable=self.search_var, width=34)
+        self.search_entry.pack(side="left", padx=(0, 7))
+        self.state_combo = ttk.Combobox(
+            filters,
+            textvariable=self.state_filter_var,
+            values=("All states", "Pass", "Fail", "Not checked", "Not run"),
+            state="readonly",
+            width=14,
+        )
+        self.state_combo.pack(side="left", padx=(0, 7))
+        ttk.Button(
+            filters,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self.clear_filters,
+        ).pack(side="left")
+        ttk.Label(filters, textvariable=self.visible_var, anchor="e").pack(
+            side="right"
+        )
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -318,6 +360,8 @@ class ComplianceWorkspace(ttk.Frame):
             "Select a configured compliance_check analysis. CleanroomX displays "
             "criteria and canonical run findings here without re-evaluating them in the GUI."
         )
+        self.search_var.trace_add("write", lambda *_: self._render_rows())
+        self.state_filter_var.trace_add("write", lambda *_: self._render_rows())
 
     @staticmethod
     def _kv(master: ttk.Frame, row: int, label: str, variable: tk.StringVar) -> None:
@@ -383,6 +427,10 @@ class ComplianceWorkspace(ttk.Frame):
             self.rule_count_var.set("0 rules")
             self.summary_var.set("No canonical compliance result")
             self.digest_var.set("Rule/evidence digests unavailable until run")
+            self.boundary_var.set(
+                "Project Requirements and compliance rule packs are separate workflows; "
+                "select a compliance_check analysis to inspect supplied criteria."
+            )
             self.run_button.configure(state="disabled")
             self._populate([], [])
             self._set_detail(
@@ -401,6 +449,10 @@ class ComplianceWorkspace(ttk.Frame):
             self.rule_count_var.set("0 valid rules")
             self.summary_var.set(str(projected["error"]))
             self.digest_var.set("Unavailable")
+            self.boundary_var.set(
+                "The input is invalid under the canonical compliance parser; no criteria "
+                "or verdicts are inferred from it."
+            )
             self.run_button.configure(state="disabled")
             self._populate([], [])
             self._set_detail(
@@ -460,16 +512,33 @@ class ComplianceWorkspace(ttk.Frame):
             )
         else:
             self.digest_var.set("Rule/evidence digests unavailable until run")
+        self.boundary_var.set(
+            result["engineering_note"]
+            or (
+                "A rule-pack check compares supplied evidence with supplied criteria; "
+                "it is not by itself regulatory approval or cleanroom certification."
+            )
+        )
 
         self._populate(rules, result["findings"])
-        if result["engineering_note"]:
-            self._set_detail(result["engineering_note"])
+
+    def clear_filters(self) -> None:
+        self.search_var.set("")
+        self.state_filter_var.set("All states")
+        self.search_entry.focus_set()
 
     def _populate(
         self,
         rules: list[dict[str, Any]],
         findings: list[dict[str, Any]],
     ) -> None:
+        self._rules_current = list(rules)
+        self._findings_current = list(findings)
+        self._render_rows()
+
+    def _render_rows(self) -> None:
+        if not hasattr(self, "tree"):
+            return
         selected_id = None
         selection = self.tree.selection()
         if selection:
@@ -480,15 +549,49 @@ class ComplianceWorkspace(ttk.Frame):
         for iid in self.tree.get_children():
             self.tree.delete(iid)
         self._rows_by_iid.clear()
+
         finding_by_id = {
             str(item.get("id")): item
-            for item in findings
+            for item in self._findings_current
             if item.get("id") not in (None, "")
         }
-        for index, rule in enumerate(rules):
+        query_tokens = [
+            token
+            for token in self.search_var.get().strip().casefold().split()
+            if token
+        ]
+        state_filter = (
+            self.state_filter_var.get()
+            .strip()
+            .casefold()
+            .replace(" ", "_")
+        )
+        visible_count = 0
+        for index, rule in enumerate(self._rules_current):
             rule_id = str(rule.get("id") or f"rule-{index + 1}")
             finding = finding_by_id.get(rule_id, {})
-            status = str(finding.get("status") or "not_run")
+            status = str(finding.get("status") or "not_run").casefold()
+            if state_filter not in {"", "all_states"} and status != state_filter:
+                continue
+            if query_tokens:
+                haystack = " ".join(
+                    (
+                        rule_id,
+                        str(rule.get("title") or ""),
+                        str(rule.get("operator") or ""),
+                        _cell(rule.get("expected")),
+                        _cell(finding.get("actual")) if finding else "",
+                        str(rule.get("unit") or ""),
+                        _cell(rule.get("tolerance")),
+                        str(rule.get("evidence_path") or ""),
+                        str(rule.get("reference") or ""),
+                        str(rule.get("source") or ""),
+                        status,
+                    )
+                ).casefold()
+                if not all(token in haystack for token in query_tokens):
+                    continue
+
             iid = f"rule:{index}:{rule_id}"
             row = {**rule, "finding": finding, "status": status}
             self._rows_by_iid[iid] = row
@@ -510,6 +613,10 @@ class ComplianceWorkspace(ttk.Frame):
                     rule.get("source") or "—",
                 ),
             )
+            visible_count += 1
+
+        total = len(self._rules_current)
+        self.visible_var.set(f"{visible_count} of {total} visible")
         self.table_behavior.reapply_sort()
         restored = False
         if selected_id is not None:
@@ -526,7 +633,12 @@ class ComplianceWorkspace(ttk.Frame):
                 self.tree.selection_set(items[0])
                 self.tree.focus(items[0])
                 self.tree.see(items[0])
-        self._show_detail()
+        if self.tree.selection():
+            self._show_detail()
+        elif total and not visible_count:
+            self._set_detail(
+                "No compliance criteria match the active search/state filters."
+            )
 
     def _show_detail(self, _event=None) -> None:
         selection = self.tree.selection()

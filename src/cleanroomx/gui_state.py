@@ -8,13 +8,14 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_VERSION = 5
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
     "theme": "dark",
+    "workspace_profile": "design",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -73,6 +74,16 @@ def clamp_window_size_to_display(
     return fitted_width, fitted_height
 
 
+def _normalize_workspace_profile(value: Any) -> str:
+    token = str(value or "").strip().lower()
+    allowed = {"design", "simulation", "verification", "evidence", "reporting"}
+    return (
+        token
+        if token in allowed
+        else _DEFAULT_GUI_LAYOUT_STATE["workspace_profile"]
+    )
+
+
 def _normalize_recent_projects(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -119,6 +130,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             source["theme"]
             if "theme" in source
             else _DEFAULT_GUI_LAYOUT_STATE["theme"]
+        ),
+        "workspace_profile": _normalize_workspace_profile(
+            source.get("workspace_profile")
         ),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")

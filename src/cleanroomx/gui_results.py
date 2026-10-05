@@ -159,6 +159,10 @@ class AnalysisResultPanel(ttk.Frame):
             value="Run an analysis to populate calculated engineering results."
         )
         self.count_var = tk.StringVar(value="0 result fields")
+        self.calculated_count_var = tk.StringVar(value="0")
+        self.requirement_count_var = tk.StringVar(value="0")
+        self.verdict_count_var = tk.StringVar(value="0")
+        self.diagnostic_count_var = tk.StringVar(value="0")
         self.search_var = tk.StringVar()
         self.class_filter_var = tk.StringVar(value="All")
         self._rows: list[tuple[str, str]] = []
@@ -196,6 +200,39 @@ class AnalysisResultPanel(ttk.Frame):
             wraplength=900,
             justify="left",
         ).pack(fill="x", pady=(0, 8))
+
+        instruments = ttk.Frame(self)
+        instruments.pack(fill="x", pady=(0, 8))
+        for column in range(4):
+            instruments.columnconfigure(column, weight=1)
+
+        for column, title, variable in (
+            (0, "CALCULATED", self.calculated_count_var),
+            (1, "REQUIREMENTS", self.requirement_count_var),
+            (2, "VERDICTS", self.verdict_count_var),
+            (3, "DIAGNOSTICS", self.diagnostic_count_var),
+        ):
+            card = ttk.Frame(
+                instruments,
+                style="CX.Instrument.TFrame",
+                padding=(8, 6),
+            )
+            card.grid(
+                row=0,
+                column=column,
+                sticky="ew",
+                padx=(0, 3) if column == 0 else (3, 3) if column < 3 else (3, 0),
+            )
+            ttk.Label(
+                card,
+                text=title,
+                style="CX.InstrumentName.TLabel",
+            ).pack(anchor="w")
+            ttk.Label(
+                card,
+                textvariable=variable,
+                style="CX.InstrumentValue.TLabel",
+            ).pack(anchor="w", pady=(2, 0))
 
         filterbar = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(8, 5))
         filterbar.pack(fill="x", pady=(0, 7))
@@ -308,6 +345,9 @@ class AnalysisResultPanel(ttk.Frame):
         calc = classes.count("CALCULATED")
         req = classes.count("REQUIREMENT")
         verdict = classes.count("VERDICT")
+        self.calculated_count_var.set(str(calc))
+        self.requirement_count_var.set(str(req))
+        self.verdict_count_var.set(str(verdict))
         details = [f"{shown}/{total} fields" if shown != total else f"{total} fields"]
         if calc:
             details.append(f"{calc} calc")
@@ -330,6 +370,10 @@ class AnalysisResultPanel(ttk.Frame):
                 "Configured requirements and compliance verdicts remain separate."
             )
             self.count_var.set("0 result fields")
+            self.calculated_count_var.set("0")
+            self.requirement_count_var.set("0")
+            self.verdict_count_var.set("0")
+            self.diagnostic_count_var.set("0")
             self.status_label.configure(style="CX.Status.Neutral.TLabel")
             return
 
@@ -347,6 +391,7 @@ class AnalysisResultPanel(ttk.Frame):
             if isinstance(diagnostics, (dict, list, tuple))
             else 0
         )
+        self.diagnostic_count_var.set(str(diagnostic_count))
         self.summary_var.set(
             f"Calculated result snapshot · {diagnostic_count} diagnostic"
             f"{'s' if diagnostic_count != 1 else ''}. "

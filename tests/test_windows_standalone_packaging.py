@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-standalone.yml"
 BUILD_SCRIPT = ROOT / "scripts" / "build_windows_standalone.ps1"
 ENTRY_POINT = ROOT / "packaging" / "cleanroomx_desktop_entry.py"
+ICON = ROOT / "packaging" / "windows" / "CleanroomX.ico"
 
 
 def test_windows_standalone_workflow_pins_builder_and_bundles_bim() -> None:
@@ -22,6 +23,12 @@ def test_windows_standalone_build_is_windowed_onedir_and_smoke_checked() -> None
 
     assert "--windowed" in script
     assert "--onedir" in script
+    assert "--icon $iconPath" in script
+    assert "--version-file $versionFile" in script
+    assert "CleanroomX Engineering Workstation" in script
+    assert "ProductVersion" in script
+    assert ICON.is_file()
+    assert ICON.stat().st_size > 0
     assert "--collect-data cleanroomx" in script
     assert "--collect-all ifcopenshell" in script
     assert "CleanroomX.exe" in script

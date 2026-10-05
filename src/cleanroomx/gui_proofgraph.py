@@ -1008,6 +1008,45 @@ class ProofGraphViewer(ttk.Frame):
             )
         self.detail.configure(state="disabled")
 
+    def select_node(self, node_id: str, *, graph_id: str | None = None) -> bool:
+        """Select a persisted ProofGraph node, optionally switching graphs first."""
+        target = _text(node_id)
+        if not target:
+            return False
+
+        graph_identity = _text(graph_id)
+        if graph_identity:
+            for document in self._documents:
+                identities = {
+                    _text(document.get("id")),
+                    _text(document.get("graph_sha256")),
+                }
+                if graph_identity in identities:
+                    self.graph_var.set(self._document_label(document))
+                    break
+            else:
+                return False
+
+        self.filter_var.set("All")
+        self.search_var.set("")
+        self._refresh()
+
+        for node in self._projection.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            raw = node.get("raw")
+            raw = raw if isinstance(raw, dict) else {}
+            identities = {
+                _text(node.get("key")),
+                _text(node.get("id")),
+                _text(raw.get("id")),
+                _text(raw.get("key")),
+            }
+            if target in identities:
+                self._select_key(_text(node.get("key")))
+                return True
+        return False
+
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None

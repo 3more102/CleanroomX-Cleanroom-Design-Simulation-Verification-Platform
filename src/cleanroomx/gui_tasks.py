@@ -229,7 +229,7 @@ class EngineeringTaskCenter(ttk.Frame):
         table_host.pack(fill="both", expand=True, padx=4, pady=(0, 4))
         self.tree = ttk.Treeview(
             table_host,
-            columns=("state", "started", "duration", "result"),
+            columns=("state", "started", "duration", "progress", "result"),
             show="tree headings",
             selectmode="browse",
         )
@@ -237,12 +237,14 @@ class EngineeringTaskCenter(ttk.Frame):
         self.tree.heading("state", text="State")
         self.tree.heading("started", text="Started (UTC)")
         self.tree.heading("duration", text="Duration")
+        self.tree.heading("progress", text="Progress")
         self.tree.heading("result", text="Result / failure")
         self.tree.column("#0", width=280, minwidth=160)
         self.tree.column("state", width=145, minwidth=110, stretch=False)
         self.tree.column("started", width=165, minwidth=135, stretch=False)
         self.tree.column("duration", width=90, minwidth=70, stretch=False)
-        self.tree.column("result", width=420, minwidth=180)
+        self.tree.column("progress", width=130, minwidth=100, stretch=False)
+        self.tree.column("result", width=360, minwidth=180)
         yscroll = ttk.Scrollbar(
             table_host,
             orient="vertical",
@@ -354,6 +356,7 @@ class EngineeringTaskCenter(ttk.Frame):
                     task.state.replace("_", " ").upper(),
                     _compact_utc(task.started_at_utc),
                     _format_duration(task.elapsed_seconds),
+                    _progress_text(task.state),
                     task.result or ("Working…" if not task.finished else ""),
                 ),
             )
@@ -433,6 +436,17 @@ class EngineeringTaskCenter(ttk.Frame):
             except tk.TclError:
                 pass
             self._refresh_after_id = None
+
+
+def _progress_text(state: str) -> str:
+    return {
+        "running": "Indeterminate",
+        "abandon_requested": "Waiting for worker",
+        "completed": "Complete",
+        "failed": "Failed",
+        "abandoned": "Abandoned",
+        "discarded": "Discarded",
+    }.get(str(state or "").strip().casefold(), "Unknown")
 
 
 def _format_duration(seconds: float) -> str:

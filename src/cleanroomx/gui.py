@@ -870,7 +870,13 @@ class VerificationHistoryDialog(tk.Toplevel):
 class RequirementsTraceabilityDialog(tk.Toplevel):
     """Read-only project requirements and evidence-routing inspection."""
 
-    def __init__(self, parent: tk.Misc, snapshot: dict):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        snapshot: dict,
+        *,
+        focus_requirement_id: str | None = None,
+    ):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
         self.geometry("1480x760")
@@ -1053,8 +1059,15 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
         first_requirement = self.tree.get_children(requirements_root)
         first_mapping = self.tree.get_children(mappings_root)
+        requested = (
+            f"requirement:{focus_requirement_id}"
+            if focus_requirement_id
+            else ""
+        )
         initial = (
-            first_requirement[0]
+            requested
+            if requested and self.tree.exists(requested)
+            else first_requirement[0]
             if first_requirement
             else first_mapping[0]
             if first_mapping
@@ -3949,7 +3962,10 @@ class CleanroomXApp:
         )
         return True
 
-    def show_requirements_traceability(self) -> bool:
+    def show_requirements_traceability(
+        self,
+        focus_requirement_id: str | None = None,
+    ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
         except (
@@ -3975,7 +3991,11 @@ class CleanroomXApp:
             )
             return False
 
-        RequirementsTraceabilityDialog(self.root, snapshot)
+        RequirementsTraceabilityDialog(
+            self.root,
+            snapshot,
+            focus_requirement_id=focus_requirement_id,
+        )
         return True
 
     def _project_verification_target(

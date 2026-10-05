@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .gui_display import configure_toplevel_geometry
+from .gui_proofgraph import proofgraph_projection
 
 
 @dataclass(frozen=True)
@@ -240,10 +241,16 @@ def build_engineering_search_entries(
         if not isinstance(document, dict):
             continue
         graph_id = _text(document.get("id") or document.get("graph_sha256")) or str(document_index)
-        nodes = document.get("nodes", [])
-        if not isinstance(nodes, list):
-            continue
-        for node_index, node in enumerate(nodes):
+        # Production history stores canonical ProofGraph documents, not GUI projection
+        # nodes. Accept the older projection-shaped input for compatibility, but
+        # project canonical documents through the same validated presentation boundary
+        # used by the ProofGraph workspace.
+        nodes = document.get("nodes")
+        if isinstance(nodes, list):
+            projected_nodes = nodes
+        else:
+            projected_nodes = proofgraph_projection(document).get("nodes", [])
+        for node_index, node in enumerate(projected_nodes):
             if not isinstance(node, dict):
                 continue
             node_id = _text(node.get("id") or node.get("key"))
@@ -252,19 +259,24 @@ def build_engineering_search_entries(
                 continue
             node_type = _text(node.get("type"))
             status = _text(node.get("status"))
+            node_key = _text(node.get("key"))
             detail = " · ".join(part for part in (node_type, status, node_id) if part)
+            payload = dict(node)
+            payload["_proofgraph_id"] = graph_id
+            if node_key:
+                payload["_proofgraph_key"] = node_key
             _append_unique(
                 entries,
                 seen,
                 SearchEntry(
-                    key=f"proof:{graph_id}:{node_id or node_index}",
+                    key=f"proof:{graph_id}:{node_key or node_id or node_index}",
                     category="Evidence",
                     label=label,
                     detail=detail,
                     target_type="evidence",
                     target_id=node_id,
                     keywords=(node_type, status, "proofgraph", "evidence", "provenance"),
-                    payload=node,
+                    payload=payload,
                 ),
             )
 

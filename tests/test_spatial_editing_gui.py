@@ -1051,3 +1051,58 @@ def test_engineering_status_strip_tracks_save_state_without_mutating_project(app
     app.description_var.set(project_before["project"].get("description", ""))
     app.root.update()
     assert app.project.to_dict() == project_before
+
+
+def test_solver_run_state_has_visible_nonblocking_feedback(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app._set_running(True)
+    app.root.update_idletasks()
+    app.root.update()
+    assert app.run_state_var.get() == "RUNNING"
+    assert app.run_button.cget("text") == "Running…"
+    assert app.workflow_run_button.cget("text") == "4  Running…"
+    assert str(app.run_button.cget("state")) == "disabled"
+    assert str(app.cancel_button.cget("state")) == "normal"
+    assert str(app.input_text.cget("state")) == "disabled"
+
+    app._set_running(False)
+    app.root.update()
+    assert app.run_state_var.get() == "IDLE"
+    assert app.run_button.cget("text") == "▶ Run"
+    assert app.workflow_run_button.cget("text") == "4  Run"
+    assert str(app.run_button.cget("state")) == "normal"
+    assert str(app.cancel_button.cget("state")) == "disabled"
+    assert str(app.input_text.cget("state")) == "normal"
+    assert app.project.to_dict() == project_before
+
+
+def test_spatial_inspector_surfaces_validation_and_sync_badges(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    workspace.redraw()
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert workspace._validation_badge.winfo_ismapped()
+    assert workspace._sync_badge.winfo_ismapped()
+    assert workspace._validation_var.get().startswith("SPATIAL ")
+    assert workspace._sync_var.get().startswith(("SYNCED", "SYNC ·"))
+    assert app.project.to_dict() == project_before
+
+
+def test_engineering_status_strip_stays_visible_at_minimum_window(app):
+    app.root.geometry("1050x680")
+    app.root.update_idletasks()
+    app.root.update()
+
+    for widget in (
+        app.save_state_badge,
+        app.problems_state_badge,
+        app.verification_state_badge,
+        app.evidence_state_badge,
+        app.run_state_badge,
+    ):
+        assert widget.winfo_ismapped()
+        assert widget.winfo_x() + widget.winfo_width() <= widget.master.winfo_width()

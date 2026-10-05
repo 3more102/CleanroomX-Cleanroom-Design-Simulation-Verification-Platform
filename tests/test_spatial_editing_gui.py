@@ -196,6 +196,33 @@ def test_workspace_deselection_clears_navigator_status_and_inspector(app):
     assert workspace._property_draft_var.get() == "Draft: select an object"
 
 
+def test_escape_cancels_measurement_then_clears_selection(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+
+    workspace.select_item("room", room["id"], notify=True)
+    workspace.set_measurement_tool("distance")
+    workspace._handle_measure_click(*workspace._world_to_canvas(0.0, 0.0))
+
+    assert workspace.selected == _Hit("room", room["id"])
+    assert workspace._tool_mode.get() == "distance"
+
+    assert workspace._on_escape() == "break"
+    app.root.update()
+
+    assert workspace._tool_mode.get() == "select"
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.analysis_tree.selection() == (f"room:{room['id']}",)
+
+    assert workspace._on_escape() == "break"
+    app.root.update()
+
+    assert workspace.selected is None
+    assert app.analysis_tree.selection() == ()
+    assert app.selection_status_var.get() == "Selected: —"
+    assert workspace._property_draft_var.get() == "Draft: select an object"
+
+
 def test_contextual_inspector_hides_irrelevant_fields(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

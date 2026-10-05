@@ -125,6 +125,17 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert workspace_shortcuts["workspace.design"] == "Ctrl+Alt+1"
     assert workspace_shortcuts["workspace.reporting"] == "Ctrl+Alt+5"
 
+    for label in (
+        "Open Problems",
+        "Open Run History",
+        "Open Verification History",
+        "Toggle Project Navigator",
+        "Toggle Output / Verification Panel",
+        "Toggle Design Inspector",
+        "Reset Active Workspace Layout",
+    ):
+        assert label in labels
+
     app.show_command_palette()
     root.update()
     assert app._command_palette_window is not None

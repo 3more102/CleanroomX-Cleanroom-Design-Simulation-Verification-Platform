@@ -314,6 +314,87 @@ def proofgraph_projection(document: dict[str, Any] | None) -> dict[str, Any]:
     return {"nodes": ordered_nodes, "edges": normalized_edges}
 
 
+def proofgraph_summary(projection: dict[str, Any]) -> dict[str, int]:
+    """Summarize persisted graph state without deriving a new engineering verdict."""
+    nodes = projection.get("nodes", [])
+    summary = {
+        "requirements": 0,
+        "evidence": 0,
+        "findings": 0,
+        "unresolved_evidence": 0,
+        "verdict_pass": 0,
+        "verdict_fail": 0,
+        "verdict_not_checked": 0,
+    }
+    for node in nodes:
+        node_type = node.get("type")
+        status = _text(node.get("status")).casefold()
+        flags = set(node.get("flags") or ())
+        if node_type == "requirement":
+            summary["requirements"] += 1
+        elif node_type == "evidence":
+            summary["evidence"] += 1
+        elif node_type == "finding":
+            summary["findings"] += 1
+            if "unresolved" in flags:
+                summary["unresolved_evidence"] += 1
+        elif node_type == "verdict":
+            if status in {"pass", "passed", "ok"}:
+                summary["verdict_pass"] += 1
+            elif status in {"fail", "failed", "error"}:
+                summary["verdict_fail"] += 1
+            else:
+                summary["verdict_not_checked"] += 1
+    return summary
+
+
+def _search_projection(
+    projection: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    """Search graph presentation fields and keep one-hop traceability context."""
+    term = _text(query).casefold()
+    if not term:
+        return projection
+
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    matched: set[str] = set()
+    for node in nodes:
+        haystack = " ".join(
+            (
+                _text(node.get("type")),
+                _text(node.get("id")),
+                _text(node.get("label")),
+                _text(node.get("status")),
+                " ".join(str(flag) for flag in node.get("flags") or ()),
+                json.dumps(
+                    node.get("raw") or {},
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            )
+        ).casefold()
+        if term in haystack:
+            matched.add(node["key"])
+
+    expanded = set(matched)
+    for edge in edges:
+        if edge["source"] in matched or edge["target"] in matched:
+            expanded.add(edge["source"])
+            expanded.add(edge["target"])
+
+    return {
+        "nodes": [node for node in nodes if node["key"] in expanded],
+        "edges": [
+            edge
+            for edge in edges
+            if edge["source"] in expanded and edge["target"] in expanded
+        ],
+    }
+
+
 def _filtered_projection(
     projection: dict[str, Any],
     filter_name: str,
@@ -398,7 +479,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
+        self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.health_var = tk.StringVar(value="No validated graph selected")
 
         toolbar = ttk.Frame(self, padding=(7, 5), style="CX.Toolbar.TFrame")
         toolbar.pack(fill="x")
@@ -428,11 +511,25 @@ class ProofGraphViewer(ttk.Frame):
             width=20,
         )
         self.filter_picker.pack(side="left", padx=(5, 10))
+        ttk.Label(toolbar, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            toolbar,
+            textvariable=self.search_var,
+            width=24,
+        )
+        self.search_entry.pack(side="left", padx=(5, 10))
+        ttk.Button(
+            toolbar,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=lambda: self.search_var.set(""),
+        ).pack(side="left")
         ttk.Label(toolbar, textvariable=self.summary_var).pack(
             side="right", padx=(10, 0)
         )
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        self.search_var.trace_add("write", lambda *_: self._refresh())
 
         lifecycle = ttk.Frame(
             self,
@@ -459,6 +556,23 @@ class ProofGraphViewer(ttk.Frame):
             style="CX.Compact.TButton",
             command=self._navigate_selected,
         ).pack(side="right")
+
+        health = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(7, 2, 7, 5),
+        )
+        health.pack(fill="x")
+        ttk.Label(
+            health,
+            text="EVIDENCE / VERDICT STATE",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Label(
+            health,
+            textvariable=self.health_var,
+            style="CX.Muted.TLabel",
+        ).pack(side="left")
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -614,7 +728,8 @@ class ProofGraphViewer(ttk.Frame):
 
     def _refresh(self) -> None:
         projection = proofgraph_projection(self._active_document())
-        self._projection = _filtered_projection(projection, self.filter_var.get())
+        filtered = _filtered_projection(projection, self.filter_var.get())
+        self._projection = _search_projection(filtered, self.search_var.get())
         self._nodes_by_key = {
             node["key"]: node for node in self._projection.get("nodes", [])
         }
@@ -632,6 +747,16 @@ class ProofGraphViewer(ttk.Frame):
             if all_nodes
             else "No persisted ProofGraph evidence"
         )
+        summary = proofgraph_summary(projection)
+        if all_nodes:
+            self.health_var.set(
+                "{requirements} requirements · {evidence} evidence · "
+                "{unresolved_evidence} missing-evidence finding(s) · "
+                "verdicts {verdict_pass} pass / {verdict_fail} fail / "
+                "{verdict_not_checked} not checked".format(**summary)
+            )
+        else:
+            self.health_var.set("No validated graph selected")
 
     def _populate_tree(self) -> None:
         for iid in self.tree.get_children():

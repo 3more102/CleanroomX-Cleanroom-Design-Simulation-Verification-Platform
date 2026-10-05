@@ -114,6 +114,8 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Activate Verification Workspace" in labels
     assert "Activate Evidence / ProofGraph Workspace" in labels
     assert "Activate Reporting Workspace" in labels
+    assert "Toggle Light / Dark Theme" in labels
+    assert "Toggle Engineering Density" in labels
     assert "Verify Project Requirements" in labels
     assert "Import IFC Spatial Layout" in labels
 

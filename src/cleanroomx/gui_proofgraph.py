@@ -45,6 +45,124 @@ def _node_key(node_type: str, node_id: str) -> str:
     return f"{node_type}:{node_id}"
 
 
+def _detail_label(key: Any) -> str:
+    return _text(key).replace("_", " ").strip().title()
+
+
+def _detail_scalar(value: Any) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "YES" if value else "NO"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return _text(value) or "—"
+
+
+def _node_detail_lines(node: dict[str, Any]) -> list[str]:
+    """Render compact engineering details without dumping persisted JSON."""
+
+    node_type = _text(node.get("type"))
+    label = _text(node.get("label"))
+    node_id = _text(node.get("id"))
+    status = _text(node.get("status")).upper()
+    flags = [str(value).upper() for value in node.get("flags") or () if _text(value)]
+    raw = node.get("raw", {})
+    if not isinstance(raw, dict):
+        raw = {}
+
+    lines = [
+        node_type.replace("_", " ").upper() or "PROOFGRAPH NODE",
+        label or node_id or "Unnamed node",
+        "",
+        f"ID: {node_id or '—'}",
+    ]
+    if status:
+        lines.append(f"Status: {status}")
+    if flags:
+        lines.append("Flags: " + " · ".join(flags))
+
+    preferred = (
+        "title",
+        "kind",
+        "reference",
+        "property_name",
+        "value",
+        "unit",
+        "subject_ref",
+        "source_id",
+        "requirement_id",
+        "check_id",
+        "reason",
+        "evidence_present",
+        "completed_at_utc",
+    )
+    rendered: set[str] = set()
+    detail_rows: list[str] = []
+    for key in preferred:
+        if key not in raw:
+            continue
+        value = raw.get(key)
+        if isinstance(value, (dict, list, tuple, set)):
+            continue
+        detail_rows.append(f"{_detail_label(key)}: {_detail_scalar(value)}")
+        rendered.add(key)
+
+    for key in ("evidence_ids", "finding_ids", "verdict_ids", "upstream_evidence_ids"):
+        value = raw.get(key)
+        if not isinstance(value, list):
+            continue
+        rendered.add(key)
+        values = [_text(item) for item in value if _text(item)]
+        detail_rows.append(
+            f"{_detail_label(key)}: " + (" · ".join(values) if values else "—")
+        )
+
+    provenance = raw.get("provenance")
+    if isinstance(provenance, list):
+        rendered.add("provenance")
+        records = [record for record in provenance if isinstance(record, dict)]
+        detail_rows.append(f"Provenance: {len(records)} record(s)")
+        for index, record in enumerate(records[:4], start=1):
+            parts = []
+            for key, label_name in (
+                ("cleanroomx_entity_id", "Object"),
+                ("ifc_global_id", "IFC"),
+                ("originating_calculation", "Calculation"),
+            ):
+                value = _text(record.get(key))
+                if value:
+                    parts.append(f"{label_name} {value}")
+            if parts:
+                detail_rows.append(f"  {index}. " + " · ".join(parts))
+        if len(records) > 4:
+            detail_rows.append(f"  + {len(records) - 4} more provenance record(s)")
+
+    for key, value in raw.items():
+        if key in rendered or key in preferred:
+            continue
+        if isinstance(value, dict):
+            scalar_items = [
+                f"{_detail_label(subkey)}={_detail_scalar(subvalue)}"
+                for subkey, subvalue in value.items()
+                if not isinstance(subvalue, (dict, list, tuple, set))
+            ]
+            if scalar_items:
+                preview = " · ".join(scalar_items[:4])
+                suffix = " …" if len(scalar_items) > 4 else ""
+                detail_rows.append(f"{_detail_label(key)}: {preview}{suffix}")
+            else:
+                detail_rows.append(f"{_detail_label(key)}: {len(value)} field(s)")
+        elif isinstance(value, (list, tuple, set)):
+            detail_rows.append(f"{_detail_label(key)}: {len(value)} item(s)")
+        else:
+            detail_rows.append(f"{_detail_label(key)}: {_detail_scalar(value)}")
+
+    if detail_rows:
+        lines.extend(("", "ENGINEERING TRACE", *detail_rows))
+    return lines
+
+
 def proofgraph_projection(document: dict[str, Any] | None) -> dict[str, Any]:
     """Project one canonical ProofGraph document into GUI-only nodes and edges.
 
@@ -773,22 +891,12 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.delete("1.0", "end")
         node = self._nodes_by_key.get(self._selected_key or "")
         if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
-            )
-            if node.get("status"):
-                header += f"Status: {node['status'].upper()}\n"
-            self.detail.insert("1.0", header + "\n")
+            self.detail.insert("1.0", "\n".join(_node_detail_lines(node)))
+        else:
             self.detail.insert(
-                "end",
-                json.dumps(
-                    node.get("raw", {}),
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                ),
+                "1.0",
+                "Select a requirement, model object, calculation, verification, "
+                "or evidence node to inspect its traceability context.",
             )
         self.detail.configure(state="disabled")
 

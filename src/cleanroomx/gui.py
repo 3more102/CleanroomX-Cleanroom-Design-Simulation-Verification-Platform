@@ -1630,18 +1630,27 @@ class CleanroomXApp:
             side="left", fill="y", padx=4
         )
 
+        ttk.Label(
+            commandbar,
+            text="VIEW",
+            style="CX.ToolbarGroup.TLabel",
+        ).pack(side="left", padx=(0, 3))
+        self.toolbar_view_buttons: dict[str, ttk.Button] = {}
         for label, mode, width in (
             ("2D", "2d", 4),
             ("3D", "3d", 4),
             ("Split", "split", 5),
         ):
-            ttk.Button(
+            button = ttk.Button(
                 commandbar,
                 text=label,
                 width=width,
-                style="CX.Compact.TButton",
+                style="CX.View.TButton",
                 command=lambda selected=mode: self._activate_spatial_workspace(selected),
-            ).pack(side="left", padx=1)
+            )
+            button.pack(side="left", padx=1)
+            self.toolbar_view_buttons[mode] = button
+        self._set_spatial_view_button("split")
         self.toolbar_fit_button = ttk.Button(
             commandbar,
             text="Fit",
@@ -1728,6 +1737,11 @@ class CleanroomXApp:
             style="CX.PanelHeader.TFrame",
         )
         navigator_header.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            navigator_header,
+            text="▎",
+            style="CX.PanelAccent.TLabel",
+        ).pack(side="left", padx=(0, 4))
         ttk.Label(
             navigator_header,
             text="PROJECT NAVIGATOR",
@@ -1950,6 +1964,11 @@ class CleanroomXApp:
             style="CX.PanelHeader.TFrame",
         )
         output_header.pack(fill="x")
+        ttk.Label(
+            output_header,
+            text="▎",
+            style="CX.PanelAccent.TLabel",
+        ).pack(side="left", padx=(0, 4))
         ttk.Label(
             output_header,
             text="OUTPUT / VERIFICATION",
@@ -3055,6 +3074,14 @@ class CleanroomXApp:
                 )
             )
 
+    def _set_spatial_view_button(self, mode: str) -> None:
+        key = str(mode or "").strip().lower()
+        buttons = getattr(self, "toolbar_view_buttons", {})
+        for name, button in buttons.items():
+            button.configure(
+                style="CX.ViewActive.TButton" if name == key else "CX.View.TButton"
+            )
+
     def _activate_primary_workspace(self, mode: str) -> None:
         """Navigate existing workflows without creating parallel engineering state."""
         key = str(mode or "").strip().lower()
@@ -3085,6 +3112,7 @@ class CleanroomXApp:
             self.notebook.select(self.spatial_workspace)
         if mode is not None and hasattr(self, "spatial_workspace"):
             self.spatial_workspace.set_workspace_mode(mode)
+            self._set_spatial_view_button(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
 

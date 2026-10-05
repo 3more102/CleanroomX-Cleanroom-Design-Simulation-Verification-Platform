@@ -1515,6 +1515,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._inspector_area_var = tk.StringVar(value="—")
+        self._inspector_volume_var = tk.StringVar(value="—")
+        self._inspector_class_var = tk.StringVar(value="—")
+        self._inspector_pressure_var = tk.StringVar(value="—")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1546,13 +1550,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 5),
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
             commandbar,
             text="DESIGN",
-            style="CX.Section.TLabel",
+            style="CX.Toolbar.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
             side="left", padx=2
@@ -1595,7 +1603,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 4),
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1642,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 4),
+        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1651,16 +1667,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
+        self._validation_label = ttk.Label(
+            viewbar,
+            textvariable=self._validation_var,
+            style="CX.Status.Pass.TLabel",
         )
+        self._validation_label.pack(side="right", padx=(10, 2))
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 4),
+        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
             text="ENGINEERING OVERLAY",
-            style="CX.Section.TLabel",
+            style="CX.Toolbar.TLabel",
         ).pack(side="left", padx=(0, 8))
         overlay_picker = ttk.Combobox(
             overlaybar,
@@ -1849,7 +1872,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            style="CX.ViewTitle.TLabel",
+        ).pack(fill="x", pady=(3, 7))
+
+        metrics = ttk.Frame(inspector)
+        metrics.pack(fill="x", pady=(0, 8))
+        for column in range(2):
+            metrics.columnconfigure(column, weight=1)
+        metric_specs = (
+            ("AREA", self._inspector_area_var, 0, 0),
+            ("VOLUME", self._inspector_volume_var, 0, 1),
+            ("CLASS", self._inspector_class_var, 1, 0),
+            ("PRESSURE", self._inspector_pressure_var, 1, 1),
+        )
+        for title, variable, row_index, column_index in metric_specs:
+            card = ttk.Frame(metrics, style="CX.Raised.TFrame", padding=(7, 5))
+            card.grid(
+                row=row_index,
+                column=column_index,
+                sticky="nsew",
+                padx=(0 if column_index == 0 else 2, 0 if column_index == 1 else 2),
+                pady=(0 if row_index == 0 else 2, 2),
+            )
+            ttk.Label(card, text=title, style="CX.Section.TLabel").pack(anchor="w")
+            ttk.Label(card, textvariable=variable).pack(anchor="w", pady=(1, 0))
 
         property_groups = (
             (
@@ -2586,6 +2632,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var.set(
             "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
         )
+        label = getattr(self, "_validation_label", None)
+        if label is not None:
+            label.configure(
+                style=(
+                    "CX.Status.Pass.TLabel"
+                    if count == 0
+                    else "CX.Status.Warning.TLabel"
+                )
+            )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
         validation_key = _spatial_validation_key(self.layout)
@@ -2612,7 +2667,11 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
-            self._selection_var.set("No selection")
+            self._selection_var.set("No object selected")
+            self._inspector_area_var.set("—")
+            self._inspector_volume_var.set("—")
+            self._inspector_class_var.set("—")
+            self._inspector_pressure_var.set("—")
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2634,6 +2693,24 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            length = float(item.get("length_m", 0.0) or 0.0)
+            width = float(item.get("width_m", 0.0) or 0.0)
+            height = float(item.get("height_m", 0.0) or 0.0)
+            area = length * width
+            volume = area * height
+            self._inspector_area_var.set(f"{area:,.2f} m²")
+            self._inspector_volume_var.set(f"{volume:,.2f} m³")
+            self._inspector_class_var.set(str(item.get("classification") or "—"))
+            pressure = item.get("pressure_pa")
+            self._inspector_pressure_var.set(
+                f"{float(pressure):+.1f} Pa" if pressure not in (None, "") else "—"
+            )
+        else:
+            self._inspector_area_var.set("—")
+            self._inspector_volume_var.set("—")
+            self._inspector_class_var.set(str(item.get("type") or "Device").title())
+            self._inspector_pressure_var.set("—")
         room_fields = {
             "name",
             "x_m",

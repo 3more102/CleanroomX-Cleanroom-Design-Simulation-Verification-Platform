@@ -199,3 +199,81 @@ def test_problem_browser_supports_engineering_filters_sorting_and_relative_navig
     assert selected is not None
     if len(all_items) > 1:
         assert selected is not panel._issues_by_iid[all_items[0]]
+
+
+def test_workspace_presets_route_engineers_to_task_oriented_layouts(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.activate_workspace_profile("design")
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is False
+    assert workspace.inspector_visible()
+    assert app.notebook.select() == str(workspace)
+    assert app.workspace_status_var.get() == "Workspace: Design"
+
+    app.activate_workspace_profile("simulation")
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert not workspace.inspector_visible()
+    assert app.notebook.select() == str(app.plot_tab)
+    assert app.output_notebook.select() == str(app.result_text.master)
+    assert app.workspace_status_var.get() == "Workspace: Simulation"
+
+    app.activate_workspace_profile("verification")
+    app.root.update()
+    assert app.notebook.select() == str(workspace)
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.workspace_status_var.get() == "Workspace: Verification"
+
+    app.activate_workspace_profile("evidence")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+    assert app.workspace_status_var.get() == "Workspace: Evidence"
+
+    app.activate_workspace_profile("reporting")
+    app.root.update()
+    assert app.navigator_panel_visible_var.get() is False
+    assert app.output_panel_visible_var.get() is True
+    assert app.notebook.select() == str(app.plot_tab)
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert app.workspace_status_var.get() == "Workspace: Reporting"
+    assert app.project.to_dict() == project_before
+
+
+def test_density_modes_change_engineering_row_density_without_project_mutation(app):
+    from tkinter import ttk
+
+    project_before = copy.deepcopy(app.project.to_dict())
+    style = ttk.Style(app.root)
+
+    app.set_density("compact", persist=False)
+    app.root.update_idletasks()
+    assert app.density_var.get() == "compact"
+    assert int(style.lookup("Treeview", "rowheight")) == 20
+
+    app.set_density("comfortable", persist=False)
+    app.root.update_idletasks()
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == 24
+    assert app.project.to_dict() == project_before
+
+
+def test_problem_browser_can_focus_global_search_result(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    panel.search_var.set("definitely-no-match")
+    panel.severity_var.set("Warning")
+    app.root.update()
+    assert panel.tree.get_children() == ()
+
+    assert panel.focus_issue(issue)
+    app.root.update()
+    assert panel.search_var.get() == ""
+    assert panel.severity_var.get() == "All"
+    selected = panel.selected_issue()
+    assert selected is not None
+    assert selected["sequence"] == issue["sequence"]

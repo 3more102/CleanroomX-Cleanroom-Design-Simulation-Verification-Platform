@@ -1659,6 +1659,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_engineering_context_change: Callable[[str], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1673,6 +1674,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_engineering_context_change = on_engineering_context_change
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -2647,6 +2649,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         if callback is not None:
             callback(self.viewport_status_text())
 
+    def engineering_context_text(self) -> str:
+        """Return live, presentation-only cursor/grid/snap context."""
+        cursor = self._coord_var.get().strip() or "x — m   y — m"
+        grid_m = _positive(self.layout.get("grid_m"), 0.5)
+        snap_state = "Snap ON" if self._snap_to_grid.get() else "Snap OFF"
+        return f"{cursor} · Grid {grid_m:g} m · {snap_state}"
+
+    def _notify_engineering_context(self) -> None:
+        callback = self._on_engineering_context_change
+        if callback is not None:
+            callback(self.engineering_context_text())
+
     def _notify_selection_change(self) -> None:
         if self.selected is None or self._on_selection_change is None:
             return
@@ -2704,6 +2718,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
+        self._notify_engineering_context()
 
     def set_3d_projection(self, value: str) -> None:
         mode = str(value or "orthographic").strip().lower()
@@ -2787,6 +2802,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change()
         self._status_setter("Spatial view settings updated")
         self.redraw()
+        if key == "snap_to_grid":
+            self._notify_engineering_context()
 
     def _update_metrics(self) -> None:
         metrics = layout_metrics(self.layout)
@@ -2919,6 +2936,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter(message)
         self._update_history_controls()
         self.redraw()
+        self._notify_engineering_context()
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:
@@ -4822,6 +4840,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        self._notify_engineering_context()
         current = self.canvas_2d.find_withtag("current")
         hovered = (
             self._parse_hit(self.canvas_2d.gettags(current[0]))

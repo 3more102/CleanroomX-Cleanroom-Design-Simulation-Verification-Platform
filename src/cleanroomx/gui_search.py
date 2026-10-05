@@ -6,6 +6,8 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_display import configure_toplevel_geometry
+
 
 @dataclass(frozen=True)
 class SearchEntry:
@@ -282,8 +284,13 @@ class GlobalEngineeringSearch(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("CleanroomX Global Engineering Search")
-        self.geometry("920x590")
-        self.minsize(650, 400)
+        configure_toplevel_geometry(
+            self,
+            920,
+            590,
+            min_width=650,
+            min_height=400,
+        )
         self.transient(parent.winfo_toplevel())
         self._entries = list(entries)
         self._on_activate = on_activate

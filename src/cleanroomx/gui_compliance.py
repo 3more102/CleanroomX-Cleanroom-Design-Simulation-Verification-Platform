@@ -708,6 +708,9 @@ class ComplianceRulePackPanel(ttk.Frame):
         if len(rules) <= 1:
             self._status_setter("A compliance rule pack must contain at least one rule")
             return False
+        if not self._confirm_delete(rule_id):
+            self._status_setter(f"Delete cancelled for compliance rule {rule_id}")
+            return False
         pack["rules"] = [
             item
             for item in rules

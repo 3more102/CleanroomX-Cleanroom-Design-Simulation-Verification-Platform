@@ -358,6 +358,27 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
     )
     style.configure(
+        "CX.Danger.TButton",
+        background=palette["error_surface"],
+        foreground=palette["error"],
+        bordercolor=palette["error"],
+        padding=(8, 4),
+    )
+    style.map(
+        "CX.Danger.TButton",
+        background=[
+            ("active", palette["error"]),
+            ("pressed", palette["error"]),
+            ("disabled", palette["surface_alt"]),
+        ],
+        foreground=[
+            ("active", palette["accent_text"]),
+            ("pressed", palette["accent_text"]),
+            ("disabled", palette["disabled"]),
+        ],
+    )
+
+    style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
         padding=(4, 3),

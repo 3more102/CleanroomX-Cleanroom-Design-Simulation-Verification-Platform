@@ -2479,15 +2479,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         return False
 
     def hide_selected(self) -> None:
-        if self.selected is None:
+        hits = list(self._selected_hits)
+        if not hits and self.selected is not None:
+            hits = [self.selected]
+        if not hits:
             self._status_setter("Select a room or device to hide")
             return
-        self._hidden_item_ids.add(
-            self._hit_key(self.selected.kind, self.selected.item_id)
-        )
-        if self._isolated_item == self.selected:
+        for hit in hits:
+            self._hidden_item_ids.add(
+                self._hit_key(hit.kind, hit.item_id)
+            )
+        if self._isolated_item in hits:
             self._isolated_item = None
-        self._status_setter("Selection hidden from spatial views")
+        self._status_setter(
+            "Selection hidden from spatial views"
+            if len(hits) == 1
+            else f"{len(hits)} selected objects hidden from spatial views"
+        )
         self.redraw()
 
     def isolate_selected(self) -> None:
@@ -3627,21 +3635,37 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def delete_selected(self) -> None:
-        if self.selected is None:
+        hits = list(self._selected_hits)
+        if not hits and self.selected is not None:
+            hits = [self.selected]
+        if not hits:
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        collection_name = "rooms" if self.selected.kind == "room" else "devices"
-        item_id = self.selected.item_id
-        self.layout[collection_name] = [item for item in self.layout[collection_name] if item["id"] != item_id]
-        if self.selected.kind == "room":
-            self.layout["devices"] = [
-                item for item in self.layout["devices"] if item.get("room_id") != item_id
-            ]
+        room_ids = {
+            hit.item_id for hit in hits if hit.kind == "room"
+        }
+        device_ids = {
+            hit.item_id for hit in hits if hit.kind == "device"
+        }
+        self.layout["rooms"] = [
+            item
+            for item in self.layout["rooms"]
+            if item["id"] not in room_ids
+        ]
+        self.layout["devices"] = [
+            item
+            for item in self.layout["devices"]
+            if item["id"] not in device_ids
+            and item.get("room_id") not in room_ids
+        ]
         self._replace_selection(None)
         self._load_property_panel()
+        deleted_count = len(hits)
         self._persist(
-            "Deleted spatial item",
+            "Deleted spatial item"
+            if deleted_count == 1
+            else f"Deleted {deleted_count} selected spatial objects",
             history_before=history_before,
             selection_before=selection_before,
         )

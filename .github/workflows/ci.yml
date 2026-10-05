@@ -147,6 +147,7 @@ jobs:
           tests/test_project_verify_cli.py
           tests/test_verification_history_cli.py
           tests/test_golden_reference_project.py
+          tests/test_golden_facility_reference.py
           tests/test_proofgraph_change_impact.py
           tests/test_proofgraph_change_impact_cli.py
           tests/test_proofgraph_project_requirements.py

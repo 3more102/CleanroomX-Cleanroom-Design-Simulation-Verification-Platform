@@ -12,6 +12,7 @@ from cleanroomx.gui_results import (
     _format_scalar,
     _humanize,
     _result_class,
+    _result_value_sort_key,
     _unit_hint,
 )
 
@@ -65,6 +66,12 @@ def test_result_classification_keeps_engineering_semantics_distinct():
     assert _result_class("solver.metadata.version") == "METADATA"
 
 
+def test_result_value_sort_key_uses_numeric_leading_values_when_available():
+    assert _result_value_sort_key("12.5 Pa") < _result_value_sort_key("125 Pa")
+    assert _result_value_sort_key("1,250 m³/h")[0] == 0
+    assert _result_value_sort_key("AVAILABLE")[0] == 1
+
+
 def test_result_panel_filters_canonical_rows_without_mutating_result():
     try:
         root = tk.Tk()
@@ -107,6 +114,21 @@ def test_result_panel_filters_canonical_rows_without_mutating_result():
         rows = panel.tree.get_children()
         assert len(rows) == 1
         assert "Airflow" in panel.tree.item(rows[0], "values")[1]
+
+        panel.search_var.set("")
+        panel._sort_by("class")
+        class_rows = [
+            panel.tree.item(iid, "values")[0]
+            for iid in panel.tree.get_children()
+        ]
+        assert class_rows == sorted(class_rows)
+
+        first_two = panel.tree.get_children()[:2]
+        panel.tree.selection_set(first_two)
+        panel._copy_selected_rows()
+        copied = root.clipboard_get()
+        assert "\t" in copied
+        assert "\n" in copied
         assert run.result["supply_airflow_m3_h"] == 1250.0
     finally:
         root.destroy()

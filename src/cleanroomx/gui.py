@@ -104,6 +104,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
+from .gui_table import TreeviewTableBehavior
 from .gui_theme import (
     attach_tooltip,
     configure_ttk_theme,
@@ -692,6 +693,11 @@ class RunHistoryDialog(tk.Toplevel):
         self.tree.column("kind", width=190)
         self.tree.column("status", width=120, stretch=False)
         self.tree.column("input", width=165, stretch=False)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "time", "analysis", "kind", "status", "input"),
+            copy_columns=("#0", "time", "analysis", "kind", "status", "input"),
+        )
         list_scroll_y = ttk.Scrollbar(
             list_frame, orient="vertical", command=self.tree.yview
         )
@@ -832,6 +838,7 @@ class RunHistoryDialog(tk.Toplevel):
             f"{len(visible)} / {len(self.records)} visible · "
             f"ledger head #{self.history_summary.get('last_sequence') or '—'}"
         )
+        self.table_behavior.reapply_sort()
         self._show_selected()
 
     def _reset_filters(self) -> None:

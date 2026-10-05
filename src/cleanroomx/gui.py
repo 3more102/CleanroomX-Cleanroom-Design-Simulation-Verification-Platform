@@ -7371,7 +7371,7 @@ class CleanroomXApp:
             try:
                 self.load_project_path(path)
             except Exception as exc:
-                messagebox.showerror("Open failed", str(exc), parent=self.root)
+                self._show_operation_error("Open failed", "Open project", exc)
 
     def open_portable_project_bundle(self) -> None:
         if self._running:

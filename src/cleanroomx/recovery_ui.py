@@ -12,6 +12,7 @@ from .autosave import (
     load_recovery_artifact,
     quarantine_recovery_artifact,
 )
+from .gui_table import TreeviewTableBehavior
 from .recovery_diff import compare_recovery_to_source, format_recovery_comparison
 
 
@@ -354,11 +355,21 @@ class RecoveryCenter(tk.Toplevel):
         self.tree.column("state", width=120, stretch=False)
         self.tree.column("integrity", width=170, stretch=False)
         self.tree.column("source", width=285, stretch=True)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "time", "state", "integrity", "source"),
+            copy_columns=("#0", "time", "state", "integrity", "source"),
+        )
+        self.table_behavior.sort_column = "time"
+        self.table_behavior.sort_descending = True
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=yscroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        yscroll.pack(side="right", fill="y")
-
+        xscroll = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
 
         self.message_var = tk.StringVar()
         message = ttk.Label(
@@ -398,6 +409,12 @@ class RecoveryCenter(tk.Toplevel):
             buttons, text="Inspect…", command=self._inspect
         )
         self.inspect_button.pack(side="left", padx=(6, 0))
+        self.copy_button = ttk.Button(
+            buttons,
+            text="Copy Row",
+            command=self.table_behavior.copy_selected,
+        )
+        self.copy_button.pack(side="left", padx=(6, 0))
         self.quarantine_button = ttk.Button(
             buttons,
             text="Quarantine Invalid Artifacts…",
@@ -472,6 +489,7 @@ class RecoveryCenter(tk.Toplevel):
                 ),
             )
 
+        self.table_behavior.reapply_sort()
         self.count_var.set(
             f"{len(visible)} of {len(self._candidates)} recoverable sessions"
         )
@@ -586,6 +604,7 @@ class RecoveryCenter(tk.Toplevel):
         self.restore_button.configure(state=state)
         self.discard_button.configure(state=state)
         self.inspect_button.configure(state=state)
+        self.copy_button.configure(state=state)
         self.message_var.set(
             recovery_safety_message(candidate) if candidate is not None else ""
         )

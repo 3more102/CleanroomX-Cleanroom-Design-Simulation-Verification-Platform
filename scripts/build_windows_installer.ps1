@@ -22,6 +22,19 @@ if (-not (Test-Path $standaloneExe -PathType Leaf)) {
     throw "Standalone build is required before installer packaging: $standaloneExe"
 }
 
+$iconPayloadPath = Join-Path $repoRoot "packaging\windows\CleanroomX.ico.b64"
+$iconPath = Join-Path $repoRoot "packaging\windows\CleanroomX.ico"
+if (-not (Test-Path $iconPayloadPath -PathType Leaf)) {
+    throw "Windows installer icon payload is missing: $iconPayloadPath"
+}
+try {
+    $iconBytes = [Convert]::FromBase64String((Get-Content -Raw $iconPayloadPath).Trim())
+    [IO.File]::WriteAllBytes($iconPath, $iconBytes)
+}
+catch {
+    throw "Windows installer icon payload is invalid: $($_.Exception.Message)"
+}
+
 if (-not $AppVersion) {
     $pyproject = Get-Content -Raw (Join-Path $repoRoot "pyproject.toml")
     if ($pyproject -notmatch '(?m)^version\s*=\s*"([^"]+)"\s*$') {

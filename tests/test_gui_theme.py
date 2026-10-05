@@ -32,6 +32,7 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "field_text",
         "tree",
         "disabled",
+        "error",
         "canvas_2d",
         "canvas_3d",
         "plot",
@@ -42,6 +43,7 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
     assert light["background"] != dark["background"]
     assert light["field"] != dark["field"]
     assert light["canvas_2d"] != dark["canvas_2d"]
+    assert light["error"] != dark["error"]
 
 
 def test_theme_palette_returns_independent_copy():

@@ -91,3 +91,24 @@ def test_ifc_extraction_fails_closed_when_device_enumeration_raises(monkeypatch,
         extract_ifc_semantics(source)
 
     assert isinstance(exc.value.__cause__, RuntimeError)
+
+
+def test_ifc_extraction_accepts_device_class_missing_from_older_schema(
+    monkeypatch, tmp_path
+):
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcFan":
+                raise RuntimeError(
+                    "Entity with name 'IfcFan' not found in schema 'IFC2X3'"
+                )
+            return []
+
+    _install_ifcopenshell(monkeypatch, Model())
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+
+    semantics, provenance = extract_ifc_semantics(source)
+
+    assert semantics["records"] == []
+    assert provenance["source_name"] == "facility.ifc"

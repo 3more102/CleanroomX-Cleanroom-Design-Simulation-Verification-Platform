@@ -4,6 +4,7 @@ import argparse
 import copy
 from datetime import datetime
 import json
+import logging
 from pathlib import Path
 import queue
 import threading
@@ -11,6 +12,8 @@ import uuid
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
+
+GUI_RUNTIME_LOGGER = logging.getLogger("cleanroomx.gui.runtime")
 
 from . import __version__
 from .autosave import (
@@ -3054,6 +3057,10 @@ class CleanroomXApp:
                 self._capture_ui_layout_state(),
             )
         except Exception:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to persist GUI layout state path=%s",
+                self._ui_state_path,
+            )
             return
 
     def _restore_ui_layout_state(self) -> None:
@@ -4739,7 +4746,10 @@ class CleanroomXApp:
             try:
                 self.load_project_path(project_path)
             except Exception:
-                pass
+                GUI_RUNTIME_LOGGER.exception(
+                    "Failed to reload project after durability warning path=%s",
+                    project_path,
+                )
             self.status_var.set(
                 "Verification bytes committed; save durability not confirmed"
             )
@@ -4943,6 +4953,9 @@ class CleanroomXApp:
         try:
             return self._project_state_signature() != baseline
         except Exception:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to compute project dirty-state signature; treating project as modified"
+            )
             return True
 
     def _capture_saved_state(self) -> None:
@@ -5542,6 +5555,104 @@ class CleanroomXApp:
         if callable(wait_window):
             wait_window(dialog)
 
+    def _run_ifc_background_task(self, label: str, operation):
+        """Run read-only IFC work off the Tk thread while keeping the UI responsive."""
+        root = self.root
+        if not all(
+            callable(getattr(root, name, None))
+            for name in ("after", "after_cancel", "wait_variable")
+        ):
+            return operation()
+
+        outcome: queue.Queue = queue.Queue(maxsize=1)
+        done = tk.BooleanVar(master=root, value=False)
+        state = {"cancelled": False, "after_id": None, "outcome": None}
+
+        dialog = tk.Toplevel(root)
+        dialog.title(label)
+        dialog.transient(root)
+        dialog.resizable(False, False)
+        frame = ttk.Frame(dialog, padding=16)
+        frame.grid(row=0, column=0, sticky="nsew")
+        ttk.Label(frame, text=label, wraplength=420, justify="left").grid(
+            row=0, column=0, sticky="w"
+        )
+        progress = ttk.Progressbar(frame, mode="indeterminate", length=360)
+        progress.grid(row=1, column=0, sticky="ew", pady=(12, 12))
+        ttk.Label(
+            frame,
+            text=(
+                "The IFC source is read in a background worker. Abandoning closes "
+                "this wait without applying any background result."
+            ),
+            wraplength=420,
+            justify="left",
+        ).grid(row=2, column=0, sticky="w")
+
+        def abandon() -> None:
+            if state["cancelled"]:
+                return
+            state["cancelled"] = True
+            self.status_var.set(
+                "IFC operation abandoned; no background result will be applied."
+            )
+            done.set(True)
+
+        ttk.Button(frame, text="Abandon", command=abandon).grid(
+            row=3, column=0, sticky="e", pady=(12, 0)
+        )
+        dialog.protocol("WM_DELETE_WINDOW", abandon)
+        dialog.grab_set()
+        progress.start(12)
+
+        def worker() -> None:
+            try:
+                result = operation()
+            except BaseException as exc:
+                outcome.put(("error", exc))
+            else:
+                outcome.put(("success", result))
+
+        def poll() -> None:
+            if state["cancelled"]:
+                return
+            try:
+                state["outcome"] = outcome.get_nowait()
+            except queue.Empty:
+                state["after_id"] = root.after(50, poll)
+                return
+            done.set(True)
+
+        threading.Thread(target=worker, daemon=True).start()
+        state["after_id"] = root.after(50, poll)
+        try:
+            root.wait_variable(done)
+        finally:
+            after_id = state.get("after_id")
+            if after_id is not None:
+                try:
+                    root.after_cancel(after_id)
+                except tk.TclError:
+                    pass
+            progress.stop()
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            try:
+                dialog.destroy()
+            except tk.TclError:
+                pass
+
+        if state["cancelled"]:
+            return None
+        kind, payload = state["outcome"]
+        if kind == "error":
+            if isinstance(payload, Exception):
+                raise payload
+            raise RuntimeError(f"IFC background worker terminated: {payload}")
+        return payload
+
     def _extract_ifc_candidate(
         self,
         source: Path,
@@ -5574,6 +5685,21 @@ class CleanroomXApp:
                 "Review the current IFC file again before applying it."
             )
         return semantics, provenance
+
+    def _plan_ifc_candidate(
+        self,
+        project_snapshot: ProjectDocument,
+        source: Path,
+    ) -> tuple[dict, dict[str, str], dict]:
+        """Extract and plan an IFC revision against an immutable project snapshot."""
+        semantics, provenance = self._extract_ifc_candidate(source)
+        report = plan_ifc_semantic_reimport(
+            project_snapshot,
+            semantics,
+            source_name=provenance["source_name"],
+            source_sha256=provenance["source_sha256"],
+        )
+        return semantics, provenance, report
 
     def _refresh_after_ifc_edit(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -5609,7 +5735,13 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = self._extract_ifc_candidate(source)
+            candidate = self._run_ifc_background_task(
+                "Reading IFC spatial model…",
+                lambda: self._extract_ifc_candidate(source),
+            )
+            if candidate is None:
+                return False
+            semantics, provenance = candidate
             preview = layout_from_ifc_semantics(semantics)
         except Exception as exc:
             self.status_var.set("IFC import failed")
@@ -5647,11 +5779,17 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = self._revalidate_reviewed_ifc_source(
-                source,
-                expected_semantics=semantics,
-                expected_provenance=provenance,
+            candidate = self._run_ifc_background_task(
+                "Revalidating IFC source…",
+                lambda: self._revalidate_reviewed_ifc_source(
+                    source,
+                    expected_semantics=semantics,
+                    expected_provenance=provenance,
+                ),
             )
+            if candidate is None:
+                return False
+            semantics, provenance = candidate
             layout = self._perform_project_edit(
                 "Import IFC spatial layout",
                 lambda: apply_ifc_semantics_to_project(
@@ -5697,13 +5835,14 @@ class CleanroomXApp:
         if source is None:
             return None
         try:
-            semantics, provenance = extract_ifc_semantics(source)
-            report = plan_ifc_semantic_reimport(
-                self.project,
-                semantics,
-                source_name=provenance["source_name"],
-                source_sha256=provenance["source_sha256"],
+            project_snapshot = project_from_dict(copy.deepcopy(self.project.to_dict()))
+            planned = self._run_ifc_background_task(
+                "Reviewing IFC revision…",
+                lambda: self._plan_ifc_candidate(project_snapshot, source),
             )
+            if planned is None:
+                return None
+            semantics, provenance, report = planned
         except Exception as exc:
             self.status_var.set("IFC re-import review failed")
             messagebox.showerror(
@@ -5746,13 +5885,14 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = extract_ifc_semantics(source)
-            report = plan_ifc_semantic_reimport(
-                self.project,
-                semantics,
-                source_name=provenance["source_name"],
-                source_sha256=provenance["source_sha256"],
+            project_snapshot = project_from_dict(copy.deepcopy(self.project.to_dict()))
+            planned = self._run_ifc_background_task(
+                "Planning IFC re-import…",
+                lambda: self._plan_ifc_candidate(project_snapshot, source),
             )
+            if planned is None:
+                return False
+            semantics, provenance, report = planned
         except Exception as exc:
             self.status_var.set("IFC re-import planning failed")
             messagebox.showerror(
@@ -5790,11 +5930,17 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = self._revalidate_reviewed_ifc_source(
-                source,
-                expected_semantics=semantics,
-                expected_provenance=provenance,
+            candidate = self._run_ifc_background_task(
+                "Revalidating IFC source…",
+                lambda: self._revalidate_reviewed_ifc_source(
+                    source,
+                    expected_semantics=semantics,
+                    expected_provenance=provenance,
+                ),
             )
+            if candidate is None:
+                return False
+            semantics, provenance = candidate
             self._perform_project_edit(
                 "Apply IFC re-import",
                 lambda: reimport_ifc_semantics_to_project(

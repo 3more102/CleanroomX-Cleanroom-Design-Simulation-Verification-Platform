@@ -62,6 +62,21 @@ Spatial and engineering data remain deliberately separated.
 - CleanroomX tracks synchronized, geometry-newer, engineering-newer, conflicting, and unmapped states.
 - Fresh verification pressure may drive 2D/3D pressure visualization without being written back into spatial geometry.
 
+### Project requirements
+
+- **Verify → Requirements Editor…** creates and edits canonical requirement sets inside CleanroomX.
+- Requirements retain explicit source/revision, scope, criterion, units, tolerance, applicability, verification method, and evidence expectations.
+- Candidate edits are validated against the complete project before commit, preventing mapped requirements from being silently orphaned.
+- Requirement edits participate in project-wide Undo/Redo and feed the existing traceability, verification, ProofGraph, diagnostics, and reporting paths.
+
+### Project constraints
+
+- **Verify → Project Constraints…** provides an in-application Constraint Manager.
+- Constraints reuse the versioned compliance rule-pack engine rather than a parallel evaluator.
+- Each rule keeps an explicit evidence path, operator, expected value, unit, tolerance, source, and reference.
+- Changes are validated transactionally and participate in project-wide Undo/Redo and autosave.
+- CleanroomX does not infer regulatory acceptance criteria; project criteria remain explicit user/project data.
+
 ### Project integrity and evidence
 
 - Strict JSON ingestion.

@@ -3225,6 +3225,7 @@ class CleanroomXApp:
                         if self.last_run is not None
                         else None
                     ),
+                    "current_result_available": self._current_fresh_run() is not None,
                     "evidence_record_count": len(records),
                     "proofgraph_count": len(proofgraphs),
                 }

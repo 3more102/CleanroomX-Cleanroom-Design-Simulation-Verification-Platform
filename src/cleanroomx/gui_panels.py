@@ -102,14 +102,19 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.category_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.error_count_var = tk.StringVar(value="ERROR 0")
         self.warning_count_var = tk.StringVar(value="WARNING 0")
         self.info_count_var = tk.StringVar(value="INFO 0")
+        self.visible_count_var = tk.StringVar(value="VISIBLE 0")
+        self._sort_column: str | None = None
+        self._sort_reverse = False
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
@@ -131,6 +136,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Domain").pack(side="left")
+        self.category_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.category_var,
+            values=("All",),
+            state="readonly",
+            width=16,
+        )
+        self.category_combo.pack(side="left", padx=(4, 8))
         ttk.Button(
             toolbar,
             text="Refresh",
@@ -144,6 +158,18 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             command=self._navigate_selected,
         )
         self.locate_button.pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Previous",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Next",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Copy",
@@ -189,7 +215,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         ).pack(side="left", padx=4)
         ttk.Label(
             counters,
-            text="Select a row to inspect · Double-click to locate",
+            textvariable=self.visible_count_var,
+            style="CX.Status.Neutral.TLabel",
+        ).pack(side="left", padx=(8, 4))
+        ttk.Label(
+            counters,
+            text="F4/Shift+F4 next/previous · Double-click to locate",
             style="CX.Muted.TLabel",
         ).pack(side="right")
 
@@ -201,7 +232,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         body.add(table_frame, weight=4)
         body.add(detail_frame, weight=1)
 
-        columns = ("severity", "code", "description", "object", "level", "source")
+        columns = ("severity", "code", "description", "object", "level", "domain")
         self.tree = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -215,7 +246,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "description": "Description",
             "object": "Object",
             "level": "Level",
-            "source": "Source",
+            "domain": "Domain",
         }
         widths = {
             "severity": 90,
@@ -223,10 +254,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "description": 520,
             "object": 180,
             "level": 120,
-            "source": 150,
+            "domain": 150,
         }
+        self._heading_labels = headings
         for column in columns:
-            self.tree.heading(column, text=headings[column])
+            self.tree.heading(
+                column,
+                text=headings[column],
+                command=lambda name=column: self._set_sort(name),
+            )
             self.tree.column(
                 column,
                 width=widths[column],
@@ -258,6 +294,24 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
+        self.tree.bind("<Control-c>", lambda _event: self.copy_selected())
+        self.tree.bind("<F4>", lambda _event: self._select_relative(1))
+        self.tree.bind("<Shift-F4>", lambda _event: self._select_relative(-1))
+        self.tree.bind("<Button-3>", self._show_context_menu)
+
+        self._context_menu = tk.Menu(self, tearoff=False)
+        self._context_menu.add_command(label="Locate", command=self._navigate_selected)
+        self._context_menu.add_command(
+            label="Previous diagnostic",
+            command=lambda: self._select_relative(-1),
+        )
+        self._context_menu.add_command(
+            label="Next diagnostic",
+            command=lambda: self._select_relative(1),
+        )
+        self._context_menu.add_separator()
+        self._context_menu.add_command(label="Copy diagnostic JSON", command=self.copy_selected)
+        self._context_menu.add_command(label="Refresh diagnostics", command=self.refresh)
 
         detail_header = ttk.Frame(
             detail_frame,
@@ -333,6 +387,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             selectbackground=self._palette["selection"],
             selectforeground=self._palette["selection_text"],
         )
+        self._context_menu.configure(
+            background=self._palette["surface_elevated"],
+            foreground=self._palette["text"],
+            activebackground=self._palette["selection"],
+            activeforeground=self._palette["selection_text"],
+            selectcolor=self._palette["accent"],
+        )
         self._update_summary_style()
 
     def _update_summary_style(self) -> None:
@@ -376,6 +437,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -383,6 +445,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_category = str(issue.get("category", "")).strip().casefold()
+            if category and category != "all" and issue_category != category:
                 continue
             if query:
                 haystack = " ".join(
@@ -403,7 +468,95 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 if query not in haystack:
                     continue
             visible.append(issue)
+
+        if self._sort_column is not None:
+            visible.sort(
+                key=lambda item: self._sort_key(item, self._sort_column),
+                reverse=self._sort_reverse,
+            )
         return visible
+
+    @staticmethod
+    def _sort_key(issue: dict[str, Any], column: str) -> tuple[Any, ...]:
+        if column == "severity":
+            order = {"error": 0, "warning": 1, "info": 2}
+            token = str(issue.get("severity") or "info").casefold()
+            return (order.get(token, 99), int(issue.get("sequence", 0) or 0))
+        if column == "code":
+            value = issue.get("rule", "")
+        elif column == "description":
+            value = issue.get("message", "")
+        elif column == "object":
+            value = ProjectDiagnosticsPanel._element_text(issue)
+        elif column == "level":
+            value = ProjectDiagnosticsPanel._level_text(issue)
+        elif column == "domain":
+            value = issue.get("category", "")
+        else:
+            value = issue.get("sequence", "")
+        return (str(value).casefold(), int(issue.get("sequence", 0) or 0))
+
+    def _set_sort(self, column: str) -> None:
+        if self._sort_column == column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column
+            self._sort_reverse = False
+        self._update_sort_headings()
+        self._populate()
+
+    def _update_sort_headings(self) -> None:
+        for column, label in self._heading_labels.items():
+            marker = ""
+            if self._sort_column == column:
+                marker = " ▼" if self._sort_reverse else " ▲"
+            self.tree.heading(column, text=f"{label}{marker}")
+
+    def _refresh_category_values(self) -> None:
+        issues = (
+            self.last_result.get("issues", [])
+            if isinstance(self.last_result, dict)
+            else []
+        )
+        categories = sorted(
+            {
+                str(issue.get("category") or "").strip()
+                for issue in issues
+                if isinstance(issue, dict) and str(issue.get("category") or "").strip()
+            },
+            key=str.casefold,
+        )
+        values = ("All", *categories)
+        self.category_combo.configure(values=values)
+        if self.category_var.get() not in values:
+            self.category_var.set("All")
+
+    def _select_relative(self, delta: int):
+        rows = list(self.tree.get_children())
+        if not rows:
+            self._status_setter("No visible diagnostics match the current filters")
+            return "break"
+        selection = self.tree.selection()
+        current = rows.index(selection[0]) if selection and selection[0] in rows else (-1 if delta > 0 else 0)
+        target = max(0, min(len(rows) - 1, current + delta))
+        iid = rows[target]
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected_detail()
+        self._status_setter(f"Diagnostic {target + 1} of {len(rows)}")
+        return "break"
+
+    def _show_context_menu(self, event):
+        row = self.tree.identify_row(event.y)
+        if row:
+            self.tree.selection_set(row)
+            self.tree.focus(row)
+        try:
+            self._context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self._context_menu.grab_release()
+        return "break"
 
     def _populate(self) -> None:
         selection = self.tree.selection()
@@ -417,7 +570,10 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.tree.delete(item)
         self._issues_by_iid.clear()
 
-        for index, issue in enumerate(self._filtered_issues(), start=1):
+        visible_issues = self._filtered_issues()
+        self.visible_count_var.set(f"VISIBLE {len(visible_issues)}")
+
+        for index, issue in enumerate(visible_issues, start=1):
             sequence = issue.get("sequence", index)
             iid = f"issue:{sequence}"
             if self.tree.exists(iid):
@@ -434,7 +590,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     issue.get("message", ""),
                     self._element_text(issue),
                     self._level_text(issue),
-                    issue.get("category", ""),
+                    str(issue.get("category", "")).replace("_", " ").title(),
                 ),
                 tags=(row_tag, severity),
             )
@@ -464,6 +620,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
+        self._refresh_category_values()
         summary = result.get("summary", {})
         self.error_count_var.set(f"ERROR {int(summary.get('error_count', 0) or 0)}")
         self.warning_count_var.set(f"WARNING {int(summary.get('warning_count', 0) or 0)}")

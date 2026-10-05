@@ -386,6 +386,28 @@ def configure_ttk_theme(
         bordercolor=palette["border"],
         padding=density_profile["compact_button_padding"],
     )
+    style.configure(
+        "CX.Status.TLabel",
+        background=palette["background"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "CX.StatusError.TLabel",
+        background=palette["background"],
+        foreground=palette["error"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.StatusWarning.TLabel",
+        background=palette["background"],
+        foreground=palette["warning"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.StatusPass.TLabel",
+        background=palette["background"],
+        foreground=palette["pass"],
+    )
     style.map(
         "CX.Compact.TButton",
         background=[

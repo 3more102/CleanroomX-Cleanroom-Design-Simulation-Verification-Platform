@@ -9,48 +9,48 @@ from tkinter import ttk
 
 _THEME_PALETTES: dict[str, dict[str, str]] = {
     "light": {
-        "background": "#e9edf2",
-        "surface": "#f6f8fa",
-        "surface_alt": "#eef2f6",
+        "background": "#e8eef5",
+        "surface": "#f3f7fb",
+        "surface_alt": "#dce7f2",
         "panel": "#ffffff",
-        "text": "#18212b",
-        "muted": "#5f6b78",
-        "border": "#c8d1dc",
-        "accent": "#0b6aa8",
-        "accent_hover": "#095786",
+        "text": "#132235",
+        "muted": "#5a6d82",
+        "border": "#b8c7d8",
+        "accent": "#0284c7",
+        "accent_hover": "#0369a1",
         "accent_text": "#ffffff",
-        "selection": "#cfe8ff",
-        "selection_text": "#102a43",
+        "selection": "#bae6fd",
+        "selection_text": "#082f49",
         "field": "#ffffff",
-        "field_text": "#18212b",
-        "tree": "#fbfcfd",
-        "disabled": "#9aa5b1",
-        "canvas_2d": "#f7f9fb",
-        "canvas_3d": "#111820",
+        "field_text": "#132235",
+        "tree": "#f8fbfe",
+        "disabled": "#8a99aa",
+        "canvas_2d": "#edf5fa",
+        "canvas_3d": "#0b1220",
         "plot": "#ffffff",
-        "grid": "#d7dee7",
+        "grid": "#c5d4e3",
     },
     "dark": {
-        "background": "#14191f",
-        "surface": "#1b2129",
-        "surface_alt": "#232a33",
-        "panel": "#1e252d",
-        "text": "#e6edf3",
-        "muted": "#9aa7b4",
-        "border": "#394451",
-        "accent": "#2f81f7",
-        "accent_hover": "#58a6ff",
-        "accent_text": "#ffffff",
-        "selection": "#264f78",
-        "selection_text": "#ffffff",
-        "field": "#11161c",
-        "field_text": "#e6edf3",
-        "tree": "#171d24",
-        "disabled": "#6f7b87",
-        "canvas_2d": "#1b222a",
-        "canvas_3d": "#0d1117",
-        "plot": "#131920",
-        "grid": "#33404c",
+        "background": "#0b1220",
+        "surface": "#111b2e",
+        "surface_alt": "#17243a",
+        "panel": "#101c2f",
+        "text": "#f1f5f9",
+        "muted": "#94a3b8",
+        "border": "#263750",
+        "accent": "#22d3ee",
+        "accent_hover": "#38bdf8",
+        "accent_text": "#06202a",
+        "selection": "#164e63",
+        "selection_text": "#ecfeff",
+        "field": "#0f1a2a",
+        "field_text": "#f1f5f9",
+        "tree": "#0d1726",
+        "disabled": "#64748b",
+        "canvas_2d": "#0e1a2a",
+        "canvas_3d": "#08111d",
+        "plot": "#0d1726",
+        "grid": "#2a405f",
     },
 }
 
@@ -309,9 +309,41 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
     )
     style.configure(
+        "CX.Topbar.TFrame",
+        background=palette["background"],
+        padding=(10, 6),
+    )
+    style.configure(
+        "CX.Panel.TFrame",
+        background=palette["panel"],
+    )
+    style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
-        padding=(4, 3),
+        padding=(6, 4),
+        relief="flat",
+    )
+    style.configure(
+        "CX.StatusBar.TFrame",
+        background=palette["surface"],
+        padding=(8, 4),
+    )
+    style.configure(
+        "CX.Status.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "CX.StatusAccent.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.ToolbarTitle.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
     )
     style.configure(
         "CX.PanelHeader.TFrame",
@@ -329,7 +361,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        padding=(6, 3),
+        padding=(7, 4),
     )
     style.map(
         "CX.Compact.TButton",

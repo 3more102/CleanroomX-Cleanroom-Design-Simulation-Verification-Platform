@@ -8,6 +8,7 @@ import pytest
 from cleanroomx.gui_dashboard import (
     EngineeringDashboard,
     _status_style,
+    project_readiness_projection,
     system_status_projection,
 )
 
@@ -75,6 +76,8 @@ def test_dashboard_projects_project_health_without_inventing_engineering_verdict
         assert dashboard.diagnostics_var.get() == "WARNING"
         assert dashboard.verification_var.get() == "STALE"
         assert dashboard.verification_percent_var.get() == "75%"
+        assert dashboard.readiness_percent_var.get() == "80%"
+        assert dashboard.readiness_var.get() == "WARNING"
         assert dashboard.model_var.get() == "8 rooms · 21 devices"
         assert dashboard.analysis_var.get() == "4 configured"
         assert dashboard.evidence_var.get() == "7 records"
@@ -190,3 +193,52 @@ def test_system_status_projection_marks_partial_verification_unverified():
         )
     )
     assert projected["VERIFICATION"] == "unverified"
+
+
+
+def test_project_readiness_projection_is_explicit_and_non_compliance():
+    percent, state, detail = project_readiness_projection(
+        {
+            "diagnostics": {"summary": {"status": "pass", "issue_count": 0}},
+            "verification": {
+                "configured_analysis_count": 2,
+                "current_count": 2,
+                "stale_count": 0,
+                "not_verified_count": 0,
+            },
+            "model": {"room_count": 6},
+            "analysis_count": 2,
+            "last_run": {"title": "Pressure", "status": "completed"},
+            "evidence": {"record_count": 3, "proofgraph_count": 2},
+        }
+    )
+    assert percent == 100
+    assert state == "ready"
+    assert detail.startswith("5/5 subsystems ready")
+
+    percent, state, detail = project_readiness_projection(
+        {
+            "diagnostics": {"summary": {"status": "warning", "issue_count": 1}},
+            "verification": {
+                "configured_analysis_count": 2,
+                "current_count": 1,
+                "stale_count": 1,
+                "not_verified_count": 0,
+            },
+            "model": {"room_count": 6},
+            "analysis_count": 2,
+            "last_run": {"title": "Pressure", "status": "completed"},
+            "evidence": {"record_count": 3, "proofgraph_count": 2},
+        }
+    )
+    assert percent == 80
+    assert state == "warning"
+    assert "3/5 subsystems ready" in detail
+    assert "2 attention" in detail
+
+
+def test_project_readiness_projection_does_not_invent_readiness():
+    percent, state, detail = project_readiness_projection({})
+    assert percent == 0
+    assert state == "not checked"
+    assert "5 not checked" in detail

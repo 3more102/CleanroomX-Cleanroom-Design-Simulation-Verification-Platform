@@ -114,6 +114,7 @@ jobs:
           tests/test_gui.py
           tests/test_gui_autosave.py
           tests/test_gui_recovery.py
+          tests/test_release_documentation.py
       - name: Run Release 2 consolidation regressions
         run: >-
           python -m pytest -q

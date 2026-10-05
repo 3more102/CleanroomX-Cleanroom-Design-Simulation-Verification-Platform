@@ -10,6 +10,51 @@ from tkinter import ttk
 from .project_diagnostics import analyze_project_diagnostics
 
 
+def _engineering_detail_value(key: str, value: Any) -> str:
+    """Render diagnostic metadata compactly for operators, not as raw JSON."""
+
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "YES" if value else "NO"
+    if isinstance(value, int):
+        rendered = f"{value:,}"
+    elif isinstance(value, float):
+        rendered = f"{value:,.6g}"
+    elif isinstance(value, (list, tuple, set)):
+        items = [str(item) for item in value if item not in (None, "")]
+        return " · ".join(items[:8]) + (f" · +{len(items) - 8} more" if len(items) > 8 else "") if items else "—"
+    elif isinstance(value, dict):
+        scalars = [
+            f"{str(subkey).replace('_', ' ').title()}={_engineering_detail_value(str(subkey), subvalue)}"
+            for subkey, subvalue in value.items()
+            if not isinstance(subvalue, (dict, list, tuple, set))
+        ]
+        return " · ".join(scalars[:6]) + (" · …" if len(scalars) > 6 else "") if scalars else f"{len(value)} field(s)"
+    else:
+        return str(value)
+
+    normalized = key.casefold()
+    unit = ""
+    if normalized.endswith("_m3_h"):
+        unit = " m³/h"
+    elif normalized.endswith("_pa"):
+        unit = " Pa"
+    elif normalized.endswith("_m2"):
+        unit = " m²"
+    elif normalized.endswith("_m3"):
+        unit = " m³"
+    elif normalized.endswith("_mm"):
+        unit = " mm"
+    elif normalized.endswith("_m"):
+        unit = " m"
+    elif normalized.endswith("_percent") or normalized.endswith("_pct"):
+        unit = "%"
+    elif normalized.endswith("_ach"):
+        unit = " 1/h"
+    return rendered + unit
+
+
 class ProjectDiagnosticsPanel(ttk.Frame):
     """IDE-style view over the canonical CleanroomX project diagnostics service."""
 
@@ -346,6 +391,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
                 str(issue.get("message", "")),
                 "",
+                f"Affected object: {self._element_text(issue)}",
+                f"Engineering domain: {str(issue.get('category') or 'project').title()}",
+                "",
                 "Suggested action:",
                 str(issue.get("suggested_action", "")),
             ]
@@ -354,16 +402,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 lines.extend(("", "ENGINEERING DETAILS"))
                 for key, value in sorted(details.items()):
                     label = str(key).replace("_", " ").strip().title()
-                    if isinstance(value, (str, int, float, bool)) or value is None:
-                        rendered = "—" if value is None else str(value)
-                    else:
-                        rendered = json.dumps(
-                            value,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        )
-                    lines.append(f"{label}: {rendered}")
+                    lines.append(
+                        f"{label}: {_engineering_detail_value(str(key), value)}"
+                    )
             self.detail.insert("1.0", "\n".join(lines))
         else:
             self.detail.insert(

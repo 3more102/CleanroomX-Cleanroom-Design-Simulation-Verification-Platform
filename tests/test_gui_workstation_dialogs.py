@@ -516,3 +516,62 @@ def test_engineering_search_records_degraded_requirement_indexing(
         "Index requirement traceability for engineering search"
     )
     assert isinstance(recorded[0][1], RuntimeError)
+
+def test_layout_persistence_failure_is_logged_once_until_recovered(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    reports = [
+        GuiErrorReport(
+            reference="CX-LAYOUT-0001",
+            operation="Save workstation layout",
+            exception_type="OSError",
+            summary="synthetic layout write failure",
+            log_path=tmp_path / "gui.log",
+        ),
+        GuiErrorReport(
+            reference="CX-LAYOUT-0002",
+            operation="Save workstation layout",
+            exception_type="OSError",
+            summary="synthetic layout write failure",
+            log_path=tmp_path / "gui.log",
+        ),
+    ]
+    recorded = []
+
+    def fail_save(*args, **kwargs):
+        raise OSError("synthetic layout write failure")
+
+    def record(operation, exc):
+        index = min(len(recorded), len(reports) - 1)
+        recorded.append((operation, exc))
+        return reports[index]
+
+    monkeypatch.setattr(gui_module, "save_gui_layout_state", fail_save)
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+
+    app._save_ui_layout_state()
+    app._save_ui_layout_state()
+
+    assert len(recorded) == 1
+    assert recorded[0][0] == "Save workstation layout"
+    assert isinstance(recorded[0][1], OSError)
+    assert app._ui_layout_save_error_reference == "CX-LAYOUT-0001"
+    assert app.status_var.get() == (
+        "Layout preferences not saved · CX-LAYOUT-0001"
+    )
+
+    monkeypatch.setattr(
+        gui_module,
+        "save_gui_layout_state",
+        lambda *args, **kwargs: app._ui_state_path,
+    )
+    app._save_ui_layout_state()
+    assert app._ui_layout_save_error_reference is None
+
+    monkeypatch.setattr(gui_module, "save_gui_layout_state", fail_save)
+    app._save_ui_layout_state()
+    assert len(recorded) == 2
+    assert app._ui_layout_save_error_reference == "CX-LAYOUT-0002"
+

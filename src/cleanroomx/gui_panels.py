@@ -126,7 +126,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         severity = ttk.Combobox(
             toolbar,
             textvariable=self.severity_var,
-            values=("All", "Error", "Warning", "Info"),
+            values=("All", "Critical", "Error", "Warning", "Info"),
             state="readonly",
             width=10,
         )
@@ -142,14 +142,17 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             text="Locate",
             style="CX.Primary.TButton",
             command=self._navigate_selected,
+            state="disabled",
         )
         self.locate_button.pack(side="left", padx=2)
-        ttk.Button(
+        self.copy_button = ttk.Button(
             toolbar,
             text="Copy",
             style="CX.Compact.TButton",
             command=self.copy_selected,
-        ).pack(side="left", padx=2)
+            state="disabled",
+        )
+        self.copy_button.pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
@@ -201,7 +204,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         body.add(table_frame, weight=4)
         body.add(detail_frame, weight=1)
 
-        columns = ("severity", "code", "description", "object", "level", "source")
+        columns = ("severity", "code", "description", "object", "level", "domain")
         self.tree = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -215,7 +218,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "description": "Description",
             "object": "Object",
             "level": "Level",
-            "source": "Source",
+            "domain": "Domain",
         }
         widths = {
             "severity": 90,
@@ -223,7 +226,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "description": 520,
             "object": 180,
             "level": 120,
-            "source": 150,
+            "domain": 150,
         }
         for column in columns:
             self.tree.heading(column, text=headings[column])
@@ -488,6 +491,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
+        enabled = "normal" if issue is not None else "disabled"
+        self.locate_button.configure(state=enabled)
+        self.copy_button.configure(state=enabled)
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:

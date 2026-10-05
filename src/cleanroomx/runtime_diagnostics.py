@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import time
+from dataclasses import dataclass
 from types import TracebackType
 from typing import Callable, Mapping
 import uuid
@@ -16,6 +17,88 @@ GUI_LOG_FILENAME = "cleanroomx-gui.log"
 GUI_LOG_MAX_BYTES = 4 * 1024 * 1024
 GUI_LOG_BACKUP_COUNT = 3
 _RUNTIME_HANDLER_MARKER = "_cleanroomx_runtime_log_handler"
+
+
+@dataclass(frozen=True)
+class GuiErrorReport:
+    """Safe operator-facing metadata for one contained GUI operation failure."""
+
+    reference: str
+    operation: str
+    exception_type: str
+    summary: str
+    log_path: Path | None
+
+    def user_message(self) -> str:
+        detail = self.summary or self.exception_type
+        lines = [
+            f"{self.operation} did not complete.",
+            "",
+            detail,
+            "",
+            f"Error reference: {self.reference}",
+        ]
+        if self.log_path is not None:
+            lines.append(f"Technical log: {self.log_path}")
+        else:
+            lines.append(
+                "Persistent technical logging was unavailable; the error reference "
+                "is still valid for this session."
+            )
+        return "\n".join(lines)
+
+
+def _configured_log_path(logger: logging.Logger) -> Path | None:
+    for handler in logger.handlers:
+        if not getattr(handler, _RUNTIME_HANDLER_MARKER, False):
+            continue
+        filename = getattr(handler, "baseFilename", None)
+        if filename:
+            return Path(filename).resolve(strict=False)
+    return None
+
+
+def record_gui_exception(
+    operation: str,
+    exc: BaseException,
+    *,
+    logger_name: str = "cleanroomx.gui.runtime",
+) -> GuiErrorReport:
+    """Persist a contained GUI failure and return a stable operator reference.
+
+    If the normal Tk exception boundary has not been installed yet, this helper
+    initializes the same bounded runtime log so constructor-time contained
+    failures are not lost.
+    """
+
+    operation_text = str(operation or "Operation").strip() or "Operation"
+    summary = str(exc).strip() or type(exc).__name__
+    reference = f"CX-{uuid.uuid4().hex[:12].upper()}"
+    logger = logging.getLogger(logger_name)
+    log_path = _configured_log_path(logger)
+
+    if log_path is None:
+        try:
+            logger, log_path = configure_gui_runtime_logging(logger_name=logger_name)
+        except OSError:
+            logger = logging.getLogger(logger_name)
+            log_path = None
+
+    logger.error(
+        "[%s] operation=%r exception=%s message=%r",
+        reference,
+        operation_text,
+        type(exc).__name__,
+        summary,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return GuiErrorReport(
+        reference=reference,
+        operation=operation_text,
+        exception_type=type(exc).__name__,
+        summary=summary,
+        log_path=log_path,
+    )
 
 
 def default_gui_log_dir(

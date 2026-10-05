@@ -1,11 +1,12 @@
 # Windows standalone installer
 
-CleanroomX has a Windows x64 standalone packaging gate in
-`.github/workflows/windows-installer.yml`.
+CleanroomX has a required Windows x64 standalone packaging gate in the
+`windows-installer-smoke` job of `.github/workflows/ci.yml`.
 
-The gate is separate from the Python wheel path. It builds the desktop application
-with an embedded Python runtime, packages it as a per-user Windows installer, and
-then exercises the installer lifecycle on a clean GitHub-hosted Windows runner.
+The gate complements the Python wheel path. It builds the desktop application with
+an embedded Python runtime, packages it as a per-user Windows installer, and then
+exercises the installer lifecycle on a clean GitHub-hosted Windows runner. The
+required CI aggregate cannot pass when this installer job fails.
 
 ## Pinned packaging stack
 
@@ -41,9 +42,9 @@ The Windows installer workflow must pass all of the following:
 2. build the standalone application;
 3. run standalone `CleanroomX.exe --check`;
 4. run the real standalone GUI demo smoke;
-5. build a baseline installer and the current installer with the same stable AppId;
-6. perform a silent clean install;
-7. perform an in-place version upgrade over that installation;
+5. build a versioned baseline fixture and the current installer with the same stable AppId;
+6. perform a silent clean install of the baseline fixture;
+7. perform an in-place upgrade to the current installer over that installation;
 8. run installed `--check` and GUI demo smoke;
 9. execute the generated uninstaller;
 10. verify the primary executable is removed;
@@ -57,8 +58,10 @@ persistence suite.
 ## Local build prerequisites
 
 The CI workflow is the canonical reproducible build recipe. A manual Windows build
-requires Python 3.12, the pinned PyInstaller and IfcOpenShell versions, and Inno
-Setup 7.1.0.
+requires Python 3.12, the pinned PyInstaller and IfcOpenShell versions, and exactly
+Inno Setup 7.1.0. The canonical command is
+`packaging\\windows\\build_installer.ps1`; CI adds `-BuildUpgradeFixture` to
+exercise upgrade semantics.
 
 The generated CI installer is an unsigned validation artifact. If CleanroomX is
 distributed publicly, Authenticode signing and organization-specific publisher

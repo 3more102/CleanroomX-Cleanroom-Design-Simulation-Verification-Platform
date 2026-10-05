@@ -155,6 +155,30 @@ def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     assert app.notebook.select() == str(app.input_tab)
 
 
+def test_workspace_presets_coordinate_main_and_output_surfaces(app):
+    app.hide_output_panel()
+    assert app.output_panel_visible_var.get() is False
+
+    app._activate_verification_workspace()
+    app.root.update()
+    assert app.output_panel_visible_var.get() is True
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.workspace_status_var.get() == "Workspace: Verification"
+
+    app._activate_evidence_workspace()
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+    assert app.workspace_status_var.get() == "Workspace: Evidence"
+
+    app._activate_results_workspace()
+    app.root.update()
+    assert app.notebook.select() == str(app.plot_tab)
+    assert app.output_notebook.select() == str(app.result_text.master)
+    assert app.workspace_status_var.get() == "Workspace: Results"
+
+
 def test_completed_run_selects_results_in_bottom_workspace(app):
     run = app.smoke_run_active()
     app.root.update()

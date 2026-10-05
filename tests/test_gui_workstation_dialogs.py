@@ -249,6 +249,12 @@ def test_requirements_traceability_filters_canonical_requirements_and_mappings(a
     assert dialog.tree.selection() == ("requirement:REQ-ACH",)
     assert "Minimum air changes" in dialog.detail.get("1.0", "end")
     assert dialog.focus_requirement("REQ-MISSING") is False
+
+    assert dialog.focus_mapping("MAP-ACH") is True
+    app.root.update()
+    assert dialog.tree.selection() == ("mapping:MAP-ACH",)
+    assert "analysis-room-a" in dialog.detail.get("1.0", "end")
+    assert dialog.focus_mapping("MAP-MISSING") is False
     dialog.destroy()
 
 

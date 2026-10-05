@@ -1548,7 +1548,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._projection_mode = tk.StringVar(value="Orthographic")
         self._section_enabled = tk.BooleanVar(value=False)
         self._section_height_var = tk.StringVar(value="2.40")
-        self._theme_palette = theme_palette("light")
+        self._theme_name = "light"
+        self._theme_palette = theme_palette(self._theme_name)
 
         self._build()
         self.refresh()
@@ -2041,7 +2042,8 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def apply_theme(self, value: str, *, redraw: bool = True) -> None:
         """Apply presentation colors without modifying spatial/project state."""
-        self._theme_palette = theme_palette(value)
+        self._theme_name = str(value or "light")
+        self._theme_palette = theme_palette(self._theme_name)
         palette = self._theme_palette
         self.canvas_2d.configure(
             background=palette["canvas_2d"],

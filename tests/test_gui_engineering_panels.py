@@ -210,3 +210,45 @@ def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
     assert "domain_hvac" in app.analysis_tree.item("nav-hvac", "tags")
     assert "domain_verification" in app.analysis_tree.item("nav-verification", "tags")
     assert "domain_evidence" in app.analysis_tree.item("nav-evidence", "tags")
+
+def test_workspace_layout_profiles_coordinate_shell_and_engineering_tabs(app):
+    app._apply_workspace_profile("evidence")
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "evidence"
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert app.spatial_workspace.inspector_visible() is False
+    assert app.notebook.select() == str(app.evidence_workspace)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+    assert app._ui_layout_state["workspace_profile"] == "evidence"
+
+    app._apply_workspace_profile("design")
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "design"
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is False
+    assert app.spatial_workspace.inspector_visible() is True
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.spatial_workspace._workspace_mode.get() == "split"
+
+
+def test_density_switch_is_persisted_and_command_palette_exposes_layouts(app):
+    app.set_density("comfortable")
+    app.root.update_idletasks()
+
+    assert app.density_var.get() == "comfortable"
+    assert app._ui_layout_state["density"] == "comfortable"
+
+    command_ids = {command.id for command in app._command_palette_commands()}
+    assert {
+        "workspace.layout.design",
+        "workspace.layout.simulation",
+        "workspace.layout.verification",
+        "workspace.layout.evidence",
+        "workspace.layout.reporting",
+        "view.density.compact",
+        "view.density.comfortable",
+    } <= command_ids
+

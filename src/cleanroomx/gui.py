@@ -2130,6 +2130,9 @@ class CleanroomXApp:
         )
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.workspace_profile_var = tk.StringVar(
+            value=self._ui_layout_state["workspace_profile"]
+        )
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
@@ -2203,6 +2206,33 @@ class CleanroomXApp:
         project_menu.add_command(label="Saved Revisions...", command=self.show_saved_revisions)
         project_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         menubar.add_cascade(label="Project", menu=project_menu)
+
+        workspace_menu = tk.Menu(menubar, tearoff=False)
+        for value, label in (
+            ("start", "Start"),
+            ("design", "Design"),
+            ("simulation", "Simulation"),
+            ("verification", "Verification"),
+            ("evidence", "Evidence"),
+            ("reporting", "Reporting"),
+        ):
+            workspace_menu.add_radiobutton(
+                label=label,
+                variable=self.workspace_profile_var,
+                value=value,
+                command=lambda profile=value: self.activate_workspace_profile(profile),
+            )
+        workspace_menu.add_separator()
+        workspace_menu.add_command(
+            label="Focus Workspace",
+            accelerator="Ctrl+Shift+F",
+            command=self.toggle_focus_workspace,
+        )
+        workspace_menu.add_command(
+            label="Reset Panel Layout",
+            command=self.reset_panel_layout,
+        )
+        menubar.add_cascade(label="Workspace", menu=workspace_menu)
 
         design_menu = tk.Menu(menubar, tearoff=False)
         design_menu.add_command(
@@ -2756,9 +2786,9 @@ class CleanroomXApp:
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
-        plot_tab = ttk.Frame(self.notebook)
-        self.notebook.add(plot_tab, text="Plot")
-        self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
+        self.plot_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.plot_tab, text="Plot")
+        self.plot_canvas = tk.Canvas(self.plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
@@ -2768,6 +2798,63 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
+        self.reporting_workspace = ttk.Frame(self.notebook, padding=(12, 10))
+        self.notebook.add(self.reporting_workspace, text="Reporting")
+        reporting_header = ttk.Frame(self.reporting_workspace)
+        reporting_header.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            reporting_header,
+            text="REPORTING WORKSPACE",
+            style="CX.Section.TLabel",
+        ).pack(side="left")
+        self.reporting_status_var = tk.StringVar(value="No current analysis report")
+        ttk.Label(
+            reporting_header,
+            textvariable=self.reporting_status_var,
+        ).pack(side="right")
+        reporting_actions = ttk.Frame(self.reporting_workspace)
+        reporting_actions.pack(fill="x", pady=(0, 8))
+        for label, command in (
+            ("Refresh Preview", self._refresh_reporting_workspace),
+            ("Project Dossier…", self.export_project_engineering_dossier),
+            ("Markdown…", self.export_report_markdown),
+            ("Portable HTML…", self.export_report_html),
+            ("Result JSON…", self.export_result_json),
+        ):
+            ttk.Button(
+                reporting_actions,
+                text=label,
+                style="CX.Compact.TButton",
+                command=command,
+            ).pack(side="left", padx=(0, 5))
+        reporting_preview_frame = ttk.Frame(self.reporting_workspace)
+        reporting_preview_frame.pack(fill="both", expand=True)
+        self.reporting_preview = tk.Text(
+            reporting_preview_frame,
+            wrap="none",
+            state="disabled",
+        )
+        reporting_y = ttk.Scrollbar(
+            reporting_preview_frame,
+            orient="vertical",
+            command=self.reporting_preview.yview,
+        )
+        reporting_x = ttk.Scrollbar(
+            reporting_preview_frame,
+            orient="horizontal",
+            command=self.reporting_preview.xview,
+        )
+        self.reporting_preview.configure(
+            yscrollcommand=reporting_y.set,
+            xscrollcommand=reporting_x.set,
+        )
+        self.reporting_preview.grid(row=0, column=0, sticky="nsew")
+        reporting_y.grid(row=0, column=1, sticky="ns")
+        reporting_x.grid(row=1, column=0, sticky="ew")
+        reporting_preview_frame.rowconfigure(0, weight=1)
+        reporting_preview_frame.columnconfigure(0, weight=1)
+        self._refresh_reporting_workspace()
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
@@ -2992,6 +3079,7 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "workspace_profile": self.workspace_profile_var.get(),
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -3027,6 +3115,11 @@ class CleanroomXApp:
             workspace.set_inspector_visible(bool(state["inspector_visible"]))
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
+        self.activate_workspace_profile(
+            state["workspace_profile"],
+            persist=False,
+            apply_layout=False,
+        )
         self.status_var.set("Ready")
 
     def _apply_menu_theme(self, menu: tk.Menu) -> None:
@@ -3071,6 +3164,7 @@ class CleanroomXApp:
                 "verification_text",
                 "console_text",
                 "evidence_text",
+                "reporting_preview",
             )
         ]
         problems_panel = getattr(self, "problems_panel", None)
@@ -3313,6 +3407,8 @@ class CleanroomXApp:
         if viewer is None:
             return
         self.notebook.select(viewer)
+        if hasattr(self, "workspace_profile_var"):
+            self.workspace_profile_var.set("evidence")
         self.workspace_status_var.set("Workspace: ProofGraph")
 
     def _navigate_proofgraph_node(self, node: dict) -> bool:
@@ -3483,6 +3579,7 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+        self._refresh_reporting_workspace()
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -3651,6 +3748,41 @@ class CleanroomXApp:
                 keywords=("zoom", "model"),
             ),
             PaletteCommand(
+                "workspace.design_profile",
+                "Open Design Workspace",
+                "Workspace",
+                lambda: self.activate_workspace_profile("design"),
+                keywords=("layout", "model", "inspector"),
+            ),
+            PaletteCommand(
+                "workspace.simulation_profile",
+                "Open Simulation Workspace",
+                "Workspace",
+                lambda: self.activate_workspace_profile("simulation"),
+                keywords=("analysis", "plot", "results"),
+            ),
+            PaletteCommand(
+                "workspace.verification_profile",
+                "Open Verification Workspace",
+                "Workspace",
+                lambda: self.activate_workspace_profile("verification"),
+                keywords=("problems", "diagnostics", "compliance"),
+            ),
+            PaletteCommand(
+                "workspace.evidence_profile",
+                "Open Evidence Workspace",
+                "Workspace",
+                lambda: self.activate_workspace_profile("evidence"),
+                keywords=("proofgraph", "traceability", "provenance"),
+            ),
+            PaletteCommand(
+                "workspace.reporting_profile",
+                "Open Reporting Workspace",
+                "Workspace",
+                lambda: self.activate_workspace_profile("reporting"),
+                keywords=("report", "preview", "export"),
+            ),
+            PaletteCommand(
                 "workspace.focus",
                 "Toggle Focus Workspace",
                 "Window",
@@ -3752,10 +3884,82 @@ class CleanroomXApp:
             on_close=clear_reference,
         )
 
+    def activate_workspace_profile(
+        self,
+        profile: str,
+        *,
+        persist: bool = True,
+        apply_layout: bool = True,
+    ) -> None:
+        """Activate a task-oriented engineering workspace without changing project data."""
+        normalized = str(profile or "").strip().casefold()
+        profiles = {
+            "start": (False, False, False),
+            "design": (True, False, True),
+            "simulation": (True, True, False),
+            "verification": (True, True, True),
+            "evidence": (True, True, False),
+            "reporting": (True, True, False),
+        }
+        if normalized not in profiles:
+            normalized = "start"
+
+        self._restore_focus_workspace_snapshot(status=False)
+        self.workspace_profile_var.set(normalized)
+        workspace = getattr(self, "spatial_workspace", None)
+
+        if apply_layout:
+            navigator_visible, output_visible, inspector_visible = profiles[normalized]
+            self.navigator_panel_visible_var.set(navigator_visible)
+            self.output_panel_visible_var.set(output_visible)
+            self._sync_navigator_panel_visibility()
+            self._sync_output_panel_visibility()
+            if workspace is not None:
+                workspace.set_inspector_visible(inspector_visible)
+            self.root.after_idle(self._apply_saved_panel_sashes)
+
+        if normalized == "start":
+            self._refresh_start_center()
+            self.notebook.select(self.start_center)
+        elif normalized == "design":
+            self.notebook.select(self.spatial_workspace)
+            self.spatial_workspace.set_workspace_mode("split")
+        elif normalized == "simulation":
+            run = self._current_fresh_run()
+            if run is not None and run.plot is not None:
+                self.notebook.select(self.plot_tab)
+            else:
+                self.notebook.select(self.input_tab)
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(
+                    self.result_text.master if run is not None else self.console_text.master
+                )
+        elif normalized == "verification":
+            self.notebook.select(self.spatial_workspace)
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(self.problems_panel)
+        elif normalized == "evidence":
+            self.notebook.select(self.proofgraph_viewer)
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(self.evidence_text.master)
+        else:
+            self._refresh_reporting_workspace()
+            self.notebook.select(self.reporting_workspace)
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(self.report_text.master)
+
+        label = normalized.title()
+        self.workspace_status_var.set(f"Workspace: {label}")
+        self.status_var.set(f"{label} workspace activated")
+        if persist:
+            self._save_ui_layout_state()
+
     def _activate_start_workspace(self) -> None:
         if hasattr(self, "notebook") and hasattr(self, "start_center"):
             self._refresh_start_center()
             self.notebook.select(self.start_center)
+            if hasattr(self, "workspace_profile_var"):
+                self.workspace_profile_var.set("start")
             self.workspace_status_var.set("Workspace: Start")
 
     def _recent_project_records(self) -> list[dict[str, str]]:
@@ -3863,6 +4067,8 @@ class CleanroomXApp:
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
+            if hasattr(self, "workspace_profile_var"):
+                self.workspace_profile_var.set("design")
         if mode is not None and hasattr(self, "spatial_workspace"):
             self.spatial_workspace.set_workspace_mode(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
@@ -3872,6 +4078,8 @@ class CleanroomXApp:
         """Open the current analysis input editor without changing engineering data."""
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
             self.notebook.select(self.input_tab)
+            if hasattr(self, "workspace_profile_var"):
+                self.workspace_profile_var.set("simulation")
             self.workspace_status_var.set("Workspace: Analysis Inputs")
 
     def _guided_save_and_verify(self) -> None:
@@ -3912,6 +4120,45 @@ class CleanroomXApp:
         frame.columnconfigure(0, weight=1)
         return text
 
+    def _refresh_reporting_workspace(self) -> None:
+        preview = getattr(self, "reporting_preview", None)
+        status = getattr(self, "reporting_status_var", None)
+        if preview is None or status is None:
+            return
+
+        run = self.last_run
+        analysis_id = self.last_run_analysis_id
+        analysis = None
+        current = False
+        if run is not None and analysis_id is not None:
+            try:
+                analysis = self.project.analysis_by_id(analysis_id)
+                current = analysis_run_is_current(
+                    run,
+                    analysis.kind,
+                    analysis.input,
+                    base_dir=self._base_dir(),
+                )
+            except (KeyError, OSError, ValueError):
+                current = False
+
+        if run is None or not current:
+            status.set("No current analysis report")
+            self._set_text(
+                preview,
+                (
+                    "REPORTING WORKSPACE\n\n"
+                    "No current analysis report is available. Run the selected analysis "
+                    "to populate the report preview. Project dossier export remains "
+                    "available after the project is saved.\n"
+                ),
+            )
+            return
+
+        analysis_name = analysis.name if analysis is not None else analysis_id
+        status.set(f"{analysis_name} · {run.status}")
+        self._set_text(preview, run.markdown)
+
     def _apply_wrap_setting(self) -> None:
         wrap = "word" if self.wrap_outputs_var.get() else "none"
         for widget in (
@@ -3921,6 +4168,7 @@ class CleanroomXApp:
             self.verification_text,
             self.console_text,
             self.evidence_text,
+            self.reporting_preview,
         ):
             widget.configure(wrap=wrap)
 
@@ -3937,6 +4185,7 @@ class CleanroomXApp:
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
         self._draw_plot()
+        self._refresh_reporting_workspace()
 
     def _clear_run_cache(self) -> None:
         self._runs_by_analysis.clear()
@@ -6934,6 +7183,7 @@ class CleanroomXApp:
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),
         )
         self._set_text(self.report_text, run.markdown)
+        self._refresh_reporting_workspace()
         self._set_text(
             self.diagnostics_text,
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),

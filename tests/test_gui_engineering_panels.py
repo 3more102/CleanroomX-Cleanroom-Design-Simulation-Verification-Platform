@@ -264,3 +264,19 @@ def test_problem_issue_inspector_prioritizes_engineering_context(app):
     assert "Suggested recovery" in detail
     assert str(panel.locate_button.cget("state")) == "normal"
 
+
+
+def test_analysis_activity_indicator_tracks_worker_ui_state(app):
+    app._set_running(True)
+    app.root.update()
+    assert app.run_state_var.get() == "RUNNING"
+    assert app.run_button.instate(["disabled"])
+    assert app.cancel_button.instate(["!disabled"])
+    assert str(app.input_text.cget("state")) == "disabled"
+
+    app._set_running(False)
+    app.root.update()
+    assert app.run_state_var.get() == "IDLE"
+    assert app.run_button.instate(["!disabled"])
+    assert app.cancel_button.instate(["disabled"])
+    assert str(app.input_text.cget("state")) == "normal"

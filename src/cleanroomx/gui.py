@@ -1950,6 +1950,10 @@ class CleanroomXApp:
             label="Reporting Workspace",
             command=self._activate_reporting_workspace,
         )
+        report_menu.add_command(
+            label="Export Selected Summary...",
+            command=self.export_selected_reporting_summary,
+        )
         report_menu.add_separator()
         report_menu.add_command(
             label="Export Project Engineering Dossier...",
@@ -2389,7 +2393,7 @@ class CleanroomXApp:
             text="6  Report",
             width=9,
             style="CX.Compact.TButton",
-            command=self.export_project_engineering_dossier,
+            command=self._activate_reporting_workspace,
         )
         self.workflow_report_button.pack(side="left", padx=1)
 
@@ -2610,6 +2614,7 @@ class CleanroomXApp:
             on_export_run_bundle=self.export_run_bundle_json,
             on_export_markdown=self.export_report_markdown,
             on_export_html=self.export_report_html,
+            on_export_selected_summary=self.export_selected_reporting_summary,
         )
         self.notebook.add(self.reporting_workspace, text="Reports")
 
@@ -6929,6 +6934,50 @@ class CleanroomXApp:
                 f"Bundle SHA-256: {report['bundle_sha256']}"
             ),
         )
+
+    def export_selected_reporting_summary(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        content = workspace.build_selected_summary_markdown()
+        if not workspace.selected_sections():
+            self.status_var.set("Select at least one report section before exporting.")
+            self._notify(
+                "No report sections selected",
+                level="warning",
+                detail="Select one or more report-composition sections in the Reporting workspace.",
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX selected report summary",
+            initialfile=(
+                f"{self.project_path.stem}.summary.md"
+                if self.project_path is not None
+                else "cleanroomx-summary.md"
+            ),
+            defaultextension=".md",
+            filetypes=[
+                ("Markdown report", "*.md"),
+                ("Text files", "*.txt"),
+            ],
+        )
+        if not path:
+            return
+        if self._write_export_file(
+            path,
+            content,
+            label="Selected report summary",
+        ):
+            self._notify(
+                "Selected report summary exported",
+                level="success",
+                detail=(
+                    f"Created {Path(path).name} from current canonical workstation state. "
+                    "The selected summary does not replace the project engineering dossier."
+                ),
+            )
 
     def export_project_engineering_dossier(self) -> None:
         if self._running:

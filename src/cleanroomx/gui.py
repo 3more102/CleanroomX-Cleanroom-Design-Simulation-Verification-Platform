@@ -5432,11 +5432,10 @@ class CleanroomXApp:
         try:
             current_revision = capture_project_file_revision(self.project_path)
         except OSError as exc:
-            self.status_var.set("Verification blocked")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Verification blocked",
-                str(exc),
-                parent=self.root,
+                "Read saved project revision for verification",
+                exc,
             )
             return None
         if not project_file_revision_matches(
@@ -7638,22 +7637,26 @@ class CleanroomXApp:
 
         try:
             revision_before = capture_project_file_revision(self.project_path)
-            expected_revision = getattr(self, "_project_file_revision", None)
-            if (
-                expected_revision is not None
-                and not project_file_revision_matches(
-                    expected_revision,
-                    revision_before,
-                )
-            ):
-                raise RuntimeError(
-                    "project file changed on disk after it was opened or saved"
-                )
-        except Exception as exc:
+        except OSError as exc:
+            self._show_operation_error(
+                "Project dossier export blocked",
+                "Read saved project revision for dossier export",
+                exc,
+            )
+            return
+
+        expected_revision = getattr(self, "_project_file_revision", None)
+        if (
+            expected_revision is not None
+            and not project_file_revision_matches(
+                expected_revision,
+                revision_before,
+            )
+        ):
             self.status_var.set("Project dossier export blocked")
             messagebox.showerror(
                 "Project dossier export blocked",
-                str(exc),
+                "project file changed on disk after it was opened or saved",
                 parent=self.root,
             )
             return

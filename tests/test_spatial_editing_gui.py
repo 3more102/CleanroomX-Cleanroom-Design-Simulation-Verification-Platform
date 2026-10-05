@@ -194,6 +194,25 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
 
 
 
+def test_design_inspector_shows_engineering_summary_without_mutating_geometry(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    before = copy.deepcopy(workspace.layout)
+
+    assert workspace.select_item("room", room["id"])
+    app.root.update()
+
+    area = room["length_m"] * room["width_m"]
+    volume = area * room["height_m"]
+    summary = workspace._selection_summary_var.get()
+    assert f"Area {area:.2f} m²" in summary
+    assert f"Volume {volume:.2f} m³" in summary
+    assert f"{room['pressure_pa']:+.1f} Pa" in summary
+    assert str(room.get("classification") or "Unclassified") in summary
+    assert workspace._selection_health_var.get()
+    assert workspace.layout == before
+
+
 def test_selected_room_shows_engineering_dimensions(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

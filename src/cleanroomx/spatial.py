@@ -29,6 +29,9 @@ from .spatial_transforms import (
 )
 
 
+_MIXED_PROPERTY_VALUE = "— mixed —"
+
+
 class SpatialSyncError(ValueError):
     """Raised when spatial geometry cannot be mapped to engineering input safely."""
 
@@ -1715,9 +1718,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_filter_var = tk.StringVar(value="")
         self._property_filter_summary_var = tk.StringVar(value="Editable properties")
         self._property_error_var = tk.StringVar(value="")
-        self._property_drafts: dict[tuple[str, str], dict[str, str]] = {}
-        self._property_loaded_selection: tuple[str, str] | None = None
+        self._property_drafts: dict[tuple, dict[str, str]] = {}
+        self._property_loaded_selection: tuple | None = None
         self._property_loaded_model_values: dict[str, str] = {}
+        self._property_mixed_fields: set[str] = set()
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -3090,6 +3094,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _load_engineering_inspector_snapshot(self) -> None:
+        selected_hits = self.selected_hits()
+        if len(selected_hits) > 1:
+            self._inspector_analysis_var.set(
+                f"{len(selected_hits)} objects selected. Engineering metrics are shown only for a single room."
+            )
+            self._inspector_geometry_var.set("Geometry: —")
+            self._inspector_pressure_var.set("Pressure: —")
+            self._inspector_airflow_var.set("Airflow / ACH: —")
+            self._inspector_compliance_var.set("Verification: —")
+            self._inspector_area_var.set("—")
+            self._inspector_volume_var.set("—")
+            self._inspector_pressure_metric_var.set("—")
+            self._inspector_airflow_metric_var.set("—")
+            self._inspector_ach_metric_var.set("—")
+            self._inspector_compliance_value_var.set("MULTI")
+            self._inspector_result_state_var.set("MULTI-SELECTION")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            self._inspector_compliance_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            return
+
         selected = self.selected
         item = self._selected_object()
         if selected is None or item is None or selected.kind != "room":
@@ -3253,11 +3281,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._clear_property_error()
         self._apply_property_filter()
 
-    def _property_selection_key(self) -> tuple[str, str] | None:
-        selected = self.selected
-        if selected is None:
+    def _property_selection_key(self) -> tuple | None:
+        hits = self.selected_hits()
+        if not hits:
             return None
-        return selected.kind, selected.item_id
+        if len(hits) == 1:
+            selected = hits[0]
+            return selected.kind, selected.item_id
+        return tuple((hit.kind, hit.item_id) for hit in hits)
+
+    def _selected_objects(self) -> list[tuple[_Hit, dict]]:
+        selected: list[tuple[_Hit, dict]] = []
+        rooms = {str(item.get("id")): item for item in self.layout["rooms"]}
+        devices = {str(item.get("id")): item for item in self.layout["devices"]}
+        for hit in self.selected_hits():
+            item = rooms.get(hit.item_id) if hit.kind == "room" else devices.get(hit.item_id)
+            if item is not None:
+                selected.append((hit, item))
+        return selected
 
     def _property_dirty_values(self) -> dict[str, str]:
         loaded = getattr(self, "_property_loaded_model_values", {})
@@ -3288,8 +3329,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         else:
             drafts.pop(key, None)
 
-    def _editable_property_fields(self) -> set[str]:
-        if self.selected and self.selected.kind == "room":
+    @staticmethod
+    def _property_fields_for_kind(kind: str) -> set[str]:
+        if kind == "room":
             return {
                 "name",
                 "x_m",
@@ -3314,6 +3356,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             "wall_side",
             "swing",
         }
+
+    def _editable_property_fields(self) -> set[str]:
+        hits = self.selected_hits()
+        if not hits:
+            return set()
+        fields = self._property_fields_for_kind(hits[0].kind)
+        for hit in hits[1:]:
+            fields &= self._property_fields_for_kind(hit.kind)
+        return fields
 
     def _clear_property_error(self) -> None:
         error_var = getattr(self, "_property_error_var", None)
@@ -3410,14 +3461,35 @@ class SpatialDesignWorkspace(ttk.Frame):
                 section.pack_forget()
         total = len(visible_fields)
         shown = len(shown_fields)
+        selected_count = len(self.selected_hits())
+        mixed_count = len(getattr(self, "_property_mixed_fields", set()) & visible_fields)
         modified = " · modified" if dirty else ""
+        multi = (
+            f" · {selected_count} selected · {mixed_count} mixed"
+            if selected_count > 1
+            else ""
+        )
+        try:
+            self._property_apply_button.configure(
+                text=(
+                    f"Apply to {selected_count}"
+                    if selected_count > 1
+                    else "Apply properties"
+                )
+            )
+        except (AttributeError, tk.TclError):
+            pass
         if query.strip():
             self._property_filter_summary_var.set(
-                f"{shown} of {total} editable properties match filter{modified}"
+                f"{shown} of {total} common editable properties match filter{multi}{modified}"
+                if selected_count > 1
+                else f"{shown} of {total} editable properties match filter{modified}"
             )
         else:
             self._property_filter_summary_var.set(
-                f"{shown} editable properties{modified}"
+                f"{shown} common editable properties{multi}{modified}"
+                if selected_count > 1
+                else f"{shown} editable properties{modified}"
             )
 
     def _load_property_panel(self) -> None:
@@ -3426,9 +3498,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         if previous_key is not None and previous_key != current_key:
             self._stash_property_draft()
 
+        selected_objects = self._selected_objects()
         item = self._selected_object()
         self._clear_property_error()
-        if item is None:
+        if item is None or not selected_objects:
             self._selection_var.set(
                 "No object selected — select a room, device, opening, or equipment item."
             )
@@ -3437,29 +3510,57 @@ class SpatialDesignWorkspace(ttk.Frame):
                 var.set("")
             self._property_loaded_selection = None
             self._property_loaded_model_values = {}
+            self._property_mixed_fields = set()
             self._apply_property_filter()
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
-        selection_text = f"{prefix}: {item.get('name', '')}"
-        if self.selected and self.selected.kind == "room":
-            sync = engineering_sync_status(self.layout, self._analysis_getter())
-            room_sync = next(
-                (
-                    record
-                    for record in sync["rooms"]
-                    if record["room_id"] == self.selected.item_id
-                ),
-                None,
+
+        if len(selected_objects) > 1:
+            room_count = sum(1 for hit, _item in selected_objects if hit.kind == "room")
+            device_count = len(selected_objects) - room_count
+            parts = []
+            if room_count:
+                parts.append(f"{room_count} room" + ("" if room_count == 1 else "s"))
+            if device_count:
+                parts.append(f"{device_count} device" + ("" if device_count == 1 else "s"))
+            selection_text = (
+                f"{len(selected_objects)} objects selected — " + " · ".join(parts)
             )
-            if room_sync is not None:
-                selection_text += " — " + room_sync["state"].replace("_", " ")
+        else:
+            prefix = (
+                "Room"
+                if self.selected and self.selected.kind == "room"
+                else item.get("type", "Device").title()
+            )
+            selection_text = f"{prefix}: {item.get('name', '')}"
+            if self.selected and self.selected.kind == "room":
+                sync = engineering_sync_status(self.layout, self._analysis_getter())
+                room_sync = next(
+                    (
+                        record
+                        for record in sync["rooms"]
+                        if record["room_id"] == self.selected.item_id
+                    ),
+                    None,
+                )
+                if room_sync is not None:
+                    selection_text += " — " + room_sync["state"].replace("_", " ")
+
         self._selection_var.set(selection_text)
         self._load_engineering_inspector_snapshot()
         visible_fields = self._editable_property_fields()
-        model_values = {
-            key: "" if item.get(key, "") is None else str(item.get(key, ""))
-            for key in visible_fields
-        }
+        model_values: dict[str, str] = {}
+        mixed_fields: set[str] = set()
+        for key in visible_fields:
+            values = [
+                "" if selected_item.get(key, "") is None else str(selected_item.get(key, ""))
+                for _hit, selected_item in selected_objects
+            ]
+            first = values[0]
+            if all(value == first for value in values[1:]):
+                model_values[key] = first
+            else:
+                model_values[key] = _MIXED_PROPERTY_VALUE
+                mixed_fields.add(key)
 
         pending: dict[str, str] = {}
         drafts = getattr(self, "_property_drafts", {})
@@ -3485,6 +3586,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 var.set("")
         self._property_loaded_selection = current_key
         self._property_loaded_model_values = model_values
+        self._property_mixed_fields = mixed_fields
         self._apply_property_filter()
 
     def revert_property_edits(self) -> None:
@@ -3499,23 +3601,47 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def apply_properties(self) -> None:
         item = self._selected_object()
-        if item is None:
+        selected_hits = self.selected_hits()
+        if item is None or not selected_hits:
             return
         self._clear_property_error()
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
         try:
-            candidate = update_spatial_properties(
-                self.layout,
-                self.selected.kind,
-                self.selected.item_id,
-                {key: variable.get() for key, variable in self._property_vars.items()},
-            )
+            if len(selected_hits) == 1:
+                candidate = update_spatial_properties(
+                    self.layout,
+                    self.selected.kind,
+                    self.selected.item_id,
+                    {key: variable.get() for key, variable in self._property_vars.items()},
+                )
+            else:
+                changed_values = self._property_dirty_values()
+                if not changed_values:
+                    self._status_setter(
+                        f"No property changes to apply to {len(selected_hits)} selected objects"
+                    )
+                    return
+                candidate = self.layout
+                for hit in selected_hits:
+                    supported = self._property_fields_for_kind(hit.kind)
+                    values = {
+                        key: value
+                        for key, value in changed_values.items()
+                        if key in supported
+                    }
+                    if values:
+                        candidate = update_spatial_properties(
+                            candidate,
+                            hit.kind,
+                            hit.item_id,
+                            values,
+                        )
         except ValueError as exc:
             message = str(exc)
             self._show_property_error(message)
             self._status_setter("Properties not applied: " + message)
             return
-        history_before = self._history_layout()
-        selection_before = self._selection_state()
         if candidate != self.layout:
             self.layout = candidate
         key = self._property_selection_key()
@@ -3523,9 +3649,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             getattr(self, "_property_drafts", {}).pop(key, None)
         self._property_loaded_selection = None
         self._property_loaded_model_values = {}
+        self._property_mixed_fields = set()
         self._load_property_panel()
         self._persist(
-            "Spatial properties updated",
+            (
+                f"Spatial properties updated for {len(selected_hits)} selected objects"
+                if len(selected_hits) > 1
+                else "Spatial properties updated"
+            ),
             history_before=history_before,
             selection_before=selection_before,
         )

@@ -7,6 +7,7 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.autosave import AutosaveManager, RecoveryScan
 from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui_errors import GuiErrorReport
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
@@ -390,3 +391,43 @@ def test_successful_project_load_discards_recovery_after_validation(
     assert app.project_path == project_path
     assert app._project_file_revision is revision
     assert app._restored_recovery_artifact is None
+
+
+def test_restored_recovery_cleanup_failure_keeps_artifact_and_reference(
+    tmp_path,
+    monkeypatch,
+):
+    artifact = tmp_path / "current.recovery.json"
+    artifact.write_text("{}\n", encoding="utf-8")
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._restored_recovery_artifact = artifact
+    app.status_var = Value("")
+
+    report = GuiErrorReport(
+        reference="CX-RECOVERY-0003",
+        operation="Clean up restored recovery artifact",
+        exception_type="OSError",
+        summary="synthetic cleanup failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "discard_recovery_artifact",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OSError("synthetic cleanup failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    app._discard_restored_recovery()
+
+    assert app._restored_recovery_artifact == artifact
+    assert artifact.exists()
+    assert app.status_var.value == "Recovery cleanup failed · CX-RECOVERY-0003"
+    assert recorded[0][0] == "Clean up restored recovery artifact"
+    assert isinstance(recorded[0][1], OSError)

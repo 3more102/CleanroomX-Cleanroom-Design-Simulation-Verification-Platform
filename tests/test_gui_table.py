@@ -142,3 +142,26 @@ def test_table_behavior_rejects_invalid_autosize_bounds(root) -> None:
 
     with pytest.raises(ValueError, match="invalid autosize bounds"):
         behavior.autosize_columns(min_width=100, max_width=90)
+
+
+def test_table_behavior_preserves_tree_column_sort_and_header_copy(root) -> None:
+    tree = ttk.Treeview(
+        root,
+        columns=("state",),
+        show="tree headings",
+        selectmode="extended",
+    )
+    tree.heading("#0", text="Task")
+    tree.heading("state", text="State")
+    tree.insert("", "end", iid="b", text="Beta", values=("RUNNING",))
+    tree.insert("", "end", iid="a", text="Alpha", values=("DONE",))
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("#0", "state"),
+        copy_columns=("#0", "state"),
+    )
+
+    behavior.sort_by("#0")
+    assert tree.get_children("") == ("a", "b")
+    tree.selection_set("a")
+    assert behavior.selected_tsv(include_headers=True) == "Task\tState\nAlpha\tDONE"

@@ -249,6 +249,36 @@ def test_requirements_navigator_opens_traceability(app, monkeypatch):
 
 
 
+def test_workspace_profiles_activate_real_engineering_workspaces_and_panel_policies(app):
+    app.set_workspace_profile("evidence", persist=False)
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "evidence"
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.navigator_panel_visible_var.get() is False
+    assert app.output_panel_visible_var.get() is False
+    assert app.spatial_workspace.inspector_visible() is False
+    assert app._capture_ui_layout_state()["workspace_profile"] == "evidence"
+
+    app.set_workspace_profile("verification", persist=False)
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "verification"
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert app.spatial_workspace.inspector_visible() is False
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    app.set_workspace_profile("design", persist=False)
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "design"
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is False
+    assert app.spatial_workspace.inspector_visible() is True
+    assert app.notebook.select() == str(app.spatial_workspace)
+
+
 def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
     app._update_title()
     app.root.update_idletasks()

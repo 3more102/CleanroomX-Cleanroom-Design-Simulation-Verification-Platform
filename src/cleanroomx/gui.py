@@ -3134,8 +3134,128 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _open_navigator_palette_item(self, item_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(item_id):
+            self.status_var.set("Navigator target is no longer available")
+            return
+        self.navigator_filter_var.set("")
+        self._restore_navigator_tree()
+        self.navigator_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+        tree.selection_set(item_id)
+        tree.focus(item_id)
+        tree.see(item_id)
+        self._on_navigator_selected()
+
+    def _navigator_palette_commands(self) -> list[PaletteCommand]:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return []
+        snapshot = list(getattr(self, "_navigator_tree_snapshot", []))
+        analysis_ids = {analysis.id for analysis in self.project.analyses}
+        commands: list[PaletteCommand] = []
+        for iid, parent, _index in snapshot:
+            if iid.startswith("nav-"):
+                continue
+            if not tree.exists(iid):
+                continue
+            item = tree.item(iid)
+            label = str(item.get("text") or iid).strip() or iid
+            values = tuple(str(value) for value in item.get("values") or ())
+            if iid.startswith("room:"):
+                kind = "Room"
+            elif iid.startswith("device:"):
+                kind = "Device"
+            elif iid in analysis_ids:
+                kind = "Analysis"
+            else:
+                kind = "Model"
+            parent_label = ""
+            if parent and tree.exists(parent):
+                parent_label = str(tree.item(parent).get("text") or "")
+            commands.append(
+                PaletteCommand(
+                    f"navigator.{iid}",
+                    f"Open {kind}: {label}",
+                    "Project Search",
+                    lambda target=iid: self._open_navigator_palette_item(target),
+                    keywords=tuple(
+                        value
+                        for value in (
+                            iid,
+                            kind,
+                            parent_label,
+                            *values,
+                        )
+                        if value
+                    ),
+                )
+            )
+        return commands
+
+    def _open_diagnostic_palette_item(self, issue: dict) -> None:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return
+        self.show_problems_panel()
+        panel.search_var.set("")
+        panel.severity_var.set("All")
+        panel.category_var.set("All")
+        panel.object_type_var.set("All")
+        panel._populate()
+        sequence = issue.get("sequence")
+        for iid, candidate in panel._issues_by_iid.items():
+            if candidate.get("sequence") == sequence:
+                panel.tree.selection_set(iid)
+                panel.tree.focus(iid)
+                panel.tree.see(iid)
+                panel._show_selected_detail()
+                break
+
+    def _diagnostic_palette_commands(self) -> list[PaletteCommand]:
+        panel = getattr(self, "problems_panel", None)
+        result = getattr(panel, "last_result", None) if panel is not None else None
+        issues = result.get("issues", []) if isinstance(result, dict) else []
+        commands: list[PaletteCommand] = []
+        for index, issue in enumerate(issues):
+            if not isinstance(issue, dict):
+                continue
+            rule = str(issue.get("rule") or "diagnostic")
+            severity = str(issue.get("severity") or "info").upper()
+            element = issue.get("element")
+            object_text = ""
+            if isinstance(element, dict):
+                object_text = str(
+                    element.get("name")
+                    or element.get("id")
+                    or element.get("type")
+                    or ""
+                )
+            sequence = issue.get("sequence", index + 1)
+            commands.append(
+                PaletteCommand(
+                    f"diagnostic.{sequence}",
+                    f"{severity} Diagnostic: {rule}",
+                    "Diagnostics",
+                    lambda item=issue: self._open_diagnostic_palette_item(item),
+                    keywords=tuple(
+                        value
+                        for value in (
+                            str(issue.get("message") or ""),
+                            str(issue.get("suggested_action") or ""),
+                            str(issue.get("category") or ""),
+                            object_text,
+                            rule,
+                        )
+                        if value
+                    ),
+                )
+            )
+        return commands
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3336,6 +3456,9 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        commands.extend(self._navigator_palette_commands())
+        commands.extend(self._diagnostic_palette_commands())
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

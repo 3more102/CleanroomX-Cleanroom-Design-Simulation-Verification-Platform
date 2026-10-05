@@ -2831,6 +2831,10 @@ class CleanroomXApp:
         result = self._refresh_engineering_panels()
         if result is None:
             return
+        if _result is not None:
+            filtered = self.problems_panel.filtered_result(result)
+            if filtered is not None:
+                result = filtered
         path = filedialog.asksaveasfilename(
             parent=self.root,
             title="Export CleanroomX project diagnostics",

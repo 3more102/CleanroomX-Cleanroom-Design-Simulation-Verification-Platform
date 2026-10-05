@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from pathlib import Path
 import tomllib
 
@@ -75,3 +76,18 @@ def test_unreleased_main_uses_distinct_development_version() -> None:
     release_parts = release.split(".")
     assert len(release_parts) == 3
     assert all(part.isdigit() for part in release_parts)
+
+
+def test_source_and_packaged_demo_match_current_release_identity() -> None:
+    project_version = str(_project_metadata()["project"]["version"])
+    source_demo = json.loads(
+        (ROOT / "examples" / "gui_demo.cleanroomx.json").read_text(encoding="utf-8")
+    )
+    packaged_demo = json.loads(
+        (ROOT / "src" / "cleanroomx" / "demo" / "gui_demo.cleanroomx.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert source_demo == packaged_demo
+    assert source_demo["application_version"] == project_version

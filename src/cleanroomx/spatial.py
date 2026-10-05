@@ -1707,7 +1707,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(commandbar, text="Duplicate", command=self.duplicate_selected).pack(
             side="left", padx=2
         )
-        ttk.Button(commandbar, text="Delete", width=7, command=self.delete_selected).pack(
+        ttk.Button(commandbar, text="Delete", width=7, command=self.request_delete_selected).pack(
             side="left", padx=2
         )
         ttk.Separator(commandbar, orient="vertical").pack(
@@ -2093,7 +2093,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
             canvas.bind("<Control-d>", self._on_duplicate_shortcut)
-            canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Delete>", lambda event: self.request_delete_selected())
             canvas.bind("<Left>", lambda event: self._nudge_selected(-1, 0))
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
@@ -3004,6 +3004,42 @@ class SpatialDesignWorkspace(ttk.Frame):
             selection_before=selection_before,
         )
 
+    def request_delete_selected(self) -> bool:
+        """Confirm a user-triggered destructive spatial edit before applying it."""
+        item = self._selected_object()
+        if self.selected is None or item is None:
+            return False
+
+        kind_label = "room" if self.selected.kind == "room" else "device"
+        name = str(item.get("name") or self.selected.item_id)
+        attached_count = 0
+        if self.selected.kind == "room":
+            attached_count = sum(
+                1
+                for device in self.layout["devices"]
+                if str(device.get("room_id") or "") == self.selected.item_id
+            )
+
+        impact = f'Delete {kind_label} "{name}"?'
+        if attached_count:
+            suffix = "" if attached_count == 1 else "s"
+            impact += (
+                f"\n\nThis also removes {attached_count} attached device{suffix}."
+            )
+        impact += "\n\nThe change can be reversed with Undo."
+
+        if not messagebox.askyesno(
+            "Confirm spatial deletion",
+            impact,
+            parent=self,
+            default="no",
+        ):
+            self._status_setter("Spatial deletion cancelled")
+            return False
+
+        self.delete_selected()
+        return True
+
     def delete_selected(self) -> None:
         if self.selected is None:
             return
@@ -3747,7 +3783,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         menu.add_command(label="Show all", command=self.show_all)
         menu.add_separator()
         menu.add_command(label="Duplicate", command=self.duplicate_selected)
-        menu.add_command(label="Delete", command=self.delete_selected)
+        menu.add_command(label="Delete", command=self.request_delete_selected)
         if hit.kind == "room":
             menu.add_separator()
             menu.add_command(label="Add Door", command=lambda: self.add_device("door"))

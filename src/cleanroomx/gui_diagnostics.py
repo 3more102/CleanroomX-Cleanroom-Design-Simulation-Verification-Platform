@@ -56,6 +56,53 @@ def diagnostics_workspace_projection(
         "categories": categories,
     }
 
+def diagnostics_filtered_export_payload(
+    result: dict[str, Any] | None,
+    *,
+    search: str = "",
+    severity: str = "All",
+    category: str = "All",
+    target_type: str = "All",
+    rule: str = "All",
+) -> dict[str, Any]:
+    """Build a clearly labeled presentation export from canonical diagnostics."""
+    source = result if isinstance(result, dict) else {}
+    state = diagnostics_workspace_projection(source)
+    visible = [
+        dict(issue)
+        for issue in state["issues"]
+        if diagnostic_matches_filters(
+            issue,
+            severity=severity,
+            category=category,
+            target_type=target_type,
+            rule=rule,
+            query=search,
+        )
+    ]
+    return {
+        "schema": "cleanroomx.diagnostics.filtered_presentation_view",
+        "schema_version": 1,
+        "view_kind": "filtered_presentation_view",
+        "canonical_diagnostics": False,
+        "source_schema": str(source.get("schema") or ""),
+        "source_schema_version": source.get("schema_version"),
+        "filters": {
+            "search": str(search or ""),
+            "severity": str(severity or "All"),
+            "category": str(category or "All"),
+            "target_type": str(target_type or "All"),
+            "rule": str(rule or "All"),
+        },
+        "source_summary": dict(
+            source.get("summary") if isinstance(source.get("summary"), dict) else {}
+        ),
+        "visible_issue_count": len(visible),
+        "total_issue_count": len(state["issues"]),
+        "issues": visible,
+    }
+
+
 
 class DiagnosticsWorkspace(ttk.Frame):
     """Central workbench over the canonical project diagnostics snapshot."""
@@ -194,12 +241,18 @@ class DiagnosticsWorkspace(ttk.Frame):
             style="CX.Compact.TButton",
             command=self._copy_selected,
         ).pack(side="left", padx=2)
-        ttk.Button(
+        export_button = ttk.Button(
             actions,
-            text="Export…",
+            text="Export view…",
             style="CX.Compact.TButton",
             command=self._export_requested,
-        ).pack(side="left", padx=2)
+        )
+        export_button.pack(side="left", padx=2)
+        attach_tooltip(
+            export_button,
+            "Export only the currently filtered diagnostic rows as a presentation view. "
+            "This is not a new canonical diagnostics run.",
+        )
         ttk.Label(
             actions,
             text="Alt+↑/↓ review · Enter locate · Ctrl+C copy",
@@ -299,7 +352,17 @@ class DiagnosticsWorkspace(ttk.Frame):
         self._on_refresh()
 
     def _export_requested(self) -> None:
-        self._on_export(self._result)
+        self._on_export(self.filtered_export_payload())
+
+    def filtered_export_payload(self) -> dict[str, Any]:
+        return diagnostics_filtered_export_payload(
+            self._result,
+            search=self.search_var.get(),
+            severity=self.severity_var.get(),
+            category=self.category_var.get(),
+            target_type=self.target_type_var.get(),
+            rule=self.rule_var.get(),
+        )
 
     def selected_issue(self) -> dict[str, Any] | None:
         selection = self.tree.selection()

@@ -17,7 +17,10 @@ def test_inno_installer_is_per_user_registered_branded_and_self_contained():
     assert "VersionInfoCompany=CleanroomX contributors" in text
     assert "VersionInfoDescription=CleanroomX Engineering Workstation Installer" in text
     assert "VersionInfoProductName=CleanroomX" in text
-    assert "VersionInfoProductVersion={#MyAppVersion}" in text
+    assert "VersionInfoVersion={#MyFileVersion}" in text
+    assert "VersionInfoProductVersion={#MyFileVersion}" in text
+    assert "VersionInfoTextVersion={#MyAppVersion}" in text
+    assert "VersionInfoProductTextVersion={#MyAppVersion}" in text
     assert 'Source: "..\\..\\dist\\windows-standalone\\CleanroomX\\*"' in text
     assert 'Filename: "{app}\\CleanroomX.exe"' in text
 
@@ -30,6 +33,8 @@ def test_installer_build_is_versioned_and_hashes_release_artifact():
     assert 'Get-Content -Raw (Join-Path $repoRoot "pyproject.toml")' in text
     assert "Inno Setup compiler not found" in text
     assert "Get-FileHash -Algorithm SHA256" in text
+    assert '"/DMyFileVersion=$FileVersion"' in text
+    assert "Installer file version must be four dot-separated integers" in text
     assert "CleanroomX-Setup-$safeVersion-x64" in text
 
 

@@ -162,6 +162,7 @@ class StartCenter(ttk.Frame):
         workspace_actions.grid(row=7, column=0, sticky="ew", pady=(10, 0))
         for column in range(3):
             workspace_actions.columnconfigure(column, weight=1)
+        self.workspace_buttons: dict[str, ttk.Button] = {}
         for index, (label, profile) in enumerate(
             (
                 ("Design", "design"),
@@ -171,19 +172,21 @@ class StartCenter(ttk.Frame):
                 ("Reporting", "reporting"),
             )
         ):
-            ttk.Button(
+            button = ttk.Button(
                 workspace_actions,
                 text=label,
                 style="CX.Compact.TButton",
                 command=lambda selected=profile: self._open_workspace(selected),
                 state="normal" if self._on_workspace is not None else "disabled",
-            ).grid(
+            )
+            button.grid(
                 row=index // 3,
                 column=index % 3,
                 sticky="ew",
                 padx=2,
                 pady=2,
             )
+            self.workspace_buttons[profile] = button
         self.problems_button = ttk.Button(
             workspace_actions,
             text="Problems",

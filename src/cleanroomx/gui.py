@@ -78,7 +78,11 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_theme import (
+    configure_ttk_theme,
+    normalize_density_name,
+    normalize_theme_name,
+)
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -2130,6 +2134,7 @@ class CleanroomXApp:
         )
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
@@ -2163,6 +2168,7 @@ class CleanroomXApp:
         self._theme_palette = configure_ttk_theme(
             self.root,
             self.theme_var.get(),
+            density=self.density_var.get(),
         )
 
     def _build_menu(self) -> None:
@@ -2306,6 +2312,20 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for profile, label, accelerator in (
+            ("design", "Design", "Ctrl+Alt+1"),
+            ("simulation", "Simulation", "Ctrl+Alt+2"),
+            ("verification", "Verification", "Ctrl+Alt+3"),
+            ("evidence", "Evidence", "Ctrl+Alt+4"),
+            ("reporting", "Reporting", "Ctrl+Alt+5"),
+        ):
+            workspace_menu.add_command(
+                label=label,
+                accelerator=accelerator,
+                command=lambda selected=profile: self.activate_workspace_profile(selected),
+            )
+        view_menu.add_cascade(label="Workspace Presets", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2334,6 +2354,15 @@ class CleanroomXApp:
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
         )
+        density_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (("comfortable", "Comfortable"), ("compact", "Compact / Engineering")):
+            density_menu.add_radiobutton(
+                label=label,
+                variable=self.density_var,
+                value=value,
+                command=lambda mode=value: self.set_density(mode),
+            )
+        view_menu.add_cascade(label="Density", menu=density_menu)
         theme_menu = tk.Menu(view_menu, tearoff=False)
         for value, label in (("light", "Light"), ("dark", "Dark")):
             theme_menu.add_radiobutton(
@@ -2368,6 +2397,11 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-1>", lambda event: self._activate_spatial_workspace("2d"))
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
+        self.root.bind("<Control-Alt-Key-1>", lambda event: self.activate_workspace_profile("design"))
+        self.root.bind("<Control-Alt-Key-2>", lambda event: self.activate_workspace_profile("simulation"))
+        self.root.bind("<Control-Alt-Key-3>", lambda event: self.activate_workspace_profile("verification"))
+        self.root.bind("<Control-Alt-Key-4>", lambda event: self.activate_workspace_profile("evidence"))
+        self.root.bind("<Control-Alt-Key-5>", lambda event: self.activate_workspace_profile("reporting"))
         self.root.bind("<Control-b>", lambda event: self.toggle_navigator_panel())
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
@@ -2757,6 +2791,7 @@ class CleanroomXApp:
         self.input_text.edit_modified(False)
 
         plot_tab = ttk.Frame(self.notebook)
+        self.plot_tab = plot_tab
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
@@ -2992,6 +3027,7 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "density": normalize_density_name(self.density_var.get()),
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -3016,6 +3052,7 @@ class CleanroomXApp:
         self._focus_workspace_snapshot = None
         self.focus_workspace_var.set(False)
         state = self._ui_layout_state
+        self.density_var.set(normalize_density_name(state["density"]))
         self.theme_var.set(normalize_theme_name(state["theme"]))
         self.set_theme(self.theme_var.get(), persist=False)
         self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
@@ -3107,7 +3144,11 @@ class CleanroomXApp:
     def set_theme(self, value: str, *, persist: bool = True) -> None:
         theme = normalize_theme_name(value)
         self.theme_var.set(theme)
-        self._theme_palette = configure_ttk_theme(self.root, theme)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            theme,
+            density=self.density_var.get(),
+        )
         self._apply_theme_to_native_widgets()
         state = dict(getattr(self, "_ui_layout_state", {}))
         state["theme"] = theme
@@ -3118,6 +3159,22 @@ class CleanroomXApp:
 
     def toggle_theme(self) -> None:
         self.set_theme("dark" if self.theme_var.get() == "light" else "light")
+
+    def set_density(self, value: str, *, persist: bool = True) -> None:
+        density = normalize_density_name(value)
+        self.density_var.set(density)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            self.theme_var.get(),
+            density=density,
+        )
+        self._apply_theme_to_native_widgets()
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["density"] = density
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(f"Density: {density.title()}")
 
     def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
         snapshot = getattr(self, "_focus_workspace_snapshot", None)
@@ -3307,6 +3364,70 @@ class CleanroomXApp:
         self._ui_layout_state = normalize_gui_layout_state({})
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
+
+    def _apply_workspace_profile_sashes(self, profile: str) -> None:
+        self.root.update_idletasks()
+        if (
+            self.output_panel_visible_var.get()
+            and self._paned_contains(self.workspace_panes, self.output_panel)
+        ):
+            height = self.workspace_panes.winfo_height()
+            if height > 1:
+                ratio = {
+                    "simulation": 0.68,
+                    "verification": 0.56,
+                    "evidence": 0.76,
+                    "reporting": 0.42,
+                }.get(profile, 0.72)
+                self.workspace_panes.sashpos(
+                    0,
+                    max(220, min(height - 150, int(height * ratio))),
+                )
+
+    def activate_workspace_profile(self, profile: str) -> None:
+        """Apply a task-oriented workstation layout without touching project data."""
+        normalized = str(profile or "").strip().casefold()
+        profiles = {
+            "design": (True, False, True),
+            "simulation": (True, True, False),
+            "verification": (True, True, False),
+            "evidence": (True, True, False),
+            "reporting": (False, True, False),
+        }
+        if normalized not in profiles:
+            raise ValueError(f"unsupported workspace profile: {profile!r}")
+
+        self._restore_focus_workspace_snapshot(status=False)
+        self._remember_current_panel_fractions()
+        navigator_visible, output_visible, inspector_visible = profiles[normalized]
+        self.navigator_panel_visible_var.set(navigator_visible)
+        self.output_panel_visible_var.set(output_visible)
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(inspector_visible)
+
+        if normalized == "design":
+            self._activate_spatial_workspace("split")
+        elif normalized == "simulation":
+            self.notebook.select(self.plot_tab)
+            self.output_notebook.select(self.result_text.master)
+        elif normalized == "verification":
+            self._activate_spatial_workspace("split")
+            self.output_notebook.select(self.problems_panel)
+        elif normalized == "evidence":
+            self._activate_proofgraph_workspace()
+            self.output_notebook.select(self.evidence_text.master)
+        else:
+            self.notebook.select(self.plot_tab)
+            self.output_notebook.select(self.report_text.master)
+
+        self.workspace_status_var.set(f"Workspace: {normalized.title()}")
+        self.status_var.set(f"Workspace preset: {normalized.title()}")
+        self.root.after_idle(
+            lambda selected=normalized: self._apply_workspace_profile_sashes(selected)
+        )
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
@@ -3587,8 +3708,215 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _open_analysis_search_result(self, analysis_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+        if not tree.exists(analysis_id):
+            self._refresh_analysis_list(select_id=analysis_id)
+        if not tree.exists(analysis_id):
+            self.status_var.set(f"Analysis no longer exists: {analysis_id}")
+            return
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_analysis_selected()
+        self.notebook.select(self.input_tab)
+        analysis = self.project.analysis_by_id(analysis_id)
+        self.selection_status_var.set(f"Selected: {analysis.name}")
+        self.status_var.set(f"Global search: opened analysis {analysis.name}")
+
+    def _open_spatial_search_result(self, kind: str, item_id: str) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None or not workspace.select_item(kind, item_id, notify=True):
+            self.status_var.set(f"{kind.title()} no longer exists: {item_id}")
+            return
+        self.activate_workspace_profile("design")
+        workspace.fit_selected()
+        self._sync_spatial_selection_status()
+        self.status_var.set(f"Global search: opened {kind} {item_id}")
+
+    def _open_diagnostic_search_result(self, issue: dict) -> None:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return
+        self.activate_workspace_profile("verification")
+        if panel.focus_issue(issue):
+            self._navigate_project_diagnostic(issue)
+        else:
+            self.status_var.set("Diagnostic is no longer present in the current project state")
+
+    def _open_requirement_search_result(self, requirement_id: str) -> None:
+        try:
+            snapshot = project_requirement_traceability_snapshot(self.project)
+        except Exception as exc:
+            self.status_var.set(f"Requirements traceability unavailable: {exc}")
+            return
+        if not snapshot.get("requirement_count") and not snapshot.get("mapping_count"):
+            self.status_var.set("No persisted requirements traceability is available")
+            return
+        dialog = RequirementsTraceabilityDialog(self.root, snapshot)
+        dialog.search_var.set(requirement_id)
+        self.status_var.set(f"Global search: requirement {requirement_id}")
+
+    def _open_proofgraph_search_result(self, node_key: str) -> None:
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return
+        self.activate_workspace_profile("evidence")
+        if viewer.focus_node(node_key):
+            node = viewer.selected_node()
+            label = node.get("label") if isinstance(node, dict) else node_key
+            self.status_var.set(f"Global search: ProofGraph {label}")
+        else:
+            self.status_var.set("ProofGraph node is no longer available")
+
+    def _engineering_search_commands(self) -> list[PaletteCommand]:
+        commands: list[PaletteCommand] = []
+
+        for analysis in self.project.analyses:
+            commands.append(
+                PaletteCommand(
+                    f"search.analysis.{analysis.id}",
+                    f"Analysis: {analysis.name}",
+                    "Project Search",
+                    lambda analysis_id=analysis.id: self._open_analysis_search_result(analysis_id),
+                    keywords=(
+                        "analysis",
+                        analysis.id,
+                        analysis.kind,
+                        analysis.name,
+                    ),
+                )
+            )
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if isinstance(layout, dict):
+            for kind, collection_name in (("room", "rooms"), ("device", "devices")):
+                collection = layout.get(collection_name, [])
+                if not isinstance(collection, list):
+                    continue
+                for item in collection:
+                    if not isinstance(item, dict) or not item.get("id"):
+                        continue
+                    item_id = str(item["id"])
+                    name = str(item.get("name") or item_id)
+                    subtype = str(
+                        item.get("type")
+                        or item.get("classification")
+                        or item.get("class")
+                        or ""
+                    )
+                    room_ref = str(item.get("room_id") or "")
+                    commands.append(
+                        PaletteCommand(
+                            f"search.{kind}.{item_id}",
+                            f"{kind.title()}: {name}",
+                            "Project Search",
+                            lambda selected_kind=kind, selected_id=item_id: self._open_spatial_search_result(
+                                selected_kind,
+                                selected_id,
+                            ),
+                            keywords=(
+                                kind,
+                                item_id,
+                                name,
+                                subtype,
+                                room_ref,
+                                "equipment" if kind == "device" else "space",
+                            ),
+                        )
+                    )
+
+        panel = getattr(self, "problems_panel", None)
+        if panel is not None:
+            for index, issue in enumerate(panel.searchable_issues()):
+                element = issue.get("element", {})
+                if not isinstance(element, dict):
+                    element = {}
+                object_name = str(
+                    element.get("name")
+                    or element.get("id")
+                    or element.get("type")
+                    or "project"
+                )
+                severity = str(issue.get("severity") or "info")
+                rule = str(issue.get("rule") or f"diagnostic-{index + 1}")
+                commands.append(
+                    PaletteCommand(
+                        f"search.diagnostic.{issue.get('sequence', index + 1)}.{index}",
+                        f"Diagnostic: {severity.upper()} · {rule} · {object_name}",
+                        "Verification Search",
+                        lambda selected=dict(issue): self._open_diagnostic_search_result(selected),
+                        keywords=(
+                            "diagnostic",
+                            severity,
+                            rule,
+                            str(issue.get("category") or ""),
+                            str(issue.get("message") or ""),
+                            str(issue.get("suggested_action") or ""),
+                            object_name,
+                            str(element.get("id") or ""),
+                            str(element.get("type") or ""),
+                        ),
+                    )
+                )
+
+        try:
+            traceability = project_requirement_traceability_snapshot(self.project)
+        except Exception:
+            traceability = {}
+        for requirement in traceability.get("requirements", []):
+            if not isinstance(requirement, dict) or not requirement.get("id"):
+                continue
+            requirement_id = str(requirement["id"])
+            title = str(requirement.get("title") or requirement_id)
+            commands.append(
+                PaletteCommand(
+                    f"search.requirement.{requirement_id}",
+                    f"Requirement: {title}",
+                    "Requirements Search",
+                    lambda selected=requirement_id: self._open_requirement_search_result(selected),
+                    keywords=(
+                        "requirement",
+                        requirement_id,
+                        title,
+                        str(requirement.get("status") or ""),
+                        str(requirement.get("applicability") or ""),
+                        str(requirement.get("criterion") or ""),
+                        " ".join(str(value) for value in requirement.get("scope", [])),
+                    ),
+                )
+            )
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None:
+            for index, node in enumerate(viewer.searchable_nodes()):
+                key = str(node.get("key") or "")
+                if not key:
+                    continue
+                label = str(node.get("label") or node.get("id") or key)
+                commands.append(
+                    PaletteCommand(
+                        f"search.proofgraph.{index}.{key}",
+                        f"Evidence: {label}",
+                        "Evidence Search",
+                        lambda selected=key: self._open_proofgraph_search_result(selected),
+                        keywords=(
+                            "proofgraph",
+                            "evidence",
+                            str(node.get("type") or ""),
+                            str(node.get("status") or ""),
+                            str(node.get("id") or ""),
+                            label,
+                        ),
+                    )
+                )
+
+        return commands
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3657,6 +3985,60 @@ class CleanroomXApp:
                 self.toggle_focus_workspace,
                 shortcut="Ctrl+Shift+F",
                 keywords=("fullscreen", "panels", "viewport", "zen"),
+            ),
+            PaletteCommand(
+                "workspace.design",
+                "Use Design Workspace Preset",
+                "Workspace",
+                lambda: self.activate_workspace_profile("design"),
+                shortcut="Ctrl+Alt+1",
+                keywords=("layout", "spatial", "inspector"),
+            ),
+            PaletteCommand(
+                "workspace.simulation",
+                "Use Simulation Workspace Preset",
+                "Workspace",
+                lambda: self.activate_workspace_profile("simulation"),
+                shortcut="Ctrl+Alt+2",
+                keywords=("layout", "plot", "results"),
+            ),
+            PaletteCommand(
+                "workspace.verification",
+                "Use Verification Workspace Preset",
+                "Workspace",
+                lambda: self.activate_workspace_profile("verification"),
+                shortcut="Ctrl+Alt+3",
+                keywords=("layout", "diagnostics", "problems"),
+            ),
+            PaletteCommand(
+                "workspace.evidence",
+                "Use Evidence Workspace Preset",
+                "Workspace",
+                lambda: self.activate_workspace_profile("evidence"),
+                shortcut="Ctrl+Alt+4",
+                keywords=("layout", "proofgraph", "provenance"),
+            ),
+            PaletteCommand(
+                "workspace.reporting",
+                "Use Reporting Workspace Preset",
+                "Workspace",
+                lambda: self.activate_workspace_profile("reporting"),
+                shortcut="Ctrl+Alt+5",
+                keywords=("layout", "report", "dossier"),
+            ),
+            PaletteCommand(
+                "density.compact",
+                "Use Compact Engineering Density",
+                "Window",
+                lambda: self.set_density("compact"),
+                keywords=("dense", "rows", "spacing"),
+            ),
+            PaletteCommand(
+                "density.comfortable",
+                "Use Comfortable Density",
+                "Window",
+                lambda: self.set_density("comfortable"),
+                keywords=("spacing", "rows"),
             ),
             PaletteCommand(
                 "bim.import",
@@ -3731,6 +4113,8 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        commands.extend(self._engineering_search_commands())
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

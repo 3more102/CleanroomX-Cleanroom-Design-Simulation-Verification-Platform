@@ -95,7 +95,10 @@ from .gui_theme import (
 )
 from .gui_proofgraph import ProofGraphViewer
 from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
-from .gui_errors import record_gui_exception
+from .gui_errors import (
+    make_gui_callback_exception_handler,
+    record_gui_exception,
+)
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -8368,7 +8371,9 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+                # Preserve the exception object/traceback until the UI thread can
+                # record a stable operator reference. Queue is in-process only.
+                self._queue.put(("error", generation, analysis_id, exc))
                 return
 
             self._queue.put(
@@ -8449,17 +8454,33 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    error = (
+                        payload
+                        if isinstance(payload, BaseException)
+                        else RuntimeError(str(payload))
+                    )
+                    report = record_gui_exception(
+                        f"Run analysis {analysis_id}",
+                        error,
+                    )
                     simulation = getattr(self, "simulation_workspace", None)
                     if simulation is not None:
-                        simulation.set_failed(str(payload))
+                        simulation.set_failed(report.summary)
                     self._finish_active_run_task(
                         state="failed",
                         stage="Backend execution failed",
                         result="Execution error",
-                        detail=str(payload),
+                        detail=(
+                            f"{report.summary}\n"
+                            f"Error reference: {report.reference}"
+                        ),
                     )
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
+                    self.status_var.set(f"Analysis failed · {report.reference}")
+                    messagebox.showerror(
+                        "Analysis failed",
+                        report.user_message(),
+                        parent=self.root,
+                    )
                 else:
                     history_evidence = None
                     history_error = None
@@ -8905,6 +8926,16 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke:
+        root.report_callback_exception = make_gui_callback_exception_handler(
+            operation="Unhandled GUI callback",
+            status_setter=app.status_var.set,
+            notifier=lambda report: messagebox.showerror(
+                "Unexpected application error",
+                report.user_message(),
+                parent=root,
+            ),
+        )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]
         lines = [

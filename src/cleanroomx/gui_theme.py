@@ -60,13 +60,24 @@ def normalize_theme_name(value: Any) -> str:
     return name if name in _THEME_PALETTES else "light"
 
 
+def normalize_density_name(value: Any) -> str:
+    name = str(value or "").strip().lower()
+    return name if name in {"comfortable", "compact"} else "comfortable"
+
+
 def theme_palette(value: Any) -> dict[str, str]:
     return deepcopy(_THEME_PALETTES[normalize_theme_name(value)])
 
 
-def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
-    """Apply the CleanroomX presentation palette to ttk without model side effects."""
+def configure_ttk_theme(
+    root: tk.Misc,
+    value: Any,
+    *,
+    density: Any = "comfortable",
+) -> dict[str, str]:
+    """Apply the CleanroomX presentation palette and density without model side effects."""
     palette = theme_palette(value)
+    compact = normalize_density_name(density) == "compact"
     style = ttk.Style(root)
     if "clam" in style.theme_names():
         style.theme_use("clam")
@@ -108,7 +119,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(8, 5),
+        padding=(7, 3) if compact else (8, 5),
     )
     style.map(
         "TButton",
@@ -198,7 +209,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TNotebook.Tab",
         background=palette["surface_alt"],
         foreground=palette["muted"],
-        padding=(10, 6),
+        padding=(8, 4) if compact else (10, 6),
         bordercolor=palette["border"],
     )
     style.map(
@@ -218,7 +229,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         fieldbackground=palette["tree"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        rowheight=24,
+        rowheight=20 if compact else 24,
     )
     style.map(
         "Treeview",
@@ -250,7 +261,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         arrowcolor=palette["text"],
-        padding=(7, 4),
+        padding=(6, 3) if compact else (7, 4),
     )
     style.map(
         "TMenubutton",
@@ -294,7 +305,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["accent"],
         foreground=palette["accent_text"],
         bordercolor=palette["accent"],
-        padding=(12, 6),
+        padding=(10, 4) if compact else (12, 6),
     )
     style.map(
         "CX.Primary.TButton",
@@ -311,12 +322,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
-        padding=(4, 3),
+        padding=(3, 2) if compact else (4, 3),
     )
     style.configure(
         "CX.PanelHeader.TFrame",
         background=palette["surface_alt"],
-        padding=(6, 4),
+        padding=(5, 3) if compact else (6, 4),
     )
     style.configure(
         "CX.PanelHeader.TLabel",
@@ -329,7 +340,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        padding=(6, 3),
+        padding=(5, 2) if compact else (6, 3),
     )
     style.map(
         "CX.Compact.TButton",

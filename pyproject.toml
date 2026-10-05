@@ -53,6 +53,9 @@ cleanroomx-dossier = "cleanroomx.dossier_cli:main"
 cleanroomx-consistency = "cleanroomx.consistency_cli:main"
 cleanroomx-assurance-snapshot = "cleanroomx.assurance_snapshot_cli:main"
 
+[project.gui-scripts]
+cleanroomx-desktop = "cleanroomx.gui:main"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

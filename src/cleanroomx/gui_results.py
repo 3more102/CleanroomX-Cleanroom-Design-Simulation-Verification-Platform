@@ -9,6 +9,35 @@ from tkinter import ttk
 from .gui_theme import theme_palette
 
 
+_UNIT_SUFFIXES: tuple[tuple[str, str], ...] = (
+    ("_m3_h", "m³/h"),
+    ("_m3_s", "m³/s"),
+    ("_kg_m3", "kg/m³"),
+    ("_m2_s", "m²/s"),
+    ("_m2", "m²"),
+    ("_m3", "m³"),
+    ("_pa", "Pa"),
+    ("_kw", "kW"),
+    ("_w", "W"),
+    ("_c", "°C"),
+    ("_percent", "%"),
+    ("_minutes", "min"),
+    ("_um", "µm"),
+    ("_m", "m"),
+)
+
+
+def _unit_hint(path: str) -> str:
+    """Infer a display unit only from an explicit field-name suffix."""
+    key = str(path or "").rsplit(".", 1)[-1].split("[", 1)[0].lower()
+    for suffix, unit in _UNIT_SUFFIXES:
+        if key.endswith(suffix):
+            return unit
+    if key.endswith("_1_h") or key == "ach":
+        return "1/h"
+    return ""
+
+
 def _humanize(value: Any) -> str:
     text = str(value or "").replace("_", " ").replace(".", " / ").strip()
     return " ".join(part.capitalize() for part in text.split())
@@ -80,7 +109,11 @@ def _flatten_result(value: Any, *, limit: int = 120) -> list[tuple[str, str]]:
                     )
                 )
             return
-        rows.append((path or "Result", _format_scalar(node)))
+        rendered = _format_scalar(node)
+        unit = _unit_hint(path)
+        if unit and isinstance(node, (int, float)) and not isinstance(node, bool):
+            rendered = f"{rendered} {unit}"
+        rows.append((path or "Result", rendered))
 
     visit(value, "", 0)
     return rows
@@ -180,7 +213,11 @@ class AnalysisResultPanel(ttk.Frame):
 
         self.title_var.set(title)
         self.status_var.set(status.upper().replace("_", " "))
-        diagnostic_count = len(diagnostics) if isinstance(diagnostics, list) else 0
+        diagnostic_count = (
+            len(diagnostics)
+            if isinstance(diagnostics, (dict, list, tuple))
+            else 0
+        )
         self.summary_var.set(
             f"Calculated result snapshot · {diagnostic_count} diagnostic"
             f"{'s' if diagnostic_count != 1 else ''}. "

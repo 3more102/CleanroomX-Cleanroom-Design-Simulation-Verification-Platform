@@ -45,7 +45,12 @@ class StartCenter(ttk.Frame):
             justify="left",
         ).pack(anchor="w", pady=(8, 0))
 
-        actions = ttk.LabelFrame(\n            self, text="Start", padding=18, style="CX.Card.TLabelframe"\n        )
+        actions = ttk.LabelFrame(
+            self,
+            text="Start",
+            padding=18,
+            style="CX.Card.TLabelframe",
+        )
         actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
@@ -64,15 +69,22 @@ class StartCenter(ttk.Frame):
         ttk.Button(
             actions,
             text="Import IFC",
+            style="CX.Secondary.TButton",
             command=on_import_ifc,
         ).grid(row=1, column=0, sticky="ew", padx=5, pady=5)
         ttk.Button(
             actions,
             text="Open Example Project",
+            style="CX.Secondary.TButton",
             command=on_open_demo,
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
-        capabilities = ttk.LabelFrame(\n            self,\n            text="Engineering workspace",\n            padding=18,\n            style="CX.Card.TLabelframe",\n        )
+        capabilities = ttk.LabelFrame(
+            self,
+            text="Engineering workspace",
+            padding=18,
+            style="CX.Card.TLabelframe",
+        )
         capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
         ttk.Label(
             capabilities,
@@ -87,7 +99,12 @@ class StartCenter(ttk.Frame):
             justify="left",
         ).pack(anchor="w")
 
-        recent = ttk.LabelFrame(\n            self,\n            text="Recent Projects",\n            padding=12,\n            style="CX.Card.TLabelframe",\n        )
+        recent = ttk.LabelFrame(
+            self,
+            text="Recent Projects",
+            padding=12,
+            style="CX.Card.TLabelframe",
+        )
         recent.grid(
             row=2,
             column=0,
@@ -126,7 +143,12 @@ class StartCenter(ttk.Frame):
             command=self._open_selected_recent,
         ).pack(side="right")
 
-        examples = ttk.LabelFrame(\n            self,\n            text="Example Projects",\n            padding=12,\n            style="CX.Card.TLabelframe",\n        )
+        examples = ttk.LabelFrame(
+            self,
+            text="Example Projects",
+            padding=12,
+            style="CX.Card.TLabelframe",
+        )
         examples.grid(
             row=3,
             column=0,
@@ -148,9 +170,12 @@ class StartCenter(ttk.Frame):
             wraplength=760,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Button(\n            examples,\n            text="Open Demo",\n            style="CX.Secondary.TButton",\n            command=on_open_demo,\n        ).grid(
-            row=0, column=1, rowspan=2, sticky="e", padx=(18, 0)
-        )
+        ttk.Button(
+            examples,
+            text="Open Demo",
+            style="CX.Secondary.TButton",
+            command=on_open_demo,
+        ).grid(row=0, column=1, rowspan=2, sticky="e", padx=(18, 0))
         examples.columnconfigure(0, weight=1)
 
     def set_recent_projects(self, records: list[dict[str, str]]) -> None:

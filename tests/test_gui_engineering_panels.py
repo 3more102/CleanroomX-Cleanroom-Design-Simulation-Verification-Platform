@@ -359,3 +359,53 @@ def test_diagnostics_table_sorting_is_presentation_only(app):
     assert panel.tree.set(rows[0], "code") == "z.rule"
     assert "▼" in panel.tree.heading("code", "text")
 
+def test_filtered_diagnostics_export_preserves_canonical_records(app):
+    panel = app.problems_panel
+    canonical = [
+        {
+            "sequence": 1,
+            "severity": "warning",
+            "rule": "air.rule",
+            "message": "Air issue",
+            "category": "HVAC",
+            "element": {"type": "project", "id": "air"},
+            "details": {},
+        },
+        {
+            "sequence": 2,
+            "severity": "error",
+            "rule": "geometry.rule",
+            "message": "Geometry issue",
+            "category": "Geometry",
+            "element": {"type": "project", "id": "geometry"},
+            "details": {},
+        },
+    ]
+    panel.last_result = {
+        "schema": "cleanroomx.project_diagnostics",
+        "summary": {
+            "status": "error",
+            "complete": True,
+            "issue_count": 2,
+            "error_count": 1,
+            "warning_count": 1,
+            "info_count": 0,
+        },
+        "issues": canonical,
+        "limitations": [],
+    }
+    panel._refresh_domain_values()
+    panel.domain_var.set("HVAC")
+    panel._populate()
+
+    snapshot = panel._filtered_export_result()
+
+    assert snapshot is not None
+    assert [issue["sequence"] for issue in snapshot["issues"]] == [1]
+    assert snapshot["summary"]["issue_count"] == 1
+    assert snapshot["summary"]["error_count"] == 0
+    assert snapshot["summary"]["warning_count"] == 1
+    assert snapshot["summary"]["status"] == "warning"
+    assert panel.last_result["issues"] == canonical
+    assert panel.last_result["summary"]["issue_count"] == 2
+

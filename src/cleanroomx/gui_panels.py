@@ -613,6 +613,19 @@ class ProjectDiagnosticsPanel(ttk.Frame):
     def previous_issue(self) -> bool:
         return self._select_relative(-1)
 
+    def select_sequence(self, sequence: Any, *, navigate: bool = True) -> bool:
+        for iid, issue in self._issues_by_iid.items():
+            if issue.get("sequence") != sequence:
+                continue
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+            self.tree.see(iid)
+            self._show_selected_detail()
+            if navigate:
+                self._navigate_callback(issue)
+            return True
+        return False
+
     def copy_selected(self) -> None:
         issue = self.selected_issue()
         if issue is None:

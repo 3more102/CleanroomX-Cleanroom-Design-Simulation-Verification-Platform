@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -196,3 +197,39 @@ def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
 
     assert app.proofgraph_viewer._documents == []
     assert "unavailable" in app.evidence_text.get("1.0", "end").casefold()
+
+
+def test_proofgraph_viewer_search_zoom_fit_and_theme_are_view_only(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    geometry_before = copy.deepcopy(workspace.layout)
+    document = _room_graph(room["id"])
+    viewer = app.proofgraph_viewer
+
+    viewer.set_documents([document])
+    viewer.search_var.set("pressure")
+    app.root.update()
+    assert viewer._projection["nodes"]
+    assert all(
+        "pressure" in (
+            str(node.get("label", ""))
+            + " "
+            + str(node.get("raw", {}))
+        ).casefold()
+        or any(
+            edge["source"] == node["key"] or edge["target"] == node["key"]
+            for edge in viewer._projection["edges"]
+        )
+        for node in viewer._projection["nodes"]
+    )
+
+    before_zoom = viewer._zoom
+    assert viewer.zoom_graph(1.15) > before_zoom
+    app.root.update()
+    fitted = viewer.fit_graph()
+    assert 0.45 <= fitted <= 2.5
+
+    viewer.apply_theme("dark")
+    app.root.update()
+    assert viewer.canvas.cget("background") == theme_palette("dark")["plot"]
+    assert workspace.layout == geometry_before

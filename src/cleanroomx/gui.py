@@ -423,10 +423,23 @@ class AnalysisPicker(tk.Toplevel):
         self.tree.column("category", width=110, stretch=False)
         self.tree.column("source", width=180, stretch=False)
         self.tree.column("description", width=420, stretch=True)
+        self.table_sort = TreeviewSortController(
+            self.tree,
+            {
+                "#0": "Analysis",
+                "category": "Category",
+                "source": "Implementation",
+                "description": "Description",
+            },
+        )
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        scroll_x = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=12, pady=(6, 12))
@@ -509,6 +522,7 @@ class AnalysisPicker(tk.Toplevel):
                 ),
             )
 
+        self.table_sort.reapply()
         self.count_var.set(f"{len(visible)} of {len(self._catalog)} workflows")
         children = self.tree.get_children()
         if selected and self.tree.exists(selected):
@@ -1857,6 +1871,17 @@ class IfcReimportPlanDialog(tk.Toplevel):
         self.tree.column("spatial", width=210)
         self.tree.column("local", width=105, stretch=False)
         self.tree.column("source", width=105, stretch=False)
+        self.table_sort = TreeviewSortController(
+            self.tree,
+            {
+                "#0": "IFC GlobalId",
+                "action": "Action",
+                "kind": "Kind",
+                "spatial": "CleanroomX ID",
+                "local": "Local changed",
+                "source": "IFC changed",
+            },
+        )
         scroll_y = ttk.Scrollbar(
             table_frame,
             orient="vertical",
@@ -1999,6 +2024,7 @@ class IfcReimportPlanDialog(tk.Toplevel):
             )
             self._change_by_iid[iid] = item
 
+        self.table_sort.reapply()
         self.count_var.set(f"{len(visible)} of {len(self.changes)} changes")
         children = self.tree.get_children()
         target = None

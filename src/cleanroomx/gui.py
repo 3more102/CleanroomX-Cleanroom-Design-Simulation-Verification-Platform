@@ -3379,10 +3379,14 @@ class CleanroomXApp:
 
     def _sync_task_status(self) -> None:
         panel = getattr(self, "task_center", None)
-        running = panel.running_count() if panel is not None else int(self._running)
-        self.task_status_var.set(
-            f"Tasks: {running} running" if running else "Tasks: idle"
+        running = panel.running_count() if panel is not None else int(
+            getattr(self, "_running", False)
         )
+        target = getattr(self, "task_status_var", None)
+        if target is not None:
+            target.set(
+                f"Tasks: {running} running" if running else "Tasks: idle"
+            )
 
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)

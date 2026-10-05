@@ -335,6 +335,93 @@ def test_hover_state_has_distinct_2d_feedback(app):
     assert workspace._hovered == _Hit("room", room["id"])
 
 
+def test_multiselect_additive_selection_keeps_primary_inspector_target(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    geometry_before = copy.deepcopy(
+        (workspace.layout["rooms"], workspace.layout["devices"])
+    )
+
+    workspace.select_item("room", first["id"])
+    workspace._set_selection(_Hit("room", second["id"]), additive=True)
+    workspace._load_property_panel()
+    workspace.redraw()
+    app.root.update()
+
+    assert workspace.selected == _Hit("room", second["id"])
+    assert set(workspace.selected_hits()) == {
+        _Hit("room", first["id"]),
+        _Hit("room", second["id"]),
+    }
+    assert workspace.selection_status_text().startswith("2 selected · ")
+    assert workspace._selection_var.get().startswith("2 selected · Primary Room:")
+    assert (workspace.layout["rooms"], workspace.layout["devices"]) == geometry_before
+
+
+def test_marquee_selection_selects_rendered_rooms_without_model_changes(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    geometry_before = copy.deepcopy(
+        (workspace.layout["rooms"], workspace.layout["devices"])
+    )
+    workspace.set_workspace_mode("2d")
+    app.root.update()
+
+    corners = []
+    for room in (first, second):
+        corners.extend(
+            (
+                workspace._world_to_canvas(room["x_m"], room["y_m"]),
+                workspace._world_to_canvas(
+                    room["x_m"] + room["length_m"],
+                    room["y_m"] + room["width_m"],
+                ),
+            )
+        )
+    x0 = min(point[0] for point in corners) - 4
+    y0 = min(point[1] for point in corners) - 4
+    x1 = max(point[0] for point in corners) + 4
+    y1 = max(point[1] for point in corners) + 4
+
+    workspace._apply_selection_box((x0, y0), (x1, y1), additive=False)
+    app.root.update()
+
+    selected = set(workspace.selected_hits())
+    assert _Hit("room", first["id"]) in selected
+    assert _Hit("room", second["id"]) in selected
+    assert len(selected) >= 2
+    assert workspace.selected in selected
+    assert (workspace.layout["rooms"], workspace.layout["devices"]) == geometry_before
+
+
+def test_multiselect_hide_and_bulk_delete_use_one_transient_selection(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    workspace.select_item("room", first["id"])
+    workspace._set_selection(_Hit("room", second["id"]), additive=True)
+    workspace._load_property_panel()
+
+    workspace.hide_selected()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag(f"room:{first['id']}")
+    assert not workspace.canvas_2d.find_withtag(f"room:{second['id']}")
+
+    workspace.show_all()
+    app.root.update()
+    room_count = len(workspace.layout["rooms"])
+    workspace.delete_selected()
+    app.root.update()
+
+    assert len(workspace.layout["rooms"]) == room_count - 2
+    assert not any(room["id"] == first["id"] for room in workspace.layout["rooms"])
+    assert not any(room["id"] == second["id"] for room in workspace.layout["rooms"])
+    assert workspace.selected_hits() == ()
+
+    assert app.undo_project_edit()
+    assert any(room["id"] == first["id"] for room in workspace.layout["rooms"])
+    assert any(room["id"] == second["id"] for room in workspace.layout["rooms"])
+
+
 def test_viewport_visibility_controls_keep_room_context(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

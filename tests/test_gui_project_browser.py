@@ -7,8 +7,13 @@ from tkinter import ttk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui import (
+    CleanroomXApp,
+    bundled_demo_project_path,
+    spatial_navigator_issue_counts,
+)
 from cleanroomx.project import ProjectDocument
+from cleanroomx.spatial import SPATIAL_METADATA_KEY, empty_layout, validate_layout
 
 
 @pytest.fixture
@@ -173,3 +178,64 @@ def test_recent_navigator_state_is_scoped_to_active_project_object(app):
     assert app._navigator_recent_ids == []
     assert tuple(app.navigator_recent_picker.cget("values")) == ()
     assert app.navigator_recent_var.get() == ""
+
+def test_spatial_navigator_issue_counts_use_canonical_item_references():
+    layout = empty_layout()
+    layout["rooms"] = [
+        {
+            "id": "room-a",
+            "name": "Process A",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+            "floor_elevation_m": 0.0,
+        },
+        {
+            "id": "room-b",
+            "name": "Process B",
+            "x_m": 2.0,
+            "y_m": 2.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+            "floor_elevation_m": 0.0,
+        },
+    ]
+    layout["devices"] = [
+        {
+            "id": "sensor-a",
+            "name": "Monitor",
+            "type": "sensor",
+            "room_id": None,
+            "x_m": 1.0,
+            "y_m": 1.0,
+            "z_m": 1.0,
+        }
+    ]
+
+    counts = spatial_navigator_issue_counts(validate_layout(layout))
+
+    assert counts["room-a"] >= 1
+    assert counts["room-b"] >= 1
+    assert counts["sensor-a"] == 1
+
+
+def test_project_browser_marks_spatial_items_with_validation_badges(app):
+    layout = app.project.metadata.get(SPATIAL_METADATA_KEY)
+    assert isinstance(layout, dict)
+    devices = layout.get("devices")
+    if not isinstance(devices, list) or not devices:
+        pytest.skip("bundled demo has no device to exercise navigator warning badge")
+
+    device = devices[0]
+    device["room_id"] = None
+    app._refresh_spatial_navigator()
+    app.root.update()
+
+    iid = f"device:{device['id']}"
+    item = app.analysis_tree.item(iid)
+    assert "⚠" in item["text"]
+    assert "spatial_warning" in item["tags"]
+

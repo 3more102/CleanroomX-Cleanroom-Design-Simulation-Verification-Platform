@@ -2456,6 +2456,12 @@ class CleanroomXApp:
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
+        self.engineering_context_var = tk.StringVar(
+            value="x 0.00 m   y 0.00 m · Grid 0.5 m · Snap ON"
+        )
+        self.health_status_var = tk.StringVar(
+            value="Errors 0 · Warnings 0 · Verify 0/0"
+        )
         self.shell_save_badge_var = tk.StringVar(value="UNSAVED")
         self.shell_model_badge_var = tk.StringVar(value="MODEL READY")
         self.shell_diagnostics_badge_var = tk.StringVar(value="DIAGNOSTICS —")
@@ -3315,6 +3321,7 @@ class CleanroomXApp:
             on_redo_requested=self.redo_project_edit,
             on_selection_change=self._on_workspace_selection_change,
             on_view_status_change=self.view_status_var.set,
+            on_engineering_context_change=self.engineering_context_var.set,
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
@@ -3553,6 +3560,15 @@ class CleanroomXApp:
         )
         ttk.Label(
             status_bar,
+            textvariable=self.engineering_context_var,
+            anchor="e",
+            style="CX.ToolbarMuted.TLabel",
+        ).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Label(
+            status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
             style="CX.ToolbarMuted.TLabel",
@@ -3563,6 +3579,15 @@ class CleanroomXApp:
         ttk.Label(
             status_bar,
             textvariable=self.task_status_var,
+            anchor="e",
+            style="CX.ToolbarMuted.TLabel",
+        ).pack(side="right")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="right", fill="y", padx=8
+        )
+        ttk.Label(
+            status_bar,
+            textvariable=self.health_status_var,
             anchor="e",
             style="CX.ToolbarMuted.TLabel",
         ).pack(side="right")
@@ -4647,6 +4672,16 @@ class CleanroomXApp:
             f"VERIFY {current}/{configured}"
         )
         self.shell_verification_badge.configure(style=verify_style)
+        health_parts = [
+            f"Errors {error_count}",
+            f"Warnings {warning_count}",
+            f"Verify {current}/{configured}",
+        ]
+        if stale:
+            health_parts.append(f"Stale {stale}")
+        if not_verified:
+            health_parts.append(f"Unverified {not_verified}")
+        self.health_status_var.set(" · ".join(health_parts))
 
         proofgraphs = self._proofgraph_documents_from_records(records)
         self.shell_evidence_badge_var.set(f"EVIDENCE {len(records)}")

@@ -4102,6 +4102,13 @@ class CleanroomXApp:
                 keywords=("solver", "calculate"),
             ),
             PaletteCommand(
+                "analysis.history",
+                "Open Analysis Run History",
+                "Analysis",
+                self.show_run_history,
+                keywords=("history", "retained", "compare", "evidence", "results"),
+            ),
+            PaletteCommand(
                 "workspace.diagnostics",
                 "Open Diagnostics Workspace",
                 "Verification",
@@ -4336,12 +4343,30 @@ class CleanroomXApp:
                 running=False,
             )
             return
+        history_available = True
+        retained_run_count: int | None = None
+        latest_retained_utc: str | None = None
+        try:
+            retained = [
+                record
+                for record in run_history_records(self.project.metadata)
+                if record.get("analysis_id") == analysis.id
+            ]
+        except RunHistoryIntegrityError:
+            history_available = False
+        else:
+            retained_run_count = len(retained)
+            if retained:
+                latest_retained_utc = str(retained[-1].get("completed_at_utc") or "") or None
         workspace.set_context(
             analysis_name=analysis.name,
             analysis_kind=analysis.kind,
             analysis_input=analysis.input,
             last_run=self._runs_by_analysis.get(analysis.id),
             running=bool(self._running),
+            retained_run_count=retained_run_count,
+            latest_retained_utc=latest_retained_utc,
+            history_available=history_available,
         )
 
     def _activate_simulation_workspace(self) -> None:

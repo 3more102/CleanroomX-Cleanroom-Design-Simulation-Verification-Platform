@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_overview import EngineeringOverview, engineering_overview_snapshot
 from .gui_reporting import ReportingWorkspace, build_reporting_snapshot
 from .gui_simulation import (
     SimulationWorkspace,
@@ -2405,6 +2406,10 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        view_menu.add_command(
+            label="Engineering Overview",
+            command=self.show_engineering_overview,
+        )
         workspace_menu = tk.Menu(view_menu, tearoff=False)
         for profile in ("design", "simulation", "verification", "evidence", "reporting"):
             workspace_menu.add_command(
@@ -2884,6 +2889,18 @@ class CleanroomXApp:
             on_forget_recent=self._forget_recent_project,
         )
         self.notebook.add(self.start_center, text="Start")
+
+        self.engineering_overview = EngineeringOverview(
+            self.notebook,
+            on_open_design=lambda: self.activate_workspace_profile("design"),
+            on_open_simulation=lambda: self.activate_workspace_profile("simulation"),
+            on_open_verification=lambda: self.activate_workspace_profile("verification"),
+            on_open_evidence=lambda: self.activate_workspace_profile("evidence"),
+            on_open_problems=self.show_problems_panel,
+            on_save=self.save_project,
+            on_refresh=self._refresh_engineering_panels,
+        )
+        self.notebook.add(self.engineering_overview, text="Overview")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -3765,6 +3782,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency: dict | None = None
+        evidence_record_count: int | None = None
 
         try:
             currency = assess_project_verification_currency(
@@ -3808,6 +3827,7 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            evidence_record_count = len(records)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents(
@@ -3879,6 +3899,20 @@ class CleanroomXApp:
         reporting_workspace = getattr(self, "reporting_workspace", None)
         if reporting_workspace is not None:
             reporting_workspace.refresh()
+        overview = getattr(self, "engineering_overview", None)
+        if overview is not None:
+            overview.set_snapshot(
+                engineering_overview_snapshot(
+                    project_name=self.project.name,
+                    project_path=str(self.project_path) if self.project_path else None,
+                    analysis_count=len(self.project.analyses),
+                    diagnostics=diagnostics if isinstance(diagnostics, dict) else None,
+                    verification_currency=currency,
+                    evidence_record_count=evidence_record_count,
+                    running=bool(self._running),
+                    unsaved=bool(self._has_unsaved_changes()),
+                )
+            )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -4159,6 +4193,13 @@ class CleanroomXApp:
                 keywords=("home", "recent", "example"),
             ),
             PaletteCommand(
+                "workspace.overview",
+                "Open Engineering Overview",
+                "Navigation",
+                self.show_engineering_overview,
+                keywords=("health", "readiness", "diagnostics", "verification", "evidence"),
+            ),
+            PaletteCommand(
                 "workspace.design",
                 "Switch to Design Workspace",
                 "Workspace",
@@ -4436,6 +4477,15 @@ class CleanroomXApp:
         start_center = getattr(self, "start_center", None)
         if start_center is not None:
             start_center.set_recent_projects(self._recent_project_records())
+
+    def show_engineering_overview(self) -> None:
+        """Refresh and open the project-health overview without recalculation."""
+        self._refresh_engineering_panels()
+        overview = getattr(self, "engineering_overview", None)
+        if overview is not None:
+            self.notebook.select(overview)
+            self.workspace_status_var.set("Workspace: Engineering Overview")
+            self.status_var.set("Engineering overview refreshed")
 
     def _remember_recent_project(self, path: str | Path) -> None:
         candidate = Path(path).resolve(strict=False)

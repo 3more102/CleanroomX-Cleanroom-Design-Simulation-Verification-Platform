@@ -255,3 +255,68 @@ def test_engineering_panel_failures_are_recorded_without_hiding_operator_state(
         ),
     ]
 
+
+def test_engineering_panel_failures_are_recorded_without_hiding_operator_state(
+    monkeypatch,
+) -> None:
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = SimpleNamespace(
+        name="Engineering panel failure",
+        analyses=[],
+        metadata={},
+    )
+    app.project_path = None
+    app.last_run = None
+    app.verification_text = "verification"
+    app.evidence_text = "evidence"
+    app.console_text = "console"
+    app._base_dir = lambda: None
+
+    class ProblemsPanel:
+        @staticmethod
+        def refresh():
+            return {"summary": {"status": "ok"}}
+
+    app.problems_panel = ProblemsPanel()
+    displayed: dict[str, str] = {}
+    app._set_text = lambda target, value: displayed.__setitem__(target, value)
+
+    def fail_currency(*_args, **_kwargs):
+        raise RuntimeError("currency backend failed")
+
+    def fail_history(*_args, **_kwargs):
+        raise ValueError("verification history failed")
+
+    monkeypatch.setattr(
+        gui_module,
+        "assess_project_verification_currency",
+        fail_currency,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "verification_run_history_records",
+        fail_history,
+    )
+    logger = _RecordingLogger()
+    monkeypatch.setattr(gui_module, "GUI_RUNTIME_LOGGER", logger)
+
+    diagnostics = app._refresh_engineering_panels()
+
+    assert diagnostics == {"summary": {"status": "ok"}}
+    assert displayed["verification"] == (
+        "Verification currency unavailable: currency backend failed\n"
+    )
+    assert displayed["evidence"] == (
+        "Verification evidence unavailable: verification history failed\n"
+    )
+    assert logger.calls == [
+        (
+            "Failed to assess project verification currency path=%s",
+            (None,),
+        ),
+        (
+            "Failed to load persisted verification evidence path=%s",
+            (None,),
+        ),
+    ]
+

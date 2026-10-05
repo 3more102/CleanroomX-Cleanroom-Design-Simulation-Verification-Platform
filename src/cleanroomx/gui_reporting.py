@@ -69,6 +69,7 @@ class ReportingWorkspace(ttk.Frame):
         self,
         master: tk.Misc,
         *,
+        on_preview_dossier: Callable[[], Any],
         on_export_dossier: Callable[[], Any],
         on_export_diagnostics: Callable[[], Any],
         on_export_result_json: Callable[[], Any],
@@ -135,8 +136,14 @@ class ReportingWorkspace(ttk.Frame):
         )
         ttk.Button(
             exports_frame,
-            text="Export Engineering Dossier…",
+            text="Preview Engineering Dossier",
             style="CX.Primary.TButton",
+            command=on_preview_dossier,
+        ).pack(fill="x", pady=3)
+        ttk.Button(
+            exports_frame,
+            text="Export Engineering Dossier…",
+            style="CX.Compact.TButton",
             command=on_export_dossier,
         ).pack(fill="x", pady=3)
         ttk.Button(
@@ -226,6 +233,11 @@ class ReportingWorkspace(ttk.Frame):
                 ]
             )
         self._set_preview("\n".join(lines))
+
+    def show_preview(self, title: str, value: str) -> None:
+        heading = str(title or "Report preview").strip()
+        body = str(value or "").rstrip()
+        self._set_preview(f"{heading}\n{'=' * len(heading)}\n\n{body}\n")
 
     def _set_preview(self, value: str) -> None:
         self.preview.configure(state="normal")

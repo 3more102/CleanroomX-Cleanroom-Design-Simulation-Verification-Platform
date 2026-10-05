@@ -20,6 +20,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "output_visible": True,
         "inspector_visible": True,
         "theme": "dark",
+        "workspace_profile": "start",
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,
@@ -40,6 +41,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "output_visible": "no",
             "inspector_visible": True,
             "theme": "neon",
+            "workspace_profile": "unsupported",
             "recent_projects": [
                 "alpha.cleanroomx.json",
                 "",
@@ -62,6 +64,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["output_visible"] is True
     assert state["inspector_visible"] is True
     assert state["theme"] == "dark"
+    assert state["workspace_profile"] == "start"
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
@@ -83,6 +86,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "output_visible": True,
             "inspector_visible": False,
             "theme": "dark",
+            "workspace_profile": "verification",
             "recent_projects": [
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
@@ -101,6 +105,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     assert payload["navigator_visible"] is False
     assert payload["inspector_visible"] is False
     assert payload["theme"] == "dark"
+    assert payload["workspace_profile"] == "verification"
     assert payload["recent_projects"] == [
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",
@@ -127,3 +132,21 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_workspace_profile_normalization_is_closed_to_supported_profiles():
+    for profile in (
+        "start",
+        "design",
+        "simulation",
+        "verification",
+        "evidence",
+        "reporting",
+    ):
+        assert normalize_gui_layout_state(
+            {"workspace_profile": profile.upper()}
+        )["workspace_profile"] == profile
+
+    assert normalize_gui_layout_state(
+        {"workspace_profile": "compliance"}
+    )["workspace_profile"] == "start"

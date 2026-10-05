@@ -59,6 +59,14 @@ toolbar visibility through real Tk widgets. It requires a source checkout and
 the development/test extra. Headless test runs skip these GUI cases; CI runs
 them explicitly under Xvfb and treats an unusable configured display as an error.
 
+## Registered Windows installer
+
+Release validation also builds a registered per-user Windows installer from the
+self-contained workstation and executes install, launch, upgrade, launch, and
+uninstall on a fresh Windows runner. See `docs/WINDOWS_INSTALLER.md` for the
+artifact and reproduction procedure. The installer does not require a separate
+Python runtime.
+
 ## Production-use boundary
 
 Deployment does not convert CleanroomX screening/numerical outputs into cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Controlled organizations should apply their own document control, change control, verification, and approval procedures.

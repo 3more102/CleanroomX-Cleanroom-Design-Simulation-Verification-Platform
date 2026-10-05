@@ -1092,3 +1092,23 @@ def test_primary_workspace_mode_bar_fits_supported_minimum_window(app):
     for button in app.workspace_mode_buttons.values():
         assert button.winfo_ismapped()
         assert button.winfo_x() + button.winfo_width() <= app.modebar.winfo_width()
+
+
+
+def test_spatial_view_buttons_track_active_view_without_model_mutation(app):
+    before = copy.deepcopy(app.project.to_dict())
+
+    app._activate_spatial_workspace("2d")
+    app.root.update()
+    assert app.toolbar_view_buttons["2d"].cget("style") == "CX.ViewActive.TButton"
+    assert app.toolbar_view_buttons["3d"].cget("style") == "CX.View.TButton"
+    assert app.toolbar_view_buttons["split"].cget("style") == "CX.View.TButton"
+
+    app._activate_spatial_workspace("3d")
+    app.root.update()
+    assert app.toolbar_view_buttons["3d"].cget("style") == "CX.ViewActive.TButton"
+
+    app._activate_spatial_workspace("split")
+    app.root.update()
+    assert app.toolbar_view_buttons["split"].cget("style") == "CX.ViewActive.TButton"
+    assert app.project.to_dict() == before

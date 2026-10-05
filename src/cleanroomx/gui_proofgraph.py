@@ -689,7 +689,7 @@ class ProofGraphViewer(ttk.Frame):
         if status in {"pass", "passed"}:
             return self._palette["success"]
         return {
-            "requirement": "#2563EB",
+            "requirement": self._palette["requirement"],
             "model_object": self._palette["accent"],
             "ifc": self._palette["info"],
             "source": self._palette["secondary_text"],

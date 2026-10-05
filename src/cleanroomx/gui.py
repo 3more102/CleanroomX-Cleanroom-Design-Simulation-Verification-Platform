@@ -2250,6 +2250,7 @@ class CleanroomXApp:
         ]
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
+            problems_panel.apply_theme(self.theme_var.get())
             text_widgets.append(getattr(problems_panel, "detail", None))
         for widget in text_widgets:
             if isinstance(widget, tk.Text):

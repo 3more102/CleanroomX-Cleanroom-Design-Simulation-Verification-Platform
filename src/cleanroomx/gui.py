@@ -3809,9 +3809,14 @@ class CleanroomXApp:
                 )
                 return
 
-        if element_type == "spatial_element" and element_id:
+        if element_type in {"spatial_element", "room", "device"} and element_id:
             workspace = self.spatial_workspace
-            for kind in ("room", "device"):
+            kinds = {
+                "room": ("room",),
+                "device": ("device",),
+                "spatial_element": ("room", "device"),
+            }[element_type]
+            for kind in kinds:
                 if workspace.select_item(kind, element_id, notify=True):
                     self._activate_spatial_workspace()
                     workspace.fit_selected()
@@ -3819,7 +3824,7 @@ class CleanroomXApp:
                     return
 
         self.status_var.set(
-            f"Diagnostic {issue.get('rule', '')}: no spatial navigation target"
+            f"Diagnostic {issue.get('rule', '')}: no supported navigation target"
         )
 
     def export_project_diagnostics(self, _result: dict | None = None) -> None:

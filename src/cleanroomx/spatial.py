@@ -2765,7 +2765,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 {key: variable.get() for key, variable in self._property_vars.items()},
             )
         except ValueError as exc:
-            self._property_status_var.set("Invalid: " + str(exc))
+            property_status = getattr(self, "_property_status_var", None)
+            if property_status is not None:
+                property_status.set("Invalid: " + str(exc))
             messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
             self._status_setter("Properties not applied: " + str(exc))
             return
@@ -2780,9 +2782,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             history_before=history_before,
             selection_before=selection_before,
         )
-        self._property_status_var.set(
-            "Properties applied" if changed else "No property changes"
-        )
+        property_status = getattr(self, "_property_status_var", None)
+        if property_status is not None:
+            property_status.set(
+                "Properties applied" if changed else "No property changes"
+            )
 
     def duplicate_selected(self) -> None:
         if self._selected_object() is None:

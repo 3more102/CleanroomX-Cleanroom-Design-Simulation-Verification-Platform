@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from cleanroomx.gui_results import _flatten_result, _format_scalar, _humanize, _unit_hint
+from cleanroomx.gui_results import (
+    _flatten_result,
+    _format_scalar,
+    _humanize,
+    _result_class,
+    _unit_hint,
+)
 
 
 def test_result_scalar_formatting_is_engineering_dense():
@@ -43,3 +49,12 @@ def test_result_projection_infers_units_only_from_explicit_field_suffixes():
     assert ("status", "pass") in rows
     assert _unit_hint("result.margin_percent") == "%"
     assert _unit_hint("result.status") == ""
+
+
+def test_result_classification_separates_calculated_requirements_and_verdicts():
+    assert _result_class("airflow.supply_airflow_m3_h") == "CALCULATED"
+    assert _result_class("requirements.minimum_ach") == "REQUIREMENT"
+    assert _result_class("design_target_pa") == "REQUIREMENT"
+    assert _result_class("compliance.status") == "VERDICT"
+    assert _result_class("pressure_verdict") == "VERDICT"
+    assert _result_class("metadata.solver_version") == "METADATA"

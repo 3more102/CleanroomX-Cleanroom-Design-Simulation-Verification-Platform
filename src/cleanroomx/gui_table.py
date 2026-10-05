@@ -108,7 +108,7 @@ class TreeviewSortController:
                 present.append((token, index, iid))
 
         present.sort(
-            key=lambda item: (item[0], item[1]),
+            key=lambda item: item[0],
             reverse=self.descending,
         )
         ordered = [iid for _, _, iid in present]

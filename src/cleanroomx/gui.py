@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_dashboard import EngineeringDashboardPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -1438,6 +1439,7 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        view_menu.add_command(label="Engineering Dashboard", command=self._activate_dashboard_workspace)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -1766,6 +1768,7 @@ class CleanroomXApp:
         ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 3))
         self.workspace_mode_buttons: dict[str, ttk.Button] = {}
         for index, (key, label) in enumerate((
+            ("dashboard", "DASHBOARD"),
             ("design", "DESIGN"),
             ("analyze", "ANALYZE"),
             ("verify", "VERIFY"),
@@ -1873,6 +1876,15 @@ class CleanroomXApp:
             on_open_recent=self._open_recent_project_from_start,
         )
         self.notebook.add(self.start_center, text="Start")
+
+        self.dashboard_panel = EngineeringDashboardPanel(
+            self.notebook,
+            navigate_callback=self._navigate_project_diagnostic,
+            show_problems_callback=self.show_problems_panel,
+            verify_callback=self.run_project_requirements_verification,
+            open_design_callback=lambda: self._activate_spatial_workspace("split"),
+        )
+        self.notebook.add(self.dashboard_panel, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -2273,6 +2285,9 @@ class CleanroomXApp:
         if problems_panel is not None:
             problems_panel.apply_theme(self.theme_var.get())
             text_widgets.append(getattr(problems_panel, "detail", None))
+        dashboard_panel = getattr(self, "dashboard_panel", None)
+        if dashboard_panel is not None:
+            dashboard_panel.apply_theme(self.theme_var.get())
         proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
         if proofgraph_viewer is not None:
             proofgraph_viewer.apply_theme(self.theme_var.get(), redraw=redraw)
@@ -2585,6 +2600,13 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        dashboard = getattr(self, "dashboard_panel", None)
+        if dashboard is not None:
+            dashboard.refresh(
+                diagnostics,
+                last_run_title=self.last_run.title if self.last_run is not None else None,
+                last_run_status=self.last_run.status if self.last_run is not None else None,
+            )
 
         try:
             currency = assess_project_verification_currency(
@@ -3085,7 +3107,9 @@ class CleanroomXApp:
     def _activate_primary_workspace(self, mode: str) -> None:
         """Navigate existing workflows without creating parallel engineering state."""
         key = str(mode or "").strip().lower()
-        if key == "design":
+        if key == "dashboard":
+            self._activate_dashboard_workspace()
+        elif key == "design":
             self._activate_spatial_workspace("split")
         elif key == "analyze":
             self._activate_analysis_input_workspace()
@@ -3102,9 +3126,17 @@ class CleanroomXApp:
             self.workspace_status_var.set("Workspace: Release")
         else:
             raise ValueError(
-                "workspace mode must be design, analyze, verify, evidence, or release"
+                "workspace mode must be dashboard, design, analyze, verify, evidence, or release"
             )
         self._set_primary_workspace_mode(key)
+
+    def _activate_dashboard_workspace(self) -> None:
+        """Open the canonical project-health dashboard without changing project state."""
+        self._restore_focus_workspace_snapshot(status=False)
+        if hasattr(self, "notebook") and hasattr(self, "dashboard_panel"):
+            self.notebook.select(self.dashboard_panel)
+        self.workspace_status_var.set("Workspace: Dashboard")
+        self._set_primary_workspace_mode("dashboard")
 
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         self._set_primary_workspace_mode("design")

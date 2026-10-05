@@ -194,7 +194,7 @@ def validate_spatial_layout_document(value: Any) -> None:
             )
         if room.get("pressure_pa") is not None:
             _require_finite_number(room.get("pressure_pa"), f"{prefix}.pressure_pa")
-        for field in ("classification", "analysis_room_name"):
+        for field in ("zone", "classification", "analysis_room_name"):
             if room.get(field) is not None:
                 _require_non_empty_string(room.get(field), f"{prefix}.{field}")
 

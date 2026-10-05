@@ -1709,6 +1709,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 0, 8, 4),
         )
         viewbar.pack(fill="x")
+
+        # Reserve the critical validation action before flexible view controls.
+        # This keeps the primary engineering check reachable at the supported
+        # 1050 px minimum window width even when navigator/inspector panes are open.
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            style="CX.Primary.TButton",
+            command=self.report_validation,
+        ).pack(side="right", padx=(6, 2))
+        ttk.Label(
+            viewbar,
+            textvariable=self._validation_var,
+            anchor="e",
+            width=20,
+        ).pack(side="right", padx=(6, 0))
+
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
         ).pack(side="left", padx=(2, 6))
@@ -1725,15 +1742,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(
-            viewbar,
-            text="Validate",
-            style="CX.Primary.TButton",
-            command=self.report_validation,
-        ).pack(side="left", padx=(10, 2))
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
-        )
 
         overlaybar = ttk.Frame(
             self,

@@ -395,3 +395,28 @@ def test_problem_browser_surfaces_backend_failure_with_reference_and_retry_guida
     assert recorded[0][0] == "Refresh project diagnostics"
     assert isinstance(recorded[0][1], RuntimeError)
 
+def test_problem_table_layout_survives_workstation_state_capture_and_restore(app):
+    behavior = app.problems_panel.table_behavior
+    tree = app.problems_panel.tree
+
+    tree.column("description", width=640)
+    assert behavior.set_column_visible("source", False)
+    behavior.sort_by("code")
+
+    captured = app._capture_ui_layout_state()
+    problems_layout = captured["table_layouts"]["problems"]
+    assert "source" not in problems_layout["visible_columns"]
+    assert problems_layout["column_widths"]["description"] == 640
+    assert problems_layout["sort_column"] == "code"
+
+    behavior.show_all_columns()
+    tree.column("description", width=240)
+    behavior.sort_by("description")
+    app._ui_layout_state = captured
+    app._restore_ui_layout_state()
+    app.root.update()
+
+    assert "source" not in behavior.visible_columns()
+    assert int(tree.column("description", "width")) == 640
+    assert behavior.sort_column == "code"
+

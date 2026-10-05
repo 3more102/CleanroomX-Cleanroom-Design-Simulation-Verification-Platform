@@ -1528,6 +1528,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_meta: dict[str, tuple[str, str, str]] = {}
+        self._property_sections: dict[str, ttk.LabelFrame] = {}
+        self._visible_property_keys: set[str] = set()
+        self._property_filter_var = tk.StringVar()
+        self._property_validation_var = tk.StringVar(value="")
+        self._property_validation_style = "CX.Section.TLabel"
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1882,7 +1888,26 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._selection_var,
             wraplength=310,
             style="CX.ViewTitle.TLabel",
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 5))
+        property_filter = ttk.Frame(inspector)
+        property_filter.pack(fill="x", pady=(0, 7))
+        ttk.Label(property_filter, text="Filter").pack(side="left")
+        self._property_filter_entry = ttk.Entry(
+            property_filter,
+            textvariable=self._property_filter_var,
+        )
+        self._property_filter_entry.pack(side="left", fill="x", expand=True, padx=(6, 4))
+        ttk.Button(
+            property_filter,
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=lambda: self._property_filter_var.set(""),
+        ).pack(side="right")
+        self._property_filter_var.trace_add(
+            "write",
+            lambda *_: self._refresh_property_row_visibility(),
+        )
 
         engineering_context = ttk.LabelFrame(
             inspector,
@@ -1937,6 +1962,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         for group_name, fields in property_groups:
             section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
+            self._property_sections[group_name] = section
             for key, label, unit in fields:
                 row = ttk.Frame(section)
                 row.pack(fill="x", pady=2)
@@ -1948,16 +1974,31 @@ class SpatialDesignWorkspace(ttk.Frame):
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
+                self._property_meta[key] = (group_name, label, unit)
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
-        ttk.Button(
+        self._property_empty_label = ttk.Label(
             inspector,
+            text="No properties match the current filter.",
+            style="CX.Section.TLabel",
+        )
+        action_row = ttk.Frame(inspector)
+        action_row.pack(fill="x", pady=(2, 6))
+        self._property_validation_label = ttk.Label(
+            action_row,
+            textvariable=self._property_validation_var,
+            style="CX.Section.TLabel",
+            wraplength=205,
+        )
+        self._property_validation_label.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            action_row,
             text="Apply properties",
             command=self.apply_properties,
-        ).pack(anchor="e", pady=(2, 6))
+        ).pack(side="right")
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
             fill="x", pady=(3, 0)
@@ -2686,16 +2727,70 @@ class SpatialDesignWorkspace(ttk.Frame):
                 lines.append(label)
         return "\n".join(lines) if lines else "No calculated room context is available for the current analysis."
 
+    def _clear_property_error_state(self) -> None:
+        for entry in self._property_entries.values():
+            entry.configure(style="TEntry")
+        self._property_validation_var.set("")
+        self._property_validation_label.configure(style="CX.Section.TLabel")
+
+    def _property_key_from_error(self, message: str) -> str | None:
+        text = str(message or "").casefold()
+        aliases = {
+            "name": ("name",),
+            "room_id": ("room id",),
+            "wall_side": ("wall side",),
+            "swing": ("swing",),
+        }
+        for key, (_group, label, _unit) in self._property_meta.items():
+            probes = {label.casefold(), key.replace("_", " ").casefold()}
+            probes.update(alias.casefold() for alias in aliases.get(key, ()))
+            if any(probe and probe in text for probe in probes):
+                return key
+        return None
+
+    def _refresh_property_row_visibility(self) -> None:
+        query = self._property_filter_var.get().strip().casefold()
+        shown = 0
+        group_counts = {name: 0 for name in self._property_sections}
+        for key, row in self._property_rows.items():
+            group, label, unit = self._property_meta[key]
+            matches = (
+                not query
+                or query
+                in " ".join((key, group, label, unit)).casefold()
+            )
+            visible = key in self._visible_property_keys and matches
+            if visible:
+                row.pack(fill="x", pady=2)
+                shown += 1
+                group_counts[group] += 1
+            else:
+                row.pack_forget()
+
+        for group, section in self._property_sections.items():
+            if group_counts[group]:
+                if not section.winfo_manager():
+                    section.pack(fill="x", pady=(0, 7))
+            else:
+                section.pack_forget()
+
+        selected = self._selected_object() is not None
+        if selected and shown == 0:
+            if not self._property_empty_label.winfo_manager():
+                self._property_empty_label.pack(fill="x", pady=(1, 7))
+        else:
+            self._property_empty_label.pack_forget()
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
             self._engineering_context_var.set(self._selected_engineering_context_text())
-            for key, var in self._property_vars.items():
+            self._visible_property_keys.clear()
+            self._clear_property_error_state()
+            for var in self._property_vars.values():
                 var.set("")
-                row = self._property_rows.get(key)
-                if row is not None:
-                    row.pack_forget()
+            self._refresh_property_row_visibility()
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         selection_text = f"{prefix}: {item.get('name', '')}"
@@ -2742,15 +2837,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self.selected and self.selected.kind == "room"
             else device_fields
         )
+        self._visible_property_keys = set(visible_fields)
+        self._clear_property_error_state()
         for key, var in self._property_vars.items():
-            row = self._property_rows.get(key)
-            if row is not None:
-                if key in visible_fields:
-                    row.pack(fill="x", pady=2)
-                else:
-                    row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        self._refresh_property_row_visibility()
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -2764,9 +2856,23 @@ class SpatialDesignWorkspace(ttk.Frame):
                 {key: variable.get() for key, variable in self._property_vars.items()},
             )
         except ValueError as exc:
-            messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
-            self._status_setter("Properties not applied: " + str(exc))
+            message = str(exc)
+            self._property_validation_var.set(message)
+            self._property_validation_label.configure(style="CX.Status.Fail.TLabel")
+            key = self._property_key_from_error(message)
+            if key is not None and key in self._property_entries:
+                self._property_filter_var.set("")
+                self._refresh_property_row_visibility()
+                entry = self._property_entries[key]
+                entry.configure(style="CX.Invalid.TEntry")
+                entry.focus_set()
+                entry.selection_range(0, "end")
+            messagebox.showerror("Invalid spatial properties", message, parent=self)
+            self._status_setter("Properties not applied: " + message)
             return
+        self._clear_property_error_state()
+        self._property_validation_var.set("Applied")
+        self._property_validation_label.configure(style="CX.Status.Pass.TLabel")
         history_before = self._history_layout()
         selection_before = self._selection_state()
         if candidate != self.layout:

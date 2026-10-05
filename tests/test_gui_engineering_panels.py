@@ -8,6 +8,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_state import load_gui_layout_state
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
 
@@ -281,6 +282,38 @@ def test_problem_table_supports_columns_and_select_all_without_domain_mutation(a
         "source",
     )
     assert panel.last_result == snapshot
+
+
+def test_engineering_table_column_layouts_persist_outside_project_data(app):
+    metadata_before = copy.deepcopy(app.project.metadata)
+    problems = app.problems_panel.table_behavior
+    tasks = app.task_center.table_behavior
+
+    assert problems.set_column_visible("level", False)
+    app.problems_panel.tree.column("description", width=640)
+    problems._notify_layout_change()
+
+    assert tasks.set_column_visible("duration", False)
+    app.task_center.tree.column("#0", width=310)
+    tasks._notify_layout_change()
+    app.root.update()
+
+    persisted = load_gui_layout_state(app._ui_state_path)
+    assert persisted["table_layouts"]["project_diagnostics"]["visible_columns"] == [
+        "severity",
+        "state",
+        "code",
+        "description",
+        "object",
+        "source",
+    ]
+    assert (
+        persisted["table_layouts"]["project_diagnostics"]["widths"]["description"]
+        == 640
+    )
+    assert "duration" not in persisted["table_layouts"]["task_center"]["visible_columns"]
+    assert persisted["table_layouts"]["task_center"]["widths"]["#0"] == 310
+    assert app.project.metadata == metadata_before
 
 
 def test_problem_browser_projects_only_explicit_canonical_freshness_states(app):

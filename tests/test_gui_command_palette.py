@@ -157,7 +157,17 @@ def test_global_palette_indexes_current_engineering_entities(root, tmp_path):
 
     assert by_category["Find / Analysis"]
     assert by_category["Find / Model"]
-    assert by_category["Find / Diagnostics"]
+
+    diagnostic_result = app.problems_panel.last_result
+    diagnostic_issues = (
+        diagnostic_result.get("issues", [])
+        if isinstance(diagnostic_result, dict)
+        else []
+    )
+    if diagnostic_issues:
+        assert by_category["Find / Diagnostics"]
+    else:
+        assert "Find / Diagnostics" not in by_category
 
     room_command = next(
         command

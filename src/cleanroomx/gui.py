@@ -1703,10 +1703,21 @@ class IfcReimportPlanDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, report: dict):
         super().__init__(parent)
         self.title("IFC Re-import Plan")
-        self.geometry("1040x620")
-        self.minsize(780, 460)
+        self.geometry("1120x700")
+        self.minsize(820, 500)
         self.transient(parent)
         self.grab_set()
+
+        self.changes = [
+            item
+            for item in report.get("changes", ())
+            if isinstance(item, dict)
+        ]
+        self._change_by_iid: dict[str, dict] = {}
+        self.search_var = tk.StringVar()
+        self.action_filter_var = tk.StringVar(value="All")
+        self.kind_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
 
         can_apply = bool(report.get("can_apply"))
         conflict_count = int(report.get("conflict_count", 0))
@@ -1718,7 +1729,7 @@ class IfcReimportPlanDialog(tk.Toplevel):
         ttk.Label(
             self,
             text=status,
-            font=("TkDefaultFont", 11, "bold"),
+            style="CX.Section.TLabel",
         ).pack(anchor="w", padx=12, pady=(12, 4))
 
         summary = report.get("summary", {})
@@ -1731,13 +1742,75 @@ class IfcReimportPlanDialog(tk.Toplevel):
         ttk.Label(
             self,
             text=summary_text,
-            wraplength=980,
+            wraplength=1060,
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
-        frame = ttk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=12, pady=4)
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=12, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=30,
+        )
+        self.search_entry.pack(side="left", padx=(4, 8))
+
+        actions = sorted(
+            {
+                str(item.get("action", "")).strip()
+                for item in self.changes
+                if str(item.get("action", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Action").pack(side="left")
+        self.action_combo = ttk.Combobox(
+            filters,
+            textvariable=self.action_filter_var,
+            values=("All", *actions),
+            state="readonly",
+            width=14,
+        )
+        self.action_combo.pack(side="left", padx=(4, 8))
+
+        kinds = sorted(
+            {
+                str(item.get("kind", "")).strip()
+                for item in self.changes
+                if str(item.get("kind", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Kind").pack(side="left")
+        self.kind_combo = ttk.Combobox(
+            filters,
+            textvariable=self.kind_filter_var,
+            values=("All", *kinds),
+            state="readonly",
+            width=14,
+        )
+        self.kind_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Copy change",
+            command=self._copy_selected,
+        ).pack(side="left", padx=(10, 0))
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=12, pady=4)
+        table_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(table_frame, weight=3)
+        body.add(detail_frame, weight=2)
+
         self.tree = ttk.Treeview(
-            frame,
+            table_frame,
             columns=("action", "kind", "spatial", "local", "source"),
             show="tree headings",
         )
@@ -1753,41 +1826,215 @@ class IfcReimportPlanDialog(tk.Toplevel):
         self.tree.column("spatial", width=210)
         self.tree.column("local", width=105, stretch=False)
         self.tree.column("source", width=105, stretch=False)
-        scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        scroll_y = ttk.Scrollbar(
+            table_frame,
+            orient="vertical",
+            command=self.tree.yview,
+        )
+        scroll_x = ttk.Scrollbar(
+            table_frame,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
+        self.tree.configure(
+            yscrollcommand=scroll_y.set,
+            xscrollcommand=scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        table_frame.rowconfigure(0, weight=1)
+        table_frame.columnconfigure(0, weight=1)
+        self.tree.tag_configure("conflict", font=("TkDefaultFont", 9, "bold"))
 
-        for item in report.get("changes", ()):
-            if not isinstance(item, dict):
-                continue
-            global_id = str(item.get("global_id", ""))
-            self.tree.insert(
-                "",
-                "end",
-                text=global_id,
-                values=(
-                    item.get("action", ""),
-                    item.get("kind", ""),
-                    item.get("spatial_id", ""),
-                    "yes" if item.get("local_changed") else "no",
-                    "yes" if item.get("source_changed") else "no",
-                ),
-            )
+        self.detail = tk.Text(
+            detail_frame,
+            wrap="none",
+            state="disabled",
+            borderwidth=0,
+        )
+        detail_scroll_y = ttk.Scrollbar(
+            detail_frame,
+            orient="vertical",
+            command=self.detail.yview,
+        )
+        detail_scroll_x = ttk.Scrollbar(
+            detail_frame,
+            orient="horizontal",
+            command=self.detail.xview,
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        detail_frame.rowconfigure(0, weight=1)
+        detail_frame.columnconfigure(0, weight=1)
+
+        for variable in (
+            self.search_var,
+            self.action_filter_var,
+            self.kind_filter_var,
+        ):
+            variable.trace_add("write", lambda *_: self._populate())
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        self.tree.bind("<Control-c>", lambda event: self._copy_selected())
+        self.bind("<Control-f>", lambda event: self.search_entry.focus_set())
+        self.bind("<Escape>", lambda event: self.destroy())
+
+        self._populate()
 
         validation_error = report.get("candidate_validation_error")
         if validation_error:
             ttk.Label(
                 self,
                 text=f"Merged-layout validation: {validation_error}",
-                wraplength=980,
+                wraplength=1060,
             ).pack(anchor="w", padx=12, pady=(6, 0))
 
         footer = ttk.Frame(self)
         footer.pack(fill="x", padx=12, pady=12)
         ttk.Button(footer, text="Close", command=self.destroy).pack(side="right")
 
+    def _filtered_changes(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        action = self.action_filter_var.get().strip().casefold()
+        kind = self.kind_filter_var.get().strip().casefold()
+        visible = []
+        for item in self.changes:
+            item_action = str(item.get("action", ""))
+            item_kind = str(item.get("kind", ""))
+            if action and action != "all" and item_action.casefold() != action:
+                continue
+            if kind and kind != "all" and item_kind.casefold() != kind:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(item.get("global_id", "")),
+                        item_action,
+                        item_kind,
+                        str(item.get("spatial_id", "")),
+                        json.dumps(
+                            item,
+                            sort_keys=True,
+                            ensure_ascii=False,
+                            allow_nan=False,
+                        ),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(item)
+        return visible
 
+    def _populate(self) -> None:
+        selection = self.tree.selection()
+        selected_item = (
+            self._change_by_iid.get(selection[0])
+            if selection
+            else None
+        )
+        selected_global_id = (
+            str(selected_item.get("global_id", ""))
+            if isinstance(selected_item, dict)
+            else None
+        )
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._change_by_iid.clear()
+
+        visible = self._filtered_changes()
+        for index, item in enumerate(visible, start=1):
+            global_id = str(item.get("global_id", ""))
+            iid = f"change:{index}"
+            action = str(item.get("action", ""))
+            tags = ("conflict",) if action.casefold() == "conflict" else ()
+            self.tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=global_id,
+                values=(
+                    action,
+                    item.get("kind", ""),
+                    item.get("spatial_id", ""),
+                    "yes" if item.get("local_changed") else "no",
+                    "yes" if item.get("source_changed") else "no",
+                ),
+                tags=tags,
+            )
+            self._change_by_iid[iid] = item
+
+        self.count_var.set(f"{len(visible)} of {len(self.changes)} changes")
+        children = self.tree.get_children()
+        target = None
+        if selected_global_id is not None:
+            for iid, item in self._change_by_iid.items():
+                if str(item.get("global_id", "")) == selected_global_id:
+                    target = iid
+                    break
+        if target is None and children:
+            target = children[0]
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self._show_selected()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.action_filter_var.set("All")
+        self.kind_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _selected_change(self) -> dict | None:
+        selection = self.tree.selection()
+        if not selection:
+            return None
+        return self._change_by_iid.get(selection[0])
+
+    def _copy_selected(self) -> None:
+        item = self._selected_change()
+        if item is None:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(
+            json.dumps(
+                item,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+        )
+
+    def _show_selected(self, event=None) -> None:
+        item = self._selected_change()
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        if item is not None:
+            self.detail.insert(
+                "1.0",
+                json.dumps(
+                    item,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ),
+            )
+        elif self.changes and not self._filtered_changes():
+            self.detail.insert(
+                "1.0",
+                "No IFC re-import changes match the active filters.",
+            )
+        else:
+            self.detail.insert(
+                "1.0",
+                "No IFC entity changes are present in this re-import plan.",
+            )
+        self.detail.configure(state="disabled")
 
 
 class CleanroomXApp:

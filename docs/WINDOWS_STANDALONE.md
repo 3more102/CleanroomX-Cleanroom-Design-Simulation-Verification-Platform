@@ -50,8 +50,10 @@ pip install -e ".[release]"
 ```
 
 The release build pins pip, the setuptools PEP 517 backend, PyInstaller, and
-IfcOpenShell to the reviewed versions used by CI. The repository source
-revision and workflow run identify the remaining build inputs.
+IfcOpenShell to the reviewed versions used by CI. The release gate also fixes
+the GitHub-hosted runner to `windows-2025` so the OS image does not drift with
+the `windows-latest` alias. The repository source revision and workflow run
+identify the remaining build inputs.
 
 ## Distribution modes
 

@@ -268,3 +268,13 @@ def test_spatial_inspector_surfaces_existing_room_engineering_results(gui_app):
     assert workspace._engineering_status_var.get() == "Status: PASS"
     assert workspace._engineering_status_badge.cget("style") == "CX.SuccessBadge.TLabel"
 
+def test_engineering_overlay_selector_explains_ach_acronym(gui_app):
+    tooltip = getattr(
+        gui_app.spatial_workspace._overlay_picker,
+        "_cleanroomx_tooltip",
+        None,
+    )
+    assert tooltip is not None
+    assert "Air Changes per Hour" in tooltip.text
+    assert "do not create new verdicts" in tooltip.text
+

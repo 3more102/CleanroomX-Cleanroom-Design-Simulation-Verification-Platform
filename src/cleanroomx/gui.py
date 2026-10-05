@@ -4786,11 +4786,18 @@ class CleanroomXApp:
         if autosave_var is not None:
             autosave_var.set("Autosave: clean")
 
-    def _discard_current_autosave(self) -> None:
+    def _discard_current_autosave(
+        self,
+        *,
+        preserve_paths: tuple[str | Path, ...] = (),
+    ) -> None:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.discard_current_recoveries()
+            if preserve_paths:
+                manager.discard_current_recoveries(preserve_paths=preserve_paths)
+            else:
+                manager.discard_current_recoveries()
 
     def _discard_restored_recovery(self) -> None:
         artifact = getattr(self, "_restored_recovery_artifact", None)
@@ -4895,8 +4902,9 @@ class CleanroomXApp:
         if choice:
             self.save_project()
             return not self._has_unsaved_changes()
-        self._discard_current_autosave()
-        self._discard_restored_recovery()
+        # Choosing "Discard" authorizes replacement, but recovery evidence is
+        # retained until the replacement operation has actually validated and
+        # committed. Callers perform cleanup only after a successful transition.
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
@@ -5739,7 +5747,17 @@ class CleanroomXApp:
 
     def restore_recovery_path(self, path: str | Path) -> None:
         recovered = restore_recovery_artifact(path)
-        self._discard_current_autosave()
+        previous_artifact = getattr(self, "_restored_recovery_artifact", None)
+        same_artifact = (
+            previous_artifact is not None
+            and previous_artifact.resolve(strict=False)
+            == recovered.artifact_path.resolve(strict=False)
+        )
+        self._discard_current_autosave(
+            preserve_paths=(recovered.artifact_path,),
+        )
+        if previous_artifact is not None and not same_artifact:
+            self._discard_restored_recovery()
         self.project = recovered.project
         self.project_path = None
         self._project_file_revision = None
@@ -5919,8 +5937,10 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        replacement = new_project()
         self._discard_current_autosave()
-        self.project = new_project()
+        self._discard_restored_recovery()
+        self.project = replacement
         self.project_path = None
         self._project_file_revision = None
         self._recovery_source_path = None
@@ -6222,7 +6242,10 @@ class CleanroomXApp:
             project_revision,
             migration_info,
         ) = load_project_document_with_revision_info(project_path)
+        # The replacement is validated before current recovery evidence is
+        # discarded, so a failed open cannot destroy the only recoverable copy.
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         self.project = project
         self.project_path = project_path
         self._project_file_revision = project_revision
@@ -7217,6 +7240,7 @@ class CleanroomXApp:
             return
         self._save_ui_layout_state()
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)

@@ -21,7 +21,7 @@ def test_windows_launchers_use_repository_source_and_open_demo_by_default():
     assert "PYTHONPATH=%CD%\\src" in cmd
     assert "CLEANROOMX_PY=" in cmd
     assert "where python >nul 2>nul" in cmd
-    assert "sys.version_info ^>= (3, 11)" in cmd
+    assert "sys.version_info.minor in range(11, 100)" in cmd
     assert '-c "import tkinter"' in cmd
     assert "CleanroomX requires Python 3.11 or newer" in cmd
     assert "CleanroomX GUI requires Tkinter" in cmd

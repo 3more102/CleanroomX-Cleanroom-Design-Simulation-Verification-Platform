@@ -4487,18 +4487,23 @@ class CleanroomXApp:
                 name = name[: -len(".cleanroomx.json")]
             else:
                 name = path.stem
-            if active_path is not None and resolved == active_path:
+            is_active = active_path is not None and resolved == active_path
+            if is_active:
                 name = self.project.name or name
             try:
-                modified = datetime.fromtimestamp(path.stat().st_mtime).strftime(
+                stat = path.stat()
+                modified = datetime.fromtimestamp(stat.st_mtime).strftime(
                     "%Y-%m-%d %H:%M"
                 )
+                status = "Active" if is_active else "Available"
             except OSError:
                 modified = "Unavailable"
+                status = "Missing"
             records.append(
                 {
                     "name": name,
                     "path": str(path),
+                    "status": status,
                     "modified": modified,
                 }
             )

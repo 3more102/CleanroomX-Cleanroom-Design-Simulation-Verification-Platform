@@ -70,6 +70,7 @@ def test_engineering_output_workspace_exposes_first_class_panels(app):
         "Console",
         "Evidence",
     ]
+    assert "Tasks" in tabs
     assert "Results" in tabs
     assert "Report" in tabs
 
@@ -138,6 +139,11 @@ def test_completed_run_selects_results_in_bottom_workspace(app):
     assert run.result
     assert app.output_notebook.select() == str(app.analysis_result_panel)
     assert app.problems_panel.last_result is not None
+    tasks = app.task_center.tasks()
+    assert tasks
+    assert tasks[0].state == "completed"
+    assert tasks[0].terminal is True
+    assert run.title in tasks[0].result
 
 
 def test_fit_selected_preserves_engineering_geometry(app):

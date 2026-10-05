@@ -2923,6 +2923,7 @@ class CleanroomXApp:
         if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
             self.show_output_panel()
             self.output_notebook.select(self.report_text.master)
+            self.status_var.set("Output: Report")
 
     def _activate_reporting_workspace(self) -> None:
         workspace = getattr(self, "reporting_workspace", None)

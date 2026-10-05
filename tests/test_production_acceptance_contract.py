@@ -26,6 +26,24 @@ def test_required_production_workflows_are_least_privilege_and_credentialless() 
         assert "persist-credentials: false" in workflow
 
 
+def test_required_release_runner_and_pip_toolchains_are_pinned() -> None:
+    expected_runners = {
+        ".github/workflows/ci.yml": ("ubuntu-24.04", "windows-2025"),
+        ".github/workflows/security.yml": ("ubuntu-24.04",),
+        ".github/workflows/production-acceptance.yml": ("ubuntu-24.04",),
+        ".github/workflows/windows-installer.yml": ("windows-2025",),
+        ".github/workflows/windows-standalone.yml": ("windows-2025",),
+    }
+
+    for relative, runners in expected_runners.items():
+        workflow = _text(relative)
+        assert "ubuntu-latest" not in workflow
+        assert "windows-latest" not in workflow
+        assert 'python -m pip install "pip==26.2.1"' in workflow
+        for runner in runners:
+            assert f"runs-on: {runner}" in workflow
+
+
 def test_ci_contract_retains_supported_matrix_golden_validation_and_performance() -> None:
     workflow = _text(".github/workflows/ci.yml")
 

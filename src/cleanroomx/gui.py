@@ -85,7 +85,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
-from .runtime_diagnostics import install_tk_exception_handler, record_gui_exception
+from .runtime_diagnostics import install_tk_exception_handler
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -3560,10 +3560,6 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
-            GUI_RUNTIME_LOGGER.exception(
-                "Failed to assess project verification currency path=%s",
-                self.project_path,
-            )
             self._set_text(
                 self.verification_text,
                 f"Verification currency unavailable: {exc}\n",
@@ -3601,10 +3597,6 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
-            GUI_RUNTIME_LOGGER.exception(
-                "Failed to load persisted verification evidence path=%s",
-                self.project_path,
-            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
@@ -4751,22 +4743,42 @@ class CleanroomXApp:
                 workflow,
             )
         except ProjectSaveDurabilityError as exc:
+            reload_error = None
             try:
                 self.load_project_path(project_path)
-            except Exception:
+            except Exception as candidate_reload_error:
+                reload_error = candidate_reload_error
                 GUI_RUNTIME_LOGGER.exception(
                     "Failed to reload project after durability warning path=%s",
                     project_path,
                 )
-            self.status_var.set(
-                "Verification bytes committed; save durability not confirmed"
-            )
+
+            if reload_error is None:
+                self.status_var.set(
+                    "Verification bytes committed; save durability not confirmed"
+                )
+                reload_note = ""
+            else:
+                self.status_var.set(
+                    "Verification bytes committed; durability unconfirmed; "
+                    "project reload failed"
+                )
+                reload_note = (
+                    "\n\nThe desktop could not reload the committed project revision:\n"
+                    f"{reload_error}\n\n"
+                    "The on-disk project bytes were committed and verified, but this "
+                    "desktop session may show an older project state. Reopen the "
+                    "project from disk and confirm the verification record before "
+                    "further edits."
+                )
+
             messagebox.showwarning(
                 "Verification save durability not confirmed",
                 (
                     "CleanroomX wrote and verified the project bytes containing the "
                     "verification record, but filesystem directory durability could "
-                    "not be confirmed.\n\n"
+                    "not be confirmed."
+                    f"{reload_note}\n\n"
                     f"Committed project SHA-256: {exc.committed_revision.sha256}"
                 ),
                 parent=self.root,
@@ -7221,9 +7233,7 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                # Preserve the exception object until the GUI boundary so the
-                # durable incident logger can retain its worker traceback.
-                self._queue.put(("error", generation, analysis_id, exc))
+                self._queue.put(("error", generation, analysis_id, str(exc)))
                 return
 
             history_evidence = None
@@ -7231,8 +7241,7 @@ class CleanroomXApp:
             try:
                 history_evidence = build_run_history_evidence(payload, result)
             except Exception as exc:  # audit preparation must not hide a valid result
-                # Keep traceback-bearing evidence until the GUI boundary logs it.
-                history_error = exc
+                history_error = str(exc)
             self._queue.put(
                 (
                     "success",
@@ -7272,22 +7281,8 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    if isinstance(payload, BaseException):
-                        report = record_gui_exception(
-                            f"Run engineering analysis {analysis_id}",
-                            payload,
-                        )
-                        self.status_var.set(f"Analysis failed · {report.reference}")
-                        detail = (
-                            report.user_message()
-                            + "\n\nNo completed result from this failed run was accepted "
-                            "or added to run history. Correct the reported cause and retry."
-                        )
-                    else:
-                        # Compatibility for a queued legacy/string failure.
-                        self.status_var.set("Analysis failed")
-                        detail = str(payload)
-                    messagebox.showerror("Analysis failed", detail, parent=self.root)
+                    self.status_var.set("Analysis failed")
+                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
                     history_evidence = None
                     history_error = None
@@ -7323,7 +7318,7 @@ class CleanroomXApp:
                                 analysis, run, history_evidence
                             )
                         except RunHistoryIntegrityError as exc:
-                            history_error = exc
+                            history_error = str(exc)
 
                     self._runs_by_analysis[analysis_id] = run
                     self.last_run = run
@@ -7334,19 +7329,8 @@ class CleanroomXApp:
                             f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
-                        if isinstance(history_error, BaseException):
-                            history_report = record_gui_exception(
-                                f"Record run history for analysis {analysis_id}",
-                                history_error,
-                            )
-                            history_detail = history_report.user_message()
-                            history_reference = f" · {history_report.reference}"
-                        else:
-                            history_detail = str(history_error)
-                            history_reference = ""
                         self.status_var.set(
-                            f"Completed — {run.title}; run history was not updated"
-                            f"{history_reference}."
+                            f"Completed — {run.title}; run history was not updated."
                         )
                         messagebox.showwarning(
                             "Run history not updated",
@@ -7356,17 +7340,13 @@ class CleanroomXApp:
                                 "evidence could not be prepared or the existing history failed "
                                 "integrity validation. Existing history was left unchanged. "
                                 "Export the run bundle if this result must be retained.\n\n"
-                                f"{history_detail}"
+                                f"{history_error}"
                             ),
                             parent=self.root,
                         )
         except queue.Empty:
             pass
-        finally:
-            # A single unexpected result-rendering/history callback failure must
-            # not permanently stop worker completion polling. The exception is
-            # still allowed to propagate to the Tk runtime exception boundary.
-            self.root.after(100, self._poll_worker)
+        self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         self._set_text(

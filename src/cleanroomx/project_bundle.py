@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
 import copy
+import ctypes
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import sys
 import tempfile
 from typing import Any, BinaryIO, Callable, Iterator
+import uuid
 import unicodedata
 import zipfile
 
@@ -906,6 +910,164 @@ def _fsync_staged_directory_tree(root: Path) -> None:
     _fsync_directory(root)
 
 
+def _extraction_destination_revision(path: Path) -> tuple[int, ...]:
+    """Capture rename-stable directory identity for publication checks."""
+    metadata = path.stat()
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        int(getattr(metadata, "st_birthtime_ns", 0)),
+    )
+
+
+def _capture_extraction_destination(path: Path) -> tuple[int, ...] | None:
+    """Capture the exact empty destination state observed before extraction work."""
+    if not os.path.lexists(path):
+        return None
+    if not path.is_dir():
+        raise ProjectBundleError(f"extraction destination is not a directory: {path}")
+    try:
+        if any(path.iterdir()):
+            raise ProjectBundleError(
+                f"extraction destination must be empty: {path}"
+            )
+        return _extraction_destination_revision(path)
+    except OSError as exc:
+        raise ProjectBundleError(
+            f"could not capture extraction destination state: {path}"
+        ) from exc
+
+
+def _rename_directory_noreplace(source: Path, destination: Path) -> None:
+    """Atomically rename one directory only when the destination is absent."""
+    if os.name == "nt":
+        # Windows rename is no-replace: an existing destination raises.
+        os.rename(source, destination)
+        return
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform.startswith("linux"):
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is None:
+            raise OSError(
+                errno.ENOTSUP,
+                "atomic no-replace directory rename is unavailable",
+                str(destination),
+            )
+        renameat2.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            -100,  # AT_FDCWD
+            os.fsencode(source),
+            -100,
+            os.fsencode(destination),
+            1,  # RENAME_NOREPLACE
+        )
+    elif sys.platform == "darwin":
+        renamex_np = getattr(libc, "renamex_np", None)
+        if renamex_np is None:
+            raise OSError(
+                errno.ENOTSUP,
+                "atomic no-replace directory rename is unavailable",
+                str(destination),
+            )
+        renamex_np.argtypes = (
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        renamex_np.restype = ctypes.c_int
+        result = renamex_np(
+            os.fsencode(source),
+            os.fsencode(destination),
+            0x00000004,  # RENAME_EXCL
+        )
+    else:
+        raise OSError(
+            errno.ENOTSUP,
+            "atomic no-replace directory rename is unavailable",
+            str(destination),
+        )
+
+    if result != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(destination))
+
+
+def _restore_detached_extraction_destination(
+    detached: Path,
+    target: Path,
+) -> None:
+    """Restore detached destination state without overwriting a new owner."""
+    if not os.path.lexists(detached):
+        return
+    try:
+        _rename_directory_noreplace(detached, target)
+    except OSError:
+        # A concurrent replacement at the public path wins. Preserve the
+        # detached revision under its private name rather than deleting it.
+        return
+
+
+def _publish_extraction_stage(
+    stage: Path,
+    target: Path,
+    expected_revision: tuple[int, ...] | None,
+) -> None:
+    """Publish a staged extraction without replacing a concurrent destination."""
+    detached: Path | None = None
+    if expected_revision is not None:
+        detached = target.with_name(
+            f".{target.name or 'cleanroomx-bundle'}."
+            f"{uuid.uuid4().hex}.destination-stage"
+        )
+        try:
+            _rename_directory_noreplace(target, detached)
+        except OSError as exc:
+            raise ProjectBundleError(
+                f"extraction destination changed before publication: {target}"
+            ) from exc
+
+        try:
+            current_revision = _extraction_destination_revision(detached)
+            remains_empty = not any(detached.iterdir())
+        except OSError as exc:
+            _restore_detached_extraction_destination(detached, target)
+            raise ProjectBundleError(
+                f"could not verify extraction destination before publication: {target}"
+            ) from exc
+        if current_revision != expected_revision or not remains_empty:
+            _restore_detached_extraction_destination(detached, target)
+            raise ProjectBundleError(
+                f"extraction destination changed before publication: {target}"
+            )
+
+    try:
+        _rename_directory_noreplace(stage, target)
+    except OSError as exc:
+        if detached is not None:
+            _restore_detached_extraction_destination(detached, target)
+        raise ProjectBundleError(
+            f"extraction destination changed before publication: {target}"
+        ) from exc
+
+    if detached is not None:
+        try:
+            detached.rmdir()
+        except OSError:
+            # Publication is already committed. Never make cleanup destructive;
+            # an unexpected private-path occupant is preserved for inspection.
+            pass
+
+
 def _extract_project_bundle_snapshot(
     source: Path,
     snapshot: BinaryIO,
@@ -914,13 +1076,7 @@ def _extract_project_bundle_snapshot(
 ) -> Path:
     """Transactionally extract one already-verified private bundle snapshot."""
     target = Path(destination).expanduser().resolve(strict=False)
-    if target.exists():
-        if not target.is_dir():
-            raise ProjectBundleError(f"extraction destination is not a directory: {target}")
-        if any(target.iterdir()):
-            raise ProjectBundleError(
-                f"extraction destination must be empty: {target}"
-            )
+    destination_revision = _capture_extraction_destination(target)
     _ensure_directory_durable(target.parent)
     stage = Path(
         tempfile.mkdtemp(
@@ -995,9 +1151,11 @@ def _extract_project_bundle_snapshot(
                 f"staged bundle extraction could not be made durable: {target}"
             ) from exc
 
-        if target.exists():
-            target.rmdir()
-        os.replace(stage, target)
+        _publish_extraction_stage(
+            stage,
+            target,
+            destination_revision,
+        )
         published = True
         try:
             _fsync_directory(target.parent)

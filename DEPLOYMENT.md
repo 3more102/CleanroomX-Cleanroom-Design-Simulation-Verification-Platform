@@ -77,9 +77,10 @@ Start-menu integration, exposes an optional desktop shortcut, carries explicit
 Windows product/file metadata and a CleanroomX application icon, and includes an
 uninstaller.
 
-The Windows release job validates the complete artifact on a fresh hosted runner:
-standalone launch, silent install into a clean path, installed `--check`,
-installed GUI `--demo --smoke`, and silent uninstall. It also publishes a
+The required Windows release job validates the complete artifact on a fresh hosted runner:
+standalone launch, a silent baseline install, an in-place upgrade to the current
+installer using the stable application identity, installed `--check`, installed GUI
+`--demo --smoke`, and silent uninstall. It also publishes a
 SHA-256 manifest recording the exact Git commit, CleanroomX version, PyInstaller
 version, IfcOpenShell version, and runner image used for the build.
 
@@ -89,6 +90,6 @@ Build from a Windows checkout with Python 3.12 by running:
 .\packaging\windows\build_installer.ps1
 ```
 
-The release extra pins the packager and IFC runtime used in the standalone
-artifact. Code signing is intentionally not performed by repository CI because a
+The release extra pins PyInstaller and the IFC runtime used in the standalone
+artifact; the required CI job installs and verifies Inno Setup 7.1.0 exactly. Code signing is intentionally not performed by repository CI because a
 trusted signing certificate/private key is an external release credential.

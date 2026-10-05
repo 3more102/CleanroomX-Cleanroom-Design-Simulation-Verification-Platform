@@ -8,7 +8,67 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_VERSION = 5
+GUI_WORKSPACE_PROFILES = (
+    "start",
+    "design",
+    "simulation",
+    "verification",
+    "evidence",
+    "reporting",
+)
+
+_DEFAULT_WORKSPACE_LAYOUTS = {
+    "start": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": True,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.72,
+        "inspector_fraction": 0.78,
+    },
+    "design": {
+        "navigator_visible": True,
+        "output_visible": False,
+        "inspector_visible": True,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.72,
+        "inspector_fraction": 0.78,
+    },
+    "simulation": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.66,
+        "inspector_fraction": 0.78,
+    },
+    "verification": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": True,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.58,
+        "inspector_fraction": 0.78,
+    },
+    "evidence": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.68,
+        "inspector_fraction": 0.78,
+    },
+    "reporting": {
+        "navigator_visible": False,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.56,
+        "inspector_fraction": 0.78,
+    },
+}
+
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -21,6 +81,8 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "navigator_fraction": 0.20,
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
+    "active_workspace": "start",
+    "workspace_layouts": _DEFAULT_WORKSPACE_LAYOUTS,
 }
 
 
@@ -95,9 +157,74 @@ def _normalize_recent_projects(value: Any) -> list[str]:
     return recent
 
 
+def _normalize_workspace_name(value: Any) -> str:
+    name = str(value or "").strip().casefold()
+    return name if name in GUI_WORKSPACE_PROFILES else "start"
+
+
+def _normalize_workspace_layout(
+    value: Any,
+    defaults: dict[str, Any],
+) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "navigator_visible": (
+            source.get("navigator_visible")
+            if isinstance(source.get("navigator_visible"), bool)
+            else defaults["navigator_visible"]
+        ),
+        "output_visible": (
+            source.get("output_visible")
+            if isinstance(source.get("output_visible"), bool)
+            else defaults["output_visible"]
+        ),
+        "inspector_visible": (
+            source.get("inspector_visible")
+            if isinstance(source.get("inspector_visible"), bool)
+            else defaults["inspector_visible"]
+        ),
+        "navigator_fraction": _bounded_fraction(
+            source.get("navigator_fraction"),
+            defaults["navigator_fraction"],
+        ),
+        "output_fraction": _bounded_fraction(
+            source.get("output_fraction"),
+            defaults["output_fraction"],
+        ),
+        "inspector_fraction": _bounded_fraction(
+            source.get("inspector_fraction"),
+            defaults["inspector_fraction"],
+        ),
+    }
+
+
+def _normalize_workspace_layouts(value: Any) -> dict[str, dict[str, Any]]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        name: _normalize_workspace_layout(
+            source.get(name),
+            defaults,
+        )
+        for name, defaults in _DEFAULT_WORKSPACE_LAYOUTS.items()
+    }
+
+
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
+    active_workspace = _normalize_workspace_name(source.get("active_workspace"))
+    workspace_layouts = _normalize_workspace_layouts(
+        source.get("workspace_layouts")
+    )
+
+    # Version-4 files had one global panel layout. Preserve that exact layout
+    # as the Start workspace during migration instead of dropping user choices.
+    if "workspace_layouts" not in source:
+        workspace_layouts["start"] = _normalize_workspace_layout(
+            source,
+            _DEFAULT_WORKSPACE_LAYOUTS["start"],
+        )
+
     return {
         "version": GUI_LAYOUT_STATE_VERSION,
         "navigator_visible": (
@@ -141,6 +268,8 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             source.get("inspector_fraction"),
             _DEFAULT_GUI_LAYOUT_STATE["inspector_fraction"],
         ),
+        "active_workspace": active_workspace,
+        "workspace_layouts": workspace_layouts,
     }
 
 

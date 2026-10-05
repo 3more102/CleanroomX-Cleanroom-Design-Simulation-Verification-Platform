@@ -17,6 +17,32 @@ def _integer(mapping: Any, key: str) -> int:
         return 0
 
 
+def verification_row_matches_filters(
+    row: dict[str, Any],
+    *,
+    state: str = "All",
+    query: str = "",
+) -> bool:
+    """Filter canonical verification-currency rows without recomputing currency."""
+    state_token = str(state or "").strip().casefold()
+    if state_token not in {"", "all"} and str(row.get("state") or "").casefold() != state_token:
+        return False
+    tokens = [token for token in str(query or "").strip().casefold().split() if token]
+    if not tokens:
+        return True
+    haystack = " ".join(
+        (
+            str(row.get("analysis_id") or ""),
+            str(row.get("name") or ""),
+            str(row.get("kind") or ""),
+            str(row.get("state") or ""),
+            str(row.get("detail") or ""),
+            " ".join(str(value) for value in row.get("mismatch_reasons") or ()),
+        )
+    ).casefold()
+    return all(token in haystack for token in tokens)
+
+
 def verification_workspace_projection(
     snapshot: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -128,10 +154,16 @@ class VerificationWorkspace(ttk.Frame):
         on_persist: Callable[[], Any],
         on_traceability: Callable[[], Any],
         on_history: Callable[[], Any],
+        on_diagnostics: Callable[[], Any],
+        on_evidence: Callable[[], Any],
     ) -> None:
         super().__init__(master, padding=10)
         self._snapshot: dict[str, Any] = {}
+        self._rows_by_iid: dict[str, dict[str, Any]] = {}
 
+        self.search_var = tk.StringVar(value="")
+        self.row_state_var = tk.StringVar(value="All")
+        self.visible_var = tk.StringVar(value="0 / 0 visible")
         self.state_var = tk.StringVar(value="NOT CONFIGURED")
         self.coverage_var = tk.StringVar(value="0 / 0 current")
         self.stale_var = tk.StringVar(value="0")
@@ -162,6 +194,8 @@ class VerificationWorkspace(ttk.Frame):
             ("Verify & persist", on_persist, "CX.Compact.TButton"),
             ("Traceability…", on_traceability, "CX.Compact.TButton"),
             ("History…", on_history, "CX.Compact.TButton"),
+            ("Diagnostics", on_diagnostics, "CX.Compact.TButton"),
+            ("Evidence", on_evidence, "CX.Compact.TButton"),
         ):
             ttk.Button(
                 actions,
@@ -174,6 +208,27 @@ class VerificationWorkspace(ttk.Frame):
             "Verification actions delegate to CleanroomX's existing requirement, "
             "currency, persistence, and evidence services.",
         )
+
+        filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
+        filters.pack(fill="x", pady=(0, 8))
+        ttk.Label(filters, text="Search analyses").pack(side="left")
+        ttk.Entry(filters, textvariable=self.search_var, width=30).pack(
+            side="left", padx=(4, 8)
+        )
+        ttk.Label(filters, text="Currency").pack(side="left")
+        self.row_state_combo = ttk.Combobox(
+            filters,
+            textvariable=self.row_state_var,
+            values=("All",),
+            state="readonly",
+            width=24,
+        )
+        self.row_state_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(
+            filters,
+            textvariable=self.visible_var,
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="right")
 
         summary = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 8))
         summary.pack(fill="x", pady=(0, 8))
@@ -256,6 +311,9 @@ class VerificationWorkspace(ttk.Frame):
             wraplength=360,
         ).pack(fill="x", pady=(12, 0))
 
+        self.search_var.trace_add("write", lambda *_: self._populate_rows())
+        self.row_state_var.trace_add("write", lambda *_: self._populate_rows())
+
     @staticmethod
     def _metric(
         master: ttk.Frame,
@@ -279,6 +337,54 @@ class VerificationWorkspace(ttk.Frame):
         ttk.Label(row, textvariable=variable, style="CX.PanelSecondary.TLabel").pack(
             side="right"
         )
+
+    def _filtered_rows(self) -> list[dict[str, Any]]:
+        state = verification_workspace_projection(self._snapshot)
+        return [
+            row
+            for row in state["rows"]
+            if verification_row_matches_filters(
+                row,
+                state=self.row_state_var.get(),
+                query=self.search_var.get(),
+            )
+        ]
+
+    def _populate_rows(self) -> None:
+        state = verification_workspace_projection(self._snapshot)
+        visible = self._filtered_rows()
+        selected = self.tree.selection()
+        selected_analysis = (
+            self._rows_by_iid.get(selected[0], {}).get("analysis_id")
+            if selected
+            else None
+        )
+
+        self._rows_by_iid.clear()
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        for index, row in enumerate(visible):
+            iid = f"verification-analysis-{index}"
+            self._rows_by_iid[iid] = row
+            self.tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=row["name"],
+                values=(
+                    row["kind"],
+                    row["state"].upper().replace("_", " "),
+                    row["mapping_count"],
+                    row["external_dependency_count"],
+                    row["detail"] or "—",
+                ),
+            )
+            if selected_analysis and row["analysis_id"] == selected_analysis:
+                self.tree.selection_set(iid)
+                self.tree.focus(iid)
+                self.tree.see(iid)
+
+        self.visible_var.set(f"{len(visible)} / {len(state['rows'])} visible")
 
     def refresh(self, snapshot: dict[str, Any] | None) -> None:
         self._snapshot = snapshot if isinstance(snapshot, dict) else {}
@@ -309,19 +415,14 @@ class VerificationWorkspace(ttk.Frame):
         )
         self.progress.configure(value=percent)
 
-        for iid in self.tree.get_children():
-            self.tree.delete(iid)
-        for index, row in enumerate(state["rows"]):
-            self.tree.insert(
-                "",
-                "end",
-                iid=f"verification-analysis-{index}",
-                text=row["name"],
-                values=(
-                    row["kind"],
-                    row["state"].upper().replace("_", " "),
-                    row["mapping_count"],
-                    row["external_dependency_count"],
-                    row["detail"] or "—",
-                ),
-            )
+        row_states = (
+            "All",
+            *sorted(
+                {str(row.get("state") or "unknown") for row in state["rows"]},
+                key=str.casefold,
+            ),
+        )
+        self.row_state_combo.configure(values=row_states)
+        if self.row_state_var.get() not in row_states:
+            self.row_state_var.set("All")
+        self._populate_rows()

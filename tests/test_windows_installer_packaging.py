@@ -37,10 +37,12 @@ def test_installer_lifecycle_gate_covers_install_upgrade_launch_and_uninstall():
     ).read_text(encoding="utf-8")
 
     assert 'Start-Process -FilePath $exe -ArgumentList "--check"' in text
+    assert 'Start-Process -FilePath $exe -ArgumentList @("--demo", "--smoke")' in text
+    assert text.count('@("--demo", "--smoke")') == 2
     assert '$baselineVersion = "0.102.999"' in text
     assert "DisplayVersion" in text
     assert "unins000.exe" in text
-    assert "install -> launch -> upgrade -> launch -> uninstall" in text
+    assert "install -> check -> GUI smoke -> upgrade -> check -> GUI smoke -> uninstall" in text
 
     assert "runs-on: windows-2025" in workflow
     assert "build_windows_standalone.ps1" in workflow

@@ -155,3 +155,29 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_dashboard_and_shell_state_are_first_class_engineering_surfaces(app):
+    diagnostics = app._refresh_engineering_panels()
+    app.root.update()
+
+    assert diagnostics is not None
+    tab_names = [app.notebook.tab(tab_id, "text") for tab_id in app.notebook.tabs()]
+    assert "Dashboard" in tab_names
+    assert app.analysis_tree.exists("nav-dashboard")
+    assert app.analysis_tree.exists("nav-diagnostics")
+    assert app.analysis_tree.exists("nav-verification")
+
+    layout = app.project.metadata.get("spatial_layout", {})
+    assert app.dashboard._card_vars["rooms"].get() == str(len(layout.get("rooms", [])))
+    assert app.dashboard._card_vars["analyses"].get() == str(len(app.project.analyses))
+    assert app.shell_model_var.get().startswith("MODEL ")
+    assert app.shell_problems_var.get().startswith("PROBLEMS ")
+    assert app._shell_model_label.cget("style").startswith("CX.Status.")
+
+    app.analysis_tree.selection_set("nav-dashboard")
+    app.analysis_tree.focus("nav-dashboard")
+    app._on_navigator_selected()
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.workspace_status_var.get() == "Workspace: Dashboard"

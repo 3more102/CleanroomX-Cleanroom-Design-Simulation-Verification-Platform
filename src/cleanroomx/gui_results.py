@@ -6,7 +6,7 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
-from .gui_theme import theme_palette
+from .gui_theme import attach_tooltip, status_style_name, theme_palette
 
 
 _UNIT_SUFFIXES: tuple[tuple[str, str], ...] = (
@@ -41,6 +41,35 @@ def _unit_hint(path: str) -> str:
 def _humanize(value: Any) -> str:
     text = str(value or "").replace("_", " ").replace(".", " / ").strip()
     return " ".join(part.capitalize() for part in text.split())
+
+
+def _result_class(path: Any) -> str:
+    """Classify result rows without changing or inventing engineering meaning."""
+    text = str(path or "").strip().lower()
+    leaf = text.rsplit(".", 1)[-1].split("[", 1)[0]
+    tokens = {
+        part
+        for part in text.replace("[", ".").replace("]", "").replace("_", ".").split(".")
+        if part
+    }
+    if any(
+        token.startswith("require")
+        or token in {"target", "limit", "criterion", "criteria", "minimum", "maximum"}
+        for token in tokens
+    ):
+        return "REQUIREMENT"
+    if (
+        leaf in {"status", "verdict", "compliance", "result_status"}
+        or any(token in {"verdict", "compliance"} for token in tokens)
+        or leaf.endswith("_status")
+    ):
+        return "VERDICT"
+    if any(
+        token in {"metadata", "meta", "provenance", "source", "version", "timestamp"}
+        for token in tokens
+    ):
+        return "METADATA"
+    return "CALCULATED"
 
 
 def _format_scalar(value: Any) -> str:
@@ -130,6 +159,9 @@ class AnalysisResultPanel(ttk.Frame):
             value="Run an analysis to populate calculated engineering results."
         )
         self.count_var = tk.StringVar(value="0 result fields")
+        self.search_var = tk.StringVar()
+        self.class_filter_var = tk.StringVar(value="All")
+        self._rows: list[tuple[str, str]] = []
 
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame")
         header.pack(fill="x", pady=(0, 8))
@@ -165,17 +197,45 @@ class AnalysisResultPanel(ttk.Frame):
             justify="left",
         ).pack(fill="x", pady=(0, 8))
 
-        columns = ("field", "value")
+        filterbar = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(8, 5))
+        filterbar.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            filterbar,
+            text="RESULT FILTER",
+            style="CX.SurfaceSection.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Label(filterbar, text="Search", style="CX.SurfaceMuted.TLabel").pack(side="left")
+        search = ttk.Entry(filterbar, textvariable=self.search_var, width=28)
+        search.pack(side="left", padx=(5, 10))
+        ttk.Label(filterbar, text="Class", style="CX.SurfaceMuted.TLabel").pack(side="left")
+        class_picker = ttk.Combobox(
+            filterbar,
+            textvariable=self.class_filter_var,
+            values=("All", "Calculated", "Requirement", "Verdict", "Metadata"),
+            state="readonly",
+            width=13,
+        )
+        class_picker.pack(side="left", padx=(5, 0))
+        attach_tooltip(
+            class_picker,
+            "Result classes separate calculated values, requirement-like fields, verdict fields, and metadata. Classification does not alter solver output.",
+        )
+        self.search_var.trace_add("write", lambda *_: self._populate())
+        class_picker.bind("<<ComboboxSelected>>", lambda _event: self._populate())
+
+        columns = ("class", "field", "value")
         self.tree = ttk.Treeview(
             self,
             columns=columns,
             show="headings",
             selectmode="browse",
         )
-        self.tree.heading("field", text="Calculated field")
+        self.tree.heading("class", text="Class")
+        self.tree.heading("field", text="Engineering field")
         self.tree.heading("value", text="Value")
-        self.tree.column("field", width=430, minwidth=180, stretch=True)
-        self.tree.column("value", width=360, minwidth=160, stretch=True)
+        self.tree.column("class", width=112, minwidth=96, stretch=False, anchor="center")
+        self.tree.column("field", width=410, minwidth=180, stretch=True)
+        self.tree.column("value", width=330, minwidth=160, stretch=True)
         yscroll = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -186,11 +246,79 @@ class AnalysisResultPanel(ttk.Frame):
         palette = theme_palette(value)
         self.tree.tag_configure("row_even", background=palette["tree"])
         self.tree.tag_configure("row_odd", background=palette["surface_alt"])
+        self.tree.tag_configure("calculated", foreground=palette["text"])
+        self.tree.tag_configure("requirement", foreground=palette["requirement"])
+        self.tree.tag_configure("metadata", foreground=palette["muted"])
+        self.tree.tag_configure("verdict_pass", foreground=palette["success"])
+        self.tree.tag_configure("verdict_warning", foreground=palette["warning"])
+        self.tree.tag_configure(
+            "verdict_fail",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
 
     def clear(self) -> None:
         self.refresh(None)
 
+    def _visible_rows(self) -> list[tuple[str, str]]:
+        query = self.search_var.get().strip().casefold()
+        selected_class = self.class_filter_var.get().strip().upper()
+        visible: list[tuple[str, str]] = []
+        for path, rendered in self._rows:
+            semantic = _result_class(path)
+            if selected_class and selected_class != "ALL" and semantic != selected_class:
+                continue
+            if query and query not in f"{path} {rendered} {semantic}".casefold():
+                continue
+            visible.append((path, rendered))
+        return visible
+
+    @staticmethod
+    def _semantic_tag(semantic: str, rendered: str) -> str:
+        if semantic != "VERDICT":
+            return semantic.lower()
+        token = str(rendered).strip().lower()
+        if token in {"fail", "failed", "error", "critical", "no", "false"}:
+            return "verdict_fail"
+        if token in {"warning", "warn", "stale", "incomplete"}:
+            return "verdict_warning"
+        if token in {"pass", "passed", "ok", "success", "completed", "yes", "true"}:
+            return "verdict_pass"
+        return "metadata"
+
+    def _populate(self) -> None:
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        visible = self._visible_rows()
+        for index, (path, rendered) in enumerate(visible):
+            semantic = _result_class(path)
+            self.tree.insert(
+                "",
+                "end",
+                iid=f"result-{index}",
+                values=(semantic, _humanize(path), rendered),
+                tags=(
+                    "row_even" if index % 2 == 0 else "row_odd",
+                    self._semantic_tag(semantic, rendered),
+                ),
+            )
+        total = len(self._rows)
+        shown = len(visible)
+        classes = [_result_class(path) for path, _rendered in self._rows]
+        calc = classes.count("CALCULATED")
+        req = classes.count("REQUIREMENT")
+        verdict = classes.count("VERDICT")
+        details = [f"{shown}/{total} fields" if shown != total else f"{total} fields"]
+        if calc:
+            details.append(f"{calc} calc")
+        if req:
+            details.append(f"{req} req")
+        if verdict:
+            details.append(f"{verdict} verdict")
+        self.count_var.set(" · ".join(details))
+
     def refresh(self, run: Any | None) -> None:
+        self._rows = []
         for item in self.tree.get_children():
             self.tree.delete(item)
 
@@ -210,6 +338,7 @@ class AnalysisResultPanel(ttk.Frame):
         result = getattr(run, "result", None)
         diagnostics = getattr(run, "diagnostics", None)
         rows = _flatten_result(result if result is not None else {})
+        self._rows = rows
 
         self.title_var.set(title)
         self.status_var.set(status.upper().replace("_", " "))
@@ -223,26 +352,5 @@ class AnalysisResultPanel(ttk.Frame):
             f"{'s' if diagnostic_count != 1 else ''}. "
             "This view presents canonical run output; verification verdicts are shown separately."
         )
-        self.count_var.set(
-            f"{len(rows)} displayed field{'s' if len(rows) != 1 else ''}"
-        )
-        self.status_label.configure(
-            style=(
-                "CX.Status.Fail.TLabel"
-                if status in {"fail", "failed", "error"}
-                else "CX.Status.Warning.TLabel"
-                if status in {"warning", "warn"}
-                else "CX.Status.Pass.TLabel"
-                if status in {"pass", "passed", "ok", "success", "completed"}
-                else "CX.Status.Info.TLabel"
-            )
-        )
-
-        for index, (path, rendered) in enumerate(rows):
-            self.tree.insert(
-                "",
-                "end",
-                iid=f"result-{index}",
-                values=(_humanize(path), rendered),
-                tags=("row_even" if index % 2 == 0 else "row_odd",),
-            )
+        self.status_label.configure(style=status_style_name(status))
+        self._populate()

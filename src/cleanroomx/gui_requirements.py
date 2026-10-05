@@ -616,20 +616,6 @@ class RequirementsEditorDialog(tk.Toplevel):
                 parent=self,
             )
             return False
-        except Exception as exc:
-            report = record_gui_exception(
-                f"Requirements editor: {description}",
-                exc,
-            )
-            messagebox.showerror(
-                "Requirements update failed",
-                (
-                    f"{report.user_message()}\n\n"
-                    "Existing requirement/evidence mappings are preserved."
-                ),
-                parent=self,
-            )
-            return False
         self.refresh(select_set_id=select_set_id)
         self._on_changed()
         return True

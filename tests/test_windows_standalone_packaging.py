@@ -20,6 +20,7 @@ def test_windows_standalone_workflow_uses_pinned_release_dependencies() -> None:
     assert 'python -m pip install "pip==26.2.1"' in workflow
     assert 'pip install -e ".[release]"' in workflow
     assert 'pip install -e ".[bim]"' not in workflow
+    assert 'pip install "pyinstaller==' not in workflow
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
     assert "CleanroomX-windows-x64.sha256" in workflow
 
@@ -29,6 +30,7 @@ def test_windows_standalone_workflow_uses_pinned_release_dependencies() -> None:
     release_dependencies = metadata["project"]["optional-dependencies"]["release"]
     assert "pyinstaller==6.22.3" in release_dependencies
     assert "ifcopenshell==0.9.0" in release_dependencies
+    assert all("==" in dependency for dependency in release_dependencies)
 
 
 def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked() -> None:

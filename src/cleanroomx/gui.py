@@ -74,6 +74,8 @@ from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
+from .gui_assurance import EvidenceWorkspace, VerificationWorkspace
+from .gui_reporting import ReportingWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
     GlobalEngineeringSearch,
@@ -1381,6 +1383,11 @@ class CleanroomXApp:
         menubar.add_cascade(label="Design", menu=design_menu)
 
         analyze_menu = tk.Menu(menubar, tearoff=False)
+        analyze_menu.add_command(
+            label="Simulation Workspace",
+            command=self._activate_simulation_workspace,
+        )
+        analyze_menu.add_separator()
         analyze_menu.add_command(label="Validate Input", command=self.validate_current)
         analyze_menu.add_command(
             label="Run Analysis", accelerator="F5", command=self.run_current
@@ -1391,6 +1398,15 @@ class CleanroomXApp:
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
+        verify_menu.add_command(
+            label="Verification Workspace",
+            command=self._activate_verification_workspace,
+        )
+        verify_menu.add_command(
+            label="Problems / Diagnostics",
+            command=self.show_problems_panel,
+        )
+        verify_menu.add_separator()
         verify_menu.add_command(
             label="Verify Project Requirements",
             command=self.run_project_requirements_verification,
@@ -1415,6 +1431,26 @@ class CleanroomXApp:
         )
         menubar.add_cascade(label="Verify", menu=verify_menu)
 
+        evidence_menu = tk.Menu(menubar, tearoff=False)
+        evidence_menu.add_command(
+            label="Evidence Workspace",
+            command=self._activate_evidence_workspace,
+        )
+        evidence_menu.add_command(
+            label="ProofGraph Explorer",
+            command=self._activate_proofgraph_workspace,
+        )
+        evidence_menu.add_separator()
+        evidence_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
+        evidence_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
+        menubar.add_cascade(label="Evidence", menu=evidence_menu)
+
         bim_menu = tk.Menu(menubar, tearoff=False)
         bim_menu.add_command(
             label="Import IFC Spatial Layout...",
@@ -1431,6 +1467,11 @@ class CleanroomXApp:
         menubar.add_cascade(label="BIM", menu=bim_menu)
 
         report_menu = tk.Menu(menubar, tearoff=False)
+        report_menu.add_command(
+            label="Reporting Workspace",
+            command=self._activate_reporting_workspace,
+        )
+        report_menu.add_separator()
         report_menu.add_command(
             label="Export Project Engineering Dossier...",
             command=self.export_project_engineering_dossier,
@@ -1990,6 +2031,36 @@ class CleanroomXApp:
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
+        self.verification_workspace = VerificationWorkspace(
+            self.notebook,
+            on_verify=self.run_project_requirements_verification,
+            on_persist=self.persist_project_requirements_verification,
+            on_traceability=self.show_requirements_traceability,
+            on_history=self.show_verification_history,
+            on_problems=self.show_problems_panel,
+            on_proofgraph=self._activate_proofgraph_workspace,
+        )
+        self.notebook.add(self.verification_workspace, text="Verification")
+
+        self.evidence_workspace = EvidenceWorkspace(
+            self.notebook,
+            on_history=self.show_verification_history,
+            on_proofgraph=self._activate_proofgraph_workspace,
+            on_report=self._activate_reporting_workspace,
+        )
+        self.notebook.add(self.evidence_workspace, text="Evidence")
+
+        self.reporting_workspace = ReportingWorkspace(
+            self.notebook,
+            on_export_dossier=self.export_project_engineering_dossier,
+            on_export_diagnostics=self.export_project_diagnostics,
+            on_export_result_json=self.export_result_json,
+            on_export_run_bundle=self.export_run_bundle_json,
+            on_export_markdown=self.export_report_markdown,
+            on_export_html=self.export_report_html,
+        )
+        self.notebook.add(self.reporting_workspace, text="Reports")
+
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
         input_notebook = ttk.Notebook(self.input_tab)
@@ -2432,6 +2503,17 @@ class CleanroomXApp:
         if dashboard is not None and hasattr(dashboard, "apply_theme"):
             dashboard.apply_theme(self.theme_var.get())
 
+        for workspace_name in (
+            "verification_workspace",
+            "evidence_workspace",
+            "reporting_workspace",
+        ):
+            engineering_workspace = getattr(self, workspace_name, None)
+            if engineering_workspace is not None and hasattr(
+                engineering_workspace, "apply_theme"
+            ):
+                engineering_workspace.apply_theme(self.theme_var.get())
+
         navigator = getattr(self, "analysis_tree", None)
         if isinstance(navigator, ttk.Treeview):
             navigator.tag_configure(
@@ -2737,6 +2819,8 @@ class CleanroomXApp:
         diagnostics = panel.refresh()
         verification_summary: dict = {}
         records: list[dict] = []
+        currency: dict = {}
+        proofgraphs: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -2912,6 +2996,43 @@ class CleanroomXApp:
                 )
             except tk.TclError:
                 pass
+
+        verification_workspace = getattr(self, "verification_workspace", None)
+        if verification_workspace is not None:
+            verification_workspace.refresh(currency)
+
+        evidence_workspace = getattr(self, "evidence_workspace", None)
+        if evidence_workspace is not None:
+            evidence_workspace.refresh(
+                records,
+                proofgraph_count=len(proofgraphs),
+                currency=currency,
+            )
+
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            reporting_workspace.refresh(
+                {
+                    "project_name": self.project.name,
+                    "source": location,
+                    "saved": bool(
+                        self.project_path is not None
+                        and not self._has_unsaved_changes()
+                    ),
+                    "diagnostics": summary,
+                    "verification": verification_summary,
+                    "last_run": (
+                        {
+                            "title": self.last_run.title,
+                            "status": self.last_run.status,
+                        }
+                        if self.last_run is not None
+                        else None
+                    ),
+                    "evidence_record_count": len(records),
+                    "proofgraph_count": len(proofgraphs),
+                }
+            )
 
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
@@ -3286,6 +3407,27 @@ class CleanroomXApp:
                 keywords=("solver", "calculate"),
             ),
             PaletteCommand(
+                "workspace.verification",
+                "Open Verification Workspace",
+                "Verification",
+                self._activate_verification_workspace,
+                keywords=("assurance", "currency", "requirements"),
+            ),
+            PaletteCommand(
+                "workspace.evidence",
+                "Open Evidence Workspace",
+                "Evidence",
+                self._activate_evidence_workspace,
+                keywords=("history", "retained", "traceability"),
+            ),
+            PaletteCommand(
+                "workspace.reports",
+                "Open Reporting Workspace",
+                "Report",
+                self._activate_reporting_workspace,
+                keywords=("dossier", "export", "release"),
+            ),
+            PaletteCommand(
                 "verification.refresh",
                 "Refresh Project Diagnostics",
                 "Verification",
@@ -3510,6 +3652,24 @@ class CleanroomXApp:
         if hasattr(self, "output_notebook") and hasattr(self, "analysis_result_panel"):
             self.show_output_panel()
             self.output_notebook.select(self.analysis_result_panel)
+
+    def _activate_verification_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "verification_workspace"):
+            self._refresh_engineering_panels()
+            self.notebook.select(self.verification_workspace)
+            self.workspace_status_var.set("Workspace: Verification")
+
+    def _activate_evidence_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "evidence_workspace"):
+            self._refresh_engineering_panels()
+            self.notebook.select(self.evidence_workspace)
+            self.workspace_status_var.set("Workspace: Evidence")
+
+    def _activate_reporting_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "reporting_workspace"):
+            self._refresh_engineering_panels()
+            self.notebook.select(self.reporting_workspace)
+            self.workspace_status_var.set("Workspace: Reports")
 
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
@@ -4903,9 +5063,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: DRC / Diagnostics")
             return
         if item_id == "nav-verification":
-            if hasattr(self, "output_notebook") and hasattr(self, "verification_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.verification_text.master)
+            self._activate_verification_workspace()
             self.selection_status_var.set("Selected: Verification")
             return
         if item_id == "nav-proofgraph":
@@ -4913,15 +5071,11 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
-            if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.evidence_text.master)
+            self._activate_evidence_workspace()
             self.selection_status_var.set("Selected: Evidence")
             return
         if item_id == "nav-reports":
-            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.report_text.master)
+            self._activate_reporting_workspace()
             self.selection_status_var.set("Selected: Reports")
             return
         if item_id in {"nav-pressure", "nav-airflow", "nav-ach"}:

@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.spatial import engineering_overlay_state, normalize_layout
 
 
@@ -136,6 +137,37 @@ def test_status_overlay_uses_result_status_and_never_derives_new_verdicts():
     assert by_room["room-a"]["fill"] == "#dcfce7"
     assert by_room["room-b"]["status"] == "fail"
     assert by_room["room-b"]["fill"] == "#fee2e2"
+
+
+def test_dark_theme_overlay_uses_semantic_workstation_surfaces():
+    layout = _layout()
+    palette = theme_palette("dark")
+    result = {
+        "rooms": [
+            {"room": "Room A", "status": "pass", "findings": []},
+            {"room": "Room B", "status": "fail", "findings": []},
+        ]
+    }
+
+    status_overlay = engineering_overlay_state(
+        layout,
+        result=result,
+        mode="status",
+        palette=palette,
+    )
+    by_room = {item["room_id"]: item for item in status_overlay["rooms"]}
+    assert by_room["room-a"]["fill"] == palette["success_surface"]
+    assert by_room["room-b"]["fill"] == palette["error_surface"]
+
+    pressure_overlay = engineering_overlay_state(
+        layout,
+        result={},
+        mode="pressure",
+        palette=palette,
+    )
+    pressure_fills = {item["fill"] for item in pressure_overlay["rooms"]}
+    assert palette["surface_alt"] not in pressure_fills
+    assert all(fill.startswith("#") and len(fill) == 7 for fill in pressure_fills)
 
 
 def test_none_overlay_has_neutral_fill_and_pressure_overlay_preserves_spatial_evidence():

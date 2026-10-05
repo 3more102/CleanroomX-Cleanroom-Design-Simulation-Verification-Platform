@@ -70,7 +70,12 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
-from .gui_simulation import SimulationWorkspace
+from .gui_simulation import (
+    SimulationWorkspace,
+    filter_run_history_records,
+    run_history_diff_rows,
+    run_history_filter_options,
+)
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
     GlobalEngineeringSearch,
@@ -560,6 +565,8 @@ class RunHistoryDialog(tk.Toplevel):
         summary = validate_run_history(metadata)
         self.records = run_history_records(metadata)
         self.search_var = tk.StringVar()
+        self.analysis_filter_var = tk.StringVar(value="All")
+        self.kind_filter_var = tk.StringVar(value="All")
         self.status_filter_var = tk.StringVar(value="All")
         self.count_var = tk.StringVar()
 
@@ -580,21 +587,31 @@ class RunHistoryDialog(tk.Toplevel):
             width=34,
         )
         self.search_entry.pack(side="left", padx=(4, 10))
-        ttk.Label(filters, text="Status").pack(side="left")
-        statuses = sorted(
-            {
-                str(record.get("status", "")).strip()
-                for record in self.records
-                if str(record.get("status", "")).strip()
-            },
-            key=str.casefold,
+        ttk.Label(filters, text="Analysis").pack(side="left")
+        self.analysis_combo = ttk.Combobox(
+            filters,
+            textvariable=self.analysis_filter_var,
+            values=run_history_filter_options(self.records, "analysis_name"),
+            state="readonly",
+            width=18,
         )
+        self.analysis_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Kind").pack(side="left")
+        self.kind_combo = ttk.Combobox(
+            filters,
+            textvariable=self.kind_filter_var,
+            values=run_history_filter_options(self.records, "analysis_kind"),
+            state="readonly",
+            width=18,
+        )
+        self.kind_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Status").pack(side="left")
         self.status_combo = ttk.Combobox(
             filters,
             textvariable=self.status_filter_var,
-            values=("All", *statuses),
+            values=run_history_filter_options(self.records, "status"),
             state="readonly",
-            width=16,
+            width=14,
         )
         self.status_combo.pack(side="left", padx=(4, 8))
         ttk.Button(
@@ -617,6 +634,13 @@ class RunHistoryDialog(tk.Toplevel):
             text="Copy record",
             command=self._copy_selected,
         ).pack(side="left", padx=2)
+        self.compare_button = ttk.Button(
+            filters,
+            text="Compare 2 selected",
+            command=self._show_selected,
+            state="disabled",
+        )
+        self.compare_button.pack(side="left", padx=2)
         ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
@@ -632,6 +656,7 @@ class RunHistoryDialog(tk.Toplevel):
             columns=("time", "analysis", "kind", "status", "input"),
             show="tree headings",
             height=10,
+            selectmode="extended",
         )
         self.tree.heading("#0", text="#")
         self.tree.heading("time", text="Completed UTC")
@@ -679,6 +704,8 @@ class RunHistoryDialog(tk.Toplevel):
         detail_frame.columnconfigure(0, weight=1)
 
         self.search_var.trace_add("write", lambda *_: self._populate())
+        self.analysis_filter_var.trace_add("write", lambda *_: self._populate())
+        self.kind_filter_var.trace_add("write", lambda *_: self._populate())
         self.status_filter_var.trace_add("write", lambda *_: self._populate())
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
         self.tree.bind("<F4>", lambda event: self._select_relative(1))
@@ -693,28 +720,14 @@ class RunHistoryDialog(tk.Toplevel):
         self._populate()
 
     def _filtered_records(self) -> list[dict]:
-        query = self.search_var.get().strip().casefold()
-        status = self.status_filter_var.get().strip().casefold()
-        visible = []
-        for record in reversed(self.records):
-            record_status = str(record.get("status", ""))
-            if status and status != "all" and record_status.casefold() != status:
-                continue
-            if query:
-                haystack = " ".join(
-                    (
-                        str(record.get("sequence", "")),
-                        str(record.get("completed_at_utc", "")),
-                        str(record.get("analysis_name", "")),
-                        str(record.get("analysis_kind", "")),
-                        record_status,
-                        str(record.get("input_sha256", "")),
-                    )
-                ).casefold()
-                if query not in haystack:
-                    continue
-            visible.append(record)
-        return visible
+        visible = filter_run_history_records(
+            self.records,
+            query=self.search_var.get(),
+            analysis=self.analysis_filter_var.get(),
+            kind=self.kind_filter_var.get(),
+            status=self.status_filter_var.get(),
+        )
+        return list(reversed(visible))
 
     def _populate(self) -> None:
         selection = self.tree.selection()
@@ -752,18 +765,26 @@ class RunHistoryDialog(tk.Toplevel):
 
     def _clear_filters(self) -> None:
         self.search_var.set("")
+        self.analysis_filter_var.set("All")
+        self.kind_filter_var.set("All")
         self.status_filter_var.set("All")
         self.search_entry.focus_set()
 
+    def _selected_records(self) -> list[dict]:
+        selected: list[dict] = []
+        for iid in self.tree.selection():
+            sequence = int(iid)
+            record = next(
+                (item for item in self.records if item["sequence"] == sequence),
+                None,
+            )
+            if record is not None:
+                selected.append(record)
+        return selected
+
     def _selected_record(self) -> dict | None:
-        selection = self.tree.selection()
-        if not selection:
-            return None
-        sequence = int(selection[0])
-        return next(
-            (item for item in self.records if item["sequence"] == sequence),
-            None,
-        )
+        records = self._selected_records()
+        return records[0] if records else None
 
     def _select_relative(self, step: int):
         children = list(self.tree.get_children())
@@ -795,13 +816,29 @@ class RunHistoryDialog(tk.Toplevel):
         self.clipboard_append(payload)
 
     def _show_selected(self, event=None) -> None:
-        record = self._selected_record()
+        selected = self._selected_records()
+        self.compare_button.configure(state="normal" if len(selected) == 2 else "disabled")
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        if record is not None:
+        if len(selected) == 2:
+            left, right = selected
+            rows = run_history_diff_rows(left, right)
+            lines = [
+                "RUN COMPARISON — retained canonical evidence only",
+                f"Left: #{left.get('sequence')} · {left.get('analysis_name')} · {left.get('completed_at_utc')}",
+                f"Right: #{right.get('sequence')} · {right.get('analysis_name')} · {right.get('completed_at_utc')}",
+                "",
+            ]
+            if rows:
+                lines.append("FIELD\tLEFT\tRIGHT")
+                lines.extend(f"{path}\t{before}\t{after}" for path, before, after in rows)
+            else:
+                lines.append("No canonical retained fields differ between these runs.")
+            self.detail.insert("1.0", "\n".join(lines))
+        elif len(selected) == 1:
             self.detail.insert(
                 "1.0",
-                json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
+                json.dumps(selected[0], indent=2, sort_keys=True, ensure_ascii=False),
             )
         elif self.records and not self._filtered_records():
             self.detail.insert(

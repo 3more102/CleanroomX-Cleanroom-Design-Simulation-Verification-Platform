@@ -486,6 +486,19 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
     app._set_running = lambda running: setattr(app, "_running", running)
     rendered = []
     app._render_run = lambda value: rendered.append(value)
+    report = GuiErrorReport(
+        reference="CX-HISTORY-1234",
+        operation="Finalize run-history audit evidence",
+        exception_type="RunHistoryIntegrityError",
+        summary="synthetic run-history integrity failure",
+        log_path=Path("/tmp/cleanroomx-gui.log"),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
     warnings = []
     monkeypatch.setattr(
         gui_module.messagebox,
@@ -505,7 +518,92 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
     assert len(warnings) == 1
     assert warnings[0]["title"] == "Run history not updated"
     assert "left unchanged" in warnings[0]["message"].lower()
+    assert "CX-HISTORY-1234" in warnings[0]["message"]
+    assert "CX-HISTORY-1234" in app.status_var.value
+    assert recorded
+    assert recorded[0][0] == "Finalize run-history audit evidence"
+    assert isinstance(recorded[0][1], gui_module.RunHistoryIntegrityError)
 
+
+
+def test_run_history_evidence_preparation_failure_keeps_result_and_logs_reference(
+    monkeypatch,
+):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    analysis = AnalysisDocument(
+        id="a", name="Room", kind="room_verification", input=dict(payload)
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+    )
+    history_exc = RuntimeError("synthetic run-history evidence preparation failure")
+    app._queue = queue.Queue()
+    app._queue.put(("success", 6, "a", (run, None, history_exc)))
+    app._run_generation = 6
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    app._render_run = lambda value: rendered.append(value)
+
+    report = GuiErrorReport(
+        reference="CX-HISTORY-5678",
+        operation="Finalize run-history audit evidence",
+        exception_type="RuntimeError",
+        summary=str(history_exc),
+        log_path=Path("/tmp/cleanroomx-gui.log"),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    app._poll_worker()
+
+    assert app._runs_by_analysis == {"a": run}
+    assert app.last_run is run
+    assert rendered == [run]
+    assert RUN_HISTORY_METADATA_KEY not in app.project.metadata
+    assert recorded == [("Finalize run-history audit evidence", history_exc)]
+    assert warnings
+    assert "CX-HISTORY-5678" in warnings[-1][1]
+    assert "CX-HISTORY-5678" in app.status_var.value
 
 def test_result_export_refuses_stale_cached_run(monkeypatch):
     payload = json.loads(

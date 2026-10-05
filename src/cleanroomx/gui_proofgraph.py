@@ -1075,6 +1075,20 @@ class ProofGraphViewer(ttk.Frame):
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None
 
+    def open_node(self, document_label: str, node_key: str) -> bool:
+        """Reveal and select a persisted node from global engineering navigation."""
+        labels = tuple(self.graph_picker.cget("values"))
+        if document_label not in labels:
+            return False
+        self.graph_var.set(document_label)
+        self.filter_var.set("All")
+        self.search_var.set("")
+        self._refresh()
+        if node_key not in self._nodes_by_key:
+            return False
+        self._select_key(node_key)
+        return True
+
     def _navigate_selected(self, _event=None):
         node = self.selected_node()
         if node is None:

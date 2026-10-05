@@ -196,3 +196,28 @@ def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
 
     assert app.proofgraph_viewer._documents == []
     assert "unavailable" in app.evidence_text.get("1.0", "end").casefold()
+
+
+def test_proofgraph_search_and_evidence_readiness_update_live(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+
+    app.proofgraph_viewer.set_documents([document])
+    app.root.update()
+
+    assert "Evidence links: 1/1 checks" in app.proofgraph_viewer.readiness_var.get()
+    assert "unresolved findings 0" in app.proofgraph_viewer.readiness_var.get()
+
+    app.proofgraph_viewer.search_var.set("pressure_solver")
+    app.root.update()
+
+    keys = set(app.proofgraph_viewer._nodes_by_key)
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:EVID-GUI-PRESSURE" in keys
+    assert "verdict:VERDICT-GUI-PRESSURE" not in keys
+    assert app.proofgraph_viewer.summary_var.get().startswith("View: 2/")
+
+    app.proofgraph_viewer._clear_search_and_filter()
+    app.root.update()
+    assert app.proofgraph_viewer.search_var.get() == ""
+    assert app.proofgraph_viewer.filter_var.get() == "All"

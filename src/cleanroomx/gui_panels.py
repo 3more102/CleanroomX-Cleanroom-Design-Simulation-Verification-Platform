@@ -530,11 +530,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.last_result = None
             self.last_error_report = report
             self.summary_var.set(f"Diagnostics unavailable · {report.reference}")
-            self.visible_var.set("0 visible")
             self._status_setter(
                 f"Project diagnostics failed · {report.reference}"
             )
             self._populate()
+            # _populate() owns the normal "visible of total" count. A backend
+            # failure is not an empty successful result, so retain the distinct
+            # unavailable-state count after the tree/detail refresh.
+            self.visible_var.set("0 visible")
             return None
 
         self.last_error_report = None

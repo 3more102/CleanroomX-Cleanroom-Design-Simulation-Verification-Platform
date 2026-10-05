@@ -5300,6 +5300,7 @@ class CleanroomXApp:
         tree = getattr(self, "analysis_tree", None)
         if tree is None:
             return
+        self._restore_navigator_tree()
 
         if tree.exists("nav-requirements"):
             for child in tree.get_children("nav-requirements"):
@@ -5382,6 +5383,9 @@ class CleanroomXApp:
         graph_count = len(getattr(viewer, "_documents", [])) if viewer is not None else 0
         if tree.exists("nav-proofgraph"):
             tree.item("nav-proofgraph", text=f"ProofGraph ({graph_count})")
+
+        self._capture_navigator_tree()
+        self._apply_navigator_filter()
 
     def _open_navigator_diagnostics(self, severity: str | None = None) -> None:
         self.show_problems_panel()

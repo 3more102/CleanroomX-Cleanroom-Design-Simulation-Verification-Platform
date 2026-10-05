@@ -931,7 +931,13 @@ class VerificationHistoryDialog(tk.Toplevel):
 class RequirementsTraceabilityDialog(tk.Toplevel):
     """Read-only project requirements and evidence-routing inspection."""
 
-    def __init__(self, parent: tk.Misc, snapshot: dict):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        snapshot: dict,
+        *,
+        initial_requirement_id: str | None = None,
+    ):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
         self.geometry("1480x760")
@@ -1114,8 +1120,15 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
         first_requirement = self.tree.get_children(requirements_root)
         first_mapping = self.tree.get_children(mappings_root)
+        requested_requirement = (
+            f"requirement:{initial_requirement_id}"
+            if initial_requirement_id
+            else None
+        )
         initial = (
-            first_requirement[0]
+            requested_requirement
+            if requested_requirement and self.tree.exists(requested_requirement)
+            else first_requirement[0]
             if first_requirement
             else first_mapping[0]
             if first_mapping
@@ -1548,6 +1561,11 @@ class CleanroomXApp:
             accelerator="Ctrl+Shift+P",
             command=self.show_command_palette,
         )
+        tools_menu.add_command(
+            label="Global Engineering Search...",
+            accelerator="Ctrl+K",
+            command=self.show_command_palette,
+        )
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -1638,6 +1656,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
+        self.root.bind("<Control-k>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -3402,6 +3421,10 @@ class CleanroomXApp:
             return
         self.status_var.set(f"Diagnostic selected: {sequence}")
 
+    def _palette_focus_requirement(self, requirement_id: str) -> None:
+        if self.show_requirements_traceability(requirement_id=requirement_id):
+            self.status_var.set(f"Requirement selected: {requirement_id}")
+
     def _palette_focus_evidence_record(self, sequence: Any) -> None:
         self._activate_evidence_workspace()
         workspace = getattr(self, "evidence_workspace", None)
@@ -3495,6 +3518,55 @@ class CleanroomXApp:
                         "Search · Diagnostic",
                         lambda sequence=sequence: self._palette_focus_diagnostic(sequence),
                         keywords=(rule, message, severity, category, element_text, "diagnostic", "drc"),
+                        search_only=True,
+                    )
+                )
+
+        try:
+            traceability = build_project_requirements_traceability(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ):
+            traceability = {}
+        raw_requirements = (
+            traceability.get("requirements", ())
+            if isinstance(traceability, dict)
+            else ()
+        )
+        if isinstance(raw_requirements, list):
+            for requirement in raw_requirements:
+                if not isinstance(requirement, dict):
+                    continue
+                requirement_id = str(requirement.get("id") or "")
+                if not requirement_id:
+                    continue
+                title = str(requirement.get("title") or requirement_id)
+                requirement_set = requirement.get("set")
+                requirement_set = (
+                    requirement_set if isinstance(requirement_set, dict) else {}
+                )
+                commands.append(
+                    PaletteCommand(
+                        f"search.requirement.{requirement_id}",
+                        f"Requirement · {title}",
+                        "Search · Requirement",
+                        lambda requirement_id=requirement_id: self._palette_focus_requirement(
+                            requirement_id
+                        ),
+                        keywords=(
+                            requirement_id,
+                            title,
+                            str(requirement.get("description") or ""),
+                            str(requirement.get("discipline") or ""),
+                            str(requirement.get("category") or ""),
+                            str(requirement.get("source") or ""),
+                            str(requirement.get("reference") or ""),
+                            str(requirement_set.get("title") or ""),
+                            "requirement",
+                            "criteria",
+                            "compliance",
+                        ),
                         search_only=True,
                     )
                 )
@@ -4391,7 +4463,10 @@ class CleanroomXApp:
         )
         return True
 
-    def show_requirements_traceability(self) -> bool:
+    def show_requirements_traceability(
+        self,
+        requirement_id: str | None = None,
+    ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
         except (
@@ -4417,7 +4492,11 @@ class CleanroomXApp:
             )
             return False
 
-        RequirementsTraceabilityDialog(self.root, snapshot)
+        RequirementsTraceabilityDialog(
+            self.root,
+            snapshot,
+            initial_requirement_id=requirement_id,
+        )
         return True
 
     def _project_verification_target(

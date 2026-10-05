@@ -280,3 +280,24 @@ def test_analysis_activity_indicator_tracks_worker_ui_state(app):
     assert app.run_button.instate(["!disabled"])
     assert app.cancel_button.instate(["disabled"])
     assert str(app.input_text.cget("state")) == "normal"
+
+def test_analysis_execution_state_is_semantic_and_non_compliance_claiming(app):
+    assert app.run_state_var.get() == "IDLE"
+    assert app.run_state_badge.cget("style") == "CX.Status.Neutral.TLabel"
+
+    app._set_running(True)
+    app.root.update_idletasks()
+    assert app.run_state_var.get() == "RUNNING"
+    assert app.run_state_badge.cget("style") == "CX.Status.Simulation.TLabel"
+    assert str(app.run_button.cget("state")) == "disabled"
+
+    app._set_running(False)
+    app._set_run_state("FAILED")
+    app.root.update_idletasks()
+    assert app.run_state_var.get() == "FAILED"
+    assert app.run_state_badge.cget("style") == "CX.Status.Fail.TLabel"
+
+    app._set_run_state("COMPLETE")
+    assert app.run_state_var.get() == "COMPLETE"
+    assert app.run_state_badge.cget("style") == "CX.Status.Info.TLabel"
+

@@ -1025,3 +1025,38 @@ def test_failed_post_write_integrity_verification_preserves_previous_history(
         assert list(recovery_dir.glob("*.recovery.json")) == [previous]
     finally:
         manager.shutdown(wait=True)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery-directory permission semantics")
+def test_recovery_directory_permission_failure_is_not_silenced(tmp_path, monkeypatch):
+    recovery_dir = tmp_path / "recovery"
+
+    def fail_chmod(_self, _mode):
+        raise OSError("permission hardening unavailable")
+
+    monkeypatch.setattr(Path, "chmod", fail_chmod)
+
+    with pytest.raises(
+        PermissionError,
+        match="unable to secure recovery directory permissions",
+    ) as exc:
+        autosave_module._ensure_recovery_dir(recovery_dir)
+
+    assert isinstance(exc.value.__cause__, OSError)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery-directory permission semantics")
+def test_recovery_directory_rejects_permissions_broader_than_owner_only(
+    tmp_path, monkeypatch
+):
+    recovery_dir = tmp_path / "recovery"
+    recovery_dir.mkdir(mode=0o755)
+    recovery_dir.chmod(0o755)
+
+    monkeypatch.setattr(Path, "chmod", lambda _self, _mode: None)
+
+    with pytest.raises(
+        PermissionError,
+        match="permissions are too broad",
+    ):
+        autosave_module._ensure_recovery_dir(recovery_dir)

@@ -4,6 +4,7 @@ import argparse
 import copy
 from datetime import datetime
 import json
+import logging
 from pathlib import Path
 import queue
 import threading
@@ -11,6 +12,8 @@ import uuid
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
+
+GUI_RUNTIME_LOGGER = logging.getLogger("cleanroomx.gui.runtime")
 
 from . import __version__
 from .autosave import (
@@ -3027,6 +3030,10 @@ class CleanroomXApp:
                 self._capture_ui_layout_state(),
             )
         except Exception:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to persist GUI layout state path=%s",
+                self._ui_state_path,
+            )
             return
 
     def _restore_ui_layout_state(self) -> None:
@@ -4525,7 +4532,10 @@ class CleanroomXApp:
             try:
                 self.load_project_path(project_path)
             except Exception:
-                pass
+                GUI_RUNTIME_LOGGER.exception(
+                    "Failed to reload project after durability warning path=%s",
+                    project_path,
+                )
             self.status_var.set(
                 "Verification bytes committed; save durability not confirmed"
             )
@@ -4729,6 +4739,9 @@ class CleanroomXApp:
         try:
             return self._project_state_signature() != baseline
         except Exception:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to compute project dirty-state signature; treating project as modified"
+            )
             return True
 
     def _capture_saved_state(self) -> None:

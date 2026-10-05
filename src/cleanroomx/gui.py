@@ -4203,28 +4203,45 @@ class CleanroomXApp:
         if not isinstance(diagnostics, dict):
             diagnostics = {}
 
+        index_reports: list[GuiErrorReport] = []
         requirement_snapshot: dict = {}
         try:
             requirement_snapshot = project_requirement_traceability_snapshot(
                 self.project
             )
-        except Exception:
+        except Exception as exc:
             requirement_snapshot = {}
+            index_reports.append(
+                record_gui_exception(
+                    "Index project requirements for engineering search",
+                    exc,
+                )
+            )
 
         proofgraph_documents: list[dict] = []
         try:
             records = verification_run_history_records(self.project.metadata)
             proofgraph_documents = self._proofgraph_documents_from_records(records)
-        except Exception:
+        except Exception as exc:
             proofgraph_documents = []
+            index_reports.append(
+                record_gui_exception(
+                    "Index verification evidence for engineering search",
+                    exc,
+                )
+            )
 
-        return build_engineering_search_entries(
+        entries = build_engineering_search_entries(
             project=self.project,
             spatial_layout=layout,
             diagnostics=diagnostics,
             requirement_snapshot=requirement_snapshot,
             proofgraph_documents=proofgraph_documents,
         )
+        if index_reports and hasattr(self, "status_var"):
+            references = ", ".join(report.reference for report in index_reports)
+            self.status_var.set(f"Search index partial · {references}")
+        return entries
 
     def _navigate_engineering_search_result(self, entry: SearchEntry) -> None:
         target_type = entry.target_type

@@ -245,3 +245,22 @@ def test_dashboard_verification_progress_uses_canonical_currency(app):
         f"{expected}% current" if configured else "not checked"
     )
 
+def test_problem_issue_inspector_prioritizes_engineering_context(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    target_iid = next(
+        iid
+        for iid, candidate in panel._issues_by_iid.items()
+        if candidate["sequence"] == issue["sequence"]
+    )
+    panel.tree.selection_set(target_iid)
+    panel.tree.focus(target_iid)
+    panel._show_selected_detail()
+    app.root.update_idletasks()
+
+    detail = panel.detail.get("1.0", "end")
+    assert "Object:" in detail
+    assert "Engineering finding" in detail
+    assert "Suggested recovery" in detail
+    assert str(panel.locate_button.cget("state")) == "normal"
+

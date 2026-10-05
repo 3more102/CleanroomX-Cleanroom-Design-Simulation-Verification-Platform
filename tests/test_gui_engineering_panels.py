@@ -195,3 +195,35 @@ def test_density_switch_updates_persisted_gui_state_without_project_mutation(app
     assert app.density_var.get() == "compact"
     assert app._ui_layout_state["density"] == "compact"
     assert app.project.to_dict() == project_before
+
+
+def test_problem_browser_supports_category_sort_and_traversal(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    categories = tuple(panel.category_filter.cget("values"))
+    assert issue["category"] in categories
+
+    panel.category_var.set(issue["category"])
+    app.root.update()
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid].get("category", "")) == issue["category"]
+        for iid in visible
+    )
+
+    panel.category_var.set("All")
+    panel.sort_by("code")
+    app.root.update()
+    children = list(panel.tree.get_children())
+    codes = [str(panel.tree.set(iid, "code")).casefold() for iid in children]
+    assert codes == sorted(codes)
+
+    if len(children) >= 2:
+        panel.tree.selection_set(children[0])
+        panel.tree.focus(children[0])
+        panel.select_next_issue()
+        assert panel.tree.selection() == (children[1],)
+        panel.select_previous_issue()
+        assert panel.tree.selection() == (children[0],)

@@ -621,8 +621,13 @@ class RunHistoryCompareDialog(tk.Toplevel):
         left_sequence = left.get("sequence", "?")
         right_sequence = right.get("sequence", "?")
         self.title(f"Compare Analysis Runs #{left_sequence} ↔ #{right_sequence}")
-        self.geometry("1320x720")
-        self.minsize(960, 520)
+        configure_toplevel_geometry(
+            self,
+            1320,
+            720,
+            min_width=960,
+            min_height=520,
+        )
         self.transient(parent)
 
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(10, 7))

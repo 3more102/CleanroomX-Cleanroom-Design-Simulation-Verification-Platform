@@ -560,6 +560,71 @@ def test_result_export_refuses_stale_cached_run(monkeypatch):
     assert app.last_run is None
 
 
+
+def test_worker_execution_error_records_reference_and_safe_dialog(monkeypatch):
+    import queue
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Report:
+        reference = "CX-TEST-WORKER"
+        summary = "synthetic solver failure"
+
+        def user_message(self):
+            return (
+                "Run analysis analysis-a did not complete.\n\n"
+                "synthetic solver failure\n\n"
+                "Error reference: CX-TEST-WORKER"
+            )
+
+    error = RuntimeError("synthetic solver failure")
+    recorded = []
+    dialogs = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or Report(),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: dialogs.append((title, message)),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._queue = queue.Queue()
+    app._queue.put(("error", 9, "analysis-a", error))
+    app._run_generation = 9
+    app._abandon_requested = False
+    app._running = True
+    app._active_run_task_id = None
+    app._run_started_monotonic = None
+    app.status_var = Status()
+    app.root = Root()
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert recorded == [("Run analysis analysis-a", error)]
+    assert "CX-TEST-WORKER" in app.status_var.value
+    assert dialogs == [
+        (
+            "Analysis failed",
+            "Run analysis analysis-a did not complete.\n\n"
+            "synthetic solver failure\n\n"
+            "Error reference: CX-TEST-WORKER",
+        )
+    ]
+    assert app.root.delay == 100
+
 def test_abandon_waits_for_worker_exit_before_reenabling_ui():
     import queue
 

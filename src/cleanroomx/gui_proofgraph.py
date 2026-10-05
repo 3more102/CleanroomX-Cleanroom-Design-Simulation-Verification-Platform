@@ -898,6 +898,31 @@ class ProofGraphViewer(ttk.Frame):
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None
 
+    def searchable_nodes(self) -> list[dict[str, Any]]:
+        """Return canonical active-graph nodes for application-level global search."""
+        projection = proofgraph_projection(self._active_document())
+        return [
+            dict(node)
+            for node in projection.get("nodes", [])
+            if isinstance(node, dict)
+        ]
+
+    def focus_node(self, key: str) -> bool:
+        """Reveal and select one canonical node regardless of current graph filters."""
+        target = _text(key)
+        if not target:
+            return False
+        if self.filter_var.get() != "All":
+            self.filter_var.set("All")
+        if self.search_var.get():
+            self.search_var.set("")
+        self._refresh()
+        if target not in self._nodes_by_key:
+            return False
+        self._select_key(target)
+        self.tree.focus_set()
+        return True
+
     def _navigate_selected(self, _event=None):
         node = self.selected_node()
         if node is None:

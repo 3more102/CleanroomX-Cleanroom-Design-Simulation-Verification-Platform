@@ -518,6 +518,49 @@ def test_reset_panel_layout_restores_shell_panels(app):
     assert app._paned_contains(app.main_panes, app.navigator_panel)
     assert app._paned_contains(app.workspace_panes, app.output_panel)
 
+@pytest.mark.parametrize(
+    ("profile", "center_attr", "output_attr", "inspector_visible"),
+    [
+        ("design", "spatial_workspace", "problems_panel", True),
+        ("analysis", "input_tab", "result_text", False),
+        ("verification", "spatial_workspace", "problems_panel", True),
+        ("evidence", "proofgraph_viewer", "evidence_text", False),
+        ("reporting", "plot_tab", "report_text", False),
+    ],
+)
+def test_workspace_profiles_apply_coherent_engineering_layouts(
+    app,
+    profile,
+    center_attr,
+    output_attr,
+    inspector_visible,
+):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.activate_workspace_profile(profile)
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert app.focus_workspace_var.get() is False
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.notebook.select() == str(getattr(app, center_attr))
+    assert app.output_notebook.select() == str(getattr(app, output_attr))
+    assert app.spatial_workspace.inspector_visible() is inspector_visible
+    assert app.project.to_dict() == project_before
+
+
+def test_workspace_profile_rejects_unknown_layout_without_mutation(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    with pytest.raises(ValueError, match="unknown workspace profile"):
+        app.activate_workspace_profile("unsupported")
+
+    assert app.project.to_dict() == project_before
+
+
 def test_design_inspector_collapses_restores_and_is_view_only(app):
     workspace = app.spatial_workspace
     project_before = copy.deepcopy(app.project.to_dict())

@@ -12,6 +12,24 @@ from .project_diagnostics import analyze_project_diagnostics
 
 
 _SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
+_DIAGNOSTIC_STATE_RANK = {
+    "stale": 0,
+    "unverifiable": 1,
+    "unverified": 2,
+    "open": 3,
+}
+_STALE_RULES = {
+    "verification_currency.stale",
+    "run_history.current_input_not_run",
+    "run_history.external_dependency_stale",
+}
+_UNVERIFIED_RULES = {
+    "verification_currency.not_verified",
+    "run_history.analysis_not_run",
+}
+_UNVERIFIABLE_RULES = {
+    "verification_currency.dependency_freshness_unverifiable",
+}
 
 
 class ProjectDiagnosticsPanel(ttk.Frame):
@@ -40,6 +58,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.state_var = tk.StringVar(value="All")
         self.rule_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.object_var = tk.StringVar(value="All")
@@ -50,6 +69,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         for variable in (
             self.search_var,
             self.severity_var,
+            self.state_var,
             self.rule_var,
             self.category_var,
             self.object_var,
@@ -112,6 +132,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=9,
         )
         self.severity_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filter_row, text="State").pack(side="left")
+        self.state_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.state_var,
+            values=("All", "Open", "Stale", "Unverified", "Unverifiable"),
+            state="readonly",
+            width=11,
+        )
+        self.state_combo.pack(side="left", padx=(4, 8))
         ttk.Label(filter_row, text="Rule").pack(side="left")
         self.rule_combo = ttk.Combobox(
             filter_row,
@@ -158,7 +187,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         body.add(table_frame, weight=4)
         body.add(detail_frame, weight=1)
 
-        columns = ("severity", "code", "description", "object", "level", "source")
+        columns = ("severity", "state", "code", "description", "object", "level", "source")
         self.tree = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -168,6 +197,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         )
         headings = {
             "severity": "Severity",
+            "state": "State",
             "code": "Rule / code",
             "description": "Engineering finding",
             "object": "Object",
@@ -176,6 +206,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         }
         widths = {
             "severity": 88,
+            "state": 98,
             "code": 220,
             "description": 520,
             "object": 180,
@@ -221,7 +252,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 "severity": lambda raw: (
                     0,
                     _SEVERITY_RANK.get(str(raw).casefold(), 99),
-                )
+                ),
+                "state": lambda raw: (
+                    0,
+                    _DIAGNOSTIC_STATE_RANK.get(str(raw).casefold(), 99),
+                ),
             },
         )
         self.table_behavior.sort_column = "severity"
@@ -272,6 +307,18 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         if not isinstance(element, dict):
             return "project"
         return str(element.get("type") or "project")
+
+    @staticmethod
+    def _state_text(issue: dict[str, Any]) -> str:
+        """Project only explicit canonical freshness/run-state rules into UI state."""
+        rule = str(issue.get("rule") or "").strip().casefold()
+        if rule in _STALE_RULES:
+            return "stale"
+        if rule in _UNVERIFIED_RULES:
+            return "unverified"
+        if rule in _UNVERIFIABLE_RULES:
+            return "unverifiable"
+        return "open"
 
     @staticmethod
     def _level_text(issue: dict[str, Any]) -> str:
@@ -327,6 +374,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
     def _filtered_issues(self) -> list[dict[str, Any]]:
         issues = self._all_issues()
         severity = self.severity_var.get().strip().casefold()
+        state = self.state_var.get().strip().casefold()
         rule = self.rule_var.get().strip().casefold()
         category = self.category_var.get().strip().casefold()
         object_type = self.object_var.get().strip().casefold()
@@ -339,6 +387,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         for issue in issues:
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_state = self._state_text(issue)
+            if state and state != "all" and issue_state != state:
                 continue
             issue_rule = str(issue.get("rule", "")).casefold()
             if rule and rule != "all" and issue_rule != rule:
@@ -360,6 +411,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                         str(issue.get("category", "")),
                         str(issue.get("message", "")),
                         str(issue.get("suggested_action", "")),
+                        self._state_text(issue),
                         self._element_text(issue),
                         self._element_type(issue),
                         self._level_text(issue),
@@ -383,6 +435,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 _SEVERITY_RANK.get(str(issue.get("severity", "")).casefold(), 99),
                 str(issue.get("rule", "")).casefold(),
             )
+        if column == "state":
+            state = self._state_text(issue)
+            return (_DIAGNOSTIC_STATE_RANK.get(state, 99), state)
         if column == "code":
             return str(issue.get("rule", "")).casefold()
         if column == "description":
@@ -403,6 +458,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
     def clear_filters(self) -> None:
         self.search_var.set("")
         self.severity_var.set("All")
+        self.state_var.set("All")
         self.rule_var.set("All")
         self.category_var.set("All")
         self.object_var.set("All")
@@ -436,6 +492,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 iid=iid,
                 values=(
                     severity.upper(),
+                    self._state_text(issue).upper(),
                     issue.get("rule", ""),
                     issue.get("message", ""),
                     self._element_text(issue),
@@ -509,6 +566,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 lines.extend((f"{selected_count} diagnostics selected", ""))
             lines.extend([
                 f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
+                f"State: {self._state_text(issue).upper()}",
                 str(issue.get("message", "")),
                 "",
                 f"Category: {issue.get('category', '')}",

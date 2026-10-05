@@ -3034,8 +3034,51 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _open_palette_analysis(self, analysis_id: str) -> None:
+        self.navigator_filter_var.set("")
+        if not self.analysis_tree.exists(analysis_id):
+            self._refresh_analysis_list(select_id=analysis_id)
+        if not self.analysis_tree.exists(analysis_id):
+            self.status_var.set(f"Analysis {analysis_id!r} is no longer available")
+            return
+        self.analysis_tree.selection_set(analysis_id)
+        self.analysis_tree.focus(analysis_id)
+        self.analysis_tree.see(analysis_id)
+        self._on_navigator_selected()
+        self._activate_analysis_input_workspace()
+
+    def _open_palette_spatial(self, kind: str, item_id: str) -> None:
+        navigator_id = f"{kind}:{item_id}"
+        self.navigator_filter_var.set("")
+        if not self.analysis_tree.exists(navigator_id):
+            self._refresh_spatial_navigator()
+        if not self.analysis_tree.exists(navigator_id):
+            self.status_var.set(f"{kind.title()} {item_id!r} is no longer available")
+            return
+        self.analysis_tree.selection_set(navigator_id)
+        self.analysis_tree.focus(navigator_id)
+        self.analysis_tree.see(navigator_id)
+        self._on_navigator_selected()
+        self.spatial_workspace.show_inspector()
+        self.spatial_workspace.fit_selected()
+
+    def _open_palette_diagnostic(self, sequence: Any) -> None:
+        self.show_problems_panel()
+        self.problems_panel.reset_filters()
+        if not self.problems_panel.select_issue(sequence):
+            self._refresh_engineering_panels()
+            self.problems_panel.reset_filters()
+        if not self.problems_panel.select_issue(sequence):
+            self.status_var.set("Diagnostic is no longer available")
+            return
+        issue = self.problems_panel.selected_issue()
+        if issue is not None:
+            self.status_var.set(
+                f"Diagnostic selected: {issue.get('rule') or 'unspecified rule'}"
+            )
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3185,6 +3228,104 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+
+        for analysis in self.project.analyses:
+            analysis_id = str(analysis.id)
+            commands.append(
+                PaletteCommand(
+                    f"entity.analysis.{analysis_id}",
+                    f"Analysis — {analysis.name}",
+                    "Project Search · Analysis",
+                    lambda value=analysis_id: self._open_palette_analysis(value),
+                    keywords=(
+                        "analysis",
+                        analysis_id,
+                        str(analysis.kind),
+                        str(analysis.name),
+                    ),
+                )
+            )
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if isinstance(layout, dict):
+            rooms = layout.get("rooms", [])
+            devices = layout.get("devices", [])
+            if isinstance(rooms, list):
+                for room in rooms:
+                    if not isinstance(room, dict) or not room.get("id"):
+                        continue
+                    room_id = str(room["id"])
+                    room_name = str(room.get("name") or room_id)
+                    commands.append(
+                        PaletteCommand(
+                            f"entity.room.{room_id}",
+                            f"Room — {room_name}",
+                            "Project Search · Room",
+                            lambda value=room_id: self._open_palette_spatial("room", value),
+                            keywords=(
+                                "room",
+                                room_id,
+                                room_name,
+                                str(room.get("classification") or ""),
+                            ),
+                        )
+                    )
+            if isinstance(devices, list):
+                for device in devices:
+                    if not isinstance(device, dict) or not device.get("id"):
+                        continue
+                    device_id = str(device["id"])
+                    device_name = str(device.get("name") or device_id)
+                    commands.append(
+                        PaletteCommand(
+                            f"entity.device.{device_id}",
+                            f"Device — {device_name}",
+                            "Project Search · Device",
+                            lambda value=device_id: self._open_palette_spatial("device", value),
+                            keywords=(
+                                "device",
+                                device_id,
+                                device_name,
+                                str(device.get("type") or ""),
+                                str(device.get("room_id") or ""),
+                            ),
+                        )
+                    )
+
+        diagnostics = getattr(getattr(self, "problems_panel", None), "last_result", None)
+        issues = diagnostics.get("issues", []) if isinstance(diagnostics, dict) else []
+        if isinstance(issues, list):
+            for issue in issues:
+                if not isinstance(issue, dict) or issue.get("sequence") is None:
+                    continue
+                sequence = issue["sequence"]
+                rule = str(issue.get("rule") or "unspecified")
+                element = issue.get("element")
+                element_text = ""
+                if isinstance(element, dict):
+                    element_text = str(
+                        element.get("name")
+                        or element.get("id")
+                        or element.get("type")
+                        or ""
+                    )
+                commands.append(
+                    PaletteCommand(
+                        f"entity.diagnostic.{sequence}",
+                        f"Diagnostic — {rule}",
+                        "Project Search · Diagnostic",
+                        lambda value=sequence: self._open_palette_diagnostic(value),
+                        keywords=(
+                            "diagnostic",
+                            str(issue.get("severity") or ""),
+                            str(issue.get("category") or ""),
+                            str(issue.get("message") or ""),
+                            element_text,
+                        ),
+                    )
+                )
+
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

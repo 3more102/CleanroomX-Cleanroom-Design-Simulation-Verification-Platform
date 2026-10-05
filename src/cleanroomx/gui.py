@@ -81,7 +81,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_theme import attach_tooltip, configure_ttk_theme, normalize_theme_name
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1614,6 +1614,22 @@ class CleanroomXApp:
             style="CX.Status.Neutral.TLabel",
         )
         self.run_state_label.pack(side="right", padx=(4, 0))
+        attach_tooltip(
+            self.shell_diagnostics_badge,
+            "Project diagnostics summary. F8 refreshes the currently enabled diagnostic rules.",
+        )
+        attach_tooltip(
+            self.shell_verification_badge,
+            "Verification currency: current checks versus configured analyses; stale results require re-verification.",
+        )
+        attach_tooltip(
+            self.shell_evidence_badge,
+            "Persisted verification evidence retained for traceability and ProofGraph.",
+        )
+        attach_tooltip(
+            self.run_state_label,
+            "Current analysis execution state. F5 starts the selected analysis.",
+        )
         ttk.Label(
             statebar,
             textvariable=self.run_elapsed_var,

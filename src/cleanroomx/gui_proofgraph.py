@@ -495,6 +495,91 @@ def _filtered_projection(
     }
 
 
+def _node_detail_lines(node: dict[str, Any]) -> list[str]:
+    """Format a ProofGraph node for engineering review without raw JSON dumping."""
+    node_type = str(node.get("type") or "node").replace("_", " ").upper()
+    label = str(node.get("label") or node.get("id") or "Unnamed")
+    lines = [node_type, label]
+    status = str(node.get("status") or "").strip()
+    if status:
+        lines.append(f"Status: {status.upper()}")
+
+    raw = node.get("raw")
+    raw = raw if isinstance(raw, dict) else {}
+    preferred = (
+        "id", "title", "kind", "property_name", "subject_ref",
+        "requirement_id", "check_id", "source_id", "reason",
+        "comparison", "unit", "value", "reference", "created_at_utc",
+    )
+    shown: set[str] = set()
+    detail_rows: list[str] = []
+    for key in preferred:
+        value = raw.get(key)
+        if value in (None, "", [], {}):
+            continue
+        shown.add(key)
+        label_key = key.replace("_", " ").title()
+        if isinstance(value, (list, tuple)):
+            rendered = f"{len(value)} item(s)"
+        elif isinstance(value, dict):
+            rendered = f"{len(value)} field(s)"
+        else:
+            rendered = str(value)
+        detail_rows.append(f"{label_key}: {rendered}")
+
+    for key, value in sorted(raw.items()):
+        if key in shown or value in (None, "", [], {}):
+            continue
+        if not isinstance(value, (dict, list, tuple)):
+            detail_rows.append(f"{key.replace('_', ' ').title()}: {value}")
+
+    if detail_rows:
+        lines.extend(("", "TRACEABILITY DETAILS", *detail_rows))
+    flags = tuple(node.get("flags") or ())
+    if flags:
+        lines.extend(("", "Markers: " + ", ".join(str(flag).upper() for flag in flags)))
+    return lines
+
+
+def _edge_identity(edge: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        _text(edge.get("source")),
+        _text(edge.get("target")),
+        _text(edge.get("relation")),
+    )
+
+
+def _edge_detail_lines(
+    edge: dict[str, Any],
+    nodes_by_key: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Format one persisted ProofGraph relationship for operator trace review."""
+    source = nodes_by_key.get(_text(edge.get("source")), {})
+    target = nodes_by_key.get(_text(edge.get("target")), {})
+    relation = _text(edge.get("relation")) or "relationship"
+
+    def node_label(node: dict[str, Any], fallback: str) -> str:
+        node_type = _text(node.get("type")).replace("_", " ").upper() or "NODE"
+        label = _text(node.get("label")) or fallback
+        status = _text(node.get("status")).upper()
+        suffix = f" [{status}]" if status else ""
+        return f"{node_type} · {label}{suffix}"
+
+    source_key = _text(edge.get("source"))
+    target_key = _text(edge.get("target"))
+    return [
+        "TRACEABILITY RELATIONSHIP",
+        relation.replace("_", " ").upper(),
+        "",
+        f"Source: {node_label(source, source_key)}",
+        f"Target: {node_label(target, target_key)}",
+        f"Relation: {relation}",
+        "",
+        "Direction: source → target",
+        "Double-click or choose Open target to navigate through the target node's existing mapping.",
+    ]
+
+
 class ProofGraphViewer(ttk.Frame):
     """Read-only tree + interactive graph view over canonical ProofGraph documents."""
 
@@ -513,7 +598,9 @@ class ProofGraphViewer(ttk.Frame):
         self._nodes_by_key: dict[str, dict[str, Any]] = {}
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
+        self._canvas_edge_by_item: dict[int, dict[str, Any]] = {}
         self._selected_key: str | None = None
+        self._selected_edge_key: tuple[str, str, str] | None = None
         self._positions_by_key: dict[str, tuple[float, float]] = {}
         self._graph_scale = 1.0
         self._pan_active = False
@@ -654,7 +741,7 @@ class ProofGraphViewer(ttk.Frame):
 
         ttk.Label(
             detail_host,
-            text="NODE DETAILS",
+            text="TRACE DETAILS",
             style="CX.Section.TLabel",
         ).pack(anchor="w", padx=7, pady=(6, 3))
         self.detail = tk.Text(
@@ -715,6 +802,13 @@ class ProofGraphViewer(ttk.Frame):
         }
         if self._selected_key not in self._nodes_by_key:
             self._selected_key = None
+        visible_edge_keys = {
+            _edge_identity(edge)
+            for edge in self._projection.get("edges", [])
+            if isinstance(edge, dict)
+        }
+        if self._selected_edge_key not in visible_edge_keys:
+            self._selected_edge_key = None
         self._populate_tree()
         self._draw_graph()
         self._show_selected_detail()
@@ -858,6 +952,15 @@ class ProofGraphViewer(ttk.Frame):
 
     def _on_canvas_hover(self, _event=None) -> None:
         current = self.canvas.find_withtag("current")
+        edge = self._canvas_edge_by_item.get(current[0]) if current else None
+        if edge is not None:
+            if not self._pan_active:
+                self.canvas.configure(cursor="hand2")
+            relation = _text(edge.get("relation")).replace("_", " ")
+            self._status_setter(
+                f"ProofGraph relationship: {relation} · double-click to open target"
+            )
+            return
         key = self._canvas_key_by_item.get(current[0]) if current else None
         if key is None:
             if not self._pan_active:
@@ -936,6 +1039,7 @@ class ProofGraphViewer(ttk.Frame):
         canvas = self.canvas
         canvas.delete("all")
         self._canvas_key_by_item.clear()
+        self._canvas_edge_by_item.clear()
         nodes = self._projection.get("nodes", [])
         edges = self._projection.get("edges", [])
         if not nodes:
@@ -975,15 +1079,26 @@ class ProofGraphViewer(ttk.Frame):
             target = positions.get(edge["target"])
             if source is None or target is None:
                 continue
-            canvas.create_line(
+            selected_edge = _edge_identity(edge) == self._selected_edge_key
+            line = canvas.create_line(
                 source[0] + 160 * scale,
                 source[1] + 24 * scale,
                 target[0],
                 target[1] + 24 * scale,
-                fill="#94a3b8",
-                width=1,
+                fill="#0f6cbd" if selected_edge else "#94a3b8",
+                width=3 if selected_edge else 1,
                 arrow="last",
             )
+            self._canvas_edge_by_item[line] = edge
+            if selected_edge:
+                relation_item = canvas.create_text(
+                    (source[0] + 160 * scale + target[0]) / 2,
+                    (source[1] + target[1] + 48 * scale) / 2 - 8 * scale,
+                    text=_text(edge.get("relation")).replace("_", " "),
+                    fill="#0f6cbd",
+                    font=("TkDefaultFont", max(7, round(8 * scale)), "bold"),
+                )
+                self._canvas_edge_by_item[relation_item] = edge
 
         for node in nodes:
             x, y = positions[node["key"]]
@@ -1027,6 +1142,21 @@ class ProofGraphViewer(ttk.Frame):
         self._draw_graph()
         self._show_selected_detail()
 
+    def _select_edge(self, edge: dict[str, Any]) -> None:
+        key = _edge_identity(edge)
+        visible = {
+            _edge_identity(candidate)
+            for candidate in self._projection.get("edges", [])
+            if isinstance(candidate, dict)
+        }
+        if key not in visible:
+            return
+        self._selected_key = None
+        self._selected_edge_key = key
+        self._populate_tree()
+        self._draw_graph()
+        self._show_selected_detail()
+
     def _on_tree_selected(self, _event=None) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -1039,6 +1169,10 @@ class ProofGraphViewer(ttk.Frame):
         current = self.canvas.find_withtag("current")
         if not current:
             return
+        edge = self._canvas_edge_by_item.get(current[0])
+        if edge is not None:
+            self._select_edge(edge)
+            return
         key = self._canvas_key_by_item.get(current[0])
         if key:
             self._select_key(key)
@@ -1046,24 +1180,16 @@ class ProofGraphViewer(ttk.Frame):
     def _show_selected_detail(self) -> None:
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
+        edge = self.selected_edge()
         node = self._nodes_by_key.get(self._selected_key or "")
-        if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
-            )
-            if node.get("status"):
-                header += f"Status: {node['status'].upper()}\n"
-            self.detail.insert("1.0", header + "\n")
+        if edge is not None:
+            self.detail.insert("1.0", "\n".join(_edge_detail_lines(edge, self._nodes_by_key)))
+        elif node is not None:
+            self.detail.insert("1.0", "\n".join(_node_detail_lines(node)))
+        else:
             self.detail.insert(
-                "end",
-                json.dumps(
-                    node.get("raw", {}),
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                ),
+                "1.0",
+                "No traceability item selected. Select a node or relationship to inspect persisted engineering evidence.",
             )
         self.detail.configure(state="disabled")
 
@@ -1071,8 +1197,20 @@ class ProofGraphViewer(ttk.Frame):
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None
 
+    def selected_edge(self) -> dict[str, Any] | None:
+        key = self._selected_edge_key
+        if key is None:
+            return None
+        for edge in self._projection.get("edges", []):
+            if isinstance(edge, dict) and _edge_identity(edge) == key:
+                return edge
+        return None
+
     def _navigate_selected(self, _event=None):
+        edge = self.selected_edge()
         node = self.selected_node()
+        if edge is not None:
+            node = self._nodes_by_key.get(_text(edge.get("target")))
         if node is None:
             return "break"
         if self._on_navigate is not None:

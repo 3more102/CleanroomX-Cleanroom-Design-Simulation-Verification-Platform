@@ -5,6 +5,8 @@ import copy
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    _edge_detail_lines,
+    _node_detail_lines,
     _filtered_projection,
     _search_projection,
     proofgraph_evidence_summary,
@@ -293,3 +295,26 @@ def test_proofgraph_search_keeps_matching_nodes_and_immediate_trace_context():
     assert "evidence:evidence-pressure" in keys
 
     assert _search_projection(projection, "   ") is projection
+
+
+def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
+    projection = proofgraph_projection(_sample_graph())
+    node = next(item for item in projection["nodes"] if item["key"] == "finding:finding-pressure")
+    rendered = "\n".join(_node_detail_lines(node))
+    assert "FINDING" in rendered
+    assert "Pressure below target" in rendered
+    assert "TRACEABILITY DETAILS" in rendered
+    assert "{\"" not in rendered
+
+
+def test_proofgraph_edge_detail_explains_direction_and_endpoint_context():
+    projection = proofgraph_projection(_sample_graph())
+    nodes = {node["key"]: node for node in projection["nodes"]}
+    edge = next(item for item in projection["edges"] if item["relation"] == "checked_by")
+    rendered = "\n".join(_edge_detail_lines(edge, nodes))
+    assert "TRACEABILITY RELATIONSHIP" in rendered
+    assert "CHECKED BY" in rendered
+    assert "Source: REQUIREMENT · Room pressure" in rendered
+    assert "Target: CHECK · check-pressure" in rendered
+    assert "Direction: source → target" in rendered
+    assert "{\"" not in rendered

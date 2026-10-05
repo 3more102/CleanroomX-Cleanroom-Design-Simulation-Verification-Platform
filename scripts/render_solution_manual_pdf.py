@@ -134,8 +134,10 @@ class ManualDoc(BaseDocTemplate):
             self.canv.bookmarkPage(key)
             try:
                 self.canv.addOutlineEntry(text, key, level=level, closed=False)
-            except Exception:
-                pass
+            except Exception as exc:
+                raise RuntimeError(
+                    f"failed to add PDF outline entry {text!r} at level {level}"
+                ) from exc
             self.notify("TOCEntry", (level, text, self.page, key))
 
 

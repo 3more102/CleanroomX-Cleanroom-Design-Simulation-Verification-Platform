@@ -230,3 +230,18 @@ def test_engineering_dashboard_promotes_and_locates_canonical_error(app):
         issue["element"]["id"],
     )
     assert app.notebook.select() == str(app.spatial_workspace)
+
+def test_dashboard_verification_progress_uses_canonical_currency(app):
+    result = app.problems_panel.last_result
+    assert isinstance(result, dict)
+    currency = result.get("verification_currency", {})
+    summary = currency.get("summary", {}) if isinstance(currency, dict) else {}
+    configured = int(summary.get("configured_analysis_count") or 0)
+    current = int(summary.get("current_count") or 0)
+    expected = int(round((current / configured) * 100)) if configured else 0
+
+    assert int(float(app.dashboard_panel.verification_progress.cget("value"))) == expected
+    assert app.dashboard_panel.verification_percent_var.get() == (
+        f"{expected}% current" if configured else "not checked"
+    )
+

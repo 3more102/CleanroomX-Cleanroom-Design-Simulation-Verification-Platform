@@ -6,6 +6,8 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import theme_palette
+
 
 def _humanize(value: Any) -> str:
     text = str(value or "").replace("_", " ").replace(".", " / ").strip()
@@ -145,6 +147,12 @@ class AnalysisResultPanel(ttk.Frame):
         self.tree.configure(yscrollcommand=yscroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         yscroll.pack(side="right", fill="y")
+        self.apply_theme("dark")
+
+    def apply_theme(self, value: Any) -> None:
+        palette = theme_palette(value)
+        self.tree.tag_configure("row_even", background=palette["tree"])
+        self.tree.tag_configure("row_odd", background=palette["surface_alt"])
 
     def clear(self) -> None:
         self.refresh(None)

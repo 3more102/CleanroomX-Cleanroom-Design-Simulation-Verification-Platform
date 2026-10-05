@@ -8,6 +8,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_panels import _engineering_detail_value
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
 
@@ -171,6 +172,20 @@ def test_engineering_dashboard_uses_canonical_project_health(app):
     assert app.dashboard.evidence_var.get()
     assert app.dashboard.readiness_var.get().endswith("%")
     assert "compliance verdict" in app.dashboard.readiness_detail_var.get()
+    assert app.dashboard.readiness_state_var.get() in {
+        "READY",
+        "ATTENTION",
+        "INCOMPLETE",
+    }
+    assert 0 <= float(app.dashboard.readiness_progress.cget("value")) <= 100
+    assert set(app.dashboard.gate_vars) == {
+        "Geometry",
+        "Diagnostics",
+        "Verification",
+        "Evidence",
+    }
+    assert all(" · " in variable.get() for variable in app.dashboard.gate_vars.values())
+    assert str(app.dashboard.readiness_badge.cget("style")).startswith("CX.Status.")
 
     app.analysis_tree.selection_set("nav-dashboard")
     app.analysis_tree.focus("nav-dashboard")

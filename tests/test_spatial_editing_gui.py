@@ -1438,6 +1438,60 @@ def test_multi_selection_bulk_hide_delete_and_undo(app):
     assert any(room["id"] == second_hit.item_id for room in workspace.layout["rooms"])
 
 
+def test_destructive_delete_request_requires_confirmation_and_reports_cascade(app, monkeypatch):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    hit = _Hit("room", room["id"])
+    workspace._set_selected_hits([hit])
+    workspace._load_property_panel()
+
+    synthetic_device = {
+        "id": "__delete_confirmation_device__",
+        "room_id": room["id"],
+    }
+    workspace.layout["devices"].append(synthetic_device)
+    before = copy.deepcopy(workspace.layout)
+    prompts = []
+
+    def reject(title, message, **kwargs):
+        prompts.append((title, message, kwargs))
+        return False
+
+    monkeypatch.setattr(spatial_module.messagebox, "askyesno", reject)
+
+    assert workspace.request_delete_selected() is False
+    assert workspace.layout == before
+    assert prompts
+    title, message, options = prompts[0]
+    assert title == "Confirm spatial deletion"
+    assert "Delete 1 selected spatial object?" in message
+    assert "1 room" in message
+    assert "1 attached device removed with the selected room" in message
+    assert "Undo" in message
+    assert options["parent"] is workspace
+    assert options["default"] == "no"
+
+
+def test_escape_cancels_transient_tool_before_clearing_selection(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    hit = _Hit("room", room["id"])
+    workspace._set_selected_hits([hit])
+    workspace._load_property_panel()
+    workspace._tool_mode.set("distance")
+    workspace._measurement_points.append((0.0, 0.0))
+
+    assert workspace._on_escape() == "break"
+    assert workspace.selected_hits() == (hit,)
+    assert workspace._current_tool_mode() == "select"
+    assert workspace._measurement_points == []
+
+    assert workspace._on_escape() == "break"
+    assert workspace.selected_hits() == ()
+    assert workspace.canvas_2d.bind("<Escape>")
+    assert workspace.canvas_3d.bind("<Escape>")
+
+
 def test_marquee_selection_selects_visible_spatial_objects_without_mutation(app):
     workspace = app.spatial_workspace
     rooms = workspace.layout["rooms"]

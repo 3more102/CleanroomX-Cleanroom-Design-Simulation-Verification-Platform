@@ -338,20 +338,115 @@ jobs:
         shell: cmd
         run: start-cleanroomx.cmd --check
 
+  windows-installer-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Build standalone Windows installer
+        shell: pwsh
+        run: .\packaging\windows\build_installer.ps1
+      - name: Install, launch, and uninstall on clean runner path
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-ChildItem "dist\installer\CleanroomX-*-windows-x64-setup.exe" |
+            Sort-Object FullName |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw "CleanroomX installer artifact was not found"
+          }
+
+          $installDir = Join-Path $env:RUNNER_TEMP "CleanroomX-installed"
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$installDir"
+          ) -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "Installer failed with exit code $($install.ExitCode)"
+          }
+
+          $app = Join-Path $installDir "CleanroomX.exe"
+          if (-not (Test-Path $app)) {
+            throw "Installed CleanroomX executable is missing"
+          }
+          $check = Start-Process -FilePath $app -ArgumentList @("--check") -Wait -PassThru
+          if ($check.ExitCode -ne 0) {
+            throw "Installed CleanroomX --check failed with exit code $($check.ExitCode)"
+          }
+          $smoke = Start-Process -FilePath $app -ArgumentList @("--demo", "--smoke") -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) {
+            throw "Installed CleanroomX GUI smoke failed with exit code $($smoke.ExitCode)"
+          }
+
+          $uninstaller = Join-Path $installDir "unins000.exe"
+          if (-not (Test-Path $uninstaller)) {
+            throw "Inno Setup uninstaller is missing"
+          }
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART"
+          ) -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) {
+            throw "Uninstaller failed with exit code $($uninstall.ExitCode)"
+          }
+          if (Test-Path $app) {
+            throw "CleanroomX executable remains after uninstall"
+          }
+      - name: Record installer integrity manifest
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "dist\installer\CleanroomX-*-windows-x64-setup.exe" |
+            Sort-Object FullName |
+            Select-Object -First 1
+          $manifest = [ordered]@{
+            schema = "cleanroomx.windows-installer-build"
+            schema_version = 1
+            cleanroomx_version = (python -c "import cleanroomx; print(cleanroomx.__version__)").Trim()
+            git_sha = "${{ github.sha }}"
+            sha256 = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
+            pyinstaller_version = (python -c "import PyInstaller; print(PyInstaller.__version__)").Trim()
+            ifcopenshell_version = (python -c "import importlib.metadata as m; print(m.version('ifcopenshell'))").Trim()
+            runner_image = $env:ImageVersion
+            artifact = $installer.Name
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 "dist\installer\manifest.json"
+      - name: Upload Windows installer evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cleanroomx-windows-installer
+          path: |
+            dist/installer/CleanroomX-*-windows-x64-setup.exe
+            dist/installer/manifest.json
+          if-no-files-found: error
+
   required-ci:
     name: Required CI Gate
     if: ${{ always() }}
     needs:
       - test
       - windows-launcher-smoke
+      - windows-installer-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required CI jobs succeeded
         env:
           TEST_RESULT: ${{ needs.test.result }}
           WINDOWS_LAUNCHER_RESULT: ${{ needs.windows-launcher-smoke.result }}
+          WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer-smoke.result }}
         run: |
           echo "Python matrix result: ${TEST_RESULT}"
           echo "Windows launcher result: ${WINDOWS_LAUNCHER_RESULT}"
+          echo "Windows installer result: ${WINDOWS_INSTALLER_RESULT}"
           test "${TEST_RESULT}" = "success"
           test "${WINDOWS_LAUNCHER_RESULT}" = "success"
+          test "${WINDOWS_INSTALLER_RESULT}" = "success"

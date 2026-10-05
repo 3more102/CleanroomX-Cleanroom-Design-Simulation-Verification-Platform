@@ -385,6 +385,10 @@ class ComplianceWorkspace(ttk.Frame):
             self.digest_var.set("Rule/evidence digests unavailable until run")
             self.run_button.configure(state="disabled")
             self._populate([], [])
+            self._set_detail(
+                "No compliance_check analysis is active. Select a configured check "
+                "from the selector above; project Requirements remain a separate workflow."
+            )
             return
 
         projected = compliance_input_projection(analysis_input)
@@ -397,7 +401,7 @@ class ComplianceWorkspace(ttk.Frame):
             self.rule_count_var.set("0 valid rules")
             self.summary_var.set(str(projected["error"]))
             self.digest_var.set("Unavailable")
-            self.run_button.configure(state="disabled" if running else "normal")
+            self.run_button.configure(state="disabled")
             self._populate([], [])
             self._set_detail(
                 "Input validation failed. The canonical compliance parser reported:\n\n"
@@ -507,13 +511,21 @@ class ComplianceWorkspace(ttk.Frame):
                 ),
             )
         self.table_behavior.reapply_sort()
+        restored = False
         if selected_id is not None:
             for iid, row in self._rows_by_iid.items():
                 if row.get("id") == selected_id:
                     self.tree.selection_set(iid)
                     self.tree.focus(iid)
                     self.tree.see(iid)
+                    restored = True
                     break
+        if not restored:
+            items = self.tree.get_children()
+            if items:
+                self.tree.selection_set(items[0])
+                self.tree.focus(items[0])
+                self.tree.see(items[0])
         self._show_detail()
 
     def _show_detail(self, _event=None) -> None:

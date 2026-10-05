@@ -3516,6 +3516,14 @@ class CleanroomXApp:
     def _activate_compliance_workspace(self) -> None:
         analysis = self._editor_analysis() or self._current_analysis()
         if analysis is None or analysis.kind != "compliance_check":
+            if analysis is not None:
+                try:
+                    self._commit_editor(analysis)
+                except Exception as exc:
+                    self.status_var.set(
+                        f"Cannot open compliance manager until current input is valid: {exc}"
+                    )
+                    return
             analysis = next(
                 (
                     item

@@ -1733,6 +1733,7 @@ class CleanroomXApp:
             value=self._ui_layout_state["workspace_profile"]
         )
         self.focus_workspace_var = tk.BooleanVar(value=False)
+        self.fullscreen_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -2007,6 +2008,12 @@ class CleanroomXApp:
             variable=self.focus_workspace_var,
             command=self._sync_focus_workspace,
         )
+        view_menu.add_checkbutton(
+            label="Full-screen Workspace",
+            accelerator="F11",
+            variable=self.fullscreen_var,
+            command=self._sync_fullscreen_workspace,
+        )
         view_menu.add_command(
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
@@ -2075,6 +2082,8 @@ class CleanroomXApp:
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
+        self.root.bind("<F11>", lambda event: self.toggle_fullscreen_workspace())
+        self.root.bind("<Escape>", lambda event: self.exit_fullscreen_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<Control-k>", lambda event: self.show_global_search())
@@ -3270,6 +3279,32 @@ class CleanroomXApp:
         self.set_focus_workspace(
             self._focus_workspace_snapshot is None
         )
+
+    def set_fullscreen_workspace(self, enabled: bool) -> None:
+        """Toggle native full-screen without changing project or panel state."""
+        target = bool(enabled)
+        try:
+            self.root.attributes("-fullscreen", target)
+        except tk.TclError:
+            self.fullscreen_var.set(False)
+            self.status_var.set("Full-screen workspace unavailable on this display")
+            return
+        self.fullscreen_var.set(target)
+        self.status_var.set(
+            "Full-screen workspace enabled — F11 or Esc to exit"
+            if target
+            else "Full-screen workspace disabled"
+        )
+
+    def _sync_fullscreen_workspace(self) -> None:
+        self.set_fullscreen_workspace(bool(self.fullscreen_var.get()))
+
+    def toggle_fullscreen_workspace(self) -> None:
+        self.set_fullscreen_workspace(not bool(self.fullscreen_var.get()))
+
+    def exit_fullscreen_workspace(self) -> None:
+        if bool(self.fullscreen_var.get()):
+            self.set_fullscreen_workspace(False)
 
     def _on_navigator_visibility_requested(self) -> None:
         target = bool(self.navigator_panel_visible_var.get())

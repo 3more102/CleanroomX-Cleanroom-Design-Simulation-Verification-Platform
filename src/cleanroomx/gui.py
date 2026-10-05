@@ -1255,6 +1255,13 @@ class CleanroomXApp:
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
         self.model_status_var = tk.StringVar(value="Model: ready")
+        self.run_state_var = tk.StringVar(value="IDLE")
+        self.dashboard_project_var = tk.StringVar(value="Project not evaluated")
+        self.dashboard_geometry_var = tk.StringVar(value="Not evaluated")
+        self.dashboard_diagnostics_var = tk.StringVar(value="Not evaluated")
+        self.dashboard_verification_var = tk.StringVar(value="Not evaluated")
+        self.dashboard_evidence_var = tk.StringVar(value="No retained evidence")
+        self.dashboard_activity_var = tk.StringVar(value="No analysis run in this session")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -1824,6 +1831,10 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
+        self.dashboard_tab = ttk.Frame(self.notebook, padding=(12, 10))
+        self.notebook.add(self.dashboard_tab, text="Dashboard")
+        self._build_engineering_dashboard(self.dashboard_tab)
+
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
             project_getter=lambda: self.project,
@@ -1998,12 +2009,125 @@ class CleanroomXApp:
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
+        self.run_state_badge = ttk.Label(
+            status_bar,
+            textvariable=self.run_state_var,
+            style="CX.SuccessBadge.TLabel",
+        )
+        self.run_state_badge.pack(side="right", padx=(6, 0))
+        self.run_progress = ttk.Progressbar(
+            status_bar,
+            mode="indeterminate",
+            length=84,
+        )
+        self.run_progress.pack(side="right", padx=(8, 0))
         ttk.Label(
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
             style="CX.EvidenceBadge.TLabel",
         ).pack(side="right")
+
+    def _build_engineering_dashboard(self, parent: ttk.Frame) -> None:
+        hero = ttk.Frame(parent, style="CX.Hero.TFrame")
+        hero.pack(fill="x", pady=(0, 10))
+        ttk.Label(
+            hero,
+            text="PROJECT HEALTH & READINESS",
+            style="CX.HeroTitle.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            hero,
+            text=(
+                "Live engineering state from canonical diagnostics, verification currency, "
+                "retained evidence, and session activity."
+            ),
+            style="CX.HeroMuted.TLabel",
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
+        grid = ttk.Frame(parent)
+        grid.pack(fill="both", expand=True)
+        for column in range(3):
+            grid.columnconfigure(column, weight=1)
+
+        cards = (
+            ("PROJECT", self.dashboard_project_var, "CX.InfoBadge.TLabel"),
+            ("GEOMETRY", self.dashboard_geometry_var, "CX.SuccessBadge.TLabel"),
+            ("DIAGNOSTICS", self.dashboard_diagnostics_var, "CX.WarningBadge.TLabel"),
+            ("VERIFICATION", self.dashboard_verification_var, "CX.SimulationBadge.TLabel"),
+            ("EVIDENCE", self.dashboard_evidence_var, "CX.EvidenceBadge.TLabel"),
+            ("SESSION ACTIVITY", self.dashboard_activity_var, "CX.AttentionBadge.TLabel"),
+        )
+        for index, (title, variable, badge_style) in enumerate(cards):
+            card = ttk.LabelFrame(
+                grid,
+                text=title,
+                padding=(12, 10),
+                style="CX.Card.TLabelframe",
+            )
+            card.grid(
+                row=index // 3,
+                column=index % 3,
+                sticky="nsew",
+                padx=5,
+                pady=5,
+            )
+            ttk.Label(
+                card,
+                textvariable=variable,
+                style=badge_style,
+                wraplength=300,
+                justify="left",
+            ).pack(anchor="w", fill="x")
+            description = {
+                "PROJECT": "Active project identity and configured analysis count.",
+                "GEOMETRY": "Canonical spatial diagnostics affecting rooms/devices/openings.",
+                "DIAGNOSTICS": "Current deterministic project issue summary.",
+                "VERIFICATION": "Current/stale/not-verified analysis evidence state.",
+                "EVIDENCE": "Persisted verification records available for traceability.",
+                "SESSION ACTIVITY": "Latest analysis activity in the current desktop session.",
+            }[title]
+            ttk.Label(
+                card,
+                text=description,
+                style="CX.CardMuted.TLabel",
+                wraplength=300,
+                justify="left",
+            ).pack(anchor="w", pady=(7, 0))
+
+        actions = ttk.Frame(parent, style="CX.Toolbar.TFrame", padding=(8, 6))
+        actions.pack(fill="x", pady=(10, 0))
+        ttk.Label(
+            actions,
+            text="ENGINEERING ACTIONS",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            actions,
+            text="Open Design",
+            style="CX.Secondary.TButton",
+            command=lambda: self._activate_spatial_workspace("split"),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            actions,
+            text="Refresh Health",
+            style="CX.Compact.TButton",
+            command=self._refresh_engineering_panels,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            actions,
+            text="Open Problems",
+            style="CX.Compact.TButton",
+            command=self.show_problems_panel,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            actions,
+            text="Run Analysis",
+            style="CX.Primary.TButton",
+            command=self.run_current,
+        ).pack(side="right", padx=2)
 
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
@@ -2540,6 +2664,14 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            if hasattr(self, "dashboard_verification_var"):
+                self.dashboard_verification_var.set(
+                    "{current} current · {stale} stale · {unverified} not verified".format(
+                        current=summary.get("current_count", 0),
+                        stale=summary.get("stale_count", 0),
+                        unverified=summary.get("not_verified_count", 0),
+                    )
+                )
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -2569,6 +2701,8 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            if hasattr(self, "dashboard_verification_var"):
+                self.dashboard_verification_var.set("Verification unavailable")
             self._set_text(
                 self.verification_text,
                 f"Verification currency unavailable: {exc}\n",
@@ -2576,6 +2710,12 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            if hasattr(self, "dashboard_evidence_var"):
+                self.dashboard_evidence_var.set(
+                    f"{len(records)} retained verification record(s)"
+                    if records
+                    else "No retained verification evidence"
+                )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents(
@@ -2606,6 +2746,8 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            if hasattr(self, "dashboard_evidence_var"):
+                self.dashboard_evidence_var.set("Evidence unavailable")
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
@@ -2619,6 +2761,34 @@ class CleanroomXApp:
             if isinstance(diagnostics, dict)
             else {}
         )
+        if hasattr(self, "dashboard_project_var"):
+            self.dashboard_project_var.set(
+                f"{self.project.name} · {len(self.project.analyses)} configured analysis(es)"
+            )
+            issue_count = int(summary.get("issue_count", 0) or 0)
+            self.dashboard_diagnostics_var.set(
+                f"{str(summary.get('status', 'unavailable')).upper()} · {issue_count} issue(s)"
+            )
+            spatial_issues = 0
+            if isinstance(diagnostics, dict):
+                for issue in diagnostics.get("issues", []):
+                    if not isinstance(issue, dict):
+                        continue
+                    rule = str(issue.get("rule", ""))
+                    category = str(issue.get("category", "")).casefold()
+                    if rule.startswith("spatial.") or "spatial" in category or "geometry" in category:
+                        spatial_issues += 1
+            self.dashboard_geometry_var.set(
+                "PASS · no spatial issues"
+                if spatial_issues == 0
+                else f"{spatial_issues} spatial issue(s)"
+            )
+            if self.last_run is not None:
+                self.dashboard_activity_var.set(
+                    f"{self.last_run.title} · {self.last_run.status}"
+                )
+            else:
+                self.dashboard_activity_var.set("No analysis run in this session")
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",
@@ -5997,6 +6167,18 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        self.run_state_var.set("RUNNING" if running else "IDLE")
+        badge = getattr(self, "run_state_badge", None)
+        if badge is not None:
+            badge.configure(
+                style="CX.SimulationBadge.TLabel" if running else "CX.SuccessBadge.TLabel"
+            )
+        progress = getattr(self, "run_progress", None)
+        if progress is not None:
+            if running:
+                progress.start(12)
+            else:
+                progress.stop()
 
     def _poll_worker(self) -> None:
         try:

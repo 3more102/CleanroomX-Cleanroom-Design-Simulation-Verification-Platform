@@ -1261,6 +1261,10 @@ class CleanroomXApp:
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
+        self.project_state_var = tk.StringVar(value="UNSAVED")
+        self.diagnostics_state_var = tk.StringVar(value="DIAGNOSTICS —")
+        self.verification_state_var = tk.StringVar(value="VERIFY —")
+        self.evidence_state_var = tk.StringVar(value="EVIDENCE —")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1513,11 +1517,22 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
-        topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 12)
+        topbar = ttk.Frame(
+            self.root,
+            style="CX.Surface.TFrame",
+            padding=(10, 6, 10, 5),
         )
+        topbar.pack(fill="x")
+        brand = ttk.Frame(topbar, style="CX.Surface.TFrame")
+        brand.grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Label(brand, text="CLEANROOMX", style="CX.Brand.TLabel").pack(
+            side="left"
+        )
+        ttk.Label(
+            brand,
+            text=f"v{__version__}",
+            style="CX.ProductSubtle.TLabel",
+        ).pack(side="left", padx=(5, 0), pady=(5, 0))
         ttk.Label(topbar, text="Project").grid(
             row=0, column=1, sticky="w", padx=(0, 5)
         )
@@ -1548,6 +1563,47 @@ class CleanroomXApp:
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
+
+        project_strip = ttk.Frame(
+            self.root,
+            style="CX.Surface.TFrame",
+            padding=(10, 3),
+        )
+        project_strip.pack(fill="x", padx=10, pady=(0, 4))
+        ttk.Label(
+            project_strip,
+            text="PROJECT STATE",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 6))
+        self.project_state_badge = ttk.Label(
+            project_strip,
+            textvariable=self.project_state_var,
+            style="CX.Status.Stale.TLabel",
+        )
+        self.project_state_badge.pack(side="left", padx=(0, 5))
+        self.diagnostics_state_badge = ttk.Label(
+            project_strip,
+            textvariable=self.diagnostics_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.diagnostics_state_badge.pack(side="left", padx=(0, 5))
+        self.verification_state_badge = ttk.Label(
+            project_strip,
+            textvariable=self.verification_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.verification_state_badge.pack(side="left", padx=(0, 5))
+        self.evidence_state_badge = ttk.Label(
+            project_strip,
+            textvariable=self.evidence_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.evidence_state_badge.pack(side="left", padx=(0, 5))
+        ttk.Label(
+            project_strip,
+            text="Ctrl+Shift+P Commands · F5 Run · F8 Refresh",
+            style="CX.Muted.TLabel",
+        ).pack(side="right")
 
         commandbar = ttk.Frame(
             self.root,
@@ -1657,6 +1713,7 @@ class CleanroomXApp:
         ttk.Label(
             workflowbar,
             text="GUIDED WORKFLOW",
+            style="CX.Toolbar.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Separator(workflowbar, orient="vertical").pack(
             side="left", fill="y", padx=(0, 6)
@@ -1967,7 +2024,11 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(
+            self.root,
+            style="CX.StatusBar.TFrame",
+            padding=(8, 3),
+        )
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
@@ -1977,15 +2038,15 @@ class CleanroomXApp:
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.model_status_var, style="CX.StatusBar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.selection_status_var, style="CX.StatusBar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.workspace_status_var, style="CX.StatusBar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -2217,6 +2278,16 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+        if problems_panel is not None and hasattr(problems_panel, "apply_theme"):
+            problems_panel.apply_theme(self.theme_var.get())
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None and hasattr(proofgraph_viewer, "apply_theme"):
+            proofgraph_viewer.apply_theme(self.theme_var.get())
+
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None and hasattr(dashboard, "apply_theme"):
+            dashboard.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2628,6 +2699,53 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        error_count = int(summary.get("error_count", 0) or 0)
+        warning_count = int(summary.get("warning_count", 0) or 0)
+        if error_count:
+            self.diagnostics_state_var.set(f"DIAGNOSTICS FAIL {error_count}")
+            self.diagnostics_state_badge.configure(style="CX.Status.Fail.TLabel")
+        elif warning_count:
+            self.diagnostics_state_var.set(f"DIAGNOSTICS WARN {warning_count}")
+            self.diagnostics_state_badge.configure(style="CX.Status.Warning.TLabel")
+        elif diagnostics is not None:
+            self.diagnostics_state_var.set("DIAGNOSTICS PASS")
+            self.diagnostics_state_badge.configure(style="CX.Status.Pass.TLabel")
+        else:
+            self.diagnostics_state_var.set("DIAGNOSTICS —")
+            self.diagnostics_state_badge.configure(style="CX.Status.Unknown.TLabel")
+
+        configured = int(currency_summary.get("configured_analysis_count", 0) or 0)
+        current = int(currency_summary.get("current_count", 0) or 0)
+        stale = int(currency_summary.get("stale_count", 0) or 0)
+        not_verified = int(currency_summary.get("not_verified_count", 0) or 0)
+        self.verification_state_var.set(f"VERIFY {current}/{configured}")
+        self.verification_state_badge.configure(
+            style=(
+                "CX.Status.Warning.TLabel"
+                if stale or not_verified
+                else "CX.Status.Verified.TLabel"
+                if configured and current == configured
+                else "CX.Status.Unknown.TLabel"
+            )
+        )
+        self.evidence_state_var.set(f"EVIDENCE {evidence_record_count}")
+        self.evidence_state_badge.configure(
+            style=(
+                "CX.Status.Evidence.TLabel"
+                if evidence_record_count
+                else "CX.Status.Unknown.TLabel"
+            )
+        )
+        if self._running:
+            self.project_state_var.set("RUNNING")
+            self.project_state_badge.configure(style="CX.Status.Running.TLabel")
+        elif self._has_unsaved_changes():
+            self.project_state_var.set("UNSAVED")
+            self.project_state_badge.configure(style="CX.Status.Stale.TLabel")
+        else:
+            self.project_state_var.set("SAVED")
+            self.project_state_badge.configure(style="CX.Status.Pass.TLabel")
 
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:

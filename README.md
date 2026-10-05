@@ -166,6 +166,12 @@ cleanroomx-project-check project.cleanroomx.json
 
 See [Project Diagnostics](docs/PROJECT_DIAGNOSTICS.md) for rule scope, severity, freshness behavior, and exit codes.
 
+Compare two ProofGraph evidence revisions and surface downstream impact/staleness:
+
+```bash
+cleanroomx-proofgraph-diff baseline.proofgraph.json candidate.proofgraph.json --require-no-stale
+```
+
 Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/network studies, uncertainty, consistency checks, and engineering dossiers.
 
 ## Validation
@@ -208,6 +214,8 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [Deployment](DEPLOYMENT.md)
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)
+- [Production acceptance contract](docs/PRODUCTION_ACCEPTANCE.md)
+- [ProofGraph revision diff and change impact](docs/PROOFGRAPH_CHANGE_IMPACT.md)
 - [Rollback](ROLLBACK.md)
 - [Changelog](CHANGELOG.md)
 

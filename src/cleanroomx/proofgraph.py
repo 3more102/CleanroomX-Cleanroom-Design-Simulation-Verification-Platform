@@ -17,6 +17,11 @@ from .proofgraph_ifc import (
     ifc_design_evidence_bundle,
     proofgraph_with_ifc_design_evidence,
 )
+from .proofgraph_change_impact import (
+    PROOFGRAPH_CHANGE_IMPACT_SCHEMA,
+    PROOFGRAPH_CHANGE_IMPACT_SCHEMA_VERSION,
+    compare_proofgraphs,
+)
 from .proofgraph_evidence_policy import (
     EVIDENCE_PRECEDENCE_DECISION_SCOPE,
     EVIDENCE_PRECEDENCE_SCHEMA,
@@ -51,6 +56,8 @@ from .proofgraph_models import (
 __all__ = [
     "PROOFGRAPH_SCHEMA",
     "PROOFGRAPH_SCHEMA_VERSION",
+    "PROOFGRAPH_CHANGE_IMPACT_SCHEMA",
+    "PROOFGRAPH_CHANGE_IMPACT_SCHEMA_VERSION",
     "EVIDENCE_PRECEDENCE_DECISION_SCOPE",
     "EVIDENCE_PRECEDENCE_SCHEMA",
     "EVIDENCE_PRECEDENCE_SCHEMA_VERSION",
@@ -86,4 +93,5 @@ __all__ = [
     "ifc_design_evidence_bundle",
     "proofgraph_with_ifc_design_evidence",
     "assess_evidence_precedence",
+    "compare_proofgraphs",
 ]

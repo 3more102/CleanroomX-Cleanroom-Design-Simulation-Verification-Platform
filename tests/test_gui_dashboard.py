@@ -77,3 +77,53 @@ def test_dashboard_projects_project_health_without_inventing_engineering_verdict
         assert dashboard.issue_tree.get_children()
     finally:
         root.destroy()
+
+def test_dashboard_issue_rows_are_semantic_and_actionable():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    opened: list[dict] = []
+    dashboard = EngineeringDashboard(root, on_issue=opened.append)
+    try:
+        dashboard.apply_theme("dark")
+        issue = {
+            "severity": "error",
+            "rule": "spatial.room_overlap",
+            "category": "geometry",
+            "message": "Two cleanroom zones overlap.",
+            "element": {"type": "spatial_element", "id": "CR-104", "name": "CR-104"},
+            "sequence": 1,
+        }
+        dashboard.refresh(
+            {
+                "project": {"name": "Fab_A12"},
+                "diagnostics": {
+                    "summary": {
+                        "status": "error",
+                        "issue_count": 1,
+                        "error_count": 1,
+                        "warning_count": 0,
+                    },
+                    "issues": [issue],
+                },
+                "verification": {},
+                "model": {},
+                "analysis_count": 0,
+                "evidence": {},
+            }
+        )
+        root.update()
+
+        iid = dashboard.issue_tree.get_children()[0]
+        assert "error" in dashboard.issue_tree.item(iid, "tags")
+        dashboard.issue_tree.selection_set(iid)
+        assert dashboard.selected_issue() == issue
+        assert dashboard._open_selected_issue() == "break"
+        assert opened == [issue]
+    finally:
+        root.destroy()
+

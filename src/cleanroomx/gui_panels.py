@@ -446,6 +446,38 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
         return self._issues_by_iid.get(selection[0])
 
+    def searchable_issues(self) -> list[dict[str, Any]]:
+        """Return stable snapshots suitable for application-level global search."""
+        return [dict(issue) for issue in self._all_issues()]
+
+    def focus_issue(self, issue: dict[str, Any]) -> bool:
+        """Reveal and select an issue without changing canonical diagnostic data."""
+        if not isinstance(issue, dict):
+            return False
+        self.clear_filters()
+        target_sequence = issue.get("sequence")
+        target_rule = issue.get("rule")
+        target_element = issue.get("element")
+        for iid, candidate in self._issues_by_iid.items():
+            if target_sequence is not None and candidate.get("sequence") == target_sequence:
+                target = iid
+            elif (
+                target_sequence is None
+                and candidate.get("rule") == target_rule
+                and candidate.get("element") == target_element
+                and candidate.get("message") == issue.get("message")
+            ):
+                target = iid
+            else:
+                continue
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+            self.tree.focus_set()
+            self._show_selected_detail()
+            return True
+        return False
+
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
         self.detail.configure(state="normal")

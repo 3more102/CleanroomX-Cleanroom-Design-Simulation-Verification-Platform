@@ -190,6 +190,23 @@ def test_diagnostics_workspace_target_filter_and_multi_token_search(app):
         "project",
         "room",
     )
+    assert tuple(panel.rule_combo.cget("values")) == (
+        "All",
+        "engineering_sync.not_configured",
+        "spatial.room_overlap",
+        "verification_currency.stale",
+    )
+
+    panel.rule_var.set("verification_currency.stale")
+    app.root.update_idletasks()
+    assert {
+        issue["sequence"] for issue in panel._issues_by_iid.values()
+    } == {11}
+
+    panel.clear_filters()
+    app.root.update_idletasks()
+    assert panel.rule_var.get() == "All"
+    assert len(panel.tree.get_children()) == 3
 
     panel.target_type_var.set("room")
     app.root.update_idletasks()

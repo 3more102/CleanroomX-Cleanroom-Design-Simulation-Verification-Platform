@@ -2849,6 +2849,9 @@ class CleanroomXApp:
             on_open_demo=self._open_bundled_demo_from_start,
             on_open_recent=self._open_recent_project_from_start,
             on_forget_recent=self._forget_recent_project,
+            on_workspace=self._activate_start_center_workspace,
+            on_show_problems=self.show_problems_panel,
+            on_show_recovery=self.show_recovery_center,
         )
         self.notebook.add(self.start_center, text="Start")
 
@@ -4376,6 +4379,100 @@ class CleanroomXApp:
             return
         self.activate_workspace_profile("reporting")
 
+    def _activate_start_center_workspace(self, profile: str) -> None:
+        """Route home-screen shortcuts through the canonical workspace profiles."""
+        self.activate_workspace_profile(profile)
+
+    def _start_center_health_snapshot(self) -> dict[str, object]:
+        """Build a read-only dashboard snapshot from canonical project authorities."""
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
+        if not isinstance(layout, dict):
+            layout = {}
+        rooms = layout.get("rooms", [])
+        devices = layout.get("devices", [])
+        room_count = len(rooms) if isinstance(rooms, list) else 0
+        device_count = len(devices) if isinstance(devices, list) else 0
+
+        diagnostics_available = False
+        error_count = 0
+        warning_count = 0
+        panel = getattr(self, "problems_panel", None)
+        diagnostics = getattr(panel, "last_result", None)
+        if isinstance(diagnostics, dict):
+            summary = diagnostics.get("summary")
+            if isinstance(summary, dict):
+                diagnostics_available = True
+                error_count = int(summary.get("error_count", 0) or 0)
+                warning_count = int(summary.get("warning_count", 0) or 0)
+
+        verification_available = False
+        verification_summary: dict[str, object] = {}
+        try:
+            currency = assess_project_verification_currency(
+                self.project,
+                base_dir=self._base_dir(),
+            )
+            summary = currency.get("summary", {})
+            if isinstance(summary, dict):
+                verification_summary = dict(summary)
+                verification_available = True
+        except Exception:
+            verification_summary = {}
+
+        evidence_record_count = 0
+        try:
+            evidence_record_count = len(
+                verification_run_history_records(self.project.metadata)
+            )
+        except Exception:
+            evidence_record_count = 0
+
+        recovery_count = 0
+        recovery_issue_count = 0
+        try:
+            manager = getattr(self, "_autosave_manager", None)
+            recovery_dir = getattr(manager, "recovery_dir", None)
+            scan = scan_recovery_artifacts(recovery_dir)
+            recovery_count = len(scan.candidates)
+            recovery_issue_count = len(scan.issues)
+        except (OSError, TypeError, ValueError):
+            recovery_issue_count = 1
+
+        return {
+            "name": self.name_var.get().strip() or self.project.name,
+            "path": str(self.project_path) if self.project_path is not None else "",
+            "dirty": self._has_unsaved_changes(),
+            "analysis_count": len(self.project.analyses),
+            "room_count": room_count,
+            "device_count": device_count,
+            "diagnostics_available": diagnostics_available,
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "verification_available": verification_available,
+            "configured_analysis_count": int(
+                verification_summary.get("configured_analysis_count", 0) or 0
+            ),
+            "current_count": int(
+                verification_summary.get("current_count", 0) or 0
+            ),
+            "stale_count": int(
+                verification_summary.get("stale_count", 0) or 0
+            ),
+            "dependency_freshness_unverifiable_count": int(
+                verification_summary.get(
+                    "dependency_freshness_unverifiable_count",
+                    0,
+                )
+                or 0
+            ),
+            "not_verified_count": int(
+                verification_summary.get("not_verified_count", 0) or 0
+            ),
+            "evidence_record_count": evidence_record_count,
+            "recovery_count": recovery_count,
+            "recovery_issue_count": recovery_issue_count,
+        }
+
     def _recent_project_records(self) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []
         active_path = (
@@ -4410,6 +4507,7 @@ class CleanroomXApp:
     def _refresh_start_center(self) -> None:
         start_center = getattr(self, "start_center", None)
         if start_center is not None:
+            start_center.set_active_project(self._start_center_health_snapshot())
             start_center.set_recent_projects(self._recent_project_records())
 
     def _remember_recent_project(self, path: str | Path) -> None:

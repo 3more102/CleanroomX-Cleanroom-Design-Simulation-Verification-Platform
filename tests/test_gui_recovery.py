@@ -421,3 +421,31 @@ def test_successful_project_load_discards_recovery_after_validation(tmp_path, mo
     assert app.project_path == project_path
     assert app._project_file_revision is revision
     assert app._restored_recovery_artifact is None
+
+
+def test_close_drains_autosave_before_recovery_cleanup_and_destroy() -> None:
+    events = []
+
+    class Root:
+        def destroy(self):
+            events.append("destroy")
+
+    class Manager:
+        def shutdown(self, *, wait=False):
+            events.append(("shutdown", wait))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app._running = False
+    app._autosave_manager = Manager()
+    app._confirm_project_replacement = lambda: True
+    app._save_ui_layout_state = lambda: events.append("layout")
+    app._discard_current_autosave = lambda: events.append("discard-autosave")
+    app._discard_restored_recovery = lambda: events.append("discard-recovery")
+
+    app._on_close()
+
+    assert ("shutdown", True) in events
+    assert events.index(("shutdown", True)) < events.index("discard-autosave")
+    assert events.index(("shutdown", True)) < events.index("discard-recovery")
+    assert events.index(("shutdown", True)) < events.index("destroy")

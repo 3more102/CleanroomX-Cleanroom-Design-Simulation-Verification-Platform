@@ -3030,6 +3030,231 @@ class CleanroomXApp:
             ),
         ]
 
+    @staticmethod
+    def _engineering_search_match(query: str, *values: object) -> bool:
+        tokens = [
+            token
+            for token in str(query or "").strip().casefold().split()
+            if token
+        ]
+        if not tokens:
+            return False
+        haystack = " ".join(str(value or "") for value in values).casefold()
+        return all(token in haystack for token in tokens)
+
+    def _open_spatial_search_result(self, kind: str, item_id: str) -> bool:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            return False
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_filter_var.set("")
+        self._apply_navigator_filter()
+        self.navigator_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+        workspace.set_inspector_visible(True)
+        self._activate_spatial_workspace("2d")
+        if not workspace.select_item(kind, item_id, notify=True):
+            return False
+        workspace.fit_selected()
+        self._sync_spatial_selection_status()
+        self.status_var.set(f"Focused {kind}: {item_id}")
+        return True
+
+    def _open_analysis_search_result(self, analysis_id: str) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return False
+        self.navigator_filter_var.set("")
+        self._apply_navigator_filter()
+        if not tree.exists(analysis_id):
+            return False
+        self.navigator_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_navigator_selected()
+        if self.project.active_analysis_id != analysis_id:
+            return False
+        self._activate_analysis_input_workspace()
+        return True
+
+    def _open_diagnostic_search_result(self, sequence: object) -> bool:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return False
+        self.show_problems_panel()
+        panel.clear_filters()
+        if panel.select_sequence(sequence, navigate=True):
+            return True
+        result = panel.refresh()
+        return bool(result is not None and panel.select_sequence(sequence, navigate=True))
+
+    def _open_proofgraph_search_result(self, key: str) -> bool:
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return False
+        self._activate_proofgraph_workspace()
+        if viewer.reveal_node(key):
+            self.selection_status_var.set(f"Selected: {key}")
+            self.status_var.set(f"ProofGraph node selected: {key}")
+            return True
+        return False
+
+    def _global_engineering_search_commands(
+        self,
+        query: str,
+    ) -> list[PaletteCommand]:
+        if not str(query or "").strip():
+            return []
+        results: list[PaletteCommand] = []
+
+        workspace = getattr(self, "spatial_workspace", None)
+        layout = getattr(workspace, "layout", {}) if workspace is not None else {}
+        if isinstance(layout, dict):
+            for room in layout.get("rooms", []):
+                if not isinstance(room, dict):
+                    continue
+                room_id = str(room.get("id") or "")
+                name = str(room.get("name") or room_id)
+                if room_id and self._engineering_search_match(
+                    query,
+                    name,
+                    room_id,
+                    room.get("analysis_room_name"),
+                    room.get("classification"),
+                    room.get("pressure_pa"),
+                ):
+                    results.append(
+                        PaletteCommand(
+                            f"entity.room.{room_id}",
+                            f"Room · {name}",
+                            "Engineering Object",
+                            lambda rid=room_id: self._open_spatial_search_result(
+                                "room", rid
+                            ),
+                            keywords=(
+                                room_id,
+                                str(room.get("classification") or ""),
+                                "room spatial model",
+                            ),
+                        )
+                    )
+            for device in layout.get("devices", []):
+                if not isinstance(device, dict):
+                    continue
+                device_id = str(device.get("id") or "")
+                name = str(device.get("name") or device_id)
+                device_type = str(device.get("type") or "device")
+                if device_id and self._engineering_search_match(
+                    query,
+                    name,
+                    device_id,
+                    device_type,
+                    device.get("room_id"),
+                ):
+                    results.append(
+                        PaletteCommand(
+                            f"entity.device.{device_id}",
+                            f"{device_type.title()} · {name}",
+                            "Engineering Object",
+                            lambda did=device_id: self._open_spatial_search_result(
+                                "device", did
+                            ),
+                            keywords=(device_id, device_type, "device spatial model"),
+                        )
+                    )
+
+        for analysis in self.project.analyses:
+            if self._engineering_search_match(
+                query,
+                analysis.name,
+                analysis.id,
+                analysis.kind,
+            ):
+                results.append(
+                    PaletteCommand(
+                        f"entity.analysis.{analysis.id}",
+                        f"Analysis · {analysis.name}",
+                        "Analysis",
+                        lambda aid=analysis.id: self._open_analysis_search_result(aid),
+                        keywords=(analysis.id, analysis.kind),
+                    )
+                )
+
+        panel = getattr(self, "problems_panel", None)
+        diagnostic_result = getattr(panel, "last_result", None)
+        issues = (
+            diagnostic_result.get("issues", [])
+            if isinstance(diagnostic_result, dict)
+            else []
+        )
+        if isinstance(issues, list):
+            for issue in issues:
+                if not isinstance(issue, dict):
+                    continue
+                element = issue.get("element")
+                element_text = ""
+                if isinstance(element, dict):
+                    element_text = " ".join(
+                        str(element.get(key) or "")
+                        for key in ("type", "id", "name")
+                    )
+                if not self._engineering_search_match(
+                    query,
+                    issue.get("rule"),
+                    issue.get("category"),
+                    issue.get("severity"),
+                    issue.get("message"),
+                    issue.get("suggested_action"),
+                    element_text,
+                ):
+                    continue
+                sequence = issue.get("sequence")
+                rule = str(issue.get("rule") or "diagnostic")
+                severity = str(issue.get("severity") or "info").upper()
+                results.append(
+                    PaletteCommand(
+                        f"entity.diagnostic.{sequence}.{rule}",
+                        f"{severity} · {rule}",
+                        "Diagnostic",
+                        lambda seq=sequence: self._open_diagnostic_search_result(seq),
+                        keywords=(
+                            str(issue.get("category") or ""),
+                            element_text,
+                            str(issue.get("message") or ""),
+                        ),
+                    )
+                )
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None:
+            try:
+                graph_nodes = viewer.search_nodes(query, limit=24)
+            except (TypeError, ValueError):
+                graph_nodes = []
+            for node in graph_nodes:
+                key = str(node.get("key") or "")
+                if not key:
+                    continue
+                node_type = str(node.get("type") or "node")
+                label = str(node.get("label") or node.get("id") or key)
+                status = str(node.get("status") or "").upper()
+                suffix = f" [{status}]" if status else ""
+                results.append(
+                    PaletteCommand(
+                        f"entity.proofgraph.{key}",
+                        f"{node_type.replace('_', ' ').title()} · {label}{suffix}",
+                        "ProofGraph",
+                        lambda node_key=key: self._open_proofgraph_search_result(
+                            node_key
+                        ),
+                        keywords=(key, node_type, status),
+                    )
+                )
+
+        return results[:80]
+
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)
         if existing is not None:
@@ -3048,6 +3273,7 @@ class CleanroomXApp:
             self.root,
             commands=self._command_palette_commands(),
             on_close=clear_reference,
+            search_provider=self._global_engineering_search_commands,
         )
 
     def _activate_start_workspace(self) -> None:

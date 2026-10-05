@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_errors import GuiErrorReport, record_gui_exception
 from .gui_table import TreeviewTableBehavior
 from .project_diagnostics import analyze_project_diagnostics
 
@@ -53,6 +54,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self.last_error_report: GuiErrorReport | None = None
         self._sort_column = "severity"
         self._sort_descending = False
 
@@ -521,14 +523,19 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 base_dir=self._base_dir_getter(),
             )
         except Exception as exc:
+            report = record_gui_exception("Refresh project diagnostics", exc)
             self.last_result = None
-            self.summary_var.set(f"Diagnostics unavailable: {exc}")
+            self.last_error_report = report
+            self.summary_var.set(f"Diagnostics unavailable · {report.reference}")
             self.visible_var.set("0 visible")
-            self._status_setter("Project diagnostics failed")
+            self._status_setter(
+                f"Project diagnostics failed · {report.reference}"
+            )
             self._populate()
             return None
 
         self.last_result = result
+        self.last_error_report = None
         summary = result.get("summary", {})
         self.summary_var.set(
             "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
@@ -601,7 +608,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 )
             self.detail.insert("1.0", "\n".join(lines))
         else:
-            if self._all_issues() and not self._filtered_issues():
+            if self.last_error_report is not None:
+                self.detail.insert(
+                    "1.0",
+                    self.last_error_report.user_message()
+                    + "\n\nUse Refresh to retry project diagnostics.",
+                )
+            elif self._all_issues() and not self._filtered_issues():
                 self.detail.insert(
                     "1.0",
                     "No diagnostics match the active filters. Clear or adjust the filters to continue.",

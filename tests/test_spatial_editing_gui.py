@@ -1033,7 +1033,8 @@ def test_primary_workspace_modes_route_existing_surfaces_without_model_mutation(
     app.root.update()
     assert app.output_notebook.select() == str(app.report_text.master)
     assert app.project.to_dict() == before
-    assert app.workspace_mode_buttons["release"].cget("style") == "CX.ModeActive.TButton"
+    assert app.workspace_mode_buttons["release"].cget("style") == "CX.ModeReleaseActive.TButton"
+    assert app.workspace_mode_buttons["design"].cget("style") == "CX.ModeDesign.TButton"
 
 
 def test_primary_workspace_mode_bar_fits_supported_minimum_window(app):

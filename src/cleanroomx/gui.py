@@ -4852,11 +4852,15 @@ class CleanroomXApp:
         if autosave_var is not None:
             autosave_var.set("Autosave: clean")
 
-    def _discard_current_autosave(self) -> None:
+    def _discard_current_autosave(
+        self,
+        *,
+        preserve_paths: tuple[str | Path, ...] = (),
+    ) -> None:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.discard_current_recoveries()
+            manager.discard_current_recoveries(preserve_paths=preserve_paths)
 
     def _discard_restored_recovery(self) -> None:
         artifact = getattr(self, "_restored_recovery_artifact", None)
@@ -5805,7 +5809,17 @@ class CleanroomXApp:
 
     def restore_recovery_path(self, path: str | Path) -> None:
         recovered = restore_recovery_artifact(path)
-        self._discard_current_autosave()
+        previous_artifact = getattr(self, "_restored_recovery_artifact", None)
+        same_artifact = (
+            previous_artifact is not None
+            and previous_artifact.resolve(strict=False)
+            == recovered.artifact_path.resolve(strict=False)
+        )
+        self._discard_current_autosave(
+            preserve_paths=(recovered.artifact_path,),
+        )
+        if previous_artifact is not None and not same_artifact:
+            self._discard_restored_recovery()
         self.project = recovered.project
         self.project_path = None
         self._project_file_revision = None

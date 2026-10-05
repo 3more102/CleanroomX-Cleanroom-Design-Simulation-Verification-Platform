@@ -4,6 +4,8 @@ import copy
 
 import pytest
 
+import cleanroomx.spatial as spatial_module
+
 from cleanroomx.project import ProjectDocument, load_project_document, save_project_document
 from cleanroomx.spatial import SpatialDesignWorkspace, _Hit, empty_layout, normalize_layout
 from cleanroomx.spatial_editing import duplicate_spatial_item, update_spatial_properties
@@ -208,6 +210,26 @@ def test_workspace_duplicate_is_one_history_transaction_with_selection(layout):
     assert old_selection == ("room", "process")
     assert new_selection == ("room", workspace.layout["rooms"][-1]["id"])
     assert project.metadata["spatial_layout"] is workspace.layout
+
+
+def test_workspace_delete_requires_confirmation_and_preserves_cancelled_edit(layout, monkeypatch):
+    workspace, project, events = _workspace(layout)
+    before = copy.deepcopy(workspace.layout)
+
+    monkeypatch.setattr(spatial_module.messagebox, "askyesno", lambda *args, **kwargs: False)
+    assert workspace.request_delete_selected() is False
+    assert workspace.layout == before
+    assert project.metadata["spatial_layout"] == before
+    assert events["changes"] == []
+    assert events["history"] == []
+    assert events["statuses"][-1] == "Spatial deletion cancelled"
+
+    monkeypatch.setattr(spatial_module.messagebox, "askyesno", lambda *args, **kwargs: True)
+    assert workspace.request_delete_selected() is True
+    assert workspace.selected is None
+    assert not workspace.layout["rooms"]
+    assert len(events["changes"]) == 1
+    assert len(events["history"]) == 1
 
 
 def test_workspace_rejected_properties_keep_model_history_and_editor_text(layout):

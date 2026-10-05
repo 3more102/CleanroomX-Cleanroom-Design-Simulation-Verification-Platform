@@ -2081,7 +2081,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
         self._property_search_var.trace_add(
-            "write", lambda *_: self._load_property_panel()
+            "write", lambda *_: self._filter_property_rows()
         )
         self._apply_workspace_mode()
 
@@ -2758,18 +2758,82 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_search_var.set("")
         self._property_search_entry.focus_set()
 
+    def _property_fields_for_selection(self) -> set[str]:
+        if self._selected_object() is None or self.selected is None:
+            return set()
+        if self.selected.kind == "room":
+            return {
+                "name",
+                "x_m",
+                "y_m",
+                "length_m",
+                "width_m",
+                "height_m",
+                "floor_elevation_m",
+                "pressure_pa",
+                "classification",
+                "analysis_room_name",
+            }
+        return {
+            "name",
+            "x_m",
+            "y_m",
+            "z_m",
+            "width_m",
+            "height_m",
+            "room_id",
+            "orientation_deg",
+            "wall_side",
+            "swing",
+        }
+
+    def _filter_property_rows(self) -> None:
+        visible_fields = self._property_fields_for_selection()
+        if not visible_fields:
+            for row in self._property_rows.values():
+                row.pack_forget()
+            self._property_filter_var.set("0 properties · select an object")
+            return
+
+        tokens = [
+            token
+            for token in self._property_search_var.get().strip().casefold().split()
+            if token
+        ]
+        visible_count = 0
+        for key, row in self._property_rows.items():
+            label = self._property_labels.get(key, key)
+            unit = self._property_units.get(key, "")
+            haystack = f"{label} {key} {unit}".casefold()
+            matches_filter = all(token in haystack for token in tokens)
+            if key in visible_fields and matches_filter:
+                row.pack(fill="x", pady=2)
+                visible_count += 1
+            else:
+                row.pack_forget()
+
+        total_count = len(visible_fields)
+        if tokens:
+            self._property_filter_var.set(
+                f"{visible_count} of {total_count} properties · filtered"
+            )
+        else:
+            self._property_filter_var.set(f"{total_count} properties")
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
-            self._property_filter_var.set("0 properties · select an object")
-            for key, var in self._property_vars.items():
+            for var in self._property_vars.values():
                 var.set("")
-                row = self._property_rows.get(key)
-                if row is not None:
-                    row.pack_forget()
+            self._filter_property_rows()
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+
+        prefix = (
+            "Room"
+            if self.selected and self.selected.kind == "room"
+            else item.get("type", "Device").title()
+        )
         selection_text = f"{prefix}: {item.get('name', '')}"
         if self.selected and self.selected.kind == "room":
             sync = engineering_sync_status(self.layout, self._analysis_getter())
@@ -2784,62 +2848,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
-        room_fields = {
-            "name",
-            "x_m",
-            "y_m",
-            "length_m",
-            "width_m",
-            "height_m",
-            "floor_elevation_m",
-            "pressure_pa",
-            "classification",
-            "analysis_room_name",
-        }
-        device_fields = {
-            "name",
-            "x_m",
-            "y_m",
-            "z_m",
-            "width_m",
-            "height_m",
-            "room_id",
-            "orientation_deg",
-            "wall_side",
-            "swing",
-        }
-        visible_fields = (
-            room_fields
-            if self.selected and self.selected.kind == "room"
-            else device_fields
-        )
-        tokens = [
-            token
-            for token in self._property_search_var.get().strip().casefold().split()
-            if token
-        ]
-        visible_count = 0
+
         for key, var in self._property_vars.items():
-            row = self._property_rows.get(key)
-            label = self._property_labels.get(key, key)
-            unit = self._property_units.get(key, "")
-            haystack = f"{label} {key} {unit}".casefold()
-            matches_filter = all(token in haystack for token in tokens)
-            if row is not None:
-                if key in visible_fields and matches_filter:
-                    row.pack(fill="x", pady=2)
-                    visible_count += 1
-                else:
-                    row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
-        total_count = len(visible_fields)
-        if tokens:
-            self._property_filter_var.set(
-                f"{visible_count} of {total_count} properties · filtered"
-            )
-        else:
-            self._property_filter_var.set(f"{total_count} properties")
+        self._filter_property_rows()
 
     def apply_properties(self) -> None:
         item = self._selected_object()

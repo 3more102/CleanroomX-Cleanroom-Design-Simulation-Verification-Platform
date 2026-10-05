@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_constraints import ConstraintManagerDialog
+from .gui_requirements import RequirementsEditorDialog
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -2270,6 +2271,11 @@ class CleanroomXApp:
             command=self._refresh_engineering_panels,
         )
         verify_menu.add_command(
+            label="Requirements Editor...",
+            accelerator="Ctrl+Alt+R",
+            command=self.show_requirements_editor,
+        )
+        verify_menu.add_command(
             label="Project Constraints...",
             accelerator="Ctrl+Alt+C",
             command=self.show_constraint_manager,
@@ -2396,6 +2402,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Alt-c>", lambda event: self.show_constraint_manager())
+        self.root.bind("<Control-Alt-r>", lambda event: self.show_requirements_editor())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -3740,6 +3747,13 @@ class CleanroomXApp:
                 keywords=("requirements", "evidence", "trace"),
             ),
             PaletteCommand(
+                "requirements.edit",
+                "Edit Project Requirements",
+                "Verification",
+                self.show_requirements_editor,
+                keywords=("requirements", "criteria", "urs", "edit"),
+            ),
+            PaletteCommand(
                 "constraints.open",
                 "Open Project Constraints",
                 "Verification",
@@ -4349,6 +4363,45 @@ class CleanroomXApp:
             base_dir=self._base_dir(),
         )
         return True
+
+    def _apply_requirements_editor_edit(self, description, mutation):
+        if self._running:
+            raise RuntimeError(
+                "abandon the current analysis before editing project requirements"
+            )
+        if not self._prepare_project_history_action("edit project requirements"):
+            raise RuntimeError(
+                "current project fields must be valid before requirements can be edited"
+            )
+        return self._perform_project_edit(
+            description,
+            lambda: mutation(self.project),
+        )
+
+    def _requirements_editor_changed(self) -> None:
+        self._refresh_engineering_panels()
+        self._schedule_project_diagnostics_refresh()
+        self._update_title()
+        self.status_var.set(
+            "Project requirements updated; dependent verification evidence may now be stale."
+        )
+
+    def show_requirements_editor(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before editing project requirements.",
+                parent=self.root,
+            )
+            return
+        dialog = RequirementsEditorDialog(
+            self.root,
+            project_getter=lambda: self.project,
+            apply_project_edit=self._apply_requirements_editor_edit,
+            on_changed=self._requirements_editor_changed,
+        )
+        self._fit_dialog_to_display(dialog)
+        dialog.focus_set()
 
     def _apply_constraint_manager_edit(self, description, mutation):
         if self._running:

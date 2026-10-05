@@ -2228,3 +2228,28 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
 
+
+
+
+def test_cleanroomx_app_exposes_workstation_shell_actions():
+    actions = (
+        "set_theme",
+        "toggle_theme",
+        "show_navigator_panel",
+        "hide_navigator_panel",
+        "toggle_navigator_panel",
+        "show_output_panel",
+        "hide_output_panel",
+        "toggle_output_panel",
+        "show_problems_panel",
+        "toggle_design_inspector",
+        "set_focus_workspace",
+        "toggle_focus_workspace",
+        "reset_panel_layout",
+        "set_workspace_profile",
+        "_activate_reporting_workspace",
+        "_activate_proofgraph_workspace",
+        "_refresh_engineering_panels",
+    )
+    for name in actions:
+        assert callable(getattr(CleanroomXApp, name, None)), name

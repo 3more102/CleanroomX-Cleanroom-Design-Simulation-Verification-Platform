@@ -183,6 +183,26 @@ def test_workspace_presets_coordinate_existing_workstation_surfaces(app):
         app.activate_workspace_preset("unknown")
 
 
+
+def test_full_screen_mode_is_view_only_and_escape_restores_window(app, monkeypatch):
+    project_before = copy.deepcopy(app.project.to_dict())
+    calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        app.root,
+        "attributes",
+        lambda key, value: calls.append((key, bool(value))),
+    )
+
+    assert app.set_full_screen(True)
+    assert app.full_screen_var.get()
+    assert calls[-1] == ("-fullscreen", True)
+
+    assert app._on_full_screen_escape() == "break"
+    assert not app.full_screen_var.get()
+    assert calls[-1] == ("-fullscreen", False)
+    assert app.project.to_dict() == project_before
+
+
 def test_engineering_output_workspace_exposes_first_class_panels(app):
     tabs = _tab_texts(app.output_notebook)
     assert tabs[:5] == [

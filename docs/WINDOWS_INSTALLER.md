@@ -46,8 +46,8 @@ machine-wide administrative state.
 First produce the self-contained distribution, then compile the installer:
 
 ```powershell
-python -m pip install -e ".[bim]"
-python -m pip install "pyinstaller==6.22.3"
+python -m pip install "pip==26.2.1"
+pip install -e ".[release]"
 .\scripts\build_windows_standalone.ps1
 .\scripts\build_windows_installer.ps1 -SkipStandaloneBuild
 ```

@@ -520,14 +520,14 @@ class ProofGraphViewer(ttk.Frame):
             toolbar,
             textvariable=self.graph_var,
             state="readonly",
-            width=42,
+            width=32,
         )
         self.graph_picker.pack(side="left", padx=(5, 10))
         ttk.Label(toolbar, text="Search").pack(side="left")
         self.search_entry = ttk.Entry(
             toolbar,
             textvariable=self.search_var,
-            width=24,
+            width=20,
         )
         self.search_entry.pack(side="left", padx=(5, 10))
         ttk.Label(toolbar, text="Filter").pack(side="left")
@@ -545,7 +545,7 @@ class ProofGraphViewer(ttk.Frame):
                 "Unresolved Evidence",
             ),
             state="readonly",
-            width=20,
+            width=18,
         )
         self.filter_picker.pack(side="left", padx=(5, 6))
         ttk.Button(

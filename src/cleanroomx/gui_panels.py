@@ -654,6 +654,20 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
         return self._issues_by_iid.get(selection[0])
 
+    def select_issue(self, sequence: Any, *, navigate: bool = False) -> bool:
+        """Select a visible canonical diagnostic by sequence for cross-workspace navigation."""
+        for iid, issue in self._issues_by_iid.items():
+            if issue.get("sequence") != sequence:
+                continue
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+            self.tree.see(iid)
+            self._show_selected_detail()
+            if navigate:
+                self._navigate_callback(issue)
+            return True
+        return False
+
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
         self.detail.configure(state="normal")

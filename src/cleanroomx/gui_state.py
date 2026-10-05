@@ -4,17 +4,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .gui_theme import normalize_theme_name
+from .gui_theme import normalize_density_name, normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_VERSION = 5
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
     "theme": "dark",
+    "density": "comfortable",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -117,6 +118,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         ),
         "theme": normalize_theme_name(
             source.get("theme", _DEFAULT_GUI_LAYOUT_STATE["theme"])
+        ),
+        "density": normalize_density_name(
+            source.get("density", _DEFAULT_GUI_LAYOUT_STATE["density"])
         ),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")

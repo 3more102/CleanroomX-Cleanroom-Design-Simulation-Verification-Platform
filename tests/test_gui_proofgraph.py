@@ -6,8 +6,10 @@ import pytest
 
 from cleanroomx.gui_proofgraph import (
     _filtered_projection,
+    proofgraph_evidence_coverage,
     proofgraph_node_detail_text,
     proofgraph_projection,
+    search_proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
@@ -258,3 +260,36 @@ def test_proofgraph_node_detail_is_readable_and_expands_provenance():
     assert "Ifc Global Id: 3IFC" in detail
     assert "{\"origin\":" not in detail
 
+
+
+def test_proofgraph_search_keeps_one_hop_traceability_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = search_proofgraph_projection(projection, "pressure_solver")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+    assert searched["edges"]
+    assert all(
+        edge["source"] in keys and edge["target"] in keys
+        for edge in searched["edges"]
+    )
+
+
+def test_proofgraph_evidence_coverage_uses_persisted_support_links_only():
+    covered = proofgraph_evidence_coverage(proofgraph_projection(_sample_graph()))
+    unresolved = proofgraph_evidence_coverage(
+        proofgraph_projection(_unresolved_graph())
+    )
+
+    assert covered["requirements"] == 1
+    assert covered["requirements_with_evidence"] == 1
+    assert covered["evidence"] == 1
+    assert covered["failures"] >= 1
+    assert covered["unresolved"] == 0
+
+    assert unresolved["requirements"] == 1
+    assert unresolved["requirements_with_evidence"] == 0
+    assert unresolved["evidence"] == 0
+    assert unresolved["unresolved"] == 1

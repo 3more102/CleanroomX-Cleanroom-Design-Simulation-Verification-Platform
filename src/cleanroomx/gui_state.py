@@ -14,7 +14,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
-    "theme": "light",
+    "theme": "dark",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,

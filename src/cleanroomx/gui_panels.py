@@ -44,7 +44,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 6))
         toolbar.pack(fill="x")
 
-        ttk.Label(toolbar, text="PROBLEMS", style="CX.Section.TLabel").pack(
+        ttk.Label(toolbar, text="PROBLEMS", style="CX.Warning.TLabel").pack(
             side="left", padx=(0, 8)
         )
         ttk.Label(toolbar, text="Search").pack(side="left")
@@ -60,17 +60,24 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            toolbar,
+            text="Refresh",
+            command=self.refresh,
+            style="CX.Compact.TButton",
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Copy",
+            command=self.copy_selected,
+            style="CX.Compact.TButton",
+        ).pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
             command=self._export,
             state="normal" if self._export_callback is not None else "disabled",
+            style="CX.Info.TButton",
         )
         self.export_button.pack(side="left", padx=2)
 

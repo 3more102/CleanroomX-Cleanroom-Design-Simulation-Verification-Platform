@@ -652,6 +652,55 @@ def test_desktop_exports_portable_bundle_through_real_service(tmp_path, monkeypa
     assert messages and messages[0][0] == "Portable project exported"
 
 
+
+def test_desktop_bundle_export_failure_uses_diagnostic_boundary(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    target = tmp_path / "failed.cleanroomx.zip"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = _consistency_project()
+    app.project_path = source / "live.cleanroomx.json"
+    app._recovery_source_path = None
+    app._editor_analysis_id = None
+    app.name_var = _Value(app.project.name)
+    app.description_var = _Value("")
+    app.status_var = _Value("")
+
+    reported = {}
+    app._show_operation_error = lambda title, operation, exc: reported.update(
+        {"title": title, "operation": operation, "exception": exc}
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(target),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "export_project_bundle",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ProjectBundleError("synthetic export failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("portable export must use the diagnostic boundary")
+        ),
+    )
+
+    app.export_portable_project_bundle()
+
+    assert reported["title"] == "Portable project export failed"
+    assert reported["operation"] == "Export portable project bundle"
+    assert isinstance(reported["exception"], ProjectBundleError)
+    assert str(reported["exception"]) == "synthetic export failure"
+
+
 def test_desktop_opens_bundle_only_after_verified_extraction(tmp_path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
@@ -688,6 +737,56 @@ def test_desktop_opens_bundle_only_after_verified_extraction(tmp_path, monkeypat
     ]
     assert opened[0].is_file()
     assert "Opened portable project" in app.status_var.value
+
+
+
+def test_desktop_bundle_open_failure_uses_diagnostic_boundary(tmp_path, monkeypatch):
+    bundle = tmp_path / "broken.cleanroomx.zip"
+    bundle.write_bytes(b"not a bundle")
+    extraction_parent = tmp_path / "opened"
+    extraction_parent.mkdir()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.status_var = _Value("")
+    app._confirm_project_replacement = lambda: True
+
+    reported = {}
+    app._show_operation_error = lambda title, operation, exc: reported.update(
+        {"title": title, "operation": operation, "exception": exc}
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(bundle),
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askdirectory",
+        lambda **kwargs: str(extraction_parent),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "extract_project_bundle",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ProjectBundleError("synthetic extraction failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("portable open must use the diagnostic boundary")
+        ),
+    )
+
+    app.open_portable_project_bundle()
+
+    assert reported["title"] == "Portable project open failed"
+    assert reported["operation"] == "Open portable project bundle"
+    assert isinstance(reported["exception"], ProjectBundleError)
+    assert str(reported["exception"]) == "synthetic extraction failure"
 
 
 def test_bundle_export_never_overwrites_source_project(tmp_path):

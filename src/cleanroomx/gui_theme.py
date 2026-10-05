@@ -7,6 +7,40 @@ import tkinter as tk
 from tkinter import ttk
 
 
+_DENSITY_PROFILES: dict[str, dict[str, int | tuple[int, int]]] = {
+    "comfortable": {
+        "button_padding": (8, 5),
+        "entry_padding": (5, 4),
+        "combo_padding": (4, 3),
+        "tab_padding": (10, 6),
+        "tree_rowheight": 25,
+        "heading_padding": (5, 5),
+        "menubutton_padding": (7, 4),
+        "appbar_padding": (8, 5),
+        "panel_header_padding": (7, 5),
+        "toolbar_padding": (4, 3),
+        "primary_padding": (12, 6),
+        "danger_padding": (8, 5),
+        "compact_padding": (6, 3),
+    },
+    "compact": {
+        "button_padding": (6, 3),
+        "entry_padding": (4, 2),
+        "combo_padding": (3, 2),
+        "tab_padding": (8, 3),
+        "tree_rowheight": 21,
+        "heading_padding": (4, 3),
+        "menubutton_padding": (5, 2),
+        "appbar_padding": (6, 3),
+        "panel_header_padding": (5, 3),
+        "toolbar_padding": (3, 2),
+        "primary_padding": (9, 4),
+        "danger_padding": (6, 3),
+        "compact_padding": (5, 2),
+    },
+}
+
+
 _THEME_PALETTES: dict[str, dict[str, str]] = {
     "light": {
         "background": "#E8EEF5",
@@ -88,6 +122,15 @@ def theme_palette(value: Any) -> dict[str, str]:
     return deepcopy(_THEME_PALETTES[normalize_theme_name(value)])
 
 
+def normalize_density_name(value: Any) -> str:
+    name = str(value or "").strip().lower()
+    return name if name in _DENSITY_PROFILES else "comfortable"
+
+
+def density_profile(value: Any) -> dict[str, int | tuple[int, int]]:
+    return deepcopy(_DENSITY_PROFILES[normalize_density_name(value)])
+
+
 def _configure_badge(
     style: ttk.Style,
     name: str,
@@ -105,9 +148,16 @@ def _configure_badge(
     )
 
 
-def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
+def configure_ttk_theme(
+    root: tk.Misc,
+    value: Any,
+    *,
+    density: Any = "comfortable",
+) -> dict[str, str]:
     """Apply the centralized CleanroomX engineering workstation design system."""
     theme_name = normalize_theme_name(value)
+    density_name = normalize_density_name(density)
+    metrics = density_profile(density_name)
     palette = theme_palette(theme_name)
     style = ttk.Style(root)
     if "clam" in style.theme_names():
@@ -148,7 +198,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(8, 5),
+        padding=metrics["button_padding"],
     )
     style.map(
         "TButton",
@@ -183,7 +233,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         insertcolor=palette["text"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(5, 4),
+        padding=metrics["entry_padding"],
     )
     style.map(
         "TEntry",
@@ -202,7 +252,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(4, 3),
+        padding=metrics["combo_padding"],
     )
     style.map(
         "TCombobox",
@@ -234,7 +284,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TNotebook.Tab",
         background=palette["surface_alt"],
         foreground=palette["muted"],
-        padding=(10, 6),
+        padding=metrics["tab_padding"],
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9, "bold"),
     )
@@ -256,7 +306,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         fieldbackground=palette["tree"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        rowheight=25,
+        rowheight=metrics["tree_rowheight"],
     )
     style.map(
         "Treeview",
@@ -269,7 +319,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["secondary_text"],
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9, "bold"),
-        padding=(5, 5),
+        padding=metrics["heading_padding"],
     )
     style.map(
         "Treeview.Heading",
@@ -285,7 +335,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         arrowcolor=palette["text"],
-        padding=(7, 4),
+        padding=metrics["menubutton_padding"],
     )
     style.map(
         "TMenubutton",
@@ -306,7 +356,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.AppBar.TFrame",
         background=palette["surface"],
-        padding=(8, 5),
+        padding=metrics["danger_padding"],
     )
     style.configure(
         "CX.Brand.TLabel",
@@ -361,7 +411,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.PanelHeader.TFrame",
         background=palette["surface_alt"],
-        padding=(7, 5),
+        padding=metrics["panel_header_padding"],
     )
     style.configure(
         "CX.PanelHeader.TLabel",
@@ -380,7 +430,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
-        padding=(4, 3),
+        padding=metrics["toolbar_padding"],
     )
     style.configure(
         "CX.ToolbarGroup.TLabel",
@@ -394,7 +444,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["tree"],
         fieldbackground=palette["tree"],
         foreground=palette["secondary_text"],
-        rowheight=25,
+        rowheight=metrics["tree_rowheight"],
         bordercolor=palette["border"],
     )
     style.map(
@@ -408,7 +458,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["accent"],
         foreground=palette["accent_text"],
         bordercolor=palette["accent"],
-        padding=(12, 6),
+        padding=metrics["primary_padding"],
         font=("TkDefaultFont", 9, "bold"),
     )
     style.map(
@@ -428,7 +478,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["error"],
         foreground="#FFFFFF",
         bordercolor=palette["error"],
-        padding=(8, 5),
+        padding=metrics["appbar_padding"],
     )
     style.map(
         "CX.Danger.TButton",
@@ -443,7 +493,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["secondary_text"],
         bordercolor=palette["border"],
-        padding=(6, 3),
+        padding=metrics["compact_padding"],
     )
     style.map(
         "CX.Compact.TButton",

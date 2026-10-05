@@ -217,15 +217,21 @@ def test_workspace_rejected_properties_keep_model_history_and_editor_text(layout
         def get(self):
             return "not a number"
     workspace._property_vars = {"height_m": Value()}
-    errors = []
-    monkeypatch.setattr("cleanroomx.spatial.messagebox.showerror", lambda *args, **kwargs: errors.append(args))
+    modal_errors = []
+    monkeypatch.setattr(
+        "cleanroomx.spatial.messagebox.showerror",
+        lambda *args, **kwargs: modal_errors.append(args),
+    )
     workspace.apply_properties()
-    assert errors and "Height" in errors[0][1]
+    assert modal_errors == []
     assert events["changes"] == events["history"] == []
     assert project.metadata["spatial_layout"] is before
     assert workspace.layout is before
     assert before == layout
     assert workspace._property_vars["height_m"].get() == "not a number"
+    assert events["statuses"][-1] == (
+        "Properties not applied: Height (m) must be a finite number"
+    )
 
 
 def test_workspace_unchanged_properties_do_not_create_history(layout):

@@ -19,7 +19,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "navigator_visible": True,
         "output_visible": True,
         "inspector_visible": True,
-        "theme": "light",
+        "theme": "dark",
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,
@@ -61,7 +61,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["navigator_visible"] is False
     assert state["output_visible"] is True
     assert state["inspector_visible"] is True
-    assert state["theme"] == "light"
+    assert state["theme"] == "dark"
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
@@ -127,3 +127,13 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_gui_layout_state_preserves_explicit_light_theme():
+    state = normalize_gui_layout_state({"theme": "light"})
+    assert state["theme"] == "light"
+
+
+def test_gui_layout_state_normalizes_explicit_dark_theme():
+    state = normalize_gui_layout_state({"theme": " DARK "})
+    assert state["theme"] == "dark"

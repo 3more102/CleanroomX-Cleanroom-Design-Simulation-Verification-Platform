@@ -7,7 +7,12 @@ from tkinter import ttk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui import (
+    CleanroomXApp,
+    bundled_demo_project_path,
+    spatial_navigator_issue_counts,
+)
+from cleanroomx.spatial import SPATIAL_METADATA_KEY, empty_layout, validate_layout
 
 
 @pytest.fixture
@@ -122,3 +127,65 @@ def test_section_context_menu_keeps_expand_collapse_local_to_tree(app):
 
     assert labels == ["Expand", "Collapse"]
     assert app.project.to_dict() == project_before
+
+
+def test_spatial_navigator_issue_counts_use_canonical_item_references():
+    layout = empty_layout()
+    layout["rooms"] = [
+        {
+            "id": "room-a",
+            "name": "Process",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+            "floor_elevation_m": 0.0,
+        },
+        {
+            "id": "room-b",
+            "name": "Process",
+            "x_m": 2.0,
+            "y_m": 2.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+            "floor_elevation_m": 0.0,
+        },
+    ]
+    layout["devices"] = [
+        {
+            "id": "sensor-a",
+            "name": "Monitor",
+            "type": "sensor",
+            "room_id": None,
+            "x_m": 1.0,
+            "y_m": 1.0,
+            "z_m": 1.0,
+        }
+    ]
+
+    issues = validate_layout(layout)
+    counts = spatial_navigator_issue_counts(issues)
+
+    assert counts["room-a"] >= 2
+    assert counts["room-b"] >= 2
+    assert counts["sensor-a"] == 1
+
+
+def test_project_browser_marks_spatial_items_with_validation_badges(app):
+    layout = app.project.metadata.get(SPATIAL_METADATA_KEY)
+    assert isinstance(layout, dict)
+    devices = layout.get("devices")
+    if not isinstance(devices, list) or not devices:
+        pytest.skip("bundled demo has no device to exercise navigator warning badge")
+
+    device = devices[0]
+    device["room_id"] = None
+    app._refresh_spatial_navigator()
+    app.root.update()
+
+    iid = f"device:{device['id']}"
+    item = app.analysis_tree.item(iid)
+    assert "⚠" in item["text"]
+    assert "spatial_warning" in item["tags"]

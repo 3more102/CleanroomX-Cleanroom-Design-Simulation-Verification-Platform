@@ -257,3 +257,43 @@ def test_problem_browser_supports_engineering_filters_sorting_and_relative_navig
     assert selected is not None
     if len(all_items) > 1:
         assert selected is not panel._issues_by_iid[all_items[0]]
+
+
+def test_problem_browser_rule_filter_and_filtered_export_are_consistent(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    assert issue["rule"] in panel.rule_combo.cget("values")
+    panel.category_var.set(str(issue["category"]))
+    panel.rule_var.set(str(issue["rule"]))
+    panel.object_var.set(str(issue["element"]["type"]))
+    app.root.update()
+
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        panel._issues_by_iid[iid]["rule"] == issue["rule"]
+        for iid in visible
+    )
+
+    filtered = panel.filtered_result(result)
+    assert filtered is not None
+    assert filtered is not result
+    assert filtered["summary"]["canonical_issue_count"] == result["summary"]["issue_count"]
+    assert filtered["summary"]["issue_count"] == len(visible)
+    assert len(filtered["issues"]) == len(visible)
+    assert all(item["rule"] == issue["rule"] for item in filtered["issues"])
+    assert filtered["presentation_filter"]["rule"] == issue["rule"]
+    assert result["summary"]["issue_count"] >= filtered["summary"]["issue_count"]
+
+    exported = []
+    panel._export_callback = lambda payload: exported.append(payload)
+    panel._export()
+    assert len(exported) == 1
+    assert exported[0]["issues"] == filtered["issues"]
+    assert exported[0]["summary"] == filtered["summary"]
+
+    panel.clear_filters()
+    app.root.update()
+    assert panel.rule_var.get() == "All"
+    assert len(panel.tree.get_children()) == result["summary"]["issue_count"]

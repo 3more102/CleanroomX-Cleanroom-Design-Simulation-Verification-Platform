@@ -1687,6 +1687,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.selected: _Hit | None = None
         self._selected_hits: list[_Hit] = []
         self._hovered: _Hit | None = None
+        self._hover_canvas_xy: tuple[int, int] | None = None
         self._snap_indicator_world: tuple[float, float] | None = None
         self._drag_anchor: tuple[float, float] | None = None
         self._drag_item_origin: tuple[float, float] | None = None
@@ -4669,6 +4670,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_engineering_legend(canvas, overlay)
         self._draw_measurement_overlay()
         self._draw_rulers_2d(canvas)
+        self._draw_hover_card_2d()
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -4837,11 +4839,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         return "break"
 
     def _on_canvas_leave(self, event: tk.Event | None = None) -> None:
+        self._hover_canvas_xy = None
         if self._hovered is not None:
             self._hovered = None
             self._draw_2d()
         self._snap_indicator_world = None
         self.canvas_2d.delete("snap_indicator")
+        self.canvas_2d.delete("hover_card")
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
         return project_3d(
@@ -5462,7 +5466,129 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         return "break"
 
+    def _hover_summary_lines(self, hit: _Hit) -> tuple[str, ...]:
+        collection = self.layout["rooms"] if hit.kind == "room" else self.layout["devices"]
+        item = next(
+            (candidate for candidate in collection if str(candidate.get("id")) == hit.item_id),
+            None,
+        )
+        if item is None:
+            return ()
+
+        name = str(item.get("name") or hit.item_id)
+        if hit.kind == "room":
+            lines = [f"Room · {name}"]
+            length = item.get("length_m")
+            width = item.get("width_m")
+            height = item.get("height_m")
+            if all(isinstance(value, (int, float)) for value in (length, width, height)):
+                lines.append(
+                    f"Geometry  {float(length):g} × {float(width):g} × {float(height):g} m"
+                )
+            classification = str(item.get("classification") or "").strip()
+            if classification:
+                lines.append(f"Class  {classification}")
+            pressure = item.get("pressure_pa")
+            if isinstance(pressure, (int, float)) and math.isfinite(float(pressure)):
+                lines.append(f"Design pressure  {float(pressure):+g} Pa")
+            analysis_link = str(item.get("analysis_room_name") or "").strip()
+            if analysis_link:
+                lines.append(f"Analysis link  {analysis_link}")
+            return tuple(lines)
+
+        device_type = str(item.get("type") or "device").replace("_", " ").title()
+        lines = [f"{device_type} · {name}"]
+        room_id = str(item.get("room_id") or "").strip()
+        if room_id:
+            room = next(
+                (
+                    candidate
+                    for candidate in self.layout["rooms"]
+                    if str(candidate.get("id") or "") == room_id
+                ),
+                None,
+            )
+            lines.append(
+                "Room  "
+                + (
+                    str(room.get("name") or room_id)
+                    if room is not None
+                    else room_id
+                )
+            )
+        z_value = item.get("z_m")
+        if isinstance(z_value, (int, float)) and math.isfinite(float(z_value)):
+            lines.append(f"Elevation  {float(z_value):g} m")
+        width_value = item.get("width_m")
+        if isinstance(width_value, (int, float)) and math.isfinite(float(width_value)):
+            lines.append(f"Width  {float(width_value):g} m")
+        orientation = item.get("orientation_deg")
+        if isinstance(orientation, (int, float)) and math.isfinite(float(orientation)):
+            lines.append(f"Orientation  {float(orientation):g}°")
+        wall_side = str(item.get("wall_side") or "").strip()
+        if wall_side:
+            lines.append(f"Wall  {wall_side.title()}")
+        return tuple(lines)
+
+    def _draw_hover_card_2d(self) -> None:
+        canvas = self.canvas_2d
+        canvas.delete("hover_card")
+        hit = getattr(self, "_hovered", None)
+        pointer = getattr(self, "_hover_canvas_xy", None)
+        if hit is None or pointer is None:
+            return
+        lines = self._hover_summary_lines(hit)
+        if not lines:
+            return
+
+        width = max(1, canvas.winfo_width())
+        height = max(1, canvas.winfo_height())
+        px, py = pointer
+        text_id = canvas.create_text(
+            px + 15,
+            py + 15,
+            anchor="nw",
+            text="\n".join(lines),
+            justify="left",
+            fill=self._theme_palette["text"],
+            width=260,
+            tags=("hover_card", "hover_card_text"),
+        )
+        bbox = canvas.bbox(text_id)
+        if bbox is None:
+            return
+        x0, y0, x1, y1 = bbox
+        dx = 0
+        dy = 0
+        if x1 + 10 > width:
+            dx = min(0, px - 15 - x1)
+        if y1 + 10 > height:
+            dy = min(0, py - 15 - y1)
+        if x0 + dx < 6:
+            dx += 6 - (x0 + dx)
+        if y0 + dy < 6:
+            dy += 6 - (y0 + dy)
+        if dx or dy:
+            canvas.move(text_id, dx, dy)
+            bbox = canvas.bbox(text_id)
+            if bbox is None:
+                return
+            x0, y0, x1, y1 = bbox
+        background_id = canvas.create_rectangle(
+            x0 - 7,
+            y0 - 6,
+            x1 + 7,
+            y1 + 6,
+            fill=self._theme_palette["surface_elevated"],
+            outline=self._theme_palette["border_strong"],
+            width=1,
+            tags=("hover_card", "hover_card_background"),
+        )
+        canvas.tag_lower(background_id, text_id)
+        canvas.tag_raise("hover_card")
+
     def _on_motion(self, event: tk.Event) -> None:
+        self._hover_canvas_xy = (int(event.x), int(event.y))
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
         self._notify_engineering_context()
@@ -5476,6 +5602,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._hovered = hovered
             self._draw_2d()
         self._draw_snap_indicator_2d(event.x, event.y)
+        self._draw_hover_card_2d()
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

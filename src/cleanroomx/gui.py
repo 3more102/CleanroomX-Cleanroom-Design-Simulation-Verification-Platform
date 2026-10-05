@@ -7457,7 +7457,7 @@ class CleanroomXApp:
         self._discard_restored_recovery()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.shutdown(wait=False)
+            manager.shutdown(wait=True)
         self.root.destroy()
 
 

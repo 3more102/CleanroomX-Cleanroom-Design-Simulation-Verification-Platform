@@ -308,6 +308,8 @@ def test_recovered_first_save_refuses_original_source_path(tmp_path, monkeypatch
     assert warnings
     assert "different file" in warnings[0][1]
     assert "both versions" in warnings[0][1]
+
+
 def test_discard_choice_preserves_recovery_until_replacement_commits(monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
@@ -338,6 +340,23 @@ def test_failed_project_load_preserves_existing_recovery(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="broken project"):
         app.load_project_path(tmp_path / "broken.cleanroomx.json")
+
+    assert discarded == []
+
+
+def test_failed_recovery_restore_preserves_existing_recovery(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    monkeypatch.setattr(
+        gui_module,
+        "restore_recovery_artifact",
+        lambda _path: (_ for _ in ()).throw(ValueError("broken recovery")),
+    )
+
+    with pytest.raises(ValueError, match="broken recovery"):
+        app.restore_recovery_path(tmp_path / "broken.recovery.json")
 
     assert discarded == []
 

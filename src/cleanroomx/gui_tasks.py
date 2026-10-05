@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 import tkinter as tk
 from tkinter import ttk
@@ -105,8 +105,14 @@ class TaskCenter(ttk.Frame):
     shown as Indeterminate until a terminal state is reported by the controller.
     """
 
-    def __init__(self, master: tk.Misc):
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        on_change: Callable[[int, int], None] | None = None,
+    ):
         super().__init__(master, padding=(8, 6))
+        self._on_change = on_change or (lambda _active, _total: None)
         self._records: dict[str, TaskRecord] = {}
         self._order: list[str] = []
         self.state_filter_var = tk.StringVar(value="All")
@@ -119,6 +125,10 @@ class TaskCenter(ttk.Frame):
     @property
     def records(self) -> tuple[TaskRecord, ...]:
         return tuple(self._records[key] for key in self._order if key in self._records)
+
+    @property
+    def active_count(self) -> int:
+        return sum(1 for item in self._records.values() if not item.terminal)
 
     def _build(self) -> None:
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(8, 6))
@@ -370,6 +380,7 @@ class TaskCenter(ttk.Frame):
             style = "CX.Status.Pass.TLabel"
         self.summary_var.set(summary)
         self.summary_label.configure(style=style)
+        self._on_change(active, total)
 
         if select_key and self.tree.exists(select_key):
             self.tree.selection_set(select_key)

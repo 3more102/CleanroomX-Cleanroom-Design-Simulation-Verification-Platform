@@ -111,6 +111,15 @@ def test_problem_severity_colors_follow_active_theme_palette(app):
     assert app.problems_panel.tree.tag_configure("info", "foreground") == app._theme_palette["info"]
 
 
+
+def test_dense_workstation_controls_have_discoverable_tooltips(app):
+    assert "Ctrl+Shift+P" in app.toolbar_commands_button._cleanroomx_tooltip.text
+    assert "diagnostics" in app.diagnostics_state_label._cleanroomx_tooltip.text.casefold()
+    assert "verification" in app.verification_state_label._cleanroomx_tooltip.text.casefold()
+    assert "Industry Foundation Classes" in app.navigator_import_ifc_button._cleanroomx_tooltip.text
+    assert "Ctrl+J" in app.output_close_button._cleanroomx_tooltip.text
+
+
 def test_engineering_output_workspace_exposes_first_class_panels(app):
     tabs = _tab_texts(app.output_notebook)
     assert tabs[:5] == [

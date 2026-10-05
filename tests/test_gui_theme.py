@@ -49,3 +49,17 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_dark_palette_matches_industrial_workstation_design_system():
+    dark = theme_palette("dark")
+
+    assert dark["background"] == "#0b1220"
+    assert dark["surface"] == "#111b2e"
+    assert dark["surface_alt"] == "#17243a"
+    assert dark["border"] == "#263750"
+    assert dark["accent"] == "#22d3ee"
+    assert dark["accent_hover"] == "#38bdf8"
+    assert dark["text"] == "#f1f5f9"
+    assert dark["muted"] == "#94a3b8"
+    assert dark["accent_text"] == "#06141c"

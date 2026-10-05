@@ -5,6 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewTableBehavior
 from .project_revisions import ProjectRevisionScan
 
 
@@ -114,6 +115,13 @@ class ProjectRevisionCenter(tk.Toplevel):
         self.tree.column("size", width=90, anchor="e", stretch=False)
         self.tree.column("sha", width=170, stretch=False)
         self.tree.column("version", width=100, stretch=False)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "time", "size", "sha", "version"),
+            copy_columns=("#0", "time", "size", "sha", "version"),
+        )
+        self.table_behavior.sort_column = "time"
+        self.table_behavior.sort_descending = True
 
         yscroll = ttk.Scrollbar(
             table_frame,
@@ -272,6 +280,7 @@ class ProjectRevisionCenter(tk.Toplevel):
                 ),
             )
 
+        self.table_behavior.reapply_sort()
         self.count_var.set(
             f"{len(visible)} of {len(self._revisions)} verified revisions"
         )

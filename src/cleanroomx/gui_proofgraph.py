@@ -6,6 +6,8 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import theme_palette
+
 from .proofgraph_io import proofgraph_from_dict
 
 
@@ -506,6 +508,8 @@ class ProofGraphViewer(ttk.Frame):
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
         self._selected_key: str | None = None
+        self._graph_zoom = 1.0
+        self._palette = theme_palette("light")
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
@@ -554,6 +558,48 @@ class ProofGraphViewer(ttk.Frame):
             style="CX.Compact.TButton",
             command=self._clear_search_and_filter,
         ).pack(side="left")
+        ttk.Separator(toolbar, orient="vertical").pack(
+            side="left", fill="y", padx=6
+        )
+        ttk.Button(
+            toolbar,
+            text="Fit",
+            style="CX.Compact.TButton",
+            command=self._fit_graph,
+        ).pack(side="left", padx=1)
+        ttk.Button(
+            toolbar,
+            text="−",
+            width=3,
+            style="CX.Compact.TButton",
+            command=lambda: self._zoom_by(1.0 / 1.15),
+        ).pack(side="left", padx=1)
+        ttk.Button(
+            toolbar,
+            text="100%",
+            width=6,
+            style="CX.Compact.TButton",
+            command=self._reset_zoom,
+        ).pack(side="left", padx=1)
+        ttk.Button(
+            toolbar,
+            text="+",
+            width=3,
+            style="CX.Compact.TButton",
+            command=lambda: self._zoom_by(1.15),
+        ).pack(side="left", padx=1)
+        ttk.Button(
+            toolbar,
+            text="Expand",
+            style="CX.Compact.TButton",
+            command=lambda: self._set_tree_open(True),
+        ).pack(side="right", padx=1)
+        ttk.Button(
+            toolbar,
+            text="Collapse",
+            style="CX.Compact.TButton",
+            command=lambda: self._set_tree_open(False),
+        ).pack(side="right", padx=1)
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.search_var.trace_add("write", lambda *_: self._refresh())
@@ -605,6 +651,12 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.bind("<Button-1>", self._on_canvas_selected)
         self.canvas.bind("<Double-1>", self._navigate_selected)
         self.canvas.bind("<Configure>", lambda _event: self._draw_graph())
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind("<Button-4>", lambda _event: self._zoom_by(1.12))
+        self.canvas.bind("<Button-5>", lambda _event: self._zoom_by(1.0 / 1.12))
+        self.canvas.bind("<ButtonPress-2>", self._on_pan_down)
+        self.canvas.bind("<B2-Motion>", self._on_pan_drag)
+        self.canvas.bind("<ButtonRelease-2>", self._on_pan_up)
 
         ttk.Label(
             detail_host,
@@ -625,6 +677,97 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
         detail_scroll.pack(side="right", fill="y", pady=(0, 6))
+
+    def apply_theme(self, palette: dict[str, str]) -> None:
+        self._palette = dict(palette)
+        self.canvas.configure(
+            background=self._palette["plot"],
+            highlightbackground=self._palette["border"],
+        )
+        self.detail.configure(
+            background=self._palette["field"],
+            foreground=self._palette["field_text"],
+            insertbackground=self._palette["text"],
+            selectbackground=self._palette["selection"],
+            selectforeground=self._palette["selection_text"],
+        )
+        self.tree.tag_configure(
+            "group",
+            foreground=self._palette["muted"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        for status, token in (
+            ("pass", "pass"),
+            ("fail", "error"),
+            ("failed", "error"),
+            ("error", "error"),
+            ("warning", "warning"),
+            ("warn", "warning"),
+            ("not_checked", "stale"),
+            ("unknown", "stale"),
+        ):
+            self.tree.tag_configure(status, foreground=self._palette[token])
+        self._draw_graph()
+
+    def _set_tree_open(self, opened: bool) -> None:
+        for iid in self.tree.get_children(""):
+            self.tree.item(iid, open=bool(opened))
+
+    def _zoom_by(self, factor: float) -> str:
+        try:
+            factor = float(factor)
+        except (TypeError, ValueError):
+            return "break"
+        self._graph_zoom = min(2.5, max(0.55, self._graph_zoom * factor))
+        self._draw_graph()
+        self._status_setter(f"ProofGraph zoom: {self._graph_zoom * 100:.0f}%")
+        return "break"
+
+    def _reset_zoom(self) -> None:
+        self._graph_zoom = 1.0
+        self._draw_graph()
+        self.canvas.xview_moveto(0.0)
+        self.canvas.yview_moveto(0.0)
+        self._status_setter("ProofGraph zoom: 100%")
+
+    def _fit_graph(self) -> None:
+        self._graph_zoom = 1.0
+        self._draw_graph()
+        bbox = self.canvas.bbox("all")
+        if bbox is None:
+            return
+        content_width = max(1, bbox[2] - bbox[0])
+        content_height = max(1, bbox[3] - bbox[1])
+        viewport_width = max(1, self.canvas.winfo_width() - 20)
+        viewport_height = max(1, self.canvas.winfo_height() - 20)
+        factor = min(
+            viewport_width / content_width,
+            viewport_height / content_height,
+        )
+        self._graph_zoom = min(1.6, max(0.55, factor))
+        self._draw_graph()
+        self.canvas.xview_moveto(0.0)
+        self.canvas.yview_moveto(0.0)
+        self._status_setter(f"ProofGraph fit: {self._graph_zoom * 100:.0f}%")
+
+    def _on_mousewheel(self, event: tk.Event) -> str:
+        delta = getattr(event, "delta", 0)
+        if delta == 0:
+            return "break"
+        return self._zoom_by(1.12 if delta > 0 else 1.0 / 1.12)
+
+    def _on_pan_down(self, event: tk.Event) -> str:
+        self.canvas.scan_mark(event.x, event.y)
+        self.canvas.configure(cursor="fleur")
+        return "break"
+
+    def _on_pan_drag(self, event: tk.Event) -> str:
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+        return "break"
+
+    def _on_pan_up(self, _event: tk.Event) -> str:
+        self.canvas.configure(cursor="")
+        return "break"
 
     def set_documents(self, documents: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> None:
         unique: dict[str, dict[str, Any]] = {}
@@ -728,38 +871,41 @@ class ProofGraphViewer(ttk.Frame):
                 )
             iid = f"node:{len(self._tree_key_by_iid)}"
             suffix = f" [{node['status'].upper()}]" if node.get("status") else ""
+            status_tag = _text(node.get("status")).casefold()
+            tags = (status_tag,) if status_tag else ()
             self.tree.insert(
                 groups[node_type],
                 "end",
                 iid=iid,
                 text=f"{node['label']}{suffix}",
+                tags=tags,
             )
             self._tree_key_by_iid[iid] = node["key"]
             if node["key"] == self._selected_key:
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def _node_fill(self, node: dict[str, Any]) -> str:
+        node_type = _text(node.get("type")).casefold()
+        if node_type in {"requirement", "check", "verdict"}:
+            return self._palette["surface_alt"]
+        if node_type in {"evidence", "source", "ifc"}:
+            return self._palette["panel"]
+        return self._palette["surface"]
+
+    def _node_outline(self, node: dict[str, Any], *, selected: bool) -> str:
+        if selected:
+            return self._palette["accent"]
         status = _text(node.get("status")).casefold()
         if status in {"fail", "failed", "error"}:
-            return "#fee2e2"
+            return self._palette["error"]
         if status in {"warning", "warn"}:
-            return "#fef3c7"
+            return self._palette["warning"]
         if status == "pass":
-            return "#dcfce7"
-        return {
-            "requirement": "#dbeafe",
-            "model_object": "#e0f2fe",
-            "ifc": "#e0e7ff",
-            "source": "#f1f5f9",
-            "calculation": "#ede9fe",
-            "evidence": "#f3e8ff",
-            "check": "#fef9c3",
-            "finding": "#ffedd5",
-            "verdict": "#e2e8f0",
-            "verification_run": "#d1fae5",
-        }.get(node.get("type"), "#f8fafc")
+            return self._palette["pass"]
+        if status in {"not_checked", "unknown"}:
+            return self._palette["stale"]
+        return self._palette["border"]
 
     def _draw_graph(self) -> None:
         canvas = self.canvas
@@ -773,7 +919,7 @@ class ProofGraphViewer(ttk.Frame):
                 24,
                 anchor="nw",
                 text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                fill=self._palette["muted"],
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -784,10 +930,13 @@ class ProofGraphViewer(ttk.Frame):
             by_column.setdefault(column, []).append(node)
 
         positions: dict[str, tuple[float, float]] = {}
-        x_spacing = 235
-        y_spacing = 88
-        margin_x = 35
-        margin_y = 55
+        zoom = self._graph_zoom
+        x_spacing = 235 * zoom
+        y_spacing = 88 * zoom
+        margin_x = 35 * zoom
+        margin_y = 55 * zoom
+        node_width = 160 * zoom
+        node_height = 48 * zoom
         max_rows = 1
         for column in sorted(by_column):
             column_nodes = by_column[column]
@@ -804,11 +953,11 @@ class ProofGraphViewer(ttk.Frame):
             if source is None or target is None:
                 continue
             canvas.create_line(
-                source[0] + 160,
-                source[1] + 24,
+                source[0] + node_width,
+                source[1] + node_height / 2,
                 target[0],
-                target[1] + 24,
-                fill="#94a3b8",
+                target[1] + node_height / 2,
+                fill=self._palette["muted"],
                 width=1,
                 arrow="last",
             )
@@ -816,13 +965,13 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
-            width = 3 if selected else 1
+            outline = self._node_outline(node, selected=selected)
+            width = 3 if selected else 2 if node.get("status") else 1
             rect = canvas.create_rectangle(
                 x,
                 y,
-                x + 160,
-                y + 48,
+                x + node_width,
+                y + node_height,
                 fill=self._node_fill(node),
                 outline=outline,
                 width=width,
@@ -832,18 +981,18 @@ class ProofGraphViewer(ttk.Frame):
                 label = label[:29] + "…"
             status = f"\n{node['status'].upper()}" if node.get("status") else ""
             text_item = canvas.create_text(
-                x + 80,
-                y + 24,
-                width=148,
+                x + node_width / 2,
+                y + node_height / 2,
+                width=max(90, 148 * zoom),
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=self._palette["text"],
             )
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]
 
-        width = margin_x + (max(by_column) + 1) * x_spacing + 190
-        height = margin_y + max_rows * y_spacing + 70
+        width = margin_x + (max(by_column) + 1) * x_spacing + 190 * zoom
+        height = margin_y + max_rows * y_spacing + 70 * zoom
         canvas.configure(scrollregion=(0, 0, width, height))
 
     def _select_key(self, key: str | None) -> None:

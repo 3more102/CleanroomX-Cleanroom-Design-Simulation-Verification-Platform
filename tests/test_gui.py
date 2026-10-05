@@ -12,6 +12,8 @@ from cleanroomx.gui_errors import GuiErrorReport
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectFileRevision,
+    ProjectSaveDurabilityError,
     capture_project_file_revision,
     load_project_document,
     save_project_document,
@@ -2049,6 +2051,100 @@ def test_gui_project_dossier_export_rejects_external_project_change(
     assert errors[0][0] == "Project dossier export blocked"
     assert "changed on disk" in errors[0][1]
 
+
+
+def test_verification_durability_failure_records_reload_failure(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_path = tmp_path / "project.cleanroomx.json"
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    committed_revision = ProjectFileRevision(
+        path=str(project_path),
+        exists=True,
+        size=123,
+        mtime_ns=456,
+        sha256="a" * 64,
+    )
+    durability_error = ProjectSaveDurabilityError(
+        project_path,
+        committed_revision,
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+    app._project_verification_target = lambda: (project_path, analysis)
+    app.load_project_path = lambda path: (_ for _ in ()).throw(
+        OSError("synthetic reload failure")
+    )
+
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "persist_project_requirements_workflow_run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(durability_error),
+    )
+
+    recorded = []
+
+    def record(operation, exc):
+        recorded.append((operation, exc))
+        if "durability uncertain" in operation:
+            return GuiErrorReport(
+                reference="CX-DURABILITY",
+                operation=operation,
+                exception_type=type(exc).__name__,
+                summary=str(exc),
+                log_path=tmp_path / "durability.log",
+            )
+        return GuiErrorReport(
+            reference="CX-RELOAD",
+            operation=operation,
+            exception_type=type(exc).__name__,
+            summary=str(exc),
+            log_path=tmp_path / "reload.log",
+        )
+
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    assert app.persist_project_requirements_verification() is False
+
+    assert [item[0] for item in recorded] == [
+        "Persist project verification evidence (durability uncertain)",
+        "Reload project after durability-uncertain verification save",
+    ]
+    assert recorded[0][1] is durability_error
+    assert isinstance(recorded[1][1], OSError)
+    assert "CX-DURABILITY" in app.status_var.value
+    assert "CX-RELOAD" in app.status_var.value
+    assert warnings[0]["title"] == "Verification save durability not confirmed"
+    assert "a" * 64 in warnings[0]["message"]
+    assert "CX-DURABILITY" in warnings[0]["message"]
+    assert "CX-RELOAD" in warnings[0]["message"]
+    assert str(tmp_path / "durability.log") in warnings[0]["message"]
+    assert str(tmp_path / "reload.log") in warnings[0]["message"]
 
 
 def test_gui_project_requirements_verification_reports_verified_pass(

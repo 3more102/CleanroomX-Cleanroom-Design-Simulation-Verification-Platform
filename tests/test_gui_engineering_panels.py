@@ -349,3 +349,28 @@ def test_workspace_profile_capture_and_restore_preserves_saved_panel_visibility(
     assert app.spatial_workspace.inspector_visible()
     assert app.notebook.select() == str(app.proofgraph_viewer)
     assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Evidence"
+
+
+def test_engineering_menus_expose_simulation_verification_evidence_and_reports(app):
+    end = app.menubar.index("end")
+    labels = [
+        app.menubar.entrycget(index, "label")
+        for index in range(end + 1)
+    ]
+    assert "Simulation" in labels
+    assert "Verification" in labels
+    assert "Evidence" in labels
+    assert "Reports" in labels
+    assert "Analyze" not in labels
+    assert "Verify" not in labels
+
+
+def test_evidence_panel_navigation_reveals_output_and_selects_evidence(app):
+    app.hide_output_panel()
+    assert not app.output_panel_visible_var.get()
+
+    app.show_evidence_panel()
+    app.root.update()
+
+    assert app.output_panel_visible_var.get()
+    assert app.output_notebook.tab(app.output_notebook.select(), "text") == "Evidence"

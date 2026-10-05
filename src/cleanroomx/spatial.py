@@ -1664,12 +1664,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
-            side="right", padx=(10, 2)
-        )
 
         overlaybar = ttk.Frame(
             self,
@@ -1702,6 +1696,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+        ttk.Label(
+            overlaybar,
+            textvariable=self._validation_var,
+        ).pack(side="right", padx=(8, 2))
+        ttk.Button(
+            overlaybar,
+            text="Validate",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.report_validation,
+        ).pack(side="right", padx=(8, 2))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))

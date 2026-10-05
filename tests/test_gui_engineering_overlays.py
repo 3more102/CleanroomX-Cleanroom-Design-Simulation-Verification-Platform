@@ -234,3 +234,37 @@ def test_overlay_mode_normalization_preserves_backward_pressure_setting():
 
     assert normalized["view"]["overlay_mode"] == "none"
     assert normalized["view"]["show_pressure"] is False
+
+def test_spatial_inspector_surfaces_existing_room_engineering_results(gui_app):
+    workspace = gui_app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    room_name = str(room.get("analysis_room_name") or room["name"])
+    workspace._result_getter = lambda: {
+        "rooms": [
+            {
+                "room": room_name,
+                "ach": 24.0,
+                "status": "pass",
+                "findings": [
+                    {"code": "ACH", "status": "pass", "actual": 24.0, "unit": "1/h"}
+                ],
+                "air_balance": {
+                    "supply_airflow_m3_h": 1500.0,
+                    "return_airflow_m3_h": 1200.0,
+                    "exhaust_airflow_m3_h": 100.0,
+                    "passes_minimum_surplus": True,
+                },
+            }
+        ]
+    }
+
+    assert workspace.select_item("room", room["id"])
+    gui_app.root.update_idletasks()
+
+    assert "Pressure:" in workspace._engineering_pressure_var.get()
+    assert "Pa" in workspace._engineering_pressure_var.get()
+    assert "Airflow: S 1500 / R 1200 / E 100 m³/h" in workspace._engineering_airflow_var.get()
+    assert "ACH: 24.00 1/h · PASS" == workspace._engineering_ach_var.get()
+    assert workspace._engineering_status_var.get() == "Status: PASS"
+    assert workspace._engineering_status_badge.cget("style") == "CX.SuccessBadge.TLabel"
+

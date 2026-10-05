@@ -1047,10 +1047,12 @@ def test_output_console_tabs_surface_live_engineering_counts(app):
 
     problems = app.output_notebook.tab(app.problems_panel, "text")
     verification = app.output_notebook.tab(app.verification_text.master, "text")
-    evidence = app.output_notebook.tab(app.evidence_text.master, "text")
+    evidence = app.output_notebook.tab(app.evidence_panel, "text")
+    evidence_log = app.output_notebook.tab(app.evidence_text.master, "text")
 
     assert problems.startswith("Problems ")
     assert problems.split()[-1].isdigit()
     assert verification.startswith("Verification ")
     assert evidence.startswith("Evidence ")
     assert evidence.split()[-1].isdigit()
+    assert evidence_log == "Evidence Log"

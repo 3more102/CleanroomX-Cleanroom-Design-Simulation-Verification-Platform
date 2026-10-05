@@ -1746,6 +1746,41 @@ class CleanroomXApp:
             command=self.hide_navigator_panel,
         )
         self.navigator_close_button.pack(side="right")
+        workspace_nav = ttk.Frame(
+            navigator,
+            style="CX.Toolbar.TFrame",
+            padding=(4, 4),
+        )
+        workspace_nav.pack(fill="x", pady=(0, 6))
+        for index, (label, command) in enumerate(
+            (
+                ("Dashboard", self._activate_dashboard_workspace),
+                ("Design", lambda: self._activate_spatial_workspace("split")),
+                ("ProofGraph", self._activate_proofgraph_workspace),
+                ("Problems", self.show_problems_panel),
+            )
+        ):
+            button = ttk.Button(
+                workspace_nav,
+                text=label,
+                style="CX.Compact.TButton",
+                command=command,
+            )
+            button.grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="ew",
+                padx=1,
+                pady=1,
+            )
+            setattr(
+                self,
+                "navigator_" + label.casefold() + "_button",
+                button,
+            )
+        workspace_nav.columnconfigure(0, weight=1)
+        workspace_nav.columnconfigure(1, weight=1)
+
         filter_row = ttk.Frame(navigator)
         filter_row.pack(fill="x", pady=(0, 6))
         ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
@@ -2470,6 +2505,13 @@ class CleanroomXApp:
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 
+    def _activate_dashboard_workspace(self) -> None:
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is None:
+            return
+        self.notebook.select(dashboard)
+        self.workspace_status_var.set("Workspace: Dashboard")
+
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
         if viewer is None:
@@ -2636,6 +2678,28 @@ class CleanroomXApp:
             else {}
         )
         location = str(self.project_path) if self.project_path else "Unsaved project"
+        problem_count = int(summary.get("error_count", 0) or 0) + int(
+            summary.get("warning_count", 0) or 0
+        )
+        output_notebook = getattr(self, "output_notebook", None)
+        if output_notebook is not None:
+            output_notebook.tab(
+                self.problems_panel,
+                text=f"Problems {problem_count}",
+            )
+            output_notebook.tab(
+                self.verification_text.master,
+                text=(
+                    "Verification "
+                    f"{currency_summary.get('current_count', 0)}/"
+                    f"{currency_summary.get('configured_analysis_count', 0)}"
+                ),
+            )
+            output_notebook.tab(
+                self.evidence_text.master,
+                text=f"Evidence {evidence_record_count}",
+            )
+
         console_lines = [
             f"CleanroomX {__version__}",
             f"Project: {self.project.name}",

@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (\n    _filtered_projection,\n    _node_detail_lines,\n    proofgraph_projection,\n)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +235,22 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+def test_proofgraph_detail_lines_are_engineering_focused_not_raw_json():
+    projection = proofgraph_projection(_sample_graph())
+    node = next(
+        item for item in projection["nodes"]
+        if item["key"] == "evidence:evidence-pressure"
+    )
+
+    lines = _node_detail_lines(node)
+    text = "\n".join(lines)
+
+    assert "EVIDENCE" in text
+    assert "Value: 12" in text
+    assert "Unit: Pa" in text
+    assert "Provenance: 1 record(s)" in text
+    assert "IFC 3IFC" in text
+    assert "Calculation pressure_solver" in text
+    assert "{\"property_name\"" not in text

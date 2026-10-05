@@ -1512,14 +1512,21 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(
+            self.root,
+            padding=(10, 5, 10, 4),
+            style="CX.AppBar.TFrame",
+        )
+        self.topbar = topbar
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
-            row=0, column=1, sticky="w", padx=(0, 5)
-        )
+        ttk.Label(
+            topbar,
+            text="PROJECT",
+            style="CX.ProductMeta.TLabel",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
@@ -1542,7 +1549,11 @@ class CleanroomXApp:
         )
         self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Danger.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
@@ -1822,6 +1833,9 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
+        self.dashboard = ProjectDashboard(self.notebook)
+        self.notebook.add(self.dashboard, text="Dashboard")
+
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
             project_getter=lambda: self.project,
@@ -1957,25 +1971,36 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(
+            self.root,
+            padding=(8, 4),
+            style="CX.StatusBar.TFrame",
+        )
+        self.status_bar = status_bar
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.Status.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        self.model_status_badge = ttk.Label(
+            status_bar,
+            textvariable=self.model_status_var,
+            style="CX.Badge.Verified.TLabel",
+        )
+        self.model_status_badge.pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.selection_status_var, style="CX.Status.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.workspace_status_var, style="CX.Status.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -1984,6 +2009,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.Status.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +2018,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.Status.TLabel",
         ).pack(side="right")
 
     @staticmethod
@@ -2227,6 +2254,10 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(self.theme_var.get(), redraw=redraw)
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -2514,6 +2545,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency_summary: dict = {}
+        evidence_record_count = 0
 
         try:
             currency = assess_project_verification_currency(
@@ -2521,6 +2554,7 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            currency_summary = summary if isinstance(summary, dict) else {}
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -2557,6 +2591,7 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            evidence_record_count = len(records)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents(
@@ -2614,6 +2649,31 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            dashboard.set_snapshot(
+                {
+                    "project_name": self.project.name,
+                    "location": location,
+                    "analysis_count": len(self.project.analyses),
+                    "diagnostic_status": summary.get("status", "not checked"),
+                    "diagnostic_errors": summary.get("error_count", 0),
+                    "diagnostic_warnings": summary.get("warning_count", 0),
+                    "verification_configured": currency_summary.get(
+                        "configured_analysis_count",
+                        len(self.project.analyses),
+                    ),
+                    "verification_current": currency_summary.get("current_count", 0),
+                    "verification_stale": currency_summary.get("stale_count", 0),
+                    "verification_not_verified": currency_summary.get(
+                        "not_verified_count",
+                        0,
+                    ),
+                    "evidence_count": evidence_record_count,
+                    "model_state": "ready",
+                }
+            )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:

@@ -293,6 +293,31 @@ def test_ifc_cleanroomx_space_pset_rejects_malformed_payload():
         bim_ifc_module._cleanroomx_space_metadata(space, ElementUtil)
 
 
+def test_ifc_extraction_fails_closed_when_device_type_enumeration_raises(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcAirTerminal":
+                raise RuntimeError("malformed IFC type index")
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+
+    with pytest.raises(
+        IfcImportError,
+        match=r"unable to enumerate IFC device entities for 'IfcAirTerminal'",
+    ) as exc_info:
+        extract_ifc_semantics(source)
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
 def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
 

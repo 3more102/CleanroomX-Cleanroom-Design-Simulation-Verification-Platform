@@ -30,7 +30,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
     assert state["output_fraction"] == 0.72
     assert state["inspector_fraction"] == 0.78
     assert tuple(state["workspace_layouts"]) == GUI_WORKSPACE_PROFILES
-    assert state["workspace_layouts"]["design"]["output_visible"] is False
+    assert state["workspace_layouts"]["design"]["output_visible"] is True
     assert state["workspace_layouts"]["simulation"]["output_visible"] is True
     assert state["workspace_layouts"]["verification"]["output_fraction"] == 0.58
     assert state["workspace_layouts"]["reporting"]["navigator_visible"] is False

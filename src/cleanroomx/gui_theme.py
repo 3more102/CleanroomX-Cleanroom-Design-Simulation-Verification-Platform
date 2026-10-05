@@ -484,6 +484,57 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         padding=(6, 3),
     )
     style.configure(
+        "CX.Nav.TButton",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        bordercolor=palette["surface"],
+        padding=(8, 5),
+        anchor="w",
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.map(
+        "CX.Nav.TButton",
+        background=[
+            ("active", palette["elevated"]),
+            ("pressed", palette["selection"]),
+        ],
+        foreground=[
+            ("active", palette["text"]),
+            ("pressed", palette["selection_text"]),
+        ],
+        bordercolor=[
+            ("focus", palette["accent"]),
+            ("active", palette["strong_border"]),
+        ],
+    )
+    style.configure(
+        "CX.NavActive.TButton",
+        background=palette["selection"],
+        foreground=palette["selection_text"],
+        bordercolor=palette["accent"],
+        padding=(8, 5),
+        anchor="w",
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.map(
+        "CX.NavActive.TButton",
+        background=[
+            ("active", palette["selection"]),
+            ("pressed", palette["selection"]),
+        ],
+        foreground=[("!disabled", palette["selection_text"])],
+        bordercolor=[("focus", palette["accent"])],
+    )
+    style.configure(
+        "CX.Engineering.Horizontal.TProgressbar",
+        troughcolor=palette["surface_alt"],
+        background=palette["accent"],
+        bordercolor=palette["border"],
+        lightcolor=palette["accent"],
+        darkcolor=palette["accent"],
+        thickness=7,
+    )
+    style.configure(
         "CX.Card.TLabelframe",
         background=palette["panel"],
         bordercolor=palette["border"],

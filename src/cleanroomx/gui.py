@@ -1715,6 +1715,22 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self._show_selected()
         return True
 
+    def focus_mapping(self, mapping_id: str) -> bool:
+        """Reveal and focus one canonical requirement-to-evidence mapping."""
+        iid = f"mapping:{str(mapping_id).strip()}"
+        if iid not in self._traceability_rows:
+            return False
+        self.search_var.set("")
+        self.type_filter_var.set("All")
+        row = self._traceability_rows[iid]
+        self.tree.move(iid, row["parent"], "end")
+        self.tree.item(self.mappings_root, open=True)
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected()
+        return True
+
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -4093,6 +4109,13 @@ class CleanroomXApp:
             )
             return
 
+        if target_type == "mapping":
+            self.show_requirements_traceability(mapping_id=target_id or None)
+            self.selection_status_var.set(
+                f"Selected evidence mapping: {target_id or entry.label}"
+            )
+            return
+
         if target_type == "evidence":
             self._activate_proofgraph_workspace()
             viewer = getattr(self, "proofgraph_viewer", None)
@@ -5096,6 +5119,7 @@ class CleanroomXApp:
     def show_requirements_traceability(
         self,
         requirement_id: str | None = None,
+        mapping_id: str | None = None,
     ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
@@ -5132,6 +5156,16 @@ class CleanroomXApp:
             else:
                 self.status_var.set(
                     f"Requirements traceability opened; {requirement_id} is not present"
+                )
+        elif mapping_id:
+            focused = dialog.focus_mapping(mapping_id)
+            if focused:
+                self.status_var.set(
+                    f"Requirements traceability focused on mapping {mapping_id}"
+                )
+            else:
+                self.status_var.set(
+                    f"Requirements traceability opened; mapping {mapping_id} is not present"
                 )
         return True
 

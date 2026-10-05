@@ -2314,3 +2314,54 @@ def test_gui_smoke_keeps_unhandled_callbacks_visible_to_smoke_runner(
     assert root.destroyed is True
     assert "CleanroomX GUI smoke: PASS" in capsys.readouterr().out
 
+def test_background_analysis_error_surfaces_stable_diagnostic_reference(
+    monkeypatch,
+    tmp_path,
+):
+    import queue
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    report = gui_module.GuiErrorReport(
+        reference="CX-ANALYSIS-TEST",
+        operation="Run analysis analysis-a",
+        exception_type="RuntimeError",
+        summary="synthetic solver failure",
+        log_path=tmp_path / "gui.log",
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._queue = queue.Queue()
+    app._queue.put(("error", 9, "analysis-a", report))
+    app._run_generation = 9
+    app._abandon_requested = False
+    app._running = True
+    app.status_var = Status()
+    app.root = Root()
+    app._set_running = lambda running: setattr(app, "_running", running)
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append(
+            (title, message, parent)
+        ),
+    )
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app.status_var.value == "Analysis failed · CX-ANALYSIS-TEST"
+    assert errors[0][0] == "Analysis failed"
+    assert "synthetic solver failure" in errors[0][1]
+    assert "CX-ANALYSIS-TEST" in errors[0][1]
+    assert str(tmp_path / "gui.log") in errors[0][1]
+    assert errors[0][2] is app.root
+    assert app.root.delay == 100
+

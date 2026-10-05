@@ -1964,6 +1964,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._property_filter_var,
         )
         self._property_filter_entry.pack(side="left", fill="x", expand=True)
+        self._property_filter_entry.bind(
+            "<Escape>",
+            lambda _event: (self._property_filter_var.set(""), "break")[1],
+        )
+        attach_tooltip(
+            self._property_filter_entry,
+            "Filter editable properties by field name, section, key, or engineering unit. Escape clears the filter.",
+        )
         ttk.Button(
             property_filter,
             text="×",

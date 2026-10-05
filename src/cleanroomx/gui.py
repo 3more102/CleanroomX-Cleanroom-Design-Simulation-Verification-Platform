@@ -6152,14 +6152,17 @@ class CleanroomXApp:
         self.input_text.configure(state="disabled" if running else "normal")
         progress = getattr(self, "run_progress", None)
         badge = getattr(self, "run_state_badge", None)
+        state_var = getattr(self, "run_state_var", None)
         if running:
-            self.run_state_var.set("RUNNING")
+            if state_var is not None:
+                state_var.set("RUNNING")
             if badge is not None:
                 badge.configure(style="CX.InfoBadge.TLabel")
             if progress is not None:
                 progress.start(70)
         else:
-            self.run_state_var.set("IDLE")
+            if state_var is not None:
+                state_var.set("IDLE")
             if badge is not None:
                 badge.configure(style="CX.SuccessBadge.TLabel")
             if progress is not None:

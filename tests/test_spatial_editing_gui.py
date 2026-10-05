@@ -1306,3 +1306,16 @@ def test_result_summary_keeps_raw_result_available_but_defaults_to_table(app):
     assert first_values[1] == "m³/h"
     assert app.result_summary_badge.cget("style") == "CX.Badge.Pass.TLabel"
     assert app.output_notebook.tab(app.result_text.master, "text") == "Results (JSON)"
+
+
+def test_engineering_status_badges_are_quick_navigation_controls(app):
+    app.hide_output_panel()
+    app.problems_state_badge.event_generate("<Button-1>")
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    app.run_state_badge.event_generate("<Button-1>")
+    app.root.update()
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.workspace_status_var.get() == "Workspace: Simulation / Inputs"

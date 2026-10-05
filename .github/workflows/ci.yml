@@ -95,7 +95,7 @@ jobs:
           tests/test_fan_variable_friction_uncertainty.py::test_selected_projection_replay_corruption_aggregates_exact_corner_evidence
           tests/test_fan_variable_friction_uncertainty.py::test_selected_projection_replay_missing_check_is_incomplete_coverage
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_selected_projection_corruption_evidence
-      - name: Run v0.100 application and desktop release regressions
+      - name: Run application and desktop release regressions
         run: >-
           python -m pytest -q
           tests/test_application.py
@@ -209,12 +209,12 @@ jobs:
           ):
               assert (demo_dir / name).is_file(), name
           PY
-      - name: Install virtual display for v0.100 GUI smoke
+      - name: Install virtual display for installed GUI smoke
         if: matrix.python-version == '3.13'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb tk
-      - name: Run v0.100 desktop GUI smoke from installed wheel
+      - name: Run desktop GUI smoke from installed wheel
         if: matrix.python-version == '3.13'
         run: |
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
@@ -233,7 +233,7 @@ jobs:
             tests/test_gui_simulation.py \
             tests/test_gui_reporting_workspace.py \
             tests/test_gui_workstation_dialogs.py
-      - name: Run representative v0.100 CLI smoke checks
+      - name: Run representative CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format markdown --output /tmp/cleanroomx-loop.md
@@ -348,6 +348,21 @@ jobs:
       - name: Smoke CMD checkout launcher
         shell: cmd
         run: start-cleanroomx.cmd --check
+      - name: Verify installed GUI-subsystem desktop launcher
+        shell: pwsh
+        run: |
+          $entryPoints = python -c "import importlib.metadata as m; print([ep.value for ep in m.distribution('cleanroomx').entry_points if ep.group == 'gui_scripts' and ep.name == 'cleanroomx-desktop'])"
+          if ($entryPoints -notmatch "cleanroomx.gui:main") {
+            throw "cleanroomx-desktop is not registered as a gui_scripts entry point"
+          }
+          $desktop = (Get-Command cleanroomx-desktop).Source
+          if (-not (Test-Path $desktop)) {
+            throw "cleanroomx-desktop launcher was not installed"
+          }
+          $process = Start-Process -FilePath $desktop -ArgumentList "--check" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "cleanroomx-desktop --check failed with exit code $($process.ExitCode)"
+          }
 
   required-ci:
     name: Required CI Gate

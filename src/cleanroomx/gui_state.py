@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 5
+GUI_LAYOUT_STATE_VERSION = 6
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -17,6 +17,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "theme": "dark",
     "density": "compact",
     "workspace_profile": "design",
+    "saved_layouts": {},
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -86,6 +87,62 @@ def _normalize_workspace_profile(value: Any) -> str:
     return token if token in allowed else _DEFAULT_GUI_LAYOUT_STATE["workspace_profile"]
 
 
+def _normalize_saved_layouts(value: Any) -> dict[str, dict[str, Any]]:
+    """Normalize bounded named workstation layouts without touching project data."""
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    for raw_name, raw_layout in value.items():
+        if not isinstance(raw_name, str) or not isinstance(raw_layout, dict):
+            continue
+        name = " ".join(raw_name.strip().split())
+        identity = name.casefold()
+        if (
+            not name
+            or len(name) > 40
+            or chr(0) in name
+            or identity in seen
+        ):
+            continue
+        seen.add(identity)
+        normalized[name] = {
+            "navigator_visible": (
+                raw_layout.get("navigator_visible")
+                if isinstance(raw_layout.get("navigator_visible"), bool)
+                else _DEFAULT_GUI_LAYOUT_STATE["navigator_visible"]
+            ),
+            "output_visible": (
+                raw_layout.get("output_visible")
+                if isinstance(raw_layout.get("output_visible"), bool)
+                else _DEFAULT_GUI_LAYOUT_STATE["output_visible"]
+            ),
+            "inspector_visible": (
+                raw_layout.get("inspector_visible")
+                if isinstance(raw_layout.get("inspector_visible"), bool)
+                else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
+            ),
+            "workspace_profile": _normalize_workspace_profile(
+                raw_layout.get("workspace_profile")
+            ),
+            "navigator_fraction": _bounded_fraction(
+                raw_layout.get("navigator_fraction"),
+                _DEFAULT_GUI_LAYOUT_STATE["navigator_fraction"],
+            ),
+            "output_fraction": _bounded_fraction(
+                raw_layout.get("output_fraction"),
+                _DEFAULT_GUI_LAYOUT_STATE["output_fraction"],
+            ),
+            "inspector_fraction": _bounded_fraction(
+                raw_layout.get("inspector_fraction"),
+                _DEFAULT_GUI_LAYOUT_STATE["inspector_fraction"],
+            ),
+        }
+        if len(normalized) >= 8:
+            break
+    return normalized
+
+
 def _normalize_recent_projects(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -136,6 +193,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         "density": _normalize_density(source.get("density")),
         "workspace_profile": _normalize_workspace_profile(
             source.get("workspace_profile")
+        ),
+        "saved_layouts": _normalize_saved_layouts(
+            source.get("saved_layouts")
         ),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")

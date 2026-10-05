@@ -48,6 +48,7 @@ class TreeviewTableBehavior:
         sortable_columns: Iterable[str],
         copy_columns: Iterable[str] | None = None,
         parent: str = "",
+        bind_copy: bool = True,
     ) -> None:
         self.tree = tree
         self.parent = parent
@@ -67,6 +68,7 @@ class TreeviewTableBehavior:
         self._heading_text: dict[str, str] = {}
         self._column_vars: dict[str, tk.BooleanVar] = {}
         self._context_column: str | None = None
+        self._bind_copy = bool(bind_copy)
 
         self._menu = tk.Menu(tree, tearoff=False)
         self._menu.add_command(
@@ -127,12 +129,20 @@ class TreeviewTableBehavior:
                 command=lambda selected=column: self.sort_by(selected),
             )
 
-        tree.bind("<Control-c>", self._copy_event, add="+")
-        tree.bind("<Control-C>", self._copy_event, add="+")
+        if self._bind_copy:
+            tree.bind("<Control-c>", self._copy_event, add="+")
+            tree.bind("<Control-C>", self._copy_event, add="+")
+        if str(tree.cget("selectmode")) == "extended":
+            tree.bind("<Control-a>", self._select_all_event, add="+")
+            tree.bind("<Control-A>", self._select_all_event, add="+")
         tree.bind("<Button-3>", self._context_menu, add="+")
 
     def _copy_event(self, _event=None):
         self.copy_selected()
+        return "break"
+
+    def _select_all_event(self, _event=None):
+        self.select_all()
         return "break"
 
     def _context_menu(self, event: tk.Event):

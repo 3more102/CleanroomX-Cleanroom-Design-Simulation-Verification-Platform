@@ -230,3 +230,29 @@ def test_project_navigator_uses_semantic_engineering_domain_tags(app):
     )
     assert "domain_geometry" in app.analysis_tree.item(room_iid, "tags")
     assert "domain_airflow" in app.analysis_tree.item("nav-airflow", "tags")
+
+def test_problem_domain_filter_and_locate_state_follow_selection(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    domain = str(issue.get("category") or "")
+    assert domain
+    assert domain in tuple(panel.domain_picker.cget("values"))
+
+    panel.domain_var.set(domain)
+    app.root.update()
+    visible = panel.tree.get_children()
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid].get("category") or "") == domain
+        for iid in visible
+    )
+
+    panel.tree.selection_remove(*panel.tree.selection())
+    panel._show_selected_detail()
+    assert str(panel.locate_button.cget("state")) == "disabled"
+
+    target = visible[0]
+    panel.tree.selection_set(target)
+    panel._show_selected_detail()
+    assert str(panel.locate_button.cget("state")) == "normal"
+

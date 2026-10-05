@@ -370,6 +370,14 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 9, "bold"),
     )
     style.configure(
+        "CX.Tooltip.TLabel",
+        background=palette["elevated"],
+        foreground=palette["text"],
+        relief="solid",
+        borderwidth=1,
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
         padding=(4, 3),

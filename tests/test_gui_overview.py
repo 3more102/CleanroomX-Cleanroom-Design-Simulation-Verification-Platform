@@ -90,3 +90,59 @@ def test_engineering_overview_snapshot_does_not_turn_unavailable_data_into_zero(
     assert "Verification currency unavailable" in titles
     assert "Verification evidence history unavailable" in titles
     assert "No retained verification evidence" not in titles
+
+
+
+def test_engineering_overview_requires_attention_for_missing_persisted_evidence() -> None:
+    snapshot = engineering_overview_snapshot(
+        project_name="Evidence Gap",
+        project_path="/tmp/evidence.cleanroomx.json",
+        analysis_count=1,
+        diagnostics={"summary": {"error_count": 0, "warning_count": 0}},
+        verification_currency={
+            "summary": {
+                "configured_analysis_count": 1,
+                "current_count": 1,
+                "stale_count": 0,
+                "not_verified_count": 0,
+                "not_configured_count": 0,
+                "dependency_freshness_unverifiable_count": 0,
+            }
+        },
+        evidence_record_count=0,
+        running=False,
+        unsaved=False,
+    )
+
+    assert snapshot["overall"]["state"] == "warning"
+    assert any(
+        action["title"] == "No retained verification evidence"
+        for action in snapshot["actions"]
+    )
+
+
+def test_engineering_overview_marks_unconfigured_verification_as_attention() -> None:
+    snapshot = engineering_overview_snapshot(
+        project_name="Coverage Gap",
+        project_path="/tmp/coverage.cleanroomx.json",
+        analysis_count=2,
+        diagnostics={"summary": {"error_count": 0, "warning_count": 0}},
+        verification_currency={
+            "summary": {
+                "configured_analysis_count": 1,
+                "current_count": 1,
+                "stale_count": 0,
+                "not_verified_count": 0,
+                "not_configured_count": 1,
+                "dependency_freshness_unverifiable_count": 0,
+            }
+        },
+        evidence_record_count=1,
+        running=False,
+        unsaved=False,
+    )
+
+    cards = {card["id"]: card for card in snapshot["cards"]}
+    assert snapshot["overall"]["state"] == "warning"
+    assert cards["verification"]["state"] == "warning"
+    assert "1 unconfigured" in cards["verification"]["detail"]

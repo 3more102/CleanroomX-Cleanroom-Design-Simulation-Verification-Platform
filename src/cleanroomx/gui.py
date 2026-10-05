@@ -79,7 +79,11 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_theme import (
+    configure_ttk_theme,
+    engineering_status_style,
+    normalize_theme_name,
+)
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1261,6 +1265,10 @@ class CleanroomXApp:
         self.verification_state_var = tk.StringVar(value="VERIFY —")
         self.evidence_state_var = tk.StringVar(value="EVIDENCE —")
         self.run_state_var = tk.StringVar(value="IDLE")
+        self.simulation_analysis_var = tk.StringVar(value="No analysis selected")
+        self.simulation_kind_var = tk.StringVar(value="No solver workflow")
+        self.simulation_state_var = tk.StringVar(value="IDLE")
+        self.simulation_result_var = tk.StringVar(value="NO CURRENT RESULT")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -1997,9 +2005,56 @@ class CleanroomXApp:
         self.notebook.add(self.spatial_workspace, text="Design")
 
         self.input_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.input_tab, text="Input")
+        self.notebook.add(self.input_tab, text="Simulation")
+
+        simulation_header = ttk.Frame(
+            self.input_tab,
+            style="CX.PanelHeader.TFrame",
+            padding=(8, 5),
+        )
+        simulation_header.pack(fill="x", padx=4, pady=(4, 3))
+        ttk.Label(
+            simulation_header,
+            text="SIMULATION WORKBENCH",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left", padx=(0, 10))
+        ttk.Label(
+            simulation_header,
+            textvariable=self.simulation_analysis_var,
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Label(
+            simulation_header,
+            textvariable=self.simulation_kind_var,
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        self.simulation_state_badge = ttk.Label(
+            simulation_header,
+            textvariable=self.simulation_state_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.simulation_state_badge.pack(side="left", padx=3)
+        self.simulation_result_badge = ttk.Label(
+            simulation_header,
+            textvariable=self.simulation_result_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.simulation_result_badge.pack(side="left", padx=3)
+        ttk.Button(
+            simulation_header,
+            text="Validate",
+            style="CX.Compact.TButton",
+            command=self.validate_current,
+        ).pack(side="right", padx=1)
+        ttk.Button(
+            simulation_header,
+            text="▶ Run",
+            style="CX.Primary.TButton",
+            command=self.run_current,
+        ).pack(side="right", padx=1)
+
         input_notebook = ttk.Notebook(self.input_tab)
-        input_notebook.pack(fill="both", expand=True)
+        input_notebook.pack(fill="both", expand=True, padx=4, pady=(0, 4))
 
         structured_tab = ttk.Frame(input_notebook)
         input_notebook.add(structured_tab, text="Structured")
@@ -3372,6 +3427,62 @@ class CleanroomXApp:
             self._set_navigator_active("simulation")
             self.workspace_status_var.set("Workspace: Simulation / Inputs")
 
+    def _update_simulation_workbench(
+        self,
+        analysis: AnalysisDocument | None = None,
+    ) -> None:
+        if not hasattr(self, "simulation_analysis_var"):
+            return
+        analysis = analysis or self._editor_analysis()
+        if analysis is None:
+            self.simulation_analysis_var.set("No analysis selected")
+            self.simulation_kind_var.set("No solver workflow")
+            self.simulation_state_var.set("IDLE")
+            self.simulation_result_var.set("NO CURRENT RESULT")
+            if hasattr(self, "simulation_state_badge"):
+                self.simulation_state_badge.configure(
+                    style="CX.Badge.Unknown.TLabel"
+                )
+            if hasattr(self, "simulation_result_badge"):
+                self.simulation_result_badge.configure(
+                    style="CX.Badge.Unknown.TLabel"
+                )
+            return
+
+        spec = ANALYSIS_SPECS[analysis.kind]
+        self.simulation_analysis_var.set(analysis.name)
+        self.simulation_kind_var.set(f"{spec.title} · {analysis.kind}")
+
+        if self._running:
+            state = "RUNNING"
+            state_style = "CX.Badge.Running.TLabel"
+        else:
+            state = "READY"
+            state_style = "CX.Badge.Unknown.TLabel"
+        self.simulation_state_var.set(state)
+        if hasattr(self, "simulation_state_badge"):
+            self.simulation_state_badge.configure(style=state_style)
+
+        run = self._runs_by_analysis.get(analysis.id)
+        current = bool(
+            run is not None
+            and analysis_run_is_current(
+                run,
+                analysis.kind,
+                analysis.input,
+                base_dir=self._base_dir(),
+            )
+        )
+        if current:
+            result_state = str(run.status or "complete").upper()
+            self.simulation_result_var.set(f"RESULT {result_state}")
+            result_style = engineering_status_style(run.status)
+        else:
+            self.simulation_result_var.set("NO CURRENT RESULT")
+            result_style = "CX.Badge.Unknown.TLabel"
+        if hasattr(self, "simulation_result_badge"):
+            self.simulation_result_badge.configure(style=result_style)
+
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
         if self._running:
@@ -3435,6 +3546,8 @@ class CleanroomXApp:
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
         self._draw_plot()
+        if hasattr(self, "simulation_result_var"):
+            self._update_simulation_workbench()
 
     def _clear_run_cache(self) -> None:
         self._runs_by_analysis.clear()
@@ -4434,6 +4547,7 @@ class CleanroomXApp:
             self.input_text.delete("1.0", "end")
             self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
+            self._update_simulation_workbench(None)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
 
@@ -4778,6 +4892,7 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        self._update_simulation_workbench(analysis)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()
@@ -6362,6 +6477,7 @@ class CleanroomXApp:
                 progress.start(12)
             else:
                 progress.stop()
+        self._update_simulation_workbench()
 
     def _poll_worker(self) -> None:
         try:
@@ -6458,6 +6574,7 @@ class CleanroomXApp:
             self.spatial_workspace.redraw()
             self.spatial_workspace._load_property_panel()
         self._refresh_engineering_panels()
+        self._update_simulation_workbench()
         if select_results:
             self.output_notebook.select(self.result_text.master)
 

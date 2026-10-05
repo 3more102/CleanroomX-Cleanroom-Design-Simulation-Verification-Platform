@@ -264,6 +264,22 @@ def test_model_badge_reflects_existing_spatial_validation_advisories(app, monkey
     assert app.shell_model_badge_var.get() == "MODEL READY"
     assert app.shell_model_badge.cget("style") == "CX.Status.Pass.TLabel"
 
+def test_canvas_rulers_toggle_without_mutating_spatial_project_data(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+
+    workspace._show_rulers.set(True)
+    workspace.redraw()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag("ruler")
+
+    workspace._show_rulers.set(False)
+    workspace.redraw()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag("ruler")
+    assert workspace.layout == before
+
+
 def test_device_category_visibility_filters_canvas_without_mutating_project(app):
     workspace = app.spatial_workspace
     device = workspace.layout["devices"][0]

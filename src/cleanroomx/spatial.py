@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from .gui_theme import theme_palette
+from .gui_widgets import attach_tooltip
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1689,6 +1690,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             width=13,
         )
         overlay_picker.pack(side="left")
+        attach_tooltip(
+            overlay_picker,
+            "Engineering visualization overlay. ACH means Air Changes per Hour; pressure and airflow views use current project/result data.",
+        )
         overlay_picker.bind(
             "<<ComboboxSelected>>",
             lambda _event: self._set_overlay_mode(self._overlay_mode.get()),

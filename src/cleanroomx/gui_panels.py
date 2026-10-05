@@ -346,14 +346,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         )
         headings = {
             "severity": "Severity",
-            "code": "Code",
-            "description": "Description",
+            "code": "Rule / code",
+            "description": "Engineering finding",
             "object": "Object",
             "level": "Level",
-            "source": "Source",
+            "source": "Category",
         }
         widths = {
-            "severity": 90,
+            "severity": 88,
             "code": 220,
             "description": 520,
             "object": 180,

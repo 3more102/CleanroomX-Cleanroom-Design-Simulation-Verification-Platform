@@ -1512,7 +1512,11 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(
+            self.root,
+            style="CX.Topbar.TFrame",
+            padding=(10, 6, 10, 5),
+        )
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
@@ -1957,7 +1961,11 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(
+            self.root,
+            style="CX.Statusbar.TFrame",
+            padding=(8, 4),
+        )
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
@@ -1967,15 +1975,15 @@ class CleanroomXApp:
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.model_status_var, style="CX.Statusbar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.selection_status_var, style="CX.Statusbar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.workspace_status_var, style="CX.Statusbar.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -2207,6 +2215,7 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+            problems_panel.apply_theme()
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(

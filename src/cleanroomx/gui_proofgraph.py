@@ -434,6 +434,32 @@ class ProofGraphViewer(ttk.Frame):
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
 
+        lifecycle = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(7, 3),
+        )
+        lifecycle.pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            lifecycle,
+            text="TRACEABILITY",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Label(
+            lifecycle,
+            text=(
+                "Requirement  →  Model  →  Calculation  →  "
+                "Verification  →  Evidence  →  Report"
+            ),
+            style="CX.Muted.TLabel",
+        ).pack(side="left")
+        ttk.Button(
+            lifecycle,
+            text="Locate selected",
+            style="CX.Compact.TButton",
+            command=self._navigate_selected,
+        ).pack(side="right")
+
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
 
@@ -471,25 +497,86 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.bind("<Double-1>", self._navigate_selected)
         self.canvas.bind("<Configure>", lambda _event: self._draw_graph())
 
+        detail_header = ttk.Frame(
+            detail_host,
+            style="CX.PanelHeader.TFrame",
+        )
+        detail_header.pack(fill="x", padx=4, pady=(4, 3))
         ttk.Label(
-            detail_host,
-            text="NODE DETAILS",
-            style="CX.Section.TLabel",
-        ).pack(anchor="w", padx=7, pady=(6, 3))
-        self.detail = tk.Text(
-            detail_host,
+            detail_header,
+            text="TRACEABILITY INSPECTOR",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Button(
+            detail_header,
+            text="Locate",
+            style="CX.Compact.TButton",
+            command=self._navigate_selected,
+        ).pack(side="right")
+
+        self.detail_notebook = ttk.Notebook(detail_host)
+        self.detail_notebook.pack(fill="both", expand=True, padx=4, pady=(0, 5))
+
+        summary_tab = ttk.Frame(self.detail_notebook)
+        technical_tab = ttk.Frame(self.detail_notebook)
+        self.detail_notebook.add(summary_tab, text="Summary")
+        self.detail_notebook.add(technical_tab, text="Technical JSON")
+
+        self.summary_detail = tk.Text(
+            summary_tab,
             wrap="word",
             state="disabled",
             borderwidth=0,
         )
-        detail_scroll = ttk.Scrollbar(
-            detail_host,
+        summary_scroll = ttk.Scrollbar(
+            summary_tab,
             orient="vertical",
-            command=self.detail.yview,
+            command=self.summary_detail.yview,
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
-        detail_scroll.pack(side="right", fill="y", pady=(0, 6))
+        self.summary_detail.configure(yscrollcommand=summary_scroll.set)
+        self.summary_detail.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(5, 0),
+            pady=4,
+        )
+        summary_scroll.pack(side="right", fill="y", pady=4)
+
+        self.technical_detail = tk.Text(
+            technical_tab,
+            wrap="none",
+            state="disabled",
+            borderwidth=0,
+        )
+        technical_y = ttk.Scrollbar(
+            technical_tab,
+            orient="vertical",
+            command=self.technical_detail.yview,
+        )
+        technical_x = ttk.Scrollbar(
+            technical_tab,
+            orient="horizontal",
+            command=self.technical_detail.xview,
+        )
+        self.technical_detail.configure(
+            yscrollcommand=technical_y.set,
+            xscrollcommand=technical_x.set,
+        )
+        self.technical_detail.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(5, 0),
+            pady=4,
+        )
+        technical_y.grid(row=0, column=1, sticky="ns", pady=4)
+        technical_x.grid(row=1, column=0, sticky="ew", padx=(5, 0))
+        technical_tab.rowconfigure(0, weight=1)
+        technical_tab.columnconfigure(0, weight=1)
+
+        # Compatibility handle retained for callers that previously themed detail.
+        self.detail = self.summary_detail
 
     def set_documents(self, documents: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> None:
         unique: dict[str, dict[str, Any]] = {}
@@ -567,11 +654,17 @@ class ProofGraphViewer(ttk.Frame):
                 )
             iid = f"node:{len(self._tree_key_by_iid)}"
             suffix = f" [{node['status'].upper()}]" if node.get("status") else ""
+            status_tag = (
+                f"status:{node['status'].casefold()}"
+                if node.get("status")
+                else "status:unknown"
+            )
             self.tree.insert(
                 groups[node_type],
                 "end",
                 iid=iid,
                 text=f"{node['label']}{suffix}",
+                tags=(f"type:{node_type}", status_tag),
             )
             self._tree_key_by_iid[iid] = node["key"]
             if node["key"] == self._selected_key:
@@ -622,6 +715,44 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.configure(
             background=self._theme_palette["canvas_2d"],
             highlightbackground=self._theme_palette["border"],
+        )
+        for widget in (self.summary_detail, self.technical_detail):
+            widget.configure(
+                background=self._theme_palette["field"],
+                foreground=self._theme_palette["field_text"],
+                insertbackground=self._theme_palette["text"],
+                selectbackground=self._theme_palette["selection"],
+                selectforeground=self._theme_palette["selection_text"],
+            )
+        type_colors = {
+            "requirement": self._theme_palette["hvac"],
+            "model_object": self._theme_palette["geometry"],
+            "ifc": self._theme_palette["geometry"],
+            "source": self._theme_palette["muted"],
+            "calculation": self._theme_palette["simulation"],
+            "evidence": self._theme_palette["evidence"],
+            "check": self._theme_palette["warning"],
+            "finding": self._theme_palette["utilities"],
+            "verdict": self._theme_palette["verification"],
+            "verification_run": self._theme_palette["verification"],
+        }
+        for node_type, color in type_colors.items():
+            self.tree.tag_configure(f"type:{node_type}", foreground=color)
+        self.tree.tag_configure(
+            "status:fail",
+            foreground=self._theme_palette["error"],
+        )
+        self.tree.tag_configure(
+            "status:failed",
+            foreground=self._theme_palette["error"],
+        )
+        self.tree.tag_configure(
+            "status:error",
+            foreground=self._theme_palette["error"],
+        )
+        self.tree.tag_configure(
+            "status:warning",
+            foreground=self._theme_palette["warning"],
         )
         if redraw:
             self._draw_graph()
@@ -739,20 +870,84 @@ class ProofGraphViewer(ttk.Frame):
         if key:
             self._select_key(key)
 
+    @staticmethod
+    def _summary_lines(node: dict[str, Any]) -> list[str]:
+        raw = node.get("raw", {})
+        if not isinstance(raw, dict):
+            raw = {}
+        lines = [
+            node["type"].replace("_", " ").upper(),
+            node["label"],
+            "",
+            f"Identifier: {node.get('id', '')}",
+        ]
+        if node.get("status"):
+            lines.append(f"Status: {str(node['status']).upper()}")
+        flags = [str(value) for value in node.get("flags", ()) if value]
+        if flags:
+            lines.append("Traceability flags: " + ", ".join(flags))
+
+        field_labels = (
+            ("requirement_id", "Requirement"),
+            ("check_id", "Check"),
+            ("subject_ref", "Model subject"),
+            ("cleanroomx_entity_id", "CleanroomX entity"),
+            ("ifc_global_id", "IFC GlobalId"),
+            ("source_id", "Evidence source"),
+            ("kind", "Kind"),
+            ("property_name", "Property"),
+            ("unit", "Unit"),
+            ("reason", "Reason"),
+            ("reference", "Source reference"),
+            ("timestamp", "Timestamp"),
+            ("created_at", "Created"),
+            ("version", "Version"),
+        )
+        presented = False
+        for key, label in field_labels:
+            value = raw.get(key)
+            if value not in (None, "", [], {}):
+                if not presented:
+                    lines.extend(("", "TRACEABILITY CONTEXT"))
+                    presented = True
+                lines.append(f"{label}: {value}")
+
+        provenance = raw.get("provenance")
+        if isinstance(provenance, list):
+            if not presented:
+                lines.extend(("", "TRACEABILITY CONTEXT"))
+            lines.append(f"Provenance records: {len(provenance)}")
+        evidence_ids = raw.get("evidence_ids")
+        if isinstance(evidence_ids, list):
+            if not presented:
+                lines.extend(("", "TRACEABILITY CONTEXT"))
+            lines.append(f"Linked evidence items: {len(evidence_ids)}")
+        finding_ids = raw.get("finding_ids")
+        if isinstance(finding_ids, list):
+            if not presented:
+                lines.extend(("", "TRACEABILITY CONTEXT"))
+            lines.append(f"Linked findings: {len(finding_ids)}")
+        return lines
+
     def _show_selected_detail(self) -> None:
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
+        for widget in (self.summary_detail, self.technical_detail):
+            widget.configure(state="normal")
+            widget.delete("1.0", "end")
+
         node = self._nodes_by_key.get(self._selected_key or "")
-        if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
+        if node is None:
+            self.summary_detail.insert(
+                "1.0",
+                (
+                    "No ProofGraph node selected.\n\n"
+                    "Select a requirement, model object, calculation, verification "
+                    "node, or evidence node to inspect its traceability context."
+                ),
             )
-            if node.get("status"):
-                header += f"Status: {node['status'].upper()}\n"
-            self.detail.insert("1.0", header + "\n")
-            self.detail.insert(
-                "end",
+        else:
+            self.summary_detail.insert("1.0", "\n".join(self._summary_lines(node)))
+            self.technical_detail.insert(
+                "1.0",
                 json.dumps(
                     node.get("raw", {}),
                     indent=2,
@@ -761,7 +956,9 @@ class ProofGraphViewer(ttk.Frame):
                     allow_nan=False,
                 ),
             )
-        self.detail.configure(state="disabled")
+
+        for widget in (self.summary_detail, self.technical_detail):
+            widget.configure(state="disabled")
 
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")

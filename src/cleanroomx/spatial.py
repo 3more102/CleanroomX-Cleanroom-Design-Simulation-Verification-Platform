@@ -1703,6 +1703,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_labels = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
         self._show_relationships = tk.BooleanVar(value=True)
+        self._device_type_visibility_vars = {
+            device_type: tk.BooleanVar(value=True) for device_type in DEVICE_TYPES
+        }
         self._overlay_mode = tk.StringVar(value="Pressure")
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
@@ -1883,6 +1886,46 @@ class SpatialDesignWorkspace(ttk.Frame):
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
+
+        self._device_categories_button = ttk.Menubutton(
+            viewbar,
+            text="Categories 10/10",
+            style="CX.Compact.TButton",
+        )
+        category_menu = tk.Menu(self._device_categories_button, tearoff=False)
+        self._device_categories_button.configure(menu=category_menu)
+        self._device_categories_button.pack(side="left", padx=(7, 2))
+        category_labels = {
+            "door": "Doors",
+            "window": "Windows",
+            "opening": "Openings",
+            "supply": "Supply",
+            "return": "Return",
+            "exhaust": "Exhaust",
+            "ffu": "FFUs",
+            "equipment": "Equipment",
+            "sensor": "Sensors",
+            "transfer": "Transfer",
+        }
+        for device_type in DEVICE_TYPES:
+            category_menu.add_checkbutton(
+                label=category_labels.get(device_type, device_type.title()),
+                variable=self._device_type_visibility_vars[device_type],
+                command=lambda t=device_type: self._on_device_type_visibility_changed(t),
+            )
+        category_menu.add_separator()
+        category_menu.add_command(
+            label="Show all categories",
+            command=lambda: self.set_all_device_types_visible(True),
+        )
+        category_menu.add_command(
+            label="Hide all categories",
+            command=lambda: self.set_all_device_types_visible(False),
+        )
+        attach_tooltip(
+            self._device_categories_button,
+            "Control device/opening categories without changing project data.",
+        )
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
         ttk.Button(
             viewbar,
@@ -2443,18 +2486,70 @@ class SpatialDesignWorkspace(ttk.Frame):
         variable = getattr(self, "_tool_mode", None)
         return variable.get() if variable is not None else "select"
 
+    def _visible_device_type_count(self) -> int:
+        variables = getattr(self, "_device_type_visibility_vars", {})
+        return sum(
+            1
+            for device_type in DEVICE_TYPES
+            if device_type in variables and bool(variables[device_type].get())
+        )
+
+    def _refresh_device_category_summary(self) -> None:
+        button = getattr(self, "_device_categories_button", None)
+        if button is None:
+            return
+        visible = self._visible_device_type_count()
+        try:
+            button.configure(text=f"Categories {visible}/{len(DEVICE_TYPES)}")
+        except tk.TclError:
+            pass
+
+    def _on_device_type_visibility_changed(self, device_type: str) -> None:
+        if device_type not in DEVICE_TYPES:
+            return
+        self._refresh_device_category_summary()
+        visible = self._visible_device_type_count()
+        self._status_setter(
+            f"Device categories: {visible}/{len(DEVICE_TYPES)} visible"
+        )
+        self.redraw()
+
+    def set_device_type_visible(self, device_type: str, visible: bool) -> None:
+        token = str(device_type or "").strip().lower()
+        if token not in DEVICE_TYPES:
+            raise ValueError(f"unsupported device category: {device_type}")
+        self._device_type_visibility_vars[token].set(bool(visible))
+        self._on_device_type_visibility_changed(token)
+
+    def set_all_device_types_visible(self, visible: bool) -> None:
+        requested = bool(visible)
+        for variable in self._device_type_visibility_vars.values():
+            variable.set(requested)
+        self._refresh_device_category_summary()
+        action = "shown" if requested else "hidden"
+        self._status_setter(f"All device categories {action}")
+        self.redraw()
+
     def _is_item_visible(self, kind: str, item_id: str) -> bool:
         hidden_item_ids = getattr(self, "_hidden_item_ids", set())
         isolated_item = getattr(self, "_isolated_item", None)
         if self._hit_key(kind, item_id) in hidden_item_ids:
             return False
 
+        device = None
         if kind == "device":
             device = next(
                 (item for item in self.layout["devices"] if item["id"] == item_id),
                 None,
             )
-            room_id = str(device.get("room_id") or "") if device else ""
+            if device is None:
+                return False
+            device_type = str(device.get("type") or "").strip().lower()
+            variables = getattr(self, "_device_type_visibility_vars", {})
+            visibility_var = variables.get(device_type)
+            if visibility_var is not None and not bool(visibility_var.get()):
+                return False
+            room_id = str(device.get("room_id") or "")
             if room_id and self._hit_key("room", room_id) in hidden_item_ids:
                 return False
 

@@ -234,3 +234,44 @@ def test_simulation_workspace_tracks_completed_session_result(app):
     assert run.title in app.simulation_workspace.result_var.get()
     assert run.status.upper() == app.simulation_workspace.state_var.get()
     assert app.simulation_workspace.cancel_button.cget("state") == "disabled"
+
+
+def test_workspace_presets_rearrange_real_workspaces_without_model_mutation(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.activate_workspace_preset("design")
+    app.root.update()
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is False
+    assert app.spatial_workspace.inspector_visible()
+
+    app.activate_workspace_preset("simulation")
+    app.root.update()
+    assert app.notebook.select() == str(app.simulation_workspace)
+    assert app.output_panel_visible_var.get() is True
+    assert app.output_notebook.select() == str(app.result_text.master)
+    assert not app.spatial_workspace.inspector_visible()
+
+    app.activate_workspace_preset("verification")
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    app.activate_workspace_preset("evidence")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+
+    app.activate_workspace_preset("reporting")
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.navigator_panel_visible_var.get() is False
+    assert app.output_notebook.select() == str(app.report_text.master)
+
+    assert app.project.to_dict() == project_before
+
+
+def test_workspace_preset_rejects_unknown_layout(app):
+    with pytest.raises(ValueError, match="unsupported workspace preset"):
+        app.activate_workspace_preset("unknown")

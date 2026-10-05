@@ -84,6 +84,10 @@ $process = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
 if ($process.ExitCode -ne 0) {
     throw "Frozen CleanroomX --check failed with exit code $($process.ExitCode)"
 }
+$smoke = Start-Process -FilePath $exe -ArgumentList @("--demo", "--smoke") -Wait -PassThru
+if ($smoke.ExitCode -ne 0) {
+    throw "Frozen CleanroomX GUI smoke failed with exit code $($smoke.ExitCode)"
+}
 
-Write-Host "Standalone CleanroomX executable validated: $exe"
+Write-Host "Standalone CleanroomX executable and GUI smoke validated: $exe"
 Write-Host "Windows product metadata validated: CleanroomX $projectVersion"

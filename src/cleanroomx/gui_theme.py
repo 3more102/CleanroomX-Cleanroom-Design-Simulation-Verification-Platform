@@ -34,6 +34,10 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "warning": "#b45309",
         "error": "#dc2626",
         "info": "#0284c7",
+        "healthy": "#65a30d",
+        "attention": "#ea580c",
+        "simulation": "#7c3aed",
+        "evidence": "#16a34a",
     },
     "dark": {
         "background": "#0b1220",
@@ -61,6 +65,10 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "warning": "#f59e0b",
         "error": "#ef4444",
         "info": "#38bdf8",
+        "healthy": "#84cc16",
+        "attention": "#f97316",
+        "simulation": "#a78bfa",
+        "evidence": "#22c55e",
     },
 }
 
@@ -344,6 +352,26 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     )
     style.configure("CX.Card.TFrame", background=palette["panel"])
     style.configure(
+        "CX.Instrument.TFrame",
+        background=palette["surface"],
+        bordercolor=palette["border"],
+        relief="solid",
+        borderwidth=1,
+        padding=(8, 6),
+    )
+    style.configure(
+        "CX.InstrumentLabel.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.InstrumentValue.TLabel",
+        background=palette["surface"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
         "CX.Card.TLabel",
         background=palette["panel"],
         foreground=palette["text"],
@@ -423,6 +451,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ("Warning", palette["warning"]),
         ("Error", palette["error"]),
         ("Info", palette["info"]),
+        ("Healthy", palette["healthy"]),
+        ("Attention", palette["attention"]),
+        ("Simulation", palette["simulation"]),
+        ("Evidence", palette["evidence"]),
     ):
         style.configure(
             f"CX.{name}.TLabel",
@@ -443,6 +475,50 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             padding=(7, 3),
             font=("TkDefaultFont", 8, "bold"),
         )
+
+    style.configure(
+        "CX.StatusBar.TFrame",
+        background=palette["surface"],
+        bordercolor=palette["border"],
+        relief="solid",
+        borderwidth=1,
+        padding=(7, 4),
+    )
+    style.configure(
+        "CX.StatusText.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "CX.StatusStrong.TLabel",
+        background=palette["surface"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.Topbar.TFrame",
+        background=palette["surface"],
+        padding=(10, 6),
+    )
+    style.configure(
+        "CX.TopbarLabel.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.TopbarValue.TLabel",
+        background=palette["surface"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.Domain.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["accent_secondary"],
+        padding=(6, 3),
+        font=("TkDefaultFont", 8, "bold"),
+    )
 
     style.configure(
         "CX.Toolbar.TFrame",

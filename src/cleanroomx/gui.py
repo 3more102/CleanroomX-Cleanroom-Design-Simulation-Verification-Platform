@@ -5046,6 +5046,20 @@ class CleanroomXApp:
                 keywords=("find", "room", "device", "analysis", "diagnostic", "requirement", "evidence"),
             ),
             PaletteCommand(
+                "navigator.favorite.toggle",
+                "Toggle Selected Navigator Favorite",
+                "Navigation",
+                self.toggle_selected_navigator_favorite,
+                keywords=("favorite", "bookmark", "star", "navigator", "selection"),
+            ),
+            PaletteCommand(
+                "navigator.favorites.clear",
+                "Clear Project Navigator Favorites",
+                "Navigation",
+                self.clear_navigator_favorites,
+                keywords=("favorite", "bookmark", "navigator", "clear"),
+            ),
+            PaletteCommand(
                 "workspace.start",
                 "Open Start Center",
                 "Window",

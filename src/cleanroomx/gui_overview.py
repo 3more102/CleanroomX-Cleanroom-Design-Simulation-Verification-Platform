@@ -111,6 +111,33 @@ def engineering_overview_snapshot(
     execution_detail = "Analysis currently running" if running else "No analysis running"
 
     actions: list[dict[str, str]] = []
+    if diagnostics is None:
+        actions.append(
+            {
+                "severity": "warning",
+                "title": "Project diagnostics unavailable",
+                "detail": "Open Problems and refresh the canonical diagnostics service.",
+                "target": "problems",
+            }
+        )
+    if verification_currency is None:
+        actions.append(
+            {
+                "severity": "warning",
+                "title": "Verification currency unavailable",
+                "detail": "Open Verification and refresh the current project state.",
+                "target": "verification",
+            }
+        )
+    if not evidence_available:
+        actions.append(
+            {
+                "severity": "warning",
+                "title": "Verification evidence history unavailable",
+                "detail": "Open Evidence and inspect persisted verification history.",
+                "target": "evidence",
+            }
+        )
     if errors:
         actions.append(
             {
@@ -193,9 +220,14 @@ def engineering_overview_snapshot(
             }
         )
 
+    unavailable = (
+        diagnostics is None
+        or verification_currency is None
+        or not evidence_available
+    )
     overall_state = "fail" if errors else (
         "warning"
-        if warnings or stale or not_verified or unverifiable or unsaved
+        if warnings or stale or not_verified or unverifiable or unsaved or unavailable
         else "pass"
     )
     overall_text = {

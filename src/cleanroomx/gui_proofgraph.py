@@ -930,6 +930,49 @@ class ProofGraphViewer(ttk.Frame):
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None
 
+    def search_nodes(self, query: str, *, limit: int = 24) -> list[dict[str, Any]]:
+        projection = proofgraph_projection(self._active_document())
+        searched = _searched_projection(projection, query)
+        matched = []
+        tokens = [
+            token
+            for token in str(query or "").strip().casefold().split()
+            if token
+        ]
+        for node in searched.get("nodes", []):
+            haystack = " ".join(
+                (
+                    _text(node.get("type")),
+                    _text(node.get("id")),
+                    _text(node.get("label")),
+                    _text(node.get("status")),
+                    json.dumps(
+                        node.get("raw", {}),
+                        sort_keys=True,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    ),
+                )
+            ).casefold()
+            if tokens and all(token in haystack for token in tokens):
+                matched.append(node)
+            if len(matched) >= max(1, int(limit)):
+                break
+        return matched
+
+    def reveal_node(self, key: str, *, navigate: bool = False) -> bool:
+        if not key:
+            return False
+        self.filter_var.set("All")
+        self.search_var.set("")
+        self._refresh()
+        if key not in self._nodes_by_key:
+            return False
+        self._select_key(key)
+        if navigate:
+            self._navigate_selected()
+        return True
+
     def _navigate_selected(self, _event=None):
         node = self.selected_node()
         if node is None:

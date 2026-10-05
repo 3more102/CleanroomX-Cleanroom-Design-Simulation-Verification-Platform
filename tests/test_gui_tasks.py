@@ -77,6 +77,45 @@ def test_task_center_separates_execution_state_from_engineering_result():
         root.destroy()
 
 
+def test_task_center_abandon_action_delegates_to_controller_truth():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    configure_ttk_theme(root, "dark")
+    requested: list[str] = []
+    center = TaskCenter(
+        root,
+        on_abandon=lambda task_key: requested.append(task_key) or True,
+    )
+    try:
+        center.start_task(
+            "analysis:2",
+            "Airflow Balance",
+            category="Analysis",
+            stage="Executing backend",
+            started_at="10:20:00",
+        )
+        root.update_idletasks()
+        assert str(center.abandon_button.cget("state")) == "normal"
+        assert center.abandon_selected() is True
+        assert requested == ["analysis:2"]
+
+        center.update_task("analysis:2", state="abandon requested")
+        root.update_idletasks()
+        assert str(center.abandon_button.cget("state")) == "disabled"
+        assert center.abandon_selected() is False
+
+        center.update_task("analysis:2", state="completed")
+        root.update_idletasks()
+        assert str(center.abandon_button.cget("state")) == "disabled"
+    finally:
+        root.destroy()
+
+
 @pytest.fixture
 def app(tmp_path):
     try:
@@ -140,3 +179,35 @@ def test_application_exposes_task_center_and_controller_lifecycle(app):
     app.root.update_idletasks()
     assert app.output_notebook.select() == str(app.task_center)
     assert app.output_panel_visible_var.get() is True
+
+def test_application_task_center_abandon_uses_existing_cancel_controller(app):
+    app.task_center.start_task(
+        "analysis:cancel",
+        "Cancelable analysis",
+        category="Analysis",
+        stage="Executing backend",
+        started_at="10:30:00",
+    )
+    app._active_run_task_id = "analysis:cancel"
+    app._running = True
+    app._abandon_requested = False
+    app.task_center.tree.selection_set("analysis:cancel")
+    app.task_center.tree.focus("analysis:cancel")
+    app.task_center._sync_detail()
+
+    try:
+        assert str(app.task_center.abandon_button.cget("state")) == "normal"
+        assert app.task_center.abandon_selected() is True
+        assert app._abandon_requested is True
+        record = next(
+            item for item in app.task_center.records
+            if item.key == "analysis:cancel"
+        )
+        assert record.state == "abandon requested"
+        assert "backend worker" in record.stage
+        assert str(app.task_center.abandon_button.cget("state")) == "disabled"
+    finally:
+        app._running = False
+        app._abandon_requested = False
+        app._active_run_task_id = None
+        app.cancel_button.configure(state="disabled")

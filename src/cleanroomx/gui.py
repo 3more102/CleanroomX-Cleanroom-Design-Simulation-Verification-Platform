@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_search import EngineeringSearch, SearchRecord
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -2089,6 +2090,7 @@ class CleanroomXApp:
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
+        self._engineering_search_window: EngineeringSearch | None = None
         self._ui_state_path = (
             Path(ui_state_path)
             if ui_state_path is not None
@@ -2336,6 +2338,11 @@ class CleanroomXApp:
             command=self.show_command_palette,
         )
         tools_menu.add_command(
+            label="Engineering Search...",
+            accelerator="Ctrl+K",
+            command=self.show_engineering_search,
+        )
+        tools_menu.add_command(
             label="Task Center",
             command=self.show_task_center,
         )
@@ -2411,6 +2418,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
+        self.root.bind("<Control-k>", lambda event: self.show_engineering_search())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -3853,6 +3861,14 @@ class CleanroomXApp:
                 keywords=("solver", "calculate"),
             ),
             PaletteCommand(
+                "search.engineering",
+                "Open Engineering Search",
+                "Search",
+                self.show_engineering_search,
+                shortcut="Ctrl+K",
+                keywords=("objects", "requirements", "diagnostics", "evidence"),
+            ),
+            PaletteCommand(
                 "tasks.open",
                 "Open Task Center",
                 "Window",
@@ -3928,6 +3944,259 @@ class CleanroomXApp:
         self._command_palette_window = CommandPalette(
             self.root,
             commands=self._command_palette_commands(),
+            on_close=clear_reference,
+        )
+
+    def _engineering_search_records(self) -> list[SearchRecord]:
+        """Build a navigation-only index from current authoritative GUI projections."""
+        records: list[SearchRecord] = []
+
+        for analysis in self.project.analyses:
+            records.append(
+                SearchRecord(
+                    id=f"analysis:{analysis.id}",
+                    kind="Analysis",
+                    label=analysis.name,
+                    location=analysis.kind,
+                    status=(
+                        "Active"
+                        if analysis.id == self.project.active_analysis_id
+                        else ""
+                    ),
+                    detail=f"Analysis ID: {analysis.id}\nKind: {analysis.kind}",
+                    keywords=(analysis.id, analysis.kind),
+                    payload={"analysis_id": analysis.id},
+                )
+            )
+
+        workspace = getattr(self, "spatial_workspace", None)
+        layout = getattr(workspace, "layout", {}) if workspace is not None else {}
+        if isinstance(layout, dict):
+            floor = layout.get("floor")
+            floor_name = (
+                str(floor.get("name") or "Building")
+                if isinstance(floor, dict)
+                else "Building"
+            )
+            for room in layout.get("rooms", []):
+                if not isinstance(room, dict):
+                    continue
+                room_id = str(room.get("id") or "")
+                if not room_id:
+                    continue
+                label = str(room.get("name") or room_id)
+                classification = str(room.get("classification") or "")
+                detail_parts = [f"Room ID: {room_id}"]
+                for key, title, suffix in (
+                    ("length_m", "Length", " m"),
+                    ("width_m", "Width", " m"),
+                    ("height_m", "Height", " m"),
+                    ("pressure_pa", "Pressure", " Pa"),
+                ):
+                    if room.get(key) is not None:
+                        detail_parts.append(f"{title}: {room[key]}{suffix}")
+                records.append(
+                    SearchRecord(
+                        id=f"room:{room_id}",
+                        kind="Room",
+                        label=label,
+                        location=floor_name,
+                        status=classification,
+                        detail="\n".join(detail_parts),
+                        keywords=(room_id, classification),
+                        payload={"kind": "room", "id": room_id},
+                    )
+                )
+            for device in layout.get("devices", []):
+                if not isinstance(device, dict):
+                    continue
+                device_id = str(device.get("id") or "")
+                if not device_id:
+                    continue
+                device_type = str(device.get("type") or "device")
+                room_id = str(device.get("room_id") or "")
+                records.append(
+                    SearchRecord(
+                        id=f"device:{device_id}",
+                        kind="Device",
+                        label=str(device.get("name") or device_id),
+                        location=room_id or floor_name,
+                        status=device_type.replace("_", " ").title(),
+                        detail=f"Device ID: {device_id}\nType: {device_type}",
+                        keywords=(device_id, device_type, room_id),
+                        payload={"kind": "device", "id": device_id},
+                    )
+                )
+
+        try:
+            traceability = project_requirement_traceability_snapshot(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ):
+            traceability = {"requirements": []}
+        for requirement in traceability.get("requirements", []):
+            requirement_id = str(requirement.get("id") or "")
+            if not requirement_id:
+                continue
+            detail = (
+                f"Requirement ID: {requirement_id}\n"
+                f"Criterion: {requirement.get('criterion', '')}\n"
+                f"Source: {requirement.get('source') or 'Not specified'}"
+            )
+            records.append(
+                SearchRecord(
+                    id=f"requirement:{requirement_id}",
+                    kind="Requirement",
+                    label=str(requirement.get("title") or requirement_id),
+                    location=str(requirement.get("set_title") or ""),
+                    status=str(requirement.get("status") or ""),
+                    detail=detail,
+                    keywords=(
+                        requirement_id,
+                        str(requirement.get("applicability") or ""),
+                        " ".join(str(value) for value in requirement.get("scope", [])),
+                    ),
+                    payload={"requirement_id": requirement_id},
+                )
+            )
+
+        panel = getattr(self, "problems_panel", None)
+        result = getattr(panel, "last_result", None) if panel is not None else None
+        issues = result.get("issues", []) if isinstance(result, dict) else []
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            sequence = str(issue.get("sequence") or len(records))
+            element = issue.get("element")
+            element = element if isinstance(element, dict) else {}
+            rule = str(issue.get("rule") or "")
+            code = str(issue.get("code") or issue.get("diagnostic_code") or rule)
+            label = str(
+                issue.get("message")
+                or issue.get("explanation")
+                or code
+                or "Diagnostic"
+            )
+            records.append(
+                SearchRecord(
+                    id=f"diagnostic:{sequence}:{code}",
+                    kind="Diagnostic",
+                    label=label,
+                    location=str(element.get("name") or element.get("id") or ""),
+                    status=str(issue.get("severity") or ""),
+                    detail=(
+                        f"Rule: {rule}\n"
+                        f"Code: {code}\n"
+                        f"Object: {element.get('type') or ''} {element.get('id') or ''}"
+                    ),
+                    keywords=(
+                        rule,
+                        code,
+                        str(issue.get("category") or ""),
+                        str(element.get("type") or ""),
+                    ),
+                    payload=issue,
+                )
+            )
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        searchable_nodes = getattr(viewer, "searchable_nodes", None)
+        if callable(searchable_nodes):
+            for node in searchable_nodes():
+                records.append(
+                    SearchRecord(
+                        id=f"proofgraph:{node['document_label']}:{node['key']}",
+                        kind="Evidence",
+                        label=str(node.get("label") or node.get("id") or node["key"]),
+                        location=str(node["document_label"]),
+                        status=str(node.get("status") or ""),
+                        detail=(
+                            f"Node type: {str(node.get('type') or '').replace('_', ' ').title()}\n"
+                            f"Node ID: {node.get('id') or ''}"
+                        ),
+                        keywords=(
+                            str(node.get("type") or ""),
+                            str(node.get("id") or ""),
+                            *tuple(str(flag) for flag in node.get("flags", ())),
+                        ),
+                        payload={
+                            "document_label": node["document_label"],
+                            "key": node["key"],
+                        },
+                    )
+                )
+
+        return records
+
+    def _navigate_engineering_search_record(self, record: SearchRecord) -> None:
+        payload = record.payload if isinstance(record.payload, dict) else {}
+        if record.kind == "Analysis":
+            analysis_id = str(payload.get("analysis_id") or "")
+            if analysis_id and self.analysis_tree.exists(analysis_id):
+                self.analysis_tree.selection_set(analysis_id)
+                self.analysis_tree.focus(analysis_id)
+                self.analysis_tree.see(analysis_id)
+                self._on_analysis_selected()
+                self._activate_analysis_input_workspace()
+                self.status_var.set(f"Search: opened analysis {record.label}")
+                return
+
+        if record.kind in {"Room", "Device"}:
+            kind = str(payload.get("kind") or "").casefold()
+            item_id = str(payload.get("id") or "")
+            workspace = getattr(self, "spatial_workspace", None)
+            if workspace is not None and workspace.select_item(kind, item_id, notify=True):
+                self.activate_workspace_profile("design")
+                workspace.fit_selected()
+                self.status_var.set(f"Search: opened {record.kind.lower()} {record.label}")
+                return
+
+        if record.kind == "Requirement":
+            requirement_id = str(payload.get("requirement_id") or "")
+            if self.show_requirements_traceability(search_query=requirement_id):
+                self.status_var.set(f"Search: opened requirement {requirement_id}")
+            return
+
+        if record.kind == "Diagnostic":
+            if isinstance(record.payload, dict):
+                self.activate_workspace_profile("verification")
+                self._navigate_project_diagnostic(record.payload)
+            return
+
+        if record.kind == "Evidence":
+            viewer = getattr(self, "proofgraph_viewer", None)
+            focus_node = getattr(viewer, "focus_node", None)
+            if callable(focus_node) and focus_node(
+                str(payload.get("document_label") or ""),
+                str(payload.get("key") or ""),
+            ):
+                self.activate_workspace_profile("evidence")
+                self.status_var.set(f"Search: opened evidence {record.label}")
+                return
+
+        self.status_var.set(f"Search result is not directly navigable: {record.label}")
+
+    def show_engineering_search(self) -> None:
+        existing = getattr(self, "_engineering_search_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    existing.search_entry.focus_set()
+                    return
+            except tk.TclError:
+                pass
+
+        self._refresh_engineering_panels()
+
+        def clear_reference() -> None:
+            self._engineering_search_window = None
+
+        self._engineering_search_window = EngineeringSearch(
+            self.root,
+            records=self._engineering_search_records(),
+            navigate=self._navigate_engineering_search_record,
             on_close=clear_reference,
         )
 
@@ -4616,7 +4885,11 @@ class CleanroomXApp:
         )
         return True
 
-    def show_requirements_traceability(self) -> bool:
+    def show_requirements_traceability(
+        self,
+        *,
+        search_query: str | None = None,
+    ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
         except (
@@ -4642,7 +4915,9 @@ class CleanroomXApp:
             )
             return False
 
-        RequirementsTraceabilityDialog(self.root, snapshot)
+        dialog = RequirementsTraceabilityDialog(self.root, snapshot)
+        if search_query and hasattr(dialog, "search_var"):
+            dialog.search_var.set(search_query)
         return True
 
     def _project_verification_target(

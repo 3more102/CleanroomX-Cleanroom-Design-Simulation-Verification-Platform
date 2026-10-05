@@ -1034,6 +1034,10 @@ def test_engineering_inspector_surfaces_room_area_volume_and_semantic_state(app)
     geometry = workspace._inspector_geometry_var.get()
     assert f"{area:,.1f} m²" in geometry
     assert f"{volume:,.1f} m³" in geometry
+    assert workspace._inspector_area_var.get() == f"{area:,.1f} m²"
+    assert workspace._inspector_volume_var.get() == f"{volume:,.1f} m³"
+    assert workspace._inspector_result_state_var.get() in {"DESIGN INPUTS", "FRESH RESULT"}
+    assert workspace._inspector_compliance_value_var.get()
     assert workspace._inspector_compliance_var.get().startswith("Verification:")
 
 

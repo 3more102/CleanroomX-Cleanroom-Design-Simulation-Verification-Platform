@@ -18,7 +18,7 @@ class StartCenter(ttk.Frame):
         on_open_demo: Callable[[], None],
         on_open_recent: Callable[[str], None],
     ):
-        super().__init__(master, padding=(34, 28))
+        super().__init__(master, padding=(34, 28), style="CX.StartCenter.TFrame")
         self._on_open_recent = on_open_recent
         self._recent_paths: dict[str, str] = {}
 
@@ -26,14 +26,24 @@ class StartCenter(ttk.Frame):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(3, weight=1)
 
-        brand = ttk.Frame(self)
+        brand = ttk.Frame(self, style="CX.Hero.TFrame")
         brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(4, 22))
-        ttk.Label(brand, text="CleanroomX", style="CX.Brand.TLabel").pack(anchor="w")
         ttk.Label(
             brand,
-            text="Engineering Design • Simulation • Verification",
-            style="CX.ViewTitle.TLabel",
+            text="ENGINEERING WORKSTATION",
+            style="CX.HeroEyebrow.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            brand,
+            text="CleanroomX",
+            style="CX.HeroTitle.TLabel",
+        ).pack(anchor="w", pady=(3, 0))
+        ttk.Label(
+            brand,
+            text="Design  •  Simulation  •  Verification  •  Evidence",
+            style="CX.HeroSubtitle.TLabel",
         ).pack(anchor="w", pady=(4, 0))
+        ttk.Separator(brand, orient="horizontal").pack(fill="x", pady=(12, 10))
         ttk.Label(
             brand,
             text=(
@@ -41,11 +51,25 @@ class StartCenter(ttk.Frame):
                 "analysis, deterministic verification, IFC semantics, diagnostics, "
                 "ProofGraph, and evidence traceability."
             ),
+            style="CX.HeroSubtitle.TLabel",
             wraplength=900,
             justify="left",
-        ).pack(anchor="w", pady=(8, 0))
+        ).pack(anchor="w")
+        chips = ttk.Frame(brand, style="CX.Surface.TFrame")
+        chips.pack(fill="x", pady=(12, 0))
+        for label in ("IFC / BIM", "2D + 3D", "Diagnostics", "ProofGraph", "Traceability"):
+            ttk.Label(
+                chips,
+                text=label.upper(),
+                style="CX.AccentChip.TLabel",
+            ).pack(side="left", padx=(0, 7))
 
-        actions = ttk.LabelFrame(self, text="Start", padding=18)
+        actions = ttk.LabelFrame(
+            self,
+            text="START / PROJECT",
+            padding=18,
+            style="CX.Card.TLabelframe",
+        )
         actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
@@ -72,22 +96,41 @@ class StartCenter(ttk.Frame):
             command=on_open_demo,
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
-        capabilities = ttk.LabelFrame(self, text="Engineering workspace", padding=18)
+        capabilities = ttk.LabelFrame(
+            self,
+            text="ENGINEERING WORKSPACE",
+            padding=18,
+            style="CX.Card.TLabelframe",
+        )
         capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
-        ttk.Label(
-            capabilities,
-            text=(
-                "2D / 3D / Split engineering views\n"
-                "Project Navigator + contextual properties\n"
-                "Analysis + verification overlays\n"
-                "IDE-style deterministic diagnostics\n"
-                "ProofGraph + evidence traceability\n"
-                "IFC semantic import / re-import review"
-            ),
-            justify="left",
-        ).pack(anchor="w")
+        capability_rows = (
+            ("DESIGN", "2D / 3D / Split engineering views", "CX.Info.Panel.TLabel"),
+            ("MODEL", "Project Navigator + contextual properties", "CX.Info.Panel.TLabel"),
+            ("VERIFY", "Analysis + verification overlays", "CX.Success.Panel.TLabel"),
+            ("DIAG", "IDE-style deterministic diagnostics", "CX.Warning.Panel.TLabel"),
+            ("EVIDENCE", "ProofGraph + evidence traceability", "CX.Success.Panel.TLabel"),
+            ("BIM", "IFC semantic import / re-import review", "CX.Info.Panel.TLabel"),
+        )
+        for code, description, style in capability_rows:
+            row = ttk.Frame(capabilities, style="CX.Panel.TFrame")
+            row.pack(fill="x", pady=2)
+            ttk.Label(
+                row,
+                text=f"{code:<8}",
+                style=style,
+            ).pack(side="left")
+            ttk.Label(
+                row,
+                text=description,
+                style="CX.ViewTitle.TLabel",
+            ).pack(side="left", padx=(8, 0))
 
-        recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
+        recent = ttk.LabelFrame(
+            self,
+            text="RECENT PROJECTS",
+            padding=12,
+            style="CX.Card.TLabelframe",
+        )
         recent.grid(
             row=2,
             column=0,
@@ -126,7 +169,12 @@ class StartCenter(ttk.Frame):
             command=self._open_selected_recent,
         ).pack(side="right")
 
-        examples = ttk.LabelFrame(self, text="Example Projects", padding=12)
+        examples = ttk.LabelFrame(
+            self,
+            text="EXAMPLE PROJECTS",
+            padding=12,
+            style="CX.Card.TLabelframe",
+        )
         examples.grid(
             row=3,
             column=0,

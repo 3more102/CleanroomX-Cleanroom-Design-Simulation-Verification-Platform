@@ -1264,6 +1264,7 @@ class CleanroomXApp:
         self.save_state_var = tk.StringVar(value="UNSAVED")
         self.diagnostics_state_var = tk.StringVar(value="NOT CHECKED")
         self.verification_state_var = tk.StringVar(value="UNVERIFIED")
+        self.analysis_run_state_var = tk.StringVar(value="IDLE")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1585,6 +1586,23 @@ class CleanroomXApp:
         )
         self.verification_state_label.grid(
             row=1, column=3, columnspan=2, padx=2, pady=(5, 0), sticky="w"
+        )
+        self.analysis_run_state_label = ttk.Label(
+            topbar,
+            textvariable=self.analysis_run_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.analysis_run_state_label.grid(
+            row=1, column=5, padx=(8, 4), pady=(5, 0), sticky="e"
+        )
+        self.analysis_run_progress = ttk.Progressbar(
+            topbar,
+            orient="horizontal",
+            mode="indeterminate",
+            length=90,
+        )
+        self.analysis_run_progress.grid(
+            row=1, column=6, columnspan=2, padx=(0, 2), pady=(5, 0), sticky="ew"
         )
         topbar.columnconfigure(2, weight=2)
         topbar.columnconfigure(4, weight=3)
@@ -6127,11 +6145,38 @@ class CleanroomXApp:
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
 
+    def _set_analysis_run_state(self, state: str) -> None:
+        token = str(state or "idle").strip().casefold()
+        if token in {"running", "queued"}:
+            text, style = "RUNNING", "CX.Status.Running.TLabel"
+        elif token in {"pass", "passed", "success", "completed", "ok"}:
+            text, style = "RUN PASS", "CX.Status.Pass.TLabel"
+        elif token in {"fail", "failed", "error"}:
+            text, style = "RUN FAIL", "CX.Status.Fail.TLabel"
+        elif token in {"abandoned", "cancelled", "canceled"}:
+            text, style = "ABANDONED", "CX.Status.Warning.TLabel"
+        elif token in {"warning", "warn"}:
+            text, style = "RUN WARN", "CX.Status.Warning.TLabel"
+        else:
+            text, style = "IDLE", "CX.Status.Unknown.TLabel"
+        self.analysis_run_state_var.set(text)
+        self.analysis_run_state_label.configure(style=style)
+
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        workflow_run_button = getattr(self, "workflow_run_button", None)
+        if workflow_run_button is not None:
+            workflow_run_button.configure(state="disabled" if running else "normal")
+        if running:
+            self._set_analysis_run_state("running")
+            self.analysis_run_progress.start(70)
+        else:
+            self.analysis_run_progress.stop()
+            if self.analysis_run_state_var.get() == "RUNNING":
+                self._set_analysis_run_state("idle")
 
     def _poll_worker(self) -> None:
         try:
@@ -6142,10 +6187,12 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self._set_analysis_run_state("abandoned")
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._set_analysis_run_state("failed")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6188,6 +6235,7 @@ class CleanroomXApp:
                     self._runs_by_analysis[analysis_id] = run
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
+                    self._set_analysis_run_state(run.status)
                     self._render_run(run)
                     if history_error is None:
                         self.status_var.set(

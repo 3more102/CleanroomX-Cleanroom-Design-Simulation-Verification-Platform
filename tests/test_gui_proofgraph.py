@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (\n    _filtered_projection,\n    _node_detail_lines,\n    proofgraph_projection,\n)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +235,20 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+
+def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
+    projection = proofgraph_projection(_sample_graph())
+    node = next(
+        item for item in projection["nodes"]
+        if item["key"] == "finding:finding-pressure"
+    )
+
+    rendered = "\n".join(_node_detail_lines(node))
+
+    assert "FINDING" in rendered
+    assert "Pressure below target" in rendered
+    assert "Status: FAIL" in rendered
+    assert "TRACEABILITY DETAILS" in rendered
+    assert "{\"" not in rendered

@@ -491,6 +491,61 @@ def test_completed_run_is_discarded_if_analysis_input_changed_during_execution()
     assert "inputs changed" in app.status_var.value.lower()
 
 
+
+def test_worker_error_incident_reference_is_visible_to_operator(monkeypatch):
+    import queue
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Report:
+        reference = "CX-BACKGROUND"
+        summary = "synthetic backend failure"
+        log_path = Path("cleanroomx-gui.log")
+
+        def user_message(self):
+            return (
+                "Run analysis did not complete.\n\n"
+                "synthetic backend failure\n\n"
+                "Error reference: CX-BACKGROUND"
+            )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._queue = queue.Queue()
+    app._queue.put(("error", 4, "a", Report()))
+    app._run_generation = 4
+    app._abandon_requested = False
+    app._running = True
+    app._set_running = lambda running: setattr(app, "_running", running)
+    app.status_var = Status()
+    app.root = Root()
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert "CX-BACKGROUND" in app.status_var.value
+    assert errors == [
+        (
+            "Analysis failed",
+            "Run analysis did not complete.\n\n"
+            "synthetic backend failure\n\n"
+            "Error reference: CX-BACKGROUND",
+        )
+    ]
+
 def test_accepted_completed_run_is_recorded_in_persisted_audit_history():
     import queue
 

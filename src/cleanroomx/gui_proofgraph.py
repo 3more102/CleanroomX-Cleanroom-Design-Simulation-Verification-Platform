@@ -313,6 +313,118 @@ def proofgraph_projection(document: dict[str, Any] | None) -> dict[str, Any]:
     return {"nodes": ordered_nodes, "edges": normalized_edges}
 
 
+def proofgraph_evidence_summary(projection: dict[str, Any]) -> dict[str, int]:
+    """Summarize persisted ProofGraph evidence links without deriving verdicts."""
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    checks = [node for node in nodes if node.get("type") == "check"]
+    findings = [node for node in nodes if node.get("type") == "finding"]
+    verdicts = [node for node in nodes if node.get("type") == "verdict"]
+
+    linked_checks = {
+        edge.get("target")
+        for edge in edges
+        if edge.get("relation") == "supports"
+        and _text(edge.get("source")).startswith("evidence:")
+        and _text(edge.get("target")).startswith("check:")
+    }
+    unresolved_findings = sum(
+        1 for node in findings if "unresolved" in set(node.get("flags") or ())
+    )
+
+    def status_count(items: list[dict[str, Any]], *states: str) -> int:
+        accepted = {state.casefold() for state in states}
+        return sum(
+            1
+            for item in items
+            if _text(item.get("status")).casefold() in accepted
+        )
+
+    return {
+        "source_count": sum(1 for node in nodes if node.get("type") == "source"),
+        "evidence_count": sum(1 for node in nodes if node.get("type") == "evidence"),
+        "check_count": len(checks),
+        "linked_check_count": sum(
+            1 for node in checks if node.get("key") in linked_checks
+        ),
+        "unlinked_check_count": sum(
+            1 for node in checks if node.get("key") not in linked_checks
+        ),
+        "finding_count": len(findings),
+        "unresolved_finding_count": unresolved_findings,
+        "pass_finding_count": status_count(findings, "pass", "passed"),
+        "fail_finding_count": status_count(findings, "fail", "failed", "error"),
+        "warning_finding_count": status_count(findings, "warning", "warn"),
+        "not_checked_finding_count": status_count(
+            findings,
+            "not_checked",
+            "not checked",
+            "unknown",
+        ),
+        "verdict_count": len(verdicts),
+        "pass_verdict_count": status_count(verdicts, "pass", "passed"),
+        "fail_verdict_count": status_count(verdicts, "fail", "failed", "error"),
+        "not_checked_verdict_count": status_count(
+            verdicts,
+            "not_checked",
+            "not checked",
+            "unknown",
+        ),
+    }
+
+
+def _search_projection(
+    projection: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    """Return search matches plus immediate trace context from persisted graph data."""
+    needle = query.strip().casefold()
+    if not needle:
+        return projection
+
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    matched: set[str] = set()
+    for node in nodes:
+        raw = node.get("raw")
+        raw_text = ""
+        if isinstance(raw, dict):
+            raw_text = json.dumps(
+                raw,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        haystack = " ".join(
+            (
+                _text(node.get("type")),
+                _text(node.get("id")),
+                _text(node.get("label")),
+                _text(node.get("status")),
+                " ".join(str(flag) for flag in node.get("flags") or ()),
+                raw_text,
+            )
+        ).casefold()
+        if needle in haystack:
+            matched.add(node["key"])
+
+    expanded = set(matched)
+    for edge in edges:
+        if edge["source"] in matched or edge["target"] in matched:
+            expanded.add(edge["source"])
+            expanded.add(edge["target"])
+
+    return {
+        "nodes": [node for node in nodes if node["key"] in expanded],
+        "edges": [
+            edge
+            for edge in edges
+            if edge["source"] in expanded and edge["target"] in expanded
+        ],
+    }
+
+
 def _filtered_projection(
     projection: dict[str, Any],
     filter_name: str,
@@ -397,7 +509,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
+        self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.readiness_var = tk.StringVar(value="Evidence readiness: unavailable")
 
         toolbar = ttk.Frame(self, padding=(7, 5))
         toolbar.pack(fill="x")
@@ -406,9 +520,16 @@ class ProofGraphViewer(ttk.Frame):
             toolbar,
             textvariable=self.graph_var,
             state="readonly",
-            width=42,
+            width=32,
         )
         self.graph_picker.pack(side="left", padx=(5, 10))
+        ttk.Label(toolbar, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            toolbar,
+            textvariable=self.search_var,
+            width=20,
+        )
+        self.search_entry.pack(side="left", padx=(5, 10))
         ttk.Label(toolbar, text="Filter").pack(side="left")
         self.filter_picker = ttk.Combobox(
             toolbar,
@@ -424,14 +545,29 @@ class ProofGraphViewer(ttk.Frame):
                 "Unresolved Evidence",
             ),
             state="readonly",
-            width=20,
+            width=18,
         )
-        self.filter_picker.pack(side="left", padx=(5, 10))
-        ttk.Label(toolbar, textvariable=self.summary_var).pack(
-            side="right", padx=(10, 0)
-        )
+        self.filter_picker.pack(side="left", padx=(5, 6))
+        ttk.Button(
+            toolbar,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self._clear_search_and_filter,
+        ).pack(side="left")
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        self.search_var.trace_add("write", lambda *_: self._refresh())
+        self.search_entry.bind(
+            "<Escape>",
+            lambda _event: self._clear_search_and_filter(),
+        )
+
+        summary_bar = ttk.Frame(self, padding=(7, 2, 7, 5))
+        summary_bar.pack(fill="x")
+        ttk.Label(summary_bar, textvariable=self.summary_var).pack(side="left")
+        ttk.Label(summary_bar, textvariable=self.readiness_var).pack(
+            side="right", padx=(10, 0)
+        )
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -526,7 +662,8 @@ class ProofGraphViewer(ttk.Frame):
 
     def _refresh(self) -> None:
         projection = proofgraph_projection(self._active_document())
-        self._projection = _filtered_projection(projection, self.filter_var.get())
+        filtered = _filtered_projection(projection, self.filter_var.get())
+        self._projection = _search_projection(filtered, self.search_var.get())
         self._nodes_by_key = {
             node["key"]: node for node in self._projection.get("nodes", [])
         }
@@ -539,11 +676,36 @@ class ProofGraphViewer(ttk.Frame):
         all_nodes = projection.get("nodes", [])
         shown = self._projection.get("nodes", [])
         self.summary_var.set(
-            f"{len(shown)}/{len(all_nodes)} nodes · "
+            f"View: {len(shown)}/{len(all_nodes)} nodes · "
             f"{len(self._projection.get('edges', []))} links"
             if all_nodes
             else "No persisted ProofGraph evidence"
         )
+
+        evidence = proofgraph_evidence_summary(projection)
+        if not all_nodes:
+            readiness = "Evidence readiness: unavailable"
+        elif evidence["check_count"]:
+            readiness = (
+                "Evidence: "
+                f"{evidence['linked_check_count']}/{evidence['check_count']} checks linked · "
+                f"unresolved {evidence['unresolved_finding_count']} · "
+                "verdicts "
+                f"{evidence['pass_verdict_count']}P/"
+                f"{evidence['fail_verdict_count']}F/"
+                f"{evidence['not_checked_verdict_count']}NC"
+            )
+        else:
+            readiness = (
+                f"Evidence: {evidence['evidence_count']} records · "
+                "no verification checks in graph"
+            )
+        self.readiness_var.set(readiness)
+
+    def _clear_search_and_filter(self) -> None:
+        self.search_var.set("")
+        self.filter_var.set("All")
+        self.search_entry.focus_set()
 
     def _populate_tree(self) -> None:
         for iid in self.tree.get_children():

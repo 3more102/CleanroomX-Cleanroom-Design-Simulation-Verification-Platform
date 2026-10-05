@@ -1378,7 +1378,7 @@ class CleanroomXApp:
         analyze_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analyze_menu.add_separator()
         analyze_menu.add_command(label="Run History...", command=self.show_run_history)
-        menubar.add_cascade(label="Analyze", menu=analyze_menu)
+        menubar.add_cascade(label="Simulation", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
         verify_menu.add_command(
@@ -1403,7 +1403,26 @@ class CleanroomXApp:
             label="Verification History...",
             command=self.show_verification_history,
         )
-        menubar.add_cascade(label="Verify", menu=verify_menu)
+        menubar.add_cascade(label="Verification", menu=verify_menu)
+
+        evidence_menu = tk.Menu(menubar, tearoff=False)
+        evidence_menu.add_command(
+            label="Evidence Workspace",
+            command=lambda: self.apply_workspace_profile("evidence"),
+        )
+        evidence_menu.add_command(
+            label="ProofGraph Explorer",
+            command=self._activate_proofgraph_workspace,
+        )
+        evidence_menu.add_command(
+            label="Persisted Evidence Panel",
+            command=lambda: (
+                self.output_panel_visible_var.set(True),
+                self._sync_output_panel_visibility(),
+                self._select_output_tab("Evidence"),
+            ),
+        )
+        menubar.add_cascade(label="Evidence", menu=evidence_menu)
 
         bim_menu = tk.Menu(menubar, tearoff=False)
         bim_menu.add_command(
@@ -1436,7 +1455,7 @@ class CleanroomXApp:
         report_menu.add_command(
             label="Export Portable HTML Report...", command=self.export_report_html
         )
-        menubar.add_cascade(label="Report", menu=report_menu)
+        menubar.add_cascade(label="Reports", menu=report_menu)
 
         tools_menu = tk.Menu(menubar, tearoff=False)
         tools_menu.add_command(

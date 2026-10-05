@@ -229,6 +229,7 @@ jobs:
             tests/test_gui_proofgraph_integration.py \
             tests/test_gui_table.py \
             tests/test_gui_engineering_panels.py \
+            tests/test_gui_compliance.py \
             tests/test_gui_navigator_favorites.py \
             tests/test_gui_simulation.py \
             tests/test_gui_reporting_workspace.py \

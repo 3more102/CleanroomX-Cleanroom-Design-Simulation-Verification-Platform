@@ -3222,6 +3222,7 @@ class CleanroomXApp:
             workspace.set_inspector_visible(bool(layout["inspector_visible"]))
 
         if selected == "start":
+            self._refresh_engineering_panels()
             self._refresh_start_center()
             self.notebook.select(self.start_center)
         elif selected == "design":

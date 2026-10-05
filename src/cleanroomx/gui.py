@@ -69,7 +69,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
-from .gui_panels import ProjectDiagnosticsPanel, SimulationSummaryPanel
+from .gui_panels import ProjectDiagnosticsPanel, RunHistoryPanel, SimulationSummaryPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
@@ -2100,6 +2100,13 @@ class CleanroomXApp:
         )
         self.simulation_panel = SimulationSummaryPanel(self.output_notebook)
         self.output_notebook.add(self.simulation_panel, text="Simulation")
+        self.run_history_panel = RunHistoryPanel(
+            self.output_notebook,
+            project_getter=lambda: self.project,
+            open_analysis_callback=self._open_navigator_palette_item,
+            status_setter=self.status_var.set,
+        )
+        self.output_notebook.add(self.run_history_panel, text="Run History")
         self.result_text = self._add_text_tab(
             "Results", notebook=self.output_notebook
         )
@@ -2401,6 +2408,9 @@ class CleanroomXApp:
         if problems_panel is not None:
             problems_panel.apply_palette(palette)
             text_widgets.append(getattr(problems_panel, "detail", None))
+        run_history_panel = getattr(self, "run_history_panel", None)
+        if run_history_panel is not None:
+            run_history_panel.apply_palette(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2843,6 +2853,9 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        history_panel = getattr(self, "run_history_panel", None)
+        if history_panel is not None:
+            history_panel.refresh()
         currency: dict = {}
         records: list[dict] = []
 

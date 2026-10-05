@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import copy
+import os
+import tkinter as tk
 
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    ProofGraphViewer,
     _filtered_projection,
     _node_detail_lines,
+    _search_projection,
     proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
@@ -256,3 +260,54 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "Status: FAIL" in rendered
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
+
+def test_proofgraph_search_matches_persisted_fields_and_keeps_context():
+    projection = proofgraph_projection(_sample_graph())
+    before = copy.deepcopy(projection)
+
+    matched = _search_projection(projection, "pressure_solver")
+    keys = {node["key"] for node in matched["nodes"]}
+
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+    assert projection == before
+    assert _search_projection(projection, "definitely missing") == {
+        "nodes": [],
+        "edges": [],
+    }
+
+
+def test_proofgraph_viewer_zoom_is_bounded_and_searchable():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    viewer = ProofGraphViewer(root)
+    viewer.pack(fill="both", expand=True)
+    try:
+        viewer.set_documents([_sample_graph()])
+        root.update_idletasks()
+
+        viewer.search_var.set("pressure_solver")
+        root.update_idletasks()
+        assert viewer._projection["nodes"]
+        assert "search: pressure_solver" in viewer.summary_var.get()
+
+        viewer._zoom_graph(1.15)
+        root.update_idletasks()
+        assert viewer._graph_scale > 1.0
+        assert viewer.zoom_var.get().endswith("%")
+
+        for _ in range(30):
+            viewer._zoom_graph(1.15)
+        assert viewer._graph_scale <= 2.25
+
+        viewer._reset_graph_zoom()
+        assert viewer._graph_scale == 1.0
+        assert viewer.zoom_var.get() == "100%"
+    finally:
+        root.destroy()
+

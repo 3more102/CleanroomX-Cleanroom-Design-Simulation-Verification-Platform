@@ -155,16 +155,20 @@ class _Tooltip:
             window.wm_attributes("-topmost", True)
         except tk.TclError:
             pass
-        palette = theme_palette(
-            getattr(self.widget, "_cleanroomx_theme_name", "dark")
+        style = ttk.Style(self.widget)
+        background = (
+            style.lookup("CX.Panel.TFrame", "background")
+            or style.lookup("TFrame", "background")
+            or "#17243A"
         )
+        foreground = style.lookup("TLabel", "foreground") or "#F1F5F9"
         label = tk.Label(
             window,
             text=self.text,
             justify="left",
             wraplength=340,
-            background=palette["surface_elevated"],
-            foreground=palette["text"],
+            background=background,
+            foreground=foreground,
             relief="solid",
             borderwidth=1,
             padx=7,

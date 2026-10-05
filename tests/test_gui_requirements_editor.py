@@ -5,6 +5,7 @@ import copy
 import pytest
 
 import cleanroomx.gui_requirements as gui_requirements_module
+
 from cleanroomx.gui_requirements import (
     RequirementsEditorDialog,
     add_requirement,
@@ -180,7 +181,6 @@ def test_requirement_ids_remain_unique_across_sets() -> None:
         add_requirement(project, "secondary", _requirement())
 
     assert project.to_dict() == before
-
 
 def test_requirements_editor_records_unexpected_apply_failures(monkeypatch) -> None:
     dialog = RequirementsEditorDialog.__new__(RequirementsEditorDialog)

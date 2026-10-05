@@ -159,6 +159,15 @@ def test_problem_browser_supports_domain_filter_sort_and_relative_review(app):
     panel._select_relative(-1)
     assert panel.tree.selection()
 
+    panel.reset_filters()
+    app.root.update()
+    assert panel.search_var.get() == ""
+    assert panel.severity_var.get() == "All"
+    assert panel.category_var.get() == "All"
+    assert panel._sort_column is None
+    assert panel.tree.heading("code", "text") == "Code"
+    assert app.status_var.get() == "Diagnostic filters cleared"
+
 
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     analysis = app.project.analyses[0]

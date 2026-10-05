@@ -38,10 +38,13 @@ pip install "pyinstaller==6.22.3"
 The PyInstaller version is pinned in CI. The repository source revision and the
 workflow run identify the remaining build inputs.
 
-## Current boundary
+## Distribution modes
 
-This artifact is a portable standalone distribution, not yet a registered
-Windows installer. It does not currently create Start Menu shortcuts, register
-an uninstaller, or perform in-place upgrades. Those installer lifecycle gates
-must be completed before claiming the Windows installation/uninstallation
-release gate is fully passed.
+The standalone ZIP is intentionally a portable, unregistered distribution:
+extracting it does not create Start Menu shortcuts, register an uninstaller, or
+perform in-place upgrades.
+
+CleanroomX also builds and validates a separate registered per-user Windows
+installer from this same standalone payload. See
+[Windows registered installer](WINDOWS_INSTALLER.md) for the install, upgrade,
+launch, and uninstall lifecycle gate.

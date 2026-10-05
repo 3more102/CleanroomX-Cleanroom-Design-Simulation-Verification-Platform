@@ -29,6 +29,9 @@ from .spatial_transforms import (
 )
 
 
+_MIXED_PROPERTY_VALUE = "— mixed —"
+
+
 class SpatialSyncError(ValueError):
     """Raised when spatial geometry cannot be mapped to engineering input safely."""
 
@@ -1659,6 +1662,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_units: dict[str, str] = {}
         self._property_search_var = tk.StringVar()
         self._property_filter_var = tk.StringVar(value="0 properties")
+        self._property_loaded_values: dict[str, str] = {}
+        self._property_mixed_fields: set[str] = set()
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -2075,11 +2080,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="Reset edits",
             command=self._load_property_panel,
         ).pack(side="left")
-        ttk.Button(
+        self._property_apply_button = ttk.Button(
             inspector_actions,
             text="Apply properties",
             command=self.apply_properties,
-        ).pack(side="right")
+        )
+        self._property_apply_button.pack(side="right")
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
             fill="x", pady=(3, 0)
@@ -2922,10 +2928,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_search_var.set("")
         self._property_search_entry.focus_set()
 
-    def _property_fields_for_selection(self) -> set[str]:
-        if self._selected_object() is None or self.selected is None:
-            return set()
-        if self.selected.kind == "room":
+    @staticmethod
+    def _property_fields_for_kind(kind: str) -> set[str]:
+        if kind == "room":
             return {
                 "name",
                 "x_m",
@@ -2950,6 +2955,35 @@ class SpatialDesignWorkspace(ttk.Frame):
             "wall_side",
             "swing",
         }
+
+    def _selected_objects(self) -> list[tuple[_Hit, dict]]:
+        rooms = {str(item.get("id")): item for item in self.layout["rooms"]}
+        devices = {str(item.get("id")): item for item in self.layout["devices"]}
+        selected: list[tuple[_Hit, dict]] = []
+        for hit in self.selected_hits():
+            item = rooms.get(hit.item_id) if hit.kind == "room" else devices.get(hit.item_id)
+            if item is not None:
+                selected.append((hit, item))
+        return selected
+
+    def _property_fields_for_selection(self) -> set[str]:
+        hits = self.selected_hits()
+        if not hits:
+            return set()
+        fields = self._property_fields_for_kind(hits[0].kind)
+        for hit in hits[1:]:
+            fields &= self._property_fields_for_kind(hit.kind)
+        return fields
+
+    def _property_dirty_values(self) -> dict[str, str]:
+        visible = self._property_fields_for_selection()
+        changed: dict[str, str] = {}
+        for key in visible:
+            current = self._property_vars[key].get()
+            loaded = self._property_loaded_values.get(key, "")
+            if current != loaded:
+                changed[key] = current
+        return changed
 
     def _filter_property_rows(self) -> None:
         visible_fields = self._property_fields_for_selection()
@@ -2977,69 +3011,148 @@ class SpatialDesignWorkspace(ttk.Frame):
                 row.pack_forget()
 
         total_count = len(visible_fields)
+        selected_count = len(self.selected_hits())
+        mixed_count = len(self._property_mixed_fields & visible_fields)
+        multi_suffix = (
+            f" · {selected_count} selected · {mixed_count} mixed"
+            if selected_count > 1
+            else ""
+        )
+        if hasattr(self, "_property_apply_button"):
+            self._property_apply_button.configure(
+                text=(
+                    f"Apply to {selected_count}"
+                    if selected_count > 1
+                    else "Apply properties"
+                )
+            )
         if tokens:
             self._property_filter_var.set(
-                f"{visible_count} of {total_count} properties · filtered"
+                f"{visible_count} of {total_count} common properties · filtered{multi_suffix}"
+                if selected_count > 1
+                else f"{visible_count} of {total_count} properties · filtered"
             )
         else:
-            self._property_filter_var.set(f"{total_count} properties")
+            self._property_filter_var.set(
+                f"{total_count} common properties{multi_suffix}"
+                if selected_count > 1
+                else f"{total_count} properties"
+            )
 
     def _load_property_panel(self) -> None:
+        selected_objects = self._selected_objects()
         item = self._selected_object()
-        if item is None:
+        if item is None or not selected_objects:
             self._selection_var.set("No selection")
             for var in self._property_vars.values():
                 var.set("")
+            self._property_loaded_values = {}
+            self._property_mixed_fields = set()
             self._filter_property_rows()
             return
 
-        prefix = (
-            "Room"
-            if self.selected and self.selected.kind == "room"
-            else item.get("type", "Device").title()
-        )
-        selection_text = f"{prefix}: {item.get('name', '')}"
-        if self.selected and self.selected.kind == "room":
-            sync = engineering_sync_status(self.layout, self._analysis_getter())
-            room_sync = next(
-                (
-                    record
-                    for record in sync["rooms"]
-                    if record["room_id"] == self.selected.item_id
-                ),
-                None,
+        if len(selected_objects) > 1:
+            room_count = sum(1 for hit, _item in selected_objects if hit.kind == "room")
+            device_count = len(selected_objects) - room_count
+            parts: list[str] = []
+            if room_count:
+                parts.append(f"{room_count} room" + ("" if room_count == 1 else "s"))
+            if device_count:
+                parts.append(
+                    f"{device_count} device" + ("" if device_count == 1 else "s")
+                )
+            selection_text = (
+                f"{len(selected_objects)} objects selected — " + " · ".join(parts)
             )
-            if room_sync is not None:
-                selection_text += " — " + room_sync["state"].replace("_", " ")
+        else:
+            prefix = (
+                "Room"
+                if self.selected and self.selected.kind == "room"
+                else item.get("type", "Device").title()
+            )
+            selection_text = f"{prefix}: {item.get('name', '')}"
+            if self.selected and self.selected.kind == "room":
+                sync = engineering_sync_status(self.layout, self._analysis_getter())
+                room_sync = next(
+                    (
+                        record
+                        for record in sync["rooms"]
+                        if record["room_id"] == self.selected.item_id
+                    ),
+                    None,
+                )
+                if room_sync is not None:
+                    selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
 
+        visible_fields = self._property_fields_for_selection()
+        loaded_values: dict[str, str] = {}
+        mixed_fields: set[str] = set()
         for key, var in self._property_vars.items():
-            value = item.get(key, "")
-            var.set("" if value is None else str(value))
+            if key not in visible_fields:
+                var.set("")
+                continue
+            values = [
+                "" if selected_item.get(key, "") is None else str(selected_item.get(key, ""))
+                for _hit, selected_item in selected_objects
+            ]
+            first = values[0]
+            if all(value == first for value in values[1:]):
+                display = first
+            else:
+                display = _MIXED_PROPERTY_VALUE
+                mixed_fields.add(key)
+            loaded_values[key] = display
+            var.set(display)
+        self._property_loaded_values = loaded_values
+        self._property_mixed_fields = mixed_fields
         self._filter_property_rows()
 
     def apply_properties(self) -> None:
-        item = self._selected_object()
-        if item is None:
+        selected_hits = self.selected_hits()
+        if not selected_hits:
             return
-        try:
-            candidate = update_spatial_properties(
-                self.layout,
-                self.selected.kind,
-                self.selected.item_id,
-                {key: variable.get() for key, variable in self._property_vars.items()},
+        changed_values = self._property_dirty_values()
+        if not changed_values:
+            self._status_setter(
+                "No property changes to apply"
+                if len(selected_hits) == 1
+                else f"No property changes to apply to {len(selected_hits)} selected objects"
             )
+            return
+
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        candidate = self.layout
+        try:
+            for hit in selected_hits:
+                supported = self._property_fields_for_kind(hit.kind)
+                values = {
+                    key: value
+                    for key, value in changed_values.items()
+                    if key in supported and value != _MIXED_PROPERTY_VALUE
+                }
+                if values:
+                    candidate = update_spatial_properties(
+                        candidate,
+                        hit.kind,
+                        hit.item_id,
+                        values,
+                    )
         except ValueError as exc:
             messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
             self._status_setter("Properties not applied: " + str(exc))
             return
-        history_before = self._history_layout()
-        selection_before = self._selection_state()
+
         if candidate != self.layout:
             self.layout = candidate
         self._load_property_panel()
         self._persist(
-            "Spatial properties updated",
+            (
+                "Spatial properties updated"
+                if len(selected_hits) == 1
+                else f"Spatial properties updated for {len(selected_hits)} objects"
+            ),
             history_before=history_before,
             selection_before=selection_before,
         )

@@ -130,6 +130,18 @@ class DiagnosticsWorkspace(ttk.Frame):
         ).pack(side="left", padx=2)
         ttk.Button(
             filters,
+            text="Previous",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            filters,
+            text="Next",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            filters,
             text="Locate",
             style="CX.Primary.TButton",
             command=self._locate_selected,
@@ -192,6 +204,8 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
         self.tree.bind("<Double-1>", self._locate_selected)
         self.tree.bind("<Return>", self._locate_selected)
+        self.tree.bind("<Alt-Up>", lambda _event: self._select_relative(-1))
+        self.tree.bind("<Alt-Down>", lambda _event: self._select_relative(1))
 
         self.detail_title_var = tk.StringVar(value="No diagnostic selected")
         ttk.Label(
@@ -239,6 +253,30 @@ class DiagnosticsWorkspace(ttk.Frame):
         issue = self.selected_issue()
         if issue is not None:
             self._on_navigate(issue)
+        return "break"
+
+    def _select_relative(self, delta: int):
+        children = list(self.tree.get_children())
+        if not children:
+            self._status_setter("No diagnostics match the current filters")
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in children:
+            index = children.index(selection[0])
+            index = (index + int(delta)) % len(children)
+        else:
+            index = 0 if int(delta) >= 0 else len(children) - 1
+        iid = children[index]
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected()
+        issue = self._issues_by_iid.get(iid)
+        if issue is not None:
+            self._status_setter(
+                f"Diagnostic {index + 1}/{len(children)} · "
+                f"{issue.get('rule') or 'unspecified'}"
+            )
         return "break"
 
     def _copy_selected(self) -> None:
@@ -313,6 +351,7 @@ class DiagnosticsWorkspace(ttk.Frame):
                     _element_text(issue),
                     str(issue.get("message") or ""),
                 ),
+                tags=(f"severity_{severity}",),
             )
             self._issues_by_iid[iid] = issue
         self.visible_var.set(f"{len(visible)} visible")
@@ -373,6 +412,18 @@ class DiagnosticsWorkspace(ttk.Frame):
     def apply_theme(self, palette: dict[str, str]) -> None:
         if not isinstance(palette, dict):
             return
+        self.tree.tag_configure(
+            "severity_error",
+            foreground=palette.get("error", palette.get("text", "#ffffff")),
+        )
+        self.tree.tag_configure(
+            "severity_warning",
+            foreground=palette.get("warning", palette.get("text", "#ffffff")),
+        )
+        self.tree.tag_configure(
+            "severity_info",
+            foreground=palette.get("info", palette.get("text", "#ffffff")),
+        )
         self.detail.configure(
             background=palette.get("field", "#101820"),
             foreground=palette.get("field_text", palette.get("text", "#ffffff")),

@@ -31,16 +31,20 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "docs/PERFORMANCE_GATES.md",
         "docs/STANDARDS.md",
         "docs/GOLDEN_REFERENCE_PROJECTS.md",
+        "docs/PRODUCTION_ACCEPTANCE.md",
         "scripts/benchmark_spatial_validation.py",
         "scripts/benchmark_project_bundle.py",
         "scripts/security_static_gate.py",
         ".github/workflows/ci.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/security.yml",
         ".github/workflows/windows-standalone.yml",
         ".github/workflows/windows-installer.yml",
         "tests/test_golden_reference_project.py",
         "tests/test_golden_facility_reference.py",
         "tests/test_fault_injection_persistence.py",
+        "tests/test_production_acceptance.py",
+        "tests/test_production_acceptance_contract.py",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     _record(
@@ -106,6 +110,7 @@ def _version_and_demo_contract(checks: list[dict[str, Any]]) -> None:
 def _workflow_contract(checks: list[dict[str, Any]]) -> None:
     workflow_paths = (
         ".github/workflows/ci.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/security.yml",
         ".github/workflows/windows-standalone.yml",
         ".github/workflows/windows-installer.yml",

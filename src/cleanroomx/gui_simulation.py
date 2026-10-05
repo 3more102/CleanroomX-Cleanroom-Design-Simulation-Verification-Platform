@@ -57,6 +57,181 @@ def _explicit_convergence(value: Any) -> str:
     return "NOT REPORTED"
 
 
+_RUN_HISTORY_MISSING = object()
+
+
+def run_history_filter_options(
+    records: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    field: str,
+) -> tuple[str, ...]:
+    """Return deterministic filter choices from already-validated retained records."""
+    values = {
+        str(record.get(field)).strip()
+        for record in records
+        if isinstance(record, dict) and record.get(field) not in (None, "")
+    }
+    return ("All", *sorted(values, key=str.casefold))
+
+
+def filter_run_history_records(
+    records: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    *,
+    query: str = "",
+    analysis: str = "All",
+    kind: str = "All",
+    status: str = "All",
+) -> list[dict[str, Any]]:
+    """Filter retained run evidence for presentation without mutating canonical data."""
+    query_token = str(query or "").strip().casefold()
+    analysis_token = str(analysis or "All").strip()
+    kind_token = str(kind or "All").strip()
+    status_token = str(status or "All").strip()
+    visible: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        if analysis_token != "All" and str(record.get("analysis_name") or "") != analysis_token:
+            continue
+        if kind_token != "All" and str(record.get("analysis_kind") or "") != kind_token:
+            continue
+        if status_token != "All" and str(record.get("status") or "") != status_token:
+            continue
+        if query_token:
+            haystack = " ".join(
+                str(record.get(key) or "")
+                for key in (
+                    "sequence",
+                    "completed_at_utc",
+                    "analysis_name",
+                    "analysis_kind",
+                    "run_title",
+                    "status",
+                    "input_sha256",
+                    "result_sha256",
+                )
+            ).casefold()
+            if query_token not in haystack:
+                continue
+        visible.append(record)
+    return visible
+
+
+def _flatten_run_history_value(
+    value: Any,
+    *,
+    prefix: str,
+    output: dict[str, Any],
+    limit: int,
+) -> None:
+    if len(output) >= limit:
+        return
+    if isinstance(value, dict):
+        if not value:
+            output[prefix] = {}
+            return
+        for key in sorted(value, key=lambda item: str(item).casefold()):
+            _flatten_run_history_value(
+                value[key],
+                prefix=f"{prefix}.{key}" if prefix else str(key),
+                output=output,
+                limit=limit,
+            )
+            if len(output) >= limit:
+                return
+        return
+    if isinstance(value, (list, tuple)):
+        if not value:
+            output[prefix] = []
+            return
+        for index, item in enumerate(value):
+            _flatten_run_history_value(
+                item,
+                prefix=f"{prefix}[{index}]",
+                output=output,
+                limit=limit,
+            )
+            if len(output) >= limit:
+                return
+        return
+    output[prefix] = value
+
+
+def _run_history_cell(value: Any) -> str:
+    if value is _RUN_HISTORY_MISSING:
+        return "— MISSING"
+    try:
+        text = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        text = str(value)
+    return text if len(text) <= 240 else text[:237] + "…"
+
+
+def run_history_diff_rows(
+    left: dict[str, Any],
+    right: dict[str, Any],
+    *,
+    limit: int = 2000,
+) -> list[tuple[str, str, str]]:
+    """Return changed canonical retained fields for two runs.
+
+    Only persisted record content is compared. No engineering value is recalculated.
+    """
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        raise TypeError("run history comparison requires two record objects")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("run history comparison limit must be positive")
+
+    left_flat: dict[str, Any] = {}
+    right_flat: dict[str, Any] = {}
+    roots = (
+        "analysis_name",
+        "analysis_kind",
+        "run_title",
+        "status",
+        "input_snapshot",
+        "result",
+        "diagnostics",
+    )
+    for key in roots:
+        if key in left:
+            _flatten_run_history_value(
+                left[key],
+                prefix=key,
+                output=left_flat,
+                limit=limit,
+            )
+        if key in right:
+            _flatten_run_history_value(
+                right[key],
+                prefix=key,
+                output=right_flat,
+                limit=limit,
+            )
+
+    rows: list[tuple[str, str, str]] = []
+    for path in sorted(set(left_flat) | set(right_flat), key=str.casefold):
+        left_value = left_flat.get(path, _RUN_HISTORY_MISSING)
+        right_value = right_flat.get(path, _RUN_HISTORY_MISSING)
+        if left_value == right_value:
+            continue
+        rows.append(
+            (
+                path,
+                _run_history_cell(left_value),
+                _run_history_cell(right_value),
+            )
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 class SimulationWorkspace(ttk.Frame):
     """Operator-facing control/status surface over the existing analysis runner."""
 
@@ -69,6 +244,7 @@ class SimulationWorkspace(ttk.Frame):
         on_validate: Callable[[], None],
         on_open_inputs: Callable[[], None],
         on_open_results: Callable[[], None],
+        on_open_history: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, padding=(14, 12))
         self._on_run = on_run
@@ -149,6 +325,14 @@ class SimulationWorkspace(ttk.Frame):
             style="CX.Compact.TButton",
             command=on_open_results,
         ).pack(side="left", padx=2)
+        self.history_button = ttk.Button(
+            controls,
+            text="Run History",
+            style="CX.Compact.TButton",
+            command=on_open_history if on_open_history is not None else (lambda: None),
+            state="normal" if on_open_history is not None else "disabled",
+        )
+        self.history_button.pack(side="left", padx=2)
 
         execution = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 8))
         execution.pack(fill="x", pady=(0, 8))

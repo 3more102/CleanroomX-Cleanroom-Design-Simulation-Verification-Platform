@@ -105,6 +105,7 @@ def test_room_context_menu_delegates_existing_spatial_view_commands(app):
         menu.destroy()
 
     assert labels == [
+        "Add to Favorites",
         "Open / Properties",
         "Fit Selected",
         "Isolate",
@@ -158,6 +159,56 @@ def test_recent_navigator_selection_is_non_destructive_and_restores_filtered_ite
     assert app.navigator_filter_var.get() == ""
     assert app.analysis_tree.selection() == (room_id,)
     assert app.project.to_dict() == project_before
+
+
+def test_navigator_favorites_are_non_destructive_and_restore_filtered_item(app):
+    app.navigator_filter_var.set("")
+    app.root.update()
+    room_id = next(
+        iid for iid in _all_tree_ids(app.analysis_tree) if iid.startswith("room:")
+    )
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    assert app.set_navigator_favorite(room_id) is True
+    favorite_values = tuple(app.navigator_favorite_picker.cget("values"))
+    assert favorite_values
+    assert "Room" in favorite_values[0]
+    assert room_id in app._navigator_favorite_ids
+    assert app.project.to_dict() == project_before
+
+    app.navigator_filter_var.set("ProofGraph")
+    app.root.update()
+    assert app.analysis_tree.get_children() == ("nav-proofgraph",)
+
+    app.navigator_favorite_var.set(favorite_values[0])
+    app._on_favorite_navigator_selected()
+    app.root.update()
+
+    assert app.navigator_filter_var.get() == ""
+    assert app.analysis_tree.selection() == (room_id,)
+    assert app.project.to_dict() == project_before
+
+    assert app.set_navigator_favorite(room_id, False) is True
+    assert app._navigator_favorite_ids == []
+    assert tuple(app.navigator_favorite_picker.cget("values")) == ()
+
+
+def test_navigator_favorites_are_scoped_to_active_project_object(app):
+    app.navigator_filter_var.set("")
+    app.root.update()
+    room_id = next(
+        iid for iid in _all_tree_ids(app.analysis_tree) if iid.startswith("room:")
+    )
+    assert app.set_navigator_favorite(room_id) is True
+    assert app._navigator_favorite_ids
+
+    app.project = ProjectDocument(name="Replacement")
+    app._refresh_analysis_list()
+    app.root.update_idletasks()
+
+    assert app._navigator_favorite_ids == []
+    assert tuple(app.navigator_favorite_picker.cget("values")) == ()
+    assert app.navigator_favorite_var.get() == ""
 
 
 def test_recent_navigator_state_is_scoped_to_active_project_object(app):

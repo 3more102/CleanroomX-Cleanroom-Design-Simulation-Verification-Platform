@@ -1514,7 +1514,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_mode = tk.StringVar(value="Pressure")
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
-        self._selection_var = tk.StringVar(value="No selection")
+        self._selection_var = tk.StringVar(value="No selection")\n        self._inspector_summary_var = tk.StringVar(\n            value="Select a room, opening, device, or equipment item to inspect."\n        )
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1546,7 +1546,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 7, 8, 4)\n        )
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1595,7 +1595,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)\n        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1630,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)\n        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1655,7 +1655,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="right", padx=(10, 2)
         )
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)\n        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
@@ -1849,7 +1849,26 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            style="CX.ViewTitle.TLabel",
+        ).pack(fill="x", pady=(3, 5))
+        summary_card = ttk.Frame(
+            inspector,
+            style="CX.Card.TFrame",
+            padding=(8, 7),
+        )
+        summary_card.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            summary_card,
+            text="ENGINEERING SUMMARY",
+            style="CX.CardTitle.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            summary_card,
+            textvariable=self._inspector_summary_var,
+            style="CX.CardTitle.TLabel",
+            wraplength=290,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
 
         property_groups = (
             (
@@ -1910,6 +1929,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(
             inspector,
             text="Apply properties",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
@@ -2612,7 +2632,11 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
-            self._selection_var.set("No selection")
+            self._selection_var.set("No object selected")
+            self._inspector_summary_var.set(
+                "Select a room, opening, device, or equipment item to inspect "
+                "its engineering properties."
+            )
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2634,6 +2658,29 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            area = float(item.get("length_m", 0.0)) * float(item.get("width_m", 0.0))
+            volume = area * float(item.get("height_m", 0.0))
+            classification = str(item.get("classification") or "Unclassified")
+            pressure = item.get("pressure_pa")
+            pressure_text = (
+                f"{float(pressure):+.1f} Pa"
+                if isinstance(pressure, (int, float))
+                else "Not configured"
+            )
+            self._inspector_summary_var.set(
+                f"Area {area:.1f} m²  ·  Volume {volume:.1f} m³\n"
+                f"Class {classification}  ·  Pressure {pressure_text}"
+            )
+        else:
+            device_type = str(item.get("type") or "device").upper()
+            room_id = str(item.get("room_id") or "Unassigned")
+            elevation = float(item.get("z_m", 0.0))
+            self._inspector_summary_var.set(
+                f"{device_type}  ·  Room {room_id}\n"
+                f"Elevation {elevation:.2f} m  ·  "
+                f"Orientation {float(item.get('orientation_deg', 0.0)):.0f}°"
+            )
         room_fields = {
             "name",
             "x_m",

@@ -60,6 +60,7 @@ def test_workspace_presets_coordinate_panels_and_primary_views(app):
     app.root.update()
     assert app.navigator_panel_visible_var.get() is False
     assert app.output_panel_visible_var.get() is True
+    assert app.notebook.select() == str(app.reporting_workspace)
     assert app.output_notebook.select() == str(app.report_text.master)
     assert app.workspace_status_var.get() == "Workspace: Reporting"
 

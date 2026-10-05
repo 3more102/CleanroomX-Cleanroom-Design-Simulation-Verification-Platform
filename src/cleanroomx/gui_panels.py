@@ -141,6 +141,47 @@ def filter_diagnostic_issues(
     return visible
 
 
+def diagnostic_sort_key(
+    issue: dict[str, Any],
+    column: str,
+) -> tuple[Any, ...]:
+    """Return stable engineer-facing sort keys for the Problems table."""
+    element = issue.get("element")
+    element_text = ""
+    if isinstance(element, dict):
+        element_text = str(
+            element.get("name")
+            or element.get("id")
+            or element.get("type")
+            or ""
+        )
+    details = issue.get("details")
+    level_text = ""
+    if isinstance(details, dict):
+        for key in ("level", "level_name", "floor", "floor_name"):
+            if details.get(key) not in (None, ""):
+                level_text = str(details[key])
+                break
+
+    severity = str(issue.get("severity") or "").casefold()
+    severity_rank = {
+        "critical": 0,
+        "error": 1,
+        "warning": 2,
+        "warn": 2,
+        "info": 3,
+    }.get(severity, 4)
+    values = {
+        "severity": (severity_rank, severity),
+        "code": (str(issue.get("rule") or "").casefold(),),
+        "description": (str(issue.get("message") or "").casefold(),),
+        "object": (element_text.casefold(),),
+        "level": (level_text.casefold(),),
+        "source": (str(issue.get("category") or "").casefold(),),
+    }
+    return (*values.get(column, values["severity"]), int(issue.get("sequence") or 0))
+
+
 class ProjectDiagnosticsPanel(ttk.Frame):
     """IDE-style view over the canonical CleanroomX project diagnostics service."""
 
@@ -162,6 +203,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self._sort_column = "severity"
+        self._sort_reverse = False
         self._theme_name = "dark"
         self._palette = theme_palette(self._theme_name)
 
@@ -343,8 +386,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "level": 120,
             "source": 150,
         }
+        self._column_headings = headings
         for column in columns:
-            self.tree.heading(column, text=headings[column])
+            self.tree.heading(
+                column,
+                text=headings[column],
+                command=lambda selected=column: self._set_sort(selected),
+            )
             self.tree.column(
                 column,
                 width=widths[column],
@@ -413,6 +461,19 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+
+    def _set_sort(self, column: str) -> None:
+        if column == self._sort_column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column
+            self._sort_reverse = False
+        for key, label in self._column_headings.items():
+            suffix = ""
+            if key == self._sort_column:
+                suffix = " ▼" if self._sort_reverse else " ▲"
+            self.tree.heading(key, text=label + suffix)
+        self._populate()
 
     def _configure_tree_tags(self) -> None:
         palette = self._palette
@@ -572,7 +633,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.tree.delete(item)
         self._issues_by_iid.clear()
 
-        visible_issues = self._filtered_issues()
+        visible_issues = sorted(
+            self._filtered_issues(),
+            key=lambda issue: diagnostic_sort_key(issue, self._sort_column),
+            reverse=self._sort_reverse,
+        )
         total_issues = (
             len(self.last_result.get("issues", []))
             if isinstance(self.last_result, dict)

@@ -2436,6 +2436,10 @@ class CleanroomXApp:
             Path(value)
             for value in self._ui_layout_state["recent_projects"]
         ]
+        self._navigator_favorites_by_project: dict[str, list[str]] = {
+            str(path): list(item_ids)
+            for path, item_ids in self._ui_layout_state["navigator_favorites"].items()
+        }
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -2477,9 +2481,14 @@ class CleanroomXApp:
         self.task_status_var = tk.StringVar(value="Tasks: idle")
         self.navigator_filter_var = tk.StringVar(value="")
         self.navigator_recent_var = tk.StringVar(value="")
+        self.navigator_favorites_var = tk.StringVar(value="")
         self._navigator_recent_ids: list[str] = []
         self._navigator_recent_display_to_id: dict[str, str] = {}
         self._navigator_recent_project_token = id(self.project)
+        self._navigator_favorite_ids: list[str] = []
+        self._navigator_favorite_display_to_id: dict[str, str] = {}
+        self._navigator_favorites_project_token = id(self.project)
+        self._navigator_favorites_loaded_key: str | None = None
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
         self.workspace_profile_var = tk.StringVar(
@@ -3221,6 +3230,39 @@ class CleanroomXApp:
             command=self.clear_navigator_recent,
         ).pack(side="left", padx=(4, 0))
 
+        favorites_row = ttk.Frame(navigator)
+        favorites_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(favorites_row, text="Favorites").pack(side="left", padx=(0, 6))
+        self.navigator_favorites_picker = ttk.Combobox(
+            favorites_row,
+            textvariable=self.navigator_favorites_var,
+            values=(),
+            state="readonly",
+        )
+        self.navigator_favorites_picker.pack(side="left", fill="x", expand=True)
+        self.navigator_favorites_picker.bind(
+            "<<ComboboxSelected>>",
+            self._on_favorite_navigator_selected,
+        )
+        self.navigator_favorite_toggle_button = ttk.Button(
+            favorites_row,
+            text="☆",
+            width=3,
+            style="CX.Compact.TButton",
+            command=self.toggle_selected_navigator_favorite,
+        )
+        self.navigator_favorite_toggle_button.pack(side="left", padx=(4, 0))
+        attach_tooltip(
+            self.navigator_favorite_toggle_button,
+            "Add or remove the selected engineering item from project favorites.",
+        )
+        ttk.Button(
+            favorites_row,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self.clear_navigator_favorites,
+        ).pack(side="left", padx=(4, 0))
+
         navigator_actions = ttk.Frame(navigator)
         navigator_actions.pack(fill="x", pady=(0, 6))
         self.navigator_add_analysis_button = ttk.Button(
@@ -3347,7 +3389,7 @@ class CleanroomXApp:
             self.notebook,
             on_refresh=self._refresh_engineering_panels,
             on_navigate=self._navigate_project_diagnostic,
-            on_export=self.export_project_diagnostics,
+            on_export=self.export_filtered_diagnostics_view,
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.diagnostics_workspace, text="Diagnostics")
@@ -3777,6 +3819,7 @@ class CleanroomXApp:
                     str(path)
                     for path in self._recent_project_paths[:8]
                 ],
+                "navigator_favorites": self._capture_navigator_favorites_state(),
                 "window_width": logical_width,
                 "window_height": logical_height,
             }
@@ -4470,6 +4513,7 @@ class CleanroomXApp:
                 "recent_projects": [
                     str(path) for path in self._recent_project_paths[:8]
                 ],
+                "navigator_favorites": self._capture_navigator_favorites_state(),
                 "saved_layouts": self._ui_layout_state.get("saved_layouts", {}),
             }
         )
@@ -4900,6 +4944,39 @@ class CleanroomXApp:
             f"Diagnostic {issue.get('rule', '')}: no spatial navigation target"
         )
 
+    def export_filtered_diagnostics_view(self, payload: dict | None) -> None:
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema")
+            != "cleanroomx.diagnostics.filtered_presentation_view"
+            or payload.get("canonical_diagnostics") is not False
+        ):
+            self.status_var.set("Filtered diagnostics export is unavailable")
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export filtered diagnostics view",
+            defaultextension=".json",
+            filetypes=[("Filtered diagnostics JSON", "*.json")],
+        )
+        if not path:
+            return
+        content = (
+            json.dumps(
+                payload,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+        )
+        self._write_export_file(
+            path,
+            content,
+            label="Filtered diagnostics view",
+        )
+
     def export_project_diagnostics(self, _result: dict | None = None) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -5104,6 +5181,20 @@ class CleanroomXApp:
                 self.show_global_search,
                 shortcut="Ctrl+K",
                 keywords=("find", "room", "device", "analysis", "diagnostic", "requirement", "evidence"),
+            ),
+            PaletteCommand(
+                "navigator.favorite.toggle",
+                "Toggle Selected Navigator Favorite",
+                "Navigation",
+                self.toggle_selected_navigator_favorite,
+                keywords=("favorite", "bookmark", "star", "navigator", "selection"),
+            ),
+            PaletteCommand(
+                "navigator.favorites.clear",
+                "Clear Project Navigator Favorites",
+                "Navigation",
+                self.clear_navigator_favorites,
+                keywords=("favorite", "bookmark", "navigator", "clear"),
             ),
             PaletteCommand(
                 "workspace.start",
@@ -6737,6 +6828,25 @@ class CleanroomXApp:
             return "Workspace"
         return "Analysis"
 
+    def _navigator_item_is_actionable(self, item_id: str) -> bool:
+        if item_id.startswith(("room:", "device:")):
+            return True
+        if item_id.startswith("nav-"):
+            return item_id in {
+                "nav-dashboard",
+                "nav-simulation",
+                "nav-diagnostics",
+                "nav-verification",
+                "nav-proofgraph",
+                "nav-evidence",
+                "nav-reports",
+                "nav-pressure",
+                "nav-airflow",
+                "nav-ach",
+                "nav-requirements",
+            }
+        return bool(item_id)
+
     def _reset_navigator_recent_for_project(self) -> None:
         token = id(self.project)
         if token == getattr(self, "_navigator_recent_project_token", None):
@@ -6781,19 +6891,7 @@ class CleanroomXApp:
         tree = getattr(self, "analysis_tree", None)
         if tree is None or not item_id or not tree.exists(item_id):
             return
-        if item_id.startswith("nav-") and item_id not in {
-            "nav-dashboard",
-            "nav-simulation",
-            "nav-diagnostics",
-            "nav-verification",
-            "nav-proofgraph",
-            "nav-evidence",
-            "nav-reports",
-            "nav-pressure",
-            "nav-airflow",
-            "nav-ach",
-            "nav-requirements",
-        }:
+        if not self._navigator_item_is_actionable(item_id):
             return
 
         self._reset_navigator_recent_for_project()
@@ -6825,6 +6923,172 @@ class CleanroomXApp:
         tree.selection_set(item_id)
         tree.focus(item_id)
         tree.see(item_id)
+
+    def _navigator_favorites_project_key(self) -> str | None:
+        path = getattr(self, "project_path", None)
+        if path is None:
+            return None
+        try:
+            return str(Path(path))
+        except (TypeError, ValueError, OSError):
+            return None
+
+    def _sync_navigator_favorites_for_project(self) -> None:
+        token = id(self.project)
+        key = self._navigator_favorites_project_key()
+        previous_token = getattr(self, "_navigator_favorites_project_token", None)
+        previous_key = getattr(self, "_navigator_favorites_loaded_key", None)
+        if token == previous_token and key == previous_key:
+            return
+        if token == previous_token:
+            if key is not None:
+                self._navigator_favorites_by_project[key] = list(
+                    getattr(self, "_navigator_favorite_ids", [])
+                )
+            self._navigator_favorites_loaded_key = key
+            return
+        self._navigator_favorites_project_token = token
+        self._navigator_favorites_loaded_key = key
+        self._navigator_favorite_ids = (
+            list(self._navigator_favorites_by_project.get(key, ()))
+            if key is not None
+            else []
+        )
+        self._navigator_favorite_display_to_id = {}
+        self.navigator_favorites_var.set("")
+
+    def _store_current_navigator_favorites(self) -> None:
+        self._sync_navigator_favorites_for_project()
+        key = self._navigator_favorites_project_key()
+        if key is None:
+            return
+        favorites = list(getattr(self, "_navigator_favorite_ids", []))
+        if favorites:
+            self._navigator_favorites_by_project[key] = favorites
+        else:
+            self._navigator_favorites_by_project.pop(key, None)
+
+    def _capture_navigator_favorites_state(self) -> dict[str, list[str]]:
+        self._store_current_navigator_favorites()
+        return {
+            path: list(item_ids)
+            for path, item_ids in self._navigator_favorites_by_project.items()
+            if item_ids
+        }
+
+    def _refresh_navigator_favorites_picker(self) -> None:
+        self._sync_navigator_favorites_for_project()
+        tree = getattr(self, "analysis_tree", None)
+        picker = getattr(self, "navigator_favorites_picker", None)
+        if tree is None or picker is None:
+            return
+        original = list(getattr(self, "_navigator_favorite_ids", []))
+        favorite_ids = [
+            item_id
+            for item_id in original
+            if tree.exists(item_id) and self._navigator_item_is_actionable(item_id)
+        ][:24]
+        self._navigator_favorite_ids = favorite_ids
+        if favorite_ids != original:
+            self._store_current_navigator_favorites()
+        display_to_id: dict[str, str] = {}
+        displays: list[str] = []
+        for item_id in favorite_ids:
+            text_value = str(tree.item(item_id, "text") or item_id)
+            display = f"{text_value} · {self._navigator_recent_category(item_id)}"
+            if display in display_to_id:
+                display = f"{display} · {item_id}"
+            display_to_id[display] = item_id
+            displays.append(display)
+        self._navigator_favorite_display_to_id = display_to_id
+        picker.configure(values=tuple(displays))
+        if self.navigator_favorites_var.get() not in display_to_id:
+            self.navigator_favorites_var.set("")
+        self._update_navigator_favorite_button()
+
+    def _is_navigator_favorite(self, item_id: str) -> bool:
+        self._sync_navigator_favorites_for_project()
+        return item_id in getattr(self, "_navigator_favorite_ids", ())
+
+    def _toggle_navigator_favorite(self, item_id: str) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        if (
+            tree is None
+            or not item_id
+            or not tree.exists(item_id)
+            or not self._navigator_item_is_actionable(item_id)
+        ):
+            return False
+        self._sync_navigator_favorites_for_project()
+        favorite_ids = list(getattr(self, "_navigator_favorite_ids", []))
+        if item_id in favorite_ids:
+            favorite_ids.remove(item_id)
+            added = False
+        else:
+            favorite_ids.insert(0, item_id)
+            favorite_ids = favorite_ids[:24]
+            added = True
+        self._navigator_favorite_ids = favorite_ids
+        self._store_current_navigator_favorites()
+        self._refresh_navigator_favorites_picker()
+        label = str(tree.item(item_id, "text") or item_id)
+        self.status_var.set(
+            f"{'Added to' if added else 'Removed from'} favorites: {label}"
+        )
+        return True
+
+    def toggle_selected_navigator_favorite(self) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        selection = tree.selection() if tree is not None else ()
+        if not selection:
+            self.status_var.set("Select an engineering item to favorite")
+            self._update_navigator_favorite_button()
+            return False
+        return self._toggle_navigator_favorite(selection[0])
+
+    def clear_navigator_favorites(self) -> None:
+        self._sync_navigator_favorites_for_project()
+        self._navigator_favorite_ids = []
+        self._navigator_favorite_display_to_id = {}
+        self.navigator_favorites_var.set("")
+        self._store_current_navigator_favorites()
+        picker = getattr(self, "navigator_favorites_picker", None)
+        if picker is not None:
+            picker.configure(values=())
+        self._update_navigator_favorite_button()
+        self.status_var.set("Project navigator favorites cleared")
+
+    def _on_favorite_navigator_selected(self, _event=None) -> None:
+        item_id = getattr(self, "_navigator_favorite_display_to_id", {}).get(
+            self.navigator_favorites_var.get()
+        )
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not item_id or not tree.exists(item_id):
+            self._refresh_navigator_favorites_picker()
+            return
+        if self.navigator_filter_var.get():
+            self.navigator_filter_var.set("")
+        tree.selection_set(item_id)
+        tree.focus(item_id)
+        tree.see(item_id)
+        self._update_navigator_favorite_button()
+
+    def _update_navigator_favorite_button(self) -> None:
+        button = getattr(self, "navigator_favorite_toggle_button", None)
+        tree = getattr(self, "analysis_tree", None)
+        if button is None or tree is None:
+            return
+        selection = tree.selection()
+        item_id = selection[0] if selection else ""
+        actionable = bool(
+            item_id
+            and tree.exists(item_id)
+            and self._navigator_item_is_actionable(item_id)
+        )
+        button.configure(
+            text="★" if actionable and self._is_navigator_favorite(item_id) else "☆",
+            state="normal" if actionable else "disabled",
+        )
 
     def _apply_navigator_filter(self) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -6881,6 +7145,16 @@ class CleanroomXApp:
         if tree is None or not item_id or not tree.exists(item_id):
             return None
         menu = tk.Menu(self.root, tearoff=False)
+        if self._navigator_item_is_actionable(item_id):
+            menu.add_command(
+                label=(
+                    "Remove from Favorites"
+                    if self._is_navigator_favorite(item_id)
+                    else "Add to Favorites"
+                ),
+                command=lambda selected=item_id: self._toggle_navigator_favorite(selected),
+            )
+            menu.add_separator()
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
 
@@ -7070,6 +7344,7 @@ class CleanroomXApp:
         self._capture_navigator_tree()
         self._apply_navigator_filter()
         self._refresh_navigator_recent_picker()
+        self._refresh_navigator_favorites_picker()
 
     def _sync_spatial_selection_status(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -7078,6 +7353,15 @@ class CleanroomXApp:
             return
         self.selection_status_var.set(workspace.selection_status_text())
 
+    def _sync_proofgraph_spatial_selection(self, kind: str, item_id: str) -> bool:
+        """Mirror real spatial selection into persisted ProofGraph evidence when present."""
+        if kind not in {"room", "device"} or not item_id:
+            return False
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return False
+        return bool(viewer.focus_node(f"model_object:{item_id}"))
+
     def _on_navigator_selected(self, event=None) -> None:
         if self._selection_guard:
             return
@@ -7085,6 +7369,7 @@ class CleanroomXApp:
         if not selection:
             return
         item_id = selection[0]
+        self._update_navigator_favorite_button()
         if item_id.startswith("room:") or item_id.startswith("device:"):
             self._remember_navigator_item(item_id)
             kind, spatial_id = item_id.split(":", 1)
@@ -7092,8 +7377,10 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+                self._sync_proofgraph_spatial_selection(kind, spatial_id)
             return
         if item_id == "nav-dashboard":
+            self._remember_navigator_item(item_id)
             if hasattr(self, "dashboard"):
                 self.notebook.select(self.dashboard)
                 self.workspace_status_var.set("Workspace: Dashboard")
@@ -7115,6 +7402,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Verification")
             return
         if item_id == "nav-proofgraph":
+            self._remember_navigator_item(item_id)
             self._activate_proofgraph_workspace()
             self.selection_status_var.set("Selected: ProofGraph")
             return
@@ -7174,6 +7462,7 @@ class CleanroomXApp:
             tree.see(navigator_id)
         finally:
             self._selection_guard = previous_guard
+        self._sync_proofgraph_spatial_selection(kind, item_id)
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:

@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .project_diagnostics import analyze_project_diagnostics
+from .gui_theme import canonical_status, status_tokens, theme_palette
 
 
 class ProjectDiagnosticsPanel(ttk.Frame):
@@ -35,7 +36,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self._theme_name = "dark"
         self._build()
+        self.apply_theme(self._theme_name)
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
@@ -60,25 +63,45 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            toolbar,
+            text="Refresh",
+            style="CX.Compact.TButton",
+            command=self.refresh,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Locate",
+            style="CX.Compact.TButton",
+            command=self._navigate_selected,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Copy",
+            style="CX.Compact.TButton",
+            command=self.copy_selected,
+        ).pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
             command=self._export,
             state="normal" if self._export_callback is not None else "disabled",
         )
+        self.export_button.configure(style="CX.Compact.TButton")
         self.export_button.pack(side="left", padx=2)
 
+        self.status_badge = ttk.Label(
+            toolbar,
+            text="NOT EVALUATED",
+            style="CX.Status.unknown.TLabel",
+        )
+        self.status_badge.pack(side="right")
         ttk.Label(
             toolbar,
             textvariable=self.summary_var,
             anchor="e",
-        ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+            style="CX.Muted.TLabel",
+        ).pack(side="right", fill="x", expand=True, padx=(12, 8))
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -252,7 +275,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     self._level_text(issue),
                     issue.get("category", ""),
                 ),
-                tags=(severity,),
+                tags=(severity, "even" if index % 2 == 0 else "odd"),
             )
             self._issues_by_iid[iid] = issue
 
@@ -280,13 +303,20 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.last_result = result
         summary = result.get("summary", {})
+        status = str(summary.get("status", "unknown"))
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        info = int(summary.get("info_count", 0) or 0)
         self.summary_var.set(
-            "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
-                status=str(summary.get("status", "unknown")).upper(),
-                errors=summary.get("error_count", 0),
-                warnings=summary.get("warning_count", 0),
-                info=summary.get("info_count", 0),
-            )
+            f"{errors} error(s) · {warnings} warning(s) · {info} information"
+        )
+        semantic = (
+            "fail" if errors else "warning" if warnings else
+            "pass" if isinstance(result, dict) else "unknown"
+        )
+        self.status_badge.configure(
+            text=("BLOCKED" if errors else "ATTENTION" if warnings else "CLEAR"),
+            style=f"CX.Status.{canonical_status(semantic)}.TLabel",
         )
         self._populate()
         return result
@@ -297,35 +327,79 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
         return self._issues_by_iid.get(selection[0])
 
+    @staticmethod
+    def _detail_lines(details: dict[str, Any]) -> list[str]:
+        lines: list[str] = []
+        for key in sorted(details):
+            value = details[key]
+            label = key.replace("_", " ").strip().title()
+            if isinstance(value, (dict, list)):
+                rendered = json.dumps(
+                    value,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ": "),
+                )
+            else:
+                rendered = str(value)
+            lines.append(f"{label}: {rendered}")
+        return lines
+
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        if issue is not None:
+        if issue is None:
+            empty = (
+                "No violations detected.\n\n"
+                "All currently evaluated project diagnostics are clear."
+                if isinstance(self.last_result, dict)
+                and not self._filtered_issues()
+                else (
+                    "No diagnostic selected.\n\n"
+                    "Select an issue to inspect its engineering context, "
+                    "recommended recovery action, and affected object."
+                )
+            )
+            self.detail.insert("1.0", empty)
+        else:
+            severity = str(issue.get("severity", "info")).upper()
+            element = self._element_text(issue)
+            category = str(issue.get("category") or "project")
             lines = [
-                f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
+                f"{severity}  ·  {issue.get('rule', '')}",
                 str(issue.get("message", "")),
                 "",
-                "Suggested action:",
-                str(issue.get("suggested_action", "")),
+                f"Affected object: {element}",
+                f"Engineering domain: {category}",
+                "",
+                "Recommended action",
+                str(issue.get("suggested_action", "") or "Review the affected engineering state."),
             ]
             details = issue.get("details")
             if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "Details:",
-                        json.dumps(
-                            details,
-                            indent=2,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
+                lines.extend(("", "Engineering details", *self._detail_lines(details)))
+            lines.extend(
+                (
+                    "",
+                    "Double-click the issue or choose Locate to focus its model context.",
                 )
+            )
             self.detail.insert("1.0", "\n".join(lines))
         self.detail.configure(state="disabled")
+
+    def apply_theme(self, value: str) -> None:
+        self._theme_name = str(value or "dark")
+        palette = theme_palette(self._theme_name)
+        error = status_tokens("fail", self._theme_name)
+        warning = status_tokens("warning", self._theme_name)
+        info = status_tokens("running", self._theme_name)
+        self.tree.tag_configure("error", foreground=error["foreground"])
+        self.tree.tag_configure("warning", foreground=warning["foreground"])
+        self.tree.tag_configure("info", foreground=info["foreground"])
+        self.tree.tag_configure("odd", background=palette["tree"])
+        self.tree.tag_configure("even", background=palette["surface"])
 
     def _navigate_selected(self, event=None):
         issue = self.selected_issue()

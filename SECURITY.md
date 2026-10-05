@@ -2,7 +2,15 @@
 
 ## Scope
 
-CleanroomX v0.102.1 is a local Python desktop/CLI engineering application. It is not a network service, authentication system, secret store, or sandbox for hostile code. The Python package declares no third-party runtime dependencies; the development/test extra adds pytest.
+CleanroomX is a local Python desktop/CLI engineering application. It is not a network service, authentication system, secret store, or sandbox for hostile code. The core Python package declares no third-party runtime dependencies; development, BIM, and release extras add purpose-specific tooling.
+
+## Automated security gates
+
+The repository has a dedicated least-privilege Security workflow on pull requests, pushes to `main`, and a weekly schedule. It runs the hostile-input and trust-boundary regression set, verifies the installed environment with `pip check`, and executes `scripts/security_static_gate.py`.
+
+The static gate scans production source and release scripts through Python ASTs and fails closed on dynamic `eval`/`exec`, `os.system`/`os.popen`, race-prone `tempfile.mktemp`, pickle/marshal unsafe deserialization, unsafe YAML loaders, direct archive `.extract()`/`.extractall()` helpers, and subprocess calls with literal `shell=True`. Regression tests verify both rejection and safe-subprocess behavior.
+
+Dependabot is configured for weekly Python-package and GitHub Actions updates. These controls reduce preventable supply-chain and unsafe-API regressions; they do not replace independent penetration testing or organization-specific deployment controls.
 
 ## Input and registry handling
 

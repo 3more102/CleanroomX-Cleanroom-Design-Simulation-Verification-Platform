@@ -153,6 +153,18 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     assert str(workspace._three_d_frame) in panes
 
 
+def test_workspace_mode_surfaces_unexpected_pane_failures(app, monkeypatch):
+    workspace = app.spatial_workspace
+
+    def fail_forget(_frame):
+        raise tk.TclError("synthetic pane failure")
+
+    monkeypatch.setattr(workspace._view_panes, "forget", fail_forget)
+
+    with pytest.raises(tk.TclError, match="synthetic pane failure"):
+        workspace.set_workspace_mode("2d")
+
+
 def test_project_navigator_and_workspace_selection_stay_synchronized(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

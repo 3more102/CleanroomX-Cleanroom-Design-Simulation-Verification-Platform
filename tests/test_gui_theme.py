@@ -20,12 +20,24 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "surface",
         "surface_alt",
         "panel",
+        "elevated",
         "text",
+        "secondary_text",
         "muted",
         "border",
+        "strong_border",
         "accent",
         "accent_hover",
         "accent_text",
+        "blue",
+        "success",
+        "lime",
+        "warning",
+        "attention",
+        "error",
+        "info",
+        "simulation",
+        "magenta",
         "selection",
         "selection_text",
         "field",
@@ -49,3 +61,16 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_dark_palette_matches_industrial_workstation_foundation():
+    dark = theme_palette("dark")
+
+    assert dark["background"] == "#0B1220"
+    assert dark["surface"] == "#111B2E"
+    assert dark["panel"] == "#17243A"
+    assert dark["accent"] == "#22D3EE"
+    assert dark["success"] == "#22C55E"
+    assert dark["warning"] == "#F59E0B"
+    assert dark["error"] == "#EF4444"
+    assert dark["simulation"] == "#A78BFA"

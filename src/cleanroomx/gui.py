@@ -80,7 +80,11 @@ from .gui_state import (
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .gui_windowing import fit_window_to_display
-from .gui_errors import make_gui_callback_exception_handler
+from .gui_errors import (
+    GuiErrorReport,
+    make_gui_callback_exception_handler,
+    record_gui_exception,
+)
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -6830,7 +6834,11 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+                report = record_gui_exception(
+                    f"Run analysis {analysis_id}",
+                    exc,
+                )
+                self._queue.put(("error", generation, analysis_id, report))
                 return
 
             history_evidence = None
@@ -6878,8 +6886,24 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
+                    if isinstance(payload, GuiErrorReport):
+                        self.status_var.set(
+                            f"Analysis failed · {payload.reference}"
+                        )
+                        messagebox.showerror(
+                            "Analysis failed",
+                            payload.user_message(),
+                            parent=self.root,
+                        )
+                    else:
+                        # Backward-compatible containment for queued errors from
+                        # older/session-local producers.
+                        self.status_var.set("Analysis failed")
+                        messagebox.showerror(
+                            "Analysis failed",
+                            str(payload),
+                            parent=self.root,
+                        )
                 else:
                     history_evidence = None
                     history_error = None

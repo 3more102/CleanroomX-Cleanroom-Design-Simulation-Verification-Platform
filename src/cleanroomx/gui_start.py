@@ -31,8 +31,8 @@ class StartCenter(ttk.Frame):
         ttk.Label(brand, text="CleanroomX", style="CX.Brand.TLabel").pack(anchor="w")
         ttk.Label(
             brand,
-            text="Engineering Design • Simulation • Verification",
-            style="CX.ViewTitle.TLabel",
+            text="ENGINEERING WORKSTATION  •  DESIGN  •  SIMULATION  •  VERIFICATION",
+            style="CX.Accent.TLabel",
         ).pack(anchor="w", pady=(4, 0))
         ttk.Label(
             brand,
@@ -141,6 +141,7 @@ class StartCenter(ttk.Frame):
             show="tree headings",
             height=6,
             selectmode="browse",
+            style="CX.Navigator.Treeview",
         )
         self.recent_tree.heading("#0", text="Project")
         self.recent_tree.heading("path", text="Path")
@@ -191,7 +192,12 @@ class StartCenter(ttk.Frame):
             wraplength=760,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Button(examples, text="Open Demo", command=on_open_demo).grid(
+        ttk.Button(
+            examples,
+            text="Open Demo",
+            command=on_open_demo,
+            style="CX.Primary.TButton",
+        ).grid(
             row=0, column=1, rowspan=2, sticky="e", padx=(18, 0)
         )
         examples.columnconfigure(0, weight=1)

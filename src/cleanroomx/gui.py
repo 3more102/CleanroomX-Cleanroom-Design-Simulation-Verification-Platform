@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_table import TreeviewTableBehavior
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -422,10 +423,19 @@ class AnalysisPicker(tk.Toplevel):
         self.tree.column("category", width=110, stretch=False)
         self.tree.column("source", width=180, stretch=False)
         self.tree.column("description", width=420, stretch=True)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "category", "source", "description"),
+            copy_columns=("#0", "category", "source", "description"),
+        )
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        scroll_x = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=12, pady=(6, 12))
@@ -508,6 +518,7 @@ class AnalysisPicker(tk.Toplevel):
                 ),
             )
 
+        self.table_behavior.reapply_sort()
         self.count_var.set(f"{len(visible)} of {len(self._catalog)} workflows")
         children = self.tree.get_children()
         if selected and self.tree.exists(selected):
@@ -629,6 +640,13 @@ class RunHistoryDialog(tk.Toplevel):
         self.tree.column("kind", width=190)
         self.tree.column("status", width=120, stretch=False)
         self.tree.column("input", width=165, stretch=False)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "time", "analysis", "kind", "status", "input"),
+            copy_columns=("#0", "time", "analysis", "kind", "status", "input"),
+        )
+        self.table_behavior.sort_column = "time"
+        self.table_behavior.sort_descending = True
         list_scroll = ttk.Scrollbar(
             list_frame, orient="vertical", command=self.tree.yview
         )
@@ -721,6 +739,7 @@ class RunHistoryDialog(tk.Toplevel):
                     record["input_sha256"][:16] + "…",
                 ),
             )
+        self.table_behavior.reapply_sort()
         self.count_var.set(f"{len(visible)} of {len(self.records)} records")
 
         children = self.tree.get_children()
@@ -956,6 +975,31 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.tree.column("currency", width=245, stretch=False)
         self.tree.column("verified", width=80, stretch=False)
         self.tree.column("identity", width=175, stretch=False)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=(
+                "#0",
+                "time",
+                "analysis",
+                "kind",
+                "status",
+                "currency",
+                "verified",
+                "identity",
+            ),
+            copy_columns=(
+                "#0",
+                "time",
+                "analysis",
+                "kind",
+                "status",
+                "currency",
+                "verified",
+                "identity",
+            ),
+        )
+        self.table_behavior.sort_column = "time"
+        self.table_behavior.sort_descending = True
 
         list_scroll = ttk.Scrollbar(
             list_frame,
@@ -1167,6 +1211,7 @@ class VerificationHistoryDialog(tk.Toplevel):
                     record["verification_identity_sha256"][:16] + "…",
                 ),
             )
+        self.table_behavior.reapply_sort()
         self.count_var.set(f"{len(visible)} of {len(self.records)} records")
 
         children = self.tree.get_children()
@@ -1826,6 +1871,11 @@ class IfcReimportPlanDialog(tk.Toplevel):
         self.tree.column("spatial", width=210)
         self.tree.column("local", width=105, stretch=False)
         self.tree.column("source", width=105, stretch=False)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "action", "kind", "spatial", "local", "source"),
+            copy_columns=("#0", "action", "kind", "spatial", "local", "source"),
+        )
         scroll_y = ttk.Scrollbar(
             table_frame,
             orient="vertical",
@@ -1968,6 +2018,7 @@ class IfcReimportPlanDialog(tk.Toplevel):
             )
             self._change_by_iid[iid] = item
 
+        self.table_behavior.reapply_sort()
         self.count_var.set(f"{len(visible)} of {len(self.changes)} changes")
         children = self.tree.get_children()
         target = None

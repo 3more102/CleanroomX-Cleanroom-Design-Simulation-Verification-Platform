@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import theme_palette
 from .project_diagnostics import analyze_project_diagnostics
 
 
@@ -31,27 +32,45 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self._theme_name = "dark"
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self.error_count_var = tk.StringVar(value="ERROR 0")
+        self.warning_count_var = tk.StringVar(value="WARNING 0")
+        self.info_count_var = tk.StringVar(value="INFO 0")
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(7, 5))
-        toolbar.pack(fill="x")
+        header = ttk.Frame(self, style="CX.PanelHeader.TFrame")
+        header.pack(fill="x")
+        ttk.Label(
+            header,
+            text="ENGINEERING PROBLEMS",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            header,
+            textvariable=self.summary_var,
+            style="CX.Muted.TLabel",
+        ).pack(side="right", padx=(10, 4))
 
-        ttk.Label(toolbar, text="PROBLEMS", style="CX.Section.TLabel").pack(
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
+        toolbar.pack(fill="x", pady=(4, 4))
+
+        ttk.Label(toolbar, text="SEARCH", style="CX.Toolbar.TLabel").pack(
+            side="left", padx=(0, 5)
+        )
+        ttk.Entry(toolbar, textvariable=self.search_var, width=28).pack(
             side="left", padx=(0, 8)
         )
-        ttk.Label(toolbar, text="Search").pack(side="left")
-        ttk.Entry(toolbar, textvariable=self.search_var, width=28).pack(
-            side="left", padx=(4, 8)
+        ttk.Label(toolbar, text="SEVERITY", style="CX.Toolbar.TLabel").pack(
+            side="left", padx=(2, 5)
         )
-        ttk.Label(toolbar, text="Severity").pack(side="left")
         severity = ttk.Combobox(
             toolbar,
             textvariable=self.severity_var,
@@ -59,26 +78,52 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             state="readonly",
             width=10,
         )
-        severity.pack(side="left", padx=(4, 8))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
-            side="left", padx=2
+        severity.pack(side="left", padx=(0, 8))
+        ttk.Button(
+            toolbar,
+            text="Refresh",
+            style="CX.Compact.TButton",
+            command=self.refresh,
+        ).pack(side="left", padx=2)
+        self.locate_button = ttk.Button(
+            toolbar,
+            text="Locate / Inspect",
+            style="CX.Primary.TButton",
+            command=self.locate_selected,
         )
-        ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
-            side="left", padx=2
-        )
+        self.locate_button.pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Copy",
+            style="CX.Compact.TButton",
+            command=self.copy_selected,
+        ).pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
+            style="CX.Compact.TButton",
             command=self._export,
             state="normal" if self._export_callback is not None else "disabled",
         )
         self.export_button.pack(side="left", padx=2)
 
+        badges = ttk.Frame(self)
+        badges.pack(fill="x", padx=6, pady=(0, 4))
         ttk.Label(
-            toolbar,
-            textvariable=self.summary_var,
-            anchor="e",
-        ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+            badges,
+            textvariable=self.error_count_var,
+            style="CX.Status.Fail.TLabel",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Label(
+            badges,
+            textvariable=self.warning_count_var,
+            style="CX.Status.Warning.TLabel",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Label(
+            badges,
+            textvariable=self.info_count_var,
+            style="CX.Status.Unknown.TLabel",
+        ).pack(side="left")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -86,7 +131,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame = ttk.Frame(body)
         detail_frame = ttk.Frame(body)
         body.add(table_frame, weight=4)
-        body.add(detail_frame, weight=1)
+        body.add(detail_frame, weight=2)
 
         columns = ("severity", "code", "description", "object", "level", "source")
         self.tree = ttk.Treeview(
@@ -99,18 +144,18 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         headings = {
             "severity": "Severity",
             "code": "Code",
-            "description": "Description",
-            "object": "Object",
+            "description": "Engineering finding",
+            "object": "Affected object",
             "level": "Level",
-            "source": "Source",
+            "source": "Domain",
         }
         widths = {
-            "severity": 90,
-            "code": 220,
+            "severity": 86,
+            "code": 190,
             "description": 520,
             "object": 180,
-            "level": 120,
-            "source": 150,
+            "level": 110,
+            "source": 140,
         }
         for column in columns:
             self.tree.heading(column, text=headings[column])
@@ -119,6 +164,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 width=widths[column],
                 minwidth=70,
                 stretch=column == "description",
+                anchor="w",
             )
 
         yscroll = ttk.Scrollbar(
@@ -141,17 +187,31 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
 
+        detail_header = ttk.Frame(detail_frame, style="CX.PanelHeader.TFrame")
+        detail_header.pack(fill="x", padx=(0, 2), pady=(2, 0))
+        ttk.Label(
+            detail_header,
+            text="DIAGNOSTIC DETAIL",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            detail_header,
+            text="Canonical diagnostic payload remains available via Copy / Export",
+            style="CX.Muted.TLabel",
+        ).pack(side="right", padx=5)
+
         self.detail = tk.Text(
             detail_frame,
             wrap="word",
-            height=4,
+            height=5,
             state="disabled",
             borderwidth=0,
+            padx=8,
+            pady=6,
         )
         detail_scroll = ttk.Scrollbar(
             detail_frame,
@@ -159,7 +219,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             command=self.detail.yview,
         )
         self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
+        self.detail.pack(side="left", fill="both", expand=True, padx=(2, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
 
     @staticmethod
@@ -252,7 +312,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     self._level_text(issue),
                     issue.get("category", ""),
                 ),
-                tags=(severity,),
+                tags=(severity, f"row-{index % 2}"),
             )
             self._issues_by_iid[iid] = issue
 
@@ -274,20 +334,25 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         except Exception as exc:
             self.last_result = None
             self.summary_var.set(f"Diagnostics unavailable: {exc}")
+            self.error_count_var.set("ERROR —")
+            self.warning_count_var.set("WARNING —")
+            self.info_count_var.set("INFO —")
             self._status_setter("Project diagnostics failed")
             self._populate()
             return None
 
         self.last_result = result
         summary = result.get("summary", {})
+        status = str(summary.get("status", "unknown")).upper()
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        info = int(summary.get("info_count", 0) or 0)
         self.summary_var.set(
-            "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
-                status=str(summary.get("status", "unknown")).upper(),
-                errors=summary.get("error_count", 0),
-                warnings=summary.get("warning_count", 0),
-                info=summary.get("info_count", 0),
-            )
+            f"{status} · {len(result.get('issues', [])) if isinstance(result.get('issues'), list) else 0} finding(s)"
         )
+        self.error_count_var.set(f"ERROR {errors}")
+        self.warning_count_var.set(f"WARNING {warnings}")
+        self.info_count_var.set(f"INFO {info}")
         self._populate()
         return result
 
@@ -297,41 +362,66 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
         return self._issues_by_iid.get(selection[0])
 
+    @staticmethod
+    def _detail_pairs(details: dict[str, Any]) -> list[str]:
+        lines: list[str] = []
+        for key in sorted(details):
+            value = details[key]
+            if isinstance(value, (dict, list)):
+                rendered = json.dumps(
+                    value,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+            else:
+                rendered = str(value)
+            lines.append(f"{key.replace('_', ' ').title()}: {rendered}")
+        return lines
+
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        if issue is not None:
+        if issue is None:
+            self.detail.insert(
+                "1.0",
+                "Select a diagnostic to inspect its engineering context and recovery action.",
+            )
+        else:
+            severity = str(issue.get("severity", "info")).upper()
+            code = str(issue.get("rule", ""))
+            category = str(issue.get("category", ""))
+            element = self._element_text(issue)
             lines = [
-                f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
+                f"{severity}  ·  {code}",
                 str(issue.get("message", "")),
                 "",
-                "Suggested action:",
-                str(issue.get("suggested_action", "")),
+                f"Affected object: {element}",
+                f"Engineering domain: {category or 'Unspecified'}",
             ]
+            level = self._level_text(issue)
+            if level:
+                lines.append(f"Level: {level}")
+            action = str(issue.get("suggested_action", "")).strip()
+            if action:
+                lines.extend(("", "Recommended recovery", action))
             details = issue.get("details")
             if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "Details:",
-                        json.dumps(
-                            details,
-                            indent=2,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                )
+                lines.extend(("", "Engineering details"))
+                lines.extend(self._detail_pairs(details))
             self.detail.insert("1.0", "\n".join(lines))
         self.detail.configure(state="disabled")
 
-    def _navigate_selected(self, event=None):
+    def locate_selected(self) -> None:
         issue = self.selected_issue()
         if issue is None:
-            return "break"
+            self._status_setter("Select a diagnostic to locate")
+            return
         self._navigate_callback(issue)
+
+    def _navigate_selected(self, event=None):
+        self.locate_selected()
         return "break"
 
     def copy_selected(self) -> None:
@@ -356,3 +446,29 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         result = self.last_result or self.refresh()
         if result is not None:
             self._export_callback(result)
+
+    def apply_theme(self, value: str) -> None:
+        """Retheme Tk-native diagnostic surfaces and semantic tree rows."""
+        self._theme_name = value
+        palette = theme_palette(value)
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+            highlightbackground=palette["border"],
+        )
+        self.tree.tag_configure(
+            "error",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground=palette["warning"],
+        )
+        self.tree.tag_configure(
+            "info",
+            foreground=palette["muted"],
+        )

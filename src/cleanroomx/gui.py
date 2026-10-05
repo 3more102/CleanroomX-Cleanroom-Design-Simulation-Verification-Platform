@@ -3225,6 +3225,7 @@ class CleanroomXApp:
             self._refresh_engineering_panels()
             self._refresh_start_center()
             self.notebook.select(self.start_center)
+            self.root.after_idle(self.start_center.focus_default)
         elif selected == "design":
             self.notebook.select(self.spatial_workspace)
         elif selected == "simulation":

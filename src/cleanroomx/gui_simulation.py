@@ -247,11 +247,16 @@ class SimulationWorkspace(ttk.Frame):
         on_open_results: Callable[[], None],
         on_open_history: Callable[[], None] | None = None,
         on_duplicate_analysis: Callable[[], None] | None = None,
+        on_select_analysis: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(master, padding=(14, 12))
         self._on_run = on_run
         self._on_cancel = on_cancel
+        self._on_select_analysis = on_select_analysis
+        self._analysis_id_by_display: dict[str, str] = {}
+        self._suppress_scenario_callback = False
 
+        self.scenario_var = tk.StringVar(value="No active scenario")
         self.analysis_var = tk.StringVar(value="No active analysis")
         self.kind_var = tk.StringVar(value="—")
         self.input_var = tk.StringVar(value="0 top-level fields")
@@ -288,6 +293,24 @@ class SimulationWorkspace(ttk.Frame):
 
         controls = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         controls.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            controls,
+            text="SCENARIO",
+            style="CX.ToolbarSection.TLabel",
+        ).pack(side="left", padx=(0, 5))
+        self.scenario_combo = ttk.Combobox(
+            controls,
+            textvariable=self.scenario_var,
+            values=(),
+            state="readonly" if on_select_analysis is not None else "disabled",
+            width=30,
+        )
+        self.scenario_combo.pack(side="left", padx=(0, 7))
+        self.scenario_combo.bind(
+            "<<ComboboxSelected>>",
+            self._scenario_selected,
+        )
+        ttk.Separator(controls, orient="vertical").pack(side="left", fill="y", padx=(0, 7))
         ttk.Label(
             controls,
             text="SOLVER",
@@ -461,6 +484,51 @@ class SimulationWorkspace(ttk.Frame):
             wraplength=250,
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
+
+    def set_analysis_options(
+        self,
+        analyses: list[tuple[str, str, str]] | tuple[tuple[str, str, str], ...],
+        *,
+        active_id: str | None,
+    ) -> None:
+        """Project canonical analyses into the scenario selector without mutation."""
+        mapping: dict[str, str] = {}
+        active_display = ""
+        for analysis_id, name, kind in analyses:
+            identity = str(analysis_id)
+            display = f"{name} [{kind}] · {identity}"
+            mapping[display] = identity
+            if active_id is not None and identity == str(active_id):
+                active_display = display
+
+        self._analysis_id_by_display = mapping
+        values = tuple(mapping)
+        self._suppress_scenario_callback = True
+        try:
+            self.scenario_combo.configure(
+                values=values,
+                state=(
+                    "readonly"
+                    if self._on_select_analysis is not None and values
+                    else "disabled"
+                ),
+            )
+            if active_display:
+                self.scenario_var.set(active_display)
+            elif values:
+                self.scenario_var.set(values[0])
+            else:
+                self.scenario_var.set("No active scenario")
+        finally:
+            self._suppress_scenario_callback = False
+
+    def _scenario_selected(self, _event=None):
+        if self._suppress_scenario_callback or self._on_select_analysis is None:
+            return "break"
+        analysis_id = self._analysis_id_by_display.get(self.scenario_var.get())
+        if analysis_id:
+            self._on_select_analysis(analysis_id)
+        return "break"
 
     @staticmethod
     def _kv(master: ttk.Frame, label: str, variable: tk.StringVar) -> None:

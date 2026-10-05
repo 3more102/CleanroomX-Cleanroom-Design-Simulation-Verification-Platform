@@ -4,7 +4,12 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    _search_projection,
+    proofgraph_projection,
+    proofgraph_summary,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +240,43 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+
+def test_proofgraph_summary_reports_only_persisted_graph_state():
+    summary = proofgraph_summary(proofgraph_projection(_sample_graph()))
+
+    assert summary == {
+        "requirements": 1,
+        "evidence": 1,
+        "findings": 1,
+        "unresolved_evidence": 0,
+        "verdict_pass": 0,
+        "verdict_fail": 1,
+        "verdict_not_checked": 0,
+    }
+
+    unresolved = proofgraph_summary(proofgraph_projection(_unresolved_graph()))
+    assert unresolved["requirements"] == 1
+    assert unresolved["evidence"] == 0
+    assert unresolved["unresolved_evidence"] == 1
+    assert unresolved["verdict_not_checked"] == 1
+    assert unresolved["verdict_fail"] == 0
+
+
+def test_proofgraph_search_keeps_one_hop_traceability_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    found = _search_projection(projection, "pressure_solver")
+    found_keys = {node["key"] for node in found["nodes"]}
+    assert "calculation:pressure_solver" in found_keys
+    assert "evidence:evidence-pressure" in found_keys
+    assert any(
+        edge["source"] == "calculation:pressure_solver"
+        and edge["target"] == "evidence:evidence-pressure"
+        for edge in found["edges"]
+    )
+
+    assert _search_projection(projection, "") == projection
+    absent = _search_projection(projection, "definitely-not-present-7f196b")
+    assert absent == {"nodes": [], "edges": []}

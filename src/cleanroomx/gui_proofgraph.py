@@ -603,12 +603,12 @@ class ProofGraphViewer(ttk.Frame):
         status = _text(node.get("status")).casefold()
         if self._theme_name == "dark":
             status_colors = {
-                "fail": "#4a2026",
-                "failed": "#4a2026",
-                "error": "#4a2026",
-                "warning": "#4b3b18",
-                "warn": "#4b3b18",
-                "pass": "#183b2b",
+                "fail": self._theme_palette["error_surface"],
+                "failed": self._theme_palette["error_surface"],
+                "error": self._theme_palette["error_surface"],
+                "warning": self._theme_palette["warning_surface"],
+                "warn": self._theme_palette["warning_surface"],
+                "pass": self._theme_palette["pass_surface"],
             }
             type_colors = {
                 "requirement": "#17324d",
@@ -628,11 +628,11 @@ class ProofGraphViewer(ttk.Frame):
             )
 
         if status in {"fail", "failed", "error"}:
-            return "#fee2e2"
+            return self._theme_palette["error_surface"]
         if status in {"warning", "warn"}:
-            return "#fef3c7"
+            return self._theme_palette["warning_surface"]
         if status == "pass":
-            return "#dcfce7"
+            return self._theme_palette["pass_surface"]
         return {
             "requirement": "#dbeafe",
             "model_object": "#e0f2fe",

@@ -64,7 +64,10 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
-from .project_diagnostics import markdown_project_diagnostics_report
+from .project_diagnostics import (
+    analyze_project_diagnostics,
+    markdown_project_diagnostics_report,
+)
 from .project_diagnostics_cli import (
     _assert_project_output_is_safe,
     _assert_project_publication_safe,
@@ -75,6 +78,13 @@ from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
 from .gui_tasks import EngineeringTaskCenter
+from .gui_reporting import (
+    REPORT_CURRENT_ANALYSIS,
+    REPORT_PROJECT_DIAGNOSTICS,
+    REPORT_PROJECT_DOSSIER,
+    ReportPreview,
+    ReportingWorkspace,
+)
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
     GlobalEngineeringSearch,
@@ -1495,6 +1505,11 @@ class CleanroomXApp:
 
         report_menu = tk.Menu(menubar, tearoff=False)
         report_menu.add_command(
+            label="Open Reporting Workspace",
+            command=self._activate_reporting_workspace,
+        )
+        report_menu.add_separator()
+        report_menu.add_command(
             label="Export Project Engineering Dossier...",
             command=self.export_project_engineering_dossier,
         )
@@ -2075,6 +2090,15 @@ class CleanroomXApp:
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
+        self.reporting_workspace = ReportingWorkspace(
+            self.notebook,
+            preview_provider=self._build_reporting_preview,
+            export_callback=self._export_reporting_type,
+            status_setter=self.status_var.set,
+        )
+        self.reporting_workspace.apply_theme(self.theme_var.get())
+        self.notebook.add(self.reporting_workspace, text="Reporting")
+
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
         input_notebook = ttk.Notebook(self.input_tab)
@@ -2536,6 +2560,10 @@ class CleanroomXApp:
         if task_center is not None:
             task_center.apply_theme(self.theme_var.get())
 
+        reporting = getattr(self, "reporting_workspace", None)
+        if reporting is not None:
+            reporting.apply_theme(self.theme_var.get())
+
         navigator = getattr(self, "analysis_tree", None)
         if isinstance(navigator, ttk.Treeview):
             navigator.tag_configure(
@@ -2845,8 +2873,7 @@ class CleanroomXApp:
             if hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
         else:
-            if hasattr(self, "dashboard"):
-                self.notebook.select(self.dashboard)
+            self._activate_reporting_workspace()
             if hasattr(self, "report_text"):
                 self.output_notebook.select(self.report_text.master)
 
@@ -2857,6 +2884,187 @@ class CleanroomXApp:
         self.status_var.set(f"{label} workspace layout applied")
         if persist:
             self._save_ui_layout_state()
+
+    def _activate_reporting_workspace(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        self.notebook.select(workspace)
+        self.workspace_status_var.set("Workspace: Reporting")
+        workspace.refresh()
+
+    def _build_reporting_preview(self, report_type: str) -> ReportPreview:
+        if report_type == REPORT_PROJECT_DOSSIER:
+            title = "Project Engineering Dossier"
+            if self._running:
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="unavailable",
+                    note="An analysis is running. Finish or abandon it before generating a project dossier preview.",
+                )
+            if self.project_path is None:
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="unavailable",
+                    note="Save the project first. The dossier must be bound to exact saved project bytes.",
+                )
+            if self._has_unsaved_changes():
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="stale",
+                    note="Save current project changes before previewing the dossier so its source revision is exact.",
+                )
+
+            expected_revision = getattr(self, "_project_file_revision", None)
+            if expected_revision is None:
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="unavailable",
+                    note="Saved project revision identity is unavailable. Save or reopen the project first.",
+                )
+            try:
+                revision_before = capture_project_file_revision(self.project_path)
+                if not project_file_revision_matches(
+                    expected_revision,
+                    revision_before,
+                ):
+                    return ReportPreview(
+                        report_type=report_type,
+                        title=title,
+                        content="",
+                        available=False,
+                        status="stale",
+                        note="The project file changed on disk after it was opened or saved. Reload or save the intended revision.",
+                    )
+                dossier = build_project_engineering_dossier(
+                    self.project,
+                    source_project_revision=revision_before.sha256,
+                    base_dir=self.project_path.parent,
+                )
+                content = markdown_project_engineering_dossier(dossier)
+                revision_after = capture_project_file_revision(self.project_path)
+                if not project_file_revision_matches(
+                    revision_before,
+                    revision_after,
+                ):
+                    return ReportPreview(
+                        report_type=report_type,
+                        title=title,
+                        content="",
+                        available=False,
+                        status="stale",
+                        note="The project file changed during dossier generation. Refresh after the saved project stabilizes.",
+                    )
+            except Exception as exc:
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="failed",
+                    note=str(exc),
+                )
+            return ReportPreview(
+                report_type=report_type,
+                title=title,
+                content=content,
+                available=True,
+                status="ready",
+                source=f"saved project SHA-256 {revision_before.sha256}",
+                note=f"Dossier SHA-256: {dossier['dossier_sha256']}",
+            )
+
+        if report_type == REPORT_PROJECT_DIAGNOSTICS:
+            title = "Project Diagnostics Report"
+            try:
+                result = analyze_project_diagnostics(
+                    self.project,
+                    base_dir=self._base_dir(),
+                )
+                content = markdown_project_diagnostics_report(result)
+            except Exception as exc:
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="failed",
+                    note=str(exc),
+                )
+            summary = result.get("summary", {})
+            status = str(summary.get("status") or "unknown").strip().lower()
+            return ReportPreview(
+                report_type=report_type,
+                title=title,
+                content=content,
+                available=True,
+                status=status,
+                source="current project diagnostics",
+                note=(
+                    f"{summary.get('error_count', 0)} error(s) · "
+                    f"{summary.get('warning_count', 0)} warning(s) · "
+                    f"{summary.get('info_count', 0)} informational"
+                ),
+            )
+
+        if report_type == REPORT_CURRENT_ANALYSIS:
+            title = "Current Analysis Report"
+            run = self._current_fresh_run()
+            if run is None:
+                return ReportPreview(
+                    report_type=report_type,
+                    title=title,
+                    content="",
+                    available=False,
+                    status="unavailable",
+                    note="No current analysis result is available. Run the selected analysis first.",
+                )
+            analysis_id = self.last_run_analysis_id
+            analysis_name = "analysis"
+            if analysis_id is not None:
+                try:
+                    analysis_name = self.project.analysis_by_id(analysis_id).name
+                except KeyError:
+                    pass
+            return ReportPreview(
+                report_type=report_type,
+                title=title,
+                content=run.markdown,
+                available=True,
+                status=str(run.status or "completed").strip().lower(),
+                source=f"current result · {analysis_name}",
+            )
+
+        return ReportPreview(
+            report_type=report_type,
+            title="Report unavailable",
+            content="",
+            available=False,
+            status="unavailable",
+            note="Unsupported report type.",
+        )
+
+    def _export_reporting_type(self, report_type: str) -> None:
+        if report_type == REPORT_PROJECT_DOSSIER:
+            self.export_project_engineering_dossier()
+        elif report_type == REPORT_PROJECT_DIAGNOSTICS:
+            self.export_project_diagnostics()
+        elif report_type == REPORT_CURRENT_ANALYSIS:
+            self.export_report_markdown()
+        else:
+            self.status_var.set("Unsupported report type")
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
@@ -3417,6 +3625,13 @@ class CleanroomXApp:
                     "requirement",
                     "evidence",
                 ),
+            ),
+            PaletteCommand(
+                "reporting.open",
+                "Open Reporting Workspace",
+                "Navigation",
+                self._activate_reporting_workspace,
+                keywords=("report", "dossier", "diagnostics", "preview", "export"),
             ),
             PaletteCommand(
                 "tasks.open",
@@ -5183,10 +5398,8 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Evidence")
             return
         if item_id == "nav-reports":
-            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.report_text.master)
-            self.selection_status_var.set("Selected: Reports")
+            self._activate_reporting_workspace()
+            self.selection_status_var.set("Selected: Reporting")
             return
         if item_id in {"nav-pressure", "nav-airflow", "nav-ach"}:
             if hasattr(self, "spatial_workspace"):

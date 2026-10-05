@@ -267,3 +267,67 @@ def test_status_bar_reports_canonical_problem_counts_and_opens_problem_panel(app
     app.root.update()
     assert app._paned_contains(app.workspace_panes, app.output_panel)
     assert app.output_notebook.select() == str(app.problems_panel)
+
+
+
+def test_navigator_projects_canonical_diagnostics_with_bounded_summary(app):
+    result, issue = _force_room_overlap(app)
+    tree = app.analysis_tree
+
+    assert tree.exists("nav-diagnostics")
+    summary = result["summary"]
+    assert tree.item("nav-diagnostics", "text") == (
+        "Diagnostics · "
+        f"{summary['error_count']}E "
+        f"{summary['warning_count']}W "
+        f"{summary['info_count']}I"
+    )
+
+    diagnostic_children = [
+        iid
+        for iid in tree.get_children("nav-diagnostics")
+        if iid.startswith("diag:")
+    ]
+    assert diagnostic_children
+    target_iid = next(
+        iid
+        for iid in diagnostic_children
+        if app._navigator_diagnostic_issues[iid]["sequence"] == issue["sequence"]
+    )
+    assert "spatial.room_overlap" in tree.item(target_iid, "text")
+
+    tree.selection_set(target_iid)
+    tree.focus(target_iid)
+    app._on_navigator_selected()
+    app.root.update()
+
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.spatial_workspace.selected == _Hit(
+        "room",
+        issue["element"]["id"],
+    )
+    assert app.selection_status_var.get() == "Selected: spatial.room_overlap"
+
+
+def test_navigator_diagnostics_are_searchable_by_rule_message_and_category(app):
+    _result, _issue = _force_room_overlap(app)
+    tree = app.analysis_tree
+
+    app.navigator_filter_var.set("room_overlap")
+    app.root.update()
+    assert tree.exists("nav-diagnostics")
+    visible = list(tree.get_children("nav-diagnostics"))
+    assert visible
+    assert any(
+        iid.startswith("diag:")
+        and "room_overlap" in str(app._navigator_diagnostic_issues[iid]["rule"])
+        for iid in visible
+    )
+
+    app.navigator_filter_var.set("spatial")
+    app.root.update()
+    visible = list(tree.get_children("nav-diagnostics"))
+    assert visible
+
+    app.navigator_filter_var.set("")
+    app.root.update()

@@ -40,6 +40,10 @@ def test_installer_lifecycle_gate_covers_install_upgrade_launch_and_uninstall():
     assert '$baselineVersion = "0.102.999"' in text
     assert "DisplayVersion" in text
     assert "unins000.exe" in text
+    assert '$baselineHash = "$baselineInstaller.sha256"' in text
+    assert "Remove-Item -Force $baselineInstaller" in text
+    assert "Remove-Item -Force $baselineHash" in text
+    assert "Lifecycle baseline installer cleanup did not complete" in text
     assert "install -> launch -> upgrade -> launch -> uninstall" in text
 
     assert "runs-on: windows-2025" in workflow

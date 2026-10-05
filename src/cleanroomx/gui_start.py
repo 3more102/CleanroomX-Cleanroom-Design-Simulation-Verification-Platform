@@ -45,7 +45,35 @@ class StartCenter(ttk.Frame):
             justify="left",
         ).pack(anchor="w", pady=(8, 0))
 
-        actions = ttk.LabelFrame(self, text="Start", padding=18)
+        badges = ttk.Frame(brand)
+        badges.pack(anchor="w", pady=(12, 0))
+        ttk.Label(
+            badges,
+            text="DESIGN",
+            style="CX.Info.Badge.TLabel",
+        ).pack(side="left", padx=(0, 6))
+        ttk.Label(
+            badges,
+            text="VERIFY",
+            style="CX.Success.Badge.TLabel",
+        ).pack(side="left", padx=6)
+        ttk.Label(
+            badges,
+            text="DIAGNOSTICS",
+            style="CX.Warning.Badge.TLabel",
+        ).pack(side="left", padx=6)
+        ttk.Label(
+            badges,
+            text="EVIDENCE",
+            style="CX.Info.Badge.TLabel",
+        ).pack(side="left", padx=6)
+
+        actions = ttk.LabelFrame(
+            self,
+            text="START / PROJECT CONTROL",
+            style="CX.Action.TLabelframe",
+            padding=18,
+        )
         actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
@@ -72,7 +100,12 @@ class StartCenter(ttk.Frame):
             command=on_open_demo,
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
-        capabilities = ttk.LabelFrame(self, text="Engineering workspace", padding=18)
+        capabilities = ttk.LabelFrame(
+            self,
+            text="ENGINEERING WORKSPACE",
+            style="CX.Capability.TLabelframe",
+            padding=18,
+        )
         capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
         ttk.Label(
             capabilities,
@@ -87,7 +120,12 @@ class StartCenter(ttk.Frame):
             justify="left",
         ).pack(anchor="w")
 
-        recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
+        recent = ttk.LabelFrame(
+            self,
+            text="RECENT PROJECTS",
+            style="CX.Panel.TLabelframe",
+            padding=12,
+        )
         recent.grid(
             row=2,
             column=0,
@@ -126,7 +164,12 @@ class StartCenter(ttk.Frame):
             command=self._open_selected_recent,
         ).pack(side="right")
 
-        examples = ttk.LabelFrame(self, text="Example Projects", padding=12)
+        examples = ttk.LabelFrame(
+            self,
+            text="EXAMPLE PROJECTS",
+            style="CX.Panel.TLabelframe",
+            padding=12,
+        )
         examples.grid(
             row=3,
             column=0,

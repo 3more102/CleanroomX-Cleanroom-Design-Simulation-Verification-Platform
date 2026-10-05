@@ -78,7 +78,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_theme import configure_ttk_theme, normalize_theme_name, status_style_name
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1255,6 +1255,11 @@ class CleanroomXApp:
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
         self.model_status_var = tk.StringVar(value="Model: ready")
+        self.project_state_var = tk.StringVar(value="UNSAVED")
+        self.diagnostics_badge_var = tk.StringVar(value="PROBLEMS —")
+        self.verification_badge_var = tk.StringVar(value="VERIFY —")
+        self.evidence_badge_var = tk.StringVar(value="EVIDENCE 0")
+        self.run_state_var = tk.StringVar(value="IDLE")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -1512,41 +1517,99 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(self.root, style="CX.Topbar.TFrame")
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 12)
+
+        brand_block = ttk.Frame(topbar, style="CX.Topbar.TFrame")
+        brand_block.grid(row=0, column=0, rowspan=2, sticky="nsw", padx=(0, 14))
+        ttk.Label(brand_block, text="CLEANROOMX", style="CX.Brand.TLabel").pack(anchor="w")
+        ttk.Label(
+            brand_block,
+            text="INDUSTRIAL ENGINEERING WORKSTATION",
+            style="CX.ProductSub.TLabel",
+        ).pack(anchor="w", pady=(1, 0))
+
+        ttk.Label(
+            topbar,
+            text="ACTIVE PROJECT",
+            style="CX.ProductSub.TLabel",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 5))
+        ttk.Entry(topbar, textvariable=self.name_var, width=24).grid(
+            row=0, column=2, sticky="ew", padx=(0, 8)
         )
-        ttk.Label(topbar, text="Project").grid(
-            row=0, column=1, sticky="w", padx=(0, 5)
+
+        self.project_state_badge = ttk.Label(
+            topbar,
+            textvariable=self.project_state_var,
+            style="CX.MutedBadge.TLabel",
         )
-        ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
-            row=0, column=2, sticky="ew", padx=(0, 10)
+        self.project_state_badge.grid(row=0, column=3, padx=2)
+        self.diagnostics_badge = ttk.Label(
+            topbar,
+            textvariable=self.diagnostics_badge_var,
+            style="CX.MutedBadge.TLabel",
         )
-        ttk.Label(topbar, text="Description").grid(
-            row=0, column=3, sticky="w", padx=(0, 5)
+        self.diagnostics_badge.grid(row=0, column=4, padx=2)
+        self.verification_badge = ttk.Label(
+            topbar,
+            textvariable=self.verification_badge_var,
+            style="CX.MutedBadge.TLabel",
         )
-        ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
-            row=0, column=4, sticky="ew", padx=(0, 10)
+        self.verification_badge.grid(row=0, column=5, padx=2)
+        self.evidence_badge = ttk.Label(
+            topbar,
+            textvariable=self.evidence_badge_var,
+            style="CX.MutedBadge.TLabel",
+        )
+        self.evidence_badge.grid(row=0, column=6, padx=2)
+        self.run_state_badge = ttk.Label(
+            topbar,
+            textvariable=self.run_state_var,
+            style="CX.Info.TLabel",
+        )
+        self.run_state_badge.grid(row=0, column=7, padx=(2, 6))
+
+        self.run_button = ttk.Button(
+            topbar,
+            text="▶ RUN",
+            command=self.run_current,
+            style="CX.Primary.TButton",
+        )
+        self.run_button.grid(row=0, column=8, padx=2)
+        self.cancel_button = ttk.Button(
+            topbar,
+            text="ABANDON",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Compact.TButton",
+        )
+        self.cancel_button.grid(row=0, column=9, padx=(2, 0))
+
+        ttk.Label(
+            topbar,
+            text="Description",
+            style="CX.ProductSub.TLabel",
+        ).grid(row=1, column=1, sticky="w", padx=(0, 5), pady=(4, 0))
+        ttk.Entry(topbar, textvariable=self.description_var).grid(
+            row=1,
+            column=2,
+            columnspan=4,
+            sticky="ew",
+            padx=(0, 8),
+            pady=(4, 0),
         )
         ttk.Button(
             topbar,
             text="Validate",
+            style="CX.Compact.TButton",
             command=self.validate_current,
-        ).grid(row=0, column=5, padx=2)
-        self.run_button = ttk.Button(
+        ).grid(row=1, column=6, padx=2, pady=(4, 0))
+        ttk.Label(
             topbar,
-            text="▶ Run",
-            command=self.run_current,
-            style="CX.Primary.TButton",
-        )
-        self.run_button.grid(row=0, column=6, padx=2)
-        self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
-        )
-        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+            textvariable=self.model_status_var,
+            style="CX.ProductSub.TLabel",
+        ).grid(row=1, column=7, columnspan=3, sticky="e", padx=(8, 0), pady=(4, 0))
         topbar.columnconfigure(2, weight=1)
-        topbar.columnconfigure(4, weight=2)
 
         commandbar = ttk.Frame(
             self.root,
@@ -1655,7 +1718,8 @@ class CleanroomXApp:
         workflowbar.pack(fill="x", padx=10, pady=(0, 4))
         ttk.Label(
             workflowbar,
-            text="GUIDED WORKFLOW",
+            text="ENGINEERING FLOW",
+            style="CX.ToolbarLabel.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Separator(workflowbar, orient="vertical").pack(
             side="left", fill="y", padx=(0, 6)
@@ -1714,7 +1778,7 @@ class CleanroomXApp:
         self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
-        navigator = ttk.Frame(panes, padding=(8, 7))
+        navigator = ttk.Frame(panes, padding=(8, 7), style="CX.Panel.TFrame")
         self.navigator_panel = navigator
         panes.add(navigator, weight=1)
         navigator_header = ttk.Frame(
@@ -1957,25 +2021,38 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(self.root, style="CX.StatusBar.TFrame")
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.StatusBar.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.model_status_var,
+            style="CX.StatusBar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.selection_status_var,
+            style="CX.StatusBar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.workspace_status_var,
+            style="CX.StatusBar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -1984,6 +2061,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.StatusBar.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +2070,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.StatusBar.TLabel",
         ).pack(side="right")
 
     @staticmethod
@@ -2207,6 +2286,15 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+            apply_panel_theme = getattr(problems_panel, "apply_theme", None)
+            if callable(apply_panel_theme):
+                apply_panel_theme(self.theme_var.get())
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            apply_proof_theme = getattr(proofgraph_viewer, "apply_theme", None)
+            if callable(apply_proof_theme):
+                apply_proof_theme(self.theme_var.get(), redraw=redraw)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2549,6 +2637,27 @@ class CleanroomXApp:
                 self.verification_text,
                 "\n".join(lines).rstrip() + "\n",
             )
+            configured = int(summary.get("configured_analysis_count", 0) or 0)
+            current = int(summary.get("current_count", 0) or 0)
+            stale = int(summary.get("stale_count", 0) or 0)
+            not_verified = int(summary.get("not_verified_count", 0) or 0)
+            unverifiable = int(
+                summary.get("dependency_freshness_unverifiable_count", 0) or 0
+            )
+            if configured <= 0:
+                verify_status = "NOT CHECKED"
+                verify_text = "VERIFY —"
+            elif stale:
+                verify_status = "STALE"
+                verify_text = f"VERIFY {current}/{configured}"
+            elif not_verified or unverifiable:
+                verify_status = "WARNING"
+                verify_text = f"VERIFY {current}/{configured}"
+            else:
+                verify_status = "VERIFIED"
+                verify_text = f"VERIFY {current}/{configured}"
+            self.verification_badge_var.set(verify_text)
+            self.verification_badge.configure(style=status_style_name(verify_status))
         except Exception as exc:
             self._set_text(
                 self.verification_text,
@@ -2586,6 +2695,10 @@ class CleanroomXApp:
                 self.evidence_text,
                 "\n".join(lines).rstrip() + "\n",
             )
+            self.evidence_badge_var.set(f"EVIDENCE {len(records)}")
+            self.evidence_badge.configure(
+                style=status_style_name("VERIFIED" if records else "NOT CHECKED")
+            )
         except Exception as exc:
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
@@ -2600,6 +2713,37 @@ class CleanroomXApp:
             if isinstance(diagnostics, dict)
             else {}
         )
+        error_count = int(summary.get("error_count", 0) or 0)
+        warning_count = int(summary.get("warning_count", 0) or 0)
+        problem_count = error_count + warning_count
+        self.diagnostics_badge_var.set(f"PROBLEMS {problem_count}")
+        self.diagnostics_badge.configure(
+            style=status_style_name(
+                "FAIL" if error_count else ("WARNING" if warning_count else "PASS")
+            )
+        )
+
+        start_center = getattr(self, "start_center", None)
+        if start_center is not None:
+            set_health = getattr(start_center, "set_project_health", None)
+            if callable(set_health):
+                spatial = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+                rooms = spatial.get("rooms", []) if isinstance(spatial, dict) else []
+                devices = spatial.get("devices", []) if isinstance(spatial, dict) else []
+                set_health(
+                    {
+                        "project_name": self.project.name,
+                        "analysis_count": len(self.project.analyses),
+                        "room_count": len(rooms) if isinstance(rooms, list) else 0,
+                        "device_count": len(devices) if isinstance(devices, list) else 0,
+                        "diagnostic_status": str(summary.get("status", "unknown")),
+                        "error_count": error_count,
+                        "warning_count": warning_count,
+                        "verification": self.verification_badge_var.get(),
+                        "evidence": self.evidence_badge_var.get(),
+                    }
+                )
+
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",
@@ -5386,6 +5530,20 @@ class CleanroomXApp:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        state_var = getattr(self, "project_state_var", None)
+        badge = getattr(self, "project_state_badge", None)
+        if state_var is not None and badge is not None:
+            if has_unsaved_changes:
+                state = "MODIFIED"
+                style_state = "WARNING"
+            elif self.project_path is None:
+                state = "UNSAVED"
+                style_state = "NOT CHECKED"
+            else:
+                state = "SAVED"
+                style_state = "VERIFIED"
+            state_var.set(state)
+            badge.configure(style=status_style_name(style_state))
 
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(
@@ -5978,6 +6136,10 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        self.run_state_var.set("RUNNING" if running else "IDLE")
+        self.run_state_badge.configure(
+            style=status_style_name("RUNNING" if running else "UNKNOWN")
+        )
 
     def _poll_worker(self) -> None:
         try:

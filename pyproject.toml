@@ -14,6 +14,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 bim = ["ifcopenshell"]
+release = ["pyinstaller==6.22.3", "ifcopenshell==0.9.0"]
 
 [project.scripts]
 cleanroomx = "cleanroomx.cli:main"

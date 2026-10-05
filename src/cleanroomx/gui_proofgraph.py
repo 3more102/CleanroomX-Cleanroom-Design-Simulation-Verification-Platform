@@ -646,6 +646,7 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.bind("<Button-5>", self._on_graph_mousewheel)
         self.canvas.bind("<ButtonPress-2>", self._start_graph_pan)
         self.canvas.bind("<B2-Motion>", self._drag_graph_pan)
+        self.canvas.bind("<ButtonRelease-2>", self._end_graph_pan)
         self.canvas.bind("<Control-0>", lambda _event: self.reset_graph_zoom())
 
         ttk.Label(
@@ -905,6 +906,10 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.scan_dragto(event.x, event.y, gain=1)
         return "break"
 
+    def _end_graph_pan(self, _event: tk.Event | None = None):
+        self.canvas.configure(cursor="")
+        return "break"
+
     def _draw_graph(self) -> None:
         canvas = self.canvas
         canvas.delete("all")
@@ -1010,6 +1015,7 @@ class ProofGraphViewer(ttk.Frame):
             self._select_key(key)
 
     def _on_canvas_selected(self, _event=None) -> None:
+        self.canvas.focus_set()
         current = self.canvas.find_withtag("current")
         if not current:
             return

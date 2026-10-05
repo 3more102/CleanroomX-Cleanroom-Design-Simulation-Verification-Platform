@@ -613,6 +613,49 @@ def test_shell_panel_visibility_persists_across_app_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+def test_workspace_context_persists_across_app_restart(tmp_path):
+    state_path = tmp_path / "gui-workspace-layout.json"
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.update()
+    first.spatial_workspace.set_workspace_mode("3d")
+    first.notebook.select(first.proofgraph_viewer)
+    first.output_notebook.select(first.evidence_text.master)
+    first._save_ui_layout_state()
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        assert second.spatial_workspace.workspace_mode() == "3d"
+        assert second.notebook.tab(second.notebook.select(), "text") == "ProofGraph"
+        assert (
+            second.output_notebook.tab(second.output_notebook.select(), "text")
+            == "Evidence"
+        )
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()
+
+
 def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     project_before = copy.deepcopy(app.project.to_dict())
 

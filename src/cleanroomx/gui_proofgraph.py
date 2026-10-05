@@ -894,6 +894,42 @@ class ProofGraphViewer(ttk.Frame):
             )
         self.detail.configure(state="disabled")
 
+    def searchable_nodes(self) -> list[dict[str, Any]]:
+        """Return validated GUI projection nodes for cross-workspace navigation."""
+        records: list[dict[str, Any]] = []
+        for document in self._documents:
+            label = self._document_label(document)
+            projection = proofgraph_projection(document)
+            for node in projection.get("nodes", []):
+                if isinstance(node, dict):
+                    records.append(
+                        {
+                            "document_label": label,
+                            "key": node["key"],
+                            "type": node["type"],
+                            "id": node["id"],
+                            "label": node["label"],
+                            "status": node.get("status", ""),
+                            "flags": tuple(node.get("flags", ())),
+                            "raw": node.get("raw", {}),
+                        }
+                    )
+        return records
+
+    def focus_node(self, document_label: str, key: str) -> bool:
+        """Focus one validated node without changing evidence content."""
+        labels = tuple(self.graph_picker.cget("values"))
+        if document_label not in labels:
+            return False
+        self.graph_var.set(document_label)
+        self.filter_var.set("All")
+        self.search_var.set("")
+        self._refresh()
+        if key not in self._nodes_by_key:
+            return False
+        self._select_key(key)
+        return True
+
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None

@@ -106,7 +106,9 @@ def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app, monkeypatch
     workspace._property_vars["name"].set("Should not apply")
     workspace._property_vars["height_m"].set("NaN")
     workspace.apply_properties()
-    assert errors and "Height" in errors[0][1]
+    assert errors == []
+    assert "Height" in workspace._property_error_var.get()
+    assert workspace._property_error_label.winfo_manager() == "pack"
     assert workspace.layout == before
     assert app.project.metadata["spatial_layout"] == before
     assert app._project_history.can_undo == can_undo
@@ -1054,3 +1056,24 @@ def test_output_console_tabs_surface_live_engineering_counts(app):
     assert verification.startswith("Verification ")
     assert evidence.startswith("Evidence ")
     assert evidence.split()[-1].isdigit()
+
+
+def test_property_filter_preserves_unsaved_edits_and_context(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    workspace._property_vars["height_m"].set("4.25")
+    workspace._property_filter_var.set("pressure")
+    app.root.update_idletasks()
+
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["height_m"].winfo_manager() == ""
+    assert workspace._property_rows["room_id"].winfo_manager() == ""
+    assert workspace._property_vars["height_m"].get() == "4.25"
+
+    workspace._property_filter_var.set("")
+    app.root.update_idletasks()
+    assert workspace._property_rows["height_m"].winfo_manager() == "pack"
+    assert workspace._property_vars["height_m"].get() == "4.25"

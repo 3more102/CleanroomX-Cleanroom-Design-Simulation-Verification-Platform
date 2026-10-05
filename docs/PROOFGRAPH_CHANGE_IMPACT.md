@@ -21,6 +21,18 @@ A candidate record is marked **potentially stale** only when its own serialized 
 
 Source-revision changes can therefore invalidate unchanged evidence even when the evidence value happens to be numerically identical.
 
+## Command-line workflow
+
+Installed builds expose the same analysis through:
+
+```bash
+cleanroomx-proofgraph-diff baseline.proofgraph.json candidate.proofgraph.json
+```
+
+Use `--require-identical` when CI must reject any graph revision change, or `--require-no-stale` when a revision may change but unchanged candidate evidence/outcomes must not remain downstream of changed inputs. Either policy exit returns code 2 after emitting the complete JSON report.
+
+`--output` publishes the report through the shared atomic CLI writer and refuses a destination that aliases either ProofGraph input. Both inputs use bounded revision-stable strict JSON ingestion; duplicate keys and non-finite JSON fail closed.
+
 ## Comparison boundary
 
 The API compares revisions of the same logical graph and requirement set. Different graph IDs or different requirement-set IDs fail closed instead of being treated as a revision diff.

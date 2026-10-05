@@ -18,6 +18,7 @@ A production candidate is acceptable only when all applicable checks below are g
 6. **Persistence fault injection** — staged-write disk-full failure must not corrupt or partially replace an existing destination, a first project save must not publish a partial project, and generated-output failure must preserve the prior destination.
 7. **Windows Standalone** — the Windows workstation build completes, smoke checks pass, and the release archive is emitted with SHA-256 evidence.
 8. **Windows Installer Lifecycle** — the registered installer builds and the automated install, launch, upgrade, and uninstall lifecycle passes.
+9. **Production Acceptance** — the dedicated acceptance workflow runs on the exact candidate SHA, evaluates the machine-readable repository contract, re-runs release-critical golden/security/persistence/packaging/ProofGraph/performance checks, and uploads `production-acceptance.json` as release evidence.
 
 A release-blocking failure in any required gate must be resolved or explicitly removed from the claimed release scope before publication. Passing a subset of the matrix is not sufficient.
 

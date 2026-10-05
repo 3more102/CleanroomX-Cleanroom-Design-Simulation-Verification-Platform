@@ -1114,6 +1114,49 @@ class ProofGraphViewer(ttk.Frame):
             )
         self.detail.configure(state="disabled")
 
+    def focus_node(
+        self,
+        node_id: str,
+        *,
+        node_type: str | None = None,
+        graph_id: str | None = None,
+        node_key: str | None = None,
+    ) -> bool:
+        """Reveal and select one persisted node, clearing presentation filters if needed."""
+        wanted_id = _text(node_id)
+        wanted_type = _text(node_type).casefold()
+        wanted_graph = _text(graph_id)
+        wanted_key = _text(node_key)
+
+        if wanted_graph:
+            for document in self._documents:
+                identities = {
+                    _text(document.get("id")),
+                    _text(document.get("graph_sha256")),
+                }
+                if wanted_graph in identities:
+                    self.graph_var.set(self._document_label(document))
+                    break
+
+        self.filter_var.set("All")
+        self.search_var.set("")
+        self._refresh()
+
+        candidates = self._projection.get("nodes", [])
+        for node in candidates:
+            if not isinstance(node, dict):
+                continue
+            if wanted_key and _text(node.get("key")) == wanted_key:
+                self._select_key(_text(node.get("key")))
+                return True
+            if wanted_id and _text(node.get("id")) != wanted_id:
+                continue
+            if wanted_type and _text(node.get("type")).casefold() != wanted_type:
+                continue
+            self._select_key(_text(node.get("key")))
+            return True
+        return False
+
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")
         return node if isinstance(node, dict) else None

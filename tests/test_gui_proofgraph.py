@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import copy
+import os
+import tkinter as tk
 
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    ProofGraphViewer,
     _filtered_projection,
     _node_detail_lines,
     proofgraph_projection,
@@ -256,3 +259,31 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "Status: FAIL" in rendered
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
+
+
+def test_proofgraph_viewer_global_search_selects_node_across_filters():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    try:
+        viewer = ProofGraphViewer(root)
+        viewer.pack(fill="both", expand=True)
+        viewer.set_documents([_sample_graph()])
+        viewer.filter_var.set("Failures")
+        viewer._refresh()
+        root.update()
+
+        searchable = {node["key"] for node in viewer.searchable_nodes()}
+        assert "requirement:REQ-PRESSURE" in searchable
+        assert "evidence:evidence-pressure" in searchable
+
+        assert viewer.select_node("requirement:REQ-PRESSURE")
+        root.update()
+        assert viewer.filter_var.get() == "All"
+        assert viewer.selected_node()["key"] == "requirement:REQ-PRESSURE"
+    finally:
+        root.destroy()

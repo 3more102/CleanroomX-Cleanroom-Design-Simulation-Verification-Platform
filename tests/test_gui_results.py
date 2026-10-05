@@ -1,6 +1,19 @@
 from __future__ import annotations
 
-from cleanroomx.gui_results import _flatten_result, _format_scalar, _humanize, _unit_hint
+import os
+from types import SimpleNamespace
+import tkinter as tk
+
+import pytest
+
+from cleanroomx.gui_results import (
+    AnalysisResultPanel,
+    _flatten_result,
+    _format_scalar,
+    _humanize,
+    _result_class,
+    _unit_hint,
+)
 
 
 def test_result_scalar_formatting_is_engineering_dense():
@@ -42,3 +55,54 @@ def test_result_projection_infers_units_only_from_explicit_field_suffixes():
     assert ("status", "pass") in rows
     assert _unit_hint("result.margin_percent") == "%"
     assert _unit_hint("result.status") == ""
+
+
+
+def test_result_classification_keeps_engineering_semantics_distinct():
+    assert _result_class("room.supply_airflow_m3_h") == "CALCULATED"
+    assert _result_class("room.target_ach") == "REQUIREMENT"
+    assert _result_class("room.compliance") == "VERDICT"
+    assert _result_class("solver.metadata.version") == "METADATA"
+
+
+def test_result_panel_filters_canonical_rows_without_mutating_result():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    panel = AnalysisResultPanel(root)
+    run = SimpleNamespace(
+        title="Air Balance",
+        status="completed",
+        diagnostics=[],
+        result={
+            "supply_airflow_m3_h": 1250.0,
+            "target_ach": 20.0,
+            "compliance": "pass",
+            "metadata": {"source": "solver"},
+        },
+    )
+    try:
+        panel.refresh(run)
+        root.update_idletasks()
+        assert len(panel.tree.get_children()) == 4
+        assert panel.status_var.get() == "COMPLETED"
+
+        panel.class_filter_var.set("Requirement")
+        panel._populate()
+        rows = panel.tree.get_children()
+        assert len(rows) == 1
+        assert panel.tree.item(rows[0], "values")[0] == "REQUIREMENT"
+
+        panel.class_filter_var.set("All")
+        panel.search_var.set("airflow")
+        panel._populate()
+        rows = panel.tree.get_children()
+        assert len(rows) == 1
+        assert "Airflow" in panel.tree.item(rows[0], "values")[1]
+        assert run.result["supply_airflow_m3_h"] == 1250.0
+    finally:
+        root.destroy()

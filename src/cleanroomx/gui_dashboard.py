@@ -38,6 +38,7 @@ class EngineeringDashboardPanel(ttk.Frame):
         self.spatial_var = tk.StringVar(value="—")
         self.evidence_var = tk.StringVar(value="—")
         self.activity_var = tk.StringVar(value="No analysis run in this session")
+        self.verification_percent_var = tk.StringVar(value="0% current")
         self.empty_var = tk.StringVar(
             value="Run or refresh project diagnostics to populate engineering health."
         )
@@ -92,7 +93,7 @@ class EngineeringDashboardPanel(ttk.Frame):
         self.health_badge.pack(anchor="e", pady=(3, 0))
 
         metrics = ttk.Frame(self, style="CX.Panel.TFrame")
-        metrics.pack(fill="x", pady=(0, 8))
+        metrics.pack(fill="x", pady=(0, 7))
         metric_specs = (
             ("DIAGNOSTICS", self.diagnostics_var),
             ("VERIFICATION CURRENCY", self.verification_var),
@@ -115,6 +116,33 @@ class EngineeringDashboardPanel(ttk.Frame):
                 justify="left",
             ).pack(anchor="w", pady=(4, 0))
             metrics.columnconfigure(column, weight=1)
+
+        currency = ttk.Frame(
+            self,
+            style="CX.SubtlePanel.TFrame",
+            padding=(10, 7),
+        )
+        currency.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            currency,
+            text="VERIFICATION CURRENCY",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 10))
+        self.verification_progress = ttk.Progressbar(
+            currency,
+            mode="determinate",
+            maximum=100,
+            value=0,
+            style="CX.Readiness.Horizontal.TProgressbar",
+        )
+        self.verification_progress.pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            currency,
+            textvariable=self.verification_percent_var,
+            style="CX.StatusPrimary.TLabel",
+            width=13,
+            anchor="e",
+        ).pack(side="right", padx=(10, 0))
 
         actionbar = ttk.Frame(self, style="CX.Toolbar.TFrame")
         actionbar.pack(fill="x", pady=(0, 6))
@@ -297,6 +325,8 @@ class EngineeringDashboardPanel(ttk.Frame):
             self.scope_var.set("Canonical project diagnostics could not be evaluated.")
             self.diagnostics_var.set("Unavailable")
             self.verification_var.set("Unavailable")
+            self.verification_progress.configure(value=0)
+            self.verification_percent_var.set("unavailable")
             self.spatial_var.set("Unavailable")
             self.evidence_var.set("Unavailable")
             self.empty_var.set("Diagnostics unavailable")
@@ -342,6 +372,11 @@ class EngineeringDashboardPanel(ttk.Frame):
         not_verified = self._count(currency_summary.get("not_verified_count"))
         self.verification_var.set(
             f"{current}/{configured} current\n{stale} stale · {not_verified} not verified"
+        )
+        percent = int(round((current / configured) * 100)) if configured else 0
+        self.verification_progress.configure(value=percent)
+        self.verification_percent_var.set(
+            f"{percent}% current" if configured else "not checked"
         )
 
         rooms = self._count(project.get("spatial_room_count"))

@@ -1657,6 +1657,21 @@ class CleanroomXApp:
             style="CX.Badge.Unknown.TLabel",
         )
         self.run_state_badge.pack(side="left", padx=3)
+
+        quick_badges = (
+            (self.save_state_badge, self.save_project),
+            (self.problems_state_badge, self.show_problems_panel),
+            (self.verification_state_badge, self.show_verification_panel),
+            (self.evidence_state_badge, self.show_evidence_panel),
+            (self.run_state_badge, self._activate_analysis_input_workspace),
+        )
+        for badge, callback in quick_badges:
+            badge.configure(cursor="hand2")
+            badge.bind(
+                "<Button-1>",
+                lambda _event, action=callback: action(),
+            )
+
         self.run_progress = ttk.Progressbar(
             engineering_strip,
             mode="indeterminate",

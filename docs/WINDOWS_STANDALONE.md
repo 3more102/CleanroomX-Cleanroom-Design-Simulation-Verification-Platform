@@ -45,13 +45,13 @@ On Windows with Python 3.12:
 
 ```powershell
 python -m pip install --upgrade pip
-pip install -e ".[bim]"
-pip install "pyinstaller==6.22.3"
+pip install -e ".[release]"
 .\scripts\build_windows_standalone.ps1
 ```
 
-The PyInstaller version is pinned in CI. The repository source revision and the
-workflow run identify the remaining build inputs.
+The release extra pins both PyInstaller and IfcOpenShell to the reviewed
+versions used by CI. The repository source revision and workflow run identify
+the remaining build inputs.
 
 ## Distribution modes
 

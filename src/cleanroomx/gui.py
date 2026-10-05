@@ -1512,18 +1512,18 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(self.root, style="CX.Topbar.TFrame", padding=(10, 5, 10, 4))
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
+        ttk.Label(topbar, text="CLEANROOMX", style="CX.TopbarBrand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
+        ttk.Label(topbar, text="PROJECT", style="CX.TopbarLabel.TLabel").grid(
             row=0, column=1, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
+        ttk.Label(topbar, text="DESCRIPTION", style="CX.TopbarLabel.TLabel").grid(
             row=0, column=3, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
@@ -1532,6 +1532,7 @@ class CleanroomXApp:
         ttk.Button(
             topbar,
             text="Validate",
+            style="CX.Secondary.TButton",
             command=self.validate_current,
         ).grid(row=0, column=5, padx=2)
         self.run_button = ttk.Button(
@@ -1656,6 +1657,7 @@ class CleanroomXApp:
         ttk.Label(
             workflowbar,
             text="GUIDED WORKFLOW",
+            style="CX.Section.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Separator(workflowbar, orient="vertical").pack(
             side="left", fill="y", padx=(0, 6)
@@ -1957,25 +1959,32 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(self.root, style="CX.StatusBar.TFrame", padding=(8, 4))
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.StatusStrong.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(
+            status_bar, textvariable=self.model_status_var, style="CX.SuccessBadge.TLabel"
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(
+            status_bar, textvariable=self.selection_status_var, style="CX.StatusText.TLabel"
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(
+            status_bar, textvariable=self.workspace_status_var, style="CX.InfoBadge.TLabel"
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -1984,6 +1993,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.StatusText.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +2002,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.EvidenceBadge.TLabel",
         ).pack(side="right")
 
     @staticmethod
@@ -2227,6 +2238,14 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        problems_panel = getattr(self, "problems_panel", None)
+        if problems_panel is not None:
+            problems_panel.apply_theme(palette)
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(palette, redraw=redraw)
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):

@@ -104,6 +104,9 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 
 ## Supported workflows
 
+Unexpected desktop callback failures are contained at the Tk event boundary during normal interactive use. CleanroomX preserves the original traceback in a rotating per-user GUI log, assigns a stable `CX-...` reference, updates the workstation status, and shows the operator the concise failure summary and log location. This diagnostic path is outside engineering/project persistence. The boundary is intentionally disabled in `--smoke` mode so automated GUI smoke runs still expose escaped callback regressions.
+
+
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
 
 Consistency and dossier workflows resolve relative file references against project path context. Imported JSON is rebased from its source directory, and **Save Project As** rebases relative references when the destination directory changes. Absolute-only dossier inputs can run before the project is saved; relative references still require an explicit base directory. The installed `--demo` project ships its referenced files beside the project file.

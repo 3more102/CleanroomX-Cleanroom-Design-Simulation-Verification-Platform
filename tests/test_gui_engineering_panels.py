@@ -206,3 +206,31 @@ def test_problem_detail_is_engineering_focused_not_raw_json_dump(app):
     assert "Engineering domain:" in text
     assert "Recommended recovery" in text
     assert not text.startswith("{")
+
+
+def test_simulation_workspace_exposes_real_runner_state(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    assert "Simulation" in _tab_texts(app.notebook)
+
+    app._activate_simulation_workspace()
+    app.root.update()
+    analysis = app.project.analysis_by_id(app.project.active_analysis_id)
+
+    assert app.notebook.select() == str(app.simulation_workspace)
+    assert app.workspace_status_var.get() == "Workspace: Simulation"
+    assert app.simulation_workspace.analysis_var.get() == analysis.name
+    assert app.simulation_workspace.kind_var.get() == analysis.kind
+    assert app.simulation_workspace.state_var.get() in {"READY", "PASS", "PASSED", "OK", "SUCCESS"}
+    assert app.project.to_dict() == project_before
+
+
+def test_simulation_workspace_tracks_completed_session_result(app):
+    analysis = app.project.analysis_by_id(app.project.active_analysis_id)
+    run = app.smoke_run_active()
+    app._activate_simulation_workspace()
+    app.root.update()
+
+    assert app.simulation_workspace.analysis_var.get() == analysis.name
+    assert run.title in app.simulation_workspace.result_var.get()
+    assert run.status.upper() == app.simulation_workspace.state_var.get()
+    assert app.simulation_workspace.cancel_button.cget("state") == "disabled"

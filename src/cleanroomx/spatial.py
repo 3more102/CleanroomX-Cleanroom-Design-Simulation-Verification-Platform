@@ -1583,6 +1583,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_filter_var = tk.StringVar(value="")
         self._property_filter_summary_var = tk.StringVar(value="Editable properties")
         self._property_error_var = tk.StringVar(value="")
+        self._property_drafts: dict[tuple[str, str], dict[str, str]] = {}
+        self._property_loaded_selection: tuple[str, str] | None = None
+        self._property_loaded_model_values: dict[str, str] = {}
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -2130,7 +2133,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 entry.pack(side="left")
                 entry.bind(
                     "<KeyRelease>",
-                    lambda _event: self._clear_property_error(),
+                    self._on_property_edit,
                     add="+",
                 )
                 entry.bind(
@@ -2145,13 +2148,23 @@ class SpatialDesignWorkspace(ttk.Frame):
                     )
                 self._property_rows[key] = row
                 self._property_meta[key] = (group_name, label, unit)
+        self._property_actions = ttk.Frame(inspector)
+        self._property_actions.pack(fill="x", pady=(2, 6))
+        self._property_revert_button = ttk.Button(
+            self._property_actions,
+            text="Revert",
+            style="CX.Compact.TButton",
+            command=self.revert_property_edits,
+            state="disabled",
+        )
+        self._property_revert_button.pack(side="right")
         self._property_apply_button = ttk.Button(
-            inspector,
+            self._property_actions,
             text="Apply properties",
             style="CX.Primary.TButton",
             command=self.apply_properties,
         )
-        self._property_apply_button.pack(anchor="e", pady=(2, 6))
+        self._property_apply_button.pack(side="right", padx=(0, 5))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         sync_card = ttk.Frame(
             inspector,
@@ -3024,6 +3037,45 @@ class SpatialDesignWorkspace(ttk.Frame):
         """Filter rows only; never reload the selected object over unsaved editor text."""
         self._apply_property_filter()
 
+    def _on_property_edit(self, _event=None) -> None:
+        self._clear_property_error()
+        self._apply_property_filter()
+
+    def _property_selection_key(self) -> tuple[str, str] | None:
+        selected = self.selected
+        if selected is None:
+            return None
+        return selected.kind, selected.item_id
+
+    def _property_dirty_values(self) -> dict[str, str]:
+        loaded = getattr(self, "_property_loaded_model_values", {})
+        if not loaded:
+            return {}
+        dirty: dict[str, str] = {}
+        variables = getattr(self, "_property_vars", {})
+        for key, model_value in loaded.items():
+            variable = variables.get(key)
+            if variable is None:
+                continue
+            current = str(variable.get())
+            if current != model_value:
+                dirty[key] = current
+        return dirty
+
+    def _stash_property_draft(self) -> None:
+        key = getattr(self, "_property_loaded_selection", None)
+        if key is None:
+            return
+        drafts = getattr(self, "_property_drafts", None)
+        if drafts is None:
+            self._property_drafts = {}
+            drafts = self._property_drafts
+        dirty = self._property_dirty_values()
+        if dirty:
+            drafts[key] = dirty
+        else:
+            drafts.pop(key, None)
+
     def _editable_property_fields(self) -> set[str]:
         if self.selected and self.selected.kind == "room":
             return {
@@ -3101,13 +3153,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 row.pack_forget()
             try:
                 self._property_apply_button.configure(state="disabled")
-            except tk.TclError:
+                self._property_revert_button.configure(state="disabled")
+            except (AttributeError, tk.TclError):
                 pass
             return
 
+        dirty = bool(self._property_dirty_values())
         try:
             self._property_apply_button.configure(state="normal")
-        except tk.TclError:
+            self._property_revert_button.configure(
+                state="normal" if dirty else "disabled"
+            )
+        except (AttributeError, tk.TclError):
             pass
         visible_fields = self._editable_property_fields()
         query = self._property_filter_var.get()
@@ -3135,22 +3192,28 @@ class SpatialDesignWorkspace(ttk.Frame):
                 section.pack(
                     fill="x",
                     pady=(0, 7),
-                    before=self._property_apply_button,
+                    before=self._property_actions,
                 )
             else:
                 section.pack_forget()
         total = len(visible_fields)
         shown = len(shown_fields)
+        modified = " · modified" if dirty else ""
         if query.strip():
             self._property_filter_summary_var.set(
-                f"{shown} of {total} editable properties match filter"
+                f"{shown} of {total} editable properties match filter{modified}"
             )
         else:
             self._property_filter_summary_var.set(
-                f"{shown} editable properties"
+                f"{shown} editable properties{modified}"
             )
 
     def _load_property_panel(self) -> None:
+        current_key = self._property_selection_key()
+        previous_key = getattr(self, "_property_loaded_selection", None)
+        if previous_key is not None and previous_key != current_key:
+            self._stash_property_draft()
+
         item = self._selected_object()
         self._clear_property_error()
         if item is None:
@@ -3160,6 +3223,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._load_engineering_inspector_snapshot()
             for var in self._property_vars.values():
                 var.set("")
+            self._property_loaded_selection = None
+            self._property_loaded_model_values = {}
             self._apply_property_filter()
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
@@ -3179,13 +3244,46 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._selection_var.set(selection_text)
         self._load_engineering_inspector_snapshot()
         visible_fields = self._editable_property_fields()
+        model_values = {
+            key: "" if item.get(key, "") is None else str(item.get(key, ""))
+            for key in visible_fields
+        }
+
+        pending: dict[str, str] = {}
+        drafts = getattr(self, "_property_drafts", {})
+        if current_key is not None:
+            pending.update(drafts.get(current_key, {}))
+        if current_key == previous_key:
+            pending.update(self._property_dirty_values())
+        pending = {
+            key: value
+            for key, value in pending.items()
+            if key in model_values and value != model_values[key]
+        }
+        if current_key is not None:
+            if pending:
+                drafts[current_key] = dict(pending)
+            else:
+                drafts.pop(current_key, None)
+
         for key, var in self._property_vars.items():
             if key in visible_fields:
-                value = item.get(key, "")
-                var.set("" if value is None else str(value))
+                var.set(pending.get(key, model_values[key]))
             else:
                 var.set("")
+        self._property_loaded_selection = current_key
+        self._property_loaded_model_values = model_values
         self._apply_property_filter()
+
+    def revert_property_edits(self) -> None:
+        key = self._property_selection_key()
+        drafts = getattr(self, "_property_drafts", {})
+        if key is not None:
+            drafts.pop(key, None)
+        self._property_loaded_selection = None
+        self._property_loaded_model_values = {}
+        self._load_property_panel()
+        self._status_setter("Property edits reverted")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -3208,6 +3306,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         selection_before = self._selection_state()
         if candidate != self.layout:
             self.layout = candidate
+        key = self._property_selection_key()
+        if key is not None:
+            getattr(self, "_property_drafts", {}).pop(key, None)
+        self._property_loaded_selection = None
+        self._property_loaded_model_values = {}
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",

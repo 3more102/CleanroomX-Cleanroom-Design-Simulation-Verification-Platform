@@ -7157,10 +7157,10 @@ class CleanroomXApp:
 
     def _on_workspace_selection_change(self, kind: str, item_id: str) -> None:
         tree = getattr(self, "analysis_tree", None)
-        if tree is None:
+        self._sync_spatial_selection_status()
+        if tree is None or not kind or not item_id:
             return
         navigator_id = f"{kind}:{item_id}"
-        self._sync_spatial_selection_status()
         if not tree.exists(navigator_id):
             self._refresh_spatial_navigator()
         if not tree.exists(navigator_id):

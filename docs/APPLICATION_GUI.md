@@ -146,7 +146,7 @@ The analysis picker, retained run history, project verification history, require
 
 These surfaces do not synthesize engineering values. Run and verification history display retained evidence; verification currency comes from the existing currency assessment; requirements/mappings are read-only projections of canonical registries; IFC re-import review displays the deterministic re-import plan; and recovery/revision browsers operate only on already validated recovery/revision records.
 
-The Start Center recent-project table can be searched by project name, path, or modification text. **Remove from Recent** removes only the remembered entry and never deletes the project file.
+The Start Center is an actionable project-health hub rather than a decorative launcher. It shows the active project identity and save state, model counts, canonical project diagnostics, canonical verification-currency summary, retained verification-evidence count, and recovery-artifact availability without synthesizing engineering values. Direct controls enter the Design, Simulation, Verification, Evidence, and Reporting workspace profiles and open Problems or Recovery Center through the same application commands used elsewhere. The recent-project table can be searched by project name, path, availability state, or modification text and labels entries as **Active**, **Available**, or **Missing** from filesystem state only. **Remove from Recent** removes only the remembered entry and never deletes the project file.
 
 ## Results and plots
 

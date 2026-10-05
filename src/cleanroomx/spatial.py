@@ -1600,6 +1600,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_pressure_var = tk.StringVar(value="Pressure: —")
         self._inspector_airflow_var = tk.StringVar(value="Airflow / ACH: —")
         self._inspector_compliance_var = tk.StringVar(value="Verification: —")
+        self._inspector_area_var = tk.StringVar(value="—")
+        self._inspector_volume_var = tk.StringVar(value="—")
+        self._inspector_pressure_metric_var = tk.StringVar(value="—")
+        self._inspector_airflow_metric_var = tk.StringVar(value="—")
+        self._inspector_ach_metric_var = tk.StringVar(value="—")
+        self._inspector_compliance_value_var = tk.StringVar(value="NOT CHECKED")
+        self._inspector_result_state_var = tk.StringVar(value="DESIGN INPUTS")
         self._theme_palette = theme_palette("dark")
 
         self._build()
@@ -1947,31 +1954,80 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 7),
         )
         engineering.pack(fill="x", pady=(0, 7))
+
+        snapshot_state = ttk.Frame(engineering)
+        snapshot_state.pack(fill="x", pady=(0, 7))
         ttk.Label(
-            engineering,
+            snapshot_state,
             textvariable=self._inspector_analysis_var,
             style="CX.Muted.TLabel",
-            wraplength=290,
+            wraplength=230,
             justify="left",
-        ).pack(anchor="w", fill="x", pady=(0, 5))
-        ttk.Label(
-            engineering,
-            textvariable=self._inspector_geometry_var,
-        ).pack(anchor="w", fill="x", pady=1)
-        ttk.Label(
-            engineering,
-            textvariable=self._inspector_pressure_var,
-        ).pack(anchor="w", fill="x", pady=1)
-        ttk.Label(
-            engineering,
-            textvariable=self._inspector_airflow_var,
-        ).pack(anchor="w", fill="x", pady=1)
-        self._inspector_compliance_label = ttk.Label(
-            engineering,
-            textvariable=self._inspector_compliance_var,
+        ).pack(side="left", fill="x", expand=True)
+        self._inspector_result_state_label = ttk.Label(
+            snapshot_state,
+            textvariable=self._inspector_result_state_var,
             style="CX.Status.Neutral.TLabel",
         )
-        self._inspector_compliance_label.pack(anchor="w", pady=(5, 0))
+        self._inspector_result_state_label.pack(side="right", padx=(6, 0))
+
+        metrics = ttk.Frame(engineering)
+        metrics.pack(fill="x")
+        metrics.columnconfigure(0, weight=1)
+        metrics.columnconfigure(1, weight=1)
+
+        def metric_card(
+            row: int,
+            column: int,
+            title: str,
+            value_var: tk.StringVar,
+            *,
+            value_style: str = "CX.InstrumentValue.TLabel",
+        ) -> ttk.Frame:
+            card = ttk.Frame(
+                metrics,
+                style="CX.Instrument.TFrame",
+                padding=(8, 6),
+            )
+            card.grid(
+                row=row,
+                column=column,
+                sticky="nsew",
+                padx=(0, 3) if column == 0 else (3, 0),
+                pady=3,
+            )
+            ttk.Label(
+                card,
+                text=title,
+                style="CX.InstrumentName.TLabel",
+            ).pack(anchor="w")
+            value_label = ttk.Label(
+                card,
+                textvariable=value_var,
+                style=value_style,
+            )
+            value_label.pack(anchor="w", pady=(2, 0))
+            return card
+
+        metric_card(0, 0, "AREA", self._inspector_area_var)
+        metric_card(0, 1, "VOLUME", self._inspector_volume_var)
+        metric_card(1, 0, "PRESSURE", self._inspector_pressure_metric_var)
+        metric_card(1, 1, "AIRFLOW", self._inspector_airflow_metric_var)
+        metric_card(2, 0, "ACH", self._inspector_ach_metric_var)
+        compliance_card = metric_card(
+            2,
+            1,
+            "COMPLIANCE",
+            self._inspector_compliance_value_var,
+            value_style="CX.Status.Neutral.TLabel",
+        )
+        self._inspector_compliance_label = next(
+            child
+            for child in compliance_card.winfo_children()
+            if isinstance(child, ttk.Label)
+            and str(child.cget("textvariable"))
+            == str(self._inspector_compliance_value_var)
+        )
 
         property_groups = (
             (
@@ -2758,6 +2814,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._inspector_pressure_var.set("Pressure: —")
             self._inspector_airflow_var.set("Airflow / ACH: —")
             self._inspector_compliance_var.set("Verification: —")
+            self._inspector_area_var.set("—")
+            self._inspector_volume_var.set("—")
+            self._inspector_pressure_metric_var.set("—")
+            self._inspector_airflow_metric_var.set("—")
+            self._inspector_ach_metric_var.set("—")
+            self._inspector_compliance_value_var.set("NOT CHECKED")
+            self._inspector_result_state_var.set("DESIGN INPUTS")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
             self._inspector_compliance_label.configure(
                 style="CX.Status.Neutral.TLabel"
             )
@@ -2771,6 +2837,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_geometry_var.set(
             f"Geometry: {area_m2:,.1f} m² · {volume_m3:,.1f} m³"
         )
+        self._inspector_area_var.set(f"{area_m2:,.1f} m²")
+        self._inspector_volume_var.set(f"{volume_m3:,.1f} m³")
 
         analysis = self._analysis_getter()
         result = self._result_getter()
@@ -2801,9 +2869,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._inspector_analysis_var.set(
                 "Fresh active-analysis results projected into this room."
             )
+            self._inspector_result_state_var.set("FRESH RESULT")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Pass.TLabel"
+            )
         else:
             self._inspector_analysis_var.set(
                 "No fresh active-analysis result is available; spatial values remain editable design inputs."
+            )
+            self._inspector_result_state_var.set("DESIGN INPUTS")
+            self._inspector_result_state_label.configure(
+                style="CX.Status.Attention.TLabel"
             )
 
         pressure_value = pressure.get("pressure_pa") if pressure else None
@@ -2811,6 +2887,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             "Pressure: —"
             if pressure_value is None
             else f"Pressure: {float(pressure_value):+.1f} Pa"
+        )
+        self._inspector_pressure_metric_var.set(
+            "—" if pressure_value is None else f"{float(pressure_value):+.1f} Pa"
         )
 
         ach_value = ach.get("value") if ach else None
@@ -2823,10 +2902,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_airflow_var.set(
             "Airflow / ACH: " + (" · ".join(parts) if parts else "—")
         )
+        self._inspector_airflow_metric_var.set(
+            "—"
+            if not isinstance(airflow_value, (int, float))
+            else f"{float(airflow_value):,.0f} m³/h"
+        )
+        self._inspector_ach_metric_var.set(
+            "—"
+            if not isinstance(ach_value, (int, float))
+            else f"{float(ach_value):.1f} 1/h"
+        )
 
         state = str((status or {}).get("status") or "not_checked").lower()
         label = state.replace("_", " ").upper()
         self._inspector_compliance_var.set(f"Verification: {label}")
+        self._inspector_compliance_value_var.set(label)
         self._inspector_compliance_label.configure(
             style=status_style_name(state)
         )

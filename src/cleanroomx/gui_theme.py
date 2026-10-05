@@ -105,7 +105,17 @@ def theme_palette(value: Any) -> dict[str, str]:
 def status_style_name(value: Any) -> str:
     """Return the canonical semantic badge style for an engineering state."""
     token = str(value or "").strip().lower().replace(" ", "_")
-    if token in {"pass", "passed", "ok", "ready", "current", "healthy", "verified"}:
+    if token in {
+        "pass",
+        "passed",
+        "ok",
+        "ready",
+        "current",
+        "healthy",
+        "verified",
+        "completed",
+        "success",
+    }:
         return "CX.Status.Pass.TLabel"
     if token in {"fail", "failed", "error", "critical", "blocked"}:
         return "CX.Status.Fail.TLabel"

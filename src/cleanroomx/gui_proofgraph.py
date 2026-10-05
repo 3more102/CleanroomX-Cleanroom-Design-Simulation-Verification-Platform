@@ -435,6 +435,69 @@ def _searched_projection(
     }
 
 
+def _projection_status_summary(projection: dict[str, Any]) -> dict[str, int]:
+    """Count only persisted ProofGraph presentation states; derive no verdicts."""
+    summary = {
+        "total": 0,
+        "pass": 0,
+        "warning": 0,
+        "fail": 0,
+        "unresolved": 0,
+        "evidence": 0,
+    }
+    for node in projection.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        summary["total"] += 1
+        if node.get("type") in {"source", "evidence"}:
+            summary["evidence"] += 1
+        status = _text(node.get("status")).casefold()
+        if status in {"pass", "passed"}:
+            summary["pass"] += 1
+        elif status in {"warning", "warn"}:
+            summary["warning"] += 1
+        elif status in {"fail", "failed", "error"}:
+            summary["fail"] += 1
+        if "unresolved" in set(node.get("flags") or ()):
+            summary["unresolved"] += 1
+    return summary
+
+
+def _node_relation_lines(
+    projection: dict[str, Any],
+    key: str,
+    *,
+    limit: int = 16,
+) -> list[str]:
+    """Render immediate incoming/outgoing trace links for one projected node."""
+    nodes = {
+        _text(node.get("key")): node
+        for node in projection.get("nodes", [])
+        if isinstance(node, dict)
+    }
+    rows: list[str] = []
+    for edge in projection.get("edges", []):
+        if not isinstance(edge, dict):
+            continue
+        source = _text(edge.get("source"))
+        target = _text(edge.get("target"))
+        relation = _text(edge.get("relation")).replace("_", " ")
+        if source == key:
+            other = nodes.get(target, {})
+            rows.append(f"→ {relation}: {_text(other.get('label')) or target}")
+        elif target == key:
+            other = nodes.get(source, {})
+            rows.append(f"← {relation}: {_text(other.get('label')) or source}")
+    if not rows:
+        return []
+    rows = sorted(dict.fromkeys(rows), key=str.casefold)
+    shown = rows[: max(1, int(limit))]
+    lines = ["", "TRACE LINKS", *shown]
+    if len(rows) > len(shown):
+        lines.append(f"… {len(rows) - len(shown)} additional link(s)")
+    return lines
+
+
 def _node_detail_lines(node: dict[str, Any]) -> list[str]:
     """Format a ProofGraph node for engineering review without raw JSON dumping."""
     node_type = str(node.get("type") or "node").replace("_", " ").upper()
@@ -512,6 +575,7 @@ class ProofGraphViewer(ttk.Frame):
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
         self._selected_key: str | None = None
+        self._canvas_bbox_by_key: dict[str, tuple[float, float, float, float]] = {}
         self._zoom = 1.0
         self._theme_name = "dark"
         self._palette = theme_palette(self._theme_name)
@@ -520,6 +584,7 @@ class ProofGraphViewer(ttk.Frame):
         self.filter_var = tk.StringVar(value="All")
         self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.health_var = tk.StringVar(value="No verification states")
 
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         toolbar.pack(fill="x")
@@ -588,7 +653,19 @@ class ProofGraphViewer(ttk.Frame):
             text="Reset",
             style="CX.Compact.TButton",
             command=lambda: self._set_zoom(1.0),
-        ).pack(side="left", padx=(1, 6))
+        ).pack(side="left", padx=(1, 3))
+        ttk.Button(
+            toolbar,
+            text="Fit",
+            style="CX.Compact.TButton",
+            command=self.fit_graph,
+        ).pack(side="left", padx=(0, 3))
+        ttk.Button(
+            toolbar,
+            text="Focus",
+            style="CX.Compact.TButton",
+            command=self.focus_selected,
+        ).pack(side="left", padx=(0, 6))
         ttk.Label(toolbar, textvariable=self.summary_var).pack(
             side="right", padx=(10, 0)
         )
@@ -619,6 +696,11 @@ class ProofGraphViewer(ttk.Frame):
                     style="CX.SurfaceMuted.TLabel",
                 ).pack(side="left", padx=3)
             ttk.Label(lifecycle, text=label, style=style_name).pack(side="left", padx=1)
+        ttk.Label(
+            lifecycle,
+            textvariable=self.health_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).pack(side="right", padx=(12, 0))
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -678,6 +760,10 @@ class ProofGraphViewer(ttk.Frame):
         )
         self.canvas.bind("<ButtonPress-2>", self._start_pan)
         self.canvas.bind("<B2-Motion>", self._drag_pan)
+        self.canvas.bind("<Home>", self.fit_graph)
+        self.tree.bind("<Home>", self.fit_graph)
+        self.canvas.bind("<Key-f>", self.focus_selected)
+        self.tree.bind("<Key-f>", self.focus_selected)
 
         detail_header = ttk.Frame(detail_host, style="CX.PanelHeader.TFrame")
         detail_header.pack(fill="x", padx=6, pady=(6, 3))
@@ -762,11 +848,68 @@ class ProofGraphViewer(ttk.Frame):
             if all_nodes
             else "No persisted ProofGraph evidence"
         )
+        health = _projection_status_summary(projection)
+        if not all_nodes:
+            self.health_var.set("No verification states")
+        else:
+            self.health_var.set(
+                f"Pass {health['pass']} · Warning {health['warning']} · "
+                f"Fail {health['fail']} · Missing evidence {health['unresolved']}"
+            )
 
     def _set_zoom(self, value: float):
         self._zoom = max(0.45, min(2.5, float(value)))
         self.zoom_label.configure(text=f"{round(self._zoom * 100):d}%")
         self._draw_graph()
+        return "break"
+
+    def fit_graph(self, _event=None):
+        """Fit current projected graph into the visible canvas without inventing data."""
+        self.update_idletasks()
+        self._draw_graph()
+        bbox = self.canvas.bbox("all")
+        if not bbox:
+            return "break"
+        content_width = max(1.0, float(bbox[2] - bbox[0]))
+        content_height = max(1.0, float(bbox[3] - bbox[1]))
+        viewport_width = max(1.0, float(self.canvas.winfo_width() - 24))
+        viewport_height = max(1.0, float(self.canvas.winfo_height() - 24))
+        scale = min(viewport_width / content_width, viewport_height / content_height)
+        target = max(0.45, min(2.5, self._zoom * scale * 0.96))
+        self._zoom = target
+        self.zoom_label.configure(text=f"{round(self._zoom * 100):d}%")
+        self._draw_graph()
+        self.canvas.xview_moveto(0.0)
+        self.canvas.yview_moveto(0.0)
+        self._status_setter(f"ProofGraph fitted at {round(self._zoom * 100):d}%")
+        return "break"
+
+    def focus_selected(self, _event=None, *, update_status: bool = True):
+        key = self._selected_key
+        bbox = self._canvas_bbox_by_key.get(key or "")
+        if bbox is None:
+            if update_status:
+                self._status_setter("Select a ProofGraph node to focus")
+            return "break"
+
+        scroll = str(self.canvas.cget("scrollregion") or "").split()
+        if len(scroll) != 4:
+            return "break"
+        x1, y1, x2, y2 = (float(value) for value in scroll)
+        total_width = max(1.0, x2 - x1)
+        total_height = max(1.0, y2 - y1)
+        view_width = max(1.0, float(self.canvas.winfo_width()))
+        view_height = max(1.0, float(self.canvas.winfo_height()))
+        center_x = (bbox[0] + bbox[2]) / 2.0
+        center_y = (bbox[1] + bbox[3]) / 2.0
+        left = max(x1, min(x2 - view_width, center_x - view_width / 2.0))
+        top = max(y1, min(y2 - view_height, center_y - view_height / 2.0))
+        self.canvas.xview_moveto(max(0.0, min(1.0, (left - x1) / total_width)))
+        self.canvas.yview_moveto(max(0.0, min(1.0, (top - y1) / total_height)))
+        if update_status:
+            node = self.selected_node()
+            label = _text(node.get("label")) if node else key
+            self._status_setter(f"Focused ProofGraph node: {label}")
         return "break"
 
     def _on_mousewheel_zoom(self, event):
@@ -868,6 +1011,7 @@ class ProofGraphViewer(ttk.Frame):
         canvas = self.canvas
         canvas.delete("all")
         self._canvas_key_by_item.clear()
+        self._canvas_bbox_by_key.clear()
         nodes = self._projection.get("nodes", [])
         edges = self._projection.get("edges", [])
         if not nodes:
@@ -983,6 +1127,12 @@ class ProofGraphViewer(ttk.Frame):
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[stripe] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]
+            self._canvas_bbox_by_key[node["key"]] = (
+                x,
+                y,
+                x + node_width,
+                y + node_height,
+            )
 
         width = margin_x + (max(by_column) + 1) * x_spacing + 190 * zoom
         height = margin_y + max_rows * y_spacing + 70 * zoom
@@ -1003,6 +1153,7 @@ class ProofGraphViewer(ttk.Frame):
         key = self._tree_key_by_iid.get(selection[0])
         if key:
             self._select_key(key)
+            self.focus_selected(update_status=False)
 
     def _on_canvas_selected(self, _event=None) -> None:
         current = self.canvas.find_withtag("current")
@@ -1017,7 +1168,14 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.delete("1.0", "end")
         node = self._nodes_by_key.get(self._selected_key or "")
         if node is not None:
-            self.detail.insert("1.0", "\n".join(_node_detail_lines(node)))
+            lines = _node_detail_lines(node)
+            lines.extend(
+                _node_relation_lines(
+                    self._projection,
+                    _text(node.get("key")),
+                )
+            )
+            self.detail.insert("1.0", "\n".join(lines))
         else:
             self.detail.insert(
                 "1.0",

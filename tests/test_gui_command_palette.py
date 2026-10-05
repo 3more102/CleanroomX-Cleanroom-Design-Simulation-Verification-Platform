@@ -133,8 +133,12 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
         "Toggle Output / Verification Panel",
         "Toggle Design Inspector",
         "Reset Active Workspace Layout",
+        "Toggle Full-screen Workspace",
     ):
         assert label in labels
+
+    commands_by_id = {command.id: command for command in commands}
+    assert commands_by_id["workspace.fullscreen"].shortcut == "F11"
 
     app.show_command_palette()
     root.update()

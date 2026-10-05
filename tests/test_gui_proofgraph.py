@@ -8,6 +8,7 @@ from cleanroomx.gui_proofgraph import (
     _filtered_projection,
     _node_detail_lines,
     _searched_projection,
+    proofgraph_completeness_summary,
     proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
@@ -276,3 +277,34 @@ def test_proofgraph_search_keeps_matches_and_immediate_traceability_context():
     assert "verdict:verdict-pressure" in failed_keys
 
     assert _searched_projection(projection, "") is projection
+
+
+
+def test_proofgraph_completeness_summary_uses_only_persisted_links():
+    summary = proofgraph_completeness_summary(
+        proofgraph_projection(_sample_graph())
+    )
+
+    assert summary == {
+        "requirements_total": 1,
+        "requirements_checked": 1,
+        "checks_total": 1,
+        "checks_with_evidence": 1,
+        "unresolved_evidence_findings": 0,
+        "verdicts_total": 1,
+        "verdicts_pass": 0,
+        "verdicts_fail": 1,
+        "verdicts_other": 0,
+    }
+
+
+def test_proofgraph_completeness_exposes_missing_evidence_without_new_verdict():
+    projection = proofgraph_projection(_unresolved_graph())
+    summary = proofgraph_completeness_summary(projection)
+
+    assert summary["requirements_checked"] == 1
+    assert summary["checks_total"] == 1
+    assert summary["checks_with_evidence"] == 0
+    assert summary["unresolved_evidence_findings"] == 1
+    assert summary["verdicts_fail"] == 0
+    assert summary["verdicts_other"] == 1

@@ -3014,6 +3014,23 @@ class CleanroomXApp:
 
         structured_tab = ttk.Frame(input_notebook)
         input_notebook.add(structured_tab, text="Structured")
+        structured_help = ttk.Frame(structured_tab, padding=(8, 6))
+        structured_help.pack(fill="x")
+        ttk.Label(
+            structured_help,
+            text=(
+                "Validated scalar editing · double-click or Enter to edit the selected "
+                "value; objects/arrays remain in the JSON editor."
+            ),
+        ).pack(side="left")
+        ttk.Button(
+            structured_help,
+            text="Edit value",
+            command=self._edit_structured_input_value,
+        ).pack(side="right")
+        self._structure_rows: dict[
+            str, tuple[tuple[str | int, ...], object, str]
+        ] = {}
         self.structure_tree = ttk.Treeview(
             structured_tab,
             columns=("value", "unit"),
@@ -3031,6 +3048,14 @@ class CleanroomXApp:
         self.structure_tree.configure(yscrollcommand=struct_scroll.set)
         self.structure_tree.pack(side="left", fill="both", expand=True)
         struct_scroll.pack(side="right", fill="y")
+        self.structure_tree.bind(
+            "<Double-1>",
+            lambda _event: self._edit_structured_input_value(),
+        )
+        self.structure_tree.bind(
+            "<Return>",
+            lambda _event: self._edit_structured_input_value(),
+        )
 
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
@@ -6899,9 +6924,113 @@ class CleanroomXApp:
         else:
             self.status_var.set("Spatial geometry already matches the active analysis")
 
+    def _edit_structured_input_value(self) -> bool:
+        if self._running:
+            self.status_var.set("Structured input edit blocked while analysis is running")
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before editing analysis inputs.",
+                parent=self.root,
+            )
+            return False
+
+        selection = self.structure_tree.selection()
+        if not selection:
+            self.status_var.set("Select a structured input value to edit")
+            return False
+        row = self._structure_rows.get(selection[0])
+        if row is None:
+            return False
+        tokens, current_value, unit = row
+        if isinstance(current_value, (dict, list)):
+            self.status_var.set(
+                "Structured editing is limited to scalar values; use the JSON editor "
+                "for objects and arrays"
+            )
+            return False
+
+        path = str(self.structure_tree.item(selection[0], "text"))
+        initial = json.dumps(
+            current_value,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        prompt = (
+            f"{path}"
+            + (f"  [{unit}]" if unit else "")
+            + "\n\nEnter one JSON scalar value (text must be quoted):"
+        )
+        raw = simpledialog.askstring(
+            "Edit structured analysis input",
+            prompt,
+            initialvalue=initial,
+            parent=self.root,
+        )
+        if raw is None:
+            return False
+
+        try:
+            replacement = _strict_json_loads(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            messagebox.showerror(
+                "Invalid structured value",
+                f"Enter one valid JSON scalar value.\n\n{exc}",
+                parent=self.root,
+            )
+            return False
+        if isinstance(replacement, (dict, list)):
+            messagebox.showerror(
+                "Structured edit not supported",
+                "Objects and arrays must be edited in the JSON editor.",
+                parent=self.root,
+            )
+            return False
+
+        text = self.input_text.get("1.0", "end-1c").strip()
+        try:
+            payload = _strict_json_loads(text)
+            candidate = replace_structured_json_value(payload, tokens, replacement)
+            analysis = self._editor_analysis() or self._current_analysis()
+            if analysis is None:
+                raise ValueError("select or add an analysis first")
+            validate_analysis_input(
+                analysis.kind,
+                candidate,
+                base_dir=self._base_dir(),
+            )
+        except Exception as exc:
+            self.status_var.set("Structured input edit rejected by analysis validation")
+            messagebox.showerror(
+                "Analysis input rejected",
+                (
+                    "The candidate value was not applied because the authoritative "
+                    f"analysis parser/validator rejected the complete input.\n\n{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+
+        serialized = json.dumps(
+            candidate,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        self.input_text.edit_separator()
+        self.input_text.delete("1.0", "end")
+        self.input_text.insert("1.0", serialized)
+        self.input_text.edit_modified(True)
+        self.input_text.edit_separator()
+        self.refresh_structure(silent=True)
+        self.status_var.set(
+            f"Updated {path}; validate/run or save to commit the edited analysis input"
+        )
+        return True
+
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():
             self.structure_tree.delete(item)
+        self._structure_rows.clear()
         text = self.input_text.get("1.0", "end-1c").strip()
         if not text:
             return
@@ -6916,11 +7045,25 @@ class CleanroomXApp:
                 )
                 messagebox.showerror("Invalid JSON", detail, parent=self.root)
             return
-        for index, (path, value, unit) in enumerate(flatten_json(payload)):
-            display = value if len(value) <= 160 else value[:157] + "..."
-            self.structure_tree.insert(
-                "", "end", iid=f"row-{index}", text=path, values=(display, unit)
+        for index, (path, tokens, raw_value, unit) in enumerate(
+            structured_json_entries(payload)
+        ):
+            value = json.dumps(
+                raw_value,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
             )
+            display = value if len(value) <= 160 else value[:157] + "..."
+            iid = f"row-{index}"
+            self.structure_tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=path,
+                values=(display, unit),
+            )
+            self._structure_rows[iid] = (tokens, copy.deepcopy(raw_value), unit)
 
     def restore_recovery_path(self, path: str | Path) -> None:
         recovered = restore_recovery_artifact(path)

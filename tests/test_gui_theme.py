@@ -47,6 +47,7 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "error",
         "error_surface",
         "info",
+        "requirement",
         "info_surface",
         "simulation",
         "evidence",
@@ -77,6 +78,7 @@ def test_dark_palette_matches_cleanroomx_industrial_foundation():
     assert dark["warning"] == "#F59E0B"
     assert dark["error"] == "#EF4444"
     assert dark["simulation"] == "#A78BFA"
+    assert dark["requirement"] == "#2563EB"
 
 
 

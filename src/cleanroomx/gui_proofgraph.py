@@ -574,7 +574,9 @@ class ProofGraphViewer(ttk.Frame):
         self._nodes_by_key: dict[str, dict[str, Any]] = {}
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
+        self._canvas_rect_by_key: dict[str, int] = {}
         self._selected_key: str | None = None
+        self._hovered_key: str | None = None
         self._canvas_bbox_by_key: dict[str, tuple[float, float, float, float]] = {}
         self._zoom = 1.0
         self._theme_name = "dark"
@@ -723,6 +725,30 @@ class ProofGraphViewer(ttk.Frame):
         ):
             ttk.Label(legend, text=text, style=style_name).pack(side="left", padx=(0, 5))
 
+        tree_header = ttk.Frame(
+            tree_host,
+            style="CX.PanelHeader.TFrame",
+            padding=(6, 4),
+        )
+        tree_header.pack(fill="x")
+        ttk.Label(
+            tree_header,
+            text="TRACE NODES",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Button(
+            tree_header,
+            text="Expand",
+            style="CX.Compact.TButton",
+            command=self.expand_tree,
+        ).pack(side="right", padx=(3, 0))
+        ttk.Button(
+            tree_header,
+            text="Collapse",
+            style="CX.Compact.TButton",
+            command=self.collapse_tree,
+        ).pack(side="right")
+
         self.tree = ttk.Treeview(tree_host, show="tree", selectmode="browse")
         tree_scroll = ttk.Scrollbar(tree_host, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
@@ -748,6 +774,8 @@ class ProofGraphViewer(ttk.Frame):
         graph_host.columnconfigure(0, weight=1)
         self.canvas.bind("<Button-1>", self._on_canvas_selected)
         self.canvas.bind("<Double-1>", self._navigate_selected)
+        self.canvas.bind("<Motion>", self._on_canvas_hover)
+        self.canvas.bind("<Leave>", self._clear_canvas_hover)
         self.canvas.bind("<Configure>", lambda _event: self._draw_graph())
         self.canvas.bind("<MouseWheel>", self._on_mousewheel_zoom)
         self.canvas.bind(
@@ -959,6 +987,14 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
+    def expand_tree(self) -> None:
+        for iid in self.tree.get_children(""):
+            self.tree.item(iid, open=True)
+
+    def collapse_tree(self) -> None:
+        for iid in self.tree.get_children(""):
+            self.tree.item(iid, open=False)
+
     def apply_theme(self, value: Any, *, redraw: bool = True) -> None:
         self._theme_name = str(value or "dark")
         self._palette = theme_palette(self._theme_name)
@@ -1011,7 +1047,9 @@ class ProofGraphViewer(ttk.Frame):
         canvas = self.canvas
         canvas.delete("all")
         self._canvas_key_by_item.clear()
+        self._canvas_rect_by_key.clear()
         self._canvas_bbox_by_key.clear()
+        self._hovered_key = None
         nodes = self._projection.get("nodes", [])
         edges = self._projection.get("edges", [])
         if not nodes:
@@ -1125,6 +1163,7 @@ class ProofGraphViewer(ttk.Frame):
                 ),
             )
             self._canvas_key_by_item[rect] = node["key"]
+            self._canvas_rect_by_key[node["key"]] = rect
             self._canvas_key_by_item[stripe] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]
             self._canvas_bbox_by_key[node["key"]] = (
@@ -1162,6 +1201,40 @@ class ProofGraphViewer(ttk.Frame):
         key = self._canvas_key_by_item.get(current[0])
         if key:
             self._select_key(key)
+
+    def _set_hovered_key(self, key: str | None) -> None:
+        if key == self._hovered_key:
+            return
+        previous = self._hovered_key
+        self._hovered_key = key if key in self._nodes_by_key else None
+
+        if previous and previous != self._selected_key:
+            rect = self._canvas_rect_by_key.get(previous)
+            node = self._nodes_by_key.get(previous)
+            if rect is not None and node is not None:
+                self.canvas.itemconfigure(
+                    rect,
+                    outline=self._node_accent(node),
+                    width=1,
+                )
+
+        active = self._hovered_key
+        if active and active != self._selected_key:
+            rect = self._canvas_rect_by_key.get(active)
+            if rect is not None:
+                self.canvas.itemconfigure(
+                    rect,
+                    outline=self._palette["accent"],
+                    width=2,
+                )
+
+    def _on_canvas_hover(self, _event=None) -> None:
+        current = self.canvas.find_withtag("current")
+        key = self._canvas_key_by_item.get(current[0]) if current else None
+        self._set_hovered_key(key)
+
+    def _clear_canvas_hover(self, _event=None) -> None:
+        self._set_hovered_key(None)
 
     def _show_selected_detail(self) -> None:
         self.detail.configure(state="normal")

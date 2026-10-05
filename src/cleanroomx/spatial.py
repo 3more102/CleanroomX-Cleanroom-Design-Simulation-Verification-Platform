@@ -4287,6 +4287,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         current = self.canvas_2d.find_withtag("current")
         hit = None
         self._resize_room_id = None
+        selection_mode = self._selection_mode_from_event(event)
         if current:
             tags = self.canvas_2d.gettags(current[0])
             resize_tag = next(
@@ -4299,25 +4300,47 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._resize_room_id = room_id
             else:
                 hit = self._parse_hit(tags)
-        self.selected = hit
-        item = self._selected_object()
-        if hit is not None and item is not None:
-            self._drag_anchor = self._canvas_to_world(event.x, event.y)
-            self._drag_item_origin = (item["x_m"], item["y_m"])
-            self._drag_history_before = (
-                self._history_layout(),
-                self._selection_state(),
-            )
-        else:
+        if hit is None:
+            self._box_select_anchor_world = self._canvas_to_world(event.x, event.y)
+            self._box_select_current_world = self._box_select_anchor_world
+            self._box_select_anchor_canvas = (event.x, event.y)
+            self._box_select_mode = selection_mode
+            if selection_mode == "replace":
+                self._select_hit(None, mode="replace")
             self._drag_anchor = None
             self._drag_item_origin = None
             self._drag_history_before = None
+        else:
+            self._box_select_anchor_world = None
+            self._box_select_current_world = None
+            self._box_select_anchor_canvas = None
+            self._select_hit(hit, mode=selection_mode)
+            item = self._selected_object()
+            if (
+                selection_mode == "replace"
+                and self.selected == hit
+                and item is not None
+            ):
+                self._drag_anchor = self._canvas_to_world(event.x, event.y)
+                self._drag_item_origin = (item["x_m"], item["y_m"])
+                self._drag_history_before = (
+                    self._history_layout(),
+                    self._selection_state(),
+                )
+            else:
+                self._drag_anchor = None
+                self._drag_item_origin = None
+                self._drag_history_before = None
         self._load_property_panel()
         self._notify_selection_change()
         self.redraw()
 
     def _on_left_drag(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if self._box_select_anchor_world is not None:
+            self._box_select_current_world = self._canvas_to_world(event.x, event.y)
+            self.redraw()
             return
         item = self._selected_object()
         if item is None or self._drag_anchor is None:
@@ -4371,6 +4394,29 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_up(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if self._box_select_anchor_world is not None:
+            self._box_select_current_world = self._canvas_to_world(event.x, event.y)
+            anchor_canvas = self._box_select_anchor_canvas
+            moved = (
+                anchor_canvas is not None
+                and (
+                    abs(event.x - anchor_canvas[0]) >= 3
+                    or abs(event.y - anchor_canvas[1]) >= 3
+                )
+            )
+            if moved:
+                self._apply_box_selection(
+                    self._box_select_anchor_world,
+                    self._box_select_current_world,
+                    mode=self._box_select_mode,
+                )
+            self._box_select_anchor_world = None
+            self._box_select_current_world = None
+            self._box_select_anchor_canvas = None
+            self._load_property_panel()
+            self._notify_selection_change()
+            self.redraw()
             return
         if (
             self._drag_anchor is not None
@@ -4565,11 +4611,15 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_3d_click(self, event: tk.Event) -> None:
         current = self.canvas_3d.find_withtag("current")
         if not current:
+            if self._selection_mode_from_event(event) == "replace":
+                self._select_hit(None, mode="replace")
+                self._load_property_panel()
+                self.redraw()
             return
         hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
         if hit is None:
             return
-        self.selected = hit
+        self._select_hit(hit, mode=self._selection_mode_from_event(event))
         self._load_property_panel()
         self._notify_selection_change()
         self.redraw()

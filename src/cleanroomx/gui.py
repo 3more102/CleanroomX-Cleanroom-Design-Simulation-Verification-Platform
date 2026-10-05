@@ -4198,11 +4198,14 @@ class CleanroomXApp:
 
         sections = (
             ("nav-dashboard", "Dashboard"),
-            ("nav-building", "Building"),
-            ("nav-hvac", "HVAC Systems"),
-            ("nav-devices", "Devices"),
+            ("nav-building", "Building / Layout"),
+            ("nav-hvac", "HVAC / Airflow"),
+            ("nav-devices", "Devices / Equipment"),
             ("nav-pressure", "Pressure Network"),
             ("nav-analyses", "Analyses"),
+            ("nav-simulation", "Simulation"),
+            ("nav-diagnostics", "DRC / Diagnostics"),
+            ("nav-verification", "Verification"),
             ("nav-requirements", "Requirements"),
             ("nav-proofgraph", "ProofGraph"),
             ("nav-evidence", "Evidence"),
@@ -4505,6 +4508,30 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+            return
+        if item_id == "nav-simulation":
+            self._activate_analysis_input_workspace()
+            self.selection_status_var.set("Selected: Simulation / Analysis Inputs")
+            return
+        if item_id == "nav-diagnostics":
+            self.show_problems_panel()
+            self.selection_status_var.set("Selected: DRC / Diagnostics")
+            return
+        if item_id == "nav-verification":
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            self.output_notebook.select(self.verification_text.master)
+            self.selection_status_var.set("Selected: Verification")
+            return
+        if item_id == "nav-requirements":
+            self.show_requirements_traceability()
+            self.selection_status_var.set("Selected: Requirements")
+            return
+        if item_id == "nav-reports":
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            self.output_notebook.select(self.report_text.master)
+            self.selection_status_var.set("Selected: Reports")
             return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()

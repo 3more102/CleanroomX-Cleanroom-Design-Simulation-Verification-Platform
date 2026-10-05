@@ -422,6 +422,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["panel"],
         foreground=palette["muted"],
     )
+    style.configure(
+        "CX.PanelSection.TLabel",
+        background=palette["panel"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
     for style_name, color in (
         ("Success", semantic["success"]),
         ("Warning", semantic["warning"]),

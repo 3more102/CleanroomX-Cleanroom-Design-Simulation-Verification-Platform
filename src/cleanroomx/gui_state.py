@@ -20,9 +20,9 @@ GUI_WORKSPACE_PROFILES = (
 
 _DEFAULT_WORKSPACE_LAYOUTS = {
     "start": {
-        "navigator_visible": True,
-        "output_visible": True,
-        "inspector_visible": True,
+        "navigator_visible": False,
+        "output_visible": False,
+        "inspector_visible": False,
         "navigator_fraction": 0.20,
         "output_fraction": 0.72,
         "inspector_fraction": 0.78,

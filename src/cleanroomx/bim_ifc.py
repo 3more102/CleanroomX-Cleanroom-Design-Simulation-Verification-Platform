@@ -1653,8 +1653,10 @@ def extract_ifc_semantics(
                     entities = model.by_type(ifc_class, include_subtypes=False)
                 else:
                     entities = model.by_type(ifc_class)
-            except Exception:
-                continue
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to enumerate IFC device entities for {ifc_class!r}"
+                ) from exc
             for entity in entities:
                 global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
                 if not global_id or global_id in seen:

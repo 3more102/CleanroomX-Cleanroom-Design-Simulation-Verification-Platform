@@ -19,7 +19,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "navigator_visible": True,
         "output_visible": True,
         "inspector_visible": True,
-        "theme": "light",
+        "theme": "dark",
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,

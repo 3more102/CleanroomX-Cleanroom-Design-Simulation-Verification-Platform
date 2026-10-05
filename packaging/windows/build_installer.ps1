@@ -53,7 +53,7 @@ try {
         }
     }
 
-    python -c "import ifcopenshell; print(ifcopenshell.version)"
+    python -c "import ifcopenshell, importlib.metadata as m; print(m.version('ifcopenshell'))"
     if ($LASTEXITCODE -ne 0) {
         throw "Pinned IfcOpenShell runtime is unavailable"
     }

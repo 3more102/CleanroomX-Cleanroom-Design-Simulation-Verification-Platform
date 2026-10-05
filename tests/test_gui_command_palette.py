@@ -111,6 +111,19 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open ProofGraph Explorer" in labels
     assert "Verify Project Requirements" in labels
     assert "Import IFC Spatial Layout" in labels
+    assert "Switch to Design Workspace" in labels
+    assert "Switch to Simulation Workspace" in labels
+    assert "Switch to Verification Workspace" in labels
+    assert "Switch to Evidence Workspace" in labels
+    assert "Switch to Reporting Workspace" in labels
+
+    workspace_shortcuts = {
+        command.id: command.shortcut
+        for command in commands
+        if command.id.startswith("workspace.")
+    }
+    assert workspace_shortcuts["workspace.design"] == "Ctrl+Alt+1"
+    assert workspace_shortcuts["workspace.reporting"] == "Ctrl+Alt+5"
 
     app.show_command_palette()
     root.update()

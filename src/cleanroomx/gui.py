@@ -3560,9 +3560,12 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            report = record_gui_exception("Refresh verification currency", exc)
             self._set_text(
                 self.verification_text,
-                f"Verification currency unavailable: {exc}\n",
+                "Verification currency unavailable.\n\n"
+                + report.user_message()
+                + "\n",
             )
 
         try:
@@ -3597,12 +3600,15 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            report = record_gui_exception("Refresh verification evidence", exc)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
             self._set_text(
                 self.evidence_text,
-                f"Verification evidence unavailable: {exc}\n",
+                "Verification evidence unavailable.\n\n"
+                + report.user_message()
+                + "\n",
             )
 
         summary = (

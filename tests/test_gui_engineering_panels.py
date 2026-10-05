@@ -364,3 +364,36 @@ def test_navigator_evidence_and_report_sections_reveal_hidden_output(app):
     app.root.update()
     assert app._paned_contains(app.workspace_panes, app.output_panel)
     assert app.output_notebook.select() == str(app.report_text.master)
+
+
+def test_status_bar_tracks_canonical_diagnostics_and_run_state(app):
+    result = app._refresh_engineering_panels()
+    assert result is not None
+    summary = result["summary"]
+    assert app.verification_status_var.get() == (
+        f"DRC: {summary['error_count']}E/{summary['warning_count']}W"
+    )
+    assert app.engineering_status_var.get().startswith(
+        app.verification_status_var.get()
+    )
+    assert "RUN: idle" in app.engineering_status_var.get()
+
+    app._set_running(True)
+    app.root.update_idletasks()
+    assert app.run_status_var.get() == "RUN: running"
+    assert "RUN: running" in app.engineering_status_var.get()
+
+    app._set_running(False)
+    app.root.update_idletasks()
+    assert app.run_status_var.get() == "RUN: idle"
+    assert app.run_button.cget("state") == "normal"
+    assert app.input_text.cget("state") == "normal"
+
+
+def test_engineering_health_status_remains_visible_at_minimum_window(app):
+    app.root.geometry("1050x680")
+    app.root.update()
+
+    label = app.engineering_status_label
+    assert label.winfo_ismapped()
+    assert label.winfo_x() + label.winfo_width() <= app.status_bar.winfo_width()

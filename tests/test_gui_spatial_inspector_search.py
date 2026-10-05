@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import tkinter as tk
 
@@ -104,3 +105,84 @@ def test_property_search_does_not_discard_unapplied_draft(app):
     workspace.clear_property_filter()
     app.root.update()
     assert workspace._property_vars["name"].get() == "Unapplied draft"
+
+
+def test_spatial_inspector_live_validation_blocks_invalid_draft_without_mutation(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    before = copy.deepcopy(workspace.layout)
+    assert workspace._property_apply_button.instate(["disabled"])
+    assert workspace._property_reset_button.instate(["disabled"])
+    assert workspace._property_draft_var.get() == "Draft: matches stored values"
+
+    workspace._property_vars["length_m"].set("")
+    app.root.update()
+
+    assert workspace._property_draft_var.get().startswith("Draft: INVALID")
+    assert "Length (m)" in workspace._property_draft_var.get()
+    assert workspace._property_apply_button.instate(["disabled"])
+    assert not workspace._property_reset_button.instate(["disabled"])
+    assert workspace.layout == before
+
+
+def test_spatial_inspector_valid_draft_enables_apply_and_returns_clean(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    revised_name = room["name"] + " revised"
+    workspace._property_vars["name"].set(revised_name)
+    app.root.update()
+
+    assert workspace._property_draft_var.get() == "Draft: valid · unapplied changes"
+    assert not workspace._property_apply_button.instate(["disabled"])
+    assert not workspace._property_reset_button.instate(["disabled"])
+
+    workspace.apply_properties()
+    app.root.update()
+
+    selected = workspace._selected_object()
+    assert selected is not None
+    assert selected["name"] == revised_name
+    assert workspace._property_apply_button.instate(["disabled"])
+    assert workspace._property_reset_button.instate(["disabled"])
+    assert workspace._property_draft_var.get() == "Draft: matches stored values"
+
+
+def test_spatial_inspector_semantically_equal_numeric_text_is_not_dirty(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    workspace._property_vars["length_m"].set(f"{float(room['length_m']):.3f}")
+    app.root.update()
+
+    assert workspace._property_draft_var.get() == "Draft: matches stored values"
+    assert workspace._property_apply_button.instate(["disabled"])
+    assert workspace._property_reset_button.instate(["disabled"])
+
+
+def test_reset_property_edits_clears_invalid_draft(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    stored_width = str(room["width_m"])
+    workspace._property_vars["width_m"].set("-1")
+    app.root.update()
+    assert workspace._property_draft_error is not None
+
+    workspace.reset_property_edits()
+    app.root.update()
+
+    assert workspace._property_vars["width_m"].get() == stored_width
+    assert workspace._property_draft_error is None
+    assert workspace._property_draft_var.get() == "Draft: matches stored values"
+    assert workspace._property_apply_button.instate(["disabled"])
+    assert workspace._property_reset_button.instate(["disabled"])

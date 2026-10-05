@@ -69,7 +69,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
-from .gui_panels import ProjectDiagnosticsPanel
+from .gui_panels import ProjectDiagnosticsPanel, SimulationSummaryPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
@@ -2056,6 +2056,8 @@ class CleanroomXApp:
         self.evidence_text = self._add_text_tab(
             "Evidence", notebook=self.output_notebook
         )
+        self.simulation_panel = SimulationSummaryPanel(self.output_notebook)
+        self.output_notebook.add(self.simulation_panel, text="Simulation")
         self.result_text = self._add_text_tab(
             "Results", notebook=self.output_notebook
         )
@@ -6255,6 +6257,13 @@ class CleanroomXApp:
         state_var = getattr(self, "analysis_run_state_var", None)
         if running:
             self._set_analysis_run_state("running")
+            simulation_panel = getattr(self, "simulation_panel", None)
+            analysis = self._editor_analysis()
+            if simulation_panel is not None:
+                simulation_panel.set_running(
+                    title=(analysis.name if analysis is not None else "Running analysis"),
+                    kind=(analysis.kind if analysis is not None else "analysis"),
+                )
             if progress is not None:
                 progress.start(70)
         else:
@@ -6278,6 +6287,9 @@ class CleanroomXApp:
                 self._set_running(False)
                 if kind == "error":
                     self._set_analysis_run_state("failed")
+                    simulation_panel = getattr(self, "simulation_panel", None)
+                    if simulation_panel is not None:
+                        simulation_panel.set_failure(str(payload))
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6348,6 +6360,18 @@ class CleanroomXApp:
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         self._set_analysis_run_state(run.status)
+        simulation_panel = getattr(self, "simulation_panel", None)
+        if simulation_panel is not None:
+            result_rows = flatten_json(run.result)
+            diagnostic_rows = flatten_json(run.diagnostics)
+            simulation_panel.set_run(
+                title=run.title,
+                kind=run.kind,
+                status=run.status,
+                result_rows=result_rows[:300],
+                diagnostic_row_count=len(diagnostic_rows),
+                has_plot=run.plot is not None,
+            )
         self._set_text(
             self.result_text,
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),
@@ -6363,7 +6387,10 @@ class CleanroomXApp:
             self.spatial_workspace._load_property_panel()
         self._refresh_engineering_panels()
         if select_results:
-            self.output_notebook.select(self.result_text.master)
+            simulation_panel = getattr(self, "simulation_panel", None)
+            self.output_notebook.select(
+                simulation_panel if simulation_panel is not None else self.result_text.master
+            )
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

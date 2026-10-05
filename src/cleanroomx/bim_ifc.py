@@ -1577,13 +1577,22 @@ def extract_ifc_semantics(
         except Exception as exc:
             raise IfcImportError(f"unable to open IFC file {source}") from exc
 
+        try:
+            raw_unit_scale = unit_util.calculate_unit_scale(model)
+        except Exception as exc:
+            raise IfcImportError("unable to resolve IFC length unit scale") from exc
         unit_scale = _positive_number(
-            unit_util.calculate_unit_scale(model),
+            raw_unit_scale,
             field="IFC length unit scale",
         )
         records: list[dict[str, Any]] = []
 
-        for entity in model.by_type("IfcSpace"):
+        try:
+            spaces = model.by_type("IfcSpace")
+        except Exception as exc:
+            raise IfcImportError("unable to enumerate IFC spaces") from exc
+
+        for entity in spaces:
             try:
                 length, width, height = _space_dimensions_m(
                     entity, unit_scale, element_util
@@ -1644,8 +1653,10 @@ def extract_ifc_semantics(
                     entities = model.by_type(ifc_class, include_subtypes=False)
                 else:
                     entities = model.by_type(ifc_class)
-            except Exception:
-                continue
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to enumerate IFC device entities for {ifc_class!r}"
+                ) from exc
             for entity in entities:
                 global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
                 if not global_id or global_id in seen:

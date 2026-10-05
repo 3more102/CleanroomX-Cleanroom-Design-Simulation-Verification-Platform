@@ -114,7 +114,7 @@ def test_command_palette_exposes_engineering_empty_state(root):
 
     assert palette.tree.get_children() == ()
     assert "No command matches" in palette._empty_hint.cget("text")
-    assert palette._summary.cget("text") == "0 COMMANDS"
+    assert palette._summary.cget("text") == "0 MATCHES"
     palette._close()
 
 

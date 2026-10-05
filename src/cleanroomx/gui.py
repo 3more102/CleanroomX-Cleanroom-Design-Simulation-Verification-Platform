@@ -4185,7 +4185,6 @@ class CleanroomXApp:
             workspace = getattr(self, "spatial_workspace", None)
             if workspace is not None and workspace.select_item(kind, item_id, notify=True):
                 self.activate_workspace_profile("design")
-                workspace.fit_selected()
                 self.status_var.set(f"Search: opened {record.kind.lower()} {record.label}")
                 return
 

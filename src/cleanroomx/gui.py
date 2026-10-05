@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_overview import EngineeringOverview, engineering_overview_snapshot
+from .gui_compliance import ComplianceWorkspace
 from .gui_simulation import SimulationWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
@@ -2288,6 +2289,10 @@ class CleanroomXApp:
             accelerator="F8",
             command=self._refresh_engineering_panels,
         )
+        verify_menu.add_command(
+            label="Compliance Rule Packs...",
+            command=self._activate_compliance_workspace,
+        )
         verify_menu.add_separator()
         verify_menu.add_command(
             label="Requirements Traceability...",
@@ -2888,6 +2893,18 @@ class CleanroomXApp:
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
+        self.compliance_workspace = ComplianceWorkspace(
+            self.notebook,
+            on_run=self.run_current,
+            on_validate=self.validate_current,
+            on_open_inputs=self._activate_analysis_input_workspace,
+            on_open_results=self._activate_analysis_results_workspace,
+            on_open_history=self.show_run_history,
+            on_open_traceability=self.show_requirements_traceability,
+            on_select_analysis=self._select_analysis_from_compliance,
+        )
+        self.notebook.add(self.compliance_workspace, text="Compliance")
+
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
         input_notebook = ttk.Notebook(self.input_tab)
@@ -3366,6 +3383,10 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        compliance = getattr(self, "compliance_workspace", None)
+        if compliance is not None:
+            compliance.apply_theme(self.theme_var.get())
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -4243,6 +4264,13 @@ class CleanroomXApp:
                 keywords=("requirements", "evidence", "trace"),
             ),
             PaletteCommand(
+                "compliance.open",
+                "Open Compliance Rule Packs",
+                "Verification",
+                self._activate_compliance_workspace,
+                keywords=("rule pack", "criteria", "urs", "evidence", "compliance"),
+            ),
+            PaletteCommand(
                 "report.dossier",
                 "Export Project Engineering Dossier",
                 "Report",
@@ -4528,6 +4556,63 @@ class CleanroomXApp:
             self.notebook.select(self.simulation_workspace)
             self.workspace_profile_var.set("simulation")
             self.workspace_status_var.set("Workspace: Simulation")
+
+    def _refresh_compliance_workspace(self) -> None:
+        """Project compliance_check configuration and canonical result without mutation."""
+        workspace = getattr(self, "compliance_workspace", None)
+        if workspace is None:
+            return
+        analyses = [
+            item for item in self.project.analyses if item.kind == "compliance_check"
+        ]
+        analysis = self._editor_analysis()
+        active_id = (
+            analysis.id
+            if analysis is not None and analysis.kind == "compliance_check"
+            else None
+        )
+        workspace.set_analysis_options(
+            tuple((item.id, item.name) for item in analyses),
+            active_id=active_id,
+        )
+        if analysis is None or analysis.kind != "compliance_check":
+            workspace.set_context(
+                analysis_name=None,
+                running=False,
+            )
+            return
+        workspace.set_context(
+            analysis_name=analysis.name,
+            analysis_input=analysis.input,
+            last_run=self._runs_by_analysis.get(analysis.id),
+            running=bool(self._running),
+        )
+
+    def _select_analysis_from_compliance(self, analysis_id: str) -> None:
+        """Route compliance selection through the canonical analysis-switch guard."""
+        target = str(analysis_id or "").strip()
+        if not target or not self.analysis_tree.exists(target):
+            self._refresh_compliance_workspace()
+            return
+        self.analysis_tree.selection_set(target)
+        self.analysis_tree.focus(target)
+        self.analysis_tree.see(target)
+        self._on_analysis_selected()
+        self._refresh_compliance_workspace()
+        if getattr(self, "_editor_analysis_id", None) == target:
+            self.notebook.select(self.compliance_workspace)
+            self.workspace_status_var.set("Workspace: Compliance Rule Packs")
+
+    def _activate_compliance_workspace(self, *, apply_layout: bool = True) -> None:
+        """Open compliance inside the Verification workstation layout."""
+        if not hasattr(self, "notebook") or not hasattr(self, "compliance_workspace"):
+            return
+        if apply_layout:
+            self.activate_workspace_profile("verification")
+        self._refresh_compliance_workspace()
+        self.notebook.select(self.compliance_workspace)
+        self.workspace_status_var.set("Workspace: Compliance Rule Packs")
+        self.status_var.set("Compliance rule-pack workspace active")
 
     def _activate_analysis_results_workspace(self) -> None:
         if hasattr(self, "output_notebook") and hasattr(self, "result_text"):
@@ -5558,6 +5643,7 @@ class CleanroomXApp:
             ("nav-analyses", "Analyses"),
             ("nav-simulation", "Simulation / Results"),
             ("nav-requirements", "Requirements"),
+            ("nav-compliance", "Compliance Rule Packs"),
             ("nav-proofgraph", "ProofGraph"),
             ("nav-evidence", "Evidence"),
             ("nav-reports", "Reports"),
@@ -5603,6 +5689,7 @@ class CleanroomXApp:
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
         self._refresh_simulation_workspace()
+        self._refresh_compliance_workspace()
 
     def _restore_navigator_tree(self) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -5641,7 +5728,12 @@ class CleanroomXApp:
     def _navigator_item_is_actionable(self, item_id: str) -> bool:
         if item_id.startswith(("room:", "device:")):
             return True
-        if item_id in {"nav-simulation", "nav-proofgraph", "nav-evidence"}:
+        if item_id in {
+            "nav-simulation",
+            "nav-compliance",
+            "nav-proofgraph",
+            "nav-evidence",
+        }:
             return True
         return bool(item_id and not item_id.startswith("nav-"))
 
@@ -6005,6 +6097,16 @@ class CleanroomXApp:
                 command=self._activate_proofgraph_workspace,
             )
             return menu
+        if item_id == "nav-compliance":
+            menu.add_command(
+                label="Open Compliance Rule Packs",
+                command=self._activate_compliance_workspace,
+            )
+            menu.add_command(
+                label="Project Requirements Traceability...",
+                command=self.show_requirements_traceability,
+            )
+            return menu
         if not item_id.startswith("nav-"):
             menu.add_command(
                 label="Open Analysis",
@@ -6166,6 +6268,11 @@ class CleanroomXApp:
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
             return
+        if item_id == "nav-compliance":
+            self._remember_navigator_item(item_id)
+            self._activate_compliance_workspace()
+            self.selection_status_var.set("Selected: Compliance Rule Packs")
+            return
         if item_id.startswith("nav-"):
             return
         self._on_analysis_selected(event)
@@ -6250,6 +6357,7 @@ class CleanroomXApp:
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
         self._refresh_simulation_workspace()
+        self._refresh_compliance_workspace()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()
@@ -7834,6 +7942,7 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        self._refresh_compliance_workspace()
 
     def _poll_worker(self) -> None:
         try:
@@ -7947,6 +8056,7 @@ class CleanroomXApp:
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.redraw()
             self.spatial_workspace._load_property_panel()
+        self._refresh_compliance_workspace()
         self._refresh_engineering_panels()
         if select_results:
             self.output_notebook.select(self.result_text.master)

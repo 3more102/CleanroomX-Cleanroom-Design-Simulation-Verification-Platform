@@ -122,3 +122,46 @@ def test_surface_aware_label_styles_match_parent_surfaces():
         )
     finally:
         root.destroy()
+
+
+def test_semantic_progress_styles_use_engineering_palette():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    try:
+        palette = configure_ttk_theme(root, "dark")
+        style = ttk.Style(root)
+        assert (
+            style.lookup(
+                "CX.Success.Horizontal.TProgressbar",
+                "background",
+            )
+            == palette["success"]
+        )
+        assert (
+            style.lookup(
+                "CX.Warning.Horizontal.TProgressbar",
+                "background",
+            )
+            == palette["warning"]
+        )
+        assert (
+            style.lookup(
+                "CX.Fail.Horizontal.TProgressbar",
+                "background",
+            )
+            == palette["error"]
+        )
+        assert (
+            style.lookup(
+                "CX.Simulation.Horizontal.TProgressbar",
+                "background",
+            )
+            == palette["simulation"]
+        )
+    finally:
+        root.destroy()

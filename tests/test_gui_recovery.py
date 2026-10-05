@@ -226,6 +226,68 @@ def test_show_recovery_center_restores_selected_artifact(tmp_path, monkeypatch):
     assert restored == [artifact]
 
 
+def test_recovery_scan_failure_uses_diagnostic_boundary(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Value("")
+    app._autosave_manager = Manager(tmp_path / "recovery")
+    reported = {}
+    app._show_operation_error = (
+        lambda title, operation, exc: reported.update(
+            {"title": title, "operation": operation, "exception": exc}
+        )
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "scan_recovery_artifacts",
+        lambda directory: (_ for _ in ()).throw(OSError("scan unavailable")),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("recovery scan failures must use the diagnostic boundary")
+        ),
+    )
+
+    assert app.show_recovery_center() is False
+    assert reported["title"] == "Recovery scan failed"
+    assert reported["operation"] == "Scan recovery artifacts"
+    assert isinstance(reported["exception"], OSError)
+    assert str(reported["exception"]) == "scan unavailable"
+
+
+def test_revision_scan_failure_uses_diagnostic_boundary(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Value("")
+    app.project_path = tmp_path / "project.cleanroomx.json"
+    reported = {}
+    app._show_operation_error = (
+        lambda title, operation, exc: reported.update(
+            {"title": title, "operation": operation, "exception": exc}
+        )
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "scan_project_revisions",
+        lambda path: (_ for _ in ()).throw(OSError("revision store unavailable")),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("revision scan failures must use the diagnostic boundary")
+        ),
+    )
+
+    assert app.show_saved_revisions() is False
+    assert reported["title"] == "Revision scan failed"
+    assert reported["operation"] == "Scan saved project revisions"
+    assert isinstance(reported["exception"], OSError)
+    assert str(reported["exception"]) == "revision store unavailable"
+
+
 def test_show_recovery_center_reports_empty_scan_without_dialog(tmp_path, monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()

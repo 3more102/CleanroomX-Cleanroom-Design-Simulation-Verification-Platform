@@ -182,6 +182,41 @@ def test_proofgraph_model_object_navigation_syncs_viewport_and_project_browser(a
     assert workspace.layout["devices"] == geometry_before["devices"]
 
 
+
+def test_proofgraph_search_and_viewport_controls_preserve_canonical_document(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    before = copy.deepcopy(document)
+    viewer = app.proofgraph_viewer
+
+    viewer.set_documents([document])
+    app.notebook.select(viewer)
+    app.root.update()
+
+    total_nodes = len(viewer._nodes_by_key)
+    assert total_nodes > 2
+
+    viewer.search_var.set("pressure_solver")
+    app.root.update()
+    assert 0 < len(viewer._nodes_by_key) < total_nodes
+    assert any(
+        node["key"] == "calculation:pressure_solver"
+        for node in viewer._nodes_by_key.values()
+    )
+
+    scale_before = viewer._graph_scale
+    viewer.zoom_graph(1.15)
+    app.root.update()
+    assert viewer._graph_scale > scale_before
+    assert viewer.canvas.cget("scrollregion")
+
+    viewer.fit_graph()
+    app.root.update()
+    assert 0.45 <= viewer._graph_scale <= 1.5
+    assert document == before
+
+
 def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
     room = app.spatial_workspace.layout["rooms"][0]
     document = _room_graph(room["id"])

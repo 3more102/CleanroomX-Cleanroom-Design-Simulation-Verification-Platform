@@ -6211,6 +6211,8 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self.run_state_var.set("FAILED")
+                    self.run_state_badge.configure(style=status_style_name("FAIL"))
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6254,6 +6256,19 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    run_status = str(run.status or "complete").strip().upper()
+                    self.run_state_var.set(run_status)
+                    if run_status in {"FAIL", "FAILED", "ERROR"}:
+                        run_badge_state = "FAIL"
+                    elif run_status in {"WARNING", "INCOMPLETE", "INDETERMINATE"}:
+                        run_badge_state = "WARNING"
+                    elif run_status in {"PASS", "SUCCESS", "COMPLETE", "COMPLETED"}:
+                        run_badge_state = "VERIFIED"
+                    else:
+                        run_badge_state = "INFO"
+                    self.run_state_badge.configure(
+                        style=status_style_name(run_badge_state)
+                    )
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"

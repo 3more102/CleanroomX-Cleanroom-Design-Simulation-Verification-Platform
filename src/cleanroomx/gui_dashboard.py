@@ -6,7 +6,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .gui_theme import canonical_status
+from .gui_theme import canonical_status, status_tokens, theme_palette
 
 
 _SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
@@ -167,6 +167,7 @@ class EngineeringDashboard(ttk.Frame):
         self._on_open_problems = on_open_problems
         self._on_verify = on_verify
         self._snapshot: dict[str, Any] = {}
+        self._theme_name = "dark"
 
         header = ttk.Frame(self)
         header.pack(fill="x", pady=(0, 8))
@@ -312,6 +313,24 @@ class EngineeringDashboard(ttk.Frame):
             style="CX.Muted.TLabel",
         ).pack(side="left", fill="x", expand=True)
 
+
+    def apply_theme(self, value: str) -> None:
+        self._theme_name = str(value or "dark")
+        palette = theme_palette(self._theme_name)
+        for tag, semantic in (
+            ("error", "fail"),
+            ("warning", "warning"),
+            ("info", "running"),
+            ("pass", "pass"),
+        ):
+            tokens = status_tokens(semantic, self._theme_name)
+            self.issue_tree.tag_configure(tag, foreground=tokens["foreground"])
+            self.domain_tree.tag_configure(tag, foreground=tokens["foreground"])
+        self.issue_tree.tag_configure("odd", background=palette["tree"])
+        self.issue_tree.tag_configure("even", background=palette["surface"])
+        self.domain_tree.tag_configure("odd", background=palette["tree"])
+        self.domain_tree.tag_configure("even", background=palette["surface"])
+
     def refresh(self, snapshot: dict[str, Any]) -> None:
         self._snapshot = dict(snapshot)
         self.project_var.set(str(snapshot.get("project_name") or "Untitled project"))
@@ -335,7 +354,10 @@ class EngineeringDashboard(ttk.Frame):
                 iid=f"domain-{index}",
                 text=str(domain.get("domain") or "Project"),
                 values=("ATTENTION" if count else "CLEAR", count),
-                tags=("warning" if count else "pass",),
+                tags=(
+                    "warning" if count else "pass",
+                    "even" if index % 2 == 0 else "odd",
+                ),
             )
 
         for item in self.issue_tree.get_children():
@@ -354,7 +376,10 @@ class EngineeringDashboard(ttk.Frame):
                     issue.get("domain", ""),
                     issue.get("message", ""),
                 ),
-                tags=(severity.lower(),),
+                tags=(
+                    severity.lower(),
+                    "even" if index % 2 == 0 else "odd",
+                ),
             )
 
         errors = int(snapshot.get("errors", 0) or 0)

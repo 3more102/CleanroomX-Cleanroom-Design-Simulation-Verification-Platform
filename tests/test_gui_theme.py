@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, theme_palette
+from cleanroomx.gui_theme import (\n    density_metrics,\n    normalize_density_name,\n    normalize_theme_name,\n    theme_palette,\n)
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -49,3 +49,16 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_density_name_normalization_and_metrics_are_deterministic():
+    assert normalize_density_name("compact") == "compact"
+    assert normalize_density_name(" COMFORTABLE ") == "comfortable"
+    assert normalize_density_name("unknown") == "comfortable"
+
+    comfortable = density_metrics("comfortable")
+    compact = density_metrics("compact")
+    assert compact["tree_rowheight"] < comfortable["tree_rowheight"]
+    assert compact["button_padding"][1] < comfortable["button_padding"][1]
+    compact["tree_rowheight"] = 999
+    assert density_metrics("compact")["tree_rowheight"] != 999

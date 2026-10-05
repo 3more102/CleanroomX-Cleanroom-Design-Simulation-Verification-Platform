@@ -6118,10 +6118,12 @@ class CleanroomXApp:
             analysis = self._commit_editor()
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
         except Exception as exc:
+            self._set_analysis_run_state("INPUT INVALID", "fail")
             self.status_var.set("Validation failed")
             messagebox.showerror("Validation failed", str(exc), parent=self.root)
             return
         self.refresh_structure(silent=True)
+        self._set_analysis_run_state("INPUT VALID", "pass")
         self.status_var.set(f"Input valid — {analysis.name}")
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
 
@@ -6132,6 +6134,7 @@ class CleanroomXApp:
             analysis = self._commit_editor()
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
         except Exception as exc:
+            self._set_analysis_run_state("INPUT INVALID", "fail")
             self.status_var.set("Cannot run — invalid input")
             messagebox.showerror("Cannot run analysis", str(exc), parent=self.root)
             return

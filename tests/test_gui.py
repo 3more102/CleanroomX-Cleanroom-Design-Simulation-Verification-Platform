@@ -1030,10 +1030,19 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
         ),
     )
     assert app._write_export_file(str(target), "payload", label="Result") is False
-    assert app.status_var.value == "Result export failed"
+    assert app.status_var.value.startswith("Export result failed · CX-")
     assert captured["title"] == "Result export failed"
-    assert captured["message"] == "disk full"
+    assert "disk full" in captured["message"]
+    assert "Error reference: CX-" in captured["message"]
+    assert "Technical log:" in captured["message"]
     assert captured["parent"] is app.root
+
+
+def test_save_ui_layout_state_is_safe_before_constructor_state_exists():
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._save_ui_layout_state()
+
+    assert not hasattr(app, "_ui_layout_save_error_reference")
 
 
 def test_remove_analysis_invalidates_matching_result(monkeypatch):

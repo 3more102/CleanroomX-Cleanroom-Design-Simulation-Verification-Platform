@@ -631,9 +631,8 @@ class EngineeringDashboard(ttk.Frame):
         errors = int(diag_summary.get("error_count", 0) or 0)
         warnings = int(diag_summary.get("warning_count", 0) or 0)
         info = int(diag_summary.get("info_count", 0) or 0)
-        if self.issues_kpi_var.get() != "Unavailable":
-            self.issues_kpi_var.set(str(errors + warnings))
-            self.issues_detail_var.set(f"{errors} error · {warnings} warning · {info} info")
+        self.issues_kpi_var.set(str(errors + warnings))
+        self.issues_detail_var.set(f"{errors} error · {warnings} warning · {info} info")
 
         if currency is None:
             try:

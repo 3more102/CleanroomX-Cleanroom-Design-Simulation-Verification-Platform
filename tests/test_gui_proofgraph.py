@@ -7,7 +7,9 @@ import pytest
 from cleanroomx.gui_proofgraph import (
     _filtered_projection,
     _node_detail_lines,
+    _search_projection,
     proofgraph_projection,
+    proofgraph_review_summary,
 )
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
@@ -256,3 +258,42 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "Status: FAIL" in rendered
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
+
+
+
+def test_proofgraph_search_matches_persisted_traceability_fields_and_keeps_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _search_projection(projection, "room-a")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "model_object:room-a" in keys
+    assert "evidence:evidence-pressure" in keys
+
+    failure_search = _search_projection(projection, "pressure below")
+    failure_keys = {node["key"] for node in failure_search["nodes"]}
+    assert "finding:finding-pressure" in failure_keys
+    assert "check:check-pressure" in failure_keys
+    assert "verdict:verdict-pressure" in failure_keys
+
+    assert _search_projection(projection, "does-not-exist") == {
+        "nodes": [],
+        "edges": [],
+    }
+
+
+def test_proofgraph_review_summary_reports_only_explicit_graph_state():
+    summary = proofgraph_review_summary(proofgraph_projection(_sample_graph()))
+
+    assert summary["check_count"] == 1
+    assert summary["checks_with_evidence"] == 1
+    assert summary["failure_count"] == 2
+    assert summary["unresolved_evidence_count"] == 0
+
+    unresolved = proofgraph_review_summary(
+        proofgraph_projection(_unresolved_graph())
+    )
+    assert unresolved["check_count"] == 1
+    assert unresolved["checks_with_evidence"] == 0
+    assert unresolved["failure_count"] == 0
+    assert unresolved["unresolved_evidence_count"] == 1

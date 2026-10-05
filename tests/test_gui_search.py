@@ -1,6 +1,11 @@
+import os
+import tkinter as tk
 from types import SimpleNamespace
 
+import pytest
+
 from cleanroomx.gui_search import (
+    GlobalEngineeringSearch,
     SearchEntry,
     build_engineering_search_entries,
     filter_search_entries,
@@ -97,3 +102,44 @@ def test_build_engineering_search_entries_does_not_turn_missing_values_into_zero
     room = next(entry for entry in entries if entry.target_type == "room")
     assert "0" not in room.detail
     assert room.detail.endswith("R1")
+
+
+@pytest.fixture
+def root():
+    try:
+        window = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    window.withdraw()
+    try:
+        yield window
+    finally:
+        window.destroy()
+
+
+def test_global_search_exposes_no_match_state(root) -> None:
+    search = GlobalEngineeringSearch(
+        root,
+        entries=[
+            SearchEntry(
+                "room:R1",
+                "Room",
+                "Compounding",
+                "Level 1",
+                target_type="room",
+                target_id="R1",
+            )
+        ],
+        on_activate=lambda _entry: None,
+    )
+    root.update()
+
+    search._query_var.set("definitely-missing")
+    root.update()
+
+    assert search.tree.get_children() == ()
+    assert "No engineering entity matches" in search.empty_hint.cget("text")
+    assert search.summary.cget("text").startswith("0 MATCHES")
+    search._close()

@@ -249,6 +249,17 @@ class DiagnosticsWorkspace(ttk.Frame):
         selection = self.tree.selection()
         return self._issues_by_iid.get(selection[0]) if selection else None
 
+    def select_issue_sequence(self, sequence: Any) -> bool:
+        for iid, issue in self._issues_by_iid.items():
+            if issue.get("sequence") != sequence:
+                continue
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+            self.tree.see(iid)
+            self._show_selected()
+            return True
+        return False
+
     def _locate_selected(self, _event=None):
         issue = self.selected_issue()
         if issue is not None:

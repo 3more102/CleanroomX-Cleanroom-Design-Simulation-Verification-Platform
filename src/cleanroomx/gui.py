@@ -2757,6 +2757,7 @@ class CleanroomXApp:
         self.input_text.edit_modified(False)
 
         plot_tab = ttk.Frame(self.notebook)
+        self.plot_tab = plot_tab
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
@@ -2988,10 +2989,34 @@ class CleanroomXApp:
             screen_width,
             screen_height,
         )
+        active_workspace = "start"
+        if hasattr(self, "notebook"):
+            selected_tab = self.notebook.select()
+            if selected_tab:
+                active_workspace = str(
+                    self.notebook.tab(selected_tab, "text")
+                ).strip().casefold()
+
+        design_mode = (
+            workspace.workspace_mode()
+            if workspace is not None and hasattr(workspace, "workspace_mode")
+            else "split"
+        )
+        output_tab = "problems"
+        if hasattr(self, "output_notebook"):
+            selected_output = self.output_notebook.select()
+            if selected_output:
+                output_tab = str(
+                    self.output_notebook.tab(selected_output, "text")
+                ).strip().casefold()
+
         state.update(
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "active_workspace": active_workspace,
+                "design_mode": design_mode,
+                "output_tab": output_tab,
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -3025,6 +3050,28 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.set_inspector_visible(bool(state["inspector_visible"]))
+            workspace.set_workspace_mode(state["design_mode"])
+
+        if hasattr(self, "output_notebook"):
+            output_target = state["output_tab"]
+            for tab_id in self.output_notebook.tabs():
+                if (
+                    str(self.output_notebook.tab(tab_id, "text")).strip().casefold()
+                    == output_target
+                ):
+                    self.output_notebook.select(tab_id)
+                    break
+
+        if hasattr(self, "notebook"):
+            workspace_target = state["active_workspace"]
+            for tab_id in self.notebook.tabs():
+                if (
+                    str(self.notebook.tab(tab_id, "text")).strip().casefold()
+                    == workspace_target
+                ):
+                    self.notebook.select(tab_id)
+                    break
+
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
         self.status_var.set("Ready")

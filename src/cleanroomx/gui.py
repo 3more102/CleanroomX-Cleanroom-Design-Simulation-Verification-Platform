@@ -5047,6 +5047,26 @@ class CleanroomXApp:
             )
             return
 
+        if target_type == "compliance_rule":
+            payload = entry.payload if isinstance(entry.payload, dict) else {}
+            analysis_id = str(payload.get("analysis_id") or "").strip()
+            rule_id = str(payload.get("rule_id") or target_id or "").strip()
+            if analysis_id:
+                self._select_analysis_from_compliance(analysis_id)
+            workspace = getattr(self, "compliance_workspace", None)
+            focused = bool(workspace is not None and workspace.focus_rule(rule_id))
+            self.selection_status_var.set(
+                f"Selected compliance criterion: {entry.label}"
+            )
+            self.status_var.set(
+                (
+                    f"Compliance criterion focused: {entry.label}"
+                    if focused
+                    else f"Compliance workspace opened; criterion not found: {entry.label}"
+                )
+            )
+            return
+
         if target_type == "evidence":
             self._activate_proofgraph_workspace()
             self.selection_status_var.set(

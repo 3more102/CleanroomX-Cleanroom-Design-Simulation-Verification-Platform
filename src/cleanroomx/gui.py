@@ -6221,6 +6221,12 @@ class CleanroomXApp:
         if callable(configure):
             configure(style=style)
 
+    def _set_run_elapsed_indicator(self, text: str) -> None:
+        variable = getattr(self, "run_elapsed_var", None)
+        setter = getattr(variable, "set", None)
+        if callable(setter):
+            setter(text)
+
     def run_current(self) -> None:
         if self._running:
             return
@@ -6244,7 +6250,7 @@ class CleanroomXApp:
             f"RUNNING · {analysis.name}",
             "CX.Status.Simulation.TLabel",
         )
-        self.run_elapsed_var.set("0.0 s")
+        self._set_run_elapsed_indicator("0.0 s")
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
         self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
@@ -6287,14 +6293,15 @@ class CleanroomXApp:
         )
 
     def _update_run_elapsed(self, generation: int) -> None:
+        started = getattr(self, "_run_started_monotonic", None)
         if (
             not self._running
             or generation != self._run_generation
-            or self._run_started_monotonic is None
+            or started is None
         ):
             return
-        elapsed = max(0.0, time.monotonic() - self._run_started_monotonic)
-        self.run_elapsed_var.set(f"{elapsed:.1f} s")
+        elapsed = max(0.0, time.monotonic() - started)
+        self._set_run_elapsed_indicator(f"{elapsed:.1f} s")
         self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
 
     def _set_running(self, running: bool) -> None:
@@ -6302,10 +6309,15 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        activity = getattr(self, "run_activity", None)
         if running:
-            self.run_activity.start(14)
+            start = getattr(activity, "start", None)
+            if callable(start):
+                start(14)
         else:
-            self.run_activity.stop()
+            stop = getattr(activity, "stop", None)
+            if callable(stop):
+                stop()
 
     def _poll_worker(self) -> None:
         try:

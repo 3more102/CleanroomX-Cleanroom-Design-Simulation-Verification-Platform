@@ -1166,3 +1166,76 @@ def test_dashboard_verification_coverage_and_issue_projection_are_grounded(app):
     )
     assert first[0] == "ERROR"
     assert first[1] == "CRX-PRES-004"
+
+
+def test_diagnostics_panel_uses_summary_and_technical_inspector(app):
+    panel = app.problems_panel
+    panel.last_result = {
+        "summary": {
+            "status": "warning",
+            "error_count": 0,
+            "warning_count": 1,
+            "info_count": 0,
+        },
+        "issues": [
+            {
+                "sequence": 1,
+                "severity": "warning",
+                "rule": "CRX-AIR-017",
+                "category": "airflow",
+                "message": "Insufficient ACH margin",
+                "suggested_action": "Recalculate supply airflow.",
+                "element": {
+                    "type": "spatial_element",
+                    "id": "CR-104",
+                    "name": "Room CR-104",
+                },
+                "details": {
+                    "required_ach": 20,
+                    "calculated_ach": 17.6,
+                },
+            }
+        ],
+    }
+    panel._populate()
+    iid = panel.tree.get_children()[0]
+    panel.tree.selection_set(iid)
+    panel._show_selected_detail()
+    app.root.update()
+
+    summary = panel.summary_detail.get("1.0", "end-1c")
+    technical = panel.technical_detail.get("1.0", "end-1c")
+    assert "Affected object: Room CR-104" in summary
+    assert "Engineering domain: airflow" in summary
+    assert "Suggested recovery:" in summary
+    assert '"required_ach": 20' in technical
+    assert panel.locate_button.cget("text") == "Locate"
+
+
+def test_proofgraph_inspector_separates_engineering_summary_from_json(app):
+    viewer = app.proofgraph_viewer
+    node = {
+        "key": "requirement:REQ-001",
+        "type": "requirement",
+        "id": "REQ-001",
+        "label": "Maintain room pressure",
+        "status": "pass",
+        "flags": (),
+        "raw": {
+            "id": "REQ-001",
+            "title": "Maintain room pressure",
+            "version": "1.0",
+        },
+    }
+    viewer._nodes_by_key = {node["key"]: node}
+    viewer._selected_key = node["key"]
+    viewer._show_selected_detail()
+    app.root.update()
+
+    summary = viewer.summary_detail.get("1.0", "end-1c")
+    technical = viewer.technical_detail.get("1.0", "end-1c")
+    assert summary.startswith("REQUIREMENT\nMaintain room pressure")
+    assert "Identifier: REQ-001" in summary
+    assert '"title": "Maintain room pressure"' in technical
+    assert viewer.detail_notebook.tab(0, "text") == "Summary"
+    assert viewer.detail_notebook.tab(1, "text") == "Technical JSON"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, theme_palette
+from cleanroomx.gui_theme import normalize_theme_name, status_style_name, theme_palette
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -77,3 +77,14 @@ def test_dark_palette_matches_cleanroomx_industrial_foundation():
     assert dark["warning"] == "#F59E0B"
     assert dark["error"] == "#EF4444"
     assert dark["simulation"] == "#A78BFA"
+
+
+
+def test_status_style_name_is_canonical_across_engineering_states():
+    assert status_style_name("PASS") == "CX.Status.Pass.TLabel"
+    assert status_style_name("verified") == "CX.Status.Pass.TLabel"
+    assert status_style_name("critical") == "CX.Status.Fail.TLabel"
+    assert status_style_name("stale") == "CX.Status.Warning.TLabel"
+    assert status_style_name("running") == "CX.Status.Simulation.TLabel"
+    assert status_style_name("available") == "CX.Status.Info.TLabel"
+    assert status_style_name("not checked") == "CX.Status.Neutral.TLabel"

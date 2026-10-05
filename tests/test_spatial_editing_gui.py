@@ -4,11 +4,17 @@ from __future__ import annotations
 import copy
 import os
 import tkinter as tk
+from types import SimpleNamespace
 from tkinter import ttk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui import (
+    CleanroomXApp,
+    bundled_demo_project_path,
+    engineering_value_text,
+    flatten_engineering_result,
+)
 from cleanroomx.gui_state import load_gui_layout_state
 from cleanroomx.project import save_project_document
 from cleanroomx.spatial import _Hit
@@ -1261,3 +1267,42 @@ def test_simulation_workbench_tracks_active_analysis_and_run_state(app):
     app._set_running(False)
     app.root.update()
     assert app.simulation_state_var.get() == "READY"
+
+
+def test_engineering_result_formatting_is_dense_and_unit_aware():
+    assert engineering_value_text(1250) == "1,250"
+    assert engineering_value_text(12.5000000) == "12.5"
+    assert engineering_value_text(True) == "TRUE"
+
+    rows = flatten_engineering_result(
+        {
+            "supply_m3_h": 1250.0,
+            "pressure_pa": 12.5,
+            "ach": 21.25,
+        }
+    )
+    assert ("$.supply_m3_h", "1,250", "m³/h") in rows
+    assert ("$.pressure_pa", "12.5", "Pa") in rows
+    assert ("$.ach", "21.25", "1/h") in rows
+
+
+def test_result_summary_keeps_raw_result_available_but_defaults_to_table(app):
+    run = SimpleNamespace(
+        title="Airflow Balance",
+        status="pass",
+        result={
+            "supply_m3_h": 12450.0,
+            "return_m3_h": 11870.0,
+            "difference_percent": 4.9,
+        },
+    )
+    app._populate_result_summary(run)
+    app.root.update()
+
+    rows = app.result_summary_tree.get_children()
+    assert len(rows) == 3
+    first_values = app.result_summary_tree.item(rows[0], "values")
+    assert first_values[0] == "12,450"
+    assert first_values[1] == "m³/h"
+    assert app.result_summary_badge.cget("style") == "CX.Badge.Pass.TLabel"
+    assert app.output_notebook.tab(app.result_text.master, "text") == "Results (JSON)"

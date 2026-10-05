@@ -7,6 +7,8 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_search import SearchEntry
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -182,6 +184,49 @@ def test_proofgraph_model_object_navigation_syncs_viewport_and_project_browser(a
     assert workspace.layout["devices"] == geometry_before["devices"]
 
 
+
+def test_global_search_evidence_focuses_exact_persisted_proofgraph_node(
+    app,
+    monkeypatch,
+):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    monkeypatch.setattr(
+        "cleanroomx.gui.verification_run_history_records",
+        lambda _metadata: [{"proofgraphs": [document]}],
+    )
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    viewer = app.proofgraph_viewer
+    viewer.filter_var.set("Failures")
+    viewer.search_var.set("does-not-exist")
+    viewer._refresh()
+    assert "evidence:EVID-GUI-PRESSURE" not in viewer._nodes_by_key
+
+    entry = SearchEntry(
+        key="proof:GRAPH-GUI-PRESSURE:evidence:EVID-GUI-PRESSURE",
+        category="Evidence",
+        label="pressure_pa",
+        target_type="evidence",
+        target_id="EVID-GUI-PRESSURE",
+        payload={
+            "id": "EVID-GUI-PRESSURE",
+            "type": "evidence",
+            "_proofgraph_id": "GRAPH-GUI-PRESSURE",
+            "_proofgraph_key": "evidence:EVID-GUI-PRESSURE",
+        },
+    )
+    app._navigate_engineering_search_result(entry)
+    app.root.update()
+
+    assert app.notebook.select() == str(viewer)
+    assert viewer.filter_var.get() == "All"
+    assert viewer.search_var.get() == ""
+    assert viewer.selected_node()["key"] == "evidence:EVID-GUI-PRESSURE"
+    assert "focused on search result" in app.status_var.get()
+
+
 def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
     room = app.spatial_workspace.layout["rooms"][0]
     document = _room_graph(room["id"])
@@ -240,3 +285,32 @@ def test_spatial_selection_synchronizes_proofgraph_without_switching_workspace(a
     assert selected is not None
     assert selected["key"] == f"model_object:{room['id']}"
     assert app.notebook.select() == str(workspace)
+
+
+def test_proofgraph_honors_workstation_theme_without_mutating_graph(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    app.proofgraph_viewer.set_documents([document])
+    app.proofgraph_viewer.focus_node("evidence:EVID-GUI-PRESSURE")
+    app.root.update()
+
+    viewer = app.proofgraph_viewer
+    documents_before = copy.deepcopy(viewer._documents)
+    selected_before = viewer.selected_node()["key"]
+
+    app.set_theme("dark", persist=False)
+    app.root.update()
+    dark = theme_palette("dark")
+
+    assert viewer.canvas.cget("background") == dark["plot"]
+    assert viewer.canvas.cget("highlightbackground") == dark["border"]
+    assert viewer.detail.cget("background") == dark["field"]
+    assert viewer.detail.cget("foreground") == dark["field_text"]
+    assert viewer._documents == documents_before
+    assert viewer.selected_node()["key"] == selected_before
+
+    app.set_theme("light", persist=False)
+    app.root.update()
+    light = theme_palette("light")
+    assert viewer.canvas.cget("background") == light["plot"]
+    assert viewer._documents == documents_before

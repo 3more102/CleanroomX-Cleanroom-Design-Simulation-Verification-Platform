@@ -210,6 +210,7 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)
 - [Production acceptance contract](docs/PRODUCTION_ACCEPTANCE.md)
+- [ProofGraph revision diff and change impact](docs/PROOFGRAPH_CHANGE_IMPACT.md)
 - [Rollback](ROLLBACK.md)
 - [Changelog](CHANGELOG.md)
 

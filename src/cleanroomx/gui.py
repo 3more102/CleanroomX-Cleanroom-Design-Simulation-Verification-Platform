@@ -7645,11 +7645,10 @@ class CleanroomXApp:
                     "project file changed on disk after it was opened or saved"
                 )
         except Exception as exc:
-            self.status_var.set("Project dossier export blocked")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project dossier export blocked",
-                str(exc),
-                parent=self.root,
+                "Prepare project dossier export",
+                exc,
             )
             return
 
@@ -7706,11 +7705,10 @@ class CleanroomXApp:
                 output=path,
             )
         except Exception as exc:
-            self.status_var.set("Project dossier export failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project dossier export failed",
-                str(exc),
-                parent=self.root,
+                "Build project dossier",
+                exc,
             )
             return
 

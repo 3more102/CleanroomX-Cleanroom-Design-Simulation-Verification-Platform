@@ -1577,6 +1577,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_labels: dict[str, str] = {}
+        self._property_group_names: dict[str, str] = {}
+        self._property_filter_var = tk.StringVar(value="")
+        self._property_filter_summary_var = tk.StringVar(value="0 fields")
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1610,6 +1614,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._theme_palette = theme_palette("dark")
 
         self._build()
+        self._property_filter_var.trace_add(
+            "write", lambda *_: self._load_property_panel()
+        )
         self.refresh()
 
     def _build(self) -> None:
@@ -1947,6 +1954,31 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="CX.ViewTitle.TLabel",
         )
         self._selection_label.pack(fill="x", pady=(3, 8))
+        property_filter = ttk.Frame(inspector, style="CX.SubtlePanel.TFrame", padding=(6, 4))
+        property_filter.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            property_filter,
+            text="Filter properties",
+            style="CX.Muted.TLabel",
+        ).pack(side="left", padx=(0, 5))
+        self._property_filter_entry = ttk.Entry(
+            property_filter,
+            textvariable=self._property_filter_var,
+            width=18,
+        )
+        self._property_filter_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            property_filter,
+            text="Clear",
+            width=5,
+            style="CX.Compact.TButton",
+            command=lambda: self._property_filter_var.set(""),
+        ).pack(side="left", padx=(5, 0))
+        ttk.Label(
+            property_filter,
+            textvariable=self._property_filter_summary_var,
+            style="CX.Muted.TLabel",
+        ).pack(side="right", padx=(8, 0))
 
         engineering = ttk.LabelFrame(
             inspector,
@@ -2077,6 +2109,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
+                self._property_labels[key] = label
+                self._property_group_names[key] = group_name
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
@@ -2933,6 +2967,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 row = self._property_rows.get(key)
                 if row is not None:
                     row.pack_forget()
+            self._property_filter_summary_var.set("0 fields")
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         selection_text = f"{prefix}: {item.get('name', '')}"
@@ -2979,15 +3014,36 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self.selected and self.selected.kind == "room"
             else device_fields
         )
+        filter_tokens = [
+            token
+            for token in self._property_filter_var.get().casefold().split()
+            if token
+        ]
+        visible_count = 0
         for key, var in self._property_vars.items():
             row = self._property_rows.get(key)
             if row is not None:
-                if key in visible_fields:
+                haystack = " ".join(
+                    (
+                        key,
+                        self._property_labels.get(key, ""),
+                        self._property_group_names.get(key, ""),
+                    )
+                ).casefold()
+                matches_filter = all(token in haystack for token in filter_tokens)
+                if key in visible_fields and matches_filter:
                     row.pack(fill="x", pady=2)
+                    visible_count += 1
                 else:
                     row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        total_visible_fields = len(visible_fields)
+        self._property_filter_summary_var.set(
+            f"{visible_count}/{total_visible_fields} fields"
+            if filter_tokens
+            else f"{total_visible_fields} fields"
+        )
 
     def apply_properties(self) -> None:
         item = self._selected_object()

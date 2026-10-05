@@ -4894,8 +4894,9 @@ class CleanroomXApp:
         if choice:
             self.save_project()
             return not self._has_unsaved_changes()
-        self._discard_current_autosave()
-        self._discard_restored_recovery()
+        # The requested replacement can still be cancelled or fail after this
+        # confirmation. Preserve recovery evidence until the current project is
+        # actually abandoned by a successful replacement or application close.
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
@@ -5919,6 +5920,7 @@ class CleanroomXApp:
         if not self._confirm_project_replacement():
             return
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         self.project = new_project()
         self.project_path = None
         self._project_file_revision = None
@@ -6221,7 +6223,10 @@ class CleanroomXApp:
             project_revision,
             migration_info,
         ) = load_project_document_with_revision_info(project_path)
+        # Parsing and validation succeeded. Only now is it safe to abandon the
+        # recovery evidence associated with the project being replaced.
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         self.project = project
         self.project_path = project_path
         self._project_file_revision = project_revision
@@ -7216,6 +7221,7 @@ class CleanroomXApp:
             return
         self._save_ui_layout_state()
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)

@@ -24,6 +24,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
     assert state["density"] == "compact"
     assert state["recent_projects"] == []
     assert state["navigator_favorites"] == {}
+    assert state["table_layouts"] == {}
     assert state["window_width"] == 1440
     assert state["window_height"] == 900
     assert state["navigator_fraction"] == 0.20
@@ -119,6 +120,12 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
             ],
+            "table_layouts": {
+                "project_diagnostics": {
+                    "visible_columns": ["severity", "code", "description"],
+                    "widths": {"severity": 96, "description": 640},
+                }
+            },
             "window_width": 1680,
             "window_height": 1050,
             "navigator_fraction": 0.25,
@@ -149,12 +156,53 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",
     ]
+    assert payload["table_layouts"]["project_diagnostics"] == {
+        "visible_columns": ["severity", "code", "description"],
+        "widths": {"description": 640, "severity": 96},
+    }
     assert payload["window_width"] == 1680
     assert payload["window_height"] == 1050
     assert payload["active_workspace"] == "evidence"
     assert payload["workspace_layouts"]["evidence"]["navigator_visible"] is False
     assert payload["workspace_layouts"]["evidence"]["output_fraction"] == 0.61
     assert load_gui_layout_state(path) == payload
+
+
+def test_gui_layout_state_sanitizes_table_layouts_and_discards_unknown_tables():
+    state = normalize_gui_layout_state(
+        {
+            "table_layouts": {
+                "project_diagnostics": {
+                    "visible_columns": [
+                        "severity",
+                        "severity",
+                        "",
+                        "bad" + chr(0) + "column",
+                        17,
+                        "description",
+                    ],
+                    "widths": {
+                        "severity": 90,
+                        "description": "720",
+                        "too_small": 12,
+                        "too_large": 9000,
+                        "boolean": True,
+                    },
+                },
+                "unknown_table": {
+                    "visible_columns": ["should_not_survive"],
+                    "widths": {"should_not_survive": 400},
+                },
+            }
+        }
+    )
+
+    assert state["table_layouts"] == {
+        "project_diagnostics": {
+            "visible_columns": ["severity", "description"],
+            "widths": {"severity": 90, "description": 720},
+        }
+    }
 
 
 def test_gui_layout_state_limits_recent_projects_to_eight():

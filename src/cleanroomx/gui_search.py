@@ -347,6 +347,12 @@ class GlobalEngineeringSearch(tk.Toplevel):
         footer.pack(fill="x", pady=(8, 0))
         self.summary = ttk.Label(footer, text="", style="CX.Status.Neutral.TLabel")
         self.summary.pack(side="left")
+        self.empty_hint = ttk.Label(
+            footer,
+            text="",
+            style="CX.ToolbarMuted.TLabel",
+        )
+        self.empty_hint.pack(side="left", padx=(8, 0))
         ttk.Label(
             footer,
             text="Enter  Navigate · ↑↓  Select · Esc  Close",
@@ -390,6 +396,19 @@ class GlobalEngineeringSearch(tk.Toplevel):
         if children:
             self.tree.selection_set(children[0])
             self.tree.focus(children[0])
+            self.empty_hint.configure(text="")
+        else:
+            query = self._query_var.get().strip()
+            category = self._category_var.get().strip() or "All"
+            if query and category.casefold() != "all":
+                message = f'No engineering entity matches "{query}" in {category}.'
+            elif query:
+                message = f'No engineering entity matches "{query}".'
+            elif category.casefold() != "all":
+                message = f"No engineering entities are indexed in {category}."
+            else:
+                message = "No engineering entities are indexed for this project."
+            self.empty_hint.configure(text=message)
 
         count = len(self._filtered)
         total = len(self._entries)

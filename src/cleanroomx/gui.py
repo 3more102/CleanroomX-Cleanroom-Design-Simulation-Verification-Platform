@@ -8368,7 +8368,10 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+                # Preserve the original exception object across the in-process
+                # worker queue so the Tk-thread diagnostic boundary can retain
+                # exception type and traceback in the technical log.
+                self._queue.put(("error", generation, analysis_id, exc))
                 return
 
             self._queue.put(
@@ -8449,17 +8452,31 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    exc = (
+                        payload
+                        if isinstance(payload, BaseException)
+                        else RuntimeError(str(payload))
+                    )
+                    report = self._show_operation_error(
+                        "Analysis failed",
+                        "Run analysis",
+                        exc,
+                    )
+                    failure_detail = (
+                        f"{report.exception_type}: {report.summary}\n"
+                        f"Error reference: {report.reference}"
+                    )
                     simulation = getattr(self, "simulation_workspace", None)
                     if simulation is not None:
-                        simulation.set_failed(str(payload))
+                        simulation.set_failed(
+                            f"{report.summary} · {report.reference}"
+                        )
                     self._finish_active_run_task(
                         state="failed",
                         stage="Backend execution failed",
                         result="Execution error",
-                        detail=str(payload),
+                        detail=failure_detail,
                     )
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
                     history_evidence = None
                     history_error = None

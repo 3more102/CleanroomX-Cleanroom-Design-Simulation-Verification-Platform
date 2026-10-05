@@ -122,3 +122,45 @@ def test_section_context_menu_keeps_expand_collapse_local_to_tree(app):
 
     assert labels == ["Expand", "Collapse"]
     assert app.project.to_dict() == project_before
+
+
+
+def test_project_browser_surfaces_diagnostic_badges_without_changing_model(app):
+    app.navigator_filter_var.set("")
+    app.root.update()
+    room_iid = next(
+        iid for iid in _all_tree_ids(app.analysis_tree) if iid.startswith("room:")
+    )
+    room_id = room_iid.split(":", 1)[1]
+    before = copy.deepcopy(app.project.to_dict())
+
+    app.problems_panel.last_result = {
+        "issues": [
+            {
+                "sequence": 1,
+                "severity": "error",
+                "rule": "ROOM_RULE",
+                "element": {"type": "room", "id": room_id},
+            },
+            {
+                "sequence": 2,
+                "severity": "warning",
+                "rule": "ROOM_RULE_2",
+                "element": {"type": "room", "id": room_id},
+            },
+        ]
+    }
+    app._apply_navigator_diagnostic_badges()
+
+    text = app.analysis_tree.item(room_iid, "text")
+    tags = set(app.analysis_tree.item(room_iid, "tags"))
+    assert "E:1" in text
+    assert "W:1" in text
+    assert "diagnostic-error" in tags
+    assert app.project.to_dict() == before
+
+    app.problems_panel.last_result = {"issues": []}
+    app._apply_navigator_diagnostic_badges()
+    assert "E:1" not in app.analysis_tree.item(room_iid, "text")
+    assert "diagnostic-error" not in set(app.analysis_tree.item(room_iid, "tags"))
+    assert app.project.to_dict() == before

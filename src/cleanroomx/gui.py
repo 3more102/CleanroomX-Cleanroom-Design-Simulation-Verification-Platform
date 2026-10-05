@@ -2769,6 +2769,11 @@ class CleanroomXApp:
         state = "shown" if visible else "hidden"
         self.status_var.set(f"Output / Verification {state}")
 
+    def show_navigator_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+
     def hide_navigator_panel(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)
         self.navigator_panel_visible_var.set(False)
@@ -2779,6 +2784,11 @@ class CleanroomXApp:
         self._restore_focus_workspace_snapshot(status=False)
         self.navigator_panel_visible_var.set(target)
         self._sync_navigator_panel_visibility()
+
+    def show_output_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
 
     def hide_output_panel(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)

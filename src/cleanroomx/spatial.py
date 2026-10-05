@@ -1577,6 +1577,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_meta: dict[str, tuple[str, str, str]] = {}
+        self._property_sections: dict[str, ttk.LabelFrame] = {}
+        self._property_group_order: list[str] = []
+        self._property_filter_var = tk.StringVar(value="")
+        self._property_filter_summary_var = tk.StringVar(value="Editable properties")
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1610,6 +1615,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._theme_palette = theme_palette("dark")
 
         self._build()
+        self._property_filter_var.trace_add(
+            "write", lambda *_: self._load_property_panel()
+        )
         self.refresh()
 
     def _build(self) -> None:
@@ -1946,7 +1954,28 @@ class SpatialDesignWorkspace(ttk.Frame):
             wraplength=310,
             style="CX.ViewTitle.TLabel",
         )
-        self._selection_label.pack(fill="x", pady=(3, 8))
+        self._selection_label.pack(fill="x", pady=(3, 6))
+
+        property_filter = ttk.Frame(inspector)
+        property_filter.pack(fill="x", pady=(0, 7))
+        ttk.Label(property_filter, text="Filter").pack(side="left", padx=(0, 5))
+        self._property_filter_entry = ttk.Entry(
+            property_filter,
+            textvariable=self._property_filter_var,
+        )
+        self._property_filter_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            property_filter,
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=lambda: self._property_filter_var.set(""),
+        ).pack(side="left", padx=(4, 0))
+        ttk.Label(
+            inspector,
+            textvariable=self._property_filter_summary_var,
+            style="CX.Muted.TLabel",
+        ).pack(fill="x", pady=(0, 6))
 
         engineering = ttk.LabelFrame(
             inspector,
@@ -2069,6 +2098,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         for group_name, fields in property_groups:
             section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
+            self._property_sections[group_name] = section
+            self._property_group_order.append(group_name)
             for key, label, unit in fields:
                 row = ttk.Frame(section)
                 row.pack(fill="x", pady=2)
@@ -2085,12 +2116,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
-        ttk.Button(
+                self._property_meta[key] = (group_name, label, unit)
+        self._property_apply_button = ttk.Button(
             inspector,
             text="Apply properties",
             style="CX.Primary.TButton",
             command=self.apply_properties,
-        ).pack(anchor="e", pady=(2, 6))
+        )
+        self._property_apply_button.pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         sync_card = ttk.Frame(
             inspector,
@@ -2921,13 +2954,31 @@ class SpatialDesignWorkspace(ttk.Frame):
             style=status_style_name(state)
         )
 
+    @staticmethod
+    def _property_matches_filter(
+        query: str,
+        *,
+        key: str,
+        group: str,
+        label: str,
+        unit: str,
+    ) -> bool:
+        tokens = [token for token in str(query or "").strip().casefold().split() if token]
+        if not tokens:
+            return True
+        haystack = " ".join((key, group, label, unit)).casefold()
+        return all(token in haystack for token in tokens)
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set(
                 "No object selected — select a room, device, opening, or equipment item."
             )
+            self._property_filter_summary_var.set("No editable properties")
             self._load_engineering_inspector_snapshot()
+            for section in self._property_sections.values():
+                section.pack_forget()
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2979,15 +3030,49 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self.selected and self.selected.kind == "room"
             else device_fields
         )
+        query = self._property_filter_var.get()
+        shown_fields: set[str] = set()
+        shown_groups: set[str] = set()
         for key, var in self._property_vars.items():
             row = self._property_rows.get(key)
+            group, label, unit = self._property_meta.get(key, ("", key, ""))
+            visible = key in visible_fields and self._property_matches_filter(
+                query,
+                key=key,
+                group=group,
+                label=label,
+                unit=unit,
+            )
             if row is not None:
-                if key in visible_fields:
+                if visible:
                     row.pack(fill="x", pady=2)
+                    shown_fields.add(key)
+                    shown_groups.add(group)
                 else:
                     row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+
+        for group_name in self._property_group_order:
+            section = self._property_sections[group_name]
+            if group_name in shown_groups:
+                section.pack(
+                    fill="x",
+                    pady=(0, 7),
+                    before=self._property_apply_button,
+                )
+            else:
+                section.pack_forget()
+        total = len(visible_fields)
+        shown = len(shown_fields)
+        if query.strip():
+            self._property_filter_summary_var.set(
+                f"{shown} of {total} editable properties match filter"
+            )
+        else:
+            self._property_filter_summary_var.set(
+                f"{shown} editable properties"
+            )
 
     def apply_properties(self) -> None:
         item = self._selected_object()

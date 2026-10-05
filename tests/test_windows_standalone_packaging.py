@@ -15,6 +15,7 @@ VERSION_SCRIPT = ROOT / "scripts" / "write_windows_version_info.py"
 def test_windows_standalone_workflow_uses_pinned_release_dependencies() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
+    assert "runs-on: windows-2025" in workflow
     assert 'python-version: "3.12"' in workflow
     assert 'python -m pip install "pip==26.2.1"' in workflow
     assert 'pip install -e ".[release]"' in workflow

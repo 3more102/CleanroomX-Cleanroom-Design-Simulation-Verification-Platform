@@ -14,6 +14,7 @@ class PaletteCommand:
     callback: Callable[[], None]
     shortcut: str = ""
     keywords: tuple[str, ...] = ()
+    search_only: bool = False
 
 
 def filter_commands(
@@ -28,7 +29,7 @@ def filter_commands(
     ]
     items = list(commands)
     if not tokens:
-        return items
+        return [item for item in items if not item.search_only]
 
     matches: list[PaletteCommand] = []
     for command in items:

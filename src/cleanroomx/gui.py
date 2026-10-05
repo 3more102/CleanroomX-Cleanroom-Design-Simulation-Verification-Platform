@@ -5527,23 +5527,51 @@ class CleanroomXApp:
                 workflow,
             )
         except ProjectSaveDurabilityError as exc:
+            reload_report = None
             try:
                 self.load_project_path(project_path)
-            except Exception:
-                pass
-            self.status_var.set(
-                "Verification bytes committed; save durability not confirmed"
-            )
-            messagebox.showwarning(
-                "Verification save durability not confirmed",
-                (
-                    "CleanroomX wrote and verified the project bytes containing the "
-                    "verification record, but filesystem directory durability could "
-                    "not be confirmed.\n\n"
-                    f"Committed project SHA-256: {exc.committed_revision.sha256}"
-                ),
-                parent=self.root,
-            )
+            except Exception as reload_exc:
+                reload_report = record_gui_exception(
+                    "Reload project after durability-uncertain verification commit",
+                    reload_exc,
+                )
+
+            if reload_report is not None:
+                self.status_var.set(
+                    "Verification bytes committed; project reload failed · "
+                    f"{reload_report.reference}"
+                )
+                messagebox.showerror(
+                    "Verification committed; reload failed",
+                    (
+                        "CleanroomX wrote and verified the project bytes containing the "
+                        "verification record, but filesystem directory durability could "
+                        "not be confirmed. The desktop session also could not reload the "
+                        "committed project, so the in-memory view may be stale.\n\n"
+                        f"Committed project SHA-256: {exc.committed_revision.sha256}\n"
+                        f"Error reference: {reload_report.reference}\n"
+                        + (
+                            f"Technical log: {reload_report.log_path}"
+                            if reload_report.log_path is not None
+                            else "Technical logging was unavailable."
+                        )
+                    ),
+                    parent=self.root,
+                )
+            else:
+                self.status_var.set(
+                    "Verification bytes committed; save durability not confirmed"
+                )
+                messagebox.showwarning(
+                    "Verification save durability not confirmed",
+                    (
+                        "CleanroomX wrote and verified the project bytes containing the "
+                        "verification record, but filesystem directory durability could "
+                        "not be confirmed.\n\n"
+                        f"Committed project SHA-256: {exc.committed_revision.sha256}"
+                    ),
+                    parent=self.root,
+                )
             return False
         except Exception as exc:
             self.status_var.set("Project verification persistence failed")

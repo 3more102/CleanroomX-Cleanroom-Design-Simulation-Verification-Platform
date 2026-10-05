@@ -31,16 +31,25 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "docs/PERFORMANCE_GATES.md",
         "docs/STANDARDS.md",
         "docs/GOLDEN_REFERENCE_PROJECTS.md",
+        "docs/PRODUCTION_ACCEPTANCE.md",
+        "docs/PROOFGRAPH_CHANGE_IMPACT.md",
         "scripts/benchmark_spatial_validation.py",
         "scripts/benchmark_project_bundle.py",
         "scripts/security_static_gate.py",
+        "src/cleanroomx/proofgraph_change_impact.py",
+        "src/cleanroomx/proofgraph_change_impact_cli.py",
         ".github/workflows/ci.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/security.yml",
         ".github/workflows/windows-standalone.yml",
         ".github/workflows/windows-installer.yml",
         "tests/test_golden_reference_project.py",
         "tests/test_golden_facility_reference.py",
         "tests/test_fault_injection_persistence.py",
+        "tests/test_production_acceptance.py",
+        "tests/test_production_acceptance_contract.py",
+        "tests/test_proofgraph_change_impact.py",
+        "tests/test_proofgraph_change_impact_cli.py",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     _record(
@@ -158,6 +167,24 @@ def _workflow_contract(checks: list[dict[str, Any]]) -> None:
         "CI contains Python 3.11/3.12/3.13"
         if matrix_ok
         else "CI supported-version matrix is incomplete",
+    )
+
+    metadata = tomllib.loads(_read("pyproject.toml"))
+    scripts = metadata["project"].get("scripts", {})
+    proofgraph_contract = (
+        scripts.get("cleanroomx-proofgraph-diff")
+        == "cleanroomx.proofgraph_change_impact_cli:main"
+        and "tests/test_proofgraph_change_impact.py" in ci
+        and "tests/test_proofgraph_change_impact_cli.py" in ci
+        and "cleanroomx-proofgraph-diff --help" in ci
+    )
+    _record(
+        checks,
+        "proofgraph-change-impact-gate",
+        proofgraph_contract,
+        "ProofGraph revision-impact API/CLI is package-registered and CI-gated"
+        if proofgraph_contract
+        else "ProofGraph revision-impact package or CI contract is incomplete",
     )
 
 

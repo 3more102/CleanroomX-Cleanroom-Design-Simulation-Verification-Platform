@@ -16,6 +16,7 @@ def test_required_production_workflows_are_least_privilege_and_credentialless() 
     for relative in (
         ".github/workflows/ci.yml",
         ".github/workflows/security.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/windows-installer.yml",
         ".github/workflows/windows-standalone.yml",
     ):
@@ -61,6 +62,36 @@ def test_security_contract_retains_static_hostile_input_and_fault_injection_gate
     assert "tests/test_security_static_gate.py" in workflow
 
 
+def test_dedicated_production_acceptance_gate_is_self_guarding() -> None:
+    workflow = _text(".github/workflows/production-acceptance.yml")
+    script = _text("scripts/production_acceptance.py")
+
+    for token in (
+        "runs-on: ubuntu-24.04",
+        'pip==26.2.1',
+        "scripts/production_acceptance.py --output production-acceptance.json",
+        "tests/test_production_acceptance.py",
+        "tests/test_production_acceptance_contract.py",
+        "tests/test_proofgraph_change_impact.py",
+        "tests/test_proofgraph_change_impact_cli.py",
+        "Upload production acceptance evidence",
+    ):
+        assert token in workflow
+
+    for token in (
+        ".github/workflows/production-acceptance.yml",
+        "scripts/production_acceptance.py",
+        "tests/test_production_acceptance.py",
+        "src/cleanroomx/proofgraph_change_impact.py",
+        "tests/test_proofgraph_change_impact_cli.py",
+        "fixed-release-runner-labels",
+        "pinned-release-pip",
+        "dedicated-production-acceptance-workflow",
+        "proofgraph-change-control-ci",
+    ):
+        assert token in script
+
+
 def test_windows_release_contract_retains_standalone_hash_and_installer_lifecycle() -> None:
     standalone = _text(".github/workflows/windows-standalone.yml")
     installer = _text(".github/workflows/windows-installer.yml")
@@ -93,6 +124,7 @@ def test_production_acceptance_document_preserves_external_validation_boundary()
         "exact tested commit SHA",
         "Python 3.11, 3.12, and 3.13",
         "Windows Installer Lifecycle",
+        "Production Acceptance",
         "Security",
         "golden",
         "commissioning/TAB",

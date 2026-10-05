@@ -68,7 +68,7 @@ class NotificationCenter(ttk.Frame):
     def __init__(self, master: tk.Misc, *, anchor: tk.Misc | None = None):
         super().__init__(
             master,
-            style="CX.SubtlePanel.TFrame",
+            style="CX.Notification.TFrame",
             padding=(8, 5),
         )
         self._anchor = anchor
@@ -107,6 +107,7 @@ class NotificationCenter(ttk.Frame):
             textvariable=self.message_var,
             anchor="w",
             justify="left",
+            style="CX.Notification.TLabel",
         )
         self.message_label.grid(row=0, column=1, sticky="ew")
 
@@ -115,7 +116,7 @@ class NotificationCenter(ttk.Frame):
             textvariable=self.detail_var,
             anchor="w",
             justify="left",
-            style="CX.ToolbarMuted.TLabel",
+            style="CX.NotificationDetail.TLabel",
         )
         self.detail_label.grid(row=1, column=1, sticky="ew", pady=(2, 0))
         self.detail_label.grid_remove()

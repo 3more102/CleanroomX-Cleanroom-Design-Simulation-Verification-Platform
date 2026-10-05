@@ -559,8 +559,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:
-            self.detail.insert("1.0", "
-".join(self._detail_lines(issue)))
+            self.detail.insert("1.0", "\n".join(self._detail_lines(issue)))
         else:
             self.detail.insert(
                 "1.0",
@@ -644,8 +643,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         if action:
             lines.append(f"Suggested action: {action}")
         self.clipboard_clear()
-        self.clipboard_append("
-".join(lines))
+        self.clipboard_append("\n".join(lines))
         self._status_setter("Diagnostic summary copied to clipboard")
 
     def _show_context_menu(self, event: tk.Event):

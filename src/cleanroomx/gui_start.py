@@ -45,7 +45,7 @@ class StartCenter(ttk.Frame):
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(2, weight=1)
 
         brand = ttk.Frame(self)
         brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(2, 12))
@@ -272,33 +272,6 @@ class StartCenter(ttk.Frame):
             text="Open Selected",
             command=self._open_selected_recent,
         ).pack(side="right")
-
-        examples = ttk.LabelFrame(self, text="Example Projects", padding=12)
-        examples.grid(
-            row=3,
-            column=0,
-            columnspan=2,
-            sticky="nsew",
-            pady=(10, 0),
-        )
-        ttk.Label(
-            examples,
-            text="Bundled CleanroomX Demo",
-            style="CX.Section.TLabel",
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            examples,
-            text=(
-                "Open the packaged demo project to explore the project browser, "
-                "2D/3D workspace, analyses, diagnostics, verification, and evidence."
-            ),
-            wraplength=760,
-            justify="left",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Button(examples, text="Open Demo", command=on_open_demo).grid(
-            row=0, column=1, rowspan=2, sticky="e", padx=(18, 0)
-        )
-        examples.columnconfigure(0, weight=1)
 
         self.recent_search_var.trace_add("write", lambda *_: self._populate_recent())
 

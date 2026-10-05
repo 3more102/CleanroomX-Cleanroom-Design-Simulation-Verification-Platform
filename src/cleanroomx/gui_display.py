@@ -51,7 +51,7 @@ def platform_layout_scale(root: Any, *, platform: str | None = None) -> float:
     token = sys.platform if platform is None else str(platform)
     if token != "win32":
         return 1.0
-    return detect_display_metrics(root).layout_scale
+    return max(1.0, detect_display_metrics(root).layout_scale)
 
 
 def scale_window_size(

@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .project import ProjectDocument, project_from_dict
+from .runtime_diagnostics import record_gui_exception
 from .project_requirements import (
     PROJECT_REQUIREMENTS_METADATA_KEY,
     PROJECT_REQUIREMENTS_SCHEMA,
@@ -590,13 +591,27 @@ class RequirementsEditorDialog(tk.Toplevel):
     def _apply(self, description: str, mutation: Callable[[ProjectDocument], Any], *, select_set_id: str | None = None) -> bool:
         try:
             self._apply_project_edit(description, mutation)
-        except Exception as exc:
+        except ValueError as exc:
             messagebox.showerror(
                 "Requirements update failed",
                 (
                     f"{exc}\n\n"
                     "Existing requirement/evidence mappings are preserved. Update or "
                     "remove dependent mappings before deleting or renaming a mapped requirement."
+                ),
+                parent=self,
+            )
+            return False
+        except Exception as exc:
+            report = record_gui_exception(
+                f"Requirements editor: {description}",
+                exc,
+            )
+            messagebox.showerror(
+                "Requirements update failed",
+                (
+                    f"{report.user_message()}\n\n"
+                    "Existing requirement/evidence mappings are preserved."
                 ),
                 parent=self,
             )

@@ -5,7 +5,7 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     PaletteCommand,
@@ -118,3 +118,39 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+
+def test_application_palette_searches_project_objects_and_diagnostics(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    app.load_project_path(bundled_demo_project_path())
+    root.update()
+
+    commands = app._command_palette_commands()
+    room_commands = [
+        command for command in commands
+        if command.id.startswith("navigator.room:")
+    ]
+    diagnostic_commands = [
+        command for command in commands
+        if command.id.startswith("diagnostic.")
+    ]
+    assert room_commands
+    assert diagnostic_commands
+
+    room = room_commands[0]
+    room.callback()
+    root.update()
+    target_iid = room.id.removeprefix("navigator.")
+    assert app.analysis_tree.selection() == (target_iid,)
+    assert app.notebook.select() == str(app.spatial_workspace)
+
+    diagnostic = diagnostic_commands[0]
+    diagnostic.callback()
+    root.update()
+    assert app.output_panel_visible_var.get()
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.problems_panel.tree.selection()

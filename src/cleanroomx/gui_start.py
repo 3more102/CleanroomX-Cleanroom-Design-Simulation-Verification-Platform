@@ -24,7 +24,7 @@ class StartCenter(ttk.Frame):
         on_show_problems: Callable[[], None] | None = None,
         on_show_recovery: Callable[[], None] | None = None,
     ):
-        super().__init__(master, padding=(34, 28))
+        super().__init__(master, padding=(24, 18))
         self._on_open_recent = on_open_recent
         self._on_forget_recent = on_forget_recent
         self._on_workspace = on_workspace
@@ -48,7 +48,7 @@ class StartCenter(ttk.Frame):
         self.rowconfigure(3, weight=1)
 
         brand = ttk.Frame(self)
-        brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(4, 22))
+        brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(2, 12))
         ttk.Label(brand, text="CleanroomX", style="CX.Brand.TLabel").pack(anchor="w")
         ttk.Label(
             brand,
@@ -180,13 +180,14 @@ class StartCenter(ttk.Frame):
             command=self._open_problems,
             state="normal" if self._on_show_problems is not None else "disabled",
         ).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
-        ttk.Button(
-            workspace_actions,
-            text="Recovery Center",
+        recovery_button = ttk.Button(
+            health,
+            text="Recovery…",
             style="CX.Compact.TButton",
             command=self._open_recovery,
             state="normal" if self._on_show_recovery is not None else "disabled",
-        ).grid(row=2, column=0, columnspan=3, sticky="ew", padx=2, pady=(2, 0))
+        )
+        recovery_button.grid(row=6, column=0, sticky="e", padx=(0, 2), pady=(2, 0))
 
         recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
         recent.grid(
@@ -194,7 +195,7 @@ class StartCenter(ttk.Frame):
             column=0,
             columnspan=2,
             sticky="nsew",
-            pady=(18, 0),
+            pady=(10, 0),
         )
         recent.columnconfigure(0, weight=1)
         recent.rowconfigure(1, weight=1)
@@ -222,7 +223,7 @@ class StartCenter(ttk.Frame):
             recent,
             columns=("path", "modified"),
             show="tree headings",
-            height=6,
+            height=4,
             selectmode="browse",
         )
         self.recent_tree.heading("#0", text="Project")
@@ -263,7 +264,7 @@ class StartCenter(ttk.Frame):
             column=0,
             columnspan=2,
             sticky="nsew",
-            pady=(18, 0),
+            pady=(10, 0),
         )
         ttk.Label(
             examples,

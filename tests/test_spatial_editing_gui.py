@@ -1042,3 +1042,37 @@ def test_spatial_validation_uses_engineering_status_badge(app):
     workspace._update_validation_summary()
     assert "warning" in workspace._validation_var.get().lower()
     assert workspace._validation_badge.cget("style") == "CX.Badge.Warning.TLabel"
+
+
+def test_navigator_workspace_shortcuts_route_to_engineering_surfaces(app):
+    app.navigator_dashboard_button.invoke()
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.workspace_status_var.get() == "Workspace: Dashboard"
+
+    app.navigator_design_button.invoke()
+    app.root.update()
+    assert app.notebook.select() == str(app.spatial_workspace)
+
+    app.navigator_proofgraph_button.invoke()
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+
+    app.hide_output_panel()
+    app.navigator_problems_button.invoke()
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+
+def test_output_console_tabs_show_live_engineering_counts(app):
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    problems_text = app.output_notebook.tab(app.problems_panel, "text")
+    verification_text = app.output_notebook.tab(app.verification_text.master, "text")
+    evidence_text = app.output_notebook.tab(app.evidence_text.master, "text")
+
+    assert problems_text.startswith("Problems ")
+    assert verification_text.startswith("Verification ")
+    assert evidence_text.startswith("Evidence ")

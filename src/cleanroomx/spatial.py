@@ -3134,15 +3134,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             relationships.append((high, low, minimum, observed_delta, state))
         return relationships
 
-    @staticmethod
-    def _relationship_style(state: str) -> tuple[str, tuple[int, ...]]:
+    def _relationship_style(self, state: str) -> tuple[str, tuple[int, ...]]:
         if state == "pass":
-            return "#15803d", ()
+            return self._theme_palette["success"], ()
         if state == "fail":
-            return "#b91c1c", ()
+            return self._theme_palette["error"], ()
         if state == "available":
-            return "#7c3aed", (6, 3)
-        return "#64748b", (5, 4)
+            return self._theme_palette["pressure"], (6, 3)
+        return self._theme_palette["muted"], (5, 4)
 
     @staticmethod
     def _relationship_label(
@@ -3297,12 +3296,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered == _Hit("room", room["id"])
             outline = (
-                "#1d4ed8"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#0ea5e9"
+                    self._theme_palette["accent_hover"]
                     if hovered
-                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["divider_strong"]
+                    )
                 )
             )
             fill = (
@@ -3358,11 +3361,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+                outline=self._theme_palette["error"], width=2, dash=(5, 3), tags=("validation",)
             )
             canvas.create_text(
                 (x0 + x1) / 2, (y0 + y1) / 2,
-                text="OVERLAP", fill="#991b1b", tags=("validation",)
+                text="OVERLAP", fill=self._theme_palette["error"], tags=("validation",)
             )
 
         if self._show_devices.get():
@@ -3385,12 +3388,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 selected = self.selected == _Hit("device", device["id"])
                 hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
-                    "#c0392b"
+                    self._theme_palette["accent"]
                     if selected
                     else (
-                        "#0ea5e9"
+                        self._theme_palette["accent_hover"]
                         if hovered
-                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                        else (
+                            self._theme_palette["warning"]
+                            if device["id"] in warning_ids
+                            else self._theme_palette["text_secondary"]
+                        )
                     )
                 )
                 tag = f"device:{device['id']}"
@@ -3649,7 +3656,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ]
         canvas.create_polygon(
             *sum(floor_points, ()),
-            fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
+            fill=self._theme_palette["surface"], outline=self._theme_palette["divider_strong"], width=1, tags=("floor3d",),
         )
 
         section_height = self._active_section_height()
@@ -3662,8 +3669,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             canvas.create_polygon(
                 *sum(section_points, ()),
-                fill="#334155",
-                outline="#38bdf8",
+                fill=self._theme_palette["elevated"],
+                outline=self._theme_palette["info"],
                 stipple="gray50",
                 width=1,
                 tags=("section_plane",),
@@ -3718,17 +3725,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill = (
                 overlay_by_room[room["id"]]["fill"]
                 if overlay_mode != "none"
-                else "#dfe7ef"
+                else self._theme_palette["surface_alt"]
             )
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
-                "#7dd3fc"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#38bdf8"
+                    self._theme_palette["accent_hover"]
                     if hovered
-                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["divider_strong"]
+                    )
                 )
             )
             tag = f"room:{room['id']}"
@@ -3744,7 +3755,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
+                fill=self._theme_palette["elevated"],
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3752,7 +3763,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
+                fill=self._theme_palette["surface"],
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3772,7 +3783,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
                     text=room["name"] + overlay_text,
-                    fill="#f0f6fc",
+                    fill=self._theme_palette["text"],
                     tags=(tag, "room3d"),
                 )
 
@@ -3797,12 +3808,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 selected = self.selected == _Hit("device", device["id"])
                 hovered = self._hovered_3d == _Hit("device", device["id"])
                 device_outline = (
-                    "#ffffff"
+                    self._theme_palette["accent"]
                     if selected
                     else (
-                        "#38bdf8"
+                        self._theme_palette["accent_hover"]
                         if hovered
-                        else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+                        else (
+                            self._theme_palette["warning"]
+                            if device["id"] in warning_ids
+                            else self._theme_palette["electrical"]
+                        )
                     )
                 )
                 device_bottom_z = room_floor + device["z_m"]
@@ -3839,7 +3854,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     radius = 5 if (selected or hovered) else 4
                     canvas.create_oval(
                         x - radius, y - radius, x + radius, y + radius,
-                        fill="#fbbf24", outline=device_outline,
+                        fill=self._theme_palette["electrical"], outline=device_outline,
                         width=2, tags=(tag, "device3d"),
                     )
 
@@ -3872,11 +3887,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             height = 104
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + height,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=self._theme_palette["panel"], outline=self._theme_palette["border"], tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text="Verification Status", fill="#0f172a",
+                text="Verification Status", fill=self._theme_palette["text"],
                 tags=("overlay_legend",),
             )
             for index, (label, fill) in enumerate(
@@ -3890,11 +3905,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 y = y0 + 30 + index * 17
                 canvas.create_rectangle(
                     x0 + 8, y, x0 + 20, y + 10,
-                    fill=fill, outline="#64748b", tags=("overlay_legend",),
+                    fill=fill, outline=self._theme_palette["muted"], tags=("overlay_legend",),
                 )
                 canvas.create_text(
                     x0 + 28, y + 5, anchor="w",
-                    text=label, fill="#334155", tags=("overlay_legend",),
+                    text=label, fill=self._theme_palette["text_secondary"], tags=("overlay_legend",),
                 )
         else:
             minimum = overlay.get("minimum")
@@ -3903,11 +3918,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             title = str(overlay.get("title") or mode.title())
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + 64,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=self._theme_palette["panel"], outline=self._theme_palette["border"], tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text=title, fill="#0f172a", tags=("overlay_legend",),
+                text=title, fill=self._theme_palette["text"], tags=("overlay_legend",),
             )
             if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
                 suffix = f" {unit}" if unit else ""
@@ -3916,7 +3931,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = "No result values available"
             canvas.create_text(
                 x0 + 8, y0 + 34, anchor="nw",
-                text=text, fill="#334155", tags=("overlay_legend",),
+                text=text, fill=self._theme_palette["text_secondary"], tags=("overlay_legend",),
             )
         canvas.tag_raise("overlay_legend")
 

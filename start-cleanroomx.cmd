@@ -23,7 +23,7 @@ if exist ".venv\Scripts\python.exe" (
     )
 )
 
-"%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -c "import sys; raise SystemExit(0 if sys.version_info ^>= (3, 11) else 1)" >nul 2>nul
+"%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -c "import sys; raise SystemExit(0 if (sys.version_info.major in range(4, 100) or (sys.version_info.major == 3 and sys.version_info.minor in range(11, 100))) else 1)" >nul 2>nul
 if errorlevel 1 (
     echo CleanroomX requires Python 3.11 or newer. The selected interpreter does not satisfy this requirement. 1>&2
     exit /b 2

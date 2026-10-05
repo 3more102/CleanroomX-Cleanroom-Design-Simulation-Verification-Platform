@@ -1446,6 +1446,19 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for key, label in (
+            ("design", "Design"),
+            ("simulation", "Simulation"),
+            ("verification", "Verification"),
+            ("evidence", "Evidence / ProofGraph"),
+            ("reporting", "Reporting"),
+        ):
+            workspace_menu.add_command(
+                label=label,
+                command=lambda preset=key: self.activate_workspace_preset(preset),
+            )
+        view_menu.add_cascade(label="Workspace Preset", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2644,6 +2657,85 @@ class CleanroomXApp:
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 
+    def activate_workspace_preset(self, value: str) -> None:
+        """Apply a presentation-only engineering workspace arrangement."""
+        key = str(value or "").strip().casefold()
+        if key not in {"design", "simulation", "verification", "evidence", "reporting"}:
+            raise ValueError(f"unsupported workspace preset: {value!r}")
+
+        self._restore_focus_workspace_snapshot(status=False)
+        workspace = getattr(self, "spatial_workspace", None)
+        configurations = {
+            "design": {
+                "label": "Design",
+                "navigator": True,
+                "output": False,
+                "inspector": True,
+                "central": workspace,
+                "output_tab": None,
+            },
+            "simulation": {
+                "label": "Simulation",
+                "navigator": True,
+                "output": True,
+                "inspector": False,
+                "central": getattr(self, "input_tab", None),
+                "output_tab": getattr(self, "simulation_panel", None),
+            },
+            "verification": {
+                "label": "Verification",
+                "navigator": True,
+                "output": True,
+                "inspector": False,
+                "central": getattr(self, "dashboard", None),
+                "output_tab": getattr(self, "problems_panel", None),
+            },
+            "evidence": {
+                "label": "Evidence",
+                "navigator": True,
+                "output": True,
+                "inspector": False,
+                "central": getattr(self, "proofgraph_viewer", None),
+                "output_tab": (
+                    getattr(getattr(self, "evidence_text", None), "master", None)
+                ),
+            },
+            "reporting": {
+                "label": "Reporting",
+                "navigator": False,
+                "output": True,
+                "inspector": False,
+                "central": getattr(self, "dashboard", None),
+                "output_tab": (
+                    getattr(getattr(self, "report_text", None), "master", None)
+                ),
+            },
+        }
+        config = configurations[key]
+
+        self.navigator_panel_visible_var.set(bool(config["navigator"]))
+        self.output_panel_visible_var.set(bool(config["output"]))
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+
+        if workspace is not None:
+            workspace.set_inspector_visible(bool(config["inspector"]))
+            if key == "design":
+                workspace.set_workspace_mode("split")
+
+        central = config["central"]
+        if central is not None:
+            self.notebook.select(central)
+        output_tab = config["output_tab"]
+        if output_tab is not None and config["output"]:
+            self.output_notebook.select(output_tab)
+
+        self.root.after_idle(self._apply_saved_panel_sashes)
+        label = str(config["label"])
+        self.workspace_status_var.set(f"Workspace: {label}")
+        self.status_var.set(f"Workspace preset: {label}")
+        self._save_ui_layout_state()
+
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
         if viewer is None:
@@ -3048,6 +3140,41 @@ class CleanroomXApp:
                 "Window",
                 lambda: self.notebook.select(self.dashboard),
                 keywords=("health", "readiness", "status", "verification"),
+            ),
+            PaletteCommand(
+                "workspace.preset.design",
+                "Activate Design Workspace Preset",
+                "Window",
+                lambda: self.activate_workspace_preset("design"),
+                keywords=("layout", "navigator", "inspector", "canvas"),
+            ),
+            PaletteCommand(
+                "workspace.preset.simulation",
+                "Activate Simulation Workspace Preset",
+                "Window",
+                lambda: self.activate_workspace_preset("simulation"),
+                keywords=("layout", "solver", "results", "input"),
+            ),
+            PaletteCommand(
+                "workspace.preset.verification",
+                "Activate Verification Workspace Preset",
+                "Window",
+                lambda: self.activate_workspace_preset("verification"),
+                keywords=("layout", "problems", "diagnostics", "compliance"),
+            ),
+            PaletteCommand(
+                "workspace.preset.evidence",
+                "Activate Evidence Workspace Preset",
+                "Window",
+                lambda: self.activate_workspace_preset("evidence"),
+                keywords=("layout", "proofgraph", "provenance", "traceability"),
+            ),
+            PaletteCommand(
+                "workspace.preset.reporting",
+                "Activate Reporting Workspace Preset",
+                "Window",
+                lambda: self.activate_workspace_preset("reporting"),
+                keywords=("layout", "report", "dossier", "export"),
             ),
             PaletteCommand(
                 "workspace.2d",

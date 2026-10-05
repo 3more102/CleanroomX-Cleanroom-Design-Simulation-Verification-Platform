@@ -90,6 +90,10 @@ def test_result_panel_filters_canonical_rows_without_mutating_result():
         root.update_idletasks()
         assert len(panel.tree.get_children()) == 4
         assert panel.status_var.get() == "COMPLETED"
+        assert panel.calculated_count_var.get() == "1"
+        assert panel.requirement_count_var.get() == "1"
+        assert panel.verdict_count_var.get() == "1"
+        assert panel.diagnostic_count_var.get() == "0"
 
         panel.class_filter_var.set("Requirement")
         panel._populate()

@@ -216,26 +216,28 @@ class _RuleDialog(tk.Toplevel):
         self.resizable(True, False)
         self.result: dict[str, Any] | None = None
         value = initial or {}
-        fields = (
+        body = ttk.Frame(self, padding=12)
+        body.pack(fill="both", expand=True)
+
+        self.vars: dict[str, tk.StringVar] = {}
+        expected_default = (
+            ""
+            if value.get("operator") == "exists"
+            else json.dumps(value.get("expected"), ensure_ascii=False)
+        )
+        rows = (
             ("ID", "id", value.get("id", "")),
             ("Title", "title", value.get("title", "")),
             ("Evidence JSON pointer", "evidence_path", value.get("evidence_path", "")),
-            ("Expected JSON", "expected", "" if value.get("operator") == "exists" else json.dumps(value.get("expected"), ensure_ascii=False)),
-            ("Unit", "unit", value.get("unit") or ""),
-            ("Tolerance", "tolerance", str(value.get("tolerance", 0.0))),
-            ("Source override", "source", value.get("source") or ""),
-            ("Reference", "reference", value.get("reference") or ""),
         )
-        self.vars: dict[str, tk.StringVar] = {}
-        body = ttk.Frame(self, padding=12)
-        body.pack(fill="both", expand=True)
-        for row, (label, key, default) in enumerate(fields):
+        for row, (label, key, default) in enumerate(rows):
             ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", pady=3)
             var = tk.StringVar(value=str(default))
             self.vars[key] = var
             ttk.Entry(body, textvariable=var, width=58).grid(
                 row=row, column=1, sticky="ew", padx=(10, 0), pady=3
             )
+
         ttk.Label(body, text="Operator").grid(row=3, column=0, sticky="w", pady=3)
         self.operator_var = tk.StringVar(value=str(value.get("operator") or "min"))
         ttk.Combobox(
@@ -245,12 +247,32 @@ class _RuleDialog(tk.Toplevel):
             state="readonly",
             width=18,
         ).grid(row=3, column=1, sticky="w", padx=(10, 0), pady=3)
-        # Move expected and following rows down one after inserting operator.
-        for child in body.grid_slaves():
-            info = child.grid_info()
-            row = int(info["row"])
-            if row >= 3 and child not in body.grid_slaves(row=3):
-                child.grid_configure(row=row + 1)
+
+        trailing = (
+            ("Expected JSON", "expected", expected_default),
+            ("Unit", "unit", value.get("unit") or ""),
+            ("Tolerance", "tolerance", str(value.get("tolerance", 0.0))),
+            ("Source override", "source", value.get("source") or ""),
+            ("Reference", "reference", value.get("reference") or ""),
+        )
+        for offset, (label, key, default) in enumerate(trailing, start=4):
+            ttk.Label(body, text=label).grid(row=offset, column=0, sticky="w", pady=3)
+            var = tk.StringVar(value=str(default))
+            self.vars[key] = var
+            ttk.Entry(body, textvariable=var, width=58).grid(
+                row=offset, column=1, sticky="ew", padx=(10, 0), pady=3
+            )
+
+        ttk.Label(
+            body,
+            text=(
+                "Expected is JSON (for example 20, \"operational\", "
+                "{\"min\": 20, \"max\": 22}, or [\"A\", \"B\"]). "
+                "It is ignored for the exists operator."
+            ),
+            wraplength=620,
+        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
         buttons = ttk.Frame(body)
         buttons.grid(row=10, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
@@ -263,12 +285,21 @@ class _RuleDialog(tk.Toplevel):
 
     def _accept(self) -> None:
         operator = self.operator_var.get()
+        try:
+            tolerance = float(self.vars["tolerance"].get().strip() or "0")
+        except ValueError:
+            messagebox.showerror(
+                "Invalid tolerance",
+                "Tolerance must be a finite numeric value.",
+                parent=self,
+            )
+            return
         rule: dict[str, Any] = {
             "id": self.vars["id"].get().strip(),
             "title": self.vars["title"].get().strip(),
             "evidence_path": self.vars["evidence_path"].get().strip(),
             "operator": operator,
-            "tolerance": float(self.vars["tolerance"].get().strip() or "0"),
+            "tolerance": tolerance,
         }
         if operator != "exists":
             expected_text = self.vars["expected"].get().strip()

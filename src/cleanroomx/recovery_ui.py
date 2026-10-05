@@ -264,6 +264,10 @@ class RecoveryCenter(tk.Toplevel):
         self.result: Path | None = None
         self._candidates = {str(item.path): item for item in scan.candidates}
         self._issues = list(scan.issues)
+        self.search_var = tk.StringVar()
+        self.relation_var = tk.StringVar(value="All")
+        self.integrity_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
 
         header = ttk.Frame(self, padding=(12, 12, 12, 6))
         header.pack(fill="x")
@@ -281,6 +285,56 @@ class RecoveryCenter(tk.Toplevel):
             ),
             wraplength=920,
         ).pack(anchor="w", pady=(4, 0))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=12, pady=(2, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=28,
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(4, 8))
+
+        relation_values = sorted(
+            {recovery_relation_label(item) for item in scan.candidates},
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Source").pack(side="left")
+        self.relation_combo = ttk.Combobox(
+            filters,
+            textvariable=self.relation_var,
+            values=("All", *relation_values),
+            state="readonly",
+            width=20,
+        )
+        self.relation_combo.pack(side="left", padx=(4, 8))
+
+        integrity_values = sorted(
+            {recovery_integrity_label(item) for item in scan.candidates},
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Integrity").pack(side="left")
+        self.integrity_combo = ttk.Combobox(
+            filters,
+            textvariable=self.integrity_var,
+            values=("All", *integrity_values),
+            state="readonly",
+            width=22,
+        )
+        self.integrity_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(filters, text="Clear", command=self._clear_filters).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Previous",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            filters,
+            text="Next",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right", padx=(12, 0))
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -305,19 +359,6 @@ class RecoveryCenter(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         yscroll.pack(side="right", fill="y")
 
-        for candidate in scan.candidates:
-            self.tree.insert(
-                "",
-                "end",
-                iid=str(candidate.path),
-                text=candidate.project_name,
-                values=(
-                    candidate.saved_at_utc,
-                    recovery_relation_label(candidate),
-                    recovery_integrity_label(candidate),
-                    str(candidate.source_path) if candidate.source_path else "Not yet saved",
-                ),
-            )
 
         self.message_var = tk.StringVar()
         message = ttk.Label(
@@ -365,13 +406,110 @@ class RecoveryCenter(tk.Toplevel):
         self.quarantine_button.pack(side="left", padx=(6, 0))
         self._refresh_quarantine_button()
 
+        self.search_var.trace_add("write", lambda *_: self._populate_candidates())
+        self.relation_var.trace_add("write", lambda *_: self._populate_candidates())
+        self.integrity_var.trace_add("write", lambda *_: self._populate_candidates())
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._selection_changed())
         self.tree.bind("<Double-1>", lambda event: self._inspect())
+        self.tree.bind("<Return>", lambda event: self._inspect())
+        self.tree.bind("<F4>", lambda event: self._select_relative(1))
+        self.tree.bind("<Shift-F4>", lambda event: self._select_relative(-1))
+        self.bind("<Control-f>", lambda event: self.search_entry.focus_set())
+        self.bind("<Escape>", lambda event: self.destroy())
+        self._populate_candidates()
+
+    def _filtered_candidates(self) -> list[RecoveryCandidate]:
+        query = self.search_var.get().strip().casefold()
+        relation = self.relation_var.get().strip().casefold()
+        integrity = self.integrity_var.get().strip().casefold()
+        visible: list[RecoveryCandidate] = []
+        for candidate in self._candidates.values():
+            relation_text = recovery_relation_label(candidate)
+            integrity_text = recovery_integrity_label(candidate)
+            if relation and relation != "all" and relation_text.casefold() != relation:
+                continue
+            if integrity and integrity != "all" and integrity_text.casefold() != integrity:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        candidate.project_name,
+                        candidate.saved_at_utc,
+                        candidate.project_identity,
+                        str(candidate.path),
+                        str(candidate.source_path or ""),
+                        relation_text,
+                        integrity_text,
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(candidate)
+        visible.sort(
+            key=lambda item: (item.saved_at_utc, item.project_name.casefold()),
+            reverse=True,
+        )
+        return visible
+
+    def _populate_candidates(self) -> None:
+        selection = self.tree.selection()
+        selected_path = selection[0] if selection else None
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+
+        visible = self._filtered_candidates()
+        for candidate in visible:
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(candidate.path),
+                text=candidate.project_name,
+                values=(
+                    candidate.saved_at_utc,
+                    recovery_relation_label(candidate),
+                    recovery_integrity_label(candidate),
+                    str(candidate.source_path) if candidate.source_path else "Not yet saved",
+                ),
+            )
+
+        self.count_var.set(
+            f"{len(visible)} of {len(self._candidates)} recoverable sessions"
+        )
         children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
+        target = (
+            selected_path
+            if selected_path is not None and self.tree.exists(selected_path)
+            else children[0]
+            if children
+            else None
+        )
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
         self._selection_changed()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.relation_var.set("All")
+        self.integrity_var.set("All")
+        self.search_entry.focus_set()
+
+    def _select_relative(self, step: int):
+        children = list(self.tree.get_children())
+        if not children:
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in children:
+            index = children.index(selection[0])
+            target = children[(index + step) % len(children)]
+        else:
+            target = children[0 if step >= 0 else -1]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._selection_changed()
+        return "break"
 
     def _selected_candidate(self) -> RecoveryCandidate | None:
         selection = self.tree.selection()
@@ -497,13 +635,8 @@ class RecoveryCenter(tk.Toplevel):
             return
         key = str(candidate.path)
         self._candidates.pop(key, None)
-        if self.tree.exists(key):
-            self.tree.delete(key)
-        children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
+        self._populate_candidates()
+        if self._candidates:
             self.message_var.set("Selected recovery discarded.")
         else:
             self.message_var.set("No recoverable sessions remain.")
-        self._selection_changed()

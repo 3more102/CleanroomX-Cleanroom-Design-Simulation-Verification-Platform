@@ -1048,6 +1048,23 @@ def test_engineering_inspector_surfaces_room_area_volume_and_semantic_state(app)
     assert workspace._inspector_compliance_var.get().startswith("Verification:")
 
 
+def test_design_inspector_scrolls_dense_content_at_minimum_window(app):
+    app.root.geometry("1050x680")
+    app.root.update()
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    assert workspace._inspector_canvas.winfo_ismapped()
+    assert workspace._inspector_scrollbar.winfo_ismapped()
+    assert workspace._inspector_canvas.cget("yscrollcommand")
+    bbox = workspace._inspector_canvas.bbox("all")
+    assert bbox is not None
+    assert bbox[2] <= workspace._inspector_canvas.winfo_width() + 2
+    assert bbox[3] > 0
+
+
 def test_output_console_tabs_surface_live_engineering_counts(app):
     app._refresh_engineering_panels()
     app.root.update()

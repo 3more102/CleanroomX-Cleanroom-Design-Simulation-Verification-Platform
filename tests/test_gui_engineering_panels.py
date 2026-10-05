@@ -272,3 +272,33 @@ def test_density_switch_is_persisted_and_command_palette_exposes_workstation_lay
         "workspace.simulation",
     } <= command_ids
 
+def test_diagnostics_domain_filter_and_relative_navigation(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    domain = str(issue.get("category") or "").strip()
+    assert domain
+    assert domain in tuple(panel.domain_picker.cget("values"))
+
+    panel.domain_var.set(domain)
+    app.root.update()
+    rows = list(panel.tree.get_children())
+    assert rows
+    assert all(
+        str(panel._issues_by_iid[iid].get("category") or "").casefold()
+        == domain.casefold()
+        for iid in rows
+    )
+
+    panel.tree.selection_set(rows[0])
+    panel.tree.focus(rows[0])
+    panel._show_selected_detail()
+    if len(rows) > 1:
+        before = panel.tree.selection()[0]
+        panel._select_relative(1)
+        assert panel.tree.selection()[0] != before
+        assert str(panel.next_button.cget("state")) == "normal"
+        assert str(panel.previous_button.cget("state")) == "normal"
+    else:
+        assert str(panel.next_button.cget("state")) == "disabled"
+        assert str(panel.previous_button.cget("state")) == "disabled"
+

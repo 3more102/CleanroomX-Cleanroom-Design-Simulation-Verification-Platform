@@ -167,6 +167,22 @@ def test_compliance_panel_rejects_invalid_expected_without_committing(root):
     assert any("strict JSON" in message for message in messages)
 
 
+def test_compliance_panel_rejects_nonfinite_tolerance_without_committing(root):
+    panel, state, messages = _panel(root, _payload())
+    panel.refresh()
+    root.update()
+
+    panel._select_rule_id("temperature")
+    panel.tolerance_var.set("NaN")
+    before = copy.deepcopy(state["payload"])
+
+    assert panel.apply_selected() is False
+    assert state["payload"] == before
+    assert state["edits"] == []
+    assert panel.validation_var.get() == "EDIT INVALID"
+    assert any("finite JSON number" in message for message in messages)
+
+
 def test_compliance_panel_duplicate_and_delete_preserve_valid_pack(root):
     panel, state, _messages = _panel(root, _payload())
     panel.refresh()

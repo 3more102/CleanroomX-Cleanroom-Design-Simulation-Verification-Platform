@@ -34,11 +34,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.category_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self.visible_var = tk.StringVar(value="0 visible")
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, padding=(7, 5))
@@ -60,9 +63,28 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Category").pack(side="left")
+        self.category_picker = ttk.Combobox(
+            toolbar,
+            textvariable=self.category_var,
+            values=("All",),
+            state="readonly",
+            width=14,
+        )
+        self.category_picker.pack(side="left", padx=(4, 8))
         ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
             side="left", padx=2
         )
+        ttk.Button(
+            toolbar,
+            text="Previous",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Next",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
             side="left", padx=2
         )
@@ -79,6 +101,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             textvariable=self.summary_var,
             anchor="e",
         ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+        ttk.Label(
+            toolbar,
+            textvariable=self.visible_var,
+            style="CX.Section.TLabel",
+        ).pack(side="right", padx=(8, 0))
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -145,6 +172,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
+        self.tree.bind("<F4>", lambda _event: self._select_relative(1))
+        self.tree.bind("<Shift-F4>", lambda _event: self._select_relative(-1))
+        self.tree.bind("<Button-3>", self._show_context_menu)
 
         self.detail = tk.Text(
             detail_frame,
@@ -193,6 +223,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -200,6 +231,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_category = str(issue.get("category", "")).strip().casefold()
+            if category and category != "all" and issue_category != category:
                 continue
             if query:
                 haystack = " ".join(
@@ -234,7 +268,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.tree.delete(item)
         self._issues_by_iid.clear()
 
-        for index, issue in enumerate(self._filtered_issues(), start=1):
+        filtered = self._filtered_issues()
+        total = 0
+        if isinstance(self.last_result, dict):
+            issues = self.last_result.get("issues")
+            if isinstance(issues, list):
+                total = len(issues)
+        self.visible_var.set(f"{len(filtered)}/{total} visible")
+
+        for index, issue in enumerate(filtered, start=1):
             sequence = issue.get("sequence", index)
             iid = f"issue:{sequence}"
             if self.tree.exists(iid):
@@ -279,6 +321,17 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
+        categories = sorted(
+            {
+                str(issue.get("category", "")).strip()
+                for issue in result.get("issues", [])
+                if isinstance(issue, dict) and str(issue.get("category", "")).strip()
+            },
+            key=str.casefold,
+        )
+        self.category_picker.configure(values=("All", *categories))
+        if self.category_var.get() not in {"All", *categories}:
+            self.category_var.set("All")
         summary = result.get("summary", {})
         self.summary_var.set(
             "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
@@ -333,6 +386,38 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return "break"
         self._navigate_callback(issue)
         return "break"
+
+    def _select_relative(self, offset: int):
+        items = list(self.tree.get_children())
+        if not items:
+            self._status_setter("No diagnostics match the current filters")
+            return "break"
+        selection = self.tree.selection()
+        try:
+            current = items.index(selection[0]) if selection else (-1 if offset > 0 else 0)
+        except ValueError:
+            current = -1 if offset > 0 else 0
+        target = items[(current + offset) % len(items)]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected_detail()
+        self._navigate_selected()
+        return "break"
+
+    def _show_context_menu(self, event):
+        row = self.tree.identify_row(event.y)
+        if not row:
+            return
+        self.tree.selection_set(row)
+        self.tree.focus(row)
+        menu = tk.Menu(self, tearoff=False)
+        menu.add_command(label="Go to affected object", command=self._navigate_selected)
+        menu.add_command(label="Copy diagnostic", command=self.copy_selected)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
 
     def copy_selected(self) -> None:
         issue = self.selected_issue()

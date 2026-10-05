@@ -391,6 +391,23 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["raised"],
     )
     style.configure(
+        "CX.RaisedSection.TLabel",
+        background=palette["raised"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.RaisedTitle.TLabel",
+        background=palette["raised"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.RaisedText.TLabel",
+        background=palette["raised"],
+        foreground=palette["text_secondary"],
+    )
+    style.configure(
         "CX.Navigator.Treeview",
         background=palette["tree"],
         fieldbackground=palette["tree"],

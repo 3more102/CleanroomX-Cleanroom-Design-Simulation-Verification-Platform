@@ -493,6 +493,75 @@ def _node_detail_lines(node: dict[str, Any]) -> list[str]:
     return lines
 
 
+def proofgraph_completeness_summary(
+    projection: dict[str, Any] | None,
+) -> dict[str, int]:
+    """Summarize persisted traceability links without deriving new verdicts."""
+    data = projection if isinstance(projection, dict) else {}
+    nodes = [
+        node for node in data.get("nodes", [])
+        if isinstance(node, dict) and _text(node.get("key"))
+    ]
+    edges = [
+        edge for edge in data.get("edges", [])
+        if isinstance(edge, dict)
+    ]
+    node_types = {
+        _text(node.get("key")): _text(node.get("type"))
+        for node in nodes
+    }
+    requirement_keys = {
+        key for key, node_type in node_types.items()
+        if node_type == "requirement"
+    }
+    check_keys = {
+        key for key, node_type in node_types.items()
+        if node_type == "check"
+    }
+
+    checked_requirements = {
+        _text(edge.get("source"))
+        for edge in edges
+        if _text(edge.get("relation")) == "checked_by"
+        and _text(edge.get("source")) in requirement_keys
+        and _text(edge.get("target")) in check_keys
+    }
+    evidence_linked_checks = {
+        _text(edge.get("target"))
+        for edge in edges
+        if _text(edge.get("relation")) == "supports"
+        and node_types.get(_text(edge.get("source"))) == "evidence"
+        and _text(edge.get("target")) in check_keys
+    }
+    unresolved_evidence = sum(
+        node.get("type") == "finding"
+        and "unresolved" in set(node.get("flags") or ())
+        for node in nodes
+    )
+    verdict_statuses = [
+        _text(node.get("status")).casefold()
+        for node in nodes
+        if node.get("type") == "verdict"
+    ]
+    verdict_pass = sum(status in {"pass", "passed"} for status in verdict_statuses)
+    verdict_fail = sum(
+        status in {"fail", "failed", "error"} for status in verdict_statuses
+    )
+    verdict_other = len(verdict_statuses) - verdict_pass - verdict_fail
+
+    return {
+        "requirements_total": len(requirement_keys),
+        "requirements_checked": len(checked_requirements),
+        "checks_total": len(check_keys),
+        "checks_with_evidence": len(evidence_linked_checks),
+        "unresolved_evidence_findings": int(unresolved_evidence),
+        "verdicts_total": len(verdict_statuses),
+        "verdicts_pass": verdict_pass,
+        "verdicts_fail": verdict_fail,
+        "verdicts_other": verdict_other,
+    }
+
+
 class ProofGraphViewer(ttk.Frame):
     """Read-only tree + interactive graph view over canonical ProofGraph documents."""
 
@@ -520,6 +589,9 @@ class ProofGraphViewer(ttk.Frame):
         self.filter_var = tk.StringVar(value="All")
         self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.completeness_var = tk.StringVar(
+            value="Evidence completeness: no persisted graph"
+        )
 
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         toolbar.pack(fill="x")
@@ -619,6 +691,23 @@ class ProofGraphViewer(ttk.Frame):
                     style="CX.SurfaceMuted.TLabel",
                 ).pack(side="left", padx=3)
             ttk.Label(lifecycle, text=label, style=style_name).pack(side="left", padx=1)
+
+        completeness = ttk.Frame(
+            self,
+            style="CX.SubtlePanel.TFrame",
+            padding=(8, 5),
+        )
+        completeness.pack(fill="x", padx=6, pady=(0, 5))
+        ttk.Label(
+            completeness,
+            text="EVIDENCE COMPLETENESS",
+            style="CX.SurfaceSection.TLabel",
+        ).pack(side="left", padx=(0, 10))
+        ttk.Label(
+            completeness,
+            textvariable=self.completeness_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).pack(side="left", fill="x", expand=True)
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -756,6 +845,25 @@ class ProofGraphViewer(ttk.Frame):
 
         all_nodes = projection.get("nodes", [])
         shown = self._projection.get("nodes", [])
+        completeness = proofgraph_completeness_summary(projection)
+        if all_nodes:
+            self.completeness_var.set(
+                "Requirements {checked}/{requirements} checked · "
+                "Checks {evidence}/{checks} evidence-linked · "
+                "Unresolved evidence {unresolved} · "
+                "Verdicts {passed} pass / {failed} fail / {other} other".format(
+                    checked=completeness["requirements_checked"],
+                    requirements=completeness["requirements_total"],
+                    evidence=completeness["checks_with_evidence"],
+                    checks=completeness["checks_total"],
+                    unresolved=completeness["unresolved_evidence_findings"],
+                    passed=completeness["verdicts_pass"],
+                    failed=completeness["verdicts_fail"],
+                    other=completeness["verdicts_other"],
+                )
+            )
+        else:
+            self.completeness_var.set("Evidence completeness: no persisted graph")
         self.summary_var.set(
             f"{len(shown)}/{len(all_nodes)} nodes · "
             f"{len(self._projection.get('edges', []))} links"

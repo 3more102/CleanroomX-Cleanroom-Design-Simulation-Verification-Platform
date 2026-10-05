@@ -3126,6 +3126,10 @@ class CleanroomXApp:
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
             problems_panel.apply_theme(palette)
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(

@@ -2271,6 +2271,7 @@ class CleanroomXApp:
         )
         verify_menu.add_command(
             label="Project Constraints...",
+            accelerator="Ctrl+Alt+C",
             command=self.show_constraint_manager,
         )
         verify_menu.add_separator()
@@ -2394,6 +2395,7 @@ class CleanroomXApp:
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
+        self.root.bind("<Control-Alt-c>", lambda event: self.show_constraint_manager())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -3738,6 +3740,13 @@ class CleanroomXApp:
                 keywords=("requirements", "evidence", "trace"),
             ),
             PaletteCommand(
+                "constraints.open",
+                "Open Project Constraints",
+                "Verification",
+                self.show_constraint_manager,
+                keywords=("constraints", "criteria", "rule pack", "tolerance"),
+            ),
+            PaletteCommand(
                 "report.dossier",
                 "Export Project Engineering Dossier",
                 "Report",
@@ -4350,17 +4359,10 @@ class CleanroomXApp:
             raise RuntimeError(
                 "current project fields must be valid before constraints can be edited"
             )
-        result = self._perform_project_edit(
+        return self._perform_project_edit(
             description,
             lambda: mutation(self.project),
         )
-        selected_id = result if isinstance(result, str) else getattr(
-            self, "_editor_analysis_id", None
-        )
-        self._refresh_analysis_list(select_id=selected_id)
-        self._schedule_project_diagnostics_refresh()
-        self._update_title()
-        return result
 
     def _constraint_manager_changed(self, analysis_id: str | None) -> None:
         if analysis_id is not None:

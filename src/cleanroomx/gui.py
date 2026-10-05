@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import queue
 import threading
+import time
 import uuid
 
 import tkinter as tk
@@ -71,6 +72,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_simulation import SimulationWorkspace
+from .gui_tasks import TaskCenter
 from .gui_reporting import ReportingWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
@@ -2243,6 +2245,8 @@ class CleanroomXApp:
         self._run_generation = 0
         self._running = False
         self._abandon_requested = False
+        self._run_started_monotonic: float | None = None
+        self._active_run_task_id: str | None = None
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -2262,6 +2266,7 @@ class CleanroomXApp:
             value=self._ui_layout_state["active_workspace"]
         )
         self.diagnostics_status_var = tk.StringVar(value="Problems: —")
+        self.task_status_var = tk.StringVar(value="Tasks: idle")
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
@@ -2512,6 +2517,10 @@ class CleanroomXApp:
             label="Design Inspector",
             accelerator="Ctrl+I",
             command=self.toggle_design_inspector,
+        )
+        view_menu.add_command(
+            label="Job / Task Center",
+            command=self.show_task_center,
         )
         view_menu.add_checkbutton(
             label="Focus Workspace",
@@ -3156,6 +3165,13 @@ class CleanroomXApp:
         self.evidence_text = self._add_text_tab(
             "Evidence", notebook=self.output_notebook
         )
+        self.task_center = TaskCenter(
+            self.output_notebook,
+            on_change=self._on_task_center_change,
+            on_abandon=self._abandon_task_from_center,
+        )
+        self.task_center.apply_theme(self.theme_var.get())
+        self.output_notebook.add(self.task_center, text="Tasks")
         self.result_text = self._add_text_tab(
             "Results", notebook=self.output_notebook
         )
@@ -3201,6 +3217,20 @@ class CleanroomXApp:
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
+        )
+        self.task_status_label = ttk.Label(
+            status_bar,
+            textvariable=self.task_status_var,
+            anchor="e",
+            cursor="hand2",
+        )
+        self.task_status_label.pack(side="right", padx=(8, 0))
+        self.task_status_label.bind(
+            "<Button-1>",
+            lambda event: self.show_task_center(),
+        )
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="right", fill="y", padx=8
         )
         self.diagnostics_status_label = ttk.Label(
             status_bar,
@@ -3537,6 +3567,10 @@ class CleanroomXApp:
         reporting = getattr(self, "reporting_workspace", None)
         if reporting is not None:
             reporting.apply_theme(self.theme_var.get())
+
+        task_center = getattr(self, "task_center", None)
+        if task_center is not None:
+            task_center.apply_theme(self.theme_var.get())
 
         proofgraph = getattr(self, "proofgraph_viewer", None)
         if proofgraph is not None:
@@ -8178,6 +8212,66 @@ class CleanroomXApp:
         self.status_var.set(f"Input valid — {analysis.name}")
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
 
+    def _on_task_center_change(self, active: int, total: int) -> None:
+        if active:
+            self.task_status_var.set(f"Tasks: {active} active · {total} session")
+        elif total:
+            self.task_status_var.set(f"Tasks: idle · {total} session")
+        else:
+            self.task_status_var.set("Tasks: idle")
+
+    def _abandon_task_from_center(self, task_key: str) -> bool:
+        if (
+            task_key != getattr(self, "_active_run_task_id", None)
+            or not self._running
+            or self._abandon_requested
+        ):
+            self.status_var.set("Selected task cannot be abandoned")
+            return False
+        self.cancel_run()
+        return bool(self._abandon_requested)
+
+    def show_task_center(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+        panel = getattr(self, "task_center", None)
+        notebook = getattr(self, "output_notebook", None)
+        if panel is not None and notebook is not None:
+            notebook.select(panel)
+        self.status_var.set("Output: Job / Task Center")
+
+    def _current_run_elapsed_seconds(self) -> float | None:
+        started = getattr(self, "_run_started_monotonic", None)
+        if started is None:
+            return None
+        return max(0.0, time.monotonic() - started)
+
+    def _update_active_run_task(self, **changes) -> None:
+        center = getattr(self, "task_center", None)
+        task_id = getattr(self, "_active_run_task_id", None)
+        if center is None or not task_id:
+            return
+        center.update_task(task_id, **changes)
+
+    def _finish_active_run_task(
+        self,
+        *,
+        state: str,
+        stage: str,
+        result: str = "",
+        detail: str = "",
+    ) -> None:
+        self._update_active_run_task(
+            state=state,
+            stage=stage,
+            duration_seconds=self._current_run_elapsed_seconds(),
+            result=result,
+            detail=detail,
+        )
+        self._active_run_task_id = None
+        self._run_started_monotonic = None
+
     def run_current(self) -> None:
         if self._running:
             return
@@ -8201,6 +8295,16 @@ class CleanroomXApp:
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
         self._abandon_requested = False
+        self._run_started_monotonic = time.monotonic()
+        self._active_run_task_id = f"analysis:{generation}"
+        task_center = getattr(self, "task_center", None)
+        if task_center is not None:
+            task_center.start_task(
+                self._active_run_task_id,
+                analysis.name,
+                category="Analysis",
+                stage=f"Executing {ANALYSIS_SPECS[analysis.kind].title}",
+            )
         self._set_running(True)
         simulation = getattr(self, "simulation_workspace", None)
         if simulation is not None:
@@ -8220,6 +8324,9 @@ class CleanroomXApp:
                 self._queue.put(("error", generation, analysis_id, str(exc)))
                 return
 
+            self._queue.put(
+                ("stage", generation, analysis_id, "Finalizing run-history evidence")
+            )
             history_evidence = None
             history_error = None
             try:
@@ -8245,6 +8352,16 @@ class CleanroomXApp:
         simulation = getattr(self, "simulation_workspace", None)
         if simulation is not None:
             simulation.set_abandon_requested()
+        self._update_active_run_task(
+            state="abandon requested",
+            stage="Waiting for backend worker to exit",
+            duration_seconds=self._current_run_elapsed_seconds(),
+            result="Pending result suppressed",
+            detail=(
+                "Abandon does not force-terminate the backend thread. "
+                "The workstation remains exclusive until the worker exits."
+            ),
+        )
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
@@ -8261,12 +8378,26 @@ class CleanroomXApp:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
                 if generation != self._run_generation:
                     continue
+                if kind == "stage":
+                    if not self._abandon_requested:
+                        self._update_active_run_task(
+                            state="finalizing",
+                            stage=str(payload),
+                            duration_seconds=self._current_run_elapsed_seconds(),
+                        )
+                    continue
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
                     simulation = getattr(self, "simulation_workspace", None)
                     if simulation is not None:
                         simulation.set_abandoned()
+                    self._finish_active_run_task(
+                        state="abandoned",
+                        stage="Backend worker finished; result suppressed",
+                        result="Suppressed",
+                        detail="The operator abandoned this run before its pending result was accepted.",
+                    )
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
@@ -8274,6 +8405,12 @@ class CleanroomXApp:
                     simulation = getattr(self, "simulation_workspace", None)
                     if simulation is not None:
                         simulation.set_failed(str(payload))
+                    self._finish_active_run_task(
+                        state="failed",
+                        stage="Backend execution failed",
+                        result="Execution error",
+                        detail=str(payload),
+                    )
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -8296,6 +8433,12 @@ class CleanroomXApp:
                             simulation.set_discarded(
                                 "Completed result discarded because the analysis no longer exists."
                             )
+                        self._finish_active_run_task(
+                            state="discarded",
+                            stage="Completed result rejected",
+                            result="No retained result",
+                            detail="The analysis no longer exists in the current project.",
+                        )
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
                         )
@@ -8309,6 +8452,15 @@ class CleanroomXApp:
                             simulation.set_discarded(
                                 "Completed result discarded because the active inputs changed."
                             )
+                        self._finish_active_run_task(
+                            state="discarded",
+                            stage="Completed result rejected",
+                            result="Stale result",
+                            detail=(
+                                "The analysis inputs changed before completion, so the "
+                                "completed backend result was not accepted."
+                            ),
+                        )
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
@@ -8328,10 +8480,25 @@ class CleanroomXApp:
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
                     if history_error is None:
+                        self._finish_active_run_task(
+                            state="completed",
+                            stage="Result accepted into current session",
+                            result=str(run.status or "completed").upper(),
+                            detail=(
+                                "Execution completed. Engineering/result status is "
+                                "reported separately from task execution state."
+                            ),
+                        )
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
+                        self._finish_active_run_task(
+                            state="completed",
+                            stage="Result accepted; audit history not updated",
+                            result=str(run.status or "completed").upper(),
+                            detail=str(history_error),
+                        )
                         self.status_var.set(
                             f"Completed — {run.title}; run history was not updated."
                         )

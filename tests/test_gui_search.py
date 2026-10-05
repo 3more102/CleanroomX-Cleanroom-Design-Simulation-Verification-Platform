@@ -65,7 +65,19 @@ def test_build_engineering_search_entries_uses_only_present_canonical_data():
                 "status": "active",
                 "source": "URS",
             }
-        ]
+        ],
+        "mappings": [
+            {
+                "id": "MAP-1",
+                "requirement_id": "REQ-1",
+                "requirement_title": "Maintain positive pressure",
+                "property_name": "pressure_pa",
+                "analysis_id": "pressure-1",
+                "subject_ref": "R-101",
+                "status": "active",
+                "reference_state": "resolved",
+            }
+        ],
     }
     proofgraphs = [
         {
@@ -98,6 +110,7 @@ def test_build_engineering_search_entries_uses_only_present_canonical_data():
     assert ("device", "D-1") in targets
     assert ("diagnostic", "AIRFLOW_BALANCE") in targets
     assert ("requirement", "REQ-1") in targets
+    assert ("mapping", "MAP-1") in targets
     assert ("evidence", "ev-1") in targets
 
 

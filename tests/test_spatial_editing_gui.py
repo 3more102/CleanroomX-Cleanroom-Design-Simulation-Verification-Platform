@@ -264,6 +264,49 @@ def test_model_badge_reflects_existing_spatial_validation_advisories(app, monkey
     assert app.shell_model_badge_var.get() == "MODEL READY"
     assert app.shell_model_badge.cget("style") == "CX.Status.Pass.TLabel"
 
+def test_canvas_hover_card_uses_selected_object_data_and_clears_cleanly(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    hit = _Hit("room", room["id"])
+    lines = workspace._hover_summary_lines(hit)
+
+    assert lines
+    assert room["name"] in lines[0]
+    assert any("Geometry" in line for line in lines)
+
+    workspace._hovered = hit
+    workspace._hover_canvas_xy = (240, 180)
+    workspace._draw_hover_card_2d()
+    app.root.update_idletasks()
+    assert workspace.canvas_2d.find_withtag("hover_card")
+
+    workspace._hovered = None
+    workspace._draw_hover_card_2d()
+    assert not workspace.canvas_2d.find_withtag("hover_card")
+
+
+def test_canvas_hit_testing_ignores_hover_overlay_items(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    cx, cy = workspace._world_to_canvas(
+        room["x_m"] + room["length_m"] / 2.0,
+        room["y_m"] + room["width_m"] / 2.0,
+    )
+    expected = _Hit("room", room["id"])
+
+    workspace.canvas_2d.create_rectangle(
+        cx - 8,
+        cy - 8,
+        cx + 8,
+        cy + 8,
+        fill="",
+        outline="",
+        tags=("hover_card",),
+    )
+
+    assert workspace._hit_at_canvas_2d(cx, cy) == expected
+
+
 def test_canvas_rulers_toggle_without_mutating_spatial_project_data(app):
     workspace = app.spatial_workspace
     before = copy.deepcopy(workspace.layout)

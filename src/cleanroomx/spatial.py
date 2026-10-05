@@ -5587,17 +5587,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas.tag_lower(background_id, text_id)
         canvas.tag_raise("hover_card")
 
+    def _hit_at_canvas_2d(self, x: float, y: float) -> _Hit | None:
+        for item_id in reversed(self.canvas_2d.find_overlapping(x, y, x, y)):
+            hit = self._parse_hit(self.canvas_2d.gettags(item_id))
+            if hit is not None:
+                return hit
+        return None
+
     def _on_motion(self, event: tk.Event) -> None:
         self._hover_canvas_xy = (int(event.x), int(event.y))
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
         self._notify_engineering_context()
-        current = self.canvas_2d.find_withtag("current")
-        hovered = (
-            self._parse_hit(self.canvas_2d.gettags(current[0]))
-            if current
-            else None
-        )
+        hovered = self._hit_at_canvas_2d(event.x, event.y)
         if hovered != self._hovered:
             self._hovered = hovered
             self._draw_2d()

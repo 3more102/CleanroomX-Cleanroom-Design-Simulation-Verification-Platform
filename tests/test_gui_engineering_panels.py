@@ -397,3 +397,53 @@ def test_engineering_health_status_remains_visible_at_minimum_window(app):
     label = app.engineering_status_label
     assert label.winfo_ismapped()
     assert label.winfo_x() + label.winfo_width() <= app.status_bar.winfo_width()
+
+
+def test_engineering_navigator_filter_includes_dynamic_requirement_nodes(app):
+    requirement = ProjectRequirement(
+        id="req-filter-ach",
+        title="Filter-visible ACH requirement",
+        description="Navigator filter regression requirement.",
+        discipline="HVAC",
+        category="air_change_rate",
+        source="GUI regression",
+        source_revision="R1",
+        unit="1/h",
+        minimum=12.0,
+        applicability="applicable",
+        scope=("project",),
+        verification_method="analysis",
+        required_evidence=("analysis_result",),
+        status="approved",
+    )
+    app.project.metadata[PROJECT_REQUIREMENTS_METADATA_KEY] = ProjectRequirements(
+        sets=(
+            ProjectRequirementSet(
+                id="set-filter",
+                title="Filter requirements",
+                source="GUI regression",
+                source_revision="R1",
+                requirements=(requirement,),
+            ),
+        )
+    ).to_dict()
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    iid = "requirement:req-filter-ach"
+    assert iid in app.analysis_tree.get_children("nav-requirements")
+
+    app.navigator_filter_var.set("Filter-visible ACH")
+    app.root.update()
+    assert iid in app.analysis_tree.get_children("nav-requirements")
+
+    app.navigator_filter_var.set("Errors")
+    app.root.update()
+    error_children = app.analysis_tree.get_children("nav-diagnostics")
+    summary = app.problems_panel.last_result["summary"]
+    if summary["error_count"]:
+        assert "nav-diagnostics:error" in error_children
+
+    app.navigator_filter_var.set("")
+    app.root.update()
+    assert iid in app.analysis_tree.get_children("nav-requirements")

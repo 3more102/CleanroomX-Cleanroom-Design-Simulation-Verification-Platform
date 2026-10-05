@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import tkinter as tk
 from tkinter import ttk
@@ -44,6 +44,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         navigate_callback: Callable[[dict[str, Any]], None],
         export_callback: Callable[[dict[str, Any]], None] | None = None,
         status_setter: Callable[[str], None] | None = None,
+        table_layout: Mapping[str, Any] | None = None,
+        on_table_layout_change: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         super().__init__(master)
         self._project_getter = project_getter
@@ -51,6 +53,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._navigate_callback = navigate_callback
         self._export_callback = export_callback
         self._status_setter = status_setter or (lambda _message: None)
+        self._table_layout = dict(table_layout or {})
+        self._on_table_layout_change = on_table_layout_change
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
         self._sort_column = "severity"
@@ -258,6 +262,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     _DIAGNOSTIC_STATE_RANK.get(str(raw).casefold(), 99),
                 ),
             },
+            layout_state=self._table_layout,
+            on_layout_change=self._on_table_layout_change,
         )
         self.table_behavior.sort_column = "severity"
         self.table_behavior.sort_descending = False

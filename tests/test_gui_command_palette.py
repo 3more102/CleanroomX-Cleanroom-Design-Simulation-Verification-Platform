@@ -114,6 +114,7 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open Design Workspace" in labels
     assert "Open Simulation Workspace" in labels
     assert "Open Verification Workspace" in labels
+    assert "Open Compliance Rule Manager" in labels
     assert "Open Evidence Workspace" in labels
     assert "Open Reporting Workspace" in labels
     assert "Open Engineering Search" in labels

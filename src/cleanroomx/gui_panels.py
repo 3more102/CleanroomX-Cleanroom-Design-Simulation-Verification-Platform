@@ -185,11 +185,19 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.copy_button.pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
-            text="Export…",
+            text="Export All…",
             command=self._export,
             state="normal" if self._export_callback is not None else "disabled",
         )
         self.export_button.pack(side="left", padx=2)
+        self.export_filtered_button = ttk.Button(
+            toolbar,
+            text="Export Filtered…",
+            style="CX.Compact.TButton",
+            command=self._export_filtered,
+            state="normal" if self._export_callback is not None else "disabled",
+        )
+        self.export_filtered_button.pack(side="left", padx=2)
 
         self.summary_label = ttk.Label(
             toolbar,
@@ -693,12 +701,61 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.clipboard_append(payload)
         self._status_setter("Diagnostic copied to clipboard")
 
+    def _filtered_export_result(self) -> dict[str, Any] | None:
+        if not isinstance(self.last_result, dict):
+            return None
+        visible = list(self._filtered_issues())
+        result = dict(self.last_result)
+        result["issues"] = visible
+
+        errors = sum(
+            str(issue.get("severity") or "").casefold() in {"critical", "error"}
+            for issue in visible
+        )
+        warnings = sum(
+            str(issue.get("severity") or "").casefold() in {"warning", "warn"}
+            for issue in visible
+        )
+        infos = sum(
+            str(issue.get("severity") or "").casefold() == "info"
+            for issue in visible
+        )
+        summary = dict(result.get("summary") or {})
+        summary.update(
+            {
+                "status": "error" if errors else "warning" if warnings else "pass",
+                "complete": True,
+                "issue_count": len(visible),
+                "error_count": errors,
+                "warning_count": warnings,
+                "info_count": infos,
+            }
+        )
+        result["summary"] = summary
+        limitations = list(result.get("limitations") or [])
+        limitations.append(
+            "This export is a GUI-filtered snapshot of canonical project diagnostics; "
+            "filters do not change diagnostic evaluation or source records."
+        )
+        result["limitations"] = limitations
+        return result
+
     def _export(self) -> None:
         if self._export_callback is None:
             return
         result = self.last_result or self.refresh()
         if result is not None:
             self._export_callback(result)
+
+    def _export_filtered(self) -> None:
+        if self._export_callback is None:
+            return
+        if self.last_result is None:
+            self.refresh()
+        result = self._filtered_export_result()
+        if result is None:
+            return
+        self._export_callback(result)
 
 def _evidence_value_text(value: Any) -> str:
     """Render retained evidence values without exposing raw structured payloads."""

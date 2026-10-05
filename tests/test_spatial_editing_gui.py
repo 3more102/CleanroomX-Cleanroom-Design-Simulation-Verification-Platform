@@ -626,6 +626,8 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     assert app.spatial_workspace.canvas_3d.cget("background") == dark["canvas_3d"]
     assert app.plot_canvas.cget("background") == dark["plot"]
     assert app.input_text.cget("background") == dark["field"]
+    assert app.proofgraph_viewer.canvas.cget("background") == dark["surface"]
+    assert app.proofgraph_viewer.detail.cget("background") == dark["field"]
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
@@ -1009,3 +1011,43 @@ def test_window_size_persists_across_application_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+def test_engineering_dashboard_and_status_strip_are_live_and_view_only(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    diagnostics = app._refresh_engineering_panels()
+    app.root.update_idletasks()
+    app.root.update()
+
+    dashboard = app.engineering_dashboard
+    assert str(dashboard) in {str(tab) for tab in app.notebook.tabs()}
+    assert dashboard.project_var.get().startswith("PROJECT HEALTH")
+    assert "rooms" in dashboard.model_kpi_var.get()
+    assert app.problems_state_var.get().startswith("PROBLEMS ")
+    assert app.verification_state_var.get().startswith("VERIFY ")
+    assert app.evidence_state_var.get().startswith("EVIDENCE ")
+    assert diagnostics is None or isinstance(diagnostics, dict)
+
+    app._activate_dashboard_workspace()
+    app.root.update()
+    assert app.notebook.select() == str(dashboard)
+    assert app.workspace_status_var.get() == "Workspace: Dashboard"
+    assert app.project.to_dict() == project_before
+
+
+def test_engineering_status_strip_tracks_save_state_without_mutating_project(app, tmp_path):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.project_path = tmp_path / "industrial-status.cleanroomx.json"
+    app._capture_saved_state()
+    app.root.update()
+    assert app.save_state_var.get() == "SAVED"
+
+    app.description_var.set(app.description_var.get() + " status-change")
+    app.root.update()
+    assert app.save_state_var.get() == "UNSAVED CHANGES"
+
+    app.description_var.set(project_before["project"].get("description", ""))
+    app.root.update()
+    assert app.project.to_dict() == project_before

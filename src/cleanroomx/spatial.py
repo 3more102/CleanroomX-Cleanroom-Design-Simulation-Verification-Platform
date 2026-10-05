@@ -2000,7 +2000,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             inspector,
             textvariable=self._property_filter_var,
-            style="CX.Muted.TLabel",
         ).pack(fill="x", pady=(0, 6))
         self._property_search_entry.bind(
             "<Escape>", lambda _event: self.clear_property_filter()

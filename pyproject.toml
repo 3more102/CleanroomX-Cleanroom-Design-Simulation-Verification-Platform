@@ -14,6 +14,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 bim = ["ifcopenshell"]
+release = ["pyinstaller==6.22.3", "ifcopenshell==0.9.0"]
 
 [project.scripts]
 cleanroomx = "cleanroomx.cli:main"
@@ -52,6 +53,9 @@ cleanroomx-damper-study = "cleanroomx.damper_study_cli:main"
 cleanroomx-dossier = "cleanroomx.dossier_cli:main"
 cleanroomx-consistency = "cleanroomx.consistency_cli:main"
 cleanroomx-assurance-snapshot = "cleanroomx.assurance_snapshot_cli:main"
+
+[project.gui-scripts]
+cleanroomx-desktop = "cleanroomx.gui:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

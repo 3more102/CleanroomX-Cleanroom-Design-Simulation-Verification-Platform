@@ -18,6 +18,8 @@ class StartCenter(ttk.Frame):
         on_open_demo: Callable[[], None],
         on_open_recent: Callable[[str], None],
         on_forget_recent: Callable[[str], None] | None = None,
+        autosave_status_var: tk.StringVar | None = None,
+        on_open_recovery: Callable[[], None] | None = None,
     ):
         super().__init__(master, padding=(22, 18))
         self._on_open_recent = on_open_recent
@@ -98,6 +100,43 @@ class StartCenter(ttk.Frame):
             wraplength=650,
             justify="left",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        reliability = ttk.Frame(
+            operations,
+            style="CX.SubtlePanel.TFrame",
+            padding=(8, 6),
+        )
+        reliability.grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(10, 0),
+        )
+        reliability.columnconfigure(1, weight=1)
+        ttk.Label(
+            reliability,
+            text="RELIABILITY",
+            style="CX.SurfaceSection.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.autosave_status_var = (
+            autosave_status_var
+            if autosave_status_var is not None
+            else tk.StringVar(master=self, value="Autosave: unavailable")
+        )
+        ttk.Label(
+            reliability,
+            textvariable=self.autosave_status_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).grid(row=0, column=1, sticky="w")
+        self.recovery_button = ttk.Button(
+            reliability,
+            text="Recovery Center…",
+            style="CX.Compact.TButton",
+            command=on_open_recovery or (lambda: None),
+            state="normal" if on_open_recovery is not None else "disabled",
+        )
+        self.recovery_button.grid(row=0, column=2, sticky="e", padx=(8, 0))
 
         workflow = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(14, 12))
         workflow.grid(row=1, column=1, sticky="nsew", padx=(6, 0))

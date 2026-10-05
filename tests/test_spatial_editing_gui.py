@@ -1195,3 +1195,346 @@ def test_top_level_menus_use_engineering_workflow_names(app):
         "Requirements Traceability...",
     ]
 
+
+def test_multi_selection_inspector_exposes_mixed_values_and_applies_batch_edit(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    first["pressure_pa"] = 10.0
+    second["pressure_pa"] = 25.0
+
+    workspace._set_selected_hits(
+        [_Hit("room", first["id"]), _Hit("room", second["id"])]
+    )
+    workspace._load_property_panel()
+    app.root.update()
+
+    assert workspace._property_vars["pressure_pa"].get() == "— Mixed —"
+    assert "2 rooms selected" in workspace._selection_var.get()
+    assert "2 selected" in workspace._property_filter_summary_var.get()
+    assert str(workspace._property_apply_button.cget("text")) == "Apply to 2 objects"
+    assert not workspace._property_rows["name"].winfo_manager()
+    assert workspace._property_rows["pressure_pa"].winfo_manager()
+
+    workspace._property_vars["pressure_pa"].set("17.5")
+    workspace._on_property_edit()
+    assert "modified" in workspace._property_filter_summary_var.get()
+
+    workspace.apply_properties()
+    app.root.update()
+
+    current = {room["id"]: room for room in workspace.layout["rooms"]}
+    assert current[first["id"]]["pressure_pa"] == pytest.approx(17.5)
+    assert current[second["id"]]["pressure_pa"] == pytest.approx(17.5)
+    assert "2 rooms selected" in workspace._selection_var.get()
+
+
+def test_multi_selection_inspector_refuses_cross_kind_batch_edit(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    device = workspace.layout["devices"][0]
+
+    workspace._set_selected_hits(
+        [_Hit("room", room["id"]), _Hit("device", device["id"])]
+    )
+    workspace._load_property_panel()
+    app.root.update()
+
+    assert "batch editing requires" in workspace._selection_var.get()
+    assert str(workspace._property_apply_button.cget("state")) == "disabled"
+    assert workspace._editable_property_fields() == set()
+
+
+def test_property_draft_survives_selection_change_and_can_be_reverted(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    original_name = first["name"]
+
+    workspace.select_item("room", first["id"])
+    workspace._property_vars["name"].set("Pending room name")
+    workspace._on_property_edit()
+    assert "modified" in workspace._property_filter_summary_var.get()
+    assert str(workspace._property_revert_button.cget("state")) == "normal"
+
+    workspace.select_item("room", second["id"])
+    workspace.select_item("room", first["id"])
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == "Pending room name"
+    assert first["name"] == original_name
+    assert "modified" in workspace._property_filter_summary_var.get()
+
+    workspace.revert_property_edits()
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == original_name
+    assert "modified" not in workspace._property_filter_summary_var.get()
+    assert str(workspace._property_revert_button.cget("state")) == "disabled"
+
+
+def test_canvas_rulers_toggle_without_mutating_spatial_project_data(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+
+    workspace._show_rulers.set(True)
+    workspace.redraw()
+    app.root.update()
+    assert workspace.canvas_2d.find_withtag("ruler")
+
+    workspace._show_rulers.set(False)
+    workspace.redraw()
+    app.root.update()
+    assert not workspace.canvas_2d.find_withtag("ruler")
+    assert workspace.layout == before
+
+
+def test_device_category_visibility_filters_canvas_without_mutating_project(app):
+    workspace = app.spatial_workspace
+    device = workspace.layout["devices"][0]
+    device_type = device["type"]
+    before = copy.deepcopy(workspace.layout)
+
+    assert workspace._is_item_visible("device", device["id"])
+    workspace.set_device_type_visible(device_type, False)
+    app.root.update()
+
+    assert not workspace._is_item_visible("device", device["id"])
+    assert not workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+    assert workspace.layout == before
+    assert f"/{len(workspace._device_type_visibility_vars)}" in str(
+        workspace._device_categories_button.cget("text")
+    )
+
+    workspace.set_device_type_visible(device_type, True)
+    app.root.update()
+
+    assert workspace._is_item_visible("device", device["id"])
+    assert workspace.canvas_2d.find_withtag(f"device:{device['id']}")
+    assert workspace.layout == before
+
+
+def test_device_category_visibility_supports_show_hide_all(app):
+    workspace = app.spatial_workspace
+
+    workspace.set_all_device_types_visible(False)
+    app.root.update()
+    assert workspace._visible_device_type_count() == 0
+    assert all(
+        not workspace._is_item_visible("device", device["id"])
+        for device in workspace.layout["devices"]
+    )
+
+    workspace.set_all_device_types_visible(True)
+    app.root.update()
+    assert workspace._visible_device_type_count() == len(
+        workspace._device_type_visibility_vars
+    )
+    assert all(
+        workspace._is_item_visible("device", device["id"])
+        for device in workspace.layout["devices"]
+    )
+
+
+def test_multi_selection_drag_moves_group_and_owned_devices_once(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first, second = rooms[:2]
+    selected_room_ids = {first["id"], second["id"]}
+    first_hit = _Hit("room", first["id"])
+    second_hit = _Hit("room", second["id"])
+    workspace._set_selected_hits([first_hit, second_hit])
+    workspace._load_property_panel()
+
+    before_rooms = {
+        room["id"]: (room["x_m"], room["y_m"])
+        for room in workspace.layout["rooms"]
+        if room["id"] in selected_room_ids
+    }
+    before_devices = {
+        device["id"]: (device["x_m"], device["y_m"])
+        for device in workspace.layout["devices"]
+        if device.get("room_id") in selected_room_ids
+    }
+
+    primary = second
+    room_item = workspace.canvas_2d.find_withtag(f"room:{primary['id']}")[0]
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    workspace.canvas_2d.addtag_withtag("current", room_item)
+
+    center_x = primary["x_m"] + primary["length_m"] / 2
+    center_y = primary["y_m"] + primary["width_m"] / 2
+    down_x, down_y = workspace._world_to_canvas(center_x, center_y)
+    drag_x, drag_y = workspace._world_to_canvas(center_x + 1.0, center_y)
+    down = type(
+        "Event",
+        (),
+        {"x": int(down_x), "y": int(down_y), "state": 0},
+    )()
+    drag = type(
+        "Event",
+        (),
+        {"x": int(drag_x), "y": int(drag_y), "state": 0},
+    )()
+
+    workspace._on_left_down(down)
+    assert workspace.selected_hits() == (first_hit, second_hit)
+    workspace._on_left_drag(drag)
+    workspace._on_left_up(drag)
+    app.root.update()
+
+    for room in workspace.layout["rooms"]:
+        if room["id"] not in selected_room_ids:
+            continue
+        before_x, before_y = before_rooms[room["id"]]
+        assert room["x_m"] == pytest.approx(before_x + 1.0)
+        assert room["y_m"] == pytest.approx(before_y)
+
+    for device in workspace.layout["devices"]:
+        if device["id"] not in before_devices:
+            continue
+        before_x, before_y = before_devices[device["id"]]
+        assert device["x_m"] == pytest.approx(before_x + 1.0)
+        assert device["y_m"] == pytest.approx(before_y)
+
+    assert app.undo_project_edit() is True
+    app.root.update()
+    for room in workspace.layout["rooms"]:
+        if room["id"] in before_rooms:
+            assert (room["x_m"], room["y_m"]) == before_rooms[room["id"]]
+    for device in workspace.layout["devices"]:
+        if device["id"] in before_devices:
+            assert (device["x_m"], device["y_m"]) == before_devices[device["id"]]
+
+
+def test_multi_selection_bulk_hide_delete_and_undo(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first_hit = _Hit("room", rooms[0]["id"])
+    second_hit = _Hit("room", rooms[1]["id"])
+    original_room_count = len(rooms)
+
+    workspace._set_selected_hits([first_hit, second_hit])
+    workspace._load_property_panel()
+    workspace.hide_selected()
+    app.root.update()
+
+    assert not workspace._is_item_visible(first_hit.kind, first_hit.item_id)
+    assert not workspace._is_item_visible(second_hit.kind, second_hit.item_id)
+    workspace.show_all()
+    assert workspace._is_item_visible(first_hit.kind, first_hit.item_id)
+    assert workspace._is_item_visible(second_hit.kind, second_hit.item_id)
+
+    workspace.delete_selected()
+    app.root.update()
+
+    assert len(workspace.layout["rooms"]) == original_room_count - 2
+    assert workspace.selected_hits() == ()
+    assert app.undo_project_edit() is True
+    app.root.update()
+    assert len(workspace.layout["rooms"]) == original_room_count
+    assert any(room["id"] == first_hit.item_id for room in workspace.layout["rooms"])
+    assert any(room["id"] == second_hit.item_id for room in workspace.layout["rooms"])
+
+
+def test_marquee_selection_selects_visible_spatial_objects_without_mutation(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    room_points = []
+    for room in rooms[:2]:
+        x0, y0 = workspace._world_to_canvas(room["x_m"], room["y_m"])
+        x1, y1 = workspace._world_to_canvas(
+            room["x_m"] + room["length_m"],
+            room["y_m"] + room["width_m"],
+        )
+        room_points.extend(((x0, y0), (x1, y1)))
+    left = int(min(point[0] for point in room_points) - 8)
+    top = int(min(point[1] for point in room_points) - 8)
+    right = int(max(point[0] for point in room_points) + 8)
+    bottom = int(max(point[1] for point in room_points) + 8)
+
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    down = type("Event", (), {"x": left, "y": top, "state": 0})()
+    drag = type("Event", (), {"x": right, "y": bottom, "state": 0})()
+    up = type("Event", (), {"x": right, "y": bottom, "state": 0})()
+
+    workspace._on_left_down(down)
+    workspace._on_left_drag(drag)
+    assert workspace.canvas_2d.find_withtag("selection_box")
+    workspace._on_left_up(up)
+    app.root.update()
+
+    selected = set(workspace.selected_hits())
+    assert _Hit("room", rooms[0]["id"]) in selected
+    assert _Hit("room", rooms[1]["id"]) in selected
+    assert len(selected) >= 2
+    assert workspace.canvas_2d.find_withtag("selection_box") == ()
+    assert app.selection_status_var.get().startswith(
+        f"Selected: {len(selected)} objects ·"
+    )
+    assert app.project.to_dict() == project_before
+
+
+def test_shift_and_control_click_support_non_mutating_multi_selection(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first, second = rooms[:2]
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    assert workspace.select_item("room", first["id"], notify=True)
+    first_hit = _Hit("room", first["id"])
+    second_hit = _Hit("room", second["id"])
+    assert workspace.selected_hits() == (first_hit,)
+
+    second_item = workspace.canvas_2d.find_withtag(f"room:{second['id']}")[0]
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    workspace.canvas_2d.addtag_withtag("current", second_item)
+    sx, sy = workspace._world_to_canvas(
+        second["x_m"] + second["length_m"] / 2,
+        second["y_m"] + second["width_m"] / 2,
+    )
+    shift_event = type(
+        "Event",
+        (),
+        {"x": int(sx), "y": int(sy), "state": 0x0001},
+    )()
+
+    workspace._on_left_down(shift_event)
+    app.root.update()
+
+    assert workspace.selected == second_hit
+    assert workspace.selected_hits() == (first_hit, second_hit)
+    assert workspace.selection_status_text().startswith("Selected: 2 objects ·")
+    assert app.selection_status_var.get().startswith("Selected: 2 objects ·")
+    assert workspace._drag_anchor is None
+    assert app.project.to_dict() == project_before
+
+    control_event = type(
+        "Event",
+        (),
+        {"x": int(sx), "y": int(sy), "state": 0x0004},
+    )()
+    workspace._on_left_down(control_event)
+    app.root.update()
+
+    assert workspace.selected == first_hit
+    assert workspace.selected_hits() == (first_hit,)
+    assert app.project.to_dict() == project_before
+
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    clear_event = type("Event", (), {"x": 0, "y": 0, "state": 0})()
+    workspace._on_left_down(clear_event)
+    app.root.update()
+
+    assert workspace.selected is None
+    assert workspace.selected_hits() == ()
+    assert app.selection_status_var.get() == "Selected: —"
+    assert app.project.to_dict() == project_before

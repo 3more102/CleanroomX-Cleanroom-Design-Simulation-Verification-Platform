@@ -32,7 +32,10 @@ def test_verification_workspace_projection_preserves_canonical_currency_states()
                     "analysis_name": "Pressure",
                     "analysis_kind": "project",
                     "state": "stale",
-                    "reason": "input changed",
+                    "explanation": "The persisted verification identity no longer matches current inputs.",
+                    "mismatch_reasons": ["analysis_input_sha256"],
+                    "active_mapping_ids": ["map-1", "map-2"],
+                    "external_dependency_count": 1,
                 },
             ],
             "diagnostics": {
@@ -51,7 +54,10 @@ def test_verification_workspace_projection_preserves_canonical_currency_states()
     assert state["current"] == 1
     assert state["stale"] == 1
     assert state["not_verified"] == 1
-    assert state["rows"][1]["detail"] == "input changed"
+    assert "persisted verification identity" in state["rows"][1]["detail"]
+    assert "analysis_input_sha256" in state["rows"][1]["detail"]
+    assert state["rows"][1]["mapping_count"] == 2
+    assert state["rows"][1]["external_dependency_count"] == 1
     assert state["evidence_count"] == 5
 
 
@@ -95,3 +101,18 @@ def test_navigator_routes_verification_to_first_class_workspace(app):
 
     assert app.notebook.select() == str(app.verification_workspace)
     assert app.workspace_status_var.get() == "Workspace: Verification"
+
+
+def test_verification_workspace_projection_keeps_unverifiable_distinct_from_stale():
+    state = verification_workspace_projection(
+        {
+            "verification": {
+                "configured_analysis_count": 1,
+                "current_count": 0,
+                "stale_count": 0,
+                "not_verified_count": 0,
+                "dependency_freshness_unverifiable_count": 1,
+            }
+        }
+    )
+    assert state["state"] == "dependency freshness unverifiable"

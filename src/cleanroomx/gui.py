@@ -7206,10 +7206,10 @@ class CleanroomXApp:
         try:
             scan = scan_recovery_artifacts(self._autosave_manager.recovery_dir)
         except OSError as exc:
-            messagebox.showerror(
+            self._show_operation_error(
                 "Recovery scan failed",
-                str(exc),
-                parent=self.root,
+                "Scan recovery artifacts",
+                exc,
             )
             return False
         if not scan.candidates and not scan.issues:
@@ -7246,10 +7246,10 @@ class CleanroomXApp:
         try:
             scan = scan_project_revisions(self.project_path)
         except OSError as exc:
-            messagebox.showerror(
+            self._show_operation_error(
                 "Revision scan failed",
-                str(exc),
-                parent=self.root,
+                "Scan saved project revisions",
+                exc,
             )
             return False
         if not scan.revisions and not scan.issues:

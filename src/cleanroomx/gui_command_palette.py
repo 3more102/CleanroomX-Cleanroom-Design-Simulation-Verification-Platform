@@ -5,6 +5,8 @@ from collections.abc import Callable, Iterable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_display import configure_toplevel_geometry
+
 
 @dataclass(frozen=True)
 class PaletteCommand:
@@ -57,8 +59,13 @@ class CommandPalette(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("CleanroomX Commands")
-        self.geometry("720x470")
-        self.minsize(560, 340)
+        configure_toplevel_geometry(
+            self,
+            720,
+            470,
+            min_width=560,
+            min_height=340,
+        )
         self.transient(parent.winfo_toplevel())
         self._commands = list(commands)
         self._filtered: list[PaletteCommand] = []

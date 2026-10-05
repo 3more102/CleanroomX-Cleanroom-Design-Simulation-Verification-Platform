@@ -265,3 +265,43 @@ def test_global_search_opens_proofgraph_node_and_spatial_object(app):
     assert app.notebook.select() == str(workspace)
     assert workspace.selected == _Hit("room", room["id"])
     assert app.workspace_status_var.get() == "Workspace: Design"
+
+
+def test_proofgraph_zoom_fit_and_pan_are_view_only(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    before = copy.deepcopy(document)
+    viewer = app.proofgraph_viewer
+    viewer.set_documents([document])
+    app.root.update()
+
+    original_keys = set(viewer._nodes_by_key)
+    assert viewer.set_graph_zoom(1.5) == pytest.approx(1.5)
+    app.root.update()
+    assert viewer.zoom_var.get() == "150%"
+    assert set(viewer._nodes_by_key) == original_keys
+    assert viewer._documents[0] == before
+
+    event = type("Event", (), {"delta": -120, "num": None, "x": 120, "y": 90})()
+    viewer._on_graph_mousewheel(event)
+    app.root.update()
+    assert viewer._graph_zoom < 1.5
+    assert viewer._documents[0] == before
+
+    viewer.reset_graph_zoom()
+    assert viewer._graph_zoom == pytest.approx(1.0)
+    assert viewer.zoom_var.get() == "100%"
+
+    viewer.fit_graph()
+    app.root.update()
+    assert 0.6 <= viewer._graph_zoom <= 2.5
+    assert viewer._documents[0] == before
+
+    pan_start = type("Event", (), {"x": 100, "y": 100})()
+    pan_drag = type("Event", (), {"x": 130, "y": 120})()
+    viewer._start_graph_pan(pan_start)
+    assert viewer.canvas.cget("cursor") == "fleur"
+    viewer._drag_graph_pan(pan_drag)
+    viewer._end_graph_pan()
+    assert viewer.canvas.cget("cursor") == ""
+    assert viewer._documents[0] == before

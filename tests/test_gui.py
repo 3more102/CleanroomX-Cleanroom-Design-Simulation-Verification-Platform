@@ -1953,6 +1953,102 @@ def test_gui_project_requirements_verification_persists_adverse_evidence(
     assert "Adverse/incomplete verification persisted" in app.status_var.value
 
 
+def test_gui_project_requirements_verification_surfaces_reload_failure_after_durability_error(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="GUI verification durability failure",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    class Workflow:
+        analysis_name = "Room A verification"
+        source_revision = revision.sha256
+        workflow_sha256 = "c" * 64
+        verification = {
+            "status": "pass",
+            "complete": True,
+            "verified": True,
+            "verification_sha256": "d" * 64,
+            "summary": {
+                "pass_count": 1,
+                "fail_count": 0,
+                "not_checked_count": 0,
+            },
+        }
+
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda path, analysis_id: Workflow(),
+    )
+
+    def fail_after_commit(path, workflow):
+        raise gui_module.ProjectSaveDurabilityError(path, revision)
+
+    monkeypatch.setattr(
+        gui_module,
+        "persist_project_requirements_workflow_run",
+        fail_after_commit,
+    )
+
+    def fail_reload(_path):
+        raise RuntimeError("synthetic reload failure")
+
+    app.load_project_path = fail_reload
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app.persist_project_requirements_verification() is False
+
+    assert errors == []
+    assert warnings[-1][0] == "Verification save durability not confirmed"
+    assert "synthetic reload failure" in warnings[-1][1]
+    assert "may show an older project state" in warnings[-1][1]
+    assert revision.sha256 in warnings[-1][1]
+    assert "project reload failed" in app.status_var.value
+
 def test_verification_history_currency_context_applies_only_to_latest_record():
     latest_record = {
         "sequence": 9,

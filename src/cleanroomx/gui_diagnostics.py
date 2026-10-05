@@ -80,6 +80,7 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.severity_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.target_type_var = tk.StringVar(value="All")
+        self.rule_var = tk.StringVar(value="All")
         self.state_var = tk.StringVar(value="NOT CHECKED")
         self.error_var = tk.StringVar(value="0")
         self.warning_var = tk.StringVar(value="0")
@@ -108,9 +109,8 @@ class DiagnosticsWorkspace(ttk.Frame):
         filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         filters.pack(fill="x", pady=(0, 4))
         ttk.Label(filters, text="Search").pack(side="left")
-        ttk.Entry(filters, textvariable=self.search_var, width=24).pack(
-            side="left", padx=(4, 8)
-        )
+        self.search_entry = ttk.Entry(filters, textvariable=self.search_var, width=24)
+        self.search_entry.pack(side="left", padx=(4, 8))
         ttk.Label(filters, text="Severity").pack(side="left")
         ttk.Combobox(
             filters,
@@ -137,6 +137,29 @@ class DiagnosticsWorkspace(ttk.Frame):
             width=16,
         )
         self.target_combo.pack(side="left", padx=(4, 0))
+
+        rule_filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 4))
+        rule_filters.pack(fill="x", pady=(0, 4))
+        ttk.Label(rule_filters, text="Rule / code").pack(side="left")
+        self.rule_combo = ttk.Combobox(
+            rule_filters,
+            textvariable=self.rule_var,
+            values=("All",),
+            state="readonly",
+            width=34,
+        )
+        self.rule_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            rule_filters,
+            text="Reset filters",
+            style="CX.Compact.TButton",
+            command=self.clear_filters,
+        ).pack(side="left", padx=2)
+        ttk.Label(
+            rule_filters,
+            text="Exact rule filter · Search supports multiple terms",
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="left", padx=(10, 0))
 
         actions = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 4))
         actions.pack(fill="x", pady=(0, 8))
@@ -249,6 +272,7 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.severity_var.trace_add("write", lambda *_: self._populate())
         self.category_var.trace_add("write", lambda *_: self._populate())
         self.target_type_var.trace_add("write", lambda *_: self._populate())
+        self.rule_var.trace_add("write", lambda *_: self._populate())
 
     @staticmethod
     def _counter(
@@ -345,9 +369,18 @@ class DiagnosticsWorkspace(ttk.Frame):
                 severity=self.severity_var.get(),
                 category=self.category_var.get(),
                 target_type=self.target_type_var.get(),
+                rule=self.rule_var.get(),
                 query=self.search_var.get(),
             )
         ]
+
+    def clear_filters(self) -> None:
+        self.search_var.set("")
+        self.severity_var.set("All")
+        self.category_var.set("All")
+        self.target_type_var.set("All")
+        self.rule_var.set("All")
+        self.search_entry.focus_set()
 
     def _populate(self) -> None:
         selected = self.selected_issue()
@@ -447,10 +480,14 @@ class DiagnosticsWorkspace(ttk.Frame):
 
         categories = diagnostic_filter_options(state["issues"], "category")
         targets = diagnostic_filter_options(state["issues"], "target_type")
+        rules = diagnostic_filter_options(state["issues"], "rule")
         self.category_combo.configure(values=categories)
         self.target_combo.configure(values=targets)
+        self.rule_combo.configure(values=rules)
         if self.category_var.get() not in categories:
             self.category_var.set("All")
         if self.target_type_var.get() not in targets:
             self.target_type_var.set("All")
+        if self.rule_var.get() not in rules:
+            self.rule_var.set("All")
         self._populate()

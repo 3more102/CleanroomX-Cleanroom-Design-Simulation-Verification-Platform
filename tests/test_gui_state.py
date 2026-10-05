@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import cleanroomx.gui_state as gui_state_module
 from cleanroomx.gui_state import (
     GUI_LAYOUT_STATE_VERSION,
     clamp_window_size_to_display,
@@ -127,3 +128,33 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_gui_layout_state_oversize_falls_back_without_unbounded_read(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "gui-layout.json"
+    path.write_bytes(b'{"theme":"dark","padding":"' + (b"x" * 128) + b'"}')
+    monkeypatch.setattr(gui_state_module, "GUI_LAYOUT_STATE_MAX_BYTES", 64)
+
+    state = load_gui_layout_state(path)
+
+    assert state == normalize_gui_layout_state({})
+    assert state["theme"] == "light"
+
+
+def test_gui_layout_state_accepts_payload_at_configured_size_limit(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "gui-layout.json"
+    raw = b'{"theme":"dark"}'
+    path.write_bytes(raw)
+    monkeypatch.setattr(
+        gui_state_module,
+        "GUI_LAYOUT_STATE_MAX_BYTES",
+        len(raw),
+    )
+
+    state = load_gui_layout_state(path)
+
+    assert state["theme"] == "dark"

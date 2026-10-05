@@ -5493,6 +5493,14 @@ class CleanroomXApp:
             return
         self.selection_status_var.set(workspace.selection_status_text())
 
+    def _sync_proofgraph_spatial_selection(self, kind: str, item_id: str) -> bool:
+        if kind not in {"room", "device"} or not item_id:
+            return False
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return False
+        return bool(viewer.focus_node(f"model_object:{item_id}"))
+
     def _on_navigator_selected(self, event=None) -> None:
         if self._selection_guard:
             return
@@ -5506,6 +5514,7 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+                self._sync_proofgraph_spatial_selection(kind, spatial_id)
             return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()
@@ -5529,6 +5538,7 @@ class CleanroomXApp:
             return
         navigator_id = f"{kind}:{item_id}"
         self._sync_spatial_selection_status()
+        self._sync_proofgraph_spatial_selection(kind, item_id)
         if not tree.exists(navigator_id):
             self._refresh_spatial_navigator()
         if not tree.exists(navigator_id):

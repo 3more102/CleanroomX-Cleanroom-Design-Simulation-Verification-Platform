@@ -94,6 +94,8 @@ from .gui_theme import (
     normalize_theme_name,
 )
 from .gui_proofgraph import ProofGraphViewer
+from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
+from .gui_errors import record_gui_exception
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -374,6 +376,78 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
         text = json.dumps(value, ensure_ascii=False)
         rows.append((path, text, unit_hint(path)))
     return rows
+
+
+def structured_json_entries(
+    value,
+    path: str = "$",
+    tokens: tuple[str | int, ...] = (),
+) -> list[tuple[str, tuple[str | int, ...], object, str]]:
+    """Return deterministic leaf/container rows with unambiguous edit tokens."""
+    rows: list[tuple[str, tuple[str | int, ...], object, str]] = []
+    if isinstance(value, dict):
+        if not value:
+            rows.append((path, tokens, {}, ""))
+        for key, item in value.items():
+            child = f"{path}.{key}"
+            rows.extend(
+                structured_json_entries(item, child, (*tokens, str(key)))
+            )
+    elif isinstance(value, list):
+        if not value:
+            rows.append((path, tokens, [], ""))
+        for index, item in enumerate(value):
+            rows.extend(
+                structured_json_entries(
+                    item,
+                    f"{path}[{index}]",
+                    (*tokens, index),
+                )
+            )
+    else:
+        rows.append((path, tokens, copy.deepcopy(value), unit_hint(path)))
+    return rows
+
+
+def replace_structured_json_value(
+    payload: dict,
+    tokens: tuple[str | int, ...],
+    value,
+) -> dict:
+    """Return a detached payload with exactly one existing scalar leaf replaced."""
+    if not isinstance(payload, dict):
+        raise ValueError("analysis input must be a JSON object")
+    if not tokens:
+        raise ValueError("the analysis input root cannot be replaced")
+    if isinstance(value, (dict, list)):
+        raise ValueError("structured editing accepts scalar JSON values only")
+
+    updated = copy.deepcopy(payload)
+    target = updated
+    for token in tokens[:-1]:
+        if isinstance(token, int):
+            if not isinstance(target, list) or not (0 <= token < len(target)):
+                raise ValueError("structured input path no longer exists")
+            target = target[token]
+        else:
+            if not isinstance(target, dict) or token not in target:
+                raise ValueError("structured input path no longer exists")
+            target = target[token]
+
+    leaf = tokens[-1]
+    if isinstance(leaf, int):
+        if not isinstance(target, list) or not (0 <= leaf < len(target)):
+            raise ValueError("structured input path no longer exists")
+        if isinstance(target[leaf], (dict, list)):
+            raise ValueError("structured editing accepts scalar leaves only")
+        target[leaf] = copy.deepcopy(value)
+    else:
+        if not isinstance(target, dict) or leaf not in target:
+            raise ValueError("structured input path no longer exists")
+        if isinstance(target[leaf], (dict, list)):
+            raise ValueError("structured editing accepts scalar leaves only")
+        target[leaf] = copy.deepcopy(value)
+    return updated
 
 
 class AnalysisPicker(tk.Toplevel):
@@ -1698,6 +1772,40 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.item(self.requirements_root, open=opened)
         self.tree.item(self.mappings_root, open=opened)
 
+    def focus_requirement(self, requirement_id: str) -> bool:
+        """Reveal and focus one canonical requirement without mutating the registry."""
+        iid = f"requirement:{str(requirement_id).strip()}"
+        if iid not in self._traceability_rows:
+            return False
+        self.search_var.set("")
+        self.type_filter_var.set("All")
+        # Trace callbacks rebuild the tree synchronously; explicitly reattach for
+        # compatibility with lightweight/fake Tk variables used by unit tests.
+        row = self._traceability_rows[iid]
+        self.tree.move(iid, row["parent"], "end")
+        self.tree.item(self.requirements_root, open=True)
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected()
+        return True
+
+    def focus_mapping(self, mapping_id: str) -> bool:
+        """Reveal and focus one canonical requirement-to-evidence mapping."""
+        iid = f"mapping:{str(mapping_id).strip()}"
+        if iid not in self._traceability_rows:
+            return False
+        self.search_var.set("")
+        self.type_filter_var.set("All")
+        row = self._traceability_rows[iid]
+        self.tree.move(iid, row["parent"], "end")
+        self.tree.item(self.mappings_root, open=True)
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected()
+        return True
+
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -2916,6 +3024,23 @@ class CleanroomXApp:
 
         structured_tab = ttk.Frame(input_notebook)
         input_notebook.add(structured_tab, text="Structured")
+        structured_help = ttk.Frame(structured_tab, padding=(8, 6))
+        structured_help.pack(fill="x")
+        ttk.Label(
+            structured_help,
+            text=(
+                "Validated scalar editing · double-click or Enter to edit the selected "
+                "value; objects/arrays remain in the JSON editor."
+            ),
+        ).pack(side="left")
+        ttk.Button(
+            structured_help,
+            text="Edit value",
+            command=self._edit_structured_input_value,
+        ).pack(side="right")
+        self._structure_rows: dict[
+            str, tuple[tuple[str | int, ...], object, str]
+        ] = {}
         self.structure_tree = ttk.Treeview(
             structured_tab,
             columns=("value", "unit"),
@@ -2933,6 +3058,14 @@ class CleanroomXApp:
         self.structure_tree.configure(yscrollcommand=struct_scroll.set)
         self.structure_tree.pack(side="left", fill="both", expand=True)
         struct_scroll.pack(side="right", fill="y")
+        self.structure_tree.bind(
+            "<Double-1>",
+            lambda _event: self._edit_structured_input_value(),
+        )
+        self.structure_tree.bind(
+            "<Return>",
+            lambda _event: self._edit_structured_input_value(),
+        )
 
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
@@ -3439,6 +3572,10 @@ class CleanroomXApp:
         task_center = getattr(self, "task_center", None)
         if task_center is not None:
             task_center.apply_theme(self.theme_var.get())
+
+        proofgraph = getattr(self, "proofgraph_viewer", None)
+        if proofgraph is not None:
+            proofgraph.apply_theme(self.theme_var.get())
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -4102,20 +4239,41 @@ class CleanroomXApp:
             return
 
         if target_type == "requirement":
-            self.show_requirements_traceability()
+            self.show_requirements_traceability(target_id or None)
             self.selection_status_var.set(
                 f"Selected requirement: {target_id or entry.label}"
+            )
+            return
+
+        if target_type == "mapping":
+            self.show_requirements_traceability(mapping_id=target_id or None)
+            self.selection_status_var.set(
+                f"Selected evidence mapping: {target_id or entry.label}"
             )
             return
 
         if target_type == "evidence":
             self._activate_proofgraph_workspace()
             viewer = getattr(self, "proofgraph_viewer", None)
+            payload = entry.payload if isinstance(entry.payload, dict) else {}
+            focused = False
             if viewer is not None and target_id:
-                viewer.focus_node(target_id)
+                focused = viewer.focus_node(
+                    target_id,
+                    node_type=str(payload.get("type") or ""),
+                    graph_id=str(payload.get("_proofgraph_id") or ""),
+                    node_key=str(payload.get("_proofgraph_key") or ""),
+                )
             self.selection_status_var.set(f"Selected evidence: {entry.label}")
             self.status_var.set(
-                f"ProofGraph opened for search result: {entry.label}"
+                (
+                    f"ProofGraph focused on search result: {entry.label}"
+                    if focused
+                    else (
+                        "ProofGraph opened; search target is not present in the "
+                        f"active persisted graph: {entry.label}"
+                    )
+                )
             )
             return
 
@@ -4519,6 +4677,22 @@ class CleanroomXApp:
         self._refresh_start_center()
         self._save_ui_layout_state()
 
+    def _show_operation_error(
+        self,
+        title: str,
+        operation: str,
+        exc: BaseException,
+    ):
+        """Report a GUI-boundary failure without leaking stack traces to dialogs."""
+        report = record_gui_exception(operation, exc)
+        self.status_var.set(f"{operation} failed · {report.reference}")
+        messagebox.showerror(
+            title,
+            report.user_message(),
+            parent=self.root,
+        )
+        return report
+
     def _open_recent_project_from_start(self, path: str) -> None:
         if self._running:
             messagebox.showwarning(
@@ -4541,7 +4715,7 @@ class CleanroomXApp:
         try:
             self.load_project_path(candidate)
         except Exception as exc:
-            messagebox.showerror("Open failed", str(exc), parent=self.root)
+            self._show_operation_error("Open failed", "Open project", exc)
 
     def _open_bundled_demo_from_start(self) -> None:
         if self._running:
@@ -4556,7 +4730,11 @@ class CleanroomXApp:
         try:
             self.load_project_path(bundled_demo_project_path())
         except Exception as exc:
-            messagebox.showerror("Open example failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "Open example failed",
+                "Open bundled demonstration project",
+                exc,
+            )
 
     def _import_ifc_from_start(self) -> None:
         if self.import_ifc_spatial_layout():
@@ -5094,7 +5272,11 @@ class CleanroomXApp:
         )
         return True
 
-    def show_requirements_traceability(self) -> bool:
+    def show_requirements_traceability(
+        self,
+        requirement_id: str | None = None,
+        mapping_id: str | None = None,
+    ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
         except (
@@ -5120,7 +5302,27 @@ class CleanroomXApp:
             )
             return False
 
-        RequirementsTraceabilityDialog(self.root, snapshot)
+        dialog = RequirementsTraceabilityDialog(self.root, snapshot)
+        if requirement_id:
+            focused = dialog.focus_requirement(requirement_id)
+            if focused:
+                self.status_var.set(
+                    f"Requirements traceability focused on {requirement_id}"
+                )
+            else:
+                self.status_var.set(
+                    f"Requirements traceability opened; {requirement_id} is not present"
+                )
+        elif mapping_id:
+            focused = dialog.focus_mapping(mapping_id)
+            if focused:
+                self.status_var.set(
+                    f"Requirements traceability focused on mapping {mapping_id}"
+                )
+            else:
+                self.status_var.set(
+                    f"Requirements traceability opened; mapping {mapping_id} is not present"
+                )
         return True
 
     def _project_verification_target(
@@ -5236,10 +5438,10 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("Project requirements verification failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project requirements verification failed",
-                str(exc),
-                parent=self.root,
+                "Verify project requirements",
+                exc,
             )
             return False
 
@@ -5299,10 +5501,10 @@ class CleanroomXApp:
             return False
         except Exception as exc:
             self.status_var.set("Project verification persistence failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project verification persistence failed",
-                str(exc),
-                parent=self.root,
+                "Persist project verification evidence",
+                exc,
             )
             return False
 
@@ -5310,12 +5512,26 @@ class CleanroomXApp:
             self.load_project_path(project_path)
         except Exception as exc:
             self.status_var.set("Verification persisted; project reload failed")
+            report = record_gui_exception(
+                "Reload project after persisted verification",
+                exc,
+            )
+            self.status_var.set(
+                "Verification persisted; project reload failed · "
+                f"{report.reference}"
+            )
             messagebox.showerror(
                 "Verification persisted; reload failed",
                 (
-                    f"The verification record was committed, but the project could "
-                    f"not be reloaded into the desktop session.\n\n{exc}\n\n"
-                    f"Record SHA-256: {persisted.record['record_sha256']}"
+                    "The verification record was committed, but the project could "
+                    "not be reloaded into the desktop session.\n\n"
+                    f"Record SHA-256: {persisted.record['record_sha256']}\n"
+                    f"Error reference: {report.reference}\n"
+                    + (
+                        f"Technical log: {report.log_path}"
+                        if report.log_path is not None
+                        else "Technical logging was unavailable."
+                    )
                 ),
                 parent=self.root,
             )
@@ -6475,36 +6691,23 @@ class CleanroomXApp:
             preview = layout_from_ifc_semantics(semantics)
         except Exception as exc:
             self.status_var.set("IFC import failed")
-            messagebox.showerror("IFC import failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "IFC import failed",
+                "Parse and preview IFC baseline",
+                exc,
+            )
             return False
 
         existing_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
-        has_existing_layout = bool(
-            isinstance(existing_layout, dict)
-            and (existing_layout.get("rooms") or existing_layout.get("devices"))
-        )
-        if has_existing_layout:
-            warning = (
-                "This project already contains an unlinked spatial layout. The IFC "
-                "import will replace that spatial layout and establish a new IFC "
-                "identity baseline."
-            )
-        else:
-            warning = "This will establish the project's first IFC identity baseline."
-
-        confirmed = messagebox.askyesno(
-            "Import IFC spatial layout?",
-            (
-                f"{warning}\n\n"
-                f"Source: {provenance['source_name']}\n"
-                f"Rooms: {len(preview['rooms'])}\n"
-                f"Devices: {len(preview['devices'])}\n"
-                f"Source SHA-256: {provenance['source_sha256']}\n\n"
-                "Engineering analysis inputs are not changed automatically. Continue?"
+        review_snapshot = ifc_import_review_snapshot(
+            semantics,
+            provenance,
+            preview,
+            existing_layout=(
+                existing_layout if isinstance(existing_layout, dict) else None
             ),
-            parent=self.root,
         )
-        if not confirmed:
+        if not show_ifc_import_review(self.root, review_snapshot):
             self.status_var.set("IFC import cancelled")
             return False
 
@@ -6525,7 +6728,11 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC import failed")
-            messagebox.showerror("IFC import failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "IFC import failed",
+                "Apply reviewed IFC baseline",
+                exc,
+            )
             return False
 
         self._refresh_after_ifc_edit()
@@ -6568,10 +6775,10 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC re-import review failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "IFC re-import review failed",
-                str(exc),
-                parent=self.root,
+                "Review IFC re-import plan",
+                exc,
             )
             return None
 
@@ -6617,10 +6824,10 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC re-import planning failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "IFC re-import planning failed",
-                str(exc),
-                parent=self.root,
+                "Plan IFC re-import",
+                exc,
             )
             return False
 
@@ -6668,7 +6875,11 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC re-import failed")
-            messagebox.showerror("IFC re-import failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "IFC re-import failed",
+                "Apply reviewed IFC re-import",
+                exc,
+            )
             return False
 
         self._refresh_after_ifc_edit()
@@ -6798,9 +7009,113 @@ class CleanroomXApp:
         else:
             self.status_var.set("Spatial geometry already matches the active analysis")
 
+    def _edit_structured_input_value(self) -> bool:
+        if self._running:
+            self.status_var.set("Structured input edit blocked while analysis is running")
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before editing analysis inputs.",
+                parent=self.root,
+            )
+            return False
+
+        selection = self.structure_tree.selection()
+        if not selection:
+            self.status_var.set("Select a structured input value to edit")
+            return False
+        row = self._structure_rows.get(selection[0])
+        if row is None:
+            return False
+        tokens, current_value, unit = row
+        if isinstance(current_value, (dict, list)):
+            self.status_var.set(
+                "Structured editing is limited to scalar values; use the JSON editor "
+                "for objects and arrays"
+            )
+            return False
+
+        path = str(self.structure_tree.item(selection[0], "text"))
+        initial = json.dumps(
+            current_value,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        prompt = (
+            f"{path}"
+            + (f"  [{unit}]" if unit else "")
+            + "\n\nEnter one JSON scalar value (text must be quoted):"
+        )
+        raw = simpledialog.askstring(
+            "Edit structured analysis input",
+            prompt,
+            initialvalue=initial,
+            parent=self.root,
+        )
+        if raw is None:
+            return False
+
+        try:
+            replacement = _strict_json_loads(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            messagebox.showerror(
+                "Invalid structured value",
+                f"Enter one valid JSON scalar value.\n\n{exc}",
+                parent=self.root,
+            )
+            return False
+        if isinstance(replacement, (dict, list)):
+            messagebox.showerror(
+                "Structured edit not supported",
+                "Objects and arrays must be edited in the JSON editor.",
+                parent=self.root,
+            )
+            return False
+
+        text = self.input_text.get("1.0", "end-1c").strip()
+        try:
+            payload = _strict_json_loads(text)
+            candidate = replace_structured_json_value(payload, tokens, replacement)
+            analysis = self._editor_analysis() or self._current_analysis()
+            if analysis is None:
+                raise ValueError("select or add an analysis first")
+            validate_analysis_input(
+                analysis.kind,
+                candidate,
+                base_dir=self._base_dir(),
+            )
+        except Exception as exc:
+            self.status_var.set("Structured input edit rejected by analysis validation")
+            messagebox.showerror(
+                "Analysis input rejected",
+                (
+                    "The candidate value was not applied because the authoritative "
+                    f"analysis parser/validator rejected the complete input.\n\n{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+
+        serialized = json.dumps(
+            candidate,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        self.input_text.edit_separator()
+        self.input_text.delete("1.0", "end")
+        self.input_text.insert("1.0", serialized)
+        self.input_text.edit_modified(True)
+        self.input_text.edit_separator()
+        self.refresh_structure(silent=True)
+        self.status_var.set(
+            f"Updated {path}; validate/run or save to commit the edited analysis input"
+        )
+        return True
+
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():
             self.structure_tree.delete(item)
+        self._structure_rows.clear()
         text = self.input_text.get("1.0", "end-1c").strip()
         if not text:
             return
@@ -6815,11 +7130,25 @@ class CleanroomXApp:
                 )
                 messagebox.showerror("Invalid JSON", detail, parent=self.root)
             return
-        for index, (path, value, unit) in enumerate(flatten_json(payload)):
-            display = value if len(value) <= 160 else value[:157] + "..."
-            self.structure_tree.insert(
-                "", "end", iid=f"row-{index}", text=path, values=(display, unit)
+        for index, (path, tokens, raw_value, unit) in enumerate(
+            structured_json_entries(payload)
+        ):
+            value = json.dumps(
+                raw_value,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
             )
+            display = value if len(value) <= 160 else value[:157] + "..."
+            iid = f"row-{index}"
+            self.structure_tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=path,
+                values=(display, unit),
+            )
+            self._structure_rows[iid] = (tokens, copy.deepcopy(raw_value), unit)
 
     def restore_recovery_path(self, path: str | Path) -> None:
         recovered = restore_recovery_artifact(path)
@@ -7042,7 +7371,7 @@ class CleanroomXApp:
             try:
                 self.load_project_path(path)
             except Exception as exc:
-                messagebox.showerror("Open failed", str(exc), parent=self.root)
+                self._show_operation_error("Open failed", "Open project", exc)
 
     def open_portable_project_bundle(self) -> None:
         if self._running:
@@ -7481,7 +7810,7 @@ class CleanroomXApp:
             self._report_external_save_conflict(self.project_path)
             return
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc), parent=self.root)
+            self._show_operation_error("Save failed", "Save project", exc)
             return
 
         self.project_path = saved_path
@@ -7645,7 +7974,7 @@ class CleanroomXApp:
             self._report_external_save_conflict(destination)
             return
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc), parent=self.root)
+            self._show_operation_error("Save failed", "Save project as", exc)
             return
 
         self.project = candidate
@@ -7890,10 +8219,10 @@ class CleanroomXApp:
                 )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 f"{label} export failed",
-                str(exc),
-                parent=self.root,
+                f"Export {label.lower()}",
+                exc,
             )
             return False
         self.status_var.set(f"Exported {label.lower()} — {target.name}")

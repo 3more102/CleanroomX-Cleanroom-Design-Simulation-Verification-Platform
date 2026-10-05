@@ -3454,17 +3454,22 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered == _Hit("room", room["id"])
+            warning_color = status_tokens("warning", self._theme_name)["accent"]
             outline = (
-                "#1d4ed8"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#0ea5e9"
+                    self._theme_palette["accent_hover"]
                     if hovered
-                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                    else (
+                        warning_color
+                        if room["id"] in warning_ids
+                        else self._theme_palette["border"]
+                    )
                 )
             )
             fill = (
-                overlay_by_room[room["id"]]["fill"]
+                self._overlay_room_fill(overlay_by_room[room["id"]], overlay)
                 if overlay_mode != "none"
                 else self._theme_palette["surface_alt"]
             )
@@ -3874,19 +3879,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x0, y1, z1),
             ]
             fill = (
-                overlay_by_room[room["id"]]["fill"]
+                self._overlay_room_fill(overlay_by_room[room["id"]], overlay)
                 if overlay_mode != "none"
-                else "#dfe7ef"
+                else self._theme_palette["surface_alt"]
             )
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered_3d == _Hit("room", room["id"])
+            warning_color = status_tokens("warning", self._theme_name)["accent"]
             outline = (
-                "#7dd3fc"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#38bdf8"
+                    self._theme_palette["accent_hover"]
                     if hovered
-                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                    else (
+                        warning_color
+                        if room["id"] in warning_ids
+                        else self._theme_palette["border"]
+                    )
                 )
             )
             tag = f"room:{room['id']}"
@@ -4003,6 +4013,38 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._draw_engineering_legend(canvas, overlay)
 
+    def _overlay_room_fill(self, record: dict, overlay: dict) -> str:
+        """Adapt display-only engineering overlays to the active workstation theme."""
+        if str(getattr(self, "_theme_name", "light")).strip().lower() != "dark":
+            return str(record.get("fill") or self._theme_palette["surface_alt"])
+
+        status = _engineering_status(record.get("status"))
+        if status in {"pass", "fail", "warning", "warn"}:
+            semantic = "warning" if status == "warn" else status
+            return status_tokens(semantic, "dark")["background"]
+
+        value = record.get("value")
+        if value is None:
+            value = record.get("pressure_pa")
+        minimum = overlay.get("minimum")
+        maximum = overlay.get("maximum")
+        if (
+            isinstance(value, (int, float))
+            and math.isfinite(float(value))
+            and isinstance(minimum, (int, float))
+            and math.isfinite(float(minimum))
+            and isinstance(maximum, (int, float))
+            and math.isfinite(float(maximum))
+        ):
+            return _scalar_fill(
+                float(value),
+                float(minimum),
+                float(maximum),
+                low_rgb=(20, 32, 52),
+                high_rgb=(14, 116, 144),
+            )
+        return self._theme_palette["surface_alt"]
+
     def _update_overlay_summary(self, overlay: dict) -> None:
         mode = str(overlay.get("mode") or "none")
         if mode == "none":
@@ -4026,33 +4068,40 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         x0, y0 = 12, 12
         width = 188
+        legend_fill = self._theme_palette["panel"]
+        legend_border = self._theme_palette["border"]
+        legend_text = self._theme_palette["text"]
+        legend_muted = self._theme_palette["muted"]
         if mode == "status":
             height = 104
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + height,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=legend_fill, outline=legend_border, tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text="Verification Status", fill="#0f172a",
+                text="Verification Status", fill=legend_text,
                 tags=("overlay_legend",),
             )
-            for index, (label, fill) in enumerate(
+            for index, (label, semantic) in enumerate(
                 (
-                    ("PASS", "#dcfce7"),
-                    ("WARNING", "#fef3c7"),
-                    ("FAIL", "#fee2e2"),
-                    ("NOT VERIFIED", "#e2e8f0"),
+                    ("PASS", "pass"),
+                    ("WARNING", "warning"),
+                    ("FAIL", "fail"),
+                    ("NOT VERIFIED", "unverified"),
                 )
             ):
+                tokens = status_tokens(semantic, self._theme_name)
                 y = y0 + 30 + index * 17
                 canvas.create_rectangle(
                     x0 + 8, y, x0 + 20, y + 10,
-                    fill=fill, outline="#64748b", tags=("overlay_legend",),
+                    fill=tokens["background"],
+                    outline=tokens["accent"],
+                    tags=("overlay_legend",),
                 )
                 canvas.create_text(
                     x0 + 28, y + 5, anchor="w",
-                    text=label, fill="#334155", tags=("overlay_legend",),
+                    text=label, fill=legend_muted, tags=("overlay_legend",),
                 )
         else:
             minimum = overlay.get("minimum")
@@ -4061,11 +4110,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             title = str(overlay.get("title") or mode.title())
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + 64,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=legend_fill, outline=legend_border, tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text=title, fill="#0f172a", tags=("overlay_legend",),
+                text=title, fill=legend_text, tags=("overlay_legend",),
             )
             if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
                 suffix = f" {unit}" if unit else ""
@@ -4074,7 +4123,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = "No result values available"
             canvas.create_text(
                 x0 + 8, y0 + 34, anchor="nw",
-                text=text, fill="#334155", tags=("overlay_legend",),
+                text=text, fill=legend_muted, tags=("overlay_legend",),
             )
         canvas.tag_raise("overlay_legend")
 

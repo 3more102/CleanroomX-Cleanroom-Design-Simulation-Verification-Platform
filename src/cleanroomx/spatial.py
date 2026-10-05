@@ -1604,7 +1604,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ] | None = None,
         on_undo_requested: Callable[[], bool] | None = None,
         on_redo_requested: Callable[[], bool] | None = None,
-        on_selection_change: Callable[[str, str], None] | None = None,
+        on_selection_change: Callable[[str | None, str | None], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
     ):
         super().__init__(master)
@@ -2441,9 +2441,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             callback(self.viewport_status_text())
 
     def _notify_selection_change(self) -> None:
-        if self.selected is None or self._on_selection_change is None:
+        callback = self._on_selection_change
+        if callback is None:
             return
-        self._on_selection_change(self.selected.kind, self.selected.item_id)
+        if self.selected is None:
+            callback(None, None)
+            return
+        callback(self.selected.kind, self.selected.item_id)
 
     def refresh(self) -> None:
         # A refresh may replace the canonical project/layout beneath an active
@@ -4619,11 +4623,11 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_3d_click(self, event: tk.Event) -> None:
         current = self.canvas_3d.find_withtag("current")
-        if not current:
-            return
-        hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
-        if hit is None:
-            return
+        hit = (
+            self._parse_hit(self.canvas_3d.gettags(current[0]))
+            if current
+            else None
+        )
         self.selected = hit
         self._load_property_panel()
         self._notify_selection_change()

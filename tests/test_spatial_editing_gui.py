@@ -174,6 +174,28 @@ def test_project_navigator_and_workspace_selection_stay_synchronized(app):
     assert app.analysis_tree.selection() == (f"room:{other['id']}",)
 
 
+def test_workspace_deselection_clears_navigator_status_and_inspector(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    navigator_id = f"room:{room['id']}"
+
+    workspace.select_item("room", room["id"], notify=True)
+    app.root.update()
+
+    assert app.analysis_tree.selection() == (navigator_id,)
+    assert app.selection_status_var.get().startswith("Room:")
+    assert workspace._property_draft_var.get() == "Draft: matches stored values"
+
+    workspace.selected = None
+    workspace._load_property_panel()
+    workspace._notify_selection_change()
+    app.root.update()
+
+    assert app.analysis_tree.selection() == ()
+    assert app.selection_status_var.get() == "Selected: —"
+    assert workspace._property_draft_var.get() == "Draft: select an object"
+
+
 def test_contextual_inspector_hides_irrelevant_fields(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

@@ -1996,15 +1996,26 @@ class IfcReimportPlanDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, report: dict):
         super().__init__(parent)
         self.title("IFC Re-import Plan")
-        dialog_width, _dialog_height = configure_toplevel_geometry(
+        configure_toplevel_geometry(
             self,
-            1040,
-            620,
-            min_width=780,
-            min_height=460,
+            1100,
+            720,
+            min_width=820,
+            min_height=520,
         )
         self.transient(parent)
         self.grab_set()
+
+        self.changes = [
+            item
+            for item in report.get("changes", ())
+            if isinstance(item, dict)
+        ]
+        self._change_by_iid: dict[str, dict] = {}
+        self.search_var = tk.StringVar()
+        self.action_filter_var = tk.StringVar(value="All")
+        self.kind_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
 
         can_apply = bool(report.get("can_apply"))
         conflict_count = int(report.get("conflict_count", 0))
@@ -2029,13 +2040,75 @@ class IfcReimportPlanDialog(tk.Toplevel):
         ttk.Label(
             self,
             text=summary_text,
-            wraplength=max(320, dialog_width - 60),
+            wraplength=1060,
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
-        frame = ttk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=12, pady=4)
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=12, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=30,
+        )
+        self.search_entry.pack(side="left", padx=(4, 8))
+
+        actions = sorted(
+            {
+                str(item.get("action", "")).strip()
+                for item in self.changes
+                if str(item.get("action", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Action").pack(side="left")
+        self.action_combo = ttk.Combobox(
+            filters,
+            textvariable=self.action_filter_var,
+            values=("All", *actions),
+            state="readonly",
+            width=14,
+        )
+        self.action_combo.pack(side="left", padx=(4, 8))
+
+        kinds = sorted(
+            {
+                str(item.get("kind", "")).strip()
+                for item in self.changes
+                if str(item.get("kind", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Kind").pack(side="left")
+        self.kind_combo = ttk.Combobox(
+            filters,
+            textvariable=self.kind_filter_var,
+            values=("All", *kinds),
+            state="readonly",
+            width=14,
+        )
+        self.kind_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Copy change",
+            command=self._copy_selected,
+        ).pack(side="left", padx=(10, 0))
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=12, pady=4)
+        table_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(table_frame, weight=3)
+        body.add(detail_frame, weight=2)
+
         self.tree = ttk.Treeview(
-            frame,
+            table_frame,
             columns=("action", "kind", "spatial", "local", "source"),
             show="tree headings",
         )

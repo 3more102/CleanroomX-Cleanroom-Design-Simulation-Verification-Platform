@@ -159,9 +159,9 @@ class StartCenter(ttk.Frame):
         scroll.grid(row=0, column=1, sticky="ns")
         self.recent_tree.bind("<Double-1>", self._open_selected_recent)
         self.recent_tree.bind("<Return>", self._open_selected_recent)
-        footer = ttk.Frame(recent)
+        footer = ttk.Frame(recent, style="CX.Panel.TFrame")
         footer.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        self.recent_hint = ttk.Label(footer, text="No recent projects in this session.")
+        self.recent_hint = ttk.Label(\n            footer,\n            text="No recent projects in this session.",\n            style="CX.PanelMuted.TLabel",\n        )
         self.recent_hint.pack(side="left")
         ttk.Button(
             footer,
@@ -185,7 +185,7 @@ class StartCenter(ttk.Frame):
         ttk.Label(
             examples,
             text="Bundled CleanroomX Demo",
-            style="CX.Section.TLabel",
+            style="CX.PanelSection.TLabel",
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
             examples,
@@ -193,6 +193,7 @@ class StartCenter(ttk.Frame):
                 "Open the packaged demo project to explore the project browser, "
                 "2D/3D workspace, analyses, diagnostics, verification, and evidence."
             ),
+            style="CX.PanelMuted.TLabel",
             wraplength=760,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))

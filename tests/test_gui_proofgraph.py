@@ -5,6 +5,7 @@ import copy
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    _clamp_graph_zoom,
     _filtered_projection,
     _search_projection,
     proofgraph_projection,
@@ -280,3 +281,12 @@ def test_proofgraph_search_keeps_one_hop_traceability_context():
     assert _search_projection(projection, "") == projection
     absent = _search_projection(projection, "definitely-not-present-7f196b")
     assert absent == {"nodes": [], "edges": []}
+
+
+
+def test_proofgraph_zoom_bounds_are_deterministic():
+    assert _clamp_graph_zoom(0.01) == 0.5
+    assert _clamp_graph_zoom(0.5) == 0.5
+    assert _clamp_graph_zoom(1.25) == 1.25
+    assert _clamp_graph_zoom(2.5) == 2.5
+    assert _clamp_graph_zoom(9.0) == 2.5

@@ -140,12 +140,23 @@ class StartCenter(ttk.Frame):
             health,
             textvariable=self.project_evidence_var,
         ).grid(row=5, column=0, sticky="w", pady=(7, 0))
+        recovery_row = ttk.Frame(health)
+        recovery_row.grid(row=6, column=0, sticky="ew", pady=(4, 0))
+        recovery_row.columnconfigure(0, weight=1)
         self.project_recovery_label = ttk.Label(
-            health,
+            recovery_row,
             textvariable=self.project_recovery_var,
             style="CX.Status.Neutral.TLabel",
         )
-        self.project_recovery_label.grid(row=6, column=0, sticky="w", pady=(4, 0))
+        self.project_recovery_label.grid(row=0, column=0, sticky="w")
+        self.recovery_button = ttk.Button(
+            recovery_row,
+            text="Recovery…",
+            style="CX.Compact.TButton",
+            command=self._open_recovery,
+            state="normal" if self._on_show_recovery is not None else "disabled",
+        )
+        self.recovery_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         workspace_actions = ttk.Frame(health)
         workspace_actions.grid(row=7, column=0, sticky="ew", pady=(10, 0))
@@ -173,21 +184,14 @@ class StartCenter(ttk.Frame):
                 padx=2,
                 pady=2,
             )
-        ttk.Button(
+        self.problems_button = ttk.Button(
             workspace_actions,
             text="Problems",
             style="CX.Compact.TButton",
             command=self._open_problems,
             state="normal" if self._on_show_problems is not None else "disabled",
-        ).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
-        recovery_button = ttk.Button(
-            health,
-            text="Recovery…",
-            style="CX.Compact.TButton",
-            command=self._open_recovery,
-            state="normal" if self._on_show_recovery is not None else "disabled",
         )
-        recovery_button.grid(row=6, column=0, sticky="e", padx=(0, 2), pady=(2, 0))
+        self.problems_button.grid(row=1, column=2, sticky="ew", padx=2, pady=2)
 
         recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
         recent.grid(
@@ -221,17 +225,19 @@ class StartCenter(ttk.Frame):
 
         self.recent_tree = ttk.Treeview(
             recent,
-            columns=("path", "modified"),
+            columns=("path", "status", "modified"),
             show="tree headings",
             height=4,
             selectmode="browse",
         )
         self.recent_tree.heading("#0", text="Project")
         self.recent_tree.heading("path", text="Path")
+        self.recent_tree.heading("status", text="Status")
         self.recent_tree.heading("modified", text="Modified")
-        self.recent_tree.column("#0", width=220, minwidth=140)
-        self.recent_tree.column("path", width=520, minwidth=240)
-        self.recent_tree.column("modified", width=150, minwidth=110, stretch=False)
+        self.recent_tree.column("#0", width=190, minwidth=130)
+        self.recent_tree.column("path", width=440, minwidth=210)
+        self.recent_tree.column("status", width=95, minwidth=80, stretch=False)
+        self.recent_tree.column("modified", width=135, minwidth=105, stretch=False)
         scroll = ttk.Scrollbar(recent, orient="vertical", command=self.recent_tree.yview)
         self.recent_tree.configure(yscrollcommand=scroll.set)
         self.recent_tree.grid(row=1, column=0, sticky="nsew")
@@ -431,6 +437,7 @@ class StartCenter(ttk.Frame):
                 {
                     "name": str(record.get("name") or path),
                     "path": path,
+                    "status": str(record.get("status") or "Available"),
                     "modified": str(record.get("modified") or "—"),
                 }
             )
@@ -448,6 +455,7 @@ class StartCenter(ttk.Frame):
                 (
                     record["name"],
                     record["path"],
+                    record["status"],
                     record["modified"],
                 )
             ).casefold()
@@ -473,7 +481,11 @@ class StartCenter(ttk.Frame):
                 "end",
                 iid=iid,
                 text=record["name"],
-                values=(record["path"], record["modified"]),
+                values=(
+                    record["path"],
+                    record["status"],
+                    record["modified"],
+                ),
             )
 
         total = len(self._recent_records)

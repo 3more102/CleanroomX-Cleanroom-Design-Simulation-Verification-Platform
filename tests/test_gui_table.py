@@ -155,3 +155,51 @@ def test_table_behavior_optional_bindings_preserve_screen_specific_handlers(root
     assert "_context_menu" not in str(tree.bind("<Button-3>"))
     behavior.prepare_columns_menu()
     assert behavior.columns_menu.winfo_exists()
+
+def test_table_behavior_layout_state_restores_visibility_width_and_sort(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+    tree.column("name", width=260)
+    assert behavior.set_column_visible("value", False)
+    behavior.sort_by("name")
+
+    state = behavior.layout_state()
+    assert state["visible_columns"] == ["name"]
+    assert state["column_widths"]["name"] == 260
+    assert state["sort_column"] == "name"
+    assert state["sort_descending"] is False
+
+    tree.column("name", width=90)
+    behavior.show_all_columns()
+    behavior.sort_by("value")
+
+    assert behavior.apply_layout_state(state)
+    assert behavior.visible_columns() == ("name",)
+    assert int(tree.column("name", "width")) == 260
+    assert behavior.sort_column == "name"
+    assert behavior.sort_descending is False
+    assert tree.get_children("") == ("a", "b", "missing")
+
+
+def test_table_behavior_rejects_invalid_layout_state_without_unknown_columns(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    assert behavior.apply_layout_state(
+        {
+            "visible_columns": ["unknown"],
+            "column_widths": {"unknown": 500, "name": 10},
+            "sort_column": "unknown",
+            "sort_descending": "yes",
+        }
+    ) is False
+    assert behavior.visible_columns() == ("name", "value")
+    assert int(tree.column("name", "width")) >= 24
+    assert behavior.sort_column is None
+

@@ -86,3 +86,27 @@ def test_workspace_profiles_route_first_class_views_and_panel_visibility(app):
     assert app.navigator_panel_visible_var.get() is False
     assert app.output_panel_visible_var.get() is True
     assert app._capture_ui_layout_state()["workspace_profile"] == "reporting"
+
+def test_fullscreen_workspace_is_explicit_reversible_window_state(app):
+    app.set_fullscreen_workspace(True)
+    app.root.update_idletasks()
+
+    assert app.fullscreen_var.get() is True
+    assert bool(app.root.attributes("-fullscreen")) is True
+    assert "Full-screen workspace enabled" in app.status_var.get()
+
+    app.exit_fullscreen_workspace()
+    app.root.update_idletasks()
+
+    assert app.fullscreen_var.get() is False
+    assert bool(app.root.attributes("-fullscreen")) is False
+
+
+def test_command_palette_exposes_workspace_window_controls(app):
+    commands = {command.command_id: command for command in app._command_palette_commands()}
+
+    assert "workspace.fullscreen" in commands
+    assert commands["workspace.fullscreen"].shortcut == "F11"
+    assert "workspace.reset" in commands
+    assert commands["workspace.reset"].label == "Reset Panel Layout"
+

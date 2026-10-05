@@ -4,7 +4,11 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    _searched_projection,
+    proofgraph_projection,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +239,18 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+def test_proofgraph_search_keeps_matches_and_immediate_trace_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _searched_projection(projection, "pressure below")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "finding:finding-pressure" in keys
+    assert "check:check-pressure" in keys
+    assert "verdict:verdict-pressure" in keys
+    assert "verification_run:run-1" not in keys
+
+    no_match = _searched_projection(projection, "definitely-not-present")
+    assert no_match == {"nodes": [], "edges": []}

@@ -15,6 +15,7 @@ def _text(relative: str) -> str:
 def test_required_production_workflows_are_least_privilege_and_credentialless() -> None:
     for relative in (
         ".github/workflows/ci.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/security.yml",
         ".github/workflows/windows-installer.yml",
         ".github/workflows/windows-standalone.yml",

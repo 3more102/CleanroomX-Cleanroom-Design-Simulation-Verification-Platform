@@ -122,6 +122,7 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
     configure_ttk_theme(root, "dark")
     history_calls = []
     duplicate_calls = []
+    selection_calls = []
     workspace = SimulationWorkspace(
         root,
         on_run=lambda: None,
@@ -131,8 +132,16 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
         on_open_results=lambda: None,
         on_open_history=lambda: history_calls.append(True),
         on_duplicate_analysis=lambda: duplicate_calls.append(True),
+        on_select_analysis=lambda analysis_id: selection_calls.append(analysis_id),
     )
     try:
+        workspace.set_analysis_options(
+            (
+                ("analysis-a", "Airflow Balance", "airflow_balance"),
+                ("analysis-b", "Pressure Variant", "pressure_cascade"),
+            ),
+            active_id="analysis-a",
+        )
         workspace.set_context(
             analysis_name="Airflow Balance",
             analysis_kind="airflow_balance",
@@ -169,8 +178,12 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
         assert workspace.verification_var.get() == "Separate verification workspace"
         workspace.history_button.invoke()
         workspace.duplicate_button.invoke()
+        workspace.scenario_combo.current(1)
+        workspace.scenario_combo.event_generate("<<ComboboxSelected>>")
+        root.update_idletasks()
         assert history_calls == [True]
         assert duplicate_calls == [True]
+        assert selection_calls == ["analysis-b"]
     finally:
         root.destroy()
 
@@ -265,6 +278,26 @@ def test_duplicate_current_analysis_creates_independent_scenario_without_run_cac
     assert duplicate.input is not source.input
     assert duplicate.id not in app._runs_by_analysis
     assert app.project.active_analysis_id == duplicate.id
+
+
+
+
+def test_simulation_scenario_selection_routes_through_canonical_analysis_switch(app):
+    source = app._editor_analysis()
+    assert source is not None
+    original_id = source.id
+    assert app.duplicate_current_analysis() is True
+    duplicate = app._editor_analysis()
+    assert duplicate is not None
+    assert duplicate.id != original_id
+
+    app._select_analysis_from_simulation(original_id)
+    app.root.update_idletasks()
+
+    assert app._editor_analysis_id == original_id
+    assert app.project.active_analysis_id == original_id
+    assert app.notebook.select() == str(app.simulation_workspace)
+    assert original_id in app.simulation_workspace.scenario_var.get()
 
 
 def test_canonical_demo_run_populates_simulation_summary(app):

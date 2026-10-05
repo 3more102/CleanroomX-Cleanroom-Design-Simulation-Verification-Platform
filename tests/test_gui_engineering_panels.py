@@ -113,6 +113,31 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     assert app.notebook.select() == str(app.spatial_workspace)
 
 
+def test_problem_category_filter_and_relative_navigation(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    category = str(issue["category"])
+    panel.category_var.set(category)
+    app.root.update()
+
+    visible = panel.tree.get_children()
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid]["category"]) == category
+        for iid in visible
+    )
+    assert panel.visible_var.get().endswith("/{} visible".format(len(result["issues"])))
+
+    visited = []
+    panel._navigate_callback = lambda candidate: visited.append(candidate["sequence"])
+    panel.tree.selection_set(visible[0])
+    panel.tree.focus(visible[0])
+    panel._select_relative(1)
+
+    assert visited
+    assert panel.selected_issue() is not None
+
+
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     analysis = app.project.analyses[0]
     issue = {

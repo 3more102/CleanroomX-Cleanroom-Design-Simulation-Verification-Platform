@@ -4206,7 +4206,10 @@ class CleanroomXApp:
             ("nav-devices", "Devices"),
             ("nav-pressure", "Pressure Network"),
             ("nav-analyses", "Analyses"),
+            ("nav-simulation", "Simulation / Results"),
+            ("nav-diagnostics", "DRC / Diagnostics"),
             ("nav-requirements", "Requirements"),
+            ("nav-verification", "Verification"),
             ("nav-proofgraph", "ProofGraph"),
             ("nav-evidence", "Evidence"),
             ("nav-reports", "Reports"),
@@ -4517,14 +4520,44 @@ class CleanroomXApp:
                 self.workspace_status_var.set("Workspace: Dashboard")
             self.selection_status_var.set("Selected: Dashboard")
             return
+        if item_id == "nav-simulation":
+            if hasattr(self, "output_notebook") and hasattr(self, "analysis_result_panel"):
+                self.output_notebook.select(self.analysis_result_panel)
+                self.show_output_panel()
+            self.selection_status_var.set("Selected: Simulation / Results")
+            return
+        if item_id == "nav-diagnostics":
+            self.show_problems_panel()
+            self.selection_status_var.set("Selected: DRC / Diagnostics")
+            return
+        if item_id == "nav-verification":
+            if hasattr(self, "output_notebook") and hasattr(self, "verification_text"):
+                self.show_output_panel()
+                self.output_notebook.select(self.verification_text.master)
+            self.selection_status_var.set("Selected: Verification")
+            return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
+                self.show_output_panel()
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
+            return
+        if item_id == "nav-reports":
+            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+                self.show_output_panel()
+                self.output_notebook.select(self.report_text.master)
+            self.selection_status_var.set("Selected: Reports")
+            return
+        if item_id == "nav-pressure":
+            if hasattr(self, "spatial_workspace"):
+                self._activate_spatial_workspace("2d")
+                self.spatial_workspace._overlay_mode.set("Pressure")
+                self.spatial_workspace._set_overlay_mode("Pressure")
+            self.selection_status_var.set("Selected: Pressure Network")
             return
         if item_id.startswith("nav-"):
             return

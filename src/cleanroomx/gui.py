@@ -1267,6 +1267,7 @@ class CleanroomXApp:
         self.model_status_var = tk.StringVar(value="Model: ready")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
+        self.diagnostics_status_var = tk.StringVar(value="Problems: —")
         self.workspace_profile_var = tk.StringVar(
             value=self._ui_layout_state["active_workspace"]
         )
@@ -2052,6 +2053,20 @@ class CleanroomXApp:
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
+        self.diagnostics_status_label = ttk.Label(
+            status_bar,
+            textvariable=self.diagnostics_status_var,
+            anchor="e",
+            cursor="hand2",
+        )
+        self.diagnostics_status_label.pack(side="right", padx=(8, 0))
+        self.diagnostics_status_label.bind(
+            "<Button-1>",
+            lambda event: self.show_problems_panel(),
+        )
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="right", fill="y", padx=8
+        )
         ttk.Label(
             status_bar,
             textvariable=self.autosave_status_var,
@@ -2745,6 +2760,17 @@ class CleanroomXApp:
             if isinstance(diagnostics, dict)
             else {}
         )
+        if isinstance(diagnostics, dict):
+            error_count = int(summary.get("error_count", 0) or 0)
+            warning_count = int(summary.get("warning_count", 0) or 0)
+            if error_count or warning_count:
+                self.diagnostics_status_var.set(
+                    f"Problems: {error_count}E {warning_count}W"
+                )
+            else:
+                self.diagnostics_status_var.set("Problems: Clear")
+        else:
+            self.diagnostics_status_var.set("Problems: unavailable")
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",

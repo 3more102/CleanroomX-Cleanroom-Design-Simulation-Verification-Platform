@@ -44,14 +44,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
         toolbar.pack(fill="x")
 
-        ttk.Label(toolbar, text="PROBLEMS", style="CX.Section.TLabel").pack(
+        ttk.Label(toolbar, text="PROBLEMS", style="CX.ToolbarSection.TLabel").pack(
             side="left", padx=(0, 8)
         )
-        ttk.Label(toolbar, text="Search").pack(side="left")
+        ttk.Label(toolbar, text="Search", style="CX.Toolbar.TLabel").pack(side="left")
         ttk.Entry(toolbar, textvariable=self.search_var, width=28).pack(
             side="left", padx=(4, 8)
         )
-        ttk.Label(toolbar, text="Severity").pack(side="left")
+        ttk.Label(toolbar, text="Severity", style="CX.Toolbar.TLabel").pack(side="left")
         severity = ttk.Combobox(
             toolbar,
             textvariable=self.severity_var,
@@ -85,6 +85,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             toolbar,
             textvariable=self.summary_var,
             anchor="e",
+            style="CX.Toolbar.TLabel",
         ).pack(side="right", fill="x", expand=True, padx=(12, 0))
 
         body = ttk.Panedwindow(self, orient="vertical")

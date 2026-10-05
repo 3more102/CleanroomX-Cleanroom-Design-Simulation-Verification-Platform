@@ -176,3 +176,47 @@ def test_build_engineering_search_entries_indexes_canonical_proofgraph_documents
     assert evidence_entry.payload["_proofgraph_id"] == "GRAPH-SEARCH"
     assert evidence_entry.payload["_proofgraph_key"] == "evidence:EVID-SEARCH"
     assert evidence_entry.payload["type"] == "evidence"
+
+
+def test_build_engineering_search_entries_indexes_compliance_rules():
+    project = SimpleNamespace(
+        name="Facility Alpha",
+        description="",
+        analyses=[
+            SimpleNamespace(
+                id="compliance-1",
+                name="Project criteria",
+                kind="compliance_check",
+                input={
+                    "rule_pack": {
+                        "rules": [
+                            {
+                                "id": "ach-min",
+                                "title": "Minimum ACH",
+                                "evidence_path": "/room/ach",
+                                "operator": "min",
+                                "expected": 20,
+                                "unit": "1/h",
+                                "reference": "URS-ACH-01",
+                            }
+                        ]
+                    }
+                },
+            )
+        ],
+    )
+
+    entries = build_engineering_search_entries(project=project)
+
+    rule = next(entry for entry in entries if entry.target_type == "compliance_rule")
+    assert rule.target_id == "ach-min"
+    assert rule.label == "Minimum ACH"
+    assert rule.category == "Compliance Rule"
+    assert rule.payload == {
+        "analysis_id": "compliance-1",
+        "rule_id": "ach-min",
+    }
+    assert "URS-ACH-01" in rule.detail
+    assert [item.key for item in filter_search_entries(entries, "ach urs")] == [
+        rule.key
+    ]

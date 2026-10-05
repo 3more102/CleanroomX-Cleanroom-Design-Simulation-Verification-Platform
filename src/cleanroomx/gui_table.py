@@ -81,6 +81,10 @@ class TreeviewTableBehavior:
         )
         self.data_columns = tuple(str(item) for item in tree["columns"])
         self._default_display_columns = self.data_columns
+        self._default_column_widths = {
+            column: int(tree.column(column, "width"))
+            for column in self.data_columns
+        }
         self.sort_column: str | None = None
         self.sort_descending = False
         self._heading_text: dict[str, str] = {}
@@ -374,8 +378,81 @@ class TreeviewTableBehavior:
             return
         self._sync_column_vars()
 
+    def layout_state(self) -> dict[str, Any]:
+        """Return presentation-only table state suitable for GUI preferences."""
+        widths: dict[str, int] = {}
+        for column in self.data_columns:
+            try:
+                widths[column] = int(self.tree.column(column, "width"))
+            except (tk.TclError, TypeError, ValueError):
+                continue
+        return {
+            "visible_columns": list(self.visible_columns()),
+            "column_widths": widths,
+            "sort_column": self.sort_column,
+            "sort_descending": bool(self.sort_descending),
+        }
+
+    def apply_layout_state(self, value: Any) -> bool:
+        """Apply validated presentation-only state without touching row data."""
+        if not isinstance(value, Mapping):
+            return False
+
+        applied = False
+        raw_visible = value.get("visible_columns")
+        if isinstance(raw_visible, (list, tuple)):
+            visible = tuple(dict.fromkeys(str(item) for item in raw_visible))
+            if (
+                visible
+                and all(column in self.data_columns for column in visible)
+                and len(visible) == len(raw_visible)
+            ):
+                try:
+                    self.tree.configure(displaycolumns=visible)
+                except tk.TclError:
+                    pass
+                else:
+                    self._sync_column_vars()
+                    applied = True
+
+        raw_widths = value.get("column_widths")
+        if isinstance(raw_widths, Mapping):
+            for raw_column, raw_width in raw_widths.items():
+                column = str(raw_column)
+                if column not in self.data_columns or isinstance(raw_width, bool):
+                    continue
+                try:
+                    width = int(raw_width)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if not 24 <= width <= 4000:
+                    continue
+                try:
+                    self.tree.column(column, width=width)
+                except tk.TclError:
+                    continue
+                applied = True
+
+        raw_sort_column = value.get("sort_column")
+        if raw_sort_column is None:
+            self.sort_column = None
+            applied = True
+        elif isinstance(raw_sort_column, str) and raw_sort_column in self.sortable_columns:
+            self.sort_column = raw_sort_column
+            applied = True
+        if isinstance(value.get("sort_descending"), bool):
+            self.sort_descending = bool(value["sort_descending"])
+            applied = True
+        self.reapply_sort()
+        return applied
+
     def reset_column_layout(self) -> None:
         self.show_all_columns()
+        for column, width in self._default_column_widths.items():
+            try:
+                self.tree.column(column, width=width)
+            except tk.TclError:
+                continue
 
     def select_all(self) -> bool:
         children = self._ordered_children()

@@ -2234,3 +2234,152 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
 
+
+
+
+class _NavigatorFakeVar:
+    def __init__(self, value=""):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+class _NavigatorFakeWidget:
+    def __init__(self):
+        self.options = {}
+
+    def configure(self, **kwargs):
+        self.options.update(kwargs)
+
+
+class _NavigatorFakeTree:
+    def __init__(self, items):
+        self.items = dict(items)
+        self._selection = ()
+        self.focused = None
+        self.seen = None
+
+    def exists(self, iid):
+        return iid in self.items
+
+    def item(self, iid, option=None):
+        text = self.items[iid]
+        if option == "text":
+            return text
+        return {"text": text, "values": ()}
+
+    def selection(self):
+        return self._selection
+
+    def selection_set(self, iid):
+        self._selection = (iid,)
+
+    def focus(self, iid):
+        self.focused = iid
+
+    def see(self, iid):
+        self.seen = iid
+
+
+def _navigator_favorites_app(project_path: Path | None):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Favorites")
+    app.project_path = project_path
+    app.analysis_tree = _NavigatorFakeTree(
+        {
+            "nav-diagnostics": "Diagnostics / DRC",
+            "nav-proofgraph": "ProofGraph",
+            "room:room-a": "Room A",
+            "analysis-a": "Analysis A",
+            "nav-building": "Building",
+        }
+    )
+    app.navigator_favorites_var = _NavigatorFakeVar()
+    app.navigator_filter_var = _NavigatorFakeVar()
+    app.navigator_favorites_picker = _NavigatorFakeWidget()
+    app.navigator_favorite_toggle_button = _NavigatorFakeWidget()
+    app.status_var = _NavigatorFakeVar()
+    app._navigator_favorites_by_project = {}
+    app._navigator_favorite_ids = []
+    app._navigator_favorite_display_to_id = {}
+    app._navigator_favorites_project_token = -1
+    app._navigator_favorites_loaded_key = None
+    return app
+
+
+def test_navigator_favorites_load_prune_toggle_and_persist_by_project():
+    project_path = Path("/projects/alpha.cleanroomx.json")
+    app = _navigator_favorites_app(project_path)
+    app._navigator_favorites_by_project[str(project_path)] = [
+        "nav-diagnostics",
+        "missing-item",
+        "room:room-a",
+    ]
+
+    app._refresh_navigator_favorites_picker()
+
+    assert app._navigator_favorite_ids == ["nav-diagnostics", "room:room-a"]
+    assert app._navigator_favorites_by_project[str(project_path)] == [
+        "nav-diagnostics",
+        "room:room-a",
+    ]
+    assert app.navigator_favorites_picker.options["values"] == (
+        "Diagnostics / DRC · Workspace",
+        "Room A · Room",
+    )
+
+    app.analysis_tree.selection_set("nav-diagnostics")
+    assert app.toggle_selected_navigator_favorite() is True
+    assert app._navigator_favorite_ids == ["room:room-a"]
+    assert app.navigator_favorite_toggle_button.options["text"] == "☆"
+
+    app.analysis_tree.selection_set("analysis-a")
+    assert app.toggle_selected_navigator_favorite() is True
+    assert app._navigator_favorite_ids == ["analysis-a", "room:room-a"]
+    assert app._navigator_favorites_by_project[str(project_path)] == [
+        "analysis-a",
+        "room:room-a",
+    ]
+    assert app.navigator_favorite_toggle_button.options["text"] == "★"
+
+
+def test_navigator_favorites_ignore_non_actionable_group_nodes():
+    app = _navigator_favorites_app(Path("/projects/alpha.cleanroomx.json"))
+    app.analysis_tree.selection_set("nav-building")
+
+    assert app.toggle_selected_navigator_favorite() is False
+    assert app._navigator_favorite_ids == []
+
+
+def test_unsaved_project_favorites_adopt_save_as_path_without_touching_project_data():
+    app = _navigator_favorites_app(None)
+    app._navigator_favorites_project_token = id(app.project)
+    app._navigator_favorite_ids = ["nav-proofgraph"]
+    original_metadata = dict(app.project.metadata)
+
+    app.project_path = Path("/projects/saved.cleanroomx.json")
+    state = app._capture_navigator_favorites_state()
+
+    assert state == {
+        "/projects/saved.cleanroomx.json": ["nav-proofgraph"],
+    }
+    assert app.project.metadata == original_metadata
+
+
+def test_favorite_picker_selection_clears_filter_and_focuses_tree_item():
+    app = _navigator_favorites_app(Path("/projects/alpha.cleanroomx.json"))
+    app._navigator_favorites_by_project[str(app.project_path)] = ["room:room-a"]
+    app._refresh_navigator_favorites_picker()
+    app.navigator_filter_var.set("pressure")
+    app.navigator_favorites_var.set("Room A · Room")
+
+    app._on_favorite_navigator_selected()
+
+    assert app.navigator_filter_var.get() == ""
+    assert app.analysis_tree.selection() == ("room:room-a",)
+    assert app.analysis_tree.focused == "room:room-a"
+    assert app.analysis_tree.seen == "room:room-a"

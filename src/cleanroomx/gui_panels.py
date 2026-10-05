@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .project_diagnostics import analyze_project_diagnostics
+from .runtime_diagnostics import GuiErrorReport, record_gui_exception
 
 
 _SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
@@ -34,6 +35,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self.last_error_report: GuiErrorReport | None = None
         self._sort_column = "severity"
         self._sort_descending = False
 
@@ -419,13 +421,17 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 base_dir=self._base_dir_getter(),
             )
         except Exception as exc:
+            report = record_gui_exception("Refresh project diagnostics", exc)
             self.last_result = None
-            self.summary_var.set(f"Diagnostics unavailable: {exc}")
-            self.visible_var.set("0 visible")
-            self._status_setter("Project diagnostics failed")
+            self.last_error_report = report
+            self.summary_var.set(f"Diagnostics unavailable · {report.reference}")
+            self._status_setter(f"Project diagnostics failed · {report.reference}")
             self._populate()
+            # A backend failure is not an empty successful result.
+            self.visible_var.set("0 visible")
             return None
 
+        self.last_error_report = None
         self.last_result = result
         summary = result.get("summary", {})
         self.summary_var.set(
@@ -493,6 +499,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 self.detail.insert(
                     "1.0",
                     "No diagnostics match the active filters. Clear or adjust the filters to continue.",
+                )
+            elif self.last_error_report is not None:
+                self.detail.insert(
+                    "1.0",
+                    self.last_error_report.user_message()
+                    + "\n\nUse Refresh to retry project diagnostics.",
                 )
             elif self.last_result is not None:
                 self.detail.insert(

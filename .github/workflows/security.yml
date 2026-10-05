@@ -45,3 +45,4 @@ jobs:
           tests/test_bim_ifc_root_failures.py
           tests/test_project_write_guard.py
           tests/test_security_static_gate.py
+          tests/test_fault_injection_persistence.py

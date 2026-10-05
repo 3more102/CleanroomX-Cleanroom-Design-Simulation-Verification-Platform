@@ -73,6 +73,7 @@ from .project_diagnostics_cli import (
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
+from .gui_simulation import SimulationWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -1959,6 +1960,16 @@ class CleanroomXApp:
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
+        self.simulation_workspace = SimulationWorkspace(
+            self.notebook,
+            on_run=self.run_current,
+            on_cancel=self.cancel_run,
+            on_validate=self.validate_current,
+            on_open_inputs=self._activate_analysis_input_workspace,
+            on_open_results=self._activate_analysis_results_workspace,
+        )
+        self.notebook.add(self.simulation_workspace, text="Simulation")
+
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
         input_notebook = ttk.Notebook(self.input_tab)
@@ -3102,6 +3113,13 @@ class CleanroomXApp:
                 keywords=("ifc", "bim", "model"),
             ),
             PaletteCommand(
+                "workspace.simulation",
+                "Open Simulation Workspace",
+                "Analysis",
+                self._activate_simulation_workspace,
+                keywords=("solver", "run", "analysis", "results"),
+            ),
+            PaletteCommand(
                 "analysis.validate",
                 "Validate Current Analysis Input",
                 "Analysis",
@@ -3309,6 +3327,38 @@ class CleanroomXApp:
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
             self.notebook.select(self.input_tab)
             self.workspace_status_var.set("Workspace: Analysis Inputs")
+
+    def _refresh_simulation_workspace(self) -> None:
+        """Project the active analysis/run into the simulation surface without mutation."""
+        workspace = getattr(self, "simulation_workspace", None)
+        if workspace is None:
+            return
+        analysis = self._editor_analysis()
+        if analysis is None:
+            workspace.set_context(
+                analysis_name=None,
+                analysis_kind=None,
+                running=False,
+            )
+            return
+        workspace.set_context(
+            analysis_name=analysis.name,
+            analysis_kind=analysis.kind,
+            analysis_input=analysis.input,
+            last_run=self._runs_by_analysis.get(analysis.id),
+            running=bool(self._running),
+        )
+
+    def _activate_simulation_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "simulation_workspace"):
+            self._refresh_simulation_workspace()
+            self.notebook.select(self.simulation_workspace)
+            self.workspace_status_var.set("Workspace: Simulation")
+
+    def _activate_analysis_results_workspace(self) -> None:
+        if hasattr(self, "output_notebook") and hasattr(self, "analysis_result_panel"):
+            self.show_output_panel()
+            self.output_notebook.select(self.analysis_result_panel)
 
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
@@ -4694,9 +4744,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Dashboard")
             return
         if item_id == "nav-simulation":
-            if hasattr(self, "output_notebook") and hasattr(self, "analysis_result_panel"):
-                self.output_notebook.select(self.analysis_result_panel)
-                self.show_output_panel()
+            self._activate_simulation_workspace()
             self.selection_status_var.set("Selected: Simulation / Results")
             return
         if item_id == "nav-diagnostics":
@@ -4820,6 +4868,7 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        self._refresh_simulation_workspace()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()

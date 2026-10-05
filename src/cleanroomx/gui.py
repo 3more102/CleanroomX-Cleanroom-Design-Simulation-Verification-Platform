@@ -91,6 +91,7 @@ from .gui_state import (
 from .gui_theme import attach_tooltip, configure_ttk_theme, normalize_theme_name, theme_palette
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
+from .gui_workspace import workspace_profile_keys, workspace_profile_spec
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -1283,6 +1284,9 @@ class CleanroomXApp:
         self.run_elapsed_var = tk.StringVar(value="—")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.workspace_profile_var = tk.StringVar(
+            value=self._ui_layout_state["workspace_profile"]
+        )
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
@@ -1469,6 +1473,16 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for profile_key in workspace_profile_keys():
+            profile = workspace_profile_spec(profile_key)
+            workspace_menu.add_radiobutton(
+                label=profile.label,
+                variable=self.workspace_profile_var,
+                value=profile.key,
+                command=lambda key=profile.key: self.set_workspace_profile(key),
+            )
+        view_menu.add_cascade(label="Workspace Profile", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2332,6 +2346,9 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "workspace_profile": workspace_profile_spec(
+                    self.workspace_profile_var.get()
+                ).key,
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -2365,6 +2382,11 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.set_inspector_visible(bool(state["inspector_visible"]))
+        self.set_workspace_profile(
+            state["workspace_profile"],
+            persist=False,
+            apply_visibility=False,
+        )
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
         self.status_var.set("Ready")
@@ -3300,6 +3322,41 @@ class CleanroomXApp:
                     "requirement",
                     "evidence",
                 ),
+            ),
+            PaletteCommand(
+                "workspace.design-profile",
+                "Switch to Design Workspace",
+                "Window",
+                lambda: self.set_workspace_profile("design"),
+                keywords=("layout", "model", "spatial"),
+            ),
+            PaletteCommand(
+                "workspace.simulation-profile",
+                "Switch to Simulation Workspace",
+                "Window",
+                lambda: self.set_workspace_profile("simulation"),
+                keywords=("layout", "analysis", "results"),
+            ),
+            PaletteCommand(
+                "workspace.verification-profile",
+                "Switch to Verification Workspace",
+                "Window",
+                lambda: self.set_workspace_profile("verification"),
+                keywords=("layout", "diagnostics", "drc", "problems"),
+            ),
+            PaletteCommand(
+                "workspace.evidence-profile",
+                "Switch to Evidence Workspace",
+                "Window",
+                lambda: self.set_workspace_profile("evidence"),
+                keywords=("layout", "proofgraph", "traceability"),
+            ),
+            PaletteCommand(
+                "workspace.reporting-profile",
+                "Switch to Reporting Workspace",
+                "Window",
+                lambda: self.set_workspace_profile("reporting"),
+                keywords=("layout", "report", "dossier"),
             ),
             PaletteCommand(
                 "workspace.start",

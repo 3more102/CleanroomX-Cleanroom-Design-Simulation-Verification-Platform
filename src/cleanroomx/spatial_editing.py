@@ -86,7 +86,7 @@ def update_spatial_properties(
                 item["pressure_pa"] = _number(pressure, "pressure_pa")
             else:
                 item.pop("pressure_pa", None)
-        for field in ("classification", "analysis_room_name"):
+        for field in ("zone", "classification", "analysis_room_name"):
             if field in values:
                 text = values[field].strip()
                 if text:

@@ -190,3 +190,23 @@ def test_requirements_navigator_opens_traceability(app, monkeypatch):
     assert opened == [True]
     assert app.selection_status_var.get() == "Selected: Requirements traceability"
 
+
+
+
+def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
+    app._update_title()
+    app.root.update_idletasks()
+    assert app.shell_save_badge_var.get() == "SAVED"
+
+    original = app.name_var.get()
+    app.name_var.set(original + " edited")
+    app._update_title()
+    app.root.update_idletasks()
+    assert app.shell_save_badge_var.get() == "UNSAVED"
+
+    app.name_var.set(original)
+    app._update_title()
+    assert "domain_pressure" in app.analysis_tree.item("nav-pressure", "tags")
+    assert "domain_hvac" in app.analysis_tree.item("nav-hvac", "tags")
+    assert "domain_verification" in app.analysis_tree.item("nav-verification", "tags")
+    assert "domain_evidence" in app.analysis_tree.item("nav-evidence", "tags")

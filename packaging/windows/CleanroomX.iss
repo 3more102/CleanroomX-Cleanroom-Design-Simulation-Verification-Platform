@@ -22,6 +22,7 @@ OutputBaseFilename={#MyOutputBaseFilename}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=CleanroomX.ico
 UninstallDisplayIcon={app}\CleanroomX.exe
 CloseApplications=yes
 RestartApplications=no

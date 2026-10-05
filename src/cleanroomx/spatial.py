@@ -1230,7 +1230,9 @@ def pressure_overlay_state(
     minimum = min(pressures) if pressures else None
     maximum = max(pressures) if pressures else None
     for item in evidence:
-        item["fill"] = _pressure_fill(\n            item["pressure_pa"], minimum, maximum, palette=palette\n        )
+        item["fill"] = _pressure_fill(
+            item["pressure_pa"], minimum, maximum, palette=palette
+        )
 
     return {
         "minimum_pressure_pa": minimum,
@@ -1329,7 +1331,9 @@ def engineering_overlay_state(
     result_dict = result if isinstance(result, dict) else {}
 
     if normalized_mode == "pressure":
-        pressure = pressure_overlay_state(\n            normalized, analysis, result_dict, palette=palette\n        )
+        pressure = pressure_overlay_state(
+            normalized, analysis, result_dict, palette=palette
+        )
         rooms = []
         for item in pressure["rooms"]:
             value = item.get("pressure_pa")
@@ -1482,7 +1486,9 @@ def engineering_overlay_state(
         if normalized_mode == "status":
             item["fill"] = _status_fill(item["status"], palette=palette)
         elif normalized_mode in {"ach", "airflow"}:
-            item["fill"] = _scalar_fill(\n                item["value"], minimum, maximum, palette=palette\n            )
+            item["fill"] = _scalar_fill(
+                item["value"], minimum, maximum, palette=palette
+            )
 
     return {
         "mode": normalized_mode,

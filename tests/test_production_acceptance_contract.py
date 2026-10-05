@@ -15,6 +15,7 @@ def _text(relative: str) -> str:
 def test_required_production_workflows_are_least_privilege_and_credentialless() -> None:
     for relative in (
         ".github/workflows/ci.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/security.yml",
         ".github/workflows/windows-installer.yml",
         ".github/workflows/windows-standalone.yml",
@@ -37,6 +38,7 @@ def test_ci_contract_retains_supported_matrix_golden_validation_and_performance(
     assert "Build wheel and verify installed application" in workflow
     assert "Run desktop GUI smoke from installed wheel" in workflow
     assert "cleanroomx-proofgraph-diff --help" in workflow
+    assert "tests/test_proofgraph_change_impact.py" in workflow
     assert "tests/test_proofgraph_change_impact_cli.py" in workflow
 
 
@@ -91,3 +93,26 @@ def test_production_acceptance_document_preserves_external_validation_boundary()
         "regulatory certification",
     ):
         assert phrase in document
+
+
+def test_production_acceptance_workflow_executes_and_publishes_its_own_evidence() -> None:
+    workflow = _text(".github/workflows/production-acceptance.yml")
+
+    assert "python scripts/production_acceptance.py --output production-acceptance.json" in workflow
+    assert "tests/test_production_acceptance.py" in workflow
+    assert "tests/test_production_acceptance_contract.py" in workflow
+    assert "tests/test_proofgraph_change_impact.py" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
+    assert "scripts/security_static_gate.py" in workflow
+    assert "Upload production acceptance evidence" in workflow
+    assert "name: CleanroomX-production-acceptance" in workflow
+    assert "path: production-acceptance.json" in workflow
+    assert "if-no-files-found: error" in workflow
+
+
+def test_proofgraph_change_impact_is_package_registered_and_documented() -> None:
+    metadata = _text("pyproject.toml")
+    acceptance = _text("docs/PRODUCTION_ACCEPTANCE.md")
+
+    assert 'cleanroomx-proofgraph-diff = "cleanroomx.proofgraph_change_impact_cli:main"' in metadata
+    assert "ProofGraph revision-diff/change-impact regressions" in acceptance

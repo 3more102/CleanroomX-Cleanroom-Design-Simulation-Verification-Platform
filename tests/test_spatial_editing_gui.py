@@ -111,6 +111,8 @@ def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
 
 def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app):
     workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
     room = workspace.layout["rooms"][0]
     workspace.selected = _Hit("room", room["id"])
     workspace._load_property_panel()
@@ -132,8 +134,9 @@ def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app):
 @pytest.mark.parametrize("size", ["1050x680", "1440x900"])
 def test_editing_toolbar_controls_remain_visible(app, size):
     app.root.geometry(size)
-    app.root.update()
     workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
     for row in workspace.winfo_children():
         if not isinstance(row, ttk.Frame):
             continue
@@ -146,6 +149,8 @@ def test_editing_toolbar_controls_remain_visible(app, size):
 
 def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
 
     workspace.set_workspace_mode("2d")
     app.root.update()

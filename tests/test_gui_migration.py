@@ -200,7 +200,7 @@ def test_failed_migrated_save_as_keeps_source_protection(tmp_path, monkeypatch):
     destination = tmp_path / "migrated.cleanroomx.json"
     app = _app()
     app.load_project_path(source)
-    errors = []
+    reported = {}
 
     monkeypatch.setattr(
         gui_module.filedialog,
@@ -212,10 +212,17 @@ def test_failed_migrated_save_as_keeps_source_protection(tmp_path, monkeypatch):
         "save_project_document_guarded",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
     )
+    app._show_operation_error = (
+        lambda title, operation, exc: reported.update(
+            {"title": title, "operation": operation, "exception": exc}
+        )
+    )
     monkeypatch.setattr(
         gui_module.messagebox,
         "showerror",
-        lambda title, message, parent=None: errors.append((title, message)),
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("save failures must use the diagnostic boundary")
+        ),
     )
 
     app.save_project_as()
@@ -225,4 +232,7 @@ def test_failed_migrated_save_as_keeps_source_protection(tmp_path, monkeypatch):
     assert app.project_path == source
     assert app._migration_source_path == source.resolve()
     assert app._has_unsaved_changes() is True
-    assert errors == [("Save failed", "disk full")]
+    assert reported["title"] == "Save failed"
+    assert reported["operation"] == "Save project as"
+    assert isinstance(reported["exception"], OSError)
+    assert str(reported["exception"]) == "disk full"

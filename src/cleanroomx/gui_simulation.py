@@ -377,6 +377,16 @@ class SimulationWorkspace(ttk.Frame):
         self.cancel_button.configure(state="disabled")
         self.progress.stop()
 
+    def set_abandon_requested(self) -> None:
+        self.state_var.set("ABANDON REQUESTED")
+        self.state_badge.configure(style="CX.Status.Warning.TLabel")
+        self.stage_var.set(
+            "UI result will be abandoned; waiting for the backend worker to finish safely"
+        )
+        self.run_button.configure(state="disabled")
+        self.cancel_button.configure(state="disabled")
+        self.progress.start(12)
+
     def set_abandoned(self) -> None:
         self.state_var.set("ABANDONED")
         self.state_badge.configure(style="CX.Status.Warning.TLabel")

@@ -433,6 +433,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         font=("TkDefaultFont", 11, "bold"),
     )
+    style.configure(
+        "CX.CardBody.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 9),
+    )
 
     status_styles = {
         "Success": ("success_surface", "success"),

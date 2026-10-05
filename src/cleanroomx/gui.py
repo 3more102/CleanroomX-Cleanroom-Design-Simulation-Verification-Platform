@@ -2867,6 +2867,7 @@ class CleanroomXApp:
         )
 
         status_bar = ttk.Frame(self.root, padding=(8, 4))
+        self.status_bar = status_bar
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
@@ -2888,10 +2889,11 @@ class CleanroomXApp:
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=6
         )
-        ttk.Label(
+        self.engineering_status_label = ttk.Label(
             status_bar,
             textvariable=self.engineering_status_var,
-        ).pack(side="left")
+        )
+        self.engineering_status_label.pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=6
         )

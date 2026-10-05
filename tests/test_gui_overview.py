@@ -79,12 +79,14 @@ def test_engineering_overview_snapshot_does_not_turn_unavailable_data_into_zero(
         unsaved=False,
     )
 
+    assert snapshot["overall"]["state"] == "warning"
     cards = {card["id"]: card for card in snapshot["cards"]}
     assert cards["diagnostics"]["detail"] == "Diagnostics unavailable"
     assert cards["verification"]["detail"] == "Verification currency unavailable"
     assert cards["evidence"]["value"] == "Unavailable"
     assert cards["evidence"]["detail"] == "Verification evidence history unavailable"
-    assert all(
-        action["title"] != "No retained verification evidence"
-        for action in snapshot["actions"]
-    )
+    titles = {action["title"] for action in snapshot["actions"]}
+    assert "Project diagnostics unavailable" in titles
+    assert "Verification currency unavailable" in titles
+    assert "Verification evidence history unavailable" in titles
+    assert "No retained verification evidence" not in titles

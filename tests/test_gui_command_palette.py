@@ -171,3 +171,27 @@ def test_filter_commands_ranks_label_prefix_above_keyword_only_match():
 
     matches = filter_commands(commands, "run")
     assert [item.id for item in matches] == ["label", "category", "keyword"]
+
+
+def test_command_palette_exposes_workspace_window_and_saved_layout_controls(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+
+    assert app.save_named_layout("Evidence review") is True
+    commands = app._command_palette_commands()
+    by_id = {command.id: command for command in commands}
+
+    assert by_id["workspace.fullscreen"].shortcut == "F11"
+    assert by_id["workspace.reset"].label == "Reset Panel Layout"
+    assert by_id["workspace.save_layout"].label == "Save Current Workspace Layout"
+    saved = [
+        command
+        for command in commands
+        if command.id.startswith("workspace.saved.")
+    ]
+    assert [command.label for command in saved] == [
+        "Apply Saved Layout: Evidence review"
+    ]

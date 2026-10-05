@@ -14,7 +14,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
-    "theme": "light",
+    "theme": "dark",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -98,6 +98,13 @@ def _normalize_recent_projects(value: Any) -> list[str]:
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
+    raw_theme = source.get("theme")
+    theme = (
+        normalize_theme_name(raw_theme)
+        if isinstance(raw_theme, str)
+        and raw_theme.strip().lower() in {"light", "dark"}
+        else _DEFAULT_GUI_LAYOUT_STATE["theme"]
+    )
     return {
         "version": GUI_LAYOUT_STATE_VERSION,
         "navigator_visible": (
@@ -115,7 +122,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             if isinstance(source.get("inspector_visible"), bool)
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
-        "theme": normalize_theme_name(source.get("theme")),
+        "theme": theme,
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),

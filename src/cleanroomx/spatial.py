@@ -2768,6 +2768,13 @@ class SpatialDesignWorkspace(ttk.Frame):
                 pass
 
     def _show_property_error(self, message: str) -> None:
+        # A validation error belongs with the field that caused it.  Ensure the
+        # inspector is actually present before revealing the inline error so a
+        # hidden/restored workspace layout cannot swallow operator feedback.
+        try:
+            self.set_inspector_visible(True)
+        except tk.TclError:
+            pass
         error_var = getattr(self, "_property_error_var", None)
         if error_var is not None:
             error_var.set(message)

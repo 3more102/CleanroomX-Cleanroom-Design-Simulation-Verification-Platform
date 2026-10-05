@@ -109,4 +109,15 @@ if ($remaining) {
     throw "CleanroomX uninstall registration remains after uninstall"
 }
 
+# The baseline package exists only to prove upgrade behavior. Remove its setup
+# artifact before the workflow publishes the release evidence, otherwise the
+# wildcard upload would expose a synthetic 0.102.999 installer beside the real
+# current-version package.
+$baselineHash = "$baselineInstaller.sha256"
+Remove-Item -Force $baselineInstaller
+Remove-Item -Force $baselineHash
+if ((Test-Path $baselineInstaller -PathType Leaf) -or (Test-Path $baselineHash -PathType Leaf)) {
+    throw "Lifecycle baseline installer cleanup did not complete"
+}
+
 Write-Host "Windows installer lifecycle: PASS (install -> launch -> upgrade -> launch -> uninstall)"

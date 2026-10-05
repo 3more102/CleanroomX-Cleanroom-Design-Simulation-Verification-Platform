@@ -9,6 +9,7 @@ import pytest
 from cleanroomx.gui import (
     AnalysisPicker,
     CleanroomXApp,
+    RequirementsTraceabilityDialog,
     RunHistoryDialog,
     VerificationHistoryDialog,
     bundled_demo_project_path,
@@ -164,3 +165,79 @@ def test_verification_history_filters_retained_status_and_currency_without_recom
     dialog.status_filter_var = Value("All")
     dialog.currency_filter_var = Value("stale")
     assert [item["sequence"] for item in dialog._filtered_records()] == [2]
+
+
+
+def test_requirements_traceability_filters_canonical_requirements_and_mappings(app):
+    snapshot = {
+        "requirement_set_count": 1,
+        "requirement_count": 1,
+        "mapping_count": 1,
+        "active_mapping_count": 1,
+        "active_mapped_requirement_count": 1,
+        "requirements_sha256": "a" * 64,
+        "mappings_sha256": "b" * 64,
+        "requirements": [
+            {
+                "id": "REQ-ACH",
+                "title": "Minimum air changes",
+                "status": "approved",
+                "applicability": "applicable",
+                "scope": ["ROOM-A"],
+                "criterion": "minimum=20, unit=1/h",
+                "detail": {
+                    "discipline": "HVAC",
+                    "source": "Project Design Basis",
+                },
+            }
+        ],
+        "mappings": [
+            {
+                "id": "MAP-ACH",
+                "requirement_title": "Minimum air changes",
+                "property_name": "air_change_rate",
+                "status": "active",
+                "reference_state": "resolved",
+                "subject_ref": "ROOM-A",
+                "analysis_name": "Room A verification",
+                "analysis_id": "analysis-room-a",
+                "result_path": ["metrics", "air_changes_per_hour"],
+                "detail": {
+                    "requirement_id": "REQ-ACH",
+                    "analysis_reference_state": "resolved",
+                },
+            }
+        ],
+    }
+
+    dialog = RequirementsTraceabilityDialog(app.root, snapshot)
+    app.root.update()
+
+    assert dialog.count_var.get() == "2 of 2 traceability rows"
+
+    dialog.type_filter_var.set("Requirement")
+    app.root.update()
+    assert dialog.tree.get_children(dialog.requirements_root) == (
+        "requirement:REQ-ACH",
+    )
+    assert dialog.tree.get_children(dialog.mappings_root) == ()
+
+    dialog.type_filter_var.set("All")
+    dialog.search_var.set("room a")
+    app.root.update()
+    visible = (
+        len(dialog.tree.get_children(dialog.requirements_root))
+        + len(dialog.tree.get_children(dialog.mappings_root))
+    )
+    assert visible >= 1
+
+    dialog.search_var.set("traceability-item-that-does-not-exist")
+    app.root.update()
+    assert dialog.count_var.get() == "0 of 2 traceability rows"
+    assert dialog.tree.get_children(dialog.requirements_root) == ()
+    assert dialog.tree.get_children(dialog.mappings_root) == ()
+
+    dialog._clear_filters()
+    app.root.update()
+    assert dialog.count_var.get() == "2 of 2 traceability rows"
+    dialog.destroy()

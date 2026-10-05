@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -221,3 +222,26 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     app.root.update()
     assert app.proofgraph_viewer.search_var.get() == ""
     assert app.proofgraph_viewer.filter_var.get() == "All"
+
+
+def test_proofgraph_follows_application_dark_and_light_theme(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    app.proofgraph_viewer.set_documents([document])
+
+    app.set_theme("dark", persist=False)
+    app.root.update()
+    dark = theme_palette("dark")
+    assert app.proofgraph_viewer.canvas.cget("background") == dark["plot"]
+    node = app.proofgraph_viewer._nodes_by_key["finding:FIND-GUI-PRESSURE"]
+    fill, foreground = app.proofgraph_viewer._node_colors(node)
+    assert fill == dark["state_pass_bg"]
+    assert foreground == dark["state_pass_fg"]
+
+    app.set_theme("light", persist=False)
+    app.root.update()
+    light = theme_palette("light")
+    assert app.proofgraph_viewer.canvas.cget("background") == light["plot"]
+    fill, foreground = app.proofgraph_viewer._node_colors(node)
+    assert fill == light["state_pass_bg"]
+    assert foreground == light["state_pass_fg"]

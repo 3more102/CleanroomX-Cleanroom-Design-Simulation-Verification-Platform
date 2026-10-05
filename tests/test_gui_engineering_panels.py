@@ -302,3 +302,15 @@ def test_diagnostics_domain_filter_and_relative_navigation(app):
         assert str(panel.next_button.cget("state")) == "disabled"
         assert str(panel.previous_button.cget("state")) == "disabled"
 
+def test_top_level_menus_follow_engineering_workflow_language(app):
+    labels = [
+        app.menubar.entrycget(index, "label")
+        for index in range(app.menubar.index("end") + 1)
+    ]
+    assert "Simulation" in labels
+    assert "Verification" in labels
+    assert "Evidence" in labels
+    assert "Reports" in labels
+    assert "Analyze" not in labels
+    assert "Verify" not in labels
+

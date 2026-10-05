@@ -7,6 +7,7 @@ import tkinter as tk
 
 import pytest
 
+import cleanroomx.gui as gui_module
 from cleanroomx.gui import (
     AnalysisPicker,
     CleanroomXApp,
@@ -438,3 +439,80 @@ def test_operation_error_boundary_surfaces_reference_without_stack_trace(
     assert "synthetic boundary failure" in dialogs[-1][1]
     assert "Traceback" not in dialogs[-1][1]
     assert "CX-TEST-1234" in app.status_var.get()
+
+
+def test_worker_failure_uses_structured_error_boundary_and_original_exception(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    report = GuiErrorReport(
+        reference="CX-WORKER-1234",
+        operation="Run analysis",
+        exception_type="RuntimeError",
+        summary="synthetic backend failure",
+        log_path=tmp_path / "gui.log",
+    )
+    boundary_calls = []
+    monkeypatch.setattr(
+        app,
+        "_show_operation_error",
+        lambda title, operation, exc: (
+            boundary_calls.append((title, operation, exc)) or report
+        ),
+    )
+    monkeypatch.setattr(app.root, "after", lambda *args, **kwargs: "after-id")
+
+    analysis = app._current_analysis()
+    assert analysis is not None
+    app._run_generation += 1
+    app._running = True
+    app._abandon_requested = False
+    exc = RuntimeError("synthetic backend failure")
+    app._queue.put(("error", app._run_generation, analysis.id, exc))
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert boundary_calls == [("Analysis failed", "Run analysis", exc)]
+
+
+def test_engineering_search_records_degraded_requirement_indexing(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    report = GuiErrorReport(
+        reference="CX-SEARCH-1234",
+        operation="Index requirement traceability for engineering search",
+        exception_type="RuntimeError",
+        summary="synthetic requirements failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+
+    def fail_requirement_snapshot(_project):
+        raise RuntimeError("synthetic requirements failure")
+
+    monkeypatch.setattr(
+        gui_module,
+        "project_requirement_traceability_snapshot",
+        fail_requirement_snapshot,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    entries = app._engineering_search_entries()
+
+    assert entries
+    assert app._engineering_search_warnings == (
+        ("Requirements", "CX-SEARCH-1234"),
+    )
+    assert recorded
+    assert recorded[0][0] == (
+        "Index requirement traceability for engineering search"
+    )
+    assert isinstance(recorded[0][1], RuntimeError)

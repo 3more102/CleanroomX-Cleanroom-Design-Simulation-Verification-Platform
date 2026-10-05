@@ -635,6 +635,53 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     assert app.project.to_dict() == project_before
 
 
+def test_industrial_spatial_visuals_follow_semantic_theme_colors(app):
+    app.set_theme("dark", persist=False)
+    app.root.update_idletasks()
+    workspace = app.spatial_workspace
+    palette = theme_palette("dark")
+
+    assert workspace._relationship_style("pass")[0] == palette["success"]
+    assert workspace._relationship_style("fail")[0] == palette["error"]
+    assert workspace._relationship_style("available")[0] == palette["mode_evidence"]
+    assert workspace._relationship_style("unavailable")[0] == palette["muted"]
+
+    workspace.set_measurement_tool("distance")
+    workspace._measurement_points = [(0.0, 0.0), (1.0, 1.0)]
+    workspace.redraw()
+    measurement_items = workspace.canvas_2d.find_withtag("measurement")
+    assert measurement_items
+    for item in measurement_items:
+        assert (
+            workspace.canvas_2d.itemcget(item, "fill").lower()
+            == palette["mode_evidence"].lower()
+        )
+
+    workspace._overlay_mode.set("status")
+    workspace.redraw()
+    legend_items = workspace.canvas_2d.find_withtag("overlay_legend")
+    assert legend_items
+    assert (
+        workspace.canvas_2d.itemcget(legend_items[0], "fill").lower()
+        == palette["panel"].lower()
+    )
+    assert (
+        workspace.canvas_2d.itemcget(legend_items[0], "outline").lower()
+        == palette["border"].lower()
+    )
+
+    floor_items = workspace.canvas_3d.find_withtag("floor3d")
+    if floor_items:
+        assert (
+            workspace.canvas_3d.itemcget(floor_items[0], "fill").lower()
+            == palette["surface"].lower()
+        )
+        assert (
+            workspace.canvas_3d.itemcget(floor_items[0], "outline").lower()
+            == palette["border"].lower()
+        )
+
+
 def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     state_path = tmp_path / "gui-theme-layout.json"
     try:

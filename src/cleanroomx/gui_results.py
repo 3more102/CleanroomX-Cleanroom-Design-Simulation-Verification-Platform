@@ -95,6 +95,19 @@ def _format_scalar(value: Any) -> str:
     return str(value)
 
 
+def _result_value_sort_key(value: str) -> tuple[int, float | str]:
+    """Sort displayed engineering values numerically when their leading token is numeric."""
+    text = str(value or "").strip()
+    token = text.split(maxsplit=1)[0].replace(",", "") if text else ""
+    try:
+        number = float(token)
+    except (TypeError, ValueError):
+        return 1, text.casefold()
+    if math.isfinite(number):
+        return 0, number
+    return 1, text.casefold()
+
+
 def _flatten_result(value: Any, *, limit: int = 120) -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
 
@@ -166,6 +179,8 @@ class AnalysisResultPanel(ttk.Frame):
         self.search_var = tk.StringVar()
         self.class_filter_var = tk.StringVar(value="All")
         self._rows: list[tuple[str, str]] = []
+        self._sort_column = "field"
+        self._sort_reverse = False
 
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame")
         header.pack(fill="x", pady=(0, 8))
@@ -265,11 +280,19 @@ class AnalysisResultPanel(ttk.Frame):
             self,
             columns=columns,
             show="headings",
-            selectmode="browse",
+            selectmode="extended",
         )
-        self.tree.heading("class", text="Class")
-        self.tree.heading("field", text="Engineering field")
-        self.tree.heading("value", text="Value")
+        self._heading_labels = {
+            "class": "Class",
+            "field": "Engineering field",
+            "value": "Value",
+        }
+        for column, label in self._heading_labels.items():
+            self.tree.heading(
+                column,
+                text=label,
+                command=lambda key=column: self._sort_by(key),
+            )
         self.tree.column("class", width=112, minwidth=96, stretch=False, anchor="center")
         self.tree.column("field", width=410, minwidth=180, stretch=True)
         self.tree.column("value", width=330, minwidth=160, stretch=True)
@@ -277,6 +300,11 @@ class AnalysisResultPanel(ttk.Frame):
         self.tree.configure(yscrollcommand=yscroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         yscroll.pack(side="right", fill="y")
+        self.tree.bind("<Control-c>", self._copy_selected_rows)
+        self.tree.bind("<Control-C>", self._copy_selected_rows)
+        self.tree.bind("<Button-3>", self._show_context_menu)
+        self.tree.bind("<Control-Button-1>", self._show_context_menu)
+        self._update_sort_headings()
         self.apply_theme("dark")
 
     def apply_theme(self, value: Any) -> None:
@@ -323,10 +351,86 @@ class AnalysisResultPanel(ttk.Frame):
             return "verdict_pass"
         return "metadata"
 
+    def _sorted_visible_rows(self) -> list[tuple[str, str]]:
+        visible = self._visible_rows()
+        if self._sort_column == "class":
+            key = lambda row: (_result_class(row[0]), row[0].casefold())
+        elif self._sort_column == "value":
+            key = lambda row: (_result_value_sort_key(row[1]), row[0].casefold())
+        else:
+            key = lambda row: row[0].casefold()
+        return sorted(visible, key=key, reverse=self._sort_reverse)
+
+    def _update_sort_headings(self) -> None:
+        for column, label in self._heading_labels.items():
+            marker = ""
+            if column == self._sort_column:
+                marker = " ↓" if self._sort_reverse else " ↑"
+            self.tree.heading(
+                column,
+                text=label + marker,
+                command=lambda key=column: self._sort_by(key),
+            )
+
+    def _sort_by(self, column: str) -> None:
+        if column not in self._heading_labels:
+            return
+        if self._sort_column == column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column
+            self._sort_reverse = False
+        self._update_sort_headings()
+        self._populate()
+
+    def _copy_selected_rows(self, _event=None):
+        selection = self.tree.selection()
+        if not selection:
+            return "break"
+        lines: list[str] = []
+        for iid in selection:
+            values = self.tree.item(iid, "values")
+            if values:
+                lines.append("\t".join(str(value) for value in values))
+        if lines:
+            self.clipboard_clear()
+            self.clipboard_append("\n".join(lines))
+            self.update_idletasks()
+        return "break"
+
+    def _show_context_menu(self, event):
+        iid = self.tree.identify_row(event.y)
+        if iid and iid not in self.tree.selection():
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+        menu = tk.Menu(self, tearoff=False)
+        menu.add_command(label="Copy selected rows", command=self._copy_selected_rows)
+        if iid:
+            values = self.tree.item(iid, "values")
+            if len(values) >= 3:
+                menu.add_command(
+                    label="Copy value",
+                    command=lambda value=str(values[2]): self._copy_text(value),
+                )
+                menu.add_command(
+                    label="Copy field",
+                    command=lambda value=str(values[1]): self._copy_text(value),
+                )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    def _copy_text(self, text: str) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(str(text))
+        self.update_idletasks()
+
     def _populate(self) -> None:
         for item in self.tree.get_children():
             self.tree.delete(item)
-        visible = self._visible_rows()
+        visible = self._sorted_visible_rows()
         for index, (path, rendered) in enumerate(visible):
             semantic = _result_class(path)
             self.tree.insert(

@@ -2665,25 +2665,39 @@ class CleanroomXApp:
             nav_key="report",
         )
 
+    def _update_save_state_badge(
+        self,
+        has_unsaved_changes: bool | None = None,
+    ) -> None:
+        if not hasattr(self, "save_state_var"):
+            return
+        unsaved = (
+            self._has_unsaved_changes()
+            if has_unsaved_changes is None
+            else bool(has_unsaved_changes)
+        )
+        if self.project_path is None:
+            save_text = "UNSAVED PROJECT"
+        else:
+            save_text = "UNSAVED" if unsaved else "SAVED"
+        self.save_state_var.set(save_text)
+        badge = getattr(self, "save_state_badge", None)
+        if badge is not None:
+            badge.configure(
+                style=(
+                    "CX.Badge.Warning.TLabel"
+                    if unsaved or self.project_path is None
+                    else "CX.Badge.Verified.TLabel"
+                )
+            )
+
     def _update_engineering_state_strip(
         self,
         diagnostics_summary: dict,
         currency_summary: dict,
         evidence_count: int,
     ) -> None:
-        unsaved = self._has_unsaved_changes()
-        if self.project_path is None:
-            save_text = "UNSAVED PROJECT"
-        else:
-            save_text = "UNSAVED" if unsaved else "SAVED"
-        self.save_state_var.set(save_text)
-        self.save_state_badge.configure(
-            style=(
-                "CX.Badge.Warning.TLabel"
-                if unsaved or self.project_path is None
-                else "CX.Badge.Verified.TLabel"
-            )
-        )
+        self._update_save_state_badge()
 
         errors = int(diagnostics_summary.get("error_count", 0) or 0)
         warnings = int(diagnostics_summary.get("warning_count", 0) or 0)
@@ -3307,6 +3321,7 @@ class CleanroomXApp:
         if hasattr(self, "notebook") and hasattr(self, "start_center"):
             self._refresh_start_center()
             self.notebook.select(self.start_center)
+            self._set_navigator_active(None)
             self.workspace_status_var.set("Workspace: Start")
 
     def _recent_project_records(self) -> list[dict[str, str]]:
@@ -5868,6 +5883,7 @@ class CleanroomXApp:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        self._update_save_state_badge(has_unsaved_changes)
 
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(

@@ -4,6 +4,14 @@
 
 CleanroomX is a local Python desktop/CLI engineering application. It is not a network service, authentication system, secret store, or sandbox for hostile code. The core Python package declares no third-party runtime dependencies; development, BIM, and release extras add purpose-specific tooling.
 
+## Automated security gates
+
+The repository has a dedicated least-privilege Security workflow on pull requests, pushes to `main`, and a weekly schedule. It runs the hostile-input and trust-boundary regression set, verifies the installed environment with `pip check`, and executes `scripts/security_static_gate.py`.
+
+The static gate scans production source and release scripts through Python ASTs and fails closed on dynamic `eval`/`exec`, `os.system`/`os.popen`, race-prone `tempfile.mktemp`, pickle/marshal unsafe deserialization, unsafe YAML loaders, direct archive `.extract()`/`.extractall()` helpers, and subprocess calls with literal `shell=True`. Regression tests verify both rejection and safe-subprocess behavior.
+
+Dependabot is configured for weekly Python-package and GitHub Actions updates. These controls reduce preventable supply-chain and unsafe-API regressions; they do not replace independent penetration testing or organization-specific deployment controls.
+
 ## Input and registry handling
 
 Desktop project and analysis inputs use strict JSON. Project loading rejects malformed JSON and non-finite constants such as `NaN` and `Infinity`. Normal project JSON is limited to 64 MiB before parsing and revision hashing; saves use the same ceiling so CleanroomX does not create a normal project it cannot reopen. Ordinary and migration-aware project opens use the same revision-stable strict-JSON snapshot authority as revision-bound loads, retry transient source changes, and fail closed if the source keeps changing. Invalid UTF-8 project bytes fail closed as a project-format error, saved revision envelopes are bounded before decoding, and portable-bundle project members reuse the same project-size authority. Project schema, version, analysis kinds, ids, and active-analysis references are validated before use.

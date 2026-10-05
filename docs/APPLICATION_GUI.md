@@ -132,6 +132,14 @@ Problems can be searched and filtered by severity, diagnostic category, and affe
 
 The **Verification** view summarizes current verification-currency state from the existing verification authority; the **Evidence** view lists retained project-verification records without recomputing historical verdicts. These views are read-only projections over existing domain services and do not change solver, requirement, ProofGraph, or acceptance semantics.
 
+## Engineering task center
+
+The persistent output workspace includes a first-class **Task Center** for long-running engineering operations. Analysis runs record their observed start time, live elapsed duration, backend workflow detail, terminal state, and result or failure message. The Task Center is available from the Project Navigator, **View → Task Center**, **Ctrl+Shift+J**, and the command palette; the status bar reports active and retained task counts.
+
+The panel deliberately does not invent percentage progress when the backend does not expose a measured completion fraction. Analysis execution is shown as running with elapsed time until the worker returns. **Abandon selected** preserves the existing CleanroomX worker-safety contract: the UI marks **ABANDON REQUESTED** and waits for the Python worker to finish before the task becomes **ABANDONED** and another run can start. Results that finish after their analysis was removed or its inputs changed are retained as **DISCARDED** task records instead of being presented as current engineering results.
+
+Clearing finished task records changes only the GUI task ledger. It does not alter project data, retained run history, verification evidence, ProofGraph, or solver output.
+
 ## ProofGraph explorer
 
 The **ProofGraph** workspace reads only ProofGraph documents retained in the canonical project-verification history. Before a graph is rendered, CleanroomX reparses it with the canonical `proofgraph_from_dict()` validator. Digest tampering, broken source/evidence references, invalid provenance, inconsistent finding/verdict closure, or invalid verification-run relationships therefore fail closed instead of being visualized as trusted evidence.

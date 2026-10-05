@@ -6,7 +6,8 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .gui_theme import theme_palette\nfrom .proofgraph_io import proofgraph_from_dict
+from .gui_theme import theme_palette
+from .proofgraph_io import proofgraph_from_dict
 
 
 _TYPE_ORDER = {
@@ -680,7 +681,11 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = (\n                self._theme_palette["accent"]\n                if selected\n                else self._theme_palette["strong_border"]\n            )
+            outline = (
+                self._theme_palette["accent"]
+                if selected
+                else self._theme_palette["strong_border"]
+            )
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,

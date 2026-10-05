@@ -1546,7 +1546,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 7, 8, 4),
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1595,7 +1599,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 2, 8, 4),
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1824,7 +1832,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(self._body, padding=(10, 8))
+        inspector = ttk.Frame(
+            self._body,
+            style="CX.Panel.TFrame",
+            padding=(10, 8),
+        )
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
         inspector_header = ttk.Frame(
@@ -1848,8 +1860,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             inspector,
             textvariable=self._selection_var,
+            style="CX.ViewTitle.TLabel",
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 6))
+
+        inspector_state = ttk.Frame(inspector, style="CX.Panel.TFrame")
+        inspector_state.pack(fill="x", pady=(0, 8))
+        self._validation_badge = ttk.Label(
+            inspector_state,
+            textvariable=self._validation_var,
+            style="CX.Badge.Success.TLabel",
+        )
+        self._validation_badge.pack(side="left", padx=(0, 4))
+        self._sync_badge = ttk.Label(
+            inspector_state,
+            textvariable=self._sync_var,
+            style="CX.Badge.Neutral.TLabel",
+        )
+        self._sync_badge.pack(side="left")
 
         property_groups = (
             (
@@ -1911,11 +1939,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             text="Apply properties",
             command=self.apply_properties,
+            style="CX.Primary.TButton",
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
-        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
-        )
+        ttk.Label(
+            inspector,
+            text="Changes are validated before they are committed to the spatial model.",
+            style="CX.PanelHint.TLabel",
+            wraplength=310,
+        ).pack(fill="x", pady=(3, 0))
 
         self._apply_workspace_mode()
 
@@ -2571,7 +2603,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         sync = engineering_sync_status(self.layout, self._analysis_getter())
         overall = sync["overall"].replace("_", " ")
         if overall == "synchronized":
-            self._sync_var.set("Engineering sync: synchronized")
+            self._sync_var.set("SYNCED")
+            badge = getattr(self, "_sync_badge", None)
+            if badge is not None:
+                badge.configure(style="CX.Badge.Success.TLabel")
             return
         parts = [
             f"{state.replace('_', ' ')} {count}"
@@ -2579,13 +2614,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             if count and state != "synchronized"
         ]
         suffix = ", ".join(parts) if parts else overall
-        self._sync_var.set(f"Engineering sync: {suffix}")
+        self._sync_var.set(f"SYNC · {suffix}")
+        badge = getattr(self, "_sync_badge", None)
+        if badge is not None:
+            badge.configure(style="CX.Badge.Warning.TLabel")
 
     def _update_validation_summary(self) -> None:
         count = len(self._validation_issues)
-        self._validation_var.set(
-            "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
-        )
+        self._validation_var.set("SPATIAL PASS" if count == 0 else f"SPATIAL WARN {count}")
+        badge = getattr(self, "_validation_badge", None)
+        if badge is not None:
+            badge.configure(
+                style=(
+                    "CX.Badge.Success.TLabel"
+                    if count == 0
+                    else "CX.Badge.Warning.TLabel"
+                )
+            )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
         validation_key = _spatial_validation_key(self.layout)

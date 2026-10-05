@@ -4243,6 +4243,7 @@ class CleanroomXApp:
         self._restore_navigator_tree()
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
+        self._navigator_diagnostic_issues.clear()
 
         sections = (
             ("nav-building", "Building"),

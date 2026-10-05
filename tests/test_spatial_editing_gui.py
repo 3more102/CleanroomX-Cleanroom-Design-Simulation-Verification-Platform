@@ -656,6 +656,29 @@ def test_shell_panel_visibility_persists_across_app_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+def test_density_switch_is_view_only_and_changes_engineering_row_density(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    style = ttk.Style(app.root)
+
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == 24
+
+    app.set_density("compact", persist=False)
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert app.density_var.get() == "compact"
+    assert int(style.lookup("Treeview", "rowheight")) == 20
+    assert int(style.lookup("CX.Navigator.Treeview", "rowheight")) == 20
+    assert app.project.to_dict() == project_before
+
+    app.toggle_density()
+    app.root.update()
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == 24
+    assert app.project.to_dict() == project_before
+
+
 def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     project_before = copy.deepcopy(app.project.to_dict())
 
@@ -697,6 +720,7 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     )
     root.update()
     first.set_theme("dark", persist=False)
+    first.set_density("compact", persist=False)
     first._save_ui_layout_state()
     first._autosave_manager.shutdown(wait=False)
     root.destroy()
@@ -711,6 +735,8 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
+        assert second.density_var.get() == "compact"
+        assert int(ttk.Style(root2).lookup("Treeview", "rowheight")) == 20
         assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
         assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
         assert second.plot_canvas.cget("background") == "#131920"

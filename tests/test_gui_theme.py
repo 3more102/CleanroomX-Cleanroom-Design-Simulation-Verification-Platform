@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import (\n    normalize_density_name,\n    normalize_theme_name,\n    theme_palette,\n)
+from cleanroomx.gui_theme import (
+    normalize_density_name,
+    normalize_theme_name,
+    theme_palette,
+)
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():

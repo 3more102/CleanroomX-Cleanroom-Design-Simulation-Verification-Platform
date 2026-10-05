@@ -2157,6 +2157,7 @@ class CleanroomXApp:
             value=self._ui_layout_state["active_workspace"]
         )
         self.diagnostics_status_var = tk.StringVar(value="Problems: —")
+        self.verification_status_var = tk.StringVar(value="Verify: —")
         self.task_status_var = tk.StringVar(value="Tasks: idle")
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
@@ -3110,6 +3111,20 @@ class CleanroomXApp:
             "<Button-1>",
             lambda event: self.show_task_center(),
         )
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="right", fill="y", padx=8
+        )
+        self.verification_status_label = ttk.Label(
+            status_bar,
+            textvariable=self.verification_status_var,
+            anchor="e",
+            cursor="hand2",
+        )
+        self.verification_status_label.pack(side="right")
+        self.verification_status_label.bind(
+            "<Button-1>",
+            lambda event: self.activate_workspace_profile("verification"),
+        )
         self.diagnostics_status_label.bind(
             "<Button-1>",
             lambda event: self.show_problems_panel(),
@@ -3935,6 +3950,36 @@ class CleanroomXApp:
                 self.diagnostics_status_var.set("Problems: Clear")
         else:
             self.diagnostics_status_var.set("Problems: unavailable")
+
+        if isinstance(currency, dict):
+            currency_summary = currency.get("summary", {})
+            if not isinstance(currency_summary, dict):
+                currency_summary = {}
+            configured = int(
+                currency_summary.get("configured_analysis_count", 0) or 0
+            )
+            current = int(currency_summary.get("current_count", 0) or 0)
+            stale = int(currency_summary.get("stale_count", 0) or 0)
+            unverified = int(
+                currency_summary.get("not_verified_count", 0) or 0
+            )
+            unverifiable = int(
+                currency_summary.get(
+                    "dependency_freshness_unverifiable_count", 0
+                )
+                or 0
+            )
+            parts = [f"Verify: {current}/{configured} current"]
+            if stale:
+                parts.append(f"{stale} stale")
+            if unverified:
+                parts.append(f"{unverified} unverified")
+            if unverifiable:
+                parts.append(f"{unverifiable} unverifiable")
+            self.verification_status_var.set(" · ".join(parts))
+        else:
+            self.verification_status_var.set("Verify: unavailable")
+
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",

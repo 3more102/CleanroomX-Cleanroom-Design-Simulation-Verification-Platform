@@ -6,6 +6,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import theme_palette
 from .proofgraph_io import proofgraph_from_dict
 
 
@@ -394,13 +395,18 @@ class ProofGraphViewer(ttk.Frame):
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
         self._selected_key: str | None = None
+        self._theme_name = "dark"
+        self._theme_palette = theme_palette(self._theme_name)
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
 
-        toolbar = ttk.Frame(self, padding=(7, 5))
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
         toolbar.pack(fill="x")
+        ttk.Label(toolbar, text="TRACEABILITY", style="CX.Toolbar.TLabel").pack(
+            side="left", padx=(0, 8)
+        )
         ttk.Label(toolbar, text="Graph").pack(side="left")
         self.graph_picker = ttk.Combobox(
             toolbar,
@@ -454,9 +460,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.canvas = tk.Canvas(
             graph_host,
-            background="#f7f9fb",
+            background=self._theme_palette["canvas_2d"],
             highlightthickness=1,
-            highlightbackground="#c7d0d9",
+            highlightbackground=self._theme_palette["border"],
         )
         graph_y = ttk.Scrollbar(graph_host, orient="vertical", command=self.canvas.yview)
         graph_x = ttk.Scrollbar(graph_host, orient="horizontal", command=self.canvas.xview)
@@ -577,27 +583,27 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def _node_fill(self, node: dict[str, Any]) -> str:
+        palette = self._theme_palette
         status = _text(node.get("status")).casefold()
         if status in {"fail", "failed", "error"}:
-            return "#fee2e2"
+            return palette["error_bg"]
         if status in {"warning", "warn"}:
-            return "#fef3c7"
-        if status == "pass":
-            return "#dcfce7"
+            return palette["warning_bg"]
+        if status in {"pass", "passed", "verified"}:
+            return palette["verified_bg"]
         return {
-            "requirement": "#dbeafe",
-            "model_object": "#e0f2fe",
-            "ifc": "#e0e7ff",
-            "source": "#f1f5f9",
-            "calculation": "#ede9fe",
-            "evidence": "#f3e8ff",
-            "check": "#fef9c3",
-            "finding": "#ffedd5",
-            "verdict": "#e2e8f0",
-            "verification_run": "#d1fae5",
-        }.get(node.get("type"), "#f8fafc")
+            "requirement": palette["running_bg"],
+            "model_object": palette["selection"],
+            "ifc": palette["surface_alt"],
+            "source": palette["unknown_bg"],
+            "calculation": palette["simulation_bg"],
+            "evidence": palette["evidence_bg"],
+            "check": palette["warning_bg"],
+            "finding": palette["stale_bg"],
+            "verdict": palette["panel"],
+            "verification_run": palette["verified_bg"],
+        }.get(node.get("type"), palette["surface_alt"])
 
     def _draw_graph(self) -> None:
         canvas = self.canvas
@@ -605,13 +611,14 @@ class ProofGraphViewer(ttk.Frame):
         self._canvas_key_by_item.clear()
         nodes = self._projection.get("nodes", [])
         edges = self._projection.get("edges", [])
+        palette = self._theme_palette
         if not nodes:
             canvas.create_text(
                 24,
                 24,
                 anchor="nw",
                 text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                fill=palette["muted"],
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -646,7 +653,7 @@ class ProofGraphViewer(ttk.Frame):
                 source[1] + 24,
                 target[0],
                 target[1] + 24,
-                fill="#94a3b8",
+                fill=palette["strong_border"],
                 width=1,
                 arrow="last",
             )
@@ -654,7 +661,7 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
+            outline = palette["accent"] if selected else palette["strong_border"]
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,
@@ -675,7 +682,7 @@ class ProofGraphViewer(ttk.Frame):
                 width=148,
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=palette["text"],
             )
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]
@@ -708,29 +715,68 @@ class ProofGraphViewer(ttk.Frame):
         if key:
             self._select_key(key)
 
+    @staticmethod
+    def _detail_value(value: Any) -> str:
+        if isinstance(value, (dict, list)):
+            return json.dumps(
+                value,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        return str(value)
+
     def _show_selected_detail(self) -> None:
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         node = self._nodes_by_key.get(self._selected_key or "")
-        if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
-            )
-            if node.get("status"):
-                header += f"Status: {node['status'].upper()}\n"
-            self.detail.insert("1.0", header + "\n")
+        if node is None:
             self.detail.insert(
-                "end",
-                json.dumps(
-                    node.get("raw", {}),
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                ),
+                "1.0",
+                "Select a traceability node to inspect its engineering identity and provenance.",
             )
+        else:
+            lines = [
+                node["type"].replace("_", " ").upper(),
+                str(node["label"]),
+            ]
+            if node.get("status"):
+                lines.append(f"Status: {node['status'].upper()}")
+            lines.extend(("", "Traceability fields"))
+            raw = node.get("raw", {})
+            if isinstance(raw, dict):
+                for key in sorted(raw):
+                    value = raw[key]
+                    if value in (None, "", [], {}):
+                        continue
+                    lines.append(
+                        f"{key.replace('_', ' ').title()}: {self._detail_value(value)}"
+                    )
+            self.detail.insert("1.0", "\n".join(lines))
         self.detail.configure(state="disabled")
+
+    def apply_theme(self, value: str) -> None:
+        """Apply semantic engineering colors without changing graph content."""
+        self._theme_name = value
+        self._theme_palette = theme_palette(value)
+        palette = self._theme_palette
+        self.canvas.configure(
+            background=palette["canvas_2d"],
+            highlightbackground=palette["border"],
+        )
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+        self.tree.tag_configure(
+            "group",
+            foreground=palette["accent"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._draw_graph()
 
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")

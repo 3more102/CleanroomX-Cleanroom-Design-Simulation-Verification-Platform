@@ -1056,3 +1056,25 @@ def test_output_console_tabs_surface_live_engineering_counts(app):
     assert evidence.startswith("Evidence ")
     assert evidence.split()[-1].isdigit()
     assert evidence_log == "Evidence Log"
+
+def test_engineering_inspector_property_filter_is_type_and_unit_aware(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    assert workspace.select_item("room", room["id"])
+    app.root.update()
+
+    workspace._property_search_var.set("pressure")
+    app.root.update()
+    assert workspace._property_rows["pressure_pa"].winfo_manager()
+    assert not workspace._property_rows["length_m"].winfo_manager()
+
+    workspace._property_search_var.set("m")
+    app.root.update()
+    assert workspace._property_rows["length_m"].winfo_manager()
+    assert workspace._property_rows["width_m"].winfo_manager()
+
+    workspace._property_search_var.set("")
+    app.root.update()
+    assert workspace._property_rows["name"].winfo_manager()
+    assert workspace._property_rows["length_m"].winfo_manager()
+

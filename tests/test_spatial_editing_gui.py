@@ -1005,3 +1005,33 @@ def test_window_size_persists_across_application_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+
+def test_engineering_inspector_surfaces_room_area_volume_and_semantic_state(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    area = room["length_m"] * room["width_m"]
+    volume = area * room["height_m"]
+    geometry = workspace._inspector_geometry_var.get()
+    assert f"{area:,.1f} m²" in geometry
+    assert f"{volume:,.1f} m³" in geometry
+    assert workspace._inspector_compliance_var.get().startswith("Verification:")
+
+
+def test_output_console_tabs_surface_live_engineering_counts(app):
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    problems = app.output_notebook.tab(app.problems_panel, "text")
+    verification = app.output_notebook.tab(app.verification_text.master, "text")
+    evidence = app.output_notebook.tab(app.evidence_text.master, "text")
+
+    assert problems.startswith("Problems ")
+    assert problems.split()[-1].isdigit()
+    assert verification.startswith("Verification ")
+    assert evidence.startswith("Evidence ")
+    assert evidence.split()[-1].isdigit()

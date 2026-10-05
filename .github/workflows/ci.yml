@@ -35,6 +35,8 @@ jobs:
           tests/test_spatial_transforms.py
           tests/test_spatial_editing.py
           tests/test_release2_spatial_integrity.py
+          tests/test_spatial_zones.py
+          tests/test_golden_reference_project.py
       - name: Run project diagnostics regressions
         run: python -m pytest -q tests/test_project_diagnostics.py
       - name: Run v0.95 solver-result-integrity compatibility regressions

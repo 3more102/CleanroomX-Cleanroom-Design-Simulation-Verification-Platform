@@ -44,3 +44,4 @@ jobs:
           tests/test_recovery_artifact_ingestion.py
           tests/test_bim_ifc_root_failures.py
           tests/test_project_write_guard.py
+          tests/test_security_static_gate.py

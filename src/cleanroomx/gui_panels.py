@@ -8,14 +8,35 @@ import tkinter as tk
 from tkinter import ttk
 
 from .project_diagnostics import analyze_project_diagnostics
-from .gui_theme import theme_palette
+from .gui_theme import status_style_name, theme_palette
+
+
+def _engineering_detail_pairs(value: Any, *, prefix: str = "") -> list[tuple[str, str]]:
+    """Flatten structured diagnostic details into compact engineer-facing fields."""
+    if not isinstance(value, dict):
+        return []
+    pairs: list[tuple[str, str]] = []
+    for key in sorted(value):
+        item = value[key]
+        label = f"{prefix}{str(key).replace('_', ' ').strip().title()}"
+        if isinstance(item, dict):
+            pairs.extend(_engineering_detail_pairs(item, prefix=f"{label} / "))
+        elif isinstance(item, (list, tuple)):
+            if all(not isinstance(entry, (dict, list, tuple)) for entry in item):
+                pairs.append((label, ", ".join(str(entry) for entry in item)))
+            else:
+                pairs.append((label, f"{len(item)} structured item(s)"))
+        elif item not in (None, ""):
+            rendered = f"{item:,.4g}" if isinstance(item, float) else str(item)
+            pairs.append((label, rendered))
+    return pairs
 
 
 def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
-    """Render one canonical diagnostic as an engineer-facing detail summary."""
+    """Render one canonical diagnostic as a compact engineering inspector summary."""
     severity = str(issue.get("severity") or "info").upper()
     rule = str(issue.get("rule") or "UNSPECIFIED")
-    category = str(issue.get("category") or "General")
+    category = str(issue.get("category") or "General").replace("_", " ").title()
     element = issue.get("element")
     if isinstance(element, dict):
         target = str(
@@ -29,27 +50,22 @@ def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
 
     lines = [
         f"{severity}  |  {rule}",
-        f"Engineering domain: {category}",
-        f"Affected object: {target}",
-        "",
         str(issue.get("message") or "No diagnostic description supplied."),
+        "",
+        f"Affected object: {target}",
+        f"Engineering domain: {category}",
     ]
     action = str(issue.get("suggested_action") or "").strip()
     if action:
-        lines.extend(("", "RECOMMENDED ACTION", action))
+        lines.extend(("", "RECOMMENDED RECOVERY", action))
 
-    details = issue.get("details")
-    if isinstance(details, dict) and details:
+    details = _engineering_detail_pairs(issue.get("details"))
+    if details:
         lines.extend(("", "ENGINEERING DETAILS"))
-        for key, value in sorted(details.items()):
-            label = str(key).replace("_", " ").strip().title()
-            if isinstance(value, dict):
-                rendered = f"{len(value)} field(s)"
-            elif isinstance(value, (list, tuple)):
-                rendered = f"{len(value)} item(s)"
-            else:
-                rendered = str(value)
-            lines.append(f"{label}: {rendered}")
+        for label, rendered in details[:16]:
+            lines.append(f"• {label}: {rendered}")
+        if len(details) > 16:
+            lines.append(f"• … {len(details) - 16} additional field(s)")
     return lines
 
 
@@ -80,6 +96,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self.error_count_var = tk.StringVar(value="ERROR 0")
+        self.warning_count_var = tk.StringVar(value="WARNING 0")
+        self.info_count_var = tk.StringVar(value="INFO 0")
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
@@ -139,6 +158,33 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             style="CX.Status.Neutral.TLabel",
         )
         self.summary_label.pack(side="right", padx=(12, 0))
+
+        counters = ttk.Frame(
+            self,
+            style="CX.SubtlePanel.TFrame",
+            padding=(7, 4),
+        )
+        counters.pack(fill="x", padx=7, pady=(0, 5))
+        ttk.Label(
+            counters,
+            textvariable=self.error_count_var,
+            style="CX.Status.Fail.TLabel",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Label(
+            counters,
+            textvariable=self.warning_count_var,
+            style="CX.Status.Warning.TLabel",
+        ).pack(side="left", padx=4)
+        ttk.Label(
+            counters,
+            textvariable=self.info_count_var,
+            style="CX.Status.Info.TLabel",
+        ).pack(side="left", padx=4)
+        ttk.Label(
+            counters,
+            text="Select a row to inspect · Double-click to locate",
+            style="CX.Muted.TLabel",
+        ).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -289,15 +335,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         errors = int(summary.get("error_count", 0) or 0)
         warnings = int(summary.get("warning_count", 0) or 0)
         status = str(summary.get("status") or "").strip().lower()
-        if errors or status in {"fail", "failed", "error"}:
-            style = "CX.Status.Fail.TLabel"
-        elif warnings or status in {"warning", "warn"}:
-            style = "CX.Status.Warning.TLabel"
-        elif status in {"pass", "passed", "ok", "healthy"}:
-            style = "CX.Status.Pass.TLabel"
-        else:
-            style = "CX.Status.Neutral.TLabel"
-        self.summary_label.configure(style=style)
+        effective = "error" if errors else "warning" if warnings else status
+        self.summary_label.configure(style=status_style_name(effective))
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
@@ -419,6 +458,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.last_result = result
         summary = result.get("summary", {})
+        self.error_count_var.set(f"ERROR {int(summary.get('error_count', 0) or 0)}")
+        self.warning_count_var.set(f"WARNING {int(summary.get('warning_count', 0) or 0)}")
+        self.info_count_var.set(f"INFO {int(summary.get('info_count', 0) or 0)}")
         self.summary_var.set(
             "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
                 status=str(summary.get("status", "unknown")).upper(),
@@ -444,10 +486,28 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         if issue is not None:
             self.detail.insert("1.0", "\n".join(_diagnostic_detail_lines(issue)))
         else:
-            self.detail.insert(
-                "1.0",
-                "No diagnostic selected. Select an issue to inspect its engineering context.",
+            issues = (
+                self.last_result.get("issues", [])
+                if isinstance(self.last_result, dict)
+                else None
             )
+            if isinstance(issues, list) and not issues:
+                empty = (
+                    "No violations detected.\n\n"
+                    "All currently enabled project diagnostic rules passed."
+                )
+            elif isinstance(issues, list):
+                empty = (
+                    "No diagnostic selected.\n\n"
+                    "Select an issue to inspect its engineering context, recovery action, "
+                    "and affected object."
+                )
+            else:
+                empty = (
+                    "Project diagnostics have not been evaluated yet.\n\n"
+                    "Use Refresh or press F8 to evaluate the current project."
+                )
+            self.detail.insert("1.0", empty)
         self.detail.configure(state="disabled")
 
     def _navigate_selected(self, event=None):

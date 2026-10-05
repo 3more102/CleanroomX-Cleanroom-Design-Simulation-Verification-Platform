@@ -6,6 +6,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import normalize_theme_name, theme_palette
 from .proofgraph_io import proofgraph_from_dict
 
 
@@ -313,6 +314,120 @@ def proofgraph_projection(document: dict[str, Any] | None) -> dict[str, Any]:
     return {"nodes": ordered_nodes, "edges": normalized_edges}
 
 
+def proofgraph_projection_summary(projection: dict[str, Any]) -> dict[str, int]:
+    """Count canonical persisted ProofGraph states without deriving new verdicts."""
+    nodes = projection.get("nodes", [])
+    if not isinstance(nodes, list):
+        nodes = []
+
+    verdicts = [
+        node
+        for node in nodes
+        if isinstance(node, dict) and node.get("type") == "verdict"
+    ]
+    findings = [
+        node
+        for node in nodes
+        if isinstance(node, dict) and node.get("type") == "finding"
+    ]
+
+    def count_type(node_type: str) -> int:
+        return sum(
+            1
+            for node in nodes
+            if isinstance(node, dict) and node.get("type") == node_type
+        )
+
+    statuses = [_text(node.get("status")).casefold() for node in verdicts]
+    return {
+        "requirement_count": count_type("requirement"),
+        "evidence_count": count_type("evidence"),
+        "check_count": count_type("check"),
+        "verdict_count": len(verdicts),
+        "pass_count": sum(status == "pass" for status in statuses),
+        "fail_count": sum(
+            status in {"fail", "failed", "error"} for status in statuses
+        ),
+        "warning_count": sum(
+            status in {"warning", "warn"} for status in statuses
+        ),
+        "not_checked_count": sum(
+            status in {"not_checked", "not checked"} for status in statuses
+        ),
+        "unknown_count": sum(
+            status in {"unknown", "uncertain", "stale"} for status in statuses
+        ),
+        "unresolved_evidence_count": sum(
+            "unresolved" in set(node.get("flags") or ())
+            for node in findings
+        ),
+    }
+
+
+def _search_projection(
+    projection: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    """Search display/provenance text and retain immediate graph context."""
+    needle = query.strip().casefold()
+    if not needle:
+        return projection
+
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    matched: set[str] = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        raw = node.get("raw", {})
+        try:
+            raw_text = json.dumps(
+                raw,
+                ensure_ascii=False,
+                sort_keys=True,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError):
+            raw_text = ""
+        haystack = " ".join(
+            (
+                _text(node.get("label")),
+                _text(node.get("id")),
+                _text(node.get("type")),
+                _text(node.get("status")),
+                " ".join(_text(item) for item in node.get("flags") or ()),
+                raw_text,
+            )
+        ).casefold()
+        if needle in haystack:
+            matched.add(_text(node.get("key")))
+
+    expanded = set(matched)
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        source = _text(edge.get("source"))
+        target = _text(edge.get("target"))
+        if source in matched or target in matched:
+            expanded.add(source)
+            expanded.add(target)
+
+    return {
+        "nodes": [
+            node
+            for node in nodes
+            if isinstance(node, dict) and node.get("key") in expanded
+        ],
+        "edges": [
+            edge
+            for edge in edges
+            if isinstance(edge, dict)
+            and edge.get("source") in expanded
+            and edge.get("target") in expanded
+        ],
+    }
+
+
 def _filtered_projection(
     projection: dict[str, Any],
     filter_name: str,
@@ -345,8 +460,20 @@ def _filtered_projection(
                 "verdict",
                 "verification_run",
             }
+        elif filter_key == "passing":
+            include = status == "pass"
         elif filter_key == "failures":
             include = status in {"fail", "failed", "error"}
+        elif filter_key == "warnings":
+            include = status in {"warning", "warn"}
+        elif filter_key == "not checked / unknown":
+            include = status in {
+                "not_checked",
+                "not checked",
+                "unknown",
+                "uncertain",
+                "stale",
+            }
         elif filter_key == "unresolved evidence":
             include = "unresolved" in flags
         if include:
@@ -397,7 +524,11 @@ class ProofGraphViewer(ttk.Frame):
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
+        self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.health_var = tk.StringVar(value="Evidence state: unavailable")
+        self._theme = "light"
+        self._theme_palette = theme_palette("light")
 
         toolbar = ttk.Frame(self, padding=(7, 5))
         toolbar.pack(fill="x")
@@ -420,7 +551,10 @@ class ProofGraphViewer(ttk.Frame):
                 "Calculations",
                 "IFC",
                 "Verification",
+                "Passing",
                 "Failures",
+                "Warnings",
+                "Not Checked / Unknown",
                 "Unresolved Evidence",
             ),
             state="readonly",
@@ -432,6 +566,27 @@ class ProofGraphViewer(ttk.Frame):
         )
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+
+        searchbar = ttk.Frame(self, padding=(7, 0, 7, 5))
+        searchbar.pack(fill="x")
+        ttk.Label(searchbar, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            searchbar,
+            textvariable=self.search_var,
+            width=36,
+        )
+        self.search_entry.pack(side="left", padx=(5, 6))
+        ttk.Button(
+            searchbar,
+            text="Clear",
+            command=lambda: self.search_var.set(""),
+        ).pack(side="left")
+        ttk.Label(
+            searchbar,
+            textvariable=self.health_var,
+            anchor="e",
+        ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+        self.search_var.trace_add("write", lambda *_: self._refresh())
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -489,6 +644,26 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
         detail_scroll.pack(side="right", fill="y", pady=(0, 6))
+        self.apply_theme("light", redraw=False)
+
+    def apply_theme(self, value: str, *, redraw: bool = True) -> None:
+        """Retheme native ProofGraph surfaces without changing evidence data."""
+        self._theme = normalize_theme_name(value)
+        self._theme_palette = theme_palette(self._theme)
+        palette = self._theme_palette
+        self.canvas.configure(
+            background=palette["plot"],
+            highlightbackground=palette["border"],
+        )
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+        if redraw:
+            self._draw_graph()
 
     def set_documents(self, documents: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> None:
         unique: dict[str, dict[str, Any]] = {}
@@ -526,7 +701,8 @@ class ProofGraphViewer(ttk.Frame):
 
     def _refresh(self) -> None:
         projection = proofgraph_projection(self._active_document())
-        self._projection = _filtered_projection(projection, self.filter_var.get())
+        filtered = _filtered_projection(projection, self.filter_var.get())
+        self._projection = _search_projection(filtered, self.search_var.get())
         self._nodes_by_key = {
             node["key"]: node for node in self._projection.get("nodes", [])
         }
@@ -544,6 +720,16 @@ class ProofGraphViewer(ttk.Frame):
             if all_nodes
             else "No persisted ProofGraph evidence"
         )
+        summary = proofgraph_projection_summary(projection)
+        if all_nodes:
+            self.health_var.set(
+                "Requirements {requirement_count} · Evidence {evidence_count} · "
+                "PASS {pass_count} · FAIL {fail_count} · "
+                "NOT CHECKED {not_checked_count} · UNKNOWN {unknown_count} · "
+                "Evidence gaps {unresolved_evidence_count}".format(**summary)
+            )
+        else:
+            self.health_var.set("Evidence state: unavailable")
 
     def _populate_tree(self) -> None:
         for iid in self.tree.get_children():
@@ -577,15 +763,37 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def _node_fill(self, node: dict[str, Any]) -> str:
         status = _text(node.get("status")).casefold()
+        if self._theme == "dark":
+            if status in {"fail", "failed", "error"}:
+                return "#4a2328"
+            if status in {"warning", "warn"}:
+                return "#4a3c20"
+            if status == "pass":
+                return "#203c2d"
+            if status in {"not_checked", "not checked", "unknown", "uncertain", "stale"}:
+                return "#303842"
+            return {
+                "requirement": "#20364f",
+                "model_object": "#183a48",
+                "ifc": "#2c3154",
+                "source": "#2a323b",
+                "calculation": "#34284b",
+                "evidence": "#3a2845",
+                "check": "#40391f",
+                "finding": "#49321f",
+                "verdict": "#303842",
+                "verification_run": "#1f4037",
+            }.get(node.get("type"), "#252d36")
         if status in {"fail", "failed", "error"}:
             return "#fee2e2"
         if status in {"warning", "warn"}:
             return "#fef3c7"
         if status == "pass":
             return "#dcfce7"
+        if status in {"not_checked", "not checked", "unknown", "uncertain", "stale"}:
+            return "#e5e7eb"
         return {
             "requirement": "#dbeafe",
             "model_object": "#e0f2fe",
@@ -605,13 +813,14 @@ class ProofGraphViewer(ttk.Frame):
         self._canvas_key_by_item.clear()
         nodes = self._projection.get("nodes", [])
         edges = self._projection.get("edges", [])
+        palette = self._theme_palette
         if not nodes:
             canvas.create_text(
                 24,
                 24,
                 anchor="nw",
-                text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                text="No ProofGraph nodes for the current graph/filter/search.",
+                fill=palette["muted"],
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -646,7 +855,7 @@ class ProofGraphViewer(ttk.Frame):
                 source[1] + 24,
                 target[0],
                 target[1] + 24,
-                fill="#94a3b8",
+                fill=palette["muted"],
                 width=1,
                 arrow="last",
             )
@@ -654,7 +863,7 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
+            outline = palette["accent"] if selected else palette["border"]
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,
@@ -675,7 +884,7 @@ class ProofGraphViewer(ttk.Frame):
                 width=148,
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=palette["text"],
             )
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]

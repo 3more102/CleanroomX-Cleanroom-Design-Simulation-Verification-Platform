@@ -2346,10 +2346,16 @@ class CleanroomXApp:
 
         self.edit_menu = tk.Menu(menubar, tearoff=False)
         self.edit_menu.add_command(
-            label="Undo Project Edit", command=self.undo_project_edit, state="disabled"
+            label="Undo Project Edit",
+            accelerator="Ctrl+Z",
+            command=self.undo_project_edit,
+            state="disabled",
         )
         self.edit_menu.add_command(
-            label="Redo Project Edit", command=self.redo_project_edit, state="disabled"
+            label="Redo Project Edit",
+            accelerator="Ctrl+Y",
+            command=self.redo_project_edit,
+            state="disabled",
         )
         menubar.add_cascade(label="Edit", menu=self.edit_menu)
 
@@ -2579,6 +2585,9 @@ class CleanroomXApp:
         self.root.bind("<Control-n>", lambda event: self.new_project())
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
+        self.root.bind("<Control-z>", self._on_project_undo_shortcut)
+        self.root.bind("<Control-y>", self._on_project_redo_shortcut)
+        self.root.bind("<Control-Shift-Z>", self._on_project_redo_shortcut)
         self.root.bind("<Control-Key-1>", lambda event: self._activate_spatial_workspace("2d"))
         self.root.bind("<Control-Key-2>", lambda event: self._activate_spatial_workspace("3d"))
         self.root.bind("<Control-Key-3>", lambda event: self._activate_spatial_workspace("split"))
@@ -5104,6 +5113,45 @@ class CleanroomXApp:
             )
             return False
         return True
+
+    def _focused_widget_owns_edit_history(self) -> bool:
+        """Return True when Ctrl+Z/Ctrl+Y belong to a text-entry widget."""
+        focus_get = getattr(self.root, "focus_get", None)
+        if not callable(focus_get):
+            return False
+        try:
+            widget = focus_get()
+        except tk.TclError:
+            return False
+        if widget is None:
+            return False
+        winfo_class = getattr(widget, "winfo_class", None)
+        if not callable(winfo_class):
+            return False
+        try:
+            widget_class = str(winfo_class())
+        except tk.TclError:
+            return False
+        return widget_class in {
+            "Entry",
+            "TEntry",
+            "Text",
+            "TCombobox",
+            "Spinbox",
+            "TSpinbox",
+        }
+
+    def _on_project_undo_shortcut(self, event=None):
+        if self._focused_widget_owns_edit_history():
+            return None
+        self.undo_project_edit()
+        return "break"
+
+    def _on_project_redo_shortcut(self, event=None):
+        if self._focused_widget_owns_edit_history():
+            return None
+        self.redo_project_edit()
+        return "break"
 
     def undo_project_edit(self) -> bool:
         if self._running:

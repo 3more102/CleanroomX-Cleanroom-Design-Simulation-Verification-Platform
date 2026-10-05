@@ -6,7 +6,7 @@ from tkinter import ttk
 
 
 class StartCenter(ttk.Frame):
-    """Professional zero-state surface; all project actions stay in the app layer."""
+    """Industrial zero-state surface; project actions remain in the app layer."""
 
     def __init__(
         self,
@@ -18,140 +18,201 @@ class StartCenter(ttk.Frame):
         on_open_demo: Callable[[], None],
         on_open_recent: Callable[[str], None],
     ):
-        super().__init__(master, padding=(34, 28))
+        super().__init__(master, padding=(18, 16))
         self._on_open_recent = on_open_recent
         self._recent_paths: dict[str, str] = {}
 
         self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)
         self.rowconfigure(3, weight=1)
 
-        brand = ttk.Frame(self)
-        brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(4, 22))
-        ttk.Label(brand, text="CleanroomX", style="CX.Brand.TLabel").pack(anchor="w")
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         ttk.Label(
-            brand,
-            text="Engineering Design • Simulation • Verification",
-            style="CX.ViewTitle.TLabel",
-        ).pack(anchor="w", pady=(4, 0))
+            header,
+            text="CLEANROOMX",
+            style="CX.Brand.TLabel",
+        ).pack(side="left")
         ttk.Label(
-            brand,
-            text=(
-                "Project-native cleanroom engineering with linked 2D/3D design, "
-                "analysis, deterministic verification, IFC semantics, diagnostics, "
-                "ProofGraph, and evidence traceability."
-            ),
-            wraplength=900,
-            justify="left",
-        ).pack(anchor="w", pady=(8, 0))
+            header,
+            text="INDUSTRIAL ENGINEERING WORKSTATION",
+            style="CX.Muted.TLabel",
+        ).pack(side="left", padx=(12, 0))
+        ttk.Label(
+            header,
+            text="WORKSTATION READY",
+            style="CX.Status.Success.TLabel",
+        ).pack(side="right")
 
-        actions = ttk.LabelFrame(self, text="Start", padding=18)
-        actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
-        actions.columnconfigure(0, weight=1)
-        actions.columnconfigure(1, weight=1)
+        launch = ttk.Frame(
+            self,
+            style="CX.Card.TFrame",
+            padding=(12, 10),
+        )
+        launch.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        launch.columnconfigure(4, weight=1)
+        ttk.Label(
+            launch,
+            text="PROJECT",
+            style="CX.CardTitle.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 10))
         ttk.Button(
-            actions,
+            launch,
             text="New Project",
             style="CX.Primary.TButton",
             command=on_new,
-        ).grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        ).grid(row=0, column=1, sticky="w", padx=(0, 5))
         ttk.Button(
-            actions,
+            launch,
             text="Open Project",
             style="CX.Primary.TButton",
             command=on_open,
-        ).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        ).grid(row=0, column=2, sticky="w", padx=(0, 5))
         ttk.Button(
-            actions,
-            text="Import IFC",
+            launch,
+            text="Import IFC…",
+            style="CX.Compact.TButton",
             command=on_import_ifc,
-        ).grid(row=1, column=0, sticky="ew", padx=5, pady=5)
-        ttk.Button(
-            actions,
-            text="Open Example Project",
-            command=on_open_demo,
-        ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
-
-        capabilities = ttk.LabelFrame(self, text="Engineering workspace", padding=18)
-        capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        ).grid(row=0, column=3, sticky="w", padx=(0, 5))
         ttk.Label(
-            capabilities,
+            launch,
             text=(
-                "2D / 3D / Split engineering views\n"
-                "Project Navigator + contextual properties\n"
-                "Analysis + verification overlays\n"
-                "IDE-style deterministic diagnostics\n"
-                "ProofGraph + evidence traceability\n"
-                "IFC semantic import / re-import review"
+                "Project-native design, analysis, deterministic verification, "
+                "ProofGraph traceability, and evidence handoff."
             ),
-            justify="left",
-        ).pack(anchor="w")
+            style="CX.CardBody.TLabel",
+            justify="right",
+            wraplength=430,
+        ).grid(row=0, column=4, sticky="e", padx=(14, 0))
 
-        recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
-        recent.grid(
-            row=2,
-            column=0,
-            columnspan=2,
-            sticky="nsew",
-            pady=(18, 0),
+        flow = ttk.Frame(
+            self,
+            style="CX.Card.TFrame",
+            padding=(12, 9),
         )
-        recent.columnconfigure(0, weight=1)
-        recent.rowconfigure(0, weight=1)
+        flow.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        ttk.Label(
+            flow,
+            text="ENGINEERING FLOW",
+            style="CX.CardTitle.TLabel",
+        ).pack(side="left", padx=(0, 10))
+        for label, domain in (
+            ("01  Design", "Geometry"),
+            ("02  Inputs", "HVAC"),
+            ("03  Simulate", "Simulation"),
+            ("04  Verify", "Verification"),
+            ("05  Evidence", "Evidence"),
+        ):
+            ttk.Label(
+                flow,
+                text=label,
+                style=f"CX.Domain.{domain}.TLabel",
+            ).pack(side="left", padx=(0, 5))
+        ttk.Label(
+            flow,
+            text="Requirement → Model → Solver → Verification → Evidence → Report",
+            style="CX.CardTitle.TLabel",
+        ).pack(side="right")
+
+        body = ttk.Panedwindow(self, orient="horizontal")
+        body.grid(row=3, column=0, sticky="nsew")
+
+        recent_host = ttk.Frame(body, style="CX.Card.TFrame", padding=(10, 9))
+        demo_host = ttk.Frame(body, style="CX.Card.TFrame", padding=(10, 9))
+        body.add(recent_host, weight=4)
+        body.add(demo_host, weight=2)
+
+        recent_header = ttk.Frame(recent_host, style="CX.Card.TFrame")
+        recent_header.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            recent_header,
+            text="RECENT PROJECTS",
+            style="CX.CardTitle.TLabel",
+        ).pack(side="left")
+        self.recent_hint = ttk.Label(
+            recent_header,
+            text="No recent projects in this session.",
+            style="CX.CardTitle.TLabel",
+        )
+        self.recent_hint.pack(side="right")
+
+        recent_table = ttk.Frame(recent_host, style="CX.Card.TFrame")
+        recent_table.pack(fill="both", expand=True)
+        recent_table.rowconfigure(0, weight=1)
+        recent_table.columnconfigure(0, weight=1)
         self.recent_tree = ttk.Treeview(
-            recent,
+            recent_table,
             columns=("path", "modified"),
             show="tree headings",
-            height=6,
+            height=8,
             selectmode="browse",
         )
         self.recent_tree.heading("#0", text="Project")
-        self.recent_tree.heading("path", text="Path")
+        self.recent_tree.heading("path", text="Location")
         self.recent_tree.heading("modified", text="Modified")
-        self.recent_tree.column("#0", width=220, minwidth=140)
-        self.recent_tree.column("path", width=520, minwidth=240)
-        self.recent_tree.column("modified", width=150, minwidth=110, stretch=False)
-        scroll = ttk.Scrollbar(recent, orient="vertical", command=self.recent_tree.yview)
+        self.recent_tree.column("#0", width=185, minwidth=120)
+        self.recent_tree.column("path", width=330, minwidth=180)
+        self.recent_tree.column("modified", width=130, minwidth=100, stretch=False)
+        scroll = ttk.Scrollbar(
+            recent_table,
+            orient="vertical",
+            command=self.recent_tree.yview,
+        )
         self.recent_tree.configure(yscrollcommand=scroll.set)
         self.recent_tree.grid(row=0, column=0, sticky="nsew")
         scroll.grid(row=0, column=1, sticky="ns")
         self.recent_tree.bind("<Double-1>", self._open_selected_recent)
         self.recent_tree.bind("<Return>", self._open_selected_recent)
-        footer = ttk.Frame(recent)
-        footer.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        self.recent_hint = ttk.Label(footer, text="No recent projects in this session.")
-        self.recent_hint.pack(side="left")
         ttk.Button(
-            footer,
+            recent_host,
             text="Open Selected",
+            style="CX.Compact.TButton",
             command=self._open_selected_recent,
-        ).pack(side="right")
+        ).pack(anchor="e", pady=(7, 0))
 
-        examples = ttk.LabelFrame(self, text="Example Projects", padding=12)
-        examples.grid(
-            row=3,
-            column=0,
-            columnspan=2,
-            sticky="nsew",
-            pady=(18, 0),
-        )
         ttk.Label(
-            examples,
+            demo_host,
+            text="REFERENCE WORKSPACE",
+            style="CX.CardTitle.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            demo_host,
             text="Bundled CleanroomX Demo",
-            style="CX.Section.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+            style="CX.CardValue.TLabel",
+        ).pack(anchor="w", pady=(7, 2))
         ttk.Label(
-            examples,
+            demo_host,
             text=(
-                "Open the packaged demo project to explore the project browser, "
-                "2D/3D workspace, analyses, diagnostics, verification, and evidence."
+                "Explore linked 2D/3D design, engineering overlays, project "
+                "diagnostics, verification currency, ProofGraph, and retained evidence."
             ),
-            wraplength=760,
+            style="CX.CardBody.TLabel",
             justify="left",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Button(examples, text="Open Demo", command=on_open_demo).grid(
-            row=0, column=1, rowspan=2, sticky="e", padx=(18, 0)
-        )
-        examples.columnconfigure(0, weight=1)
+            wraplength=300,
+        ).pack(anchor="w", pady=(0, 10))
+        ttk.Button(
+            demo_host,
+            text="Open Demo Project",
+            style="CX.Primary.TButton",
+            command=on_open_demo,
+        ).pack(fill="x")
+        ttk.Separator(demo_host, orient="horizontal").pack(fill="x", pady=12)
+        ttk.Label(
+            demo_host,
+            text="WORKSPACE CAPABILITIES",
+            style="CX.CardTitle.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            demo_host,
+            text=(
+                "• 2D / 3D / Split engineering views\n"
+                "• IFC spatial import and re-import review\n"
+                "• Airflow / ACH / pressure overlays\n"
+                "• DRC-style diagnostics and navigation\n"
+                "• Verification and evidence traceability"
+            ),
+            style="CX.CardBody.TLabel",
+            justify="left",
+        ).pack(anchor="w", pady=(6, 0))
 
     def set_recent_projects(self, records: list[dict[str, str]]) -> None:
         for item in self.recent_tree.get_children():

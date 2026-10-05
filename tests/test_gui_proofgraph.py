@@ -4,7 +4,11 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import (\n    _filtered_projection,\n    _node_detail_lines,\n    proofgraph_projection,\n)
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    _node_detail_lines,
+    proofgraph_projection,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,

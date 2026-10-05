@@ -27,6 +27,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
       - run: pip install -e .[dev]
+      - name: Verify production acceptance contract
+        run: python -m pytest -q tests/test_production_acceptance_contract.py
       - name: Run spatial design focused regressions
         run: >-
           python -m pytest -q

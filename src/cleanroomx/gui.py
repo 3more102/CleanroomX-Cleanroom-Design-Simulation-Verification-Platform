@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_dashboard import EngineeringDashboard
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -2740,6 +2741,16 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
+        self.dashboard = EngineeringDashboard(
+            self.notebook,
+            open_design=self._activate_design_workspace,
+            open_simulation=self._activate_simulation_workspace,
+            open_verification=self._activate_verification_workspace,
+            open_evidence=self._activate_evidence_workspace,
+            open_reporting=self._activate_reporting_workspace,
+        )
+        self.notebook.add(self.dashboard, text="Overview")
+
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
             project_getter=lambda: self.project,
@@ -3496,6 +3507,9 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency_summary: dict | None = None
+        retained_records: list[dict] = []
+        proofgraph_documents: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -3503,6 +3517,7 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            currency_summary = summary if isinstance(summary, dict) else None
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -3539,11 +3554,11 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            retained_records = records if isinstance(records, list) else []
+            proofgraph_documents = self._proofgraph_documents_from_records(records)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
-                viewer.set_documents(
-                    self._proofgraph_documents_from_records(records)
-                )
+                viewer.set_documents(proofgraph_documents)
             lines = [
                 "PERSISTED VERIFICATION EVIDENCE",
                 "",
@@ -3597,6 +3612,30 @@ class CleanroomXApp:
             except tk.TclError:
                 pass
         self._apply_navigator_diagnostic_badges()
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
+        devices = layout.get("devices", []) if isinstance(layout, dict) else []
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            dashboard.set_snapshot(
+                {
+                    "project_name": self.project.name,
+                    "project_location": (
+                        str(self.project_path)
+                        if self.project_path is not None
+                        else "Unsaved project"
+                    ),
+                    "diagnostics": summary if isinstance(summary, dict) else None,
+                    "verification": currency_summary,
+                    "retained_verification_records": len(retained_records),
+                    "proofgraph_count": len(proofgraph_documents),
+                    "room_count": len(rooms) if isinstance(rooms, list) else 0,
+                    "device_count": len(devices) if isinstance(devices, list) else 0,
+                    "analysis_count": len(self.project.analyses),
+                    "current_run": self._current_fresh_run(),
+                }
+            )
 
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
@@ -3926,6 +3965,13 @@ class CleanroomXApp:
                 keywords=("home", "recent", "example"),
             ),
             PaletteCommand(
+                "workspace.overview",
+                "Open Project Overview",
+                "Workspace",
+                self._activate_overview_workspace,
+                keywords=("dashboard", "health", "project", "status"),
+            ),
+            PaletteCommand(
                 "workspace.2d",
                 "Open 2D Workspace",
                 "Design",
@@ -4113,6 +4159,19 @@ class CleanroomXApp:
             self._refresh_start_center()
             self.notebook.select(self.start_center)
             self.workspace_status_var.set("Workspace: Start")
+
+    def _activate_overview_workspace(self) -> None:
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is None:
+            return
+        self._prepare_workspace_preset(
+            navigator=True,
+            output=False,
+            inspector=False,
+        )
+        self.notebook.select(dashboard)
+        self.workspace_status_var.set("Workspace: Overview")
+        self.status_var.set("Project overview: engineering health and next actions")
 
     def _recent_project_records(self) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []
@@ -5339,6 +5398,7 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
+            ("nav-overview", "Project Overview"),
             ("nav-building", "Building"),
             ("nav-hvac", "HVAC Systems"),
             ("nav-devices", "Devices"),
@@ -5719,6 +5779,10 @@ class CleanroomXApp:
         if not selection:
             return
         item_id = selection[0]
+        if item_id == "nav-overview":
+            self._activate_overview_workspace()
+            self.selection_status_var.set("Selected: Project Overview")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
             if hasattr(self, "spatial_workspace"):

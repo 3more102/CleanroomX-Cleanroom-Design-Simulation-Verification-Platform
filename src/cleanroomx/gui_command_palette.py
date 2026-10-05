@@ -54,6 +54,7 @@ class CommandPalette(tk.Toplevel):
         *,
         commands: list[PaletteCommand],
         on_close: Callable[[], None] | None = None,
+        search_provider: Callable[[str], Iterable[PaletteCommand]] | None = None,
     ):
         super().__init__(parent)
         self.title("CleanroomX Command Palette")
@@ -63,6 +64,7 @@ class CommandPalette(tk.Toplevel):
         self._commands = list(commands)
         self._filtered: list[PaletteCommand] = []
         self._on_close = on_close
+        self._search_provider = search_provider
         self._query_var = tk.StringVar()
         self._iid_to_command: dict[str, PaletteCommand] = {}
 
@@ -70,7 +72,7 @@ class CommandPalette(tk.Toplevel):
         shell.pack(fill="both", expand=True)
         ttk.Label(
             shell,
-            text="COMMAND PALETTE",
+            text="COMMAND PALETTE · ENGINEERING SEARCH",
             style="CX.Section.TLabel",
         ).pack(anchor="w")
         self.search = ttk.Entry(shell, textvariable=self._query_var)
@@ -116,7 +118,26 @@ class CommandPalette(tk.Toplevel):
         self.after_idle(self.search.focus_set)
 
     def _refresh(self) -> None:
-        self._filtered = filter_commands(self._commands, self._query_var.get())
+        query = self._query_var.get()
+        static_matches = filter_commands(self._commands, query)
+        dynamic_matches: list[PaletteCommand] = []
+        if self._search_provider is not None and str(query).strip():
+            try:
+                dynamic_matches = list(self._search_provider(query))
+            except Exception:
+                dynamic_matches = []
+
+        combined: list[PaletteCommand] = []
+        seen: set[str] = set()
+        for command in (*static_matches, *dynamic_matches):
+            if command.id in seen:
+                continue
+            seen.add(command.id)
+            combined.append(command)
+            if len(combined) >= 120:
+                break
+        self._filtered = combined
+
         for item in self.tree.get_children():
             self.tree.delete(item)
         self._iid_to_command.clear()
@@ -136,7 +157,7 @@ class CommandPalette(tk.Toplevel):
             self.tree.selection_set(first)
             self.tree.focus(first)
         self._summary.configure(
-            text=f"{len(self._filtered)} command{'s' if len(self._filtered) != 1 else ''}"
+            text=f"{len(self._filtered)} result{'s' if len(self._filtered) != 1 else ''}"
         )
 
     def _focus_first_result(self, _event=None):

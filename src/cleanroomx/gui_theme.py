@@ -225,6 +225,26 @@ def _configure_status_style(
     )
 
 
+def _configure_progress_style(
+    style: ttk.Style,
+    name: str,
+    *,
+    color: str,
+    trough: str,
+    border: str,
+) -> None:
+    """Configure a compact semantic progress bar used by engineering status views."""
+    style.configure(
+        name,
+        background=color,
+        troughcolor=trough,
+        bordercolor=border,
+        lightcolor=color,
+        darkcolor=color,
+        thickness=8,
+    )
+
+
 def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     """Apply the CleanroomX workstation palette without engineering side effects."""
     palette = theme_palette(value)
@@ -255,6 +275,14 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure("CX.Panel.TFrame", background=palette["panel"])
     style.configure("CX.Surface.TFrame", background=palette["surface_alt"])
     style.configure("CX.Card.TFrame", background=palette["panel"])
+    style.configure(
+        "CX.Instrument.TFrame",
+        background=palette["panel"],
+        borderwidth=1,
+        relief="solid",
+        bordercolor=palette["border"],
+        padding=(8, 6),
+    )
 
     style.configure(
         "TLabel",
@@ -343,6 +371,24 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "CX.PanelMuted.TLabel",
         background=palette["panel"],
         foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.InstrumentName.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.InstrumentValue.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.InstrumentMeta.TLabel",
+        background=palette["panel"],
+        foreground=palette["secondary_text"],
         font=("TkDefaultFont", 8),
     )
     style.configure(
@@ -610,6 +656,35 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["accent"],
         darkcolor=palette["accent"],
+    )
+
+    _configure_progress_style(
+        style,
+        "CX.Success.Horizontal.TProgressbar",
+        color=palette["success"],
+        trough=palette["surface_alt"],
+        border=palette["border"],
+    )
+    _configure_progress_style(
+        style,
+        "CX.Warning.Horizontal.TProgressbar",
+        color=palette["warning"],
+        trough=palette["surface_alt"],
+        border=palette["border"],
+    )
+    _configure_progress_style(
+        style,
+        "CX.Fail.Horizontal.TProgressbar",
+        color=palette["error"],
+        trough=palette["surface_alt"],
+        border=palette["border"],
+    )
+    _configure_progress_style(
+        style,
+        "CX.Simulation.Horizontal.TProgressbar",
+        color=palette["simulation"],
+        trough=palette["surface_alt"],
+        border=palette["border"],
     )
 
     style.configure(

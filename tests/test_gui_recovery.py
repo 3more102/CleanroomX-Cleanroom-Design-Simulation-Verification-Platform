@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import cleanroomx.gui as gui_module
 from cleanroomx.autosave import AutosaveManager, RecoveryScan
 from cleanroomx.gui import CleanroomXApp
@@ -306,3 +308,102 @@ def test_recovered_first_save_refuses_original_source_path(tmp_path, monkeypatch
     assert warnings
     assert "different file" in warnings[0][1]
     assert "both versions" in warnings[0][1]
+
+
+def test_discard_choice_preserves_recovery_until_replacement_commits(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._has_unsaved_changes = lambda: True
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesnocancel",
+        lambda *args, **kwargs: False,
+    )
+
+    assert app._confirm_project_replacement() is True
+    assert discarded == []
+
+
+def test_failed_project_load_preserves_existing_recovery(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    monkeypatch.setattr(
+        gui_module,
+        "load_project_document_with_revision_info",
+        lambda _path: (_ for _ in ()).throw(ValueError("broken project")),
+    )
+
+    with pytest.raises(ValueError, match="broken project"):
+        app.load_project_path(tmp_path / "broken.cleanroomx.json")
+
+    assert discarded == []
+
+
+def test_failed_recovery_restore_preserves_existing_recovery(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    monkeypatch.setattr(
+        gui_module,
+        "restore_recovery_artifact",
+        lambda _path: (_ for _ in ()).throw(ValueError("broken recovery")),
+    )
+
+    with pytest.raises(ValueError, match="broken recovery"):
+        app.restore_recovery_path(tmp_path / "broken.recovery.json")
+
+    assert discarded == []
+
+
+def test_successful_project_load_discards_recovery_after_validation(
+    tmp_path,
+    monkeypatch,
+):
+    class MigrationInfo:
+        migrated = False
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = new_project()
+    app.project_path = None
+    app._project_file_revision = None
+    app._recovery_source_path = tmp_path / "old.cleanroomx.json"
+    app._restored_recovery_artifact = tmp_path / "old.recovery.json"
+    app._migration_source_path = None
+    app.name_var = Value("")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    app._begin_autosave_project = lambda _path: None
+    app._clear_run_cache = lambda: None
+    app._clear_project_history = lambda: None
+    app._refresh_analysis_list = lambda: None
+    app._refresh_engineering_panels = lambda: None
+    app._capture_saved_state = lambda: None
+    app._update_title = lambda: None
+    app._remember_recent_project = lambda _path: None
+    app._activate_spatial_workspace = lambda *args: None
+
+    loaded = _project()
+    revision = object()
+    monkeypatch.setattr(
+        gui_module,
+        "load_project_document_with_revision_info",
+        lambda _path: (loaded, revision, MigrationInfo()),
+    )
+
+    project_path = tmp_path / "loaded.cleanroomx.json"
+    app.load_project_path(project_path)
+
+    assert discarded == ["autosave", "recovery"]
+    assert app.project is loaded
+    assert app.project_path == project_path
+    assert app._project_file_revision is revision
+    assert app._restored_recovery_artifact is None

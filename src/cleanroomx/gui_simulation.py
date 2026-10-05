@@ -246,6 +246,7 @@ class SimulationWorkspace(ttk.Frame):
         on_open_inputs: Callable[[], None],
         on_open_results: Callable[[], None],
         on_open_history: Callable[[], None] | None = None,
+        on_duplicate_analysis: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, padding=(14, 12))
         self._on_run = on_run
@@ -335,6 +336,18 @@ class SimulationWorkspace(ttk.Frame):
             state="normal" if on_open_history is not None else "disabled",
         )
         self.history_button.pack(side="left", padx=2)
+        self.duplicate_button = ttk.Button(
+            controls,
+            text="Duplicate Scenario",
+            style="CX.Compact.TButton",
+            command=(
+                on_duplicate_analysis
+                if on_duplicate_analysis is not None
+                else (lambda: None)
+            ),
+            state="normal" if on_duplicate_analysis is not None else "disabled",
+        )
+        self.duplicate_button.pack(side="left", padx=2)
 
         execution = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 8))
         execution.pack(fill="x", pady=(0, 8))

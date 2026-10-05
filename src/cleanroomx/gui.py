@@ -6192,6 +6192,17 @@ class CleanroomXApp:
         self.status_var.set(f"Input valid — {analysis.name}")
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
 
+    def _set_run_state_indicator(self, text: str, style: str) -> None:
+        """Update optional run-state presentation without coupling worker logic to Tk."""
+        variable = getattr(self, "run_state_var", None)
+        setter = getattr(variable, "set", None)
+        if callable(setter):
+            setter(text)
+        label = getattr(self, "run_state_label", None)
+        configure = getattr(label, "configure", None)
+        if callable(configure):
+            configure(style=style)
+
     def run_current(self) -> None:
         if self._running:
             return
@@ -6211,9 +6222,11 @@ class CleanroomXApp:
         base_dir = self._base_dir()
         self._abandon_requested = False
         self._run_started_monotonic = time.monotonic()
-        self.run_state_var.set(f"RUNNING · {analysis.name}")
+        self._set_run_state_indicator(
+            f"RUNNING · {analysis.name}",
+            "CX.Status.Simulation.TLabel",
+        )
         self.run_elapsed_var.set("0.0 s")
-        self.run_state_label.configure(style="CX.Status.Simulation.TLabel")
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
         self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
@@ -6247,8 +6260,10 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
-        self.run_state_var.set("ABANDON REQUESTED")
-        self.run_state_label.configure(style="CX.Status.Warning.TLabel")
+        self._set_run_state_indicator(
+            "ABANDON REQUESTED",
+            "CX.Status.Warning.TLabel",
+        )
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
@@ -6283,14 +6298,18 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
-                    self.run_state_var.set("ABANDONED")
-                    self.run_state_label.configure(style="CX.Status.Warning.TLabel")
+                    self._set_run_state_indicator(
+                        "ABANDONED",
+                        "CX.Status.Warning.TLabel",
+                    )
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    self.run_state_var.set("FAILED")
-                    self.run_state_label.configure(style="CX.Status.Fail.TLabel")
+                    self._set_run_state_indicator(
+                        "FAILED",
+                        "CX.Status.Fail.TLabel",
+                    )
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6335,17 +6354,22 @@ class CleanroomXApp:
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
                     run_status = str(run.status or "completed").strip().lower()
-                    self.run_state_var.set(
-                        "COMPLETED" if run_status in {"pass", "passed", "ok", "completed", "success"} else run_status.upper()
+                    run_state_text = (
+                        "COMPLETED"
+                        if run_status
+                        in {"pass", "passed", "ok", "completed", "success"}
+                        else run_status.upper()
                     )
-                    self.run_state_label.configure(
-                        style=(
-                            "CX.Status.Fail.TLabel"
-                            if run_status in {"fail", "failed", "error"}
-                            else "CX.Status.Warning.TLabel"
-                            if run_status in {"warning", "warn"}
-                            else "CX.Status.Pass.TLabel"
-                        )
+                    run_state_style = (
+                        "CX.Status.Fail.TLabel"
+                        if run_status in {"fail", "failed", "error"}
+                        else "CX.Status.Warning.TLabel"
+                        if run_status in {"warning", "warn"}
+                        else "CX.Status.Pass.TLabel"
+                    )
+                    self._set_run_state_indicator(
+                        run_state_text,
+                        run_state_style,
                     )
                     if history_error is None:
                         self.status_var.set(

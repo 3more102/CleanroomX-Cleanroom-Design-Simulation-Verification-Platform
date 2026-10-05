@@ -44,6 +44,17 @@ def normalize_report_preview(value: Any, report_type: str) -> ReportPreview:
     )
 
 
+def report_status_semantic(value: Any) -> str:
+    token = str(value or "").strip().casefold().replace(" ", "_")
+    if token in {"error", "fail", "failed"}:
+        return "error"
+    if token in {"warning", "warn", "stale", "completed_with_warning"}:
+        return "warning"
+    if token in {"pass", "passed", "success", "completed", "ready", "ok"}:
+        return "pass"
+    return "neutral"
+
+
 class ReportingWorkspace(ttk.Frame):
     """Read-only report preview over authoritative CleanroomX report generators."""
 
@@ -215,11 +226,7 @@ class ReportingWorkspace(ttk.Frame):
         if preview.available:
             self.state_var.set(preview.status.replace("_", " ").upper())
             self.state_label.configure(
-                style=status_style_name(
-                    "warning"
-                    if preview.status in {"warning", "stale"}
-                    else "pass"
-                )
+                style=status_style_name(report_status_semantic(preview.status))
             )
             text = preview.content
             if preview.note:
@@ -230,9 +237,10 @@ class ReportingWorkspace(ttk.Frame):
             self.state_var.set(
                 preview.status.replace("_", " ").upper() or "UNAVAILABLE"
             )
+            semantic = report_status_semantic(preview.status)
             self.state_label.configure(
                 style=status_style_name(
-                    "error" if preview.status == "failed" else "warning"
+                    semantic if semantic != "neutral" else "warning"
                 )
             )
             self._render_empty(

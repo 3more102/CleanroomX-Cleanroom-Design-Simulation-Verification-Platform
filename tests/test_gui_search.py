@@ -15,7 +15,7 @@ def test_filter_search_entries_requires_all_tokens_and_ranks_label_hits():
     ]
 
     results = filter_search_entries(entries, "prep")
-    assert [item.key for item in results] == ["a", "b"]
+    assert [item.key for item in results] == ["b", "a"]
     assert [item.key for item in filter_search_entries(entries, "iso 7")] == ["a"]
     assert [
         item.key

@@ -4860,7 +4860,10 @@ class CleanroomXApp:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.discard_current_recoveries(preserve_paths=preserve_paths)
+            if preserve_paths:
+                manager.discard_current_recoveries(preserve_paths=preserve_paths)
+            else:
+                manager.discard_current_recoveries()
 
     def _discard_restored_recovery(self) -> None:
         artifact = getattr(self, "_restored_recovery_artifact", None)

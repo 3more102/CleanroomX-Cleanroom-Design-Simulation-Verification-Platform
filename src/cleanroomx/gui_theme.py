@@ -395,6 +395,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
     )
     style.configure(
+        "CX.TopbarBrand.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 15, "bold"),
+    )
+    style.configure(
         "CX.TopbarMuted.TLabel",
         background=palette["surface"],
         foreground=palette["muted"],

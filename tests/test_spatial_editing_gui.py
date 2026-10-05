@@ -424,6 +424,75 @@ def test_multi_selection_bulk_hide_delete_and_undo(app):
     assert any(room["id"] == second_hit.item_id for room in workspace.layout["rooms"])
 
 
+def test_multi_selection_property_inspector_shows_common_and_mixed_state(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first_hit = _Hit("room", rooms[0]["id"])
+    second_hit = _Hit("room", rooms[1]["id"])
+
+    workspace._set_selected_hits([first_hit, second_hit])
+    workspace._load_property_panel()
+    app.root.update()
+
+    assert workspace._selection_var.get().startswith("2 objects selected")
+    assert workspace._property_vars["name"].get() == spatial_module._MIXED_PROPERTY_VALUE
+    assert "name" in workspace._property_mixed_fields
+    assert "z_m" not in workspace._editable_property_fields()
+    assert "2 selected" in workspace._property_filter_summary_var.get()
+    assert "mixed" in workspace._property_filter_summary_var.get()
+    assert workspace._inspector_result_state_var.get() == "MULTI-SELECTION"
+    assert workspace._inspector_compliance_value_var.get() == "MULTI"
+    assert workspace._property_apply_button.cget("text") == "Apply to 2"
+
+
+def test_multi_selection_bulk_property_edit_is_one_undoable_transaction(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    selected_ids = {rooms[0]["id"], rooms[1]["id"]}
+    before = copy.deepcopy(workspace.layout)
+
+    workspace._set_selected_hits(
+        [_Hit("room", rooms[0]["id"]), _Hit("room", rooms[1]["id"])]
+    )
+    workspace._load_property_panel()
+    workspace._property_vars["classification"].set("ISO 7")
+    workspace._on_property_edit()
+    workspace.apply_properties()
+    app.root.update()
+
+    for room in workspace.layout["rooms"]:
+        if room["id"] in selected_ids:
+            assert room.get("classification") == "ISO 7"
+    assert workspace._property_vars["name"].get() == spatial_module._MIXED_PROPERTY_VALUE
+    assert app.undo_project_edit() is True
+    app.root.update()
+    assert workspace.layout == before
+
+
+def test_multi_selection_invalid_bulk_property_edit_is_atomic(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    before = copy.deepcopy(workspace.layout)
+    can_undo = app._project_history.can_undo
+
+    workspace._set_selected_hits(
+        [_Hit("room", rooms[0]["id"]), _Hit("room", rooms[1]["id"])]
+    )
+    workspace._load_property_panel()
+    workspace._property_vars["height_m"].set("NaN")
+    workspace._on_property_edit()
+    workspace.apply_properties()
+    app.root.update()
+
+    assert "Height (m) must be a finite number" in workspace._property_error_var.get()
+    assert workspace.layout == before
+    assert app.project.metadata["spatial_layout"] == before
+    assert app._project_history.can_undo == can_undo
+
+
 def test_marquee_selection_selects_visible_spatial_objects_without_mutation(app):
     workspace = app.spatial_workspace
     rooms = workspace.layout["rooms"]

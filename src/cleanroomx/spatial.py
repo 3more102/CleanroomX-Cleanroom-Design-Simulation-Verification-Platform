@@ -1709,6 +1709,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 0, 8, 4),
         )
         viewbar.pack(fill="x")
+        # Pack the critical right-side action before the variable-width left
+        # controls. Tk's packer allocates parcels in call order, so this reserves
+        # the Validate action at the supported 1050px workstation width.
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            style="CX.Primary.TButton",
+            command=self.report_validation,
+        ).pack(side="right", padx=(8, 2))
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
         ).pack(side="left", padx=(2, 6))
@@ -1725,15 +1734,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        # Reserve the primary validation action on the right so it remains
-        # reachable at the supported 1050px workstation width. The potentially
-        # wider validation summary lives on the engineering-overlay row below.
-        ttk.Button(
-            viewbar,
-            text="Validate",
-            style="CX.Primary.TButton",
-            command=self.report_validation,
-        ).pack(side="right", padx=(8, 2))
 
         overlaybar = ttk.Frame(
             self,

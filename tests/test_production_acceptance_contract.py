@@ -29,6 +29,11 @@ def test_ci_contract_retains_supported_matrix_golden_validation_and_performance(
     workflow = _text(".github/workflows/ci.yml")
 
     assert 'python-version: ["3.11", "3.12", "3.13"]' in workflow
+    assert 'python -m pip install "pip==26.2.1"' in workflow
+    assert "runs-on: windows-2025" in workflow
+    assert "runs-on: ubuntu-24.04" in workflow
+    assert "windows-latest" not in workflow
+    assert "ubuntu-latest" not in workflow
     assert "Run complete test suite with skip reasons" in workflow
     assert "Run complete test suite with real Tk and skip reasons" in workflow
     assert "tests/test_golden_reference_project.py" in workflow
@@ -42,6 +47,9 @@ def test_security_contract_retains_static_hostile_input_and_fault_injection_gate
     workflow = _text(".github/workflows/security.yml")
 
     assert "schedule:" in workflow
+    assert 'python -m pip install "pip==26.2.1"' in workflow
+    assert "runs-on: ubuntu-24.04" in workflow
+    assert "ubuntu-latest" not in workflow
     assert "scripts/security_static_gate.py" in workflow
     assert "tests/test_project_bundle.py" in workflow
     assert "tests/test_plugins.py" in workflow

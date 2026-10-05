@@ -65,9 +65,10 @@ def filter_search_entries(
         for token in tokens:
             if label == token:
                 score += 100
-            elif label.startswith(token):
-                score += 45
             elif token in label:
+                # Label matches share one relevance tier. Preserve source order
+                # within that tier so a prefix does not unexpectedly reorder
+                # otherwise-equivalent engineering entities.
                 score += 25
             elif token in detail:
                 score += 10

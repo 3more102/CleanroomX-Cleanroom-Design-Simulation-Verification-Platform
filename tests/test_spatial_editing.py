@@ -103,6 +103,38 @@ def test_room_property_move_keeps_device_offsets_and_elevations(layout):
     assert result["engineering_sync"] == layout["engineering_sync"]
 
 
+def test_spatial_properties_accept_registered_length_and_pressure_units(layout):
+    result = update_spatial_properties(
+        layout,
+        "room",
+        "process",
+        {
+            "height_m": "3200 mm",
+            "width_m": "350 cm",
+            "pressure_pa": "0.025 kPa",
+        },
+    )
+
+    room = result["rooms"][0]
+    assert room["height_m"] == pytest.approx(3.2)
+    assert room["width_m"] == pytest.approx(3.5)
+    assert room["pressure_pa"] == pytest.approx(25.0)
+
+
+def test_spatial_properties_reject_unregistered_or_incompatible_units_atomically(layout):
+    before = copy.deepcopy(layout)
+
+    with pytest.raises(ValueError, match="supported compatible unit"):
+        update_spatial_properties(
+            layout,
+            "room",
+            "process",
+            {"height_m": "3 seconds"},
+        )
+
+    assert layout == before
+
+
 def test_blank_pressure_and_optional_metadata_clear_without_inventing_zero(layout):
     result = update_spatial_properties(layout, "room", "process", {
         "pressure_pa": "", "classification": " ", "analysis_room_name": "",

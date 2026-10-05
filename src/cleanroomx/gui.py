@@ -1629,7 +1629,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, snapshot: dict):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
-        dialog_width, _dialog_height = configure_toplevel_geometry(
+        configure_toplevel_geometry(
             self,
             1480,
             760,
@@ -1638,6 +1638,10 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         )
         self.transient(parent)
         self._details: dict[str, dict] = {}
+        self._traceability_rows: dict[str, dict[str, str]] = {}
+        self.search_var = tk.StringVar()
+        self.type_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
 
         ttk.Label(
             self,
@@ -1660,7 +1664,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 "Mappings SHA-256: "
                 f"{snapshot.get('mappings_sha256') or 'not configured'}"
             ),
-            wraplength=max(320, dialog_width - 60),
+            wraplength=1420,
         ).pack(anchor="w", padx=10, pady=(0, 6))
 
         ttk.Label(

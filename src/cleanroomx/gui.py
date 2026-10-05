@@ -85,6 +85,12 @@ from .gui_search import (
     SearchEntry,
     build_engineering_search_entries,
 )
+from .gui_display import (
+    enable_windows_per_monitor_dpi_awareness,
+    platform_layout_scale,
+    scale_window_size,
+    unscale_window_size,
+)
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -1205,15 +1211,21 @@ class CleanroomXApp:
         self.root.title(f"CleanroomX {__version__}")
         self._display_width = max(1, int(self.root.winfo_screenwidth()))
         self._display_height = max(1, int(self.root.winfo_screenheight()))
-        self.root.minsize(
-            min(1050, self._display_width),
-            min(680, self._display_height),
+        self._layout_scale = platform_layout_scale(self.root)
+        minimum_width, minimum_height = scale_window_size(
+            1050,
+            680,
+            self._layout_scale,
+            screen_width=self._display_width,
+            screen_height=self._display_height,
         )
-        default_width, default_height = clamp_window_size_to_display(
+        self.root.minsize(minimum_width, minimum_height)
+        default_width, default_height = scale_window_size(
             1440,
             900,
-            self._display_width,
-            self._display_height,
+            self._layout_scale,
+            screen_width=self._display_width,
+            screen_height=self._display_height,
         )
         self.root.geometry(f"{default_width}x{default_height}")
 
@@ -1250,11 +1262,12 @@ class CleanroomXApp:
             else default_gui_layout_state_path()
         )
         self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
-        window_width, window_height = clamp_window_size_to_display(
+        window_width, window_height = scale_window_size(
             self._ui_layout_state["window_width"],
             self._ui_layout_state["window_height"],
-            self._display_width,
-            self._display_height,
+            self._layout_scale,
+            screen_width=self._display_width,
+            screen_height=self._display_height,
         )
         self.root.geometry(f"{window_width}x{window_height}")
         self._recent_project_paths = [
@@ -2461,19 +2474,37 @@ class CleanroomXApp:
             visibility = dict(focus_snapshot)
         screen_width = max(1, int(self.root.winfo_screenwidth()))
         screen_height = max(1, int(self.root.winfo_screenheight()))
-        minimum_width = min(1050, screen_width)
-        minimum_height = min(680, screen_height)
+        minimum_width, minimum_height = scale_window_size(
+            1050,
+            680,
+            self._layout_scale,
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
         width = self.root.winfo_width()
         height = self.root.winfo_height()
-        if width < minimum_width:
-            width = int(state.get("window_width", 1440))
-        if height < minimum_height:
-            height = int(state.get("window_height", 900))
+        if width < minimum_width or height < minimum_height:
+            fallback_width, fallback_height = scale_window_size(
+                int(state.get("window_width", 1440)),
+                int(state.get("window_height", 900)),
+                self._layout_scale,
+                screen_width=screen_width,
+                screen_height=screen_height,
+            )
+            if width < minimum_width:
+                width = fallback_width
+            if height < minimum_height:
+                height = fallback_height
         width, height = clamp_window_size_to_display(
             width,
             height,
             screen_width,
             screen_height,
+        )
+        logical_width, logical_height = unscale_window_size(
+            width,
+            height,
+            self._layout_scale,
         )
         state.update(
             {
@@ -2487,8 +2518,8 @@ class CleanroomXApp:
                     str(path)
                     for path in self._recent_project_paths[:8]
                 ],
-                "window_width": width,
-                "window_height": height,
+                "window_width": logical_width,
+                "window_height": logical_height,
             }
         )
         self._ui_layout_state = normalize_gui_layout_state(state)
@@ -7689,6 +7720,8 @@ def main(argv: list[str] | None = None) -> int:
     registry = validate_application_registry()
     project_path = bundled_demo_project_path() if args.demo else args.project
 
+    # DPI awareness must be established before Tk creates any native windows.
+    enable_windows_per_monitor_dpi_awareness()
     root = tk.Tk()
     app = CleanroomXApp(
         root,

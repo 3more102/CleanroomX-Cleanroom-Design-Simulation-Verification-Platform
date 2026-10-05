@@ -30,7 +30,11 @@ def app(tmp_path):
         autosave_interval_seconds=0,
         ui_state_path=tmp_path / "gui-layout.json",
     )
+    # Model a real startup: let deferred layout restoration finish before the
+    # test performs explicit navigation or starts editing project state.
+    root.update()
     application.load_project_path(bundled_demo_project_path())
+    root.update()
     application.notebook.select(application.spatial_workspace)
     root.update()
     try:

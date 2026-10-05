@@ -4,7 +4,11 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    _searched_projection,
+    proofgraph_projection,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +239,29 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+def test_proofgraph_search_matches_multiple_tokens_and_keeps_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _searched_projection(projection, "pressure 12.0")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "evidence:evidence-pressure" in keys
+    assert "source:source-ifc" in keys
+    assert "model_object:room-a" in keys
+    assert "check:check-pressure" in keys
+    assert "verification_run:run-1" not in keys
+
+
+def test_proofgraph_search_reads_validated_raw_provenance_and_fails_empty():
+    projection = proofgraph_projection(_sample_graph())
+
+    provenance = _searched_projection(projection, "3ifc pressure_solver")
+    keys = {node["key"] for node in provenance["nodes"]}
+    assert "evidence:evidence-pressure" in keys
+    assert "ifc:3IFC" in keys
+    assert "calculation:pressure_solver" in keys
+
+    missing = _searched_projection(projection, "definitely-not-present")
+    assert missing == {"nodes": [], "edges": []}
+

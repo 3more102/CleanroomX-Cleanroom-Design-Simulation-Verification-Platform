@@ -196,3 +196,30 @@ def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
 
     assert app.proofgraph_viewer._documents == []
     assert "unavailable" in app.evidence_text.get("1.0", "end").casefold()
+
+
+def test_proofgraph_viewer_tracks_application_theme(app):
+    viewer = app.proofgraph_viewer
+
+    app.set_theme("dark", persist=False)
+    app.root.update()
+    assert viewer.canvas.cget("background") == app._theme_palette["plot"]
+    assert viewer.canvas.cget("highlightbackground") == app._theme_palette["border"]
+    assert viewer.detail.cget("background") == app._theme_palette["field"]
+    assert viewer.detail.cget("foreground") == app._theme_palette["field_text"]
+
+    room = app.spatial_workspace.layout["rooms"][0]
+    viewer.set_documents([_room_graph(room["id"])])
+    assert viewer._theme_name == "dark"
+    assert viewer._node_fill(
+        viewer._nodes_by_key["finding:FIND-GUI-PRESSURE"]
+    ) == "#183b2b"
+
+    app.set_theme("light", persist=False)
+    app.root.update()
+    assert viewer.canvas.cget("background") == app._theme_palette["plot"]
+    assert viewer.detail.cget("background") == app._theme_palette["field"]
+    assert viewer._theme_name == "light"
+    assert viewer._node_fill(
+        viewer._nodes_by_key["finding:FIND-GUI-PRESSURE"]
+    ) == "#dcfce7"

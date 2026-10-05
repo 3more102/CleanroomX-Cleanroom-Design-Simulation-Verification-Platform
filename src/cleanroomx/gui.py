@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_dashboard import EngineeringDashboard
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -125,6 +126,7 @@ from .spatial import (
     SPATIAL_METADATA_KEY,
     SpatialDesignWorkspace,
     SpatialSyncError,
+    layout_metrics,
     sync_analysis_to_layout,
     sync_layout_to_analysis,
 )
@@ -1897,6 +1899,12 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
+        self.dashboard = EngineeringDashboard(
+            self.notebook,
+            navigate_issue=self._navigate_project_diagnostic,
+        )
+        self.notebook.add(self.dashboard, text="Dashboard")
+
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
             project_getter=lambda: self.project,
@@ -2285,6 +2293,11 @@ class CleanroomXApp:
             apply_panel_theme = getattr(problems_panel, "apply_theme", None)
             if callable(apply_panel_theme):
                 apply_panel_theme(palette)
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            apply_dashboard_theme = getattr(dashboard, "apply_theme", None)
+            if callable(apply_dashboard_theme):
+                apply_dashboard_theme(palette)
         proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
         if proofgraph_viewer is not None:
             apply_graph_theme = getattr(proofgraph_viewer, "apply_theme", None)
@@ -2605,6 +2618,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency: dict | None = None
+        records: list[dict] = []
         diagnostic_summary = (
             diagnostics.get("summary", {})
             if isinstance(diagnostics, dict)
@@ -2794,6 +2809,17 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            raw_layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+            dashboard.refresh(
+                project=self.project,
+                diagnostics=diagnostics,
+                verification_currency=currency,
+                verification_records=records,
+                spatial_metrics=layout_metrics(raw_layout),
+            )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -4199,6 +4225,7 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
+            ("nav-dashboard", "Dashboard"),
             ("nav-building", "Building"),
             ("nav-hvac", "HVAC Systems"),
             ("nav-devices", "Devices"),
@@ -4330,6 +4357,12 @@ class CleanroomXApp:
         if tree is None or not item_id or not tree.exists(item_id):
             return None
         menu = tk.Menu(self.root, tearoff=False)
+        if item_id == "nav-dashboard":
+            if hasattr(self, "dashboard"):
+                self.notebook.select(self.dashboard)
+                self.workspace_status_var.set("Workspace: Dashboard")
+            self.selection_status_var.set("Selected: Dashboard")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
 

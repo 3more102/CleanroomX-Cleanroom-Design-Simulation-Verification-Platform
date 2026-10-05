@@ -16,6 +16,8 @@ from cleanroomx.gui import (
     bundled_demo_project_path,
 )
 
+from cleanroomx.gui_ifc import IfcImportReviewDialog
+
 
 @pytest.fixture
 def app(tmp_path):
@@ -297,3 +299,41 @@ def test_ifc_reimport_plan_filters_real_change_records_and_preserves_detail(app)
     app.root.update()
     assert len(dialog.tree.get_children()) == 2
     dialog.destroy()
+
+
+
+def test_ifc_import_review_dialog_exposes_identity_and_model_statistics(app):
+    snapshot = {
+        "source_name": "facility.ifc",
+        "source_sha256": "a" * 64,
+        "semantic_sha256": "b" * 64,
+        "record_count": 4,
+        "room_count": 2,
+        "device_count": 2,
+        "storey_count": 1,
+        "orphan_device_count": 1,
+        "classified_room_count": 1,
+        "analysis_linked_room_count": 1,
+        "existing_room_count": 3,
+        "existing_device_count": 4,
+        "will_replace_existing_layout": True,
+        "floor_name": "Level 1",
+        "floor_elevation_m": 0.0,
+        "ifc_class_counts": {"IfcFlowTerminal": 2, "IfcSpace": 2},
+        "device_type_counts": {"supply": 2},
+        "dimension_source_counts": {"ifc_quantities": 2},
+        "warnings": ["The current unlinked spatial layout will be replaced."],
+    }
+
+    dialog = IfcImportReviewDialog(app.root, snapshot)
+    app.root.update()
+
+    assert dialog.title() == "Review IFC Import"
+    assert len(dialog.summary_tree.get_children()) == 10
+    groups = dialog.breakdown_tree.get_children()
+    assert len(groups) == 3
+    assert dialog.breakdown_tree.item(groups[0], "text") == "IFC classes"
+    assert str(dialog.import_button.cget("state")) != "disabled"
+
+    dialog._accept()
+    assert dialog.accepted is True

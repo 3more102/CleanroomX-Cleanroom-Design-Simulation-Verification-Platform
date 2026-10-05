@@ -378,6 +378,67 @@ def test_desktop_undo_refuses_to_discard_malformed_pending_editor_text(monkeypat
     assert errors[0][0] == "Cannot undo"
 
 
+
+@pytest.mark.parametrize(
+    "widget_class",
+    ["Entry", "TEntry", "Text", "TCombobox", "Spinbox", "TSpinbox"],
+)
+def test_global_project_history_shortcuts_defer_to_text_editors(widget_class):
+    class Widget:
+        def winfo_class(self):
+            return widget_class
+
+    class Root:
+        def focus_get(self):
+            return Widget()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    calls = []
+    app.undo_project_edit = lambda: calls.append("undo") or True
+    app.redo_project_edit = lambda: calls.append("redo") or True
+
+    assert app._focused_widget_owns_edit_history() is True
+    assert app._on_project_undo_shortcut() is None
+    assert app._on_project_redo_shortcut() is None
+    assert calls == []
+
+
+def test_global_project_history_shortcuts_execute_outside_text_editors():
+    class Widget:
+        def winfo_class(self):
+            return "Treeview"
+
+    class Root:
+        def focus_get(self):
+            return Widget()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    calls = []
+    app.undo_project_edit = lambda: calls.append("undo") or True
+    app.redo_project_edit = lambda: calls.append("redo") or True
+
+    assert app._focused_widget_owns_edit_history() is False
+    assert app._on_project_undo_shortcut() == "break"
+    assert app._on_project_redo_shortcut() == "break"
+    assert calls == ["undo", "redo"]
+
+
+def test_global_project_history_shortcuts_work_when_nothing_has_focus():
+    class Root:
+        def focus_get(self):
+            return None
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    calls = []
+    app.undo_project_edit = lambda: calls.append("undo") or True
+
+    assert app._focused_widget_owns_edit_history() is False
+    assert app._on_project_undo_shortcut() == "break"
+    assert calls == ["undo"]
+
 def test_project_history_rejects_invalid_configuration():
     for invalid in (0, -1, True, 1.5):
         with pytest.raises(ValueError, match="positive integer"):

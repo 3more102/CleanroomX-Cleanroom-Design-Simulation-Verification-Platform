@@ -13,7 +13,7 @@ version-1 layouts that predate floor metadata are defaulted to a metric `Floor 1
 
 Floor data includes a stable ID, floor name, elevation, default ceiling height, and metric units.
 Rooms have stable IDs, X/Y position, length, width, height, floor elevation, optional pressure,
-optional project-defined classification text, and an optional `analysis_room_name` link.
+an optional project-defined cleanroom `zone`, optional classification text, and an optional\n`analysis_room_name` link. Zone names are project-defined grouping labels; CleanroomX does not\ninfer regulatory classification or acceptance criteria from them.
 Devices use stable IDs and support doors, windows, generic wall openings, supply diffusers,
 return grilles, exhaust grilles, FFUs, equipment, sensors, and transfer openings. Wall-opening
 records may carry width, height, wall side, orientation, and swing metadata.
@@ -32,7 +32,7 @@ Open **Design 2D + 3D** in the desktop application. The 2D side supports:
 Dragging a room also translates devices assigned to that room. The blue lower-right handle of a
 selected room resizes its footprint. The property inspector can edit device Z elevation, room
 association, opening dimensions/orientation/wall side/swing, room floor elevation,
-classification text, and analysis-room linkage.
+cleanroom zone, classification text, and analysis-room linkage.
 
 Use **+ Device / opening** to choose a device type. Creation/editing, navigation,
 and view controls occupy separate compact rows so the editing commands remain
@@ -53,7 +53,7 @@ ceiling remain visible through **Validate**.
 Select a room or device and choose **Duplicate**, or press **Ctrl+D** while a
 2D/3D canvas has focus. A room copy includes its assigned devices, uses new
 stable IDs and a unique room name, and is placed to the right of the layout.
-Room dimensions, classification, and device geometry are preserved. The copy
+Room dimensions, zone, classification, and device geometry are preserved. The copy
 has no stored pressure or explicit analysis-room link, and receives no copied
 synchronization baseline. Set pressure and link the new room to engineering
 inputs explicitly before using those data in analysis.
@@ -123,7 +123,7 @@ These checks are geometry/model-integrity checks, not cleanroom certification cr
 
 ## Demo
 
-`cleanroomx-gui --demo` includes an explicit three-room spatial layout for Process,
+`cleanroomx-gui --demo` includes an explicit three-room, multi-zone spatial layout for Process,
 Preparation, and Ante/Airlock, together with pressure data, pressure-cascade relationships,
 doors, supply/return devices, an FFU, equipment, and a transfer opening.
 

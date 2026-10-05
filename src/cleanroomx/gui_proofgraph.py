@@ -557,8 +557,10 @@ class ProofGraphViewer(ttk.Frame):
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.search_var.trace_add("write", lambda *_: self._refresh())
-        self.bind_all("<Control-f>", self._focus_search, add="+")
-        self.bind_all("<Control-F>", self._focus_search, add="+")
+        self.search_entry.bind(
+            "<Escape>",
+            lambda _event: self._clear_search_and_filter(),
+        )
 
         summary_bar = ttk.Frame(self, padding=(7, 2, 7, 5))
         summary_bar.pack(fill="x")
@@ -685,13 +687,13 @@ class ProofGraphViewer(ttk.Frame):
             readiness = "Evidence readiness: unavailable"
         elif evidence["check_count"]:
             readiness = (
-                "Evidence links: "
-                f"{evidence['linked_check_count']}/{evidence['check_count']} checks · "
-                f"unresolved findings {evidence['unresolved_finding_count']} · "
+                "Evidence: "
+                f"{evidence['linked_check_count']}/{evidence['check_count']} checks linked · "
+                f"unresolved {evidence['unresolved_finding_count']} · "
                 "verdicts "
-                f"{evidence['pass_verdict_count']} pass / "
-                f"{evidence['fail_verdict_count']} fail / "
-                f"{evidence['not_checked_verdict_count']} not checked"
+                f"{evidence['pass_verdict_count']}P/"
+                f"{evidence['fail_verdict_count']}F/"
+                f"{evidence['not_checked_verdict_count']}NC"
             )
         else:
             readiness = (
@@ -699,11 +701,6 @@ class ProofGraphViewer(ttk.Frame):
                 "no verification checks in graph"
             )
         self.readiness_var.set(readiness)
-
-    def _focus_search(self, _event=None):
-        self.search_entry.focus_set()
-        self.search_entry.selection_range(0, "end")
-        return "break"
 
     def _clear_search_and_filter(self) -> None:
         self.search_var.set("")

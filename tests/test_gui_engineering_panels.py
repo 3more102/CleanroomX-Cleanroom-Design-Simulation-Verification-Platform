@@ -155,6 +155,7 @@ def test_completed_run_selects_results_in_bottom_workspace(app):
     assert run.result
     assert app.output_notebook.select() == str(app.result_text.master)
     assert app.problems_panel.last_result is not None
+    assert app.analysis_run_state_var.get() != "IDLE"
 
 
 def test_fit_selected_preserves_engineering_geometry(app):

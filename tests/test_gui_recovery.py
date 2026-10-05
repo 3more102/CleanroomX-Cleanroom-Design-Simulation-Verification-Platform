@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import cleanroomx.gui as gui_module
 from cleanroomx.autosave import AutosaveManager, RecoveryScan
 from cleanroomx.gui import CleanroomXApp
@@ -64,13 +66,15 @@ class Manager:
         self.recovery_dir = recovery_dir
         self.begun = []
         self.discards = 0
+        self.preserved = []
         self.saved = []
 
     def begin_project(self, path):
         self.begun.append(path)
 
-    def discard_current_recoveries(self):
+    def discard_current_recoveries(self, *, preserve_paths=()):
         self.discards += 1
+        self.preserved.append(tuple(Path(path) for path in preserve_paths))
 
     def notify_explicit_save(self, path):
         self.saved.append(Path(path))
@@ -160,6 +164,7 @@ def test_restore_recovery_opens_protected_unsaved_copy_with_source_context(tmp_p
     assert app.project.active_analysis_id == "room-1"
     assert app._has_unsaved_changes() is True
     assert app._autosave_manager.discards == 1
+    assert app._autosave_manager.preserved == [(artifact,)]
     assert app._autosave_manager.begun == [source.resolve()]
     assert "Save Project As" in app.status_var.value
     assert source.read_bytes() == source_before
@@ -306,3 +311,113 @@ def test_recovered_first_save_refuses_original_source_path(tmp_path, monkeypatch
     assert warnings
     assert "different file" in warnings[0][1]
     assert "both versions" in warnings[0][1]
+
+
+def test_switching_recovery_artifacts_discards_only_previous_selection(tmp_path):
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    _source_a, first_artifact, recovery_dir = _make_recovery(first_dir, '{"value": 2}')
+    _source_b, second_artifact, _ = _make_recovery(second_dir, '{"value": 3}')
+    app = _app_for_restore(recovery_dir)
+
+    app.restore_recovery_path(first_artifact)
+    assert first_artifact.exists()
+
+    app.restore_recovery_path(second_artifact)
+
+    assert not first_artifact.exists()
+    assert second_artifact.exists()
+    assert app._restored_recovery_artifact == second_artifact
+    assert app._autosave_manager.preserved[-1] == (second_artifact,)
+
+
+def test_restoring_same_recovery_artifact_does_not_delete_it(tmp_path):
+    _source, artifact, recovery_dir = _make_recovery(tmp_path, '{"value": 2}')
+    app = _app_for_restore(recovery_dir)
+
+    app.restore_recovery_path(artifact)
+    app.restore_recovery_path(artifact)
+
+    assert artifact.exists()
+    assert app._restored_recovery_artifact == artifact
+
+
+def test_discard_choice_preserves_recovery_until_replacement_commits(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._has_unsaved_changes = lambda: True
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesnocancel",
+        lambda *args, **kwargs: False,
+    )
+
+    assert app._confirm_project_replacement() is True
+    assert discarded == []
+
+
+def test_failed_project_load_preserves_existing_recovery(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    monkeypatch.setattr(
+        gui_module,
+        "load_project_document_with_revision_info",
+        lambda _path: (_ for _ in ()).throw(ValueError("broken project")),
+    )
+
+    with pytest.raises(ValueError, match="broken project"):
+        app.load_project_path(tmp_path / "broken.cleanroomx.json")
+
+    assert discarded == []
+
+
+def test_successful_project_load_discards_recovery_after_validation(tmp_path, monkeypatch):
+    class MigrationInfo:
+        migrated = False
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = new_project()
+    app.project_path = None
+    app._project_file_revision = None
+    app._recovery_source_path = tmp_path / "old.cleanroomx.json"
+    app._restored_recovery_artifact = tmp_path / "old.recovery.json"
+    app._migration_source_path = None
+    app.name_var = Value("")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("recovery")
+    app._begin_autosave_project = lambda _path: None
+    app._clear_run_cache = lambda: None
+    app._clear_project_history = lambda: None
+    app._refresh_analysis_list = lambda: None
+    app._refresh_engineering_panels = lambda: None
+    app._capture_saved_state = lambda: None
+    app._update_title = lambda: None
+    app._remember_recent_project = lambda _path: None
+    app._activate_spatial_workspace = lambda *args: None
+
+    loaded = _project()
+    revision = object()
+    monkeypatch.setattr(
+        gui_module,
+        "load_project_document_with_revision_info",
+        lambda _path: (loaded, revision, MigrationInfo()),
+    )
+
+    project_path = tmp_path / "loaded.cleanroomx.json"
+    app.load_project_path(project_path)
+
+    assert discarded == ["autosave", "recovery"]
+    assert app.project is loaded
+    assert app.project_path == project_path
+    assert app._project_file_revision is revision
+    assert app._restored_recovery_artifact is None

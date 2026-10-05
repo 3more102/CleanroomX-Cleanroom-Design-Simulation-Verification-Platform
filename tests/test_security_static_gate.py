@@ -1,26 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-import runpy
 import subprocess
 import sys
+
+from scripts import security_static_gate as gate
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 GATE_SCRIPT = REPOSITORY_ROOT / "scripts" / "security_static_gate.py"
 
 
-def _gate_namespace() -> dict[str, object]:
-    return runpy.run_path(str(GATE_SCRIPT))
-
-
-def _scan_source(tmp_path: Path, source: str):
-    namespace = _gate_namespace()
-    namespace["REPOSITORY_ROOT"] = tmp_path
+def _scan_source(tmp_path: Path, source: str, monkeypatch):
+    monkeypatch.setattr(gate, "REPOSITORY_ROOT", tmp_path)
     candidate = tmp_path / "src" / "candidate.py"
     candidate.parent.mkdir(parents=True)
     candidate.write_text(source, encoding="utf-8")
-    return namespace["_scan_file"](candidate)
+    return gate._scan_file(candidate)
 
 
 def test_security_static_gate_passes_current_production_tree() -> None:
@@ -35,7 +31,9 @@ def test_security_static_gate_passes_current_production_tree() -> None:
     assert "CleanroomX security static gate: PASS" in result.stdout
 
 
-def test_security_static_gate_rejects_shell_and_dynamic_execution(tmp_path: Path) -> None:
+def test_security_static_gate_rejects_shell_and_dynamic_execution(
+    tmp_path: Path, monkeypatch
+) -> None:
     violations = _scan_source(
         tmp_path,
         """
@@ -46,6 +44,7 @@ operating.system("echo unsafe")
 launch("echo unsafe", shell=True)
 eval("1 + 1")
 """,
+        monkeypatch,
     )
     messages = [item.message for item in violations]
     assert any("os.system" in message for message in messages)
@@ -54,7 +53,7 @@ eval("1 + 1")
 
 
 def test_security_static_gate_rejects_unsafe_deserialization_and_archive_helpers(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch
 ) -> None:
     violations = _scan_source(
         tmp_path,
@@ -66,6 +65,7 @@ serializer.loads(b"payload")
 tempfile.mktemp()
 archive.extractall("output")
 """,
+        monkeypatch,
     )
     messages = [item.message for item in violations]
     assert any("pickle.loads" in message for message in messages)
@@ -73,7 +73,9 @@ archive.extractall("output")
     assert any(".extractall()" in message for message in messages)
 
 
-def test_security_static_gate_allows_safe_subprocess_usage(tmp_path: Path) -> None:
+def test_security_static_gate_allows_safe_subprocess_usage(
+    tmp_path: Path, monkeypatch
+) -> None:
     violations = _scan_source(
         tmp_path,
         """
@@ -81,5 +83,6 @@ import subprocess
 
 subprocess.run(["python", "--version"], check=True, shell=False)
 """,
+        monkeypatch,
     )
     assert violations == []

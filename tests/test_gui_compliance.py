@@ -194,6 +194,49 @@ def test_compliance_workspace_never_derives_result_from_input_only(root) -> None
     assert all(workspace.tree.set(iid, "status") == "NOT RUN" for iid in rows)
 
 
+
+def test_compliance_workspace_filters_large_rule_tables_without_changing_state(root) -> None:
+    payload = _payload()
+    result = analyze_compliance_check(compliance_check_from_dict(payload))
+    workspace = _workspace(root)
+    workspace.set_context(
+        analysis_name="Process compliance",
+        analysis_input=payload,
+        last_run=SimpleNamespace(result=result),
+        running=False,
+    )
+
+    workspace.search_var.set("URS-HVAC-004 ach")
+    root.update_idletasks()
+    rows = list(workspace.tree.get_children())
+    assert len(rows) == 1
+    assert workspace.tree.set(rows[0], "id") == "ach"
+    assert workspace.visible_var.get() == "1 of 2 visible"
+
+    workspace.state_filter_var.set("Fail")
+    root.update_idletasks()
+    assert list(workspace.tree.get_children()) == []
+    assert workspace.visible_var.get() == "0 of 2 visible"
+    assert workspace.state_var.get() == "PASS"
+
+
+def test_invalid_compliance_input_disables_run_control(root) -> None:
+    payload = _payload()
+    payload["rule_pack"]["rules"][0]["operator"] = "approximately"
+    workspace = _workspace(root)
+
+    workspace.set_context(
+        analysis_name="Broken criteria",
+        analysis_input=payload,
+        last_run=None,
+        running=False,
+    )
+    root.update_idletasks()
+
+    assert workspace.state_var.get() == "INVALID INPUT"
+    assert str(workspace.run_button.cget("state")) == "disabled"
+    assert "canonical compliance parser" in workspace.detail.get("1.0", "end").lower()
+
 def test_navigator_and_command_palette_open_compliance_workspace(root, tmp_path) -> None:
     app = CleanroomXApp(
         root,

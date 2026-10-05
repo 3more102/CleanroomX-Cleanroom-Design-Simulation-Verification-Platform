@@ -2190,15 +2190,16 @@ class SpatialDesignWorkspace(ttk.Frame):
         if not measurement_points:
             return
         canvas = self.canvas_2d
+        measurement_color = self._theme_palette["simulation"]
         points = [self._world_to_canvas(x, y) for x, y in measurement_points]
         for px, py in points:
             canvas.create_line(
                 px - 5, py, px + 5, py,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=measurement_color, width=2, tags=("measurement",),
             )
             canvas.create_line(
                 px, py - 5, px, py + 5,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=measurement_color, width=2, tags=("measurement",),
             )
         if len(points) != 2:
             return
@@ -2206,18 +2207,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._current_tool_mode() == "area":
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                outline=measurement_color, width=2, dash=(5, 3), tags=("measurement",),
             )
         else:
             canvas.create_line(
                 x0, y0, x1, y1,
-                fill="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                fill=measurement_color, width=2, dash=(5, 3), tags=("measurement",),
             )
         canvas.create_text(
             (x0 + x1) / 2,
             (y0 + y1) / 2 - 10,
             text=self._measurement_result_var.get(),
-            fill="#5b21b6",
+            fill=measurement_color,
             tags=("measurement",),
         )
 

@@ -141,7 +141,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self._configure_issue_tags()
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
@@ -161,6 +161,24 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+
+    def _configure_issue_tags(self) -> None:
+        style = ttk.Style(self)
+        semantic_styles = {
+            "error": "CX.Error.TLabel",
+            "warning": "CX.Warning.TLabel",
+            "info": "CX.Info.TLabel",
+        }
+        for tag, style_name in semantic_styles.items():
+            foreground = style.lookup(style_name, "foreground")
+            options: dict[str, Any] = {"foreground": foreground}
+            if tag == "error":
+                options["font"] = ("TkDefaultFont", 9, "bold")
+            self.tree.tag_configure(tag, **options)
+
+    def apply_theme(self) -> None:
+        """Refresh semantic row colors after a global theme switch."""
+        self._configure_issue_tags()
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:

@@ -624,10 +624,10 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         )
         if iid:
             menu.add_separator()
-        menu.add_command(
-            label="Previous diagnostic",
-            command=lambda: self.navigate_relative(-1),
-        )
+            menu.add_command(
+                label="Previous diagnostic",
+                command=lambda: self.navigate_relative(-1),
+            )
             menu.add_command(
                 label="Next diagnostic",
                 command=lambda: self.navigate_relative(1),

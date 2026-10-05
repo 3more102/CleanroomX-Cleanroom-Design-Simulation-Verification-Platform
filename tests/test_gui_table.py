@@ -131,3 +131,18 @@ def test_table_behavior_select_all_event_selects_rows(root) -> None:
 
     assert behavior._select_all_event() == "break"
     assert set(tree.selection()) == {"a", "b", "missing"}
+
+
+def test_table_behavior_can_move_visible_columns(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    assert behavior.move_column("value", -1) is True
+    assert behavior.visible_columns() == ("value", "name")
+    assert behavior.move_column("value", -1) is False
+    assert behavior.move_column("value", 1) is True
+    assert behavior.visible_columns() == ("name", "value")
+    assert behavior.move_column("missing", 1) is False

@@ -10,7 +10,12 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
-from .gui_theme import theme_palette
+from .gui_theme import (
+    canonical_status,
+    format_engineering_value,
+    status_tokens,
+    theme_palette,
+)
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1515,6 +1520,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._inspector_metrics_var = tk.StringVar(value="Select an engineering object")
+        self._inspector_context_var = tk.StringVar(value="No engineering context")
+        self._inspector_state_var = tk.StringVar(value="NOT SELECTED")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1546,7 +1554,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 7, 8, 4),
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1595,7 +1607,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1646,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1655,7 +1675,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="right", padx=(10, 2)
         )
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
@@ -1834,7 +1858,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         inspector_header.pack(fill="x", pady=(0, 5))
         ttk.Label(
             inspector_header,
-            text="PROPERTIES",
+            text="ENGINEERING INSPECTOR",
             style="CX.PanelHeader.TLabel",
         ).pack(side="left")
         self._inspector_close_button = ttk.Button(
@@ -1848,8 +1872,39 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             inspector,
             textvariable=self._selection_var,
+            style="CX.ViewTitle.TLabel",
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 6))
+
+        state_card = ttk.Frame(inspector, style="CX.Card.TFrame")
+        state_card.pack(fill="x", pady=(0, 8))
+        state_header = ttk.Frame(state_card, style="CX.Card.TFrame")
+        state_header.pack(fill="x")
+        ttk.Label(
+            state_header,
+            text="CURRENT ENGINEERING STATE",
+            style="CX.CardTitle.TLabel",
+        ).pack(side="left")
+        self._inspector_state_label = ttk.Label(
+            state_header,
+            textvariable=self._inspector_state_var,
+            style="CX.Status.unknown.TLabel",
+        )
+        self._inspector_state_label.pack(side="right")
+        ttk.Label(
+            state_card,
+            textvariable=self._inspector_metrics_var,
+            style="CX.CardBody.TLabel",
+            wraplength=285,
+            justify="left",
+        ).pack(fill="x", anchor="w", pady=(6, 2))
+        ttk.Label(
+            state_card,
+            textvariable=self._inspector_context_var,
+            style="CX.CardBody.TLabel",
+            wraplength=285,
+            justify="left",
+        ).pack(fill="x", anchor="w")
 
         property_groups = (
             (
@@ -1909,7 +1964,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._property_rows[key] = row
         ttk.Button(
             inspector,
-            text="Apply properties",
+            text="Apply changes",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
@@ -2383,6 +2439,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
         self._on_change()
         self._status_setter(f"Engineering overlay: {mode.title()}")
+        self._load_property_panel()
         self.redraw()
 
     def _set_view_flag(self, key: str, value: bool) -> None:

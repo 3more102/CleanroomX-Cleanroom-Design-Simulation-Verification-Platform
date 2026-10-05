@@ -207,3 +207,51 @@ This interface does not edit requirements or mappings, infer standards limits,
 convert units, run comparisons, or issue verification verdicts. Project
 requirements verification remains under the canonical Release 3 workflow and
 verification engine.
+
+
+## Industrial engineering workstation visual system
+
+The desktop application uses a centralized Tk/ttk design system rather than
+per-screen styling. Fresh GUI state opens in the dark industrial theme while
+the existing light theme remains selectable. The dark foundation uses the
+CleanroomX engineering palette: deep blue-black work surfaces, restrained
+cyan/blue interaction accents, and semantic green, amber, orange, red, violet,
+and magenta states. Status colors carry engineering meaning; they are not used
+as decorative effects.
+
+The main shell exposes a compact **Engineering State** strip for save state,
+model/diagnostic health, open-problem state, and verification currency. The
+Project Navigator is grouped by domain (layout, BIM/IFC, HVAC/airflow,
+pressure, simulation, requirements, diagnostics, verification, ProofGraph,
+evidence, and reports/handoff) and retains the existing synchronized
+room/device hierarchy.
+
+A first-class **Dashboard** workspace summarizes only canonical project state:
+rooms, configured analyses, current diagnostics, retained ProofGraph evidence,
+domain-level issue counts, and the highest-priority current engineering
+issues. It deliberately does not invent a compliance percentage when the
+underlying checks have not been evaluated.
+
+The **Design** workspace uses the same workstation theme for its command strips,
+2D/3D viewports, engineering overlays, warning/selection outlines, legends, and
+right-side **Engineering Inspector**. Room selection exposes compact derived
+geometry (area, volume, height), explicit design pressure/classification where
+available, synchronization context, and the active result-overlay verdict
+without altering model data.
+
+The **Analysis / Simulation** header keeps the selected backend workflow,
+validation state, run state, Run/Validate controls, and retained history in one
+dense control surface. Long-running analysis continues to use the existing
+background worker, so visual changes do not move solver work onto the Tk event
+thread.
+
+The bottom **Problems** workspace remains backed by the canonical project
+diagnostics service. It now presents semantic severity, affected engineering
+object/domain, recommended recovery, structured engineering details, and
+Locate/Copy/Export actions. Raw diagnostic JSON remains available through copy
+and canonical exports instead of being the primary reading experience.
+
+**ProofGraph** keeps canonical graph validation and navigation semantics while
+using distinct requirement, model, calculation, verification, and evidence
+colors. Failure/warning/pass verdicts override node-type color as appropriate,
+and the detail pane separates trace-link context from the technical payload.

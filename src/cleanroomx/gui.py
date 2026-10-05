@@ -1261,6 +1261,7 @@ class CleanroomXApp:
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
         self.model_status_var = tk.StringVar(value="Model: ready")
+        self.diagnostic_status_var = tk.StringVar(value="Problems: not evaluated")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -2012,6 +2013,20 @@ class CleanroomXApp:
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
+        self.diagnostic_status_label = ttk.Label(
+            status_bar,
+            textvariable=self.diagnostic_status_var,
+            style="CX.Status.TLabel",
+            cursor="hand2",
+        )
+        self.diagnostic_status_label.pack(side="left")
+        self.diagnostic_status_label.bind(
+            "<Button-1>",
+            lambda _event: self.show_problems_panel(),
+        )
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
         ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2715,6 +2730,12 @@ class CleanroomXApp:
             return None
         diagnostics = panel.refresh()
         self._apply_navigator_diagnostic_badges(diagnostics)
+        diagnostic_summary = (
+            diagnostics.get("summary", {})
+            if isinstance(diagnostics, dict)
+            else {}
+        )
+        self._update_diagnostic_status(diagnostic_summary)
 
         try:
             currency = assess_project_verification_currency(
@@ -2816,6 +2837,35 @@ class CleanroomXApp:
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
         return diagnostics
+
+    def _update_diagnostic_status(self, summary: dict) -> None:
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        infos = int(summary.get("info_count", 0) or 0)
+        issue_count = errors + warnings + infos
+
+        if errors:
+            text_value = f"Problems: {errors}E · {warnings}W"
+            style = "CX.StatusError.TLabel"
+        elif warnings:
+            text_value = f"Problems: {warnings}W"
+            style = "CX.StatusWarning.TLabel"
+        elif summary:
+            text_value = "Problems: clear"
+            style = "CX.StatusPass.TLabel"
+        else:
+            text_value = "Problems: unavailable"
+            style = "CX.Status.TLabel"
+
+        self.diagnostic_status_var.set(text_value)
+        label = getattr(self, "diagnostic_status_label", None)
+        if label is not None:
+            label.configure(style=style)
+        button = getattr(self, "toolbar_problems_button", None)
+        if button is not None:
+            button.configure(
+                text=f"Problems {issue_count}" if issue_count else "Problems"
+            )
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
         if getattr(self, "problems_panel", None) is None:

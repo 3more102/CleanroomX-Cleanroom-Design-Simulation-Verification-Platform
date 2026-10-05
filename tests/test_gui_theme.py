@@ -56,8 +56,10 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "requirement",
         "info_surface",
         "simulation",
+        "simulation_surface",
         "evidence",
         "attention",
+        "attention_surface",
         "magenta",
     }
     assert required <= set(light)
@@ -92,8 +94,10 @@ def test_status_style_name_is_canonical_across_engineering_states():
     assert status_style_name("PASS") == "CX.Status.Pass.TLabel"
     assert status_style_name("verified") == "CX.Status.Pass.TLabel"
     assert status_style_name("critical") == "CX.Status.Fail.TLabel"
-    assert status_style_name("stale") == "CX.Status.Warning.TLabel"
-    assert status_style_name("running") == "CX.Status.Simulation.TLabel"
+    assert status_style_name("stale") == "CX.Status.Attention.TLabel"
+    assert status_style_name("running") == "CX.Status.Running.TLabel"
+    assert status_style_name("simulation") == "CX.Status.Simulation.TLabel"
+    assert status_style_name("unverified") == "CX.Status.Unverified.TLabel"
     assert status_style_name("available") == "CX.Status.Info.TLabel"
     assert status_style_name("not checked") == "CX.Status.Neutral.TLabel"
 
@@ -119,6 +123,14 @@ def test_surface_aware_label_styles_match_parent_surfaces():
         assert (
             style.lookup("CX.SurfaceMuted.TLabel", "background")
             == palette["surface_alt"]
+        )
+        assert (
+            style.lookup("CX.Status.Running.TLabel", "foreground")
+            == palette["accent"]
+        )
+        assert (
+            style.lookup("CX.Status.Attention.TLabel", "foreground")
+            == palette["attention"]
         )
     finally:
         root.destroy()

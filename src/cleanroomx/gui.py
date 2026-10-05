@@ -95,7 +95,7 @@ from .gui_theme import (
 )
 from .gui_proofgraph import ProofGraphViewer
 from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
-from .gui_errors import record_gui_exception
+from .gui_errors import GuiErrorReport, record_gui_exception
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -8366,7 +8366,11 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+                report = record_gui_exception(
+                    f"Run analysis ({kind})",
+                    exc,
+                )
+                self._queue.put(("error", generation, analysis_id, report))
                 return
 
             self._queue.put(
@@ -8447,17 +8451,35 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    report = payload if isinstance(payload, GuiErrorReport) else None
+                    if report is not None:
+                        detail = (
+                            f"{report.summary}\n"
+                            f"Error reference: {report.reference}"
+                        )
+                        operator_message = report.user_message()
+                        status = f"Analysis failed · {report.reference}"
+                    else:
+                        # Compatibility with queued failures produced by an older
+                        # in-process worker during a live development reload.
+                        detail = str(payload)
+                        operator_message = detail
+                        status = "Analysis failed"
                     simulation = getattr(self, "simulation_workspace", None)
                     if simulation is not None:
-                        simulation.set_failed(str(payload))
+                        simulation.set_failed(detail)
                     self._finish_active_run_task(
                         state="failed",
                         stage="Backend execution failed",
                         result="Execution error",
-                        detail=str(payload),
+                        detail=detail,
                     )
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
+                    self.status_var.set(status)
+                    messagebox.showerror(
+                        "Analysis failed",
+                        operator_message,
+                        parent=self.root,
+                    )
                 else:
                     history_evidence = None
                     history_error = None

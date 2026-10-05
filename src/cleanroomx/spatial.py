@@ -1983,7 +1983,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             value_var: tk.StringVar,
             *,
             value_style: str = "CX.InstrumentValue.TLabel",
-        ) -> ttk.Frame:
+        ) -> ttk.Label:
             card = ttk.Frame(
                 metrics,
                 style="CX.Instrument.TFrame",
@@ -2007,26 +2007,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 style=value_style,
             )
             value_label.pack(anchor="w", pady=(2, 0))
-            return card
+            return value_label
 
         metric_card(0, 0, "AREA", self._inspector_area_var)
         metric_card(0, 1, "VOLUME", self._inspector_volume_var)
         metric_card(1, 0, "PRESSURE", self._inspector_pressure_metric_var)
         metric_card(1, 1, "AIRFLOW", self._inspector_airflow_metric_var)
         metric_card(2, 0, "ACH", self._inspector_ach_metric_var)
-        compliance_card = metric_card(
+        self._inspector_compliance_label = metric_card(
             2,
             1,
             "COMPLIANCE",
             self._inspector_compliance_value_var,
             value_style="CX.Status.Neutral.TLabel",
-        )
-        self._inspector_compliance_label = next(
-            child
-            for child in compliance_card.winfo_children()
-            if isinstance(child, ttk.Label)
-            and str(child.cget("textvariable"))
-            == str(self._inspector_compliance_value_var)
         )
 
         property_groups = (

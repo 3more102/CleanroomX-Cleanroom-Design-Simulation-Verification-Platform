@@ -142,7 +142,7 @@ The Project Navigator **ProofGraph** entry activates this workspace. Graph selec
 
 ## Professional inspection and recovery browsers
 
-The analysis picker, retained run history, project verification history, requirements traceability, IFC re-import review, saved revisions, and recovery center use consistent dense inspection patterns: search, domain-specific filters, visible/total counts, keyboard navigation, deliberate no-match states, horizontal scrolling for wide engineering records, and read-only canonical detail views where applicable.
+The analysis picker, retained run history, project verification history, requirements traceability, IFC re-import review, saved revisions, and recovery center use consistent dense inspection patterns: search, domain-specific filters, visible/total counts, keyboard navigation, deliberate no-match states, horizontal scrolling for wide engineering records, and read-only canonical detail views where applicable. The Problems and Task Center engineering tables persist column visibility, order, and widths in the per-user GUI layout file; these presentation preferences are bounded and validated on load and are never written into the engineering project document.
 
 These surfaces do not synthesize engineering values. Run and verification history display retained evidence; verification currency comes from the existing currency assessment; requirements/mappings are read-only projections of canonical registries; IFC re-import review displays the deterministic re-import plan; and recovery/revision browsers operate only on already validated recovery/revision records.
 

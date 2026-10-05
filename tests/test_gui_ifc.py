@@ -93,6 +93,62 @@ def _silence_messages(monkeypatch, *, confirm=True):
     )
 
 
+def test_gui_ifc_initial_import_routes_file_reads_through_background_runner(
+    monkeypatch,
+):
+    project = new_project("IFC GUI background")
+    app = _app(project)
+    _install_source(monkeypatch, _records(), "a" * 64)
+    _silence_messages(monkeypatch)
+    labels = []
+
+    def run_background(label, operation):
+        labels.append(label)
+        return operation()
+
+    app._run_ifc_background_task = run_background
+
+    assert app.import_ifc_spatial_layout() is True
+    assert labels == [
+        "Reading IFC spatial model…",
+        "Revalidating IFC source…",
+    ]
+
+
+def test_gui_ifc_review_and_apply_route_planning_through_background_runner(
+    monkeypatch,
+):
+    project = new_project("IFC GUI background reimport")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    revised = _records()
+    revised[0]["length_m"] = 7.0
+    app = _app(project)
+    _install_source(monkeypatch, revised, "b" * 64)
+    _silence_messages(monkeypatch, confirm=True)
+    labels = []
+
+    def run_background(label, operation):
+        labels.append(label)
+        return operation()
+
+    app._run_ifc_background_task = run_background
+
+    report = app.review_ifc_reimport()
+    assert report is not None
+    assert app.apply_ifc_reimport() is True
+    assert labels == [
+        "Reviewing IFC revision…",
+        "Planning IFC re-import…",
+        "Revalidating IFC source…",
+    ]
+
+
 def test_gui_ifc_initial_import_establishes_identity_without_touching_analyses(
     monkeypatch,
 ):

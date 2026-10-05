@@ -2092,11 +2092,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         if mode not in {"2d", "3d", "split"}:
             mode = "split"
             self._workspace_mode.set(mode)
+        attached_panes = {str(pane) for pane in self._view_panes.panes()}
         for frame in (self._two_d_frame, self._three_d_frame):
-            try:
+            if str(frame) in attached_panes:
                 self._view_panes.forget(frame)
-            except tk.TclError:
-                pass
         if mode in {"2d", "split"}:
             self._view_panes.add(self._two_d_frame, weight=5 if mode == "split" else 1)
         if mode in {"3d", "split"}:

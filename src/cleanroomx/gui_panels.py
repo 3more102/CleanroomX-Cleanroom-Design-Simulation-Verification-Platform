@@ -14,6 +14,133 @@ from .gui_theme import status_style_name, theme_palette
 _SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
 
 
+def _diagnostic_element_text(issue: dict[str, Any]) -> str:
+    element = issue.get("element")
+    if not isinstance(element, dict):
+        return "project"
+    return str(
+        element.get("name")
+        or element.get("id")
+        or element.get("type")
+        or "project"
+    )
+
+
+def _diagnostic_element_type(issue: dict[str, Any]) -> str:
+    element = issue.get("element")
+    if not isinstance(element, dict):
+        return "project"
+    return str(element.get("type") or "project")
+
+
+def _diagnostic_level_text(issue: dict[str, Any]) -> str:
+    details = issue.get("details")
+    if not isinstance(details, dict):
+        return ""
+    for key in ("level", "level_name", "floor", "floor_name"):
+        value = details.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
+def diagnostic_issue_matches(
+    issue: dict[str, Any],
+    filters: dict[str, Any] | None,
+) -> bool:
+    """Apply presentation-only issue filtering without changing diagnostic semantics."""
+    filters = filters if isinstance(filters, dict) else {}
+    severity = str(filters.get("severity") or "").strip().casefold()
+    category = str(filters.get("category") or "").strip().casefold()
+    object_type = str(filters.get("object_type") or "").strip().casefold()
+    rule = str(filters.get("rule") or "").strip().casefold()
+    query = str(filters.get("query") or "").strip().casefold()
+
+    issue_severity = str(issue.get("severity", "")).casefold()
+    if severity and severity != "all" and issue_severity != severity:
+        return False
+    issue_category = str(issue.get("category", "")).casefold()
+    if category and category != "all" and issue_category != category:
+        return False
+    issue_object_type = _diagnostic_element_type(issue).casefold()
+    if object_type and object_type != "all" and issue_object_type != object_type:
+        return False
+    issue_rule = str(issue.get("rule", "")).casefold()
+    if rule and rule != "all" and issue_rule != rule:
+        return False
+
+    if query:
+        haystack = " ".join(
+            (
+                str(issue.get("rule", "")),
+                str(issue.get("category", "")),
+                str(issue.get("message", "")),
+                str(issue.get("suggested_action", "")),
+                _diagnostic_element_text(issue),
+                _diagnostic_element_type(issue),
+                _diagnostic_level_text(issue),
+                json.dumps(
+                    issue.get("details", {}),
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            )
+        ).casefold()
+        if query not in haystack:
+            return False
+    return True
+
+
+def filter_project_diagnostics_result(
+    result: dict[str, Any],
+    filters: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Project a canonical diagnostics result into an explicitly filtered export."""
+    if not isinstance(result, dict):
+        raise TypeError("diagnostics result must be a dictionary")
+    issues = result.get("issues")
+    source_issues = [issue for issue in issues if isinstance(issue, dict)] if isinstance(issues, list) else []
+    visible = [
+        issue
+        for issue in source_issues
+        if diagnostic_issue_matches(issue, filters)
+    ]
+
+    error_count = sum(str(item.get("severity", "")).casefold() == "error" for item in visible)
+    warning_count = sum(str(item.get("severity", "")).casefold() == "warning" for item in visible)
+    info_count = sum(str(item.get("severity", "")).casefold() == "info" for item in visible)
+    status = "error" if error_count else ("warning" if warning_count else "pass")
+
+    filtered = dict(result)
+    filtered["issues"] = visible
+    filtered["summary"] = {
+        **(result.get("summary") if isinstance(result.get("summary"), dict) else {}),
+        "status": status,
+        "issue_count": len(visible),
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "info_count": info_count,
+    }
+    active_filters = {
+        key: value
+        for key, value in (filters or {}).items()
+        if str(value or "").strip() and str(value).strip().casefold() != "all"
+    }
+    filtered["view_scope"] = {
+        "kind": "filtered_diagnostics_export",
+        "source_issue_count": len(source_issues),
+        "exported_issue_count": len(visible),
+        "filters": active_filters,
+    }
+    limitations = list(result.get("limitations", [])) if isinstance(result.get("limitations"), list) else []
+    limitations.append(
+        "This artifact is a GUI-filtered diagnostics view; project health outside the exported filter scope may differ."
+    )
+    filtered["limitations"] = limitations
+    return filtered
+
+
 def _engineering_detail_pairs(value: Any, *, prefix: str = "") -> list[tuple[str, str]]:
     """Flatten structured diagnostic details into compact engineer-facing fields."""
     if not isinstance(value, dict):
@@ -109,6 +236,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.object_var = tk.StringVar(value="All")
+        self.rule_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.visible_var = tk.StringVar(value="0 visible")
         self.error_count_var = tk.StringVar(value="ERROR 0")
@@ -121,6 +249,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.severity_var,
             self.category_var,
             self.object_var,
+            self.rule_var,
         ):
             variable.trace_add("write", lambda *_: self._populate())
 
@@ -164,7 +293,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         ).pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
-            text="Export…",
+            text="Export visible…",
             command=self._export,
             state="normal" if self._export_callback is not None else "disabled",
         )
@@ -211,9 +340,18 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             textvariable=self.object_var,
             values=("All",),
             state="readonly",
-            width=18,
+            width=14,
         )
         self.object_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filterbar, text="Rule").pack(side="left")
+        self.rule_combo = ttk.Combobox(
+            filterbar,
+            textvariable=self.rule_var,
+            values=("All",),
+            state="readonly",
+            width=20,
+        )
+        self.rule_combo.pack(side="left", padx=(4, 8))
         ttk.Button(
             filterbar,
             text="Clear filters",
@@ -414,33 +552,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
-        element = issue.get("element")
-        if not isinstance(element, dict):
-            return "project"
-        return str(
-            element.get("name")
-            or element.get("id")
-            or element.get("type")
-            or "project"
-        )
+        return _diagnostic_element_text(issue)
 
     @staticmethod
     def _element_type(issue: dict[str, Any]) -> str:
-        element = issue.get("element")
-        if not isinstance(element, dict):
-            return "project"
-        return str(element.get("type") or "project")
+        return _diagnostic_element_type(issue)
 
     @staticmethod
     def _level_text(issue: dict[str, Any]) -> str:
-        details = issue.get("details")
-        if not isinstance(details, dict):
-            return ""
-        for key in ("level", "level_name", "floor", "floor_name"):
-            value = details.get(key)
-            if value not in (None, ""):
-                return str(value)
-        return ""
+        return _diagnostic_level_text(issue)
 
     def _all_issues(self) -> list[dict[str, Any]]:
         if not isinstance(self.last_result, dict):
@@ -464,56 +584,40 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             {self._element_type(issue) for issue in issues},
             key=str.casefold,
         )
+        rules = sorted(
+            {
+                str(issue.get("rule", "")).strip()
+                for issue in issues
+                if str(issue.get("rule", "")).strip()
+            },
+            key=str.casefold,
+        )
         self.category_combo.configure(values=("All", *categories))
         self.object_combo.configure(values=("All", *objects))
+        self.rule_combo.configure(values=("All", *rules))
         if self.category_var.get() not in {"All", *categories}:
             self.category_var.set("All")
         if self.object_var.get() not in {"All", *objects}:
             self.object_var.set("All")
+        if self.rule_var.get() not in {"All", *rules}:
+            self.rule_var.set("All")
+
+    def _active_filter_spec(self) -> dict[str, str]:
+        return {
+            "severity": self.severity_var.get(),
+            "category": self.category_var.get(),
+            "object_type": self.object_var.get(),
+            "rule": self.rule_var.get(),
+            "query": self.search_var.get(),
+        }
 
     def _filtered_issues(self) -> list[dict[str, Any]]:
-        issues = self._all_issues()
-        severity = self.severity_var.get().strip().casefold()
-        category = self.category_var.get().strip().casefold()
-        object_type = self.object_var.get().strip().casefold()
-        query = self.search_var.get().strip().casefold()
-        visible: list[dict[str, Any]] = []
-        for issue in issues:
-            issue_severity = str(issue.get("severity", "")).casefold()
-            if severity and severity != "all" and issue_severity != severity:
-                continue
-            issue_category = str(issue.get("category", "")).casefold()
-            if category and category != "all" and issue_category != category:
-                continue
-            issue_object_type = self._element_type(issue).casefold()
-            if (
-                object_type
-                and object_type != "all"
-                and issue_object_type != object_type
-            ):
-                continue
-            if query:
-                haystack = " ".join(
-                    (
-                        str(issue.get("rule", "")),
-                        str(issue.get("category", "")),
-                        str(issue.get("message", "")),
-                        str(issue.get("suggested_action", "")),
-                        self._element_text(issue),
-                        self._element_type(issue),
-                        self._level_text(issue),
-                        json.dumps(
-                            issue.get("details", {}),
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                ).casefold()
-                if query not in haystack:
-                    continue
-            visible.append(issue)
-        return visible
+        filters = self._active_filter_spec()
+        return [
+            issue
+            for issue in self._all_issues()
+            if diagnostic_issue_matches(issue, filters)
+        ]
 
     def _sort_value(self, issue: dict[str, Any]):
         column = self._sort_column
@@ -550,6 +654,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.set("All")
         self.category_var.set("All")
         self.object_var.set("All")
+        self.rule_var.set("All")
         self.search_entry.focus_set()
 
     def _populate(self) -> None:
@@ -751,5 +856,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         if self._export_callback is None:
             return
         result = self.last_result or self.refresh()
-        if result is not None:
-            self._export_callback(result)
+        if result is None:
+            return
+        filters = self._active_filter_spec()
+        self._export_callback({"_gui_filter": filters})

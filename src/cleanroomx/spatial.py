@@ -3230,26 +3230,71 @@ class SpatialDesignWorkspace(ttk.Frame):
             selection_before=selection_before,
         )
 
-    def delete_selected(self) -> None:
-        if self.selected is None:
-            return
+    def delete_selected(self, *, confirm: bool = True) -> bool:
+        item = self._selected_object()
+        if self.selected is None or item is None:
+            self._status_setter("Select a room or device to delete")
+            return False
+
+        kind = self.selected.kind
+        item_id = self.selected.item_id
+        item_name = str(item.get("name") or item_id)
+        linked_device_count = 0
+        if kind == "room":
+            linked_device_count = sum(
+                1
+                for device in self.layout["devices"]
+                if str(device.get("room_id") or "") == item_id
+            )
+
+        if confirm:
+            if kind == "room":
+                dependent_text = (
+                    f"\n\nThis will also delete {linked_device_count} linked "
+                    f"device{'s' if linked_device_count != 1 else ''}."
+                    if linked_device_count
+                    else ""
+                )
+                prompt = (
+                    f"Delete room \"{item_name}\"?{dependent_text}"
+                    "\n\nThis action can be undone with Ctrl+Z."
+                )
+                title = "Delete room"
+            else:
+                prompt = (
+                    f"Delete device \"{item_name}\"?"
+                    "\n\nThis action can be undone with Ctrl+Z."
+                )
+                title = "Delete device"
+            if not messagebox.askyesno(title, prompt, parent=self):
+                self._status_setter("Delete cancelled")
+                return False
+
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        collection_name = "rooms" if self.selected.kind == "room" else "devices"
-        item_id = self.selected.item_id
-        self.layout[collection_name] = [item for item in self.layout[collection_name] if item["id"] != item_id]
-        if self.selected.kind == "room":
+        collection_name = "rooms" if kind == "room" else "devices"
+        self.layout[collection_name] = [
+            candidate
+            for candidate in self.layout[collection_name]
+            if candidate["id"] != item_id
+        ]
+        if kind == "room":
             self.layout["devices"] = [
-                item for item in self.layout["devices"] if item.get("room_id") != item_id
+                candidate
+                for candidate in self.layout["devices"]
+                if candidate.get("room_id") != item_id
             ]
         self.selected = None
         self._prune_property_drafts()
         self._load_property_panel()
+        self._notify_selection_change()
+        deleted_label = "room" if kind == "room" else "device"
         self._persist(
-            "Deleted spatial item",
+            f"Deleted {deleted_label} {item_name}",
             history_before=history_before,
             selection_before=selection_before,
         )
+        return True
 
     def _bounds(self) -> tuple[float, float, float, float]:
         rooms = self.layout["rooms"]

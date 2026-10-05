@@ -245,25 +245,94 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=[("disabled", palette["disabled"])],
         bordercolor=[("focus", palette["accent"])],
     )
+    # Workstation modes use restrained, semantic accent rails so the shell reads
+    # like an industrial CAD/EDA console rather than a generic dark Tk theme.
+    # Color supplements the text labels; it is never the only mode indicator.
+    theme_name = normalize_theme_name(value)
+    mode_colors = {
+        "Design": palette["accent"],
+        "Analyze": palette["info"],
+        "Verify": palette["warning"],
+        "Evidence": "#A78BFA" if theme_name == "dark" else "#7C3AED",
+        "Release": palette["success"],
+    }
+    mode_active_surfaces = (
+        {
+            "Design": "#123A46",
+            "Analyze": "#17365D",
+            "Verify": "#4A3513",
+            "Evidence": "#35245A",
+            "Release": "#183D2A",
+        }
+        if theme_name == "dark"
+        else {
+            "Design": "#CFFAFE",
+            "Analyze": "#DBEAFE",
+            "Verify": "#FEF3C7",
+            "Evidence": "#EDE9FE",
+            "Release": "#DCFCE7",
+        }
+    )
+    for mode_name, mode_color in mode_colors.items():
+        style.configure(
+            f"CX.Mode{mode_name}.TButton",
+            background=palette["background"],
+            foreground=mode_color,
+            bordercolor=palette["surface_alt"],
+            padding=(11, 5),
+            font=("TkDefaultFont", 9, "bold"),
+            relief="flat",
+        )
+        style.map(
+            f"CX.Mode{mode_name}.TButton",
+            background=[
+                ("active", palette["surface_alt"]),
+                ("pressed", mode_active_surfaces[mode_name]),
+            ],
+            foreground=[
+                ("active", mode_color),
+                ("pressed", mode_color),
+            ],
+            bordercolor=[
+                ("focus", mode_color),
+                ("active", mode_color),
+            ],
+        )
+        style.configure(
+            f"CX.Mode{mode_name}Active.TButton",
+            background=mode_active_surfaces[mode_name],
+            foreground=mode_color,
+            bordercolor=mode_color,
+            padding=(11, 5),
+            font=("TkDefaultFont", 9, "bold"),
+            relief="solid",
+        )
+        style.map(
+            f"CX.Mode{mode_name}Active.TButton",
+            background=[
+                ("active", mode_active_surfaces[mode_name]),
+                ("pressed", mode_active_surfaces[mode_name]),
+            ],
+            foreground=[
+                ("active", mode_color),
+                ("pressed", mode_color),
+            ],
+            bordercolor=[
+                ("focus", mode_color),
+                ("active", mode_color),
+                ("pressed", mode_color),
+            ],
+        )
+
+    # Keep generic names as compatibility aliases for extensions/tests that may
+    # still request them directly.
     style.configure(
         "CX.Mode.TButton",
         background=palette["background"],
         foreground=palette["muted"],
-        bordercolor=palette["background"],
+        bordercolor=palette["surface_alt"],
         padding=(11, 5),
         font=("TkDefaultFont", 9, "bold"),
-    )
-    style.map(
-        "CX.Mode.TButton",
-        background=[
-            ("active", palette["surface_alt"]),
-            ("pressed", palette["selection"]),
-        ],
-        foreground=[
-            ("active", palette["text"]),
-            ("pressed", palette["text"]),
-        ],
-        bordercolor=[("focus", palette["accent"])],
     )
     style.configure(
         "CX.ModeActive.TButton",
@@ -272,21 +341,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["accent"],
         padding=(11, 5),
         font=("TkDefaultFont", 9, "bold"),
-    )
-    style.map(
-        "CX.ModeActive.TButton",
-        background=[
-            ("active", palette["selection"]),
-            ("pressed", palette["selection"]),
-        ],
-        foreground=[
-            ("active", palette["accent_hover"]),
-            ("pressed", palette["accent"]),
-        ],
-        bordercolor=[
-            ("focus", palette["accent_hover"]),
-            ("active", palette["accent"]),
-        ],
     )
     mode_accents = {
         "Design": palette["mode_design"],

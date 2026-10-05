@@ -1025,3 +1025,49 @@ def test_failed_post_write_integrity_verification_preserves_previous_history(
         assert list(recovery_dir.glob("*.recovery.json")) == [previous]
     finally:
         manager.shutdown(wait=True)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery-directory permissions")
+def test_recovery_directory_permission_failure_fails_closed(tmp_path, monkeypatch) -> None:
+    target = tmp_path / "recovery"
+    original_chmod = Path.chmod
+
+    def fail_chmod(path: Path, mode: int) -> None:
+        if path == target:
+            raise PermissionError("chmod denied")
+        original_chmod(path, mode)
+
+    monkeypatch.setattr(Path, "chmod", fail_chmod)
+
+    with pytest.raises(
+        PermissionError,
+        match="could not secure recovery directory permissions",
+    ):
+        autosave_module._ensure_recovery_dir(target)
+
+    assert not list(target.glob("*.recovery.json"))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery-directory permissions")
+def test_recovery_directory_rejects_ineffective_permission_tightening(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    target = tmp_path / "recovery"
+    target.mkdir()
+    target.chmod(0o755)
+
+    original_chmod = Path.chmod
+
+    def ignore_target_chmod(path: Path, mode: int) -> None:
+        if path == target:
+            return
+        original_chmod(path, mode)
+
+    monkeypatch.setattr(Path, "chmod", ignore_target_chmod)
+
+    with pytest.raises(
+        PermissionError,
+        match="recovery directory permissions remain too broad",
+    ):
+        autosave_module._ensure_recovery_dir(target)

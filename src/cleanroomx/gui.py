@@ -6167,7 +6167,9 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
-        self.run_state_var.set("RUNNING" if running else "IDLE")
+        run_state_var = getattr(self, "run_state_var", None)
+        if run_state_var is not None:
+            run_state_var.set("RUNNING" if running else "IDLE")
         badge = getattr(self, "run_state_badge", None)
         if badge is not None:
             badge.configure(

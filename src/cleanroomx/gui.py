@@ -2245,6 +2245,9 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+            apply_palette = getattr(problems_panel, "apply_palette", None)
+            if callable(apply_palette):
+                apply_palette(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2747,7 +2750,11 @@ class CleanroomXApp:
             )
             return
 
-        result = self._refresh_engineering_panels()
+        result = (
+            _result
+            if isinstance(_result, dict)
+            else self._refresh_engineering_panels()
+        )
         if result is None:
             return
         path = filedialog.asksaveasfilename(

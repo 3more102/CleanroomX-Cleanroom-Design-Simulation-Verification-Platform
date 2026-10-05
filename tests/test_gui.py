@@ -2228,3 +2228,89 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
 
+def test_gui_launch_installs_callback_error_boundary(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def __init__(self):
+            self.report_callback_exception = None
+            self.mainloop_called = False
+
+        def mainloop(self):
+            self.mainloop_called = True
+
+    class App:
+        def __init__(self, root, *, autosave_interval_seconds):
+            self.root = root
+            self.status_var = Status()
+            self.autosave_interval_seconds = autosave_interval_seconds
+
+        def offer_startup_recovery(self):
+            return False
+
+    root = Root()
+    sentinel = object()
+    installs = []
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module,
+        "make_gui_callback_exception_handler",
+        lambda **kwargs: installs.append(kwargs) or sentinel,
+    )
+
+    assert main([]) == 0
+
+    assert root.report_callback_exception is sentinel
+    assert root.mainloop_called is True
+    assert installs[0]["operation"] == "Unhandled GUI callback"
+    assert callable(installs[0]["status_setter"])
+    assert callable(installs[0]["notifier"])
+
+
+def test_gui_smoke_keeps_unhandled_callbacks_visible_to_smoke_runner(
+    monkeypatch,
+    capsys,
+):
+    class Root:
+        def update_idletasks(self):
+            pass
+
+        def update(self):
+            pass
+
+        def destroy(self):
+            self.destroyed = True
+
+    class App:
+        def __init__(self, root, *, autosave_interval_seconds):
+            self.root = root
+            self.autosave_interval_seconds = autosave_interval_seconds
+
+    root = Root()
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module,
+        "make_gui_callback_exception_handler",
+        lambda **kwargs: pytest.fail(
+            "smoke mode must not install the production callback boundary"
+        ),
+    )
+
+    assert main(["--smoke"]) == 0
+    assert root.destroyed is True
+    assert "CleanroomX GUI smoke: PASS" in capsys.readouterr().out
+

@@ -94,7 +94,7 @@ class CommandPalette(tk.Toplevel):
         self.search.pack(side="left", fill="x", expand=True)
         ttk.Label(
             search_host,
-            text="command · room · device · analysis · diagnostic · evidence",
+            text="command · analysis · room · device · diagnostic · requirement · evidence",
             style="CX.Muted.TLabel",
         ).pack(side="right", padx=(10, 0))
 

@@ -3356,7 +3356,7 @@ class CleanroomXApp:
             self.notebook,
             on_refresh=self._refresh_engineering_panels,
             on_navigate=self._navigate_project_diagnostic,
-            on_export=self.export_project_diagnostics,
+            on_export=self.export_filtered_diagnostics_view,
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.diagnostics_workspace, text="Diagnostics")
@@ -4838,6 +4838,39 @@ class CleanroomXApp:
 
         self.status_var.set(
             f"Diagnostic {issue.get('rule', '')}: no spatial navigation target"
+        )
+
+    def export_filtered_diagnostics_view(self, payload: dict | None) -> None:
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema")
+            != "cleanroomx.diagnostics.filtered_presentation_view"
+            or payload.get("canonical_diagnostics") is not False
+        ):
+            self.status_var.set("Filtered diagnostics export is unavailable")
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export filtered diagnostics view",
+            defaultextension=".json",
+            filetypes=[("Filtered diagnostics JSON", "*.json")],
+        )
+        if not path:
+            return
+        content = (
+            json.dumps(
+                payload,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+        )
+        self._write_export_file(
+            path,
+            content,
+            label="Filtered diagnostics view",
         )
 
     def export_project_diagnostics(self, _result: dict | None = None) -> None:

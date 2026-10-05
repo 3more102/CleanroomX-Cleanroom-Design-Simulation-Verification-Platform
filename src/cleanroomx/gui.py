@@ -2614,6 +2614,11 @@ class CleanroomXApp:
         state = "shown" if visible else "hidden"
         self.status_var.set(f"Output / Verification {state}")
 
+    def show_navigator_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+
     def hide_navigator_panel(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)
         self.navigator_panel_visible_var.set(False)
@@ -2624,6 +2629,11 @@ class CleanroomXApp:
         self._restore_focus_workspace_snapshot(status=False)
         self.navigator_panel_visible_var.set(target)
         self._sync_navigator_panel_visibility()
+
+    def show_output_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
 
     def hide_output_panel(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)
@@ -2758,6 +2768,20 @@ class CleanroomXApp:
         self.workspace_profile_var.set("design")
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
+
+    def _open_report_output(self) -> None:
+        if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+            self.show_output_panel()
+            self.output_notebook.select(self.report_text.master)
+            self.status_var.set("Output: Report")
+
+    def _activate_reporting_workspace(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(workspace)
+        self.workspace_status_var.set("Workspace: Reporting")
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)

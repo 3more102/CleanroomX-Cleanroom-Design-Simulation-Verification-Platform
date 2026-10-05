@@ -2636,8 +2636,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._section_height_var.set(
             f"{_finite_number(view.get('section_height_m'), self.layout['floor']['elevation_m'] + 2.4):.2f}"
         )
-        if self.selected and not self._selected_object():
-            self.selected = None
+        self._set_selected_hits(list(self.selected_hits()))
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
@@ -3640,8 +3639,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["x_m"] + room["length_m"],
                 room["y_m"] + room["width_m"],
             )
-            selected = self.selected == _Hit("room", room["id"])
-            hovered = self._hovered == _Hit("room", room["id"])
+            room_hit = _Hit("room", room["id"])
+            selected = self._is_selected_hit(room_hit)
+            primary_selected = self.selected == room_hit
+            hovered = self._hovered == room_hit
             outline = (
                 "#1d4ed8"
                 if selected
@@ -3682,7 +3683,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     fill=self._theme_palette["text"],
                     tags=(f"room:{room['id']}", "room"),
                 )
-            if selected:
+            if primary_selected:
                 self._draw_room_dimensions_2d(room, x0, y0, x1, y1)
                 handle = 6
                 canvas.create_rectangle(
@@ -3728,8 +3729,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if not self._is_item_visible("device", device["id"]):
                     continue
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
-                selected = self.selected == _Hit("device", device["id"])
-                hovered = self._hovered == _Hit("device", device["id"])
+                device_hit = _Hit("device", device["id"])
+                selected = self._is_selected_hit(device_hit)
+                hovered = self._hovered == device_hit
                 device_outline = (
                     "#c0392b"
                     if selected
@@ -3778,6 +3780,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._draw_engineering_legend(canvas, overlay)
         self._draw_measurement_overlay()
+        self._draw_box_selection_overlay()
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -4066,8 +4069,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if overlay_mode != "none"
                 else "#dfe7ef"
             )
-            selected = self.selected == _Hit("room", room["id"])
-            hovered = self._hovered_3d == _Hit("room", room["id"])
+            room_hit = _Hit("room", room["id"])
+            selected = self._is_selected_hit(room_hit)
+            hovered = self._hovered_3d == room_hit
             outline = (
                 "#7dd3fc"
                 if selected
@@ -4140,8 +4144,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                     else floor_z
                 )
                 tag = f"device:{device['id']}"
-                selected = self.selected == _Hit("device", device["id"])
-                hovered = self._hovered_3d == _Hit("device", device["id"])
+                device_hit = _Hit("device", device["id"])
+                selected = self._is_selected_hit(device_hit)
+                hovered = self._hovered_3d == device_hit
                 device_outline = (
                     "#ffffff"
                     if selected

@@ -94,6 +94,29 @@ def test_command_palette_filters_and_dispatches_existing_callback(root):
     assert not palette.winfo_exists()
 
 
+def test_command_palette_exposes_engineering_empty_state(root):
+    palette = CommandPalette(
+        root,
+        commands=[
+            PaletteCommand(
+                "verify",
+                "Verify Project Requirements",
+                "Verification",
+                lambda: None,
+            )
+        ],
+    )
+    root.update()
+
+    palette._query_var.set("definitely-missing-command")
+    root.update()
+
+    assert palette.tree.get_children() == ()
+    assert "No command matches" in palette._empty_hint.cget("text")
+    assert palette._summary.cget("text") == "0 COMMANDS"
+    palette._close()
+
+
 def test_application_command_catalog_uses_existing_workflows_without_duplicates(root, tmp_path):
     app = CleanroomXApp(
         root,

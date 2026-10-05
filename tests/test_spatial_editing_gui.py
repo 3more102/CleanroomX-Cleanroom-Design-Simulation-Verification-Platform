@@ -10,6 +10,7 @@ import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_state import load_gui_layout_state
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.project import save_project_document
 from cleanroomx.spatial import _Hit
 
@@ -620,16 +621,20 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
 
     assert app.theme_var.get() == "dark"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-    assert app.plot_canvas.cget("background") == "#131920"
-    assert app.input_text.cget("background") == "#11161c"
+    dark = theme_palette("dark")
+    assert app.spatial_workspace.canvas_2d.cget("background") == dark["canvas_2d"]
+    assert app.spatial_workspace.canvas_3d.cget("background") == dark["canvas_3d"]
+    assert app.plot_canvas.cget("background") == dark["plot"]
+    assert app.input_text.cget("background") == dark["field"]
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
     app.root.update()
     assert app.theme_var.get() == "light"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
+    assert (
+        app.spatial_workspace.canvas_2d.cget("background")
+        == theme_palette("light")["canvas_2d"]
+    )
     assert app.project.to_dict() == project_before
 
 
@@ -663,9 +668,10 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
-        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-        assert second.plot_canvas.cget("background") == "#131920"
+        dark = theme_palette("dark")
+        assert second.spatial_workspace.canvas_2d.cget("background") == dark["canvas_2d"]
+        assert second.spatial_workspace.canvas_3d.cget("background") == dark["canvas_3d"]
+        assert second.plot_canvas.cget("background") == dark["plot"]
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()

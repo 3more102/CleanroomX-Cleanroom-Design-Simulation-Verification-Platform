@@ -232,6 +232,16 @@ def configure_ttk_theme(
         foreground=[("disabled", palette["disabled"])],
     )
     style.configure(
+        "CX.Invalid.TEntry",
+        fieldbackground=palette["field"],
+        foreground=palette["field_text"],
+        bordercolor=palette["error"],
+        lightcolor=palette["error"],
+        darkcolor=palette["error"],
+        insertcolor=palette["text"],
+        padding=(5, metrics["entry_y"]),
+    )
+    style.configure(
         "TCombobox",
         fieldbackground=palette["field"],
         background=palette["surface_alt"],

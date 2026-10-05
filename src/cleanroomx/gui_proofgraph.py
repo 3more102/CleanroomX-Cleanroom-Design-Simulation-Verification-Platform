@@ -507,7 +507,9 @@ class ProofGraphViewer(ttk.Frame):
         self._nodes_by_key: dict[str, dict[str, Any]] = {}
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
+        self._canvas_edge_by_item: dict[int, dict[str, Any]] = {}
         self._selected_key: str | None = None
+        self._selected_edge: dict[str, Any] | None = None
         self._graph_zoom = 1.0
         self._palette = theme_palette("light")
 
@@ -911,6 +913,7 @@ class ProofGraphViewer(ttk.Frame):
         canvas = self.canvas
         canvas.delete("all")
         self._canvas_key_by_item.clear()
+        self._canvas_edge_by_item.clear()
         nodes = self._projection.get("nodes", [])
         edges = self._projection.get("edges", [])
         if not nodes:
@@ -952,15 +955,21 @@ class ProofGraphViewer(ttk.Frame):
             target = positions.get(edge["target"])
             if source is None or target is None:
                 continue
-            canvas.create_line(
+            edge_selected = self._selected_edge == edge
+            line = canvas.create_line(
                 source[0] + node_width,
                 source[1] + node_height / 2,
                 target[0],
                 target[1] + node_height / 2,
-                fill=self._palette["muted"],
-                width=1,
+                fill=(
+                    self._palette["accent"]
+                    if edge_selected
+                    else self._palette["muted"]
+                ),
+                width=3 if edge_selected else 1,
                 arrow="last",
             )
+            self._canvas_edge_by_item[line] = edge
 
         for node in nodes:
             x, y = positions[node["key"]]
@@ -998,8 +1007,17 @@ class ProofGraphViewer(ttk.Frame):
     def _select_key(self, key: str | None) -> None:
         if key not in self._nodes_by_key:
             return
+        self._selected_edge = None
         self._selected_key = key
         self._populate_tree()
+        self._draw_graph()
+        self._show_selected_detail()
+
+    def _select_edge(self, edge: dict[str, Any]) -> None:
+        self._selected_key = None
+        self._selected_edge = dict(edge)
+        for iid in self.tree.selection():
+            self.tree.selection_remove(iid)
         self._draw_graph()
         self._show_selected_detail()
 
@@ -1018,6 +1036,10 @@ class ProofGraphViewer(ttk.Frame):
         key = self._canvas_key_by_item.get(current[0])
         if key:
             self._select_key(key)
+            return
+        edge = self._canvas_edge_by_item.get(current[0])
+        if edge is not None:
+            self._select_edge(edge)
 
     def _show_selected_detail(self) -> None:
         self.detail.configure(state="normal")
@@ -1035,6 +1057,33 @@ class ProofGraphViewer(ttk.Frame):
                 "end",
                 json.dumps(
                     node.get("raw", {}),
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            )
+        elif self._selected_edge is not None:
+            edge = self._selected_edge
+            source = self._nodes_by_key.get(str(edge.get("source") or ""), {})
+            target = self._nodes_by_key.get(str(edge.get("target") or ""), {})
+            source_label = source.get("label") or edge.get("source") or "—"
+            target_label = target.get("label") or edge.get("target") or "—"
+            relation = str(edge.get("relation") or "relationship")
+            self.detail.insert(
+                "1.0",
+                (
+                    "RELATIONSHIP\n"
+                    f"{relation}\n\n"
+                    f"Source: {source_label}\n"
+                    f"Target: {target_label}\n\n"
+                    "Persisted edge:\n"
+                ),
+            )
+            self.detail.insert(
+                "end",
+                json.dumps(
+                    edge,
                     indent=2,
                     sort_keys=True,
                     ensure_ascii=False,

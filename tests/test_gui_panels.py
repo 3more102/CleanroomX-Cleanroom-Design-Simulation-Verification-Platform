@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from cleanroomx.gui_panels import _diagnostic_detail_lines, _engineering_detail_pairs
+from cleanroomx.gui_panels import (
+    _diagnostic_detail_lines,
+    _engineering_detail_pairs,
+    diagnostic_filter_options,
+    diagnostic_matches_filters,
+)
 
 
 def test_engineering_detail_pairs_flattens_structured_values_without_raw_dict_dump():
@@ -46,3 +51,47 @@ def test_diagnostic_detail_lines_are_engineer_facing_and_actionable():
     assert "Required Ach: 20" in text
     assert "Calculated Ach: 17.6" in text
     assert "{\"required_ach\"" not in text
+
+
+
+def test_diagnostic_filters_support_exact_rule_and_multi_term_search():
+    issues = [
+        {
+            "severity": "warning",
+            "rule": "spatial.room_overlap",
+            "category": "spatial",
+            "message": "Room geometry overlaps another room.",
+            "suggested_action": "Review room placement.",
+            "element": {"type": "room", "id": "room-a", "name": "Room A"},
+            "details": {"level": "L2"},
+        },
+        {
+            "severity": "warning",
+            "rule": "verification_currency.stale",
+            "category": "traceability",
+            "message": "Persisted verification is stale.",
+            "element": {"type": "analysis", "id": "ach-a", "name": "Room ACH"},
+            "details": {"level": "L2"},
+        },
+    ]
+
+    assert diagnostic_filter_options(issues, "rule") == (
+        "All",
+        "spatial.room_overlap",
+        "verification_currency.stale",
+    )
+    assert diagnostic_matches_filters(
+        issues[0],
+        rule="spatial.room_overlap",
+        query="room l2",
+    )
+    assert not diagnostic_matches_filters(
+        issues[1],
+        rule="spatial.room_overlap",
+    )
+    assert diagnostic_matches_filters(
+        issues[1],
+        category="traceability",
+        target_type="analysis",
+        query="persisted stale",
+    )

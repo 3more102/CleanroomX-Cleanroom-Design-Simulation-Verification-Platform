@@ -287,6 +287,28 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 8),
     )
     style.configure(
+        "CX.MetricRow.TFrame",
+        background=palette["background"],
+    )
+    style.configure(
+        "CX.MetricLabel.TLabel",
+        background=palette["background"],
+        foreground=palette["secondary_text"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.MetricValue.TLabel",
+        background=palette["background"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.MetricUnit.TLabel",
+        background=palette["background"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
         "CX.Topbar.TLabel",
         background=palette["surface"],
         foreground=palette["text"],

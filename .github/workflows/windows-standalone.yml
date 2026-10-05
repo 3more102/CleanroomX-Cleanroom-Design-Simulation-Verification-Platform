@@ -1,0 +1,52 @@
+name: Windows Standalone
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows-standalone:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install frozen-build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[bim]"
+          pip install "pyinstaller==6.22.3"
+      - name: Build and smoke standalone workstation
+        shell: pwsh
+        run: .\scripts\build_windows_standalone.ps1
+      - name: Archive standalone workstation
+        shell: pwsh
+        run: |
+          $archive = "dist\CleanroomX-windows-x64.zip"
+          Compress-Archive -Path "dist\windows-standalone\CleanroomX" -DestinationPath $archive -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          "$hash  CleanroomX-windows-x64.zip" | Set-Content -Encoding ascii "dist\CleanroomX-windows-x64.sha256"
+          Get-Item $archive | Format-List FullName,Length
+          Get-Content "dist\CleanroomX-windows-x64.sha256"
+      - name: Upload standalone release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: CleanroomX-windows-x64
+          path: |
+            dist/CleanroomX-windows-x64.zip
+            dist/CleanroomX-windows-x64.sha256
+          if-no-files-found: error
+          retention-days: 14

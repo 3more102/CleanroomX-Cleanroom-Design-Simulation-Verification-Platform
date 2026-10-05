@@ -1005,3 +1005,22 @@ def test_window_size_persists_across_application_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+def test_engineering_inspector_exposes_compact_room_snapshot(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+
+    assert workspace.select_item("room", room["id"], notify=True)
+    app.root.update()
+
+    metrics = workspace._inspector_metrics_var.get()
+    context = workspace._inspector_context_var.get()
+    state = workspace._inspector_state_var.get()
+
+    assert "Area " in metrics
+    assert "Volume " in metrics
+    assert "Height " in metrics
+    assert state in {"CLEAR", "ATTENTION", "VERIFIED", "FAILED"}
+    assert context
+    assert workspace._inspector_state_label.cget("style").startswith("CX.Status.")

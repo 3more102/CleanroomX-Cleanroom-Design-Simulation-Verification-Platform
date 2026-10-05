@@ -1155,3 +1155,43 @@ def test_fullscreen_workspace_is_explicit_reversible_window_state(app):
     assert app.fullscreen_var.get() is False
     assert bool(app.root.attributes("-fullscreen")) is False
 
+def test_top_level_menus_use_engineering_workflow_names(app):
+    end = app.menubar.index("end")
+    assert end is not None
+    labels = [
+        app.menubar.entrycget(index, "label")
+        for index in range(end + 1)
+    ]
+
+    for label in (
+        "File",
+        "Edit",
+        "Design",
+        "Simulation",
+        "Verification",
+        "Evidence",
+        "Reports",
+        "Tools",
+        "View",
+        "Help",
+    ):
+        assert label in labels
+    assert "Analyze" not in labels
+    assert "Verify" not in labels
+    assert "Report" not in labels
+
+    evidence_index = labels.index("Evidence")
+    evidence_menu = app.menubar.nametowidget(
+        app.menubar.entrycget(evidence_index, "menu")
+    )
+    evidence_labels = [
+        evidence_menu.entrycget(index, "label")
+        for index in range(evidence_menu.index("end") + 1)
+        if evidence_menu.type(index) != "separator"
+    ]
+    assert evidence_labels == [
+        "Evidence Workspace",
+        "ProofGraph Explorer",
+        "Requirements Traceability...",
+    ]
+

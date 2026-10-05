@@ -34,7 +34,7 @@ On Windows, a repository checkout can launch the current source tree without rel
 .\start-cleanroomx.ps1
 ```
 
-The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo`, which exposes the synchronized **Design 2D + 3D** workspace. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer.
+The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo`, which exposes the synchronized **Design 2D + 3D** workspace. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer. Both launchers validate the selected interpreter before importing CleanroomX: Python must be 3.11 or newer and Tkinter must be available. Unsupported runtimes fail immediately with an actionable startup message instead of entering the GUI import path.
 
 Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
 

@@ -5,6 +5,7 @@ import tkinter as tk
 
 import pytest
 
+import cleanroomx.gui as gui_module
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.spatial import _Hit
 from cleanroomx.gui_command_palette import (
@@ -187,3 +188,56 @@ def test_application_palette_searches_and_focuses_real_model_objects(root, tmp_p
 
     assert app.spatial_workspace.selected == _Hit("room", room["id"])
     assert app.notebook.select() == str(app.spatial_workspace)
+
+
+def test_application_palette_indexes_requirements_and_routes_to_traceability(
+    root,
+    tmp_path,
+    monkeypatch,
+):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout-requirement-search.json",
+    )
+    opened: list[str | None] = []
+    monkeypatch.setattr(
+        gui_module,
+        "build_project_requirements_traceability",
+        lambda _project: {
+            "requirements": [
+                {
+                    "id": "REQ-ACH-01",
+                    "title": "Minimum room air changes",
+                    "description": "Maintain the approved room ACH criterion.",
+                    "discipline": "HVAC",
+                    "category": "air_changes",
+                    "source": "URS",
+                    "reference": "URS-7.2",
+                    "set": {"title": "Cleanroom URS"},
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        app,
+        "show_requirements_traceability",
+        lambda requirement_id=None: opened.append(requirement_id) or True,
+    )
+
+    commands = app._engineering_search_commands()
+    matches = filter_commands(commands, "REQ-ACH-01")
+    requirement_commands = [
+        command
+        for command in matches
+        if command.id == "search.requirement.REQ-ACH-01"
+    ]
+
+    assert len(requirement_commands) == 1
+    assert requirement_commands[0].search_only is True
+    assert "Search · Requirement" == requirement_commands[0].category
+
+    requirement_commands[0].callback()
+
+    assert opened == ["REQ-ACH-01"]
+    assert app.status_var.get() == "Requirement selected: REQ-ACH-01"

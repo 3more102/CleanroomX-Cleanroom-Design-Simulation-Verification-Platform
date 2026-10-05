@@ -4181,32 +4181,100 @@ class CleanroomXApp:
         if not isinstance(diagnostics, dict):
             diagnostics = {}
 
+        index_issues: list[SearchEntry] = []
         requirement_snapshot: dict = {}
         try:
             requirement_snapshot = project_requirement_traceability_snapshot(
                 self.project
             )
-        except Exception:
-            requirement_snapshot = {}
+        except Exception as exc:
+            report = record_gui_exception(
+                "Build requirements search index",
+                exc,
+            )
+            index_issues.append(
+                SearchEntry(
+                    key=f"search-issue:requirements:{report.reference}",
+                    category="System",
+                    label="Requirements search index unavailable",
+                    detail=f"{report.summary} · Error reference: {report.reference}",
+                    target_type="search_issue",
+                    target_id=report.reference,
+                    keywords=(
+                        "search",
+                        "requirements",
+                        "traceability",
+                        "incomplete",
+                        "error",
+                    ),
+                    payload={
+                        "operation": report.operation,
+                        "reference": report.reference,
+                        "log_path": (
+                            str(report.log_path)
+                            if report.log_path is not None
+                            else ""
+                        ),
+                    },
+                )
+            )
 
         proofgraph_documents: list[dict] = []
         try:
             records = verification_run_history_records(self.project.metadata)
             proofgraph_documents = self._proofgraph_documents_from_records(records)
-        except Exception:
-            proofgraph_documents = []
+        except Exception as exc:
+            report = record_gui_exception(
+                "Build ProofGraph search index",
+                exc,
+            )
+            index_issues.append(
+                SearchEntry(
+                    key=f"search-issue:proofgraph:{report.reference}",
+                    category="System",
+                    label="Evidence search index unavailable",
+                    detail=f"{report.summary} · Error reference: {report.reference}",
+                    target_type="search_issue",
+                    target_id=report.reference,
+                    keywords=(
+                        "search",
+                        "proofgraph",
+                        "evidence",
+                        "verification",
+                        "incomplete",
+                        "error",
+                    ),
+                    payload={
+                        "operation": report.operation,
+                        "reference": report.reference,
+                        "log_path": (
+                            str(report.log_path)
+                            if report.log_path is not None
+                            else ""
+                        ),
+                    },
+                )
+            )
 
-        return build_engineering_search_entries(
+        entries = build_engineering_search_entries(
             project=self.project,
             spatial_layout=layout,
             diagnostics=diagnostics,
             requirement_snapshot=requirement_snapshot,
             proofgraph_documents=proofgraph_documents,
         )
+        self._engineering_search_index_issue_count = len(index_issues)
+        return entries + index_issues
 
     def _navigate_engineering_search_result(self, entry: SearchEntry) -> None:
         target_type = entry.target_type
         target_id = entry.target_id
+
+        if target_type == "search_issue":
+            self.status_var.set(
+                f"Global search index incomplete · {entry.detail}"
+            )
+            return
 
         if target_type == "project":
             self._activate_start_workspace()
@@ -4306,9 +4374,20 @@ class CleanroomXApp:
             on_activate=self._navigate_engineering_search_result,
             on_close=clear_reference,
         )
-        self.status_var.set(
-            f"Global engineering search indexed {len(entries)} project entities"
+        issue_count = int(
+            getattr(self, "_engineering_search_index_issue_count", 0) or 0
         )
+        entity_count = max(0, len(entries) - issue_count)
+        if issue_count:
+            self.status_var.set(
+                "Global engineering search indexed "
+                f"{entity_count} project entities · index incomplete "
+                f"({issue_count} source issue(s))"
+            )
+        else:
+            self.status_var.set(
+                f"Global engineering search indexed {entity_count} project entities"
+            )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
         return [

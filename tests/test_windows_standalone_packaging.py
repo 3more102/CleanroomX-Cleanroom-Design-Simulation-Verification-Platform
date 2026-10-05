@@ -58,9 +58,17 @@ def test_windows_version_info_is_generated_from_project_version(tmp_path: Path) 
         version = tomllib.load(handle)["project"]["version"]
 
     release = version.split(".")
-    expected_tuple = (int(release[0]), int(release[1]), int("".join(
-        char for char in release[2] if char.isdigit()
-    )), 0)
+    patch_digits = []
+    for char in release[2]:
+        if not char.isdigit():
+            break
+        patch_digits.append(char)
+    expected_tuple = (
+        int(release[0]),
+        int(release[1]),
+        int("".join(patch_digits)),
+        0,
+    )
     tuple_text = ", ".join(str(value) for value in expected_tuple)
 
     assert f"filevers=({tuple_text})" in generated

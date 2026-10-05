@@ -637,19 +637,19 @@ def test_desktop_exports_portable_bundle_through_real_service(tmp_path, monkeypa
         "asksaveasfilename",
         lambda **kwargs: str(target),
     )
-    messages = []
-    monkeypatch.setattr(
-        gui_module.messagebox,
-        "showinfo",
-        lambda title, message, parent=None: messages.append((title, message)),
-    )
+    notifications = []
+    app._notify = lambda message, **kwargs: notifications.append((message, kwargs))
 
     app.export_portable_project_bundle()
 
     report = inspect_project_bundle(target)
     assert report["dependency_count"] == 2
     assert "Portable project exported" in app.status_var.value
-    assert messages and messages[0][0] == "Portable project exported"
+    assert notifications
+    assert notifications[0][0] == "Portable project exported"
+    assert notifications[0][1]["level"] == "success"
+    assert "Dependencies packaged: 2" in notifications[0][1]["detail"]
+    assert report["bundle_sha256"] in notifications[0][1]["detail"]
 
 
 def test_desktop_opens_bundle_only_after_verified_extraction(tmp_path, monkeypatch):

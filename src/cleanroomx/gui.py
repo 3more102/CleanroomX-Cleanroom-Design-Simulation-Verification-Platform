@@ -2652,6 +2652,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency: dict | None = None
+        records: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -2739,6 +2741,19 @@ class CleanroomXApp:
             else {}
         )
         location = str(self.project_path) if self.project_path else "Unsaved project"
+        dashboard = getattr(self, "engineering_dashboard", None)
+        if dashboard is not None:
+            dashboard.refresh(
+                diagnostics=diagnostics,
+                currency=currency,
+                records=records,
+            )
+        self._update_engineering_status_strip(
+            diagnostics=diagnostics,
+            currency=currency,
+            records=records,
+        )
+
         console_lines = [
             f"CleanroomX {__version__}",
             f"Project: {self.project.name}",
@@ -2753,6 +2768,79 @@ class CleanroomXApp:
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
         return diagnostics
+
+    def _update_engineering_status_strip(
+        self,
+        *,
+        diagnostics: dict | None,
+        currency: dict | None,
+        records: list[dict],
+    ) -> None:
+        diagnostic_summary = (
+            diagnostics.get("summary", {})
+            if isinstance(diagnostics, dict)
+            else {}
+        )
+        errors = int(diagnostic_summary.get("error_count", 0) or 0)
+        warnings = int(diagnostic_summary.get("warning_count", 0) or 0)
+        visible_problems = errors + warnings
+        self.problems_state_var.set(f"PROBLEMS {visible_problems}")
+        if errors:
+            self.problems_state_badge.configure(style="CX.Badge.Error.TLabel")
+        elif warnings:
+            self.problems_state_badge.configure(style="CX.Badge.Warning.TLabel")
+        else:
+            self.problems_state_badge.configure(style="CX.Badge.Success.TLabel")
+
+        verify_summary = (
+            currency.get("summary", {})
+            if isinstance(currency, dict)
+            else {}
+        )
+        configured = int(verify_summary.get("configured_analysis_count", 0) or 0)
+        current = int(verify_summary.get("current_count", 0) or 0)
+        stale = int(verify_summary.get("stale_count", 0) or 0)
+        not_verified = int(verify_summary.get("not_verified_count", 0) or 0)
+        if configured:
+            self.verification_state_var.set(f"VERIFY {current}/{configured} CURRENT")
+            if current == configured:
+                style = "CX.Badge.Success.TLabel"
+            elif stale:
+                style = "CX.Badge.Warning.TLabel"
+            elif not_verified:
+                style = "CX.Badge.Violet.TLabel"
+            else:
+                style = "CX.Badge.Info.TLabel"
+        else:
+            self.verification_state_var.set("VERIFY —")
+            style = "CX.Badge.Neutral.TLabel"
+        self.verification_state_badge.configure(style=style)
+
+        retained = len(records)
+        self.evidence_state_var.set(f"EVIDENCE {retained}")
+        self.evidence_state_badge.configure(
+            style="CX.Badge.Success.TLabel" if retained else "CX.Badge.Neutral.TLabel"
+        )
+
+        notebook = getattr(self, "output_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.tab(self.problems_panel, text=f"Problems {visible_problems}")
+                verification_attention = stale + not_verified
+                notebook.tab(
+                    self.verification_text,
+                    text=(
+                        f"Verification {verification_attention}"
+                        if verification_attention
+                        else "Verification"
+                    ),
+                )
+                notebook.tab(
+                    self.evidence_text,
+                    text=f"Evidence {retained}" if retained else "Evidence",
+                )
+            except tk.TclError:
+                pass
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
         if getattr(self, "problems_panel", None) is None:
@@ -2970,6 +3058,13 @@ class CleanroomXApp:
                 "Verification",
                 self.persist_project_requirements_verification,
                 keywords=("requirements", "evidence"),
+            ),
+            PaletteCommand(
+                "dashboard.open",
+                "Open Engineering Dashboard",
+                "View",
+                self._activate_dashboard_workspace,
+                keywords=("health", "status", "project", "readiness"),
             ),
             PaletteCommand(
                 "proofgraph.open",
@@ -4157,6 +4252,7 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
+            ("nav-dashboard", "Dashboard"),
             ("nav-building", "Building"),
             ("nav-hvac", "HVAC Systems"),
             ("nav-devices", "Devices"),
@@ -4454,6 +4550,10 @@ class CleanroomXApp:
         if not selection:
             return
         item_id = selection[0]
+        if item_id == "nav-dashboard":
+            self._activate_dashboard_workspace()
+            self.selection_status_var.set("Selected: Project health")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
             if hasattr(self, "spatial_workspace"):
@@ -5523,6 +5623,20 @@ class CleanroomXApp:
         else:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
+        save_state_var = getattr(self, "save_state_var", None)
+        save_state_badge = getattr(self, "save_state_badge", None)
+        if save_state_var is not None:
+            if has_unsaved_changes:
+                save_state_var.set("UNSAVED CHANGES")
+                save_style = "CX.Badge.Warning.TLabel"
+            elif self.project_path is None:
+                save_state_var.set("UNSAVED PROJECT")
+                save_style = "CX.Badge.Neutral.TLabel"
+            else:
+                save_state_var.set("SAVED")
+                save_style = "CX.Badge.Success.TLabel"
+            if save_state_badge is not None:
+                save_state_badge.configure(style=save_style)
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
     def _report_external_save_conflict(self, path: Path) -> None:

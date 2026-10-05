@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import tkinter as tk
 from tkinter import ttk
 
-from .gui_theme import status_style_name
+from .gui_theme import status_style_name, theme_palette
 
 
 def _status_style(value: Any) -> str:
@@ -25,9 +25,16 @@ def _count(summary: dict[str, Any], *keys: str) -> int:
 class EngineeringDashboard(ttk.Frame):
     """Dense, display-only engineering project health surface."""
 
-    def __init__(self, master: tk.Misc) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        on_issue: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
         super().__init__(master, padding=(14, 12))
         self._snapshot: dict[str, Any] = {}
+        self._on_issue = on_issue
+        self._issues_by_iid: dict[str, dict[str, Any]] = {}
 
         self.project_var = tk.StringVar(value="Untitled project")
         self.location_var = tk.StringVar(value="Unsaved project")
@@ -206,6 +213,29 @@ class EngineeringDashboard(ttk.Frame):
         self.issue_tree.configure(yscrollcommand=scroll.set)
         self.issue_tree.grid(row=1, column=0, sticky="nsew")
         scroll.grid(row=1, column=1, sticky="ns")
+        self.issue_tree.bind("<Double-1>", self._open_selected_issue)
+        self.issue_tree.bind("<Return>", self._open_selected_issue)
+
+    def apply_theme(self, value: Any) -> None:
+        """Keep dashboard severity cues legible in both workstation themes."""
+        palette = theme_palette(value)
+        self.issue_tree.tag_configure("critical", foreground=palette["error"])
+        self.issue_tree.tag_configure("error", foreground=palette["error"])
+        self.issue_tree.tag_configure("warning", foreground=palette["warning"])
+        self.issue_tree.tag_configure("info", foreground=palette["info"])
+
+    def selected_issue(self) -> dict[str, Any] | None:
+        selection = self.issue_tree.selection()
+        if not selection:
+            return None
+        return self._issues_by_iid.get(selection[0])
+
+    def _open_selected_issue(self, _event=None):
+        issue = self.selected_issue()
+        if issue is None or self._on_issue is None:
+            return None
+        self._on_issue(issue)
+        return "break"
 
     @staticmethod
     def _issue_object(issue: dict[str, Any]) -> str:
@@ -302,12 +332,15 @@ class EngineeringDashboard(ttk.Frame):
         )
         for iid in self.issue_tree.get_children():
             self.issue_tree.delete(iid)
+        self._issues_by_iid.clear()
         for index, issue in enumerate(ordered[:12], start=1):
-            severity = str(issue.get("severity") or "info").upper()
+            severity_token = str(issue.get("severity") or "info").strip().lower()
+            severity = severity_token.upper()
+            iid = f"issue-{index}"
             self.issue_tree.insert(
                 "",
                 "end",
-                iid=f"issue-{index}",
+                iid=iid,
                 values=(
                     severity,
                     str(issue.get("rule") or ""),
@@ -315,7 +348,9 @@ class EngineeringDashboard(ttk.Frame):
                     str(issue.get("category") or ""),
                     str(issue.get("message") or ""),
                 ),
+                tags=(severity_token,),
             )
+            self._issues_by_iid[iid] = issue
         self.issue_summary_var.set(
             "No unresolved issues"
             if not ordered

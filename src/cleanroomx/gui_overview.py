@@ -75,11 +75,12 @@ def engineering_overview_snapshot(
     if verification_currency is None:
         verification_state = "neutral"
         verification_detail = "Verification currency unavailable"
-    elif stale or not_verified or unverifiable:
+    elif stale or not_verified or not_configured or unverifiable:
         verification_state = "warning"
         verification_detail = (
             f"{current}/{configured} current · {stale} stale · "
-            f"{not_verified} not verified · {unverifiable} freshness unknown"
+            f"{not_verified} not verified · {not_configured} unconfigured · "
+            f"{unverifiable} freshness unknown"
         )
     elif configured == 0:
         verification_state = "neutral"
@@ -227,7 +228,16 @@ def engineering_overview_snapshot(
     )
     overall_state = "fail" if errors else (
         "warning"
-        if warnings or stale or not_verified or unverifiable or unsaved or unavailable
+        if (
+            warnings
+            or stale
+            or not_verified
+            or not_configured
+            or unverifiable
+            or unsaved
+            or unavailable
+            or (configured > 0 and evidence_available and evidence_count == 0)
+        )
         else "pass"
     )
     overall_text = {
@@ -349,7 +359,12 @@ class EngineeringOverview(ttk.Frame):
         )
         ttk.Button(header, text="Refresh", command=self._on_refresh).pack(side="right")
 
-        ttk.Label(self, textvariable=self.location_var).pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            self,
+            textvariable=self.location_var,
+            wraplength=980,
+            justify="left",
+        ).pack(fill="x", pady=(0, 6))
 
         readiness = ttk.Frame(self, padding=(0, 4))
         readiness.pack(fill="x")

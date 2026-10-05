@@ -11,6 +11,51 @@ from .project_diagnostics import analyze_project_diagnostics
 from .gui_theme import theme_palette
 
 
+def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
+    """Render one canonical diagnostic as an engineer-facing detail summary."""
+    severity = str(issue.get("severity") or "info").upper()
+    rule = str(issue.get("rule") or "UNSPECIFIED")
+    category = str(issue.get("category") or "General")
+    element = issue.get("element")
+    if isinstance(element, dict):
+        target = str(
+            element.get("name")
+            or element.get("id")
+            or element.get("type")
+            or "Project"
+        )
+    else:
+        target = "Project"
+
+    lines = [
+        f"{severity}  |  {rule}",
+        f"Engineering domain: {category}",
+        f"Affected object: {target}",
+        "",
+        str(issue.get("message") or "No diagnostic description supplied."),
+    ]
+    action = str(issue.get("suggested_action") or "").strip()
+    if action:
+        lines.extend(("", "RECOMMENDED ACTION", action))
+
+    details = issue.get("details")
+    if isinstance(details, dict) and details:
+        lines.extend(("", "ENGINEERING DETAILS"))
+        for key, value in sorted(details.items()):
+            label = str(key).replace("_", " ").strip().title()
+            if isinstance(value, (dict, list, tuple)):
+                rendered = json.dumps(
+                    value,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+            else:
+                rendered = str(value)
+            lines.append(f"{label}: {rendered}")
+    return lines
+
+
 class ProjectDiagnosticsPanel(ttk.Frame):
     """IDE-style view over the canonical CleanroomX project diagnostics service."""
 
@@ -400,34 +445,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:
-            element = self._element_text(issue)
-            category = str(issue.get("category", "") or "General")
-            lines = [
-                f"{str(issue.get('severity', 'info')).upper()}  |  {issue.get('rule', '')}",
-                f"Engineering domain: {category}",
-                f"Affected object: {element}",
-                "",
-                str(issue.get("message", "")),
-                "",
-                "Recommended recovery",
-                str(issue.get("suggested_action", "") or "Review the affected engineering object and rerun validation."),
-            ]
-            details = issue.get("details")
-            if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "Details:",
-                        json.dumps(
-                            details,
-                            indent=2,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                )
-            self.detail.insert("1.0", "\n".join(lines))
+            self.detail.insert("1.0", "\n".join(_diagnostic_detail_lines(issue)))
         else:
             self.detail.insert(
                 "1.0",

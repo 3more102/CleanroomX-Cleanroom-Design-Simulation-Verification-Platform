@@ -1270,6 +1270,7 @@ class CleanroomXApp:
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
+        self.full_screen_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -1483,6 +1484,12 @@ class CleanroomXApp:
             variable=self.focus_workspace_var,
             command=self._sync_focus_workspace,
         )
+        view_menu.add_checkbutton(
+            label="Full Screen",
+            accelerator="F11",
+            variable=self.full_screen_var,
+            command=lambda: self.set_full_screen(self.full_screen_var.get()),
+        )
         view_menu.add_command(
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
@@ -1537,6 +1544,8 @@ class CleanroomXApp:
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
+        self.root.bind("<F11>", lambda event: self.toggle_full_screen())
+        self.root.bind("<Escape>", self._on_full_screen_escape, add="+")
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Alt-d>", lambda event: self.toggle_density())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
@@ -2527,6 +2536,29 @@ class CleanroomXApp:
             self._focus_workspace_snapshot is None
         )
 
+    def set_full_screen(self, enabled: bool) -> bool:
+        """Toggle native Tk full-screen presentation without changing project data."""
+        target = bool(enabled)
+        try:
+            self.root.attributes("-fullscreen", target)
+        except tk.TclError:
+            self.full_screen_var.set(False)
+            self.status_var.set("Full screen is unavailable on this window system")
+            return False
+        self.full_screen_var.set(target)
+        self.status_var.set("Full Screen enabled" if target else "Full Screen disabled")
+        return True
+
+    def toggle_full_screen(self):
+        self.set_full_screen(not bool(self.full_screen_var.get()))
+        return "break"
+
+    def _on_full_screen_escape(self, _event=None):
+        if not self.full_screen_var.get():
+            return None
+        self.set_full_screen(False)
+        return "break"
+
     def _on_navigator_visibility_requested(self) -> None:
         target = bool(self.navigator_panel_visible_var.get())
         self._restore_focus_workspace_snapshot(status=False)
@@ -3214,6 +3246,14 @@ class CleanroomXApp:
                 self.toggle_focus_workspace,
                 shortcut="Ctrl+Shift+F",
                 keywords=("fullscreen", "panels", "viewport", "zen"),
+            ),
+            PaletteCommand(
+                "workspace.fullscreen",
+                "Toggle Full Screen",
+                "Window",
+                self.toggle_full_screen,
+                shortcut="F11",
+                keywords=("fullscreen", "display", "presentation"),
             ),
             PaletteCommand(
                 "view.density",

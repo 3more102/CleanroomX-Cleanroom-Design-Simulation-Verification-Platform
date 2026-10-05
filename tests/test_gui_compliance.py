@@ -278,6 +278,7 @@ def test_opening_compliance_workspace_commits_current_editor_before_switch(root,
     )
     app.project.active_analysis_id = source.id
     app._refresh_analysis_list(select_id=source.id)
+    root.update()
     app.input_text.delete("1.0", "end")
     app.input_text.insert("1.0", '{"preserved": true}')
 
@@ -308,6 +309,7 @@ def test_opening_compliance_workspace_blocks_switch_on_invalid_current_json(root
     )
     app.project.active_analysis_id = source.id
     app._refresh_analysis_list(select_id=source.id)
+    root.update()
     app.input_text.delete("1.0", "end")
     app.input_text.insert("1.0", "{broken")
 

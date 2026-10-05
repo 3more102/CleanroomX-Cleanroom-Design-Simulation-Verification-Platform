@@ -34,11 +34,16 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.category_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self._summary_base_text = "Project diagnostics not evaluated"
+        self._sort_column: str | None = None
+        self._sort_reverse = False
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, padding=(7, 5))
@@ -60,7 +65,22 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Discipline").pack(side="left")
+        self.category_filter = ttk.Combobox(
+            toolbar,
+            textvariable=self.category_var,
+            values=("All",),
+            state="readonly",
+            width=14,
+        )
+        self.category_filter.pack(side="left", padx=(4, 8))
         ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
+            side="left", padx=2
+        )
+        ttk.Button(toolbar, text="Previous", command=self.select_previous_issue).pack(
+            side="left", padx=2
+        )
+        ttk.Button(toolbar, text="Next", command=self.select_next_issue).pack(
             side="left", padx=2
         )
         ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
@@ -113,7 +133,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "source": 150,
         }
         for column in columns:
-            self.tree.heading(column, text=headings[column])
+            self.tree.heading(
+                column,
+                text=headings[column],
+                command=lambda selected=column: self.sort_by(selected),
+            )
             self.tree.column(
                 column,
                 width=widths[column],
@@ -145,6 +169,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
+        self.tree.bind("<F4>", lambda _event: self.select_next_issue())
+        self.tree.bind("<Shift-F4>", lambda _event: self.select_previous_issue())
 
         self.detail = tk.Text(
             detail_frame,
@@ -193,6 +219,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -200,6 +227,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_category = str(issue.get("category", "")).casefold()
+            if category and category != "all" and issue_category != category:
                 continue
             if query:
                 haystack = " ".join(
@@ -220,7 +250,46 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 if query not in haystack:
                     continue
             visible.append(issue)
+        if self._sort_column is not None:
+            visible.sort(
+                key=lambda issue: self._issue_sort_value(
+                    issue,
+                    self._sort_column or "severity",
+                ),
+                reverse=self._sort_reverse,
+            )
         return visible
+
+    def _issue_sort_value(
+        self,
+        issue: dict[str, Any],
+        column: str,
+    ) -> tuple[Any, ...]:
+        if column == "severity":
+            severity = str(issue.get("severity", "info")).casefold()
+            rank = {"error": 0, "warning": 1, "info": 2}.get(severity, 3)
+            return (rank, str(issue.get("rule", "")).casefold())
+        if column == "code":
+            value = issue.get("rule", "")
+        elif column == "description":
+            value = issue.get("message", "")
+        elif column == "object":
+            value = self._element_text(issue)
+        elif column == "level":
+            value = self._level_text(issue)
+        elif column == "source":
+            value = issue.get("category", "")
+        else:
+            value = issue.get("sequence", 0)
+        return (str(value).casefold(), str(issue.get("rule", "")).casefold())
+
+    def sort_by(self, column: str) -> None:
+        if self._sort_column == column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column
+            self._sort_reverse = False
+        self._populate()
 
     def _populate(self) -> None:
         selection = self.tree.selection()
@@ -234,7 +303,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.tree.delete(item)
         self._issues_by_iid.clear()
 
-        for index, issue in enumerate(self._filtered_issues(), start=1):
+        filtered_issues = self._filtered_issues()
+        for index, issue in enumerate(filtered_issues, start=1):
             sequence = issue.get("sequence", index)
             iid = f"issue:{sequence}"
             if self.tree.exists(iid):
@@ -256,6 +326,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             )
             self._issues_by_iid[iid] = issue
 
+        total = 0
+        if isinstance(self.last_result, dict):
+            issues = self.last_result.get("issues")
+            if isinstance(issues, list):
+                total = len(issues)
+        self.summary_var.set(
+            f"{self._summary_base_text} · {len(filtered_issues)}/{total} visible"
+        )
+
         if selected_sequence is not None:
             for iid, issue in self._issues_by_iid.items():
                 if issue.get("sequence") == selected_sequence:
@@ -273,14 +352,28 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             )
         except Exception as exc:
             self.last_result = None
-            self.summary_var.set(f"Diagnostics unavailable: {exc}")
+            self._summary_base_text = f"Diagnostics unavailable: {exc}"
+            self.summary_var.set(self._summary_base_text)
             self._status_setter("Project diagnostics failed")
             self._populate()
             return None
 
         self.last_result = result
+        issues = result.get("issues", [])
+        categories = sorted(
+            {
+                str(issue.get("category", "")).strip()
+                for issue in issues
+                if isinstance(issue, dict) and str(issue.get("category", "")).strip()
+            },
+            key=str.casefold,
+        )
+        self.category_filter.configure(values=("All", *categories))
+        if self.category_var.get() != "All" and self.category_var.get() not in categories:
+            self.category_var.set("All")
+
         summary = result.get("summary", {})
-        self.summary_var.set(
+        self._summary_base_text = (
             "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
                 status=str(summary.get("status", "unknown")).upper(),
                 errors=summary.get("error_count", 0),
@@ -333,6 +426,30 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return "break"
         self._navigate_callback(issue)
         return "break"
+
+    def _move_selection(self, step: int) -> str:
+        children = list(self.tree.get_children())
+        if not children:
+            self._status_setter("No visible diagnostics")
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in children:
+            index = children.index(selection[0])
+            target_index = (index + step) % len(children)
+        else:
+            target_index = 0 if step >= 0 else len(children) - 1
+        target = children[target_index]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected_detail()
+        return "break"
+
+    def select_next_issue(self) -> str:
+        return self._move_selection(1)
+
+    def select_previous_issue(self) -> str:
+        return self._move_selection(-1)
 
     def copy_selected(self) -> None:
         issue = self.selected_issue()

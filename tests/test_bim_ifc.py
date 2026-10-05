@@ -61,7 +61,7 @@ def _records():
 
 def _install_empty_ifcopenshell(monkeypatch):
     class Model:
-        def by_type(self, _ifc_class):
+        def by_type(self, _ifc_class, include_subtypes=True):
             return []
 
     ifcopenshell = types.ModuleType("ifcopenshell")
@@ -307,7 +307,7 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcAirTerminal":
                 return [entity]
             return []
@@ -401,6 +401,54 @@ def test_ifc_extraction_queries_generic_flow_terminal_without_subtypes(
         "FT-GENERIC"
     ]
     assert semantics["records"][0]["ifc_class"] == "IfcFlowTerminal"
+
+
+def test_ifc_extraction_treats_explicit_missing_schema_device_class_as_absent(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcFan":
+                raise RuntimeError(
+                    "Entity with name 'IfcFan' not found in schema 'IFC2X3'"
+                )
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+
+    assert semantics["records"] == []
+
+
+def test_ifc_extraction_does_not_hide_unexpected_device_query_failure(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcFan":
+                raise RuntimeError("IFC backend traversal failed")
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    with pytest.raises(
+        IfcImportError,
+        match="unable to query IFC class 'IfcFan'",
+    ):
+        extract_ifc_semantics(source)
 
 
 def test_ifc_extraction_preserves_quarter_turn_space_footprint(monkeypatch, tmp_path):
@@ -854,7 +902,7 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcSpace":
                 return [space]
             return []

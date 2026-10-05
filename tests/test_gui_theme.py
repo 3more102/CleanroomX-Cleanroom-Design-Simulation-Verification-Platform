@@ -132,5 +132,29 @@ def test_surface_aware_label_styles_match_parent_surfaces():
             style.lookup("CX.Status.Attention.TLabel", "foreground")
             == palette["attention"]
         )
+        assert (
+            style.lookup("CX.Instrument.TFrame", "background")
+            == palette["panel"]
+        )
+        assert (
+            style.lookup("CX.InstrumentValue.TLabel", "foreground")
+            == palette["text"]
+        )
+        assert (
+            style.lookup("CX.Success.Horizontal.TProgressbar", "background")
+            == palette["success"]
+        )
+        assert (
+            style.lookup("CX.Warning.Horizontal.TProgressbar", "background")
+            == palette["warning"]
+        )
+        assert (
+            style.lookup("CX.Fail.Horizontal.TProgressbar", "background")
+            == palette["error"]
+        )
+        assert (
+            style.lookup("CX.Simulation.Horizontal.TProgressbar", "background")
+            == palette["simulation"]
+        )
     finally:
         root.destroy()

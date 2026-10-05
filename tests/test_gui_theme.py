@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, theme_palette
+from cleanroomx.gui_theme import (
+    density_profile,
+    normalize_density_name,
+    normalize_theme_name,
+    theme_palette,
+)
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -74,3 +79,18 @@ def test_dark_palette_matches_industrial_workstation_foundation():
     assert dark["warning"] == "#F59E0B"
     assert dark["error"] == "#EF4444"
     assert dark["simulation"] == "#A78BFA"
+
+
+def test_density_profiles_are_strict_independent_and_more_compact():
+    assert normalize_density_name("compact") == "compact"
+    assert normalize_density_name(" COMFORTABLE ") == "comfortable"
+    assert normalize_density_name("tiny") == "comfortable"
+
+    comfortable = density_profile("comfortable")
+    compact = density_profile("compact")
+    assert compact["tree_rowheight"] < comfortable["tree_rowheight"]
+    assert compact["tab_padding"][1] < comfortable["tab_padding"][1]
+    assert compact["compact_padding"][1] < comfortable["compact_padding"][1]
+
+    compact["tree_rowheight"] = 99
+    assert density_profile("compact")["tree_rowheight"] != 99

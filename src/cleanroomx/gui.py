@@ -927,7 +927,13 @@ class VerificationHistoryDialog(tk.Toplevel):
 class RequirementsTraceabilityDialog(tk.Toplevel):
     """Read-only project requirements and evidence-routing inspection."""
 
-    def __init__(self, parent: tk.Misc, snapshot: dict):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        snapshot: dict,
+        *,
+        focus_requirement_id: str | None = None,
+    ):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
         self.geometry("1480x760")
@@ -1110,8 +1116,15 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
         first_requirement = self.tree.get_children(requirements_root)
         first_mapping = self.tree.get_children(mappings_root)
+        requested = (
+            f"requirement:{focus_requirement_id}"
+            if focus_requirement_id
+            else ""
+        )
         initial = (
-            first_requirement[0]
+            requested
+            if requested and self.tree.exists(requested)
+            else first_requirement[0]
             if first_requirement
             else first_mapping[0]
             if first_mapping
@@ -3211,8 +3224,66 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _open_palette_analysis(self, analysis_id: str) -> None:
+        self.navigator_filter_var.set("")
+        if not self.analysis_tree.exists(analysis_id):
+            self._refresh_analysis_list(select_id=analysis_id)
+        if not self.analysis_tree.exists(analysis_id):
+            self.status_var.set(f"Analysis {analysis_id!r} is no longer available")
+            return
+        self.analysis_tree.selection_set(analysis_id)
+        self.analysis_tree.focus(analysis_id)
+        self.analysis_tree.see(analysis_id)
+        self._on_navigator_selected()
+        self._activate_analysis_input_workspace()
+
+    def _open_palette_spatial(self, kind: str, item_id: str) -> None:
+        navigator_id = f"{kind}:{item_id}"
+        self.navigator_filter_var.set("")
+        if not self.analysis_tree.exists(navigator_id):
+            self._refresh_spatial_navigator()
+        if not self.analysis_tree.exists(navigator_id):
+            self.status_var.set(f"{kind.title()} {item_id!r} is no longer available")
+            return
+        self.analysis_tree.selection_set(navigator_id)
+        self.analysis_tree.focus(navigator_id)
+        self.analysis_tree.see(navigator_id)
+        self._on_navigator_selected()
+        self.spatial_workspace.show_inspector()
+        self.spatial_workspace.fit_selected()
+
+    def _open_palette_diagnostic(self, sequence: object) -> None:
+        self.show_problems_panel()
+        self.problems_panel.reset_filters()
+        if not self.problems_panel.select_issue(sequence):
+            self._refresh_engineering_panels()
+            self.problems_panel.reset_filters()
+        if not self.problems_panel.select_issue(sequence):
+            self.status_var.set("Diagnostic is no longer available")
+            return
+        issue = self.problems_panel.selected_issue()
+        if issue is not None:
+            self.status_var.set(
+                f"Diagnostic selected: {issue.get('rule') or 'unspecified rule'}"
+            )
+
+    def _open_palette_requirement(self, requirement_id: str) -> None:
+        if self.show_requirements_traceability(requirement_id):
+            self.status_var.set(f"Requirement selected: {requirement_id}")
+
+    def _open_palette_proofgraph_node(self, key: str) -> None:
+        self._activate_proofgraph_workspace()
+        if not self.proofgraph_viewer.select_node(key):
+            self.status_var.set("ProofGraph node is no longer available")
+            return
+        node = self.proofgraph_viewer.selected_node()
+        if node is not None:
+            self.status_var.set(
+                f"ProofGraph selected: {node.get('label') or node.get('id') or key}"
+            )
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3411,6 +3482,186 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+
+        for analysis in self.project.analyses:
+            analysis_id = str(analysis.id)
+            commands.append(
+                PaletteCommand(
+                    f"entity.analysis.{analysis_id}",
+                    f"Analysis — {analysis.name}",
+                    "Project Search · Analysis",
+                    lambda value=analysis_id: self._open_palette_analysis(value),
+                    keywords=(
+                        "analysis",
+                        analysis_id,
+                        str(analysis.kind),
+                        str(analysis.name),
+                    ),
+                )
+            )
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if isinstance(layout, dict):
+            rooms = layout.get("rooms", [])
+            devices = layout.get("devices", [])
+            if isinstance(rooms, list):
+                for room in rooms:
+                    if not isinstance(room, dict) or not room.get("id"):
+                        continue
+                    room_id = str(room["id"])
+                    room_name = str(room.get("name") or room_id)
+                    commands.append(
+                        PaletteCommand(
+                            f"entity.room.{room_id}",
+                            f"Room — {room_name}",
+                            "Project Search · Room",
+                            lambda value=room_id: self._open_palette_spatial("room", value),
+                            keywords=(
+                                "room",
+                                room_id,
+                                room_name,
+                                str(room.get("classification") or ""),
+                            ),
+                        )
+                    )
+            if isinstance(devices, list):
+                for device in devices:
+                    if not isinstance(device, dict) or not device.get("id"):
+                        continue
+                    device_id = str(device["id"])
+                    device_name = str(device.get("name") or device_id)
+                    commands.append(
+                        PaletteCommand(
+                            f"entity.device.{device_id}",
+                            f"Device — {device_name}",
+                            "Project Search · Device",
+                            lambda value=device_id: self._open_palette_spatial("device", value),
+                            keywords=(
+                                "device",
+                                device_id,
+                                device_name,
+                                str(device.get("type") or ""),
+                                str(device.get("room_id") or ""),
+                            ),
+                        )
+                    )
+
+        try:
+            traceability = project_requirement_traceability_snapshot(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ):
+            traceability = {}
+        requirements = (
+            traceability.get("requirements", [])
+            if isinstance(traceability, dict)
+            else []
+        )
+        if isinstance(requirements, list):
+            for requirement in requirements:
+                if not isinstance(requirement, dict) or not requirement.get("id"):
+                    continue
+                requirement_id = str(requirement["id"])
+                title = str(requirement.get("title") or requirement_id)
+                scope = requirement.get("scope", [])
+                scope_text = (
+                    " ".join(str(item) for item in scope)
+                    if isinstance(scope, list)
+                    else str(scope)
+                )
+                commands.append(
+                    PaletteCommand(
+                        f"entity.requirement.{requirement_id}",
+                        f"Requirement — {title}",
+                        "Project Search · Requirement",
+                        lambda value=requirement_id: self._open_palette_requirement(value),
+                        keywords=(
+                            "requirement",
+                            requirement_id,
+                            title,
+                            str(requirement.get("status") or ""),
+                            str(requirement.get("applicability") or ""),
+                            scope_text,
+                            str(requirement.get("criterion") or ""),
+                        ),
+                    )
+                )
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            try:
+                proof_nodes = proofgraph_viewer.searchable_nodes()
+            except (TypeError, ValueError, KeyError):
+                proof_nodes = []
+            for node in proof_nodes:
+                key = str(node.get("key") or "")
+                if not key:
+                    continue
+                label = str(node.get("label") or node.get("id") or key)
+                node_type = str(node.get("type") or "node")
+                flags = node.get("flags", ())
+                flag_tokens = (
+                    tuple(str(flag) for flag in flags)
+                    if isinstance(flags, (list, tuple))
+                    else ()
+                )
+                commands.append(
+                    PaletteCommand(
+                        f"entity.proofgraph.{key}",
+                        f"ProofGraph {node_type.replace('_', ' ').title()} — {label}",
+                        "Project Search · ProofGraph",
+                        lambda value=key: self._open_palette_proofgraph_node(value),
+                        keywords=(
+                            "proofgraph",
+                            "evidence",
+                            "traceability",
+                            node_type,
+                            str(node.get("id") or ""),
+                            str(node.get("status") or ""),
+                            *flag_tokens,
+                        ),
+                    )
+                )
+
+        diagnostics = getattr(
+            getattr(self, "problems_panel", None),
+            "last_result",
+            None,
+        )
+        issues = diagnostics.get("issues", []) if isinstance(diagnostics, dict) else []
+        if isinstance(issues, list):
+            for issue in issues:
+                if not isinstance(issue, dict) or issue.get("sequence") is None:
+                    continue
+                sequence = issue["sequence"]
+                rule = str(issue.get("rule") or "unspecified")
+                element = issue.get("element")
+                element_text = ""
+                if isinstance(element, dict):
+                    element_text = str(
+                        element.get("name")
+                        or element.get("id")
+                        or element.get("type")
+                        or ""
+                    )
+                commands.append(
+                    PaletteCommand(
+                        f"entity.diagnostic.{sequence}",
+                        f"Diagnostic — {rule}",
+                        "Project Search · Diagnostic",
+                        lambda value=sequence: self._open_palette_diagnostic(value),
+                        keywords=(
+                            "diagnostic",
+                            str(issue.get("severity") or ""),
+                            str(issue.get("category") or ""),
+                            str(issue.get("message") or ""),
+                            element_text,
+                        ),
+                    )
+                )
+
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)
@@ -4034,7 +4285,10 @@ class CleanroomXApp:
         )
         return True
 
-    def show_requirements_traceability(self) -> bool:
+    def show_requirements_traceability(
+        self,
+        focus_requirement_id: str | None = None,
+    ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
         except (
@@ -4060,7 +4314,11 @@ class CleanroomXApp:
             )
             return False
 
-        RequirementsTraceabilityDialog(self.root, snapshot)
+        RequirementsTraceabilityDialog(
+            self.root,
+            snapshot,
+            focus_requirement_id=focus_requirement_id,
+        )
         return True
 
     def _project_verification_target(

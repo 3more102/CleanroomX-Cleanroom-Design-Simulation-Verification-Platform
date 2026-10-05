@@ -1532,6 +1532,40 @@ def _file_sha256(path: Path) -> str:
     return digest
 
 
+
+def _query_ifc_device_entities(
+    model: Any,
+    ifc_class: str,
+    *,
+    include_subtypes: bool | None = None,
+) -> Iterable[Any]:
+    """Query a supported device class without hiding parser/index failures.
+
+    IfcOpenShell raises RuntimeError when a requested entity does not exist in
+    the active IFC schema. That explicit schema-compatibility condition means
+    the class is absent, not that extraction failed. Every other query failure
+    aborts extraction so a partial device model cannot look complete.
+    """
+    try:
+        if include_subtypes is None:
+            return model.by_type(ifc_class)
+        return model.by_type(ifc_class, include_subtypes=include_subtypes)
+    except RuntimeError as exc:
+        lowered = str(exc).lower()
+        if (
+            "not found in schema" in lowered
+            and ifc_class.lower() in lowered
+        ):
+            return ()
+        raise IfcImportError(
+            f"unable to enumerate IFC device entities for {ifc_class!r}"
+        ) from exc
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to enumerate IFC device entities for {ifc_class!r}"
+        ) from exc
+
+
 def extract_ifc_semantics(
     path: str | Path,
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -1577,13 +1611,22 @@ def extract_ifc_semantics(
         except Exception as exc:
             raise IfcImportError(f"unable to open IFC file {source}") from exc
 
+        try:
+            raw_unit_scale = unit_util.calculate_unit_scale(model)
+        except Exception as exc:
+            raise IfcImportError("unable to resolve IFC length unit scale") from exc
         unit_scale = _positive_number(
-            unit_util.calculate_unit_scale(model),
+            raw_unit_scale,
             field="IFC length unit scale",
         )
         records: list[dict[str, Any]] = []
 
-        for entity in model.by_type("IfcSpace"):
+        try:
+            spaces = model.by_type("IfcSpace")
+        except Exception as exc:
+            raise IfcImportError("unable to enumerate IFC spaces") from exc
+
+        for entity in spaces:
             try:
                 length, width, height = _space_dimensions_m(
                     entity, unit_scale, element_util
@@ -1638,16 +1681,13 @@ def extract_ifc_semantics(
 
         seen = {item["global_id"] for item in records}
         for ifc_class in _IFC_DEVICE_TYPES:
-            try:
-                if ifc_class == "IfcFlowTerminal":
-                    # IfcOpenShell includes subtypes by default; keep this generic query exact.
-                    entities = model.by_type(ifc_class, include_subtypes=False)
-                else:
-                    entities = model.by_type(ifc_class)
-            except Exception as exc:
-                raise IfcImportError(
-                    f"unable to enumerate IFC device entities for {ifc_class!r}"
-                ) from exc
+            entities = _query_ifc_device_entities(
+                model,
+                ifc_class,
+                include_subtypes=(
+                    False if ifc_class == "IfcFlowTerminal" else None
+                ),
+            )
             for entity in entities:
                 global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
                 if not global_id or global_id in seen:

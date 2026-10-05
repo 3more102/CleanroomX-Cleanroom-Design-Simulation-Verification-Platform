@@ -35,7 +35,10 @@ def treeview_cell_text(tree: ttk.Treeview, iid: str, column: str) -> str:
 
 
 def _treeview_columns(tree: ttk.Treeview) -> tuple[str, ...]:
-    return tuple(str(column) for column in tree.cget("columns"))
+    configured = tree.cget("columns")
+    if isinstance(configured, str):
+        configured = tree.tk.splitlist(configured)
+    return tuple(str(column) for column in configured)
 
 
 def _treeview_display_columns(tree: ttk.Treeview) -> tuple[str, ...]:
@@ -68,6 +71,7 @@ class TreeviewTableBehavior:
         self.tree = tree
         self.parent = parent
         self.columns = _treeview_columns(tree)
+        self.addressable_columns = ("#0", *self.columns)
         self.sortable_columns = tuple(
             dict.fromkeys(str(item) for item in sortable_columns)
         )
@@ -106,7 +110,7 @@ class TreeviewTableBehavior:
         self._columns_menu = tk.Menu(self._menu, tearoff=False)
         self._menu.add_cascade(label="Columns", menu=self._columns_menu)
 
-        for column in self.columns:
+        for column in self.addressable_columns:
             try:
                 label = str(tree.heading(column, "text") or column)
             except tk.TclError:
@@ -114,7 +118,7 @@ class TreeviewTableBehavior:
             self._heading_text[column] = label
 
         for column in self.sortable_columns:
-            if column not in self.columns:
+            if column not in self.addressable_columns:
                 continue
             label = self._heading_text.get(column, column)
             tree.heading(
@@ -288,9 +292,9 @@ class TreeviewTableBehavior:
             raise ValueError("invalid autosize bounds")
 
         try:
-            font = tkfont.nametofont("TkDefaultFont")
+            font = tkfont.nametofont("TkDefaultFont", root=self.tree)
         except tk.TclError:
-            font = tkfont.Font(master=self.tree)
+            font = tkfont.Font(root=self.tree, font="TkDefaultFont")
 
         children = self._ordered_children()
         for column in self.visible_columns:

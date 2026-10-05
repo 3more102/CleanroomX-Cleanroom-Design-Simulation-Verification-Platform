@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tempfile
 import time
 import tracemalloc
@@ -63,6 +63,60 @@ def _project(dependency_name: str) -> ProjectDocument:
     )
 
 
+def _validate_extracted_dependency(
+    label: str,
+    extracted_root: Path,
+    verify_report: dict,
+    *,
+    source_size: int,
+) -> Path:
+    dependencies = verify_report.get("dependencies")
+    if verify_report.get("dependency_count") != 1 or not isinstance(dependencies, list):
+        raise RuntimeError(
+            f"{label} bundle verification expected exactly one dependency"
+        )
+    if len(dependencies) != 1 or not isinstance(dependencies[0], dict):
+        raise RuntimeError(
+            f"{label} bundle verification returned inconsistent dependency metadata"
+        )
+
+    record = dependencies[0]
+    archive_path = record.get("path")
+    expected_size = record.get("size_bytes")
+    if not isinstance(archive_path, str) or not archive_path:
+        raise RuntimeError(
+            f"{label} bundle verification returned an invalid dependency path"
+        )
+    if (
+        isinstance(expected_size, bool)
+        or not isinstance(expected_size, int)
+        or expected_size < 0
+    ):
+        raise RuntimeError(
+            f"{label} bundle verification returned an invalid dependency size"
+        )
+    if expected_size != source_size:
+        raise RuntimeError(
+            f"{label} bundle dependency size changed across export/verification: "
+            f"{expected_size} != {source_size}"
+        )
+
+    portable_path = PurePosixPath(archive_path)
+    if portable_path.is_absolute() or ".." in portable_path.parts:
+        raise RuntimeError(
+            f"{label} bundle verification returned an unsafe dependency path"
+        )
+    extracted_dependency = extracted_root.joinpath(*portable_path.parts)
+    if (
+        not extracted_dependency.is_file()
+        or extracted_dependency.stat().st_size != expected_size
+    ):
+        raise RuntimeError(
+            f"{label} bundle extraction did not reproduce the verified dependency"
+        )
+    return extracted_dependency
+
+
 def main() -> int:
     results = []
     with tempfile.TemporaryDirectory(prefix="cleanroomx-bundle-benchmark-") as raw:
@@ -94,19 +148,12 @@ def main() -> int:
             _, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
-            if verify_report["dependency_count"] != 1:
-                raise RuntimeError(
-                    f"{label} bundle verification expected one dependency, got "
-                    f"{verify_report['dependency_count']}"
-                )
-            extracted_dependency = extracted / dependency.name
-            if (
-                not extracted_dependency.is_file()
-                or extracted_dependency.stat().st_size != dependency.stat().st_size
-            ):
-                raise RuntimeError(
-                    f"{label} bundle extraction did not reproduce the dependency"
-                )
+            _validate_extracted_dependency(
+                label,
+                extracted,
+                verify_report,
+                source_size=dependency.stat().st_size,
+            )
             if label == "stress":
                 phase_times = {
                     "export": export_seconds,

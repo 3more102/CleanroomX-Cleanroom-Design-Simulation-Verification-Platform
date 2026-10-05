@@ -78,7 +78,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_theme import (\n    configure_ttk_theme,\n    normalize_density_name,\n    normalize_theme_name,\n)
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -2130,6 +2130,7 @@ class CleanroomXApp:
         )
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
@@ -2163,6 +2164,7 @@ class CleanroomXApp:
         self._theme_palette = configure_ttk_theme(
             self.root,
             self.theme_var.get(),
+            density=self.density_var.get(),
         )
 
     def _build_menu(self) -> None:
@@ -2215,7 +2217,7 @@ class CleanroomXApp:
         )
         design_menu.add_command(
             label="Split 2D + 3D", accelerator="Ctrl+3",
-            command=lambda: self._activate_spatial_workspace("split"),
+            command=self._activate_design_workspace,
         )
         design_menu.add_separator()
         design_menu.add_command(
@@ -2281,7 +2283,7 @@ class CleanroomXApp:
         report_menu = tk.Menu(menubar, tearoff=False)
         report_menu.add_command(
             label="Export Project Engineering Dossier...",
-            command=self.export_project_engineering_dossier,
+            command=self._activate_reporting_workspace,
         )
         report_menu.add_separator()
         report_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
@@ -2306,6 +2308,33 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        workspace_menu.add_command(
+            label="Design Workspace",
+            accelerator="Ctrl+Alt+1",
+            command=self._activate_design_workspace,
+        )
+        workspace_menu.add_command(
+            label="Simulation Workspace",
+            accelerator="Ctrl+Alt+2",
+            command=self._activate_simulation_workspace,
+        )
+        workspace_menu.add_command(
+            label="Verification Workspace",
+            accelerator="Ctrl+Alt+3",
+            command=self._activate_verification_workspace,
+        )
+        workspace_menu.add_command(
+            label="Evidence Workspace",
+            accelerator="Ctrl+Alt+4",
+            command=self._activate_evidence_workspace,
+        )
+        workspace_menu.add_command(
+            label="Reporting Workspace",
+            accelerator="Ctrl+Alt+5",
+            command=self._activate_reporting_workspace,
+        )
+        view_menu.add_cascade(label="Workspace Presets", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2343,6 +2372,18 @@ class CleanroomXApp:
                 command=lambda mode=value: self.set_theme(mode),
             )
         view_menu.add_cascade(label="Theme", menu=theme_menu)
+        density_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (
+            ("comfortable", "Comfortable"),
+            ("compact", "Compact / Engineering"),
+        ):
+            density_menu.add_radiobutton(
+                label=label,
+                variable=self.density_var,
+                value=value,
+                command=lambda mode=value: self.set_density(mode),
+            )
+        view_menu.add_cascade(label="Density", menu=density_menu)
         view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
@@ -2374,6 +2415,12 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
+        self.root.bind("<Control-Alt-Key-1>", lambda event: self._activate_design_workspace())
+        self.root.bind("<Control-Alt-Key-2>", lambda event: self._activate_simulation_workspace())
+        self.root.bind("<Control-Alt-Key-3>", lambda event: self._activate_verification_workspace())
+        self.root.bind("<Control-Alt-Key-4>", lambda event: self._activate_evidence_workspace())
+        self.root.bind("<Control-Alt-Key-5>", lambda event: self._activate_reporting_workspace())
+        self.root.bind("<Control-Alt-d>", lambda event: self.toggle_density())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -2542,7 +2589,7 @@ class CleanroomXApp:
             text="2  Inputs",
             width=9,
             style="CX.Compact.TButton",
-            command=self._activate_analysis_input_workspace,
+            command=self._activate_simulation_workspace,
         )
         self.workflow_input_button.pack(side="left", padx=1)
         self.workflow_validate_button = ttk.Button(
@@ -2992,6 +3039,7 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "density": normalize_density_name(self.density_var.get()),
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -3017,6 +3065,7 @@ class CleanroomXApp:
         self.focus_workspace_var.set(False)
         state = self._ui_layout_state
         self.theme_var.set(normalize_theme_name(state["theme"]))
+        self.density_var.set(normalize_density_name(state["density"]))
         self.set_theme(self.theme_var.get(), persist=False)
         self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
         self.output_panel_visible_var.set(bool(state["output_visible"]))
@@ -3107,7 +3156,11 @@ class CleanroomXApp:
     def set_theme(self, value: str, *, persist: bool = True) -> None:
         theme = normalize_theme_name(value)
         self.theme_var.set(theme)
-        self._theme_palette = configure_ttk_theme(self.root, theme)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            theme,
+            density=self.density_var.get(),
+        )
         self._apply_theme_to_native_widgets()
         state = dict(getattr(self, "_ui_layout_state", {}))
         state["theme"] = theme
@@ -3118,6 +3171,28 @@ class CleanroomXApp:
 
     def toggle_theme(self) -> None:
         self.set_theme("dark" if self.theme_var.get() == "light" else "light")
+
+    def set_density(self, value: str, *, persist: bool = True) -> None:
+        density = normalize_density_name(value)
+        self.density_var.set(density)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            self.theme_var.get(),
+            density=density,
+        )
+        self._apply_theme_to_native_widgets()
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["density"] = density
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        label = "Compact / Engineering" if density == "compact" else "Comfortable"
+        self.status_var.set(f"Density: {label}")
+
+    def toggle_density(self) -> None:
+        self.set_density(
+            "compact" if self.density_var.get() == "comfortable" else "comfortable"
+        )
 
     def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
         snapshot = getattr(self, "_focus_workspace_snapshot", None)
@@ -3724,6 +3799,54 @@ class CleanroomXApp:
                 keywords=("report", "evidence"),
             ),
             PaletteCommand(
+                "workspace.design",
+                "Activate Design Workspace",
+                "Workspace",
+                self._activate_design_workspace,
+                shortcut="Ctrl+Alt+1",
+                keywords=("layout", "model", "inspector"),
+            ),
+            PaletteCommand(
+                "workspace.simulation",
+                "Activate Simulation Workspace",
+                "Workspace",
+                self._activate_simulation_workspace,
+                shortcut="Ctrl+Alt+2",
+                keywords=("analysis", "plot", "results"),
+            ),
+            PaletteCommand(
+                "workspace.verification",
+                "Activate Verification Workspace",
+                "Workspace",
+                self._activate_verification_workspace,
+                shortcut="Ctrl+Alt+3",
+                keywords=("diagnostics", "problems", "compliance"),
+            ),
+            PaletteCommand(
+                "workspace.evidence",
+                "Activate Evidence Workspace",
+                "Workspace",
+                self._activate_evidence_workspace,
+                shortcut="Ctrl+Alt+4",
+                keywords=("proofgraph", "provenance", "traceability"),
+            ),
+            PaletteCommand(
+                "workspace.reporting",
+                "Activate Reporting Workspace",
+                "Workspace",
+                self._activate_reporting_workspace,
+                shortcut="Ctrl+Alt+5",
+                keywords=("report", "dossier", "export"),
+            ),
+            PaletteCommand(
+                "view.density",
+                "Toggle Compact / Comfortable Density",
+                "View",
+                self.toggle_density,
+                shortcut="Ctrl+Alt+D",
+                keywords=("compact", "engineering", "comfortable"),
+            ),
+            PaletteCommand(
                 "recovery.open",
                 "Open Recovery Center",
                 "Project",
@@ -3867,6 +3990,87 @@ class CleanroomXApp:
             self.spatial_workspace.set_workspace_mode(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
+
+    def _prepare_workspace_preset(
+        self,
+        *,
+        navigator: bool,
+        output: bool,
+        inspector: bool,
+    ) -> None:
+        """Apply panel visibility for a named workstation preset."""
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(bool(navigator))
+        self.output_panel_visible_var.set(bool(output))
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(bool(inspector))
+        self.root.after_idle(self._apply_saved_panel_sashes)
+
+    def _activate_design_workspace(self) -> None:
+        self._prepare_workspace_preset(
+            navigator=True,
+            output=False,
+            inspector=True,
+        )
+        self._activate_spatial_workspace("split")
+        self.workspace_status_var.set("Workspace: Design")
+
+    def _activate_simulation_workspace(self) -> None:
+        self._prepare_workspace_preset(
+            navigator=True,
+            output=True,
+            inspector=False,
+        )
+        if self.last_run is None:
+            self.notebook.select(self.input_tab)
+        else:
+            self.notebook.select(self.plot_canvas.master)
+            self.output_notebook.select(self.result_text.master)
+        self.workspace_status_var.set("Workspace: Simulation")
+        self.status_var.set(
+            "Simulation workspace: configure inputs and run, or inspect the latest results"
+        )
+
+    def _activate_verification_workspace(self) -> None:
+        self._prepare_workspace_preset(
+            navigator=True,
+            output=True,
+            inspector=False,
+        )
+        self.notebook.select(self.spatial_workspace)
+        self.output_notebook.select(self.problems_panel)
+        self.workspace_status_var.set("Workspace: Verification")
+        self.status_var.set("Verification workspace: Problems and model context linked")
+
+    def _activate_evidence_workspace(self) -> None:
+        self._prepare_workspace_preset(
+            navigator=True,
+            output=True,
+            inspector=False,
+        )
+        self.notebook.select(self.proofgraph_viewer)
+        self.output_notebook.select(self.evidence_text.master)
+        self.workspace_status_var.set("Workspace: Evidence")
+        self.status_var.set("Evidence workspace: ProofGraph and retained evidence")
+
+    def _activate_reporting_workspace(self) -> None:
+        self._prepare_workspace_preset(
+            navigator=False,
+            output=True,
+            inspector=False,
+        )
+        self.output_notebook.select(self.report_text.master)
+        if self.last_run is not None:
+            self.notebook.select(self.plot_canvas.master)
+        else:
+            self.notebook.select(self.input_tab)
+        self.workspace_status_var.set("Workspace: Reporting")
+        self.status_var.set(
+            "Reporting workspace: review generated output and export engineering reports"
+        )
 
     def _activate_analysis_input_workspace(self) -> None:
         """Open the current analysis input editor without changing engineering data."""

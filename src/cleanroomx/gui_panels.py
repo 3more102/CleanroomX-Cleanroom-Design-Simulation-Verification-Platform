@@ -485,6 +485,22 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.detail.insert("1.0", "\n".join(lines))
         self.detail.configure(state="disabled")
 
+    def select_issue(self, issue: dict[str, Any]) -> bool:
+        """Select one canonical issue after clearing presentation filters."""
+        sequence = issue.get("sequence") if isinstance(issue, dict) else None
+        if sequence is None:
+            return False
+        self.clear_filters()
+        self._populate()
+        for iid, candidate in self._issues_by_iid.items():
+            if candidate.get("sequence") == sequence:
+                self.tree.selection_set(iid)
+                self.tree.focus(iid)
+                self.tree.see(iid)
+                self._show_selected_detail()
+                return True
+        return False
+
     def select_relative(self, delta: int):
         items = list(self.tree.get_children())
         if not items:

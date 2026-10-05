@@ -683,6 +683,7 @@ def test_application_command_strip_remains_visible_at_minimum_window(app):
         app.toolbar_redo_button,
         app.toolbar_fit_button,
         app.toolbar_problems_button,
+        app.toolbar_workspace_button,
         app.toolbar_commands_button,
     )
     for button in buttons:
@@ -1056,3 +1057,141 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+def test_workspace_profiles_switch_surfaces_and_panels_without_project_mutation(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "verification"
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.spatial_workspace.inspector_visible()
+
+    app.activate_workspace_profile("evidence", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "evidence"
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert not app.spatial_workspace.inspector_visible()
+
+    app.activate_workspace_profile("reporting", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "reporting"
+    assert app.notebook.select() == str(app.plot_tab)
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert not app.spatial_workspace.inspector_visible()
+
+    assert app.project.to_dict() == project_before
+
+
+def test_workspace_profiles_preserve_independent_visibility_layouts(app):
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
+
+    app.navigator_panel_visible_var.set(False)
+    app._sync_navigator_panel_visibility()
+    app.spatial_workspace.set_inspector_visible(False)
+    app.root.update()
+
+    app.activate_workspace_profile("design", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "design"
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.spatial_workspace.inspector_visible()
+
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "verification"
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert not app.spatial_workspace.inspector_visible()
+
+
+def test_workspace_profile_reset_only_resets_active_workspace(app):
+    app.activate_workspace_profile("verification", persist=False)
+    app.navigator_panel_visible_var.set(False)
+    app._sync_navigator_panel_visibility()
+    app.spatial_workspace.set_inspector_visible(False)
+    app.root.update()
+
+    app.activate_workspace_profile("design", persist=False)
+    app.root.update()
+    verification_before = copy.deepcopy(
+        app._ui_layout_state["workspace_layouts"]["verification"]
+    )
+
+    app.reset_panel_layout()
+    app.root.update()
+    assert app.workspace_profile_var.get() == "design"
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.spatial_workspace.inspector_visible()
+    assert app._ui_layout_state["workspace_layouts"]["verification"] == verification_before
+
+
+def test_workspace_profile_rejects_unknown_profile(app):
+    with pytest.raises(ValueError, match="unsupported GUI workspace profile"):
+        app.activate_workspace_profile("thermal-lab", persist=False)
+
+def test_fullscreen_workspace_is_explicit_reversible_window_state(app):
+    app.set_fullscreen_workspace(True)
+    app.root.update_idletasks()
+
+    assert app.fullscreen_var.get() is True
+    assert bool(app.root.attributes("-fullscreen")) is True
+    assert "Full-screen workspace enabled" in app.status_var.get()
+
+    app.exit_fullscreen_workspace()
+    app.root.update_idletasks()
+
+    assert app.fullscreen_var.get() is False
+    assert bool(app.root.attributes("-fullscreen")) is False
+
+def test_top_level_menus_use_engineering_workflow_names(app):
+    end = app.menubar.index("end")
+    assert end is not None
+    labels = [
+        app.menubar.entrycget(index, "label")
+        for index in range(end + 1)
+    ]
+
+    for label in (
+        "File",
+        "Edit",
+        "Design",
+        "Simulation",
+        "Verification",
+        "Evidence",
+        "Reports",
+        "Tools",
+        "View",
+        "Help",
+    ):
+        assert label in labels
+    assert "Analyze" not in labels
+    assert "Verify" not in labels
+    assert "Report" not in labels
+
+    evidence_index = labels.index("Evidence")
+    evidence_menu = app.menubar.nametowidget(
+        app.menubar.entrycget(evidence_index, "menu")
+    )
+    evidence_labels = [
+        evidence_menu.entrycget(index, "label")
+        for index in range(evidence_menu.index("end") + 1)
+        if evidence_menu.type(index) != "separator"
+    ]
+    assert evidence_labels == [
+        "Evidence Workspace",
+        "ProofGraph Explorer",
+        "Requirements Traceability...",
+    ]
+

@@ -789,6 +789,35 @@ def test_navigator_quick_actions_route_to_existing_commands(app, monkeypatch):
     assert "Import IFC" in app.navigator_import_ifc_button.cget("text")
 
 
+def test_navigator_context_open_synchronizes_workspace_selection(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    navigator_id = f"room:{room['id']}"
+
+    workspace.selected = None
+    workspace._load_property_panel()
+    workspace._notify_selection_change()
+    app.root.update()
+    assert app.analysis_tree.selection() == ()
+    assert app.selection_status_var.get() == "Selected: —"
+
+    menu = app._build_navigator_context_menu(navigator_id)
+    assert menu is not None
+    open_index = next(
+        index
+        for index in range(int(menu.index("end")) + 1)
+        if menu.type(index) == "command"
+        and menu.entrycget(index, "label") == "Open / Properties"
+    )
+    menu.invoke(open_index)
+    app.root.update()
+
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.analysis_tree.selection() == (navigator_id,)
+    assert app.selection_status_var.get().startswith("Room:")
+    assert app.notebook.select() == str(workspace)
+
+
 def test_panel_header_close_controls_and_problems_navigation(app):
     workspace = app.spatial_workspace
 

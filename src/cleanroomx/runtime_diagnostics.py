@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -15,7 +16,33 @@ GUI_LOG_DIR_ENV = "CLEANROOMX_LOG_DIR"
 GUI_LOG_FILENAME = "cleanroomx-gui.log"
 GUI_LOG_MAX_BYTES = 4 * 1024 * 1024
 GUI_LOG_BACKUP_COUNT = 3
+
 _RUNTIME_HANDLER_MARKER = "_cleanroomx_runtime_log_handler"
+
+
+@dataclass(frozen=True)
+class GuiIncidentReport:
+    """Operator-safe metadata for one handled GUI operation failure."""
+
+    reference: str
+    operation: str
+    exception_type: str
+    summary: str
+    log_path: Path | None
+
+    def user_message(self) -> str:
+        lines = [
+            f"{self.operation} did not complete.",
+            "",
+            self.summary or self.exception_type,
+            "",
+            f"Error reference: {self.reference}",
+        ]
+        if self.log_path is not None:
+            lines.append(f"Technical log: {self.log_path}")
+        else:
+            lines.append("Persistent technical logging was unavailable.")
+        return "\n".join(lines)
 
 
 def default_gui_log_dir(
@@ -97,6 +124,59 @@ def close_gui_runtime_logging(logger: logging.Logger) -> None:
         if getattr(handler, _RUNTIME_HANDLER_MARKER, False):
             logger.removeHandler(handler)
             handler.close()
+
+
+
+def record_gui_exception(
+    operation: str,
+    exc: BaseException,
+    *,
+    log_dir: str | Path | None = None,
+    logger_name: str = "cleanroomx.gui.runtime",
+) -> GuiIncidentReport:
+    """Persist a handled GUI-boundary failure and return an operator reference."""
+
+    operation_text = str(operation or "Operation").strip() or "Operation"
+    summary = str(exc).strip() or type(exc).__name__
+    incident_id = uuid.uuid4().hex[:12].upper()
+    reference = f"CX-{incident_id}"
+    log_path: Path | None = None
+
+    logger = logging.getLogger(logger_name)
+    for handler in logger.handlers:
+        if getattr(handler, _RUNTIME_HANDLER_MARKER, False):
+            base_filename = getattr(handler, "baseFilename", None)
+            if base_filename:
+                log_path = Path(base_filename).resolve(strict=False)
+                break
+
+    if log_path is None:
+        try:
+            logger, log_path = configure_gui_runtime_logging(
+                log_dir,
+                logger_name=logger_name,
+            )
+        except OSError:
+            logger = logging.getLogger(logger_name)
+            log_path = None
+
+    try:
+        logger.error(
+            "Handled GUI operation failure incident=%s operation=%r",
+            incident_id,
+            operation_text,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+    except Exception:
+        log_path = None
+
+    return GuiIncidentReport(
+        reference=reference,
+        operation=operation_text,
+        exception_type=type(exc).__name__,
+        summary=summary,
+        log_path=log_path,
+    )
 
 
 def install_tk_exception_handler(

@@ -1867,6 +1867,118 @@ def test_gui_project_dossier_export_rejects_external_project_change(
 
 
 
+
+def test_project_verification_revision_read_failure_uses_structured_error_boundary(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="Verification revision read",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    failure = PermissionError("synthetic revision read failure")
+    monkeypatch.setattr(
+        gui_module,
+        "capture_project_file_revision",
+        lambda path: (_ for _ in ()).throw(failure),
+    )
+    boundary = []
+    app._show_operation_error = (
+        lambda title, operation, exc: boundary.append((title, operation, exc))
+    )
+
+    assert app._project_verification_target() is None
+    assert boundary == [
+        (
+            "Verification blocked",
+            "Read saved project revision for verification",
+            failure,
+        )
+    ]
+
+
+def test_project_dossier_revision_read_failure_uses_structured_error_boundary(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Dossier revision read"),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    failure = PermissionError("synthetic dossier revision read failure")
+    monkeypatch.setattr(
+        gui_module,
+        "capture_project_file_revision",
+        lambda path: (_ for _ in ()).throw(failure),
+    )
+    boundary = []
+    app._show_operation_error = (
+        lambda title, operation, exc: boundary.append((title, operation, exc))
+    )
+    dialog_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: dialog_calls.append(kwargs) or "",
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert dialog_calls == []
+    assert boundary == [
+        (
+            "Project dossier export blocked",
+            "Read saved project revision for dossier export",
+            failure,
+        )
+    ]
+
+
 def test_gui_project_requirements_verification_reports_verified_pass(
     monkeypatch,
     tmp_path,

@@ -2756,6 +2756,36 @@ class CleanroomXApp:
             )
         )
 
+        notebook = getattr(self, "output_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.tab(
+                    self.problems_panel,
+                    text=f"Problems {issue_count}",
+                )
+                notebook.tab(
+                    self.diagnostics_text.master,
+                    text=f"Diagnostics {error_count + warning_count}",
+                )
+                notebook.tab(
+                    self.verification_text.master,
+                    text=(
+                        f"Verification {current}/{configured}"
+                        if configured
+                        else "Verification —"
+                    ),
+                )
+                notebook.tab(
+                    self.evidence_text.master,
+                    text=f"Evidence {len(records)}",
+                )
+                notebook.tab(
+                    self.analysis_result_panel,
+                    text="Analysis ●" if self.last_run is not None else "Analysis",
+                )
+            except tk.TclError:
+                pass
+
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
             metrics = layout_metrics(

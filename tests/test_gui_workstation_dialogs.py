@@ -1,6 +1,7 @@
 """Real Tk coverage for high-density workstation dialogs."""
 from __future__ import annotations
 
+import json
 import os
 import tkinter as tk
 
@@ -349,3 +350,51 @@ def test_ifc_import_review_dialog_exposes_identity_and_model_statistics(app):
 
     dialog._accept()
     assert dialog.accepted is True
+
+
+def test_structured_analysis_input_scalar_edit_is_validated_before_editor_mutation(
+    app,
+    monkeypatch,
+):
+    app.refresh_structure()
+    app.root.update()
+
+    def select_path(path):
+        for iid in app.structure_tree.get_children():
+            if app.structure_tree.item(iid, "text") == path:
+                app.structure_tree.selection_set(iid)
+                app.structure_tree.focus(iid)
+                return iid
+        raise AssertionError(f"structured row not found: {path}")
+
+    path = "$.rooms[0].min_ach"
+    select_path(path)
+    project_before = app.project.to_dict()
+    monkeypatch.setattr(
+        "cleanroomx.gui.simpledialog.askstring",
+        lambda *args, **kwargs: "26",
+    )
+
+    assert app._edit_structured_input_value() is True
+    edited = json.loads(app.input_text.get("1.0", "end-1c"))
+    assert edited["rooms"][0]["min_ach"] == 26
+    assert app.project.to_dict() == project_before
+    assert "Updated $.rooms[0].min_ach" in app.status_var.get()
+
+    app.refresh_structure()
+    select_path(path)
+    editor_before_rejected_change = app.input_text.get("1.0", "end-1c")
+    errors = []
+    monkeypatch.setattr(
+        "cleanroomx.gui.simpledialog.askstring",
+        lambda *args, **kwargs: '"not-a-number"',
+    )
+    monkeypatch.setattr(
+        "cleanroomx.gui.messagebox.showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app._edit_structured_input_value() is False
+    assert app.input_text.get("1.0", "end-1c") == editor_before_rejected_change
+    assert errors
+    assert errors[-1][0] == "Analysis input rejected"

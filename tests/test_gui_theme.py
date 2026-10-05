@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, status_style_name, theme_palette
+import os
+import tkinter as tk
+
+import pytest
+
+from cleanroomx.gui_theme import configure_ttk_theme, normalize_theme_name, status_style_name, theme_palette
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -90,3 +95,32 @@ def test_status_style_name_is_canonical_across_engineering_states():
     assert status_style_name("running") == "CX.Status.Simulation.TLabel"
     assert status_style_name("available") == "CX.Status.Info.TLabel"
     assert status_style_name("not checked") == "CX.Status.Neutral.TLabel"
+
+
+def test_surface_aware_label_styles_match_parent_surfaces():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    try:
+        palette = configure_ttk_theme(root, "dark")
+        style = tk.ttk.Style(root) if hasattr(tk, "ttk") else None
+        if style is None:
+            from tkinter import ttk
+            style = ttk.Style(root)
+
+        assert style.lookup("CX.PanelTitle.TLabel", "background") == palette["panel"]
+        assert style.lookup("CX.PanelMuted.TLabel", "background") == palette["panel"]
+        assert (
+            style.lookup("CX.SurfaceSection.TLabel", "background")
+            == palette["surface_alt"]
+        )
+        assert (
+            style.lookup("CX.SurfaceMuted.TLabel", "background")
+            == palette["surface_alt"]
+        )
+    finally:
+        root.destroy()

@@ -2655,22 +2655,18 @@ class CleanroomXApp:
             self._activate_spatial_workspace("split")
         elif mode == "simulation":
             self._activate_analysis_input_workspace()
-            if apply_layout:
-                self._select_output_tab("Simulation")
+            self._select_output_tab("Simulation")
         elif mode == "verification":
             self.notebook.select(self.dashboard)
             self.workspace_status_var.set("Workspace: Verification")
-            if apply_layout:
-                self._select_output_tab("Problems")
+            self._select_output_tab("Problems")
         elif mode == "evidence":
             self._activate_proofgraph_workspace()
-            if apply_layout:
-                self._select_output_tab("Evidence")
+            self._select_output_tab("Evidence")
         elif mode == "reporting":
             self.notebook.select(self.dashboard)
             self.workspace_status_var.set("Workspace: Reporting")
-            if apply_layout:
-                self._select_output_tab("Report")
+            self._select_output_tab("Report")
 
         if apply_layout:
             self.root.after_idle(self._apply_default_panel_sashes)

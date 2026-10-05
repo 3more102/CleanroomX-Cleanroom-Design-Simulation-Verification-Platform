@@ -8960,7 +8960,7 @@ def main(argv: list[str] | None = None) -> int:
                 root.destroy()
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
-            messagebox.showerror("Open failed", str(exc), parent=root)
+            app._show_operation_error("Open failed", "Open startup project", exc)
 
     if args.smoke:
         try:

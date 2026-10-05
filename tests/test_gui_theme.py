@@ -25,6 +25,7 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "border",
         "accent",
         "accent_hover",
+        "accent_secondary",
         "accent_text",
         "selection",
         "selection_text",
@@ -36,12 +37,30 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "canvas_3d",
         "plot",
         "grid",
+        "success",
+        "warning",
+        "error",
+        "info",
     }
     assert set(light) == required
     assert set(dark) == required
     assert light["background"] != dark["background"]
     assert light["field"] != dark["field"]
     assert light["canvas_2d"] != dark["canvas_2d"]
+
+
+def test_dark_palette_matches_industrial_cleanroomx_identity():
+    dark = theme_palette("dark")
+    assert dark["background"] == "#0b1220"
+    assert dark["surface"] == "#111b2e"
+    assert dark["surface_alt"] == "#17243a"
+    assert dark["border"] == "#263750"
+    assert dark["accent"] == "#22d3ee"
+    assert dark["accent_secondary"] == "#38bdf8"
+    assert dark["success"] == "#22c55e"
+    assert dark["warning"] == "#f59e0b"
+    assert dark["error"] == "#ef4444"
+    assert "#000000" not in dark.values()
 
 
 def test_theme_palette_returns_independent_copy():

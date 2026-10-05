@@ -362,11 +362,49 @@ class AnalysisPicker(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
+        self._catalog = list(analysis_catalog())
+        self.search_var = tk.StringVar()
+        self.category_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
+
         ttk.Label(
             self,
             text="Choose a CleanroomX backend workflow",
-            font=("TkDefaultFont", 11, "bold"),
+            style="CX.Section.TLabel",
         ).pack(anchor="w", padx=12, pady=(12, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=12, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=32,
+        )
+        self.search_entry.pack(side="left", padx=(4, 10))
+        ttk.Label(filters, text="Category").pack(side="left")
+        categories = sorted(
+            {
+                str(item.get("category", "")).strip()
+                for item in self._catalog
+                if str(item.get("category", "")).strip()
+            },
+            key=str.casefold,
+        )
+        self.category_combo = ttk.Combobox(
+            filters,
+            textvariable=self.category_var,
+            values=("All", *categories),
+            state="readonly",
+            width=18,
+        )
+        self.category_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=12, pady=6)
@@ -389,40 +427,103 @@ class AnalysisPicker(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
-        for item in analysis_catalog():
-            source = "Built-in"
-            plugin = item.get("plugin")
-            if isinstance(plugin, dict):
-                identity = (
-                    plugin.get("distribution_name")
-                    or plugin.get("entry_point_name")
-                    or item["key"]
-                )
-                version = plugin.get("distribution_version")
-                source = f"Plugin: {identity}" + (
-                    f" {version}" if version else ""
-                )
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=12, pady=(6, 12))
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
+        self.add_button = ttk.Button(
+            buttons,
+            text="Add",
+            command=self._accept,
+            style="CX.Primary.TButton",
+        )
+        self.add_button.pack(side="right", padx=(0, 6))
+
+        self.search_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
+        self.tree.bind("<Double-1>", lambda event: self._accept())
+        self.tree.bind("<Return>", lambda event: self._accept())
+        self.bind("<Escape>", lambda event: self.destroy())
+        self._populate()
+
+        self.geometry("1020x500")
+        self.minsize(760, 420)
+        self.search_entry.focus_set()
+
+    @staticmethod
+    def _catalog_source(item: dict) -> str:
+        source = "Built-in"
+        plugin = item.get("plugin")
+        if isinstance(plugin, dict):
+            identity = (
+                plugin.get("distribution_name")
+                or plugin.get("entry_point_name")
+                or item["key"]
+            )
+            version = plugin.get("distribution_version")
+            source = f"Plugin: {identity}" + (
+                f" {version}" if version else ""
+            )
+        return source
+
+    def _filtered_catalog(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
+        visible = []
+        for item in self._catalog:
+            item_category = str(item.get("category", ""))
+            if category and category != "all" and item_category.casefold() != category:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(item.get("key", "")),
+                        str(item.get("title", "")),
+                        item_category,
+                        str(item.get("description", "")),
+                        self._catalog_source(item),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(item)
+        return visible
+
+    def _populate(self) -> None:
+        previous = self.tree.selection()
+        selected = previous[0] if previous else None
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+
+        visible = self._filtered_catalog()
+        for item in visible:
             self.tree.insert(
                 "",
                 "end",
                 iid=item["key"],
                 text=item["title"],
-                values=(item["category"], source, item["description"]),
+                values=(
+                    item["category"],
+                    self._catalog_source(item),
+                    item["description"],
+                ),
             )
 
-        buttons = ttk.Frame(self)
-        buttons.pack(fill="x", padx=12, pady=(6, 12))
-        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
-        ttk.Button(buttons, text="Add", command=self._accept).pack(
-            side="right", padx=(0, 6)
-        )
-        self.tree.bind("<Double-1>", lambda event: self._accept())
-        first = self.tree.get_children()
-        if first:
-            self.tree.selection_set(first[0])
-            self.tree.focus(first[0])
+        self.count_var.set(f"{len(visible)} of {len(self._catalog)} workflows")
+        children = self.tree.get_children()
+        if selected and self.tree.exists(selected):
+            target = selected
+        else:
+            target = children[0] if children else None
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self.add_button.configure(state="normal" if children else "disabled")
 
-        self.geometry("1020x470")
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.category_var.set("All")
+        self.search_entry.focus_set()
 
     def _accept(self) -> None:
         selection = self.tree.selection()
@@ -436,12 +537,16 @@ class RunHistoryDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, metadata: dict):
         super().__init__(parent)
         self.title("Analysis Run History")
-        self.geometry("1180x680")
+        self.geometry("1180x700")
         self.minsize(900, 520)
         self.transient(parent)
 
         summary = validate_run_history(metadata)
         self.records = run_history_records(metadata)
+        self.search_var = tk.StringVar()
+        self.status_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
+
         ttk.Label(
             self,
             text=(
@@ -449,6 +554,54 @@ class RunHistoryDialog(tk.Toplevel):
                 "Digests detect accidental corruption; they are not authenticity signatures."
             ),
         ).pack(fill="x", padx=10, pady=(10, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=10, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=34,
+        )
+        self.search_entry.pack(side="left", padx=(4, 10))
+        ttk.Label(filters, text="Status").pack(side="left")
+        statuses = sorted(
+            {
+                str(record.get("status", "")).strip()
+                for record in self.records
+                if str(record.get("status", "")).strip()
+            },
+            key=str.casefold,
+        )
+        self.status_combo = ttk.Combobox(
+            filters,
+            textvariable=self.status_filter_var,
+            values=("All", *statuses),
+            state="readonly",
+            width=16,
+        )
+        self.status_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Previous",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            filters,
+            text="Next",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            filters,
+            text="Copy record",
+            command=self._copy_selected,
+        ).pack(side="left", padx=2)
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -479,19 +632,82 @@ class RunHistoryDialog(tk.Toplevel):
         list_scroll = ttk.Scrollbar(
             list_frame, orient="vertical", command=self.tree.yview
         )
-        self.tree.configure(yscrollcommand=list_scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        list_scroll.pack(side="right", fill="y")
+        list_scroll_x = ttk.Scrollbar(
+            list_frame, orient="horizontal", command=self.tree.xview
+        )
+        self.tree.configure(
+            yscrollcommand=list_scroll.set,
+            xscrollcommand=list_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        list_scroll.grid(row=0, column=1, sticky="ns")
+        list_scroll_x.grid(row=1, column=0, sticky="ew")
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
 
         self.detail = tk.Text(detail_frame, wrap="none")
         detail_scroll = ttk.Scrollbar(
             detail_frame, orient="vertical", command=self.detail.yview
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        detail_scroll_x = ttk.Scrollbar(
+            detail_frame, orient="horizontal", command=self.detail.xview
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        detail_frame.rowconfigure(0, weight=1)
+        detail_frame.columnconfigure(0, weight=1)
 
+        self.search_var.trace_add("write", lambda *_: self._populate())
+        self.status_filter_var.trace_add("write", lambda *_: self._populate())
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        self.tree.bind("<F4>", lambda event: self._select_relative(1))
+        self.tree.bind("<Shift-F4>", lambda event: self._select_relative(-1))
+        self.tree.bind("<Control-c>", lambda event: self._copy_selected())
+        self.bind("<Escape>", lambda event: self.destroy())
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+        self._populate()
+
+    def _filtered_records(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        status = self.status_filter_var.get().strip().casefold()
+        visible = []
         for record in reversed(self.records):
+            record_status = str(record.get("status", ""))
+            if status and status != "all" and record_status.casefold() != status:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(record.get("sequence", "")),
+                        str(record.get("completed_at_utc", "")),
+                        str(record.get("analysis_name", "")),
+                        str(record.get("analysis_kind", "")),
+                        record_status,
+                        str(record.get("input_sha256", "")),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(record)
+        return visible
+
+    def _populate(self) -> None:
+        selection = self.tree.selection()
+        selected = selection[0] if selection else None
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+
+        visible = self._filtered_records()
+        for record in visible:
             self.tree.insert(
                 "",
                 "end",
@@ -505,32 +721,79 @@ class RunHistoryDialog(tk.Toplevel):
                     record["input_sha256"][:16] + "…",
                 ),
             )
-        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
-
-        buttons = ttk.Frame(self)
-        buttons.pack(fill="x", padx=10, pady=(0, 10))
-        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+        self.count_var.set(f"{len(visible)} of {len(self.records)} records")
 
         children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
-            self._show_selected()
+        if selected and self.tree.exists(selected):
+            target = selected
+        else:
+            target = children[0] if children else None
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self._show_selected()
 
-    def _show_selected(self, event=None) -> None:
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.status_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _selected_record(self) -> dict | None:
         selection = self.tree.selection()
         if not selection:
-            return
+            return None
         sequence = int(selection[0])
-        record = next(
-            item for item in self.records if item["sequence"] == sequence
+        return next(
+            (item for item in self.records if item["sequence"] == sequence),
+            None,
         )
+
+    def _select_relative(self, step: int):
+        children = list(self.tree.get_children())
+        if not children:
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in children:
+            index = children.index(selection[0])
+            target = children[(index + step) % len(children)]
+        else:
+            target = children[0 if step >= 0 else -1]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected()
+        return "break"
+
+    def _copy_selected(self) -> None:
+        record = self._selected_record()
+        if record is None:
+            return
+        payload = json.dumps(
+            record,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        self.clipboard_clear()
+        self.clipboard_append(payload)
+
+    def _show_selected(self, event=None) -> None:
+        record = self._selected_record()
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        self.detail.insert(
-            "1.0",
-            json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
-        )
+        if record is not None:
+            self.detail.insert(
+                "1.0",
+                json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
+            )
+        elif self.records and not self._filtered_records():
+            self.detail.insert(
+                "1.0",
+                "No retained run records match the active filters.",
+            )
+        else:
+            self.detail.insert("1.0", "No retained run records are available.")
         self.detail.configure(state="disabled")
 
 

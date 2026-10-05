@@ -6,6 +6,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import normalize_theme_name, theme_palette
 from .proofgraph_io import proofgraph_from_dict
 
 
@@ -394,6 +395,8 @@ class ProofGraphViewer(ttk.Frame):
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
         self._selected_key: str | None = None
+        self._theme_name = "light"
+        self._theme_palette = theme_palette(self._theme_name)
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
@@ -454,9 +457,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.canvas = tk.Canvas(
             graph_host,
-            background="#f7f9fb",
+            background=self._theme_palette["plot"],
             highlightthickness=1,
-            highlightbackground="#c7d0d9",
+            highlightbackground=self._theme_palette["border"],
         )
         graph_y = ttk.Scrollbar(graph_host, orient="vertical", command=self.canvas.yview)
         graph_x = ttk.Scrollbar(graph_host, orient="horizontal", command=self.canvas.xview)
@@ -489,6 +492,25 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
         detail_scroll.pack(side="right", fill="y", pady=(0, 6))
+        self.apply_theme(self._theme_name, redraw=False)
+
+    def apply_theme(self, value: Any, *, redraw: bool = True) -> None:
+        self._theme_name = normalize_theme_name(value)
+        self._theme_palette = theme_palette(self._theme_name)
+        palette = self._theme_palette
+        self.canvas.configure(
+            background=palette["plot"],
+            highlightbackground=palette["border"],
+        )
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+        if redraw:
+            self._draw_graph()
 
     def set_documents(self, documents: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> None:
         unique: dict[str, dict[str, Any]] = {}
@@ -577,9 +599,34 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def _node_fill(self, node: dict[str, Any]) -> str:
         status = _text(node.get("status")).casefold()
+        if self._theme_name == "dark":
+            status_colors = {
+                "fail": "#4a2026",
+                "failed": "#4a2026",
+                "error": "#4a2026",
+                "warning": "#4b3b18",
+                "warn": "#4b3b18",
+                "pass": "#183b2b",
+            }
+            type_colors = {
+                "requirement": "#17324d",
+                "model_object": "#13384a",
+                "ifc": "#252d56",
+                "source": "#29323c",
+                "calculation": "#332b54",
+                "evidence": "#40284c",
+                "check": "#443c1c",
+                "finding": "#4b2f20",
+                "verdict": "#303844",
+                "verification_run": "#1b4038",
+            }
+            return status_colors.get(
+                status,
+                type_colors.get(node.get("type"), self._theme_palette["surface_alt"]),
+            )
+
         if status in {"fail", "failed", "error"}:
             return "#fee2e2"
         if status in {"warning", "warn"}:
@@ -611,7 +658,7 @@ class ProofGraphViewer(ttk.Frame):
                 24,
                 anchor="nw",
                 text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                fill=self._theme_palette["muted"],
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -646,7 +693,7 @@ class ProofGraphViewer(ttk.Frame):
                 source[1] + 24,
                 target[0],
                 target[1] + 24,
-                fill="#94a3b8",
+                fill=self._theme_palette["disabled"],
                 width=1,
                 arrow="last",
             )
@@ -654,7 +701,11 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
+            outline = (
+                self._theme_palette["accent"]
+                if selected
+                else self._theme_palette["border"]
+            )
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,
@@ -675,7 +726,7 @@ class ProofGraphViewer(ttk.Frame):
                 width=148,
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=self._theme_palette["text"],
             )
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]

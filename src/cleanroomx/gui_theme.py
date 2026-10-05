@@ -768,6 +768,16 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         arrowcolor=[("active", palette["text"])],
     )
     style.configure(
+        "CX.Activity.Horizontal.TProgressbar",
+        troughcolor=palette["surface_alt"],
+        background=palette["accent"],
+        bordercolor=palette["border"],
+        lightcolor=palette["accent"],
+        darkcolor=palette["accent"],
+        thickness=5,
+    )
+
+    style.configure(
         "TMenubutton",
         background=palette["surface_alt"],
         foreground=palette["text"],

@@ -2,6 +2,10 @@
   #define MyAppVersion "0.103.0.dev0"
 #endif
 
+#ifndef MyFileVersion
+  #define MyFileVersion "0.103.0.0"
+#endif
+
 #ifndef MyOutputBaseFilename
   #define MyOutputBaseFilename "CleanroomX-Setup-x64"
 #endif
@@ -32,7 +36,10 @@ SetupLogging=yes
 VersionInfoCompany=CleanroomX contributors
 VersionInfoDescription=CleanroomX Engineering Workstation Installer
 VersionInfoProductName=CleanroomX
-VersionInfoProductVersion={#MyAppVersion}
+VersionInfoVersion={#MyFileVersion}
+VersionInfoProductVersion={#MyFileVersion}
+VersionInfoTextVersion={#MyAppVersion}
+VersionInfoProductTextVersion={#MyAppVersion}
 
 [Files]
 Source: "..\..\dist\windows-standalone\CleanroomX\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

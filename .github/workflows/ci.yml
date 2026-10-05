@@ -230,6 +230,7 @@ jobs:
           tests/test_gui_command_palette.py
           tests/test_gui_proofgraph_integration.py
           tests/test_gui_dashboard.py
+          tests/test_gui_plot.py
       - name: Run representative v0.100 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

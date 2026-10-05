@@ -29,6 +29,12 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#111820",
         "plot": "#ffffff",
         "grid": "#d7dee7",
+        "info": "#175cd3",
+        "pass": "#027a48",
+        "warning": "#b54708",
+        "error": "#b42318",
+        "stale": "#667085",
+        "suppressed": "#667085",
     },
     "dark": {
         "background": "#14191f",
@@ -51,6 +57,12 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#0d1117",
         "plot": "#131920",
         "grid": "#33404c",
+        "info": "#84adff",
+        "pass": "#75e0a7",
+        "warning": "#fec84b",
+        "error": "#fda29b",
+        "stale": "#98a2b3",
+        "suppressed": "#98a2b3",
     },
 }
 

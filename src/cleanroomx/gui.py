@@ -81,7 +81,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
-from .gui_widgets import attach_tooltip
+from .gui_widgets import TreeviewColumnSorter, attach_tooltip
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -356,6 +356,48 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     return rows
 
 
+def compare_run_records(
+    left: dict,
+    right: dict,
+) -> list[dict[str, str]]:
+    """Compare retained result snapshots without recomputing engineering values."""
+    left_result = left.get("result") if isinstance(left, dict) else None
+    right_result = right.get("result") if isinstance(right, dict) else None
+    if not isinstance(left_result, dict) or not isinstance(right_result, dict):
+        return []
+
+    left_rows = {
+        path: (value, unit)
+        for path, value, unit in flatten_json(left_result)
+    }
+    right_rows = {
+        path: (value, unit)
+        for path, value, unit in flatten_json(right_result)
+    }
+    rows: list[dict[str, str]] = []
+    for path in sorted(set(left_rows) | set(right_rows), key=str.casefold):
+        left_value, left_unit = left_rows.get(path, ("—", ""))
+        right_value, right_unit = right_rows.get(path, ("—", ""))
+        if path not in left_rows:
+            state = "Only B"
+        elif path not in right_rows:
+            state = "Only A"
+        elif left_value == right_value and left_unit == right_unit:
+            state = "Same"
+        else:
+            state = "Changed"
+        rows.append(
+            {
+                "path": path,
+                "left": left_value,
+                "right": right_value,
+                "unit": left_unit or right_unit,
+                "state": state,
+            }
+        )
+    return rows
+
+
 class AnalysisPicker(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
@@ -435,6 +477,137 @@ class AnalysisPicker(tk.Toplevel):
         self.destroy()
 
 
+class RunComparisonDialog(tk.Toplevel):
+    """Side-by-side projection of two immutable retained run results."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        left: dict,
+        right: dict,
+    ) -> None:
+        super().__init__(parent)
+        self.title("Compare Analysis Runs")
+        self.geometry("1320x760")
+        self.minsize(940, 540)
+        self.transient(parent)
+        self._all_rows = compare_run_records(left, right)
+        self.search_var = tk.StringVar()
+        self.changed_only_var = tk.BooleanVar(value=False)
+        self.summary_var = tk.StringVar()
+
+        ttk.Label(
+            self,
+            text=(
+                f"Run A  #{left.get('sequence', '?')} · "
+                f"{left.get('analysis_name', 'analysis')} · "
+                f"{left.get('completed_at_utc', '')}"
+            ),
+            style="CX.Section.TLabel",
+        ).pack(fill="x", padx=10, pady=(10, 2))
+        ttk.Label(
+            self,
+            text=(
+                f"Run B  #{right.get('sequence', '?')} · "
+                f"{right.get('analysis_name', 'analysis')} · "
+                f"{right.get('completed_at_utc', '')}"
+            ),
+            style="CX.Section.TLabel",
+        ).pack(fill="x", padx=10, pady=(0, 6))
+
+        filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
+        filters.pack(fill="x", padx=10)
+        ttk.Label(filters, text="Search").pack(side="left")
+        ttk.Entry(filters, textvariable=self.search_var, width=32).pack(
+            side="left", padx=(5, 10)
+        )
+        ttk.Checkbutton(
+            filters,
+            text="Changed only",
+            variable=self.changed_only_var,
+            command=self._populate,
+        ).pack(side="left")
+        ttk.Label(
+            filters,
+            textvariable=self.summary_var,
+            style="CX.Section.TLabel",
+        ).pack(side="right")
+        self.search_var.trace_add("write", lambda *_: self._populate())
+
+        host = ttk.Frame(self)
+        host.pack(fill="both", expand=True, padx=10, pady=(6, 8))
+        self.tree = ttk.Treeview(
+            host,
+            columns=("left", "right", "unit", "state"),
+            show="tree headings",
+            selectmode="browse",
+        )
+        self.tree.heading("#0", text="Result path")
+        self.tree.heading("left", text="Run A")
+        self.tree.heading("right", text="Run B")
+        self.tree.heading("unit", text="Unit")
+        self.tree.heading("state", text="Comparison")
+        self.tree.column("#0", width=390, minwidth=220)
+        self.tree.column("left", width=285, minwidth=130)
+        self.tree.column("right", width=285, minwidth=130)
+        self.tree.column("unit", width=90, minwidth=60, stretch=False)
+        self.tree.column("state", width=110, minwidth=90, stretch=False)
+        self._sorter = TreeviewColumnSorter(
+            self.tree,
+            ("#0", "left", "right", "unit", "state"),
+        )
+        yscroll = ttk.Scrollbar(host, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(host, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(
+            yscrollcommand=yscroll.set,
+            xscrollcommand=xscroll.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        host.rowconfigure(0, weight=1)
+        host.columnconfigure(0, weight=1)
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+        self._populate()
+
+    def _populate(self) -> None:
+        query = self.search_var.get().strip().casefold()
+        changed_only = bool(self.changed_only_var.get())
+        visible: list[dict[str, str]] = []
+        for row in self._all_rows:
+            if changed_only and row["state"] == "Same":
+                continue
+            if query:
+                haystack = " ".join(row.values()).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(row)
+
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        for index, row in enumerate(visible):
+            self.tree.insert(
+                "",
+                "end",
+                iid=f"comparison:{index}",
+                text=row["path"],
+                values=(
+                    row["left"],
+                    row["right"],
+                    row["unit"],
+                    row["state"],
+                ),
+                tags=(row["state"].casefold().replace(" ", "-"),),
+            )
+        changed = sum(1 for row in visible if row["state"] != "Same")
+        self.summary_var.set(
+            f"{len(visible)} fields · {changed} different"
+        )
+
+
 class RunHistoryDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, metadata: dict):
         super().__init__(parent)
@@ -465,6 +638,7 @@ class RunHistoryDialog(tk.Toplevel):
             list_frame,
             columns=("time", "analysis", "kind", "status", "input"),
             show="tree headings",
+            selectmode="extended",
             height=10,
         )
         self.tree.heading("#0", text="#")
@@ -508,17 +682,73 @@ class RunHistoryDialog(tk.Toplevel):
                     record["input_sha256"][:16] + "…",
                 ),
             )
-        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        self.tree.bind("<<TreeviewSelect>>", self._on_selected)
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=10, pady=(0, 10))
+        self.compare_button = ttk.Button(
+            buttons,
+            text="Compare Selected",
+            command=self._compare_selected,
+            state="disabled",
+        )
+        self.compare_button.pack(side="left")
+        ttk.Label(
+            buttons,
+            text="Select exactly two retained runs to compare persisted results.",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(8, 0))
         ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
 
         children = self.tree.get_children()
         if children:
             self.tree.selection_set(children[0])
             self.tree.focus(children[0])
-            self._show_selected()
+            self._on_selected()
+
+    def _on_selected(self, event=None) -> None:
+        self._show_selected(event)
+        selection = self.tree.selection()
+        comparable = False
+        if len(selection) == 2:
+            selected_records = [
+                next(
+                    item
+                    for item in self.records
+                    if item["sequence"] == int(iid)
+                )
+                for iid in selection
+            ]
+            comparable = all(
+                isinstance(record.get("result"), dict)
+                for record in selected_records
+            )
+        self.compare_button.configure(
+            state="normal" if comparable else "disabled"
+        )
+
+    def _compare_selected(self) -> None:
+        selection = self.tree.selection()
+        if len(selection) != 2:
+            return
+        selected_records = [
+            next(
+                item
+                for item in self.records
+                if item["sequence"] == int(iid)
+            )
+            for iid in selection
+        ]
+        if not all(
+            isinstance(record.get("result"), dict)
+            for record in selected_records
+        ):
+            return
+        RunComparisonDialog(
+            self,
+            selected_records[0],
+            selected_records[1],
+        )
 
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()

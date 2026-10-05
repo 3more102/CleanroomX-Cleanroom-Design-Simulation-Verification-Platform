@@ -47,6 +47,19 @@ def layout():
     ("floor_elevation_m", "Infinity"), ("pressure_pa", "unknown"),
     ("pressure_pa", "NaN"),
 ])
+@pytest.mark.parametrize(
+    ("scale", "expected"),
+    (
+        (50.0, 2.0),
+        (100.0, 1.0),
+        (200.0, 0.5),
+        (500.0, 0.2),
+    ),
+)
+def test_ruler_major_step_uses_stable_one_two_five_spacing(scale, expected):
+    assert SpatialDesignWorkspace._ruler_major_step(scale) == pytest.approx(expected)
+
+
 def test_invalid_room_properties_are_rejected_without_partial_changes(layout, field, value):
     before = copy.deepcopy(layout)
     with pytest.raises(ValueError):

@@ -86,3 +86,55 @@ def test_workspace_profiles_route_first_class_views_and_panel_visibility(app):
     assert app.navigator_panel_visible_var.get() is False
     assert app.output_panel_visible_var.get() is True
     assert app._capture_ui_layout_state()["workspace_profile"] == "reporting"
+
+
+def test_named_workspace_layouts_round_trip_panel_state(app):
+    app.apply_workspace_profile("verification", persist=False)
+    app.navigator_panel_visible_var.set(True)
+    app.output_panel_visible_var.set(True)
+    app._sync_navigator_panel_visibility()
+    app._sync_output_panel_visibility()
+    app.spatial_workspace.set_inspector_visible(False)
+    app.root.update_idletasks()
+
+    assert app.save_named_layout("Review") is True
+    assert "Review" in app._ui_layout_state["saved_layouts"]
+    assert app.save_named_layout(" review ") is False
+
+    app.apply_workspace_profile("design", persist=False)
+    app.navigator_panel_visible_var.set(False)
+    app.output_panel_visible_var.set(False)
+    app._sync_navigator_panel_visibility()
+    app._sync_output_panel_visibility()
+    app.spatial_workspace.set_inspector_visible(True)
+    app.root.update_idletasks()
+
+    assert app.apply_saved_layout("Review") is True
+    app.root.update_idletasks()
+    assert app.workspace_profile_var.get() == "verification"
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert app.spatial_workspace.inspector_visible() is False
+
+    assert app.delete_saved_layout("Review") is True
+    assert "Review" not in app._ui_layout_state["saved_layouts"]
+    assert app.apply_saved_layout("Review") is False
+
+
+def test_reset_panel_layout_preserves_named_layouts(app):
+    assert app.save_named_layout("Keep") is True
+    app.apply_workspace_profile("reporting", persist=False)
+    app.navigator_panel_visible_var.set(False)
+    app.output_panel_visible_var.set(False)
+    app._sync_navigator_panel_visibility()
+    app._sync_output_panel_visibility()
+
+    app.reset_panel_layout()
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert "Keep" in app._ui_layout_state["saved_layouts"]
+    assert app.workspace_profile_var.get() == "design"
+    assert app.navigator_panel_visible_var.get() is True
+    assert app.output_panel_visible_var.get() is True
+    assert app.spatial_workspace.inspector_visible() is True

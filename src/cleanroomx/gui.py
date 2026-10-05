@@ -1527,21 +1527,26 @@ class CleanroomXApp:
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
-            row=0, column=1, sticky="w", padx=(0, 5)
-        )
+        ttk.Label(
+            topbar,
+            text="Project",
+            style="CX.TopbarMuted.TLabel",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
-            row=0, column=3, sticky="w", padx=(0, 5)
-        )
+        ttk.Label(
+            topbar,
+            text="Description",
+            style="CX.TopbarMuted.TLabel",
+        ).grid(row=0, column=3, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
             row=0, column=4, sticky="ew", padx=(0, 10)
         )
         ttk.Button(
             topbar,
             text="Validate",
+            style="CX.Compact.TButton",
             command=self.validate_current,
         ).grid(row=0, column=5, padx=2)
         self.run_button = ttk.Button(
@@ -1552,7 +1557,11 @@ class CleanroomXApp:
         )
         self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            style="CX.Danger.TButton",
+            command=self.cancel_run,
+            state="disabled",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
@@ -1568,7 +1577,7 @@ class CleanroomXApp:
         ttk.Label(
             statebar,
             text="ENGINEERING STATE",
-            style="CX.Section.TLabel",
+            style="CX.ToolbarSection.TLabel",
         ).pack(side="left", padx=(0, 8))
         self.shell_model_badge = ttk.Label(
             statebar,
@@ -1597,7 +1606,7 @@ class CleanroomXApp:
         ttk.Label(
             statebar,
             text="Ctrl+Shift+P Commands · F5 Run · F8 Refresh",
-            style="CX.Muted.TLabel",
+            style="CX.ToolbarMuted.TLabel",
         ).pack(side="right")
 
         commandbar = ttk.Frame(
@@ -2262,6 +2271,7 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+            problems_panel.apply_theme(self.theme_var.get())
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(

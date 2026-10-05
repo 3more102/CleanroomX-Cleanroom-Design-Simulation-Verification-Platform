@@ -1291,6 +1291,7 @@ class CleanroomXApp:
         self.shell_evidence_badge_var = tk.StringVar(value="EVIDENCE —")
         self.run_state_var = tk.StringVar(value="ANALYSIS IDLE")
         self.run_elapsed_var = tk.StringVar(value="—")
+        self.task_status_var = tk.StringVar(value="Tasks: idle")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
@@ -2202,7 +2203,10 @@ class CleanroomXApp:
         self.output_notebook.add(self.problems_panel, text="Problems")
         self.analysis_result_panel = AnalysisResultPanel(self.output_notebook)
         self.output_notebook.add(self.analysis_result_panel, text="Analysis")
-        self.task_center = TaskCenter(self.output_notebook)
+        self.task_center = TaskCenter(
+            self.output_notebook,
+            on_change=self._on_task_center_change,
+        )
         self.task_center.apply_theme(self.theme_var.get())
         self.output_notebook.add(self.task_center, text="Tasks")
         self.diagnostics_text = self._add_text_tab(
@@ -2276,6 +2280,15 @@ class CleanroomXApp:
         ttk.Label(
             status_bar,
             textvariable=self.autosave_status_var,
+            anchor="e",
+            style="CX.ToolbarMuted.TLabel",
+        ).pack(side="right")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="right", fill="y", padx=8
+        )
+        ttk.Label(
+            status_bar,
+            textvariable=self.task_status_var,
             anchor="e",
             style="CX.ToolbarMuted.TLabel",
         ).pack(side="right")
@@ -2825,6 +2838,14 @@ class CleanroomXApp:
         if panel is not None and notebook is not None:
             notebook.select(panel)
         self.status_var.set("Output: Problems")
+
+    def _on_task_center_change(self, active: int, total: int) -> None:
+        if active:
+            self.task_status_var.set(f"Tasks: {active} active · {total} session")
+        elif total:
+            self.task_status_var.set(f"Tasks: idle · {total} session")
+        else:
+            self.task_status_var.set("Tasks: idle")
 
     def show_task_center(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)

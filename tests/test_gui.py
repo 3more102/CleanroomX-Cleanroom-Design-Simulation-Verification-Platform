@@ -8,6 +8,7 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
+from cleanroomx.gui_errors import GuiErrorReport
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
@@ -358,6 +359,145 @@ def test_completed_run_is_discarded_if_analysis_input_changed_during_execution()
     assert rendered == []
     assert "discarded" in app.status_var.value.lower()
     assert "inputs changed" in app.status_var.value.lower()
+
+
+def test_run_worker_records_original_background_exception(monkeypatch):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input=payload,
+    )
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    report = GuiErrorReport(
+        reference="CX-TEST-WORKER",
+        operation="Run analysis (room_verification)",
+        exception_type="RuntimeError",
+        summary="synthetic solver failure",
+        log_path=None,
+    )
+    recorded = []
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._queue = queue.Queue()
+    app._runs_by_analysis = {}
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    app.status_var = Status()
+
+    monkeypatch.setattr(
+        gui_module,
+        "run_analysis",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic solver failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: (
+            recorded.append((operation, exc))
+            or report
+        ),
+    )
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    assert len(recorded) == 1
+    assert recorded[0][0] == "Run analysis (room_verification)"
+    assert isinstance(recorded[0][1], RuntimeError)
+    assert str(recorded[0][1]) == "synthetic solver failure"
+    assert app._queue.get_nowait() == ("error", 1, "a", report)
+
+
+def test_background_analysis_failure_surfaces_diagnostic_reference(
+    monkeypatch,
+    tmp_path,
+):
+    import queue
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Simulation:
+        def set_failed(self, value):
+            self.failed = value
+
+    class TaskCenter:
+        def update_task(self, task_id, **changes):
+            self.task_id = task_id
+            self.changes = changes
+
+    report = GuiErrorReport(
+        reference="CX-TEST-POLL",
+        operation="Run analysis (room_verification)",
+        exception_type="RuntimeError",
+        summary="synthetic solver failure",
+        log_path=tmp_path / "gui.log",
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._queue = queue.Queue()
+    app._queue.put(("error", 9, "a", report))
+    app._run_generation = 9
+    app._abandon_requested = False
+    app._running = True
+    app._active_run_task_id = "analysis:9"
+    app._run_started_monotonic = None
+    app.status_var = Status()
+    app.root = Root()
+    app.simulation_workspace = Simulation()
+    app.task_center = TaskCenter()
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app.status_var.value == "Analysis failed · CX-TEST-POLL"
+    assert "synthetic solver failure" in app.simulation_workspace.failed
+    assert "CX-TEST-POLL" in app.simulation_workspace.failed
+    assert app.task_center.task_id == "analysis:9"
+    assert app.task_center.changes["state"] == "failed"
+    assert "CX-TEST-POLL" in app.task_center.changes["detail"]
+    assert errors[0]["title"] == "Analysis failed"
+    assert "CX-TEST-POLL" in errors[0]["message"]
+    assert str(tmp_path / "gui.log") in errors[0]["message"]
+    assert app.root.delay == 100
 
 
 def test_accepted_completed_run_is_recorded_in_persisted_audit_history():

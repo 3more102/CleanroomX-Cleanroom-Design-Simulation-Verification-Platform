@@ -284,9 +284,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     semantic = {
         "success": "#22C55E",
         "warning": "#F59E0B",
-        "danger": "#EF4444",
+        "danger": "#DC2626",
         "info": "#38BDF8",
-        "violet": "#8B5CF6",
+        "violet": "#7C3AED",
     }
 
     style.configure(
@@ -337,17 +337,17 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             font=("TkDefaultFont", 9, "bold"),
         )
 
-    for style_name, color in (
-        ("CX.Success.TButton", semantic["success"]),
-        ("CX.Warning.TButton", semantic["warning"]),
-        ("CX.Danger.TButton", semantic["danger"]),
-        ("CX.Info.TButton", semantic["info"]),
-        ("CX.Violet.TButton", semantic["violet"]),
+    for style_name, color, text_color in (
+        ("CX.Success.TButton", semantic["success"], "#07131E"),
+        ("CX.Warning.TButton", semantic["warning"], "#07131E"),
+        ("CX.Danger.TButton", semantic["danger"], "#ffffff"),
+        ("CX.Info.TButton", semantic["info"], "#07131E"),
+        ("CX.Violet.TButton", semantic["violet"], "#ffffff"),
     ):
         style.configure(
             style_name,
             background=color,
-            foreground="#ffffff",
+            foreground=text_color,
             bordercolor=color,
             lightcolor=color,
             darkcolor=color,
@@ -362,7 +362,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ],
             foreground=[
                 ("disabled", palette["disabled"]),
-                ("!disabled", "#ffffff"),
+                ("!disabled", text_color),
             ],
         )
 

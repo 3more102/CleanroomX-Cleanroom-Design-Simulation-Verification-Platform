@@ -1648,6 +1648,20 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 0, 8, 4),
         )
         viewbar.pack(fill="x")
+        # Spatial validation is a primary engineering action. Keep it in the
+        # always-visible view row so the supported 1050×680 layout cannot hide
+        # it when the lower overlay row is vertically constrained.
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.report_validation,
+        ).pack(side="right", padx=(8, 2))
+        ttk.Label(
+            viewbar,
+            textvariable=self._validation_var,
+        ).pack(side="right", padx=(8, 2))
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
         ).pack(side="left", padx=(2, 6))
@@ -1671,20 +1685,6 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 0, 8, 4),
         )
         overlaybar.pack(fill="x")
-
-        # Reserve critical validation controls first so they remain visible at
-        # the supported 1050 px laptop width before optional overlay detail.
-        ttk.Button(
-            overlaybar,
-            text="Validate",
-            width=8,
-            style="CX.Compact.TButton",
-            command=self.report_validation,
-        ).pack(side="right", padx=(8, 2))
-        ttk.Label(
-            overlaybar,
-            textvariable=self._validation_var,
-        ).pack(side="right", padx=(8, 2))
 
         ttk.Label(
             overlaybar,

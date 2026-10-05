@@ -217,6 +217,17 @@ class EvidenceWorkspace(ttk.Frame):
             row=0, column=column + 1, sticky="w", padx=(0, 22)
         )
 
+    def select_record_sequence(self, sequence: Any) -> bool:
+        for iid, row in self._rows.items():
+            if row.get("sequence") != sequence:
+                continue
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+            self.tree.see(iid)
+            self._show_selected()
+            return True
+        return False
+
     def _show_selected(self, _event=None) -> None:
         selection = self.tree.selection()
         row = self._rows.get(selection[0]) if selection else None

@@ -1512,20 +1512,28 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(
+            self.root,
+            style="CX.Topbar.TFrame",
+            padding=(10, 6, 10, 5),
+        )
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
+        ttk.Label(topbar, text="CLEANROOMX", style="CX.TopbarBrand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
-            row=0, column=1, sticky="w", padx=(0, 5)
-        )
+        ttk.Label(
+            topbar,
+            text="Project",
+            style="CX.Topbar.TLabel",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
-            row=0, column=3, sticky="w", padx=(0, 5)
-        )
+        ttk.Label(
+            topbar,
+            text="Description",
+            style="CX.Topbar.TLabel",
+        ).grid(row=0, column=3, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
             row=0, column=4, sticky="ew", padx=(0, 10)
         )
@@ -1720,7 +1728,11 @@ class CleanroomXApp:
         self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
-        navigator = ttk.Frame(panes, padding=(8, 7))
+        navigator = ttk.Frame(
+            panes,
+            style="CX.Sidebar.TFrame",
+            padding=(8, 7),
+        )
         self.navigator_panel = navigator
         panes.add(navigator, weight=1)
         navigator_header = ttk.Frame(
@@ -1741,9 +1753,13 @@ class CleanroomXApp:
             command=self.hide_navigator_panel,
         )
         self.navigator_close_button.pack(side="right")
-        filter_row = ttk.Frame(navigator)
+        filter_row = ttk.Frame(navigator, style="CX.Sidebar.TFrame")
         filter_row.pack(fill="x", pady=(0, 6))
-        ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
+        ttk.Label(
+            filter_row,
+            text="Filter",
+            style="CX.Sidebar.TLabel",
+        ).pack(side="left", padx=(0, 6))
         navigator_filter = ttk.Entry(
             filter_row,
             textvariable=self.navigator_filter_var,
@@ -1753,15 +1769,19 @@ class CleanroomXApp:
             filter_row,
             text="×",
             width=3,
+            style="CX.Tool.TButton",
             command=lambda: self.navigator_filter_var.set(""),
         ).pack(side="left", padx=(4, 0))
 
-        navigator_actions = ttk.Frame(navigator)
+        navigator_actions = ttk.Frame(
+            navigator,
+            style="CX.Sidebar.TFrame",
+        )
         navigator_actions.pack(fill="x", pady=(0, 6))
         self.navigator_add_analysis_button = ttk.Button(
             navigator_actions,
             text="+ Analysis",
-            style="CX.Compact.TButton",
+            style="CX.Info.TButton",
             command=lambda: self.add_analysis(),
         )
         self.navigator_add_analysis_button.pack(
@@ -1770,7 +1790,7 @@ class CleanroomXApp:
         self.navigator_add_room_button = ttk.Button(
             navigator_actions,
             text="+ Room",
-            style="CX.Compact.TButton",
+            style="CX.Success.TButton",
             command=lambda: self.spatial_workspace.add_room(),
         )
         self.navigator_add_room_button.pack(
@@ -1779,7 +1799,7 @@ class CleanroomXApp:
         self.navigator_import_ifc_button = ttk.Button(
             navigator,
             text="Import IFC spatial layout…",
-            style="CX.Compact.TButton",
+            style="CX.Violet.TButton",
             command=lambda: self.import_ifc_spatial_layout(),
         )
         self.navigator_import_ifc_button.pack(fill="x", pady=(0, 6))
@@ -1806,14 +1826,20 @@ class CleanroomXApp:
             lambda *_: self._apply_navigator_filter(),
         )
 
-        content = ttk.Frame(panes)
+        content = ttk.Frame(
+            panes,
+            style="CX.Workbench.TFrame",
+        )
         self.content_panel = content
         panes.add(content, weight=5)
 
         self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
         self.workspace_panes.pack(fill="both", expand=True)
 
-        workspace_host = ttk.Frame(self.workspace_panes)
+        workspace_host = ttk.Frame(
+            self.workspace_panes,
+            style="CX.Workbench.TFrame",
+        )
         self.workspace_panes.add(workspace_host, weight=5)
         self.notebook = ttk.Notebook(workspace_host)
         self.notebook.pack(fill="both", expand=True)
@@ -1906,7 +1932,11 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
-        output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        output_host = ttk.Frame(
+            self.workspace_panes,
+            style="CX.Panel.TFrame",
+            padding=(0, 5, 0, 0),
+        )
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(
@@ -1930,6 +1960,7 @@ class CleanroomXApp:
         ttk.Label(
             output_host,
             text="Diagnostics · verification currency · evidence · analysis output",
+            style="CX.PanelHint.TLabel",
         ).pack(fill="x", padx=8, pady=(4, 2))
 
         self.output_notebook = ttk.Notebook(output_host)

@@ -5823,7 +5823,13 @@ class CleanroomXApp:
         except FileNotFoundError:
             pass
         except (OSError, ValueError) as exc:
-            self.status_var.set(f"Recovery cleanup failed: {exc}")
+            report = record_gui_exception(
+                "Clean up restored recovery artifact",
+                exc,
+            )
+            self.status_var.set(
+                f"Recovery cleanup failed · {report.reference}"
+            )
             return
         self._restored_recovery_artifact = None
 
@@ -5869,8 +5875,14 @@ class CleanroomXApp:
                 self._discard_current_autosave()
                 self.autosave_status_var.set("Autosave: clean")
         except (OSError, TypeError, ValueError) as exc:
-            self.autosave_status_var.set("Autosave: failed")
-            self.status_var.set(f"Autosave failed: {exc}")
+            report = record_gui_exception(
+                "Create recovery checkpoint",
+                exc,
+            )
+            self.autosave_status_var.set(
+                f"Autosave: failed · {report.reference}"
+            )
+            self.status_var.set(f"Autosave failed · {report.reference}")
 
     def _run_debounced_recovery_checkpoint(self) -> None:
         self._recovery_checkpoint_after_id = None
@@ -5895,8 +5907,18 @@ class CleanroomXApp:
             elif status.state == "saved":
                 self.autosave_status_var.set("Autosave: recovery saved")
             elif status.state == "failed":
-                self.autosave_status_var.set("Autosave: failed")
-                self.status_var.set(status.message)
+                report = record_gui_exception(
+                    "Background recovery autosave",
+                    RuntimeError(
+                        status.message or "Recovery autosave failed"
+                    ),
+                )
+                self.autosave_status_var.set(
+                    f"Autosave: failed · {report.reference}"
+                )
+                self.status_var.set(
+                    f"Autosave failed · {report.reference}"
+                )
             elif status.state == "idle":
                 self.autosave_status_var.set("Autosave: ready")
         self.root.after(500, self._poll_autosave_status)

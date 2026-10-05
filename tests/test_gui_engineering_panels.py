@@ -244,3 +244,26 @@ def test_problem_browser_clear_filters_restores_all_findings(app):
     assert panel.category_var.get() == "All"
     assert panel.rule_var.get() == "All"
     assert len(panel.tree.get_children()) == result["summary"]["issue_count"]
+
+
+
+def test_status_bar_reports_canonical_problem_counts_and_opens_problem_panel(app):
+    result, _issue = _force_room_overlap(app)
+    summary = result["summary"]
+    errors = summary["error_count"]
+    warnings = summary["warning_count"]
+    expected = (
+        f"Problems: {errors}E {warnings}W"
+        if errors or warnings
+        else "Problems: Clear"
+    )
+    assert app.diagnostics_status_var.get() == expected
+
+    app.hide_output_panel()
+    app.root.update()
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+    app.diagnostics_status_label.event_generate("<Button-1>")
+    app.root.update()
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert app.output_notebook.select() == str(app.problems_panel)

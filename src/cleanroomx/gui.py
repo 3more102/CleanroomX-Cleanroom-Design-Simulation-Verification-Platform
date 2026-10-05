@@ -3090,6 +3090,21 @@ class CleanroomXApp:
                 f"Diagnostic selected: {issue.get('rule') or 'unspecified rule'}"
             )
 
+    def _open_palette_requirement(self, requirement_id: str) -> None:
+        if self.show_requirements_traceability(requirement_id):
+            self.status_var.set(f"Requirement selected: {requirement_id}")
+
+    def _open_palette_proofgraph_node(self, key: str) -> None:
+        self._activate_proofgraph_workspace()
+        if not self.proofgraph_viewer.select_node(key):
+            self.status_var.set("ProofGraph node is no longer available")
+            return
+        node = self.proofgraph_viewer.selected_node()
+        if node is not None:
+            self.status_var.set(
+                f"ProofGraph selected: {node.get('label') or node.get('id') or key}"
+            )
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
         commands = [
             PaletteCommand(
@@ -3304,6 +3319,72 @@ class CleanroomXApp:
                             ),
                         )
                     )
+
+        try:
+            traceability = project_requirement_traceability_snapshot(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ):
+            traceability = {}
+        requirements = (
+            traceability.get("requirements", [])
+            if isinstance(traceability, dict)
+            else []
+        )
+        if isinstance(requirements, list):
+            for requirement in requirements:
+                if not isinstance(requirement, dict) or not requirement.get("id"):
+                    continue
+                requirement_id = str(requirement["id"])
+                title = str(requirement.get("title") or requirement_id)
+                commands.append(
+                    PaletteCommand(
+                        f"entity.requirement.{requirement_id}",
+                        f"Requirement — {title}",
+                        "Project Search · Requirement",
+                        lambda value=requirement_id: self._open_palette_requirement(value),
+                        keywords=(
+                            "requirement",
+                            requirement_id,
+                            title,
+                            str(requirement.get("status") or ""),
+                            str(requirement.get("applicability") or ""),
+                            " ".join(str(item) for item in requirement.get("scope", [])),
+                            str(requirement.get("criterion") or ""),
+                        ),
+                    )
+                )
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            try:
+                proof_nodes = proofgraph_viewer.searchable_nodes()
+            except ValueError:
+                proof_nodes = []
+            for node in proof_nodes:
+                key = str(node.get("key") or "")
+                if not key:
+                    continue
+                label = str(node.get("label") or node.get("id") or key)
+                node_type = str(node.get("type") or "node")
+                commands.append(
+                    PaletteCommand(
+                        f"entity.proofgraph.{key}",
+                        f"ProofGraph {node_type.replace('_', ' ').title()} — {label}",
+                        "Project Search · ProofGraph",
+                        lambda value=key: self._open_palette_proofgraph_node(value),
+                        keywords=(
+                            "proofgraph",
+                            "evidence",
+                            "traceability",
+                            node_type,
+                            str(node.get("id") or ""),
+                            str(node.get("status") or ""),
+                            *tuple(str(flag) for flag in node.get("flags", ())),
+                        ),
+                    )
+                )
 
         diagnostics = getattr(getattr(self, "problems_panel", None), "last_result", None)
         issues = diagnostics.get("issues", []) if isinstance(diagnostics, dict) else []

@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from cleanroomx.gui_theme import normalize_theme_name, theme_palette
+from cleanroomx.gui_theme import (
+    canonical_status,
+    domain_accent,
+    format_engineering_value,
+    normalize_theme_name,
+    status_tokens,
+    theme_palette,
+)
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -49,3 +56,31 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_dark_palette_matches_industrial_workstation_foundation():
+    dark = theme_palette("dark")
+    assert dark["background"] == "#0B1220"
+    assert dark["surface"] == "#111B2E"
+    assert dark["panel"] == "#17243A"
+    assert dark["border"] == "#263750"
+    assert dark["accent"] == "#22D3EE"
+    assert dark["text"] == "#F1F5F9"
+    assert dark["muted"] == "#94A3B8"
+    assert dark["disabled"] == "#64748B"
+
+
+def test_semantic_status_and_domain_tokens_are_stable():
+    assert canonical_status("PASSED") == "pass"
+    assert canonical_status("critical") == "fail"
+    assert canonical_status("not checked") == "not_checked"
+    assert status_tokens("warning", "dark")["accent"] == "#F59E0B"
+    assert status_tokens("fail", "dark")["accent"] == "#EF4444"
+    assert domain_accent("pressure") == "#A78BFA"
+    assert domain_accent("evidence") == "#22C55E"
+
+
+def test_engineering_values_are_compact_and_unit_aware():
+    assert format_engineering_value(1250, "m³/h") == "1,250 m³/h"
+    assert format_engineering_value(12.5, "Pa", precision=1, signed=True) == "+12.5 Pa"
+    assert format_engineering_value(None, "Pa") == "— Pa"

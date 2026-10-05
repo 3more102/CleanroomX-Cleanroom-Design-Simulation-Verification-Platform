@@ -5832,7 +5832,11 @@ class CleanroomXApp:
             kind, spatial_id = item_id.split(":", 1)
 
             def select_spatial() -> None:
-                self.spatial_workspace.select_item(kind, spatial_id)
+                self.spatial_workspace.select_item(
+                    kind,
+                    spatial_id,
+                    notify=True,
+                )
                 self._activate_spatial_workspace()
 
             menu.add_command(label="Open / Properties", command=select_spatial)

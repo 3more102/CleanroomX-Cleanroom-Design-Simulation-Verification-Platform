@@ -7,6 +7,7 @@ import tkinter as tk
 
 import pytest
 
+import cleanroomx.gui as gui_module
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_state import load_gui_layout_state
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
@@ -59,6 +60,38 @@ def _force_room_overlap(app: CleanroomXApp) -> tuple[dict, dict]:
         if item["rule"] == "spatial.room_overlap"
     )
     return result, issue
+
+
+def test_ui_layout_save_failure_uses_non_modal_diagnostic_boundary(app, monkeypatch):
+    recorded = {}
+
+    def fail_save(*_args, **_kwargs):
+        raise OSError("layout storage unavailable")
+
+    class Report:
+        reference = "CX-TEST-LAYOUT"
+
+    def record(operation, exc):
+        recorded["operation"] = operation
+        recorded["exception"] = exc
+        return Report()
+
+    monkeypatch.setattr(gui_module, "save_gui_layout_state", fail_save)
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("layout persistence failures must remain non-modal")
+        ),
+    )
+
+    app._save_ui_layout_state()
+
+    assert recorded["operation"] == "Save workstation layout"
+    assert isinstance(recorded["exception"], OSError)
+    assert str(recorded["exception"]) == "layout storage unavailable"
+    assert app.status_var.get() == "Workstation layout not saved · CX-TEST-LAYOUT"
 
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):

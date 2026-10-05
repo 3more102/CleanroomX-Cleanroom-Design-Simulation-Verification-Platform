@@ -140,3 +140,17 @@ def test_table_behavior_moves_and_resets_visible_column_order(root) -> None:
     assert behavior.set_column_visible("value", False) is True
     assert behavior.reset_column_order() is True
     assert behavior.visible_columns() == ("name",)
+
+def test_table_behavior_optional_copy_binding_preserves_screen_specific_ctrl_c(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+        bind_copy=False,
+    )
+
+    bindings = tree.bind("<Control-c>")
+    assert "_copy_event" not in str(bindings)
+    assert tree.bind("<Control-a>")
+    assert behavior.visible_columns() == ("name", "value")
+

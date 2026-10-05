@@ -590,22 +590,24 @@ class ProofGraphViewer(ttk.Frame):
 
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         toolbar.pack(fill="x")
+        toolbar_primary = ttk.Frame(toolbar, style="CX.Toolbar.TFrame")
+        toolbar_primary.pack(fill="x")
         ttk.Label(
-            toolbar,
+            toolbar_primary,
             text="PROOFGRAPH TRACEABILITY",
             style="CX.Section.TLabel",
         ).pack(side="left", padx=(0, 10))
-        ttk.Label(toolbar, text="Graph").pack(side="left")
+        ttk.Label(toolbar_primary, text="Graph").pack(side="left")
         self.graph_picker = ttk.Combobox(
-            toolbar,
+            toolbar_primary,
             textvariable=self.graph_var,
             state="readonly",
-            width=42,
+            width=30,
         )
         self.graph_picker.pack(side="left", padx=(5, 10))
-        ttk.Label(toolbar, text="Filter").pack(side="left")
+        ttk.Label(toolbar_primary, text="Filter").pack(side="left")
         self.filter_picker = ttk.Combobox(
-            toolbar,
+            toolbar_primary,
             textvariable=self.filter_var,
             values=(
                 "All",
@@ -618,25 +620,36 @@ class ProofGraphViewer(ttk.Frame):
                 "Unresolved Evidence",
             ),
             state="readonly",
-            width=20,
+            width=18,
         )
-        self.filter_picker.pack(side="left", padx=(5, 10))
-        ttk.Label(toolbar, text="Search").pack(side="left")
+        self.filter_picker.pack(side="left", padx=(5, 0))
+        ttk.Label(toolbar_primary, textvariable=self.summary_var).pack(
+            side="right", padx=(10, 0)
+        )
+
+        toolbar_view = ttk.Frame(toolbar, style="CX.Toolbar.TFrame")
+        toolbar_view.pack(fill="x", pady=(4, 0))
+        ttk.Label(toolbar_view, text="Search").pack(side="left")
         self.search_entry = ttk.Entry(
-            toolbar,
+            toolbar_view,
             textvariable=self.search_var,
-            width=20,
+            width=28,
         )
         self.search_entry.pack(side="left", padx=(5, 8))
+        ttk.Label(
+            toolbar_view,
+            text="VIEW",
+            style="CX.ToolbarSection.TLabel",
+        ).pack(side="left", padx=(4, 5))
         ttk.Button(
-            toolbar,
+            toolbar_view,
             text="−",
             width=3,
             style="CX.Compact.TButton",
             command=lambda: self._set_zoom(self._zoom / 1.2),
         ).pack(side="left", padx=1)
         self.zoom_label = ttk.Label(
-            toolbar,
+            toolbar_view,
             text="100%",
             width=5,
             anchor="center",
@@ -644,33 +657,35 @@ class ProofGraphViewer(ttk.Frame):
         )
         self.zoom_label.pack(side="left", padx=1)
         ttk.Button(
-            toolbar,
+            toolbar_view,
             text="+",
             width=3,
             style="CX.Compact.TButton",
             command=lambda: self._set_zoom(self._zoom * 1.2),
         ).pack(side="left", padx=1)
         ttk.Button(
-            toolbar,
+            toolbar_view,
             text="Reset",
             style="CX.Compact.TButton",
             command=lambda: self._set_zoom(1.0),
         ).pack(side="left", padx=(1, 3))
         ttk.Button(
-            toolbar,
+            toolbar_view,
             text="Fit",
             style="CX.Compact.TButton",
             command=self.fit_graph,
         ).pack(side="left", padx=(0, 3))
         ttk.Button(
-            toolbar,
+            toolbar_view,
             text="Focus",
             style="CX.Compact.TButton",
             command=self.focus_selected,
         ).pack(side="left", padx=(0, 6))
-        ttk.Label(toolbar, textvariable=self.summary_var).pack(
-            side="right", padx=(10, 0)
-        )
+        ttk.Label(
+            toolbar_view,
+            text="Home fit · F focus · wheel zoom · middle-drag pan",
+            style="CX.Muted.TLabel",
+        ).pack(side="right")
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.search_var.trace_add("write", lambda *_: self._refresh())

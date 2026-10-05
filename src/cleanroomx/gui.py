@@ -1265,7 +1265,8 @@ class CleanroomXApp:
         self.project_state_var = tk.StringVar(value="UNSAVED")
         self.diagnostics_status_var = tk.StringVar(value="DRC —")
         self.verification_badge_var = tk.StringVar(value="VERIFY —")
-        self.evidence_badge_var = tk.StringVar(value="EVIDENCE —")\n        self.simulation_badge_var = tk.StringVar(value="SIM IDLE")
+        self.evidence_badge_var = tk.StringVar(value="EVIDENCE —")
+        self.simulation_badge_var = tk.StringVar(value="SIM IDLE")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1545,7 +1546,9 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(\n            self.root, style="CX.Topbar.TFrame", padding=(10, 5, 10, 4)\n        )
+        topbar = ttk.Frame(
+            self.root, style="CX.Topbar.TFrame", padding=(10, 5, 10, 4)
+        )
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
@@ -2052,7 +2055,9 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(\n            self.root, style="CX.StatusBar.TFrame", padding=(8, 4)\n        )
+        status_bar = ttk.Frame(
+            self.root, style="CX.StatusBar.TFrame", padding=(8, 4)
+        )
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,

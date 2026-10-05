@@ -18,6 +18,7 @@ from cleanroomx.gui import (
 )
 
 from cleanroomx.gui_ifc import IfcImportReviewDialog
+from cleanroomx.gui_errors import GuiErrorReport
 
 
 @pytest.fixture
@@ -398,3 +399,42 @@ def test_structured_analysis_input_scalar_edit_is_validated_before_editor_mutati
     assert app.input_text.get("1.0", "end-1c") == editor_before_rejected_change
     assert errors
     assert errors[-1][0] == "Analysis input rejected"
+
+
+
+def test_operation_error_boundary_surfaces_reference_without_stack_trace(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    report = GuiErrorReport(
+        reference="CX-TEST-1234",
+        operation="Save project",
+        exception_type="RuntimeError",
+        summary="synthetic boundary failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    dialogs = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: dialogs.append((title, message)),
+    )
+
+    exc = RuntimeError("synthetic boundary failure")
+    returned = app._show_operation_error("Save failed", "Save project", exc)
+
+    assert returned is report
+    assert recorded == [("Save project", exc)]
+    assert dialogs
+    assert dialogs[-1][0] == "Save failed"
+    assert "CX-TEST-1234" in dialogs[-1][1]
+    assert "synthetic boundary failure" in dialogs[-1][1]
+    assert "Traceback" not in dialogs[-1][1]
+    assert "CX-TEST-1234" in app.status_var.get()

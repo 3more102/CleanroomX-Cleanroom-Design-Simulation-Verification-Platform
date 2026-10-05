@@ -1966,8 +1966,43 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._selection_label.pack(fill="x", pady=(3, 8))
 
+        inspector_scroll = ttk.Frame(inspector)
+        inspector_scroll.pack(fill="both", expand=True)
+        self._inspector_canvas = tk.Canvas(
+            inspector_scroll,
+            background=self._theme_palette["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self._inspector_scrollbar = ttk.Scrollbar(
+            inspector_scroll,
+            orient="vertical",
+            command=self._inspector_canvas.yview,
+        )
+        self._inspector_canvas.configure(
+            yscrollcommand=self._inspector_scrollbar.set,
+        )
+        self._inspector_canvas.pack(side="left", fill="both", expand=True)
+        self._inspector_scrollbar.pack(side="right", fill="y")
+        self._inspector_content = ttk.Frame(self._inspector_canvas)
+        self._inspector_window = self._inspector_canvas.create_window(
+            (0, 0),
+            window=self._inspector_content,
+            anchor="nw",
+        )
+        self._inspector_content.bind(
+            "<Configure>",
+            lambda _event: self._inspector_canvas.configure(
+                scrollregion=self._inspector_canvas.bbox("all")
+            ),
+        )
+        self._inspector_canvas.bind(
+            "<Configure>",
+            self._resize_inspector_scroll_content,
+        )
+
         engineering = ttk.LabelFrame(
-            inspector,
+            self._inspector_content,
             text="Engineering snapshot",
             padding=(8, 7),
         )
@@ -2071,7 +2106,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(self._inspector_content, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -2090,14 +2125,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                     )
                 self._property_rows[key] = row
         ttk.Button(
-            inspector,
+            self._inspector_content,
             text="Apply properties",
             style="CX.Primary.TButton",
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
-        ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
+        ttk.Separator(self._inspector_content, orient="horizontal").pack(fill="x", pady=5)
         sync_card = ttk.Frame(
-            inspector,
+            self._inspector_content,
             style="CX.SubtlePanel.TFrame",
             padding=(8, 6),
         )
@@ -2159,6 +2194,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
 
+    def _resize_inspector_scroll_content(self, event: tk.Event) -> None:
+        """Keep the inspector form at viewport width while allowing vertical overflow."""
+        canvas = getattr(self, "_inspector_canvas", None)
+        window = getattr(self, "_inspector_window", None)
+        if canvas is None or window is None:
+            return
+        canvas.itemconfigure(window, width=max(1, int(event.width)))
+
     def _apply_workspace_mode(self) -> None:
         mode = self._workspace_mode.get()
         if mode not in {"2d", "3d", "split"}:
@@ -2193,6 +2236,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             background=palette["canvas_3d"],
             highlightbackground=palette["border"],
         )
+        inspector_canvas = getattr(self, "_inspector_canvas", None)
+        if inspector_canvas is not None:
+            inspector_canvas.configure(background=palette["background"])
         if redraw:
             self.redraw()
 

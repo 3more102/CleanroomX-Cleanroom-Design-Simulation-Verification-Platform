@@ -1512,18 +1512,18 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, style="CX.Surface.TFrame", padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(self.root, style="CX.Topbar.TFrame", padding=(12, 6, 12, 6))
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
+        ttk.Label(topbar, text="PROJECT", style="CX.Meta.TLabel").grid(
             row=0, column=1, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
+        ttk.Label(topbar, text="DESCRIPTION", style="CX.Meta.TLabel").grid(
             row=0, column=3, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
@@ -1533,6 +1533,7 @@ class CleanroomXApp:
             topbar,
             text="Validate",
             command=self.validate_current,
+            style="CX.Secondary.TButton",
         ).grid(row=0, column=5, padx=2)
         self.run_button = ttk.Button(
             topbar,
@@ -1542,7 +1543,11 @@ class CleanroomXApp:
         )
         self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Destructive.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
@@ -1648,14 +1653,15 @@ class CleanroomXApp:
 
         workflowbar = ttk.Frame(
             self.root,
-            style="CX.Toolbar.TFrame",
-            padding=(10, 3),
+            style="CX.Workflow.TFrame",
+            padding=(10, 4),
         )
         self.workflowbar = workflowbar
         workflowbar.pack(fill="x", padx=10, pady=(0, 4))
         ttk.Label(
             workflowbar,
             text="GUIDED WORKFLOW",
+            style="CX.WorkflowLabel.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Separator(workflowbar, orient="vertical").pack(
             side="left", fill="y", padx=(0, 6)
@@ -1665,7 +1671,7 @@ class CleanroomXApp:
             workflowbar,
             text="1  Design",
             width=9,
-            style="CX.Compact.TButton",
+            style="CX.Step.TButton",
             command=lambda: self._activate_spatial_workspace("split"),
         )
         self.workflow_design_button.pack(side="left", padx=1)
@@ -1673,7 +1679,7 @@ class CleanroomXApp:
             workflowbar,
             text="2  Inputs",
             width=9,
-            style="CX.Compact.TButton",
+            style="CX.Step.TButton",
             command=self._activate_analysis_input_workspace,
         )
         self.workflow_input_button.pack(side="left", padx=1)
@@ -1681,7 +1687,7 @@ class CleanroomXApp:
             workflowbar,
             text="3  Validate",
             width=10,
-            style="CX.Compact.TButton",
+            style="CX.Step.TButton",
             command=self.validate_current,
         )
         self.workflow_validate_button.pack(side="left", padx=1)
@@ -1697,7 +1703,7 @@ class CleanroomXApp:
             workflowbar,
             text="5  Save & Verify",
             width=14,
-            style="CX.Compact.TButton",
+            style="CX.Step.TButton",
             command=self._guided_save_and_verify,
         )
         self.workflow_verify_button.pack(side="left", padx=1)
@@ -1705,7 +1711,7 @@ class CleanroomXApp:
             workflowbar,
             text="6  Report",
             width=9,
-            style="CX.Compact.TButton",
+            style="CX.Step.TButton",
             command=self.export_project_engineering_dossier,
         )
         self.workflow_report_button.pack(side="left", padx=1)
@@ -1767,9 +1773,9 @@ class CleanroomXApp:
             modebar.columnconfigure(column, weight=1)
         self._set_primary_workspace_mode("design")
 
-        filter_row = ttk.Frame(navigator)
+        filter_row = ttk.Frame(navigator, style="CX.Panel.TFrame")
         filter_row.pack(fill="x", pady=(0, 6))
-        ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
+        ttk.Label(filter_row, text="FILTER", style="CX.Section.TLabel").pack(side="left", padx=(0, 6))
         navigator_filter = ttk.Entry(
             filter_row,
             textvariable=self.navigator_filter_var,
@@ -1782,12 +1788,12 @@ class CleanroomXApp:
             command=lambda: self.navigator_filter_var.set(""),
         ).pack(side="left", padx=(4, 0))
 
-        navigator_actions = ttk.Frame(navigator)
+        navigator_actions = ttk.Frame(navigator, style="CX.Panel.TFrame")
         navigator_actions.pack(fill="x", pady=(0, 6))
         self.navigator_add_analysis_button = ttk.Button(
             navigator_actions,
             text="+ Analysis",
-            style="CX.Compact.TButton",
+            style="CX.NavigatorAction.TButton",
             command=lambda: self.add_analysis(),
         )
         self.navigator_add_analysis_button.pack(
@@ -1796,7 +1802,7 @@ class CleanroomXApp:
         self.navigator_add_room_button = ttk.Button(
             navigator_actions,
             text="+ Room",
-            style="CX.Compact.TButton",
+            style="CX.NavigatorAction.TButton",
             command=lambda: self.spatial_workspace.add_room(),
         )
         self.navigator_add_room_button.pack(
@@ -1805,7 +1811,7 @@ class CleanroomXApp:
         self.navigator_import_ifc_button = ttk.Button(
             navigator,
             text="Import IFC spatial layout…",
-            style="CX.Compact.TButton",
+            style="CX.NavigatorAction.TButton",
             command=lambda: self.import_ifc_spatial_layout(),
         )
         self.navigator_import_ifc_button.pack(fill="x", pady=(0, 6))
@@ -1956,7 +1962,8 @@ class CleanroomXApp:
         ttk.Label(
             output_host,
             text="Diagnostics · verification currency · evidence · analysis output",
-        ).pack(fill="x", padx=8, pady=(4, 2))
+            style="CX.Helper.TLabel",
+        ).pack(fill="x", padx=8, pady=(5, 3))
 
         self.output_notebook = ttk.Notebook(output_host)
         self.output_notebook.pack(fill="both", expand=True)
@@ -1995,7 +2002,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.status_var,
             anchor="w",
-            style="CX.StatusBar.TLabel",
+            style="CX.StatusPrimary.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8

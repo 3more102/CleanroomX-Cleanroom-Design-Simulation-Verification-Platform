@@ -770,10 +770,10 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.Activity.Horizontal.TProgressbar",
         troughcolor=palette["surface_alt"],
-        background=palette["accent"],
+        background=palette["simulation"],
         bordercolor=palette["border"],
-        lightcolor=palette["accent"],
-        darkcolor=palette["accent"],
+        lightcolor=palette["simulation"],
+        darkcolor=palette["simulation"],
         thickness=5,
     )
 

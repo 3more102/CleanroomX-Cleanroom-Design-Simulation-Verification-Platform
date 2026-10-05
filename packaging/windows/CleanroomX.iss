@@ -2,6 +2,9 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
 #endif
+#ifndef MyVersionInfo
+  #define MyVersionInfo "0.0.0.0"
+#endif
 #define MyAppPublisher "CleanroomX contributors"
 #define MyAppExeName "CleanroomX.exe"
 
@@ -25,7 +28,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyVersionInfo}
 VersionInfoProductName={#MyAppName}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=CleanroomX engineering workstation installer

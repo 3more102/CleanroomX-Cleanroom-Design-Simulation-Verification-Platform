@@ -6,6 +6,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewTableBehavior
 from .gui_theme import status_style_name, theme_palette
 
 
@@ -213,6 +214,11 @@ class VerificationWorkspace(ttk.Frame):
         self.tree.column("state", width=180, stretch=False)
         self.tree.column("record", width=110, stretch=False)
         self.tree.column("dependencies", width=105, stretch=False, anchor="center")
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "kind", "state", "record", "dependencies"),
+            copy_columns=("#0", "kind", "state", "record", "dependencies"),
+        )
         scroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -277,6 +283,7 @@ class VerificationWorkspace(ttk.Frame):
             )
             self._analysis_by_iid[iid] = item
 
+        self.table_behavior.reapply_sort()
         children = self.tree.get_children()
         if children:
             self.tree.selection_set(children[0])
@@ -464,6 +471,11 @@ class EvidenceWorkspace(ttk.Frame):
         self.tree.column("status", width=120, stretch=False)
         self.tree.column("currency", width=175, stretch=False)
         self.tree.column("evidence", width=80, stretch=False, anchor="center")
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "completed", "analysis", "status", "currency", "evidence"),
+            copy_columns=("#0", "completed", "analysis", "status", "currency", "evidence"),
+        )
         scroll = ttk.Scrollbar(host, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -534,6 +546,7 @@ class EvidenceWorkspace(ttk.Frame):
             )
             self._records_by_iid[iid] = item
 
+        self.table_behavior.reapply_sort()
         children = self.tree.get_children()
         if children:
             self.tree.selection_set(children[0])

@@ -1136,7 +1136,10 @@ def test_import_input_json_rejects_path_identity_change_without_mutating_analysi
     assert captured["parent"] is app.root
 
 
-def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):
+def test_export_writer_uses_atomic_write_and_diagnostic_failure_boundary(
+    monkeypatch,
+    tmp_path,
+):
     class Status:
         def set(self, value):
             self.value = value
@@ -1156,24 +1159,31 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     assert calls == [(target, "payload")]
     assert "Exported result" in app.status_var.value
 
-    captured = {}
+    reported = {}
 
     def fail_write(path, content):
         raise OSError("disk full")
 
+    app._show_operation_error = (
+        lambda title, operation, exc: reported.update(
+            {"title": title, "operation": operation, "exception": exc}
+        )
+    )
     monkeypatch.setattr(gui_module, "atomic_write_text", fail_write)
     monkeypatch.setattr(
         gui_module.messagebox,
         "showerror",
-        lambda title, message, parent=None: captured.update(
-            {"title": title, "message": message, "parent": parent}
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("export failures must use the diagnostic boundary")
         ),
     )
+
     assert app._write_export_file(str(target), "payload", label="Result") is False
     assert app.status_var.value == "Result export failed"
-    assert captured["title"] == "Result export failed"
-    assert captured["message"] == "disk full"
-    assert captured["parent"] is app.root
+    assert reported["title"] == "Result export failed"
+    assert reported["operation"] == "Export result"
+    assert isinstance(reported["exception"], OSError)
+    assert str(reported["exception"]) == "disk full"
 
 
 def test_remove_analysis_invalidates_matching_result(monkeypatch):

@@ -219,6 +219,20 @@ jobs:
         run: |
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
           xvfb-run -a /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --demo --smoke
+      - name: Exercise industrial workstation GUI with real Tk widgets
+        if: matrix.python-version == '3.13'
+        run: >-
+          xvfb-run -a python -m pytest -q
+          tests/test_gui_theme.py
+          tests/test_gui_dashboard.py
+          tests/test_gui_results.py
+          tests/test_gui_panels.py
+          tests/test_gui_panels_formatting.py
+          tests/test_gui_proofgraph.py
+          tests/test_gui_engineering_panels.py
+          tests/test_gui_command_palette.py
+          tests/test_gui_start_center.py
+          tests/test_gui_state.py
       - name: Exercise spatial editing with real Tk widgets
         if: matrix.python-version == '3.13'
         run: xvfb-run -a python -m pytest -q tests/test_spatial_editing_gui.py

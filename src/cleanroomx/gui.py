@@ -70,7 +70,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
-from .gui_panels import ProjectDiagnosticsPanel
+from .gui_panels import ProjectDiagnosticsPanel, VerificationEvidencePanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
@@ -2069,8 +2069,13 @@ class CleanroomXApp:
         self.console_text = self._add_text_tab(
             "Console", notebook=self.output_notebook
         )
+        self.evidence_panel = VerificationEvidencePanel(
+            self.output_notebook,
+            on_open_proofgraph=self._activate_proofgraph_workspace,
+        )
+        self.output_notebook.add(self.evidence_panel, text="Evidence")
         self.evidence_text = self._add_text_tab(
-            "Evidence", notebook=self.output_notebook
+            "Evidence Log", notebook=self.output_notebook
         )
         self.result_text = self._add_text_tab(
             "Results", notebook=self.output_notebook
@@ -2368,6 +2373,9 @@ class CleanroomXApp:
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
             problems_panel.apply_theme(self.theme_var.get())
+        evidence_panel = getattr(self, "evidence_panel", None)
+        if evidence_panel is not None:
+            evidence_panel.apply_theme(self.theme_var.get())
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2755,6 +2763,9 @@ class CleanroomXApp:
                 viewer.set_documents(
                     self._proofgraph_documents_from_records(records)
                 )
+            evidence_panel = getattr(self, "evidence_panel", None)
+            if evidence_panel is not None:
+                evidence_panel.set_records(records)
             lines = [
                 "PERSISTED VERIFICATION EVIDENCE",
                 "",
@@ -2783,6 +2794,9 @@ class CleanroomXApp:
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
+            evidence_panel = getattr(self, "evidence_panel", None)
+            if evidence_panel is not None:
+                evidence_panel.set_records([])
             self._set_text(
                 self.evidence_text,
                 f"Verification evidence unavailable: {exc}\n",
@@ -2872,8 +2886,12 @@ class CleanroomXApp:
                     ),
                 )
                 notebook.tab(
-                    self.evidence_text.master,
+                    self.evidence_panel,
                     text=f"Evidence {len(records)}",
+                )
+                notebook.tab(
+                    self.evidence_text.master,
+                    text="Evidence Log",
                 )
                 notebook.tab(
                     self.analysis_result_panel,
@@ -4714,9 +4732,9 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
-            if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
+            if hasattr(self, "output_notebook") and hasattr(self, "evidence_panel"):
                 self.show_output_panel()
-                self.output_notebook.select(self.evidence_text.master)
+                self.output_notebook.select(self.evidence_panel)
             self.selection_status_var.set("Selected: Evidence")
             return
         if item_id == "nav-reports":

@@ -9,7 +9,7 @@ from tkinter import ttk
 
 
 _MISSING_TOKENS = {"", "—", "-", "n/a", "na", "none", "null", "unknown"}
-_NATURAL_PART = re.compile(r"(\\d+)")
+_NATURAL_PART = re.compile(r"(\d+)")
 
 
 def _natural_text_sort_key(text: str) -> tuple[tuple[int, Any], ...]:

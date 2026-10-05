@@ -1393,8 +1393,11 @@ def _containing_space_global_id(entity: Any, element_util: Any) -> str:
         structure = getattr(relation, "RelatingStructure", None)
         try:
             is_space = bool(structure and structure.is_a("IfcSpace"))
-        except Exception:
-            is_space = False
+        except Exception as exc:
+            raise IfcImportError(
+                f"unable to classify IFC spatial containment relation for "
+                f"{getattr(entity, 'GlobalId', '?')!r}"
+            ) from exc
         if is_space:
             return _non_empty_text(getattr(structure, "GlobalId", ""))
 
@@ -1417,8 +1420,11 @@ def _containing_space_global_id(entity: Any, element_util: Any) -> str:
     try:
         if not structure.is_a("IfcSpace"):
             return ""
-    except Exception:
-        return ""
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to classify resolved IFC spatial container for "
+            f"{getattr(entity, 'GlobalId', '?')!r}"
+        ) from exc
     return _non_empty_text(getattr(structure, "GlobalId", ""))
 
 
@@ -1450,8 +1456,11 @@ def _containing_storey_metadata(
                 if parent.is_a("IfcBuildingStorey"):
                     storey = parent
                     break
-            except Exception:
-                pass
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to classify IFC aggregate parent for "
+                    f"{getattr(entity, 'GlobalId', '?')!r}"
+                ) from exc
             current = parent
 
     if storey is None:
@@ -1472,8 +1481,11 @@ def _containing_storey_metadata(
                 try:
                     if candidate.is_a("IfcBuildingStorey"):
                         storey = candidate
-                except Exception:
-                    storey = None
+                except Exception as exc:
+                    raise IfcImportError(
+                        f"unable to classify resolved IFC building storey for "
+                        f"{getattr(entity, 'GlobalId', '?')!r}"
+                    ) from exc
 
     if storey is None:
         return {}

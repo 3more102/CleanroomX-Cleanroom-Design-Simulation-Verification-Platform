@@ -190,6 +190,23 @@ def test_diagnostics_workspace_target_filter_and_multi_token_search(app):
         "project",
         "room",
     )
+    assert tuple(panel.rule_combo.cget("values")) == (
+        "All",
+        "engineering_sync.not_configured",
+        "spatial.room_overlap",
+        "verification_currency.stale",
+    )
+
+    panel.rule_var.set("verification_currency.stale")
+    app.root.update_idletasks()
+    assert {
+        issue["sequence"] for issue in panel._issues_by_iid.values()
+    } == {11}
+
+    panel.clear_filters()
+    app.root.update_idletasks()
+    assert panel.rule_var.get() == "All"
+    assert len(panel.tree.get_children()) == 3
 
     panel.target_type_var.set("room")
     app.root.update_idletasks()
@@ -204,6 +221,15 @@ def test_diagnostics_workspace_target_filter_and_multi_token_search(app):
     }
     assert sequences == {10, 11}
     assert panel.visible_var.get() == "2 / 3 visible"
+
+    payload = panel.filtered_export_payload()
+    assert payload["schema"] == "cleanroomx.diagnostics.filtered_presentation_view"
+    assert payload["canonical_diagnostics"] is False
+    assert payload["visible_issue_count"] == 2
+    assert payload["total_issue_count"] == 3
+    assert payload["filters"]["search"] == "room l2"
+    assert {issue["sequence"] for issue in payload["issues"]} == {10, 11}
+    assert len(result["issues"]) == 3
 
 
 def test_diagnostics_workspace_detail_uses_compact_engineering_fields(app):

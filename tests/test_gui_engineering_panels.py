@@ -204,3 +204,79 @@ def test_problem_browser_supports_engineering_filters_sorting_and_relative_navig
     assert selected is not None
     if len(all_items) > 1:
         assert selected is not panel._issues_by_iid[all_items[0]]
+
+
+def test_problem_browser_rule_filter_multitoken_search_and_multi_copy(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    assert issue["rule"] in panel.rule_combo.cget("values")
+    panel.rule_var.set(issue["rule"])
+    app.root.update()
+    visible = panel.tree.get_children()
+    assert visible
+    assert all(
+        panel._issues_by_iid[iid]["rule"] == issue["rule"]
+        for iid in visible
+    )
+
+    panel.rule_var.set("All")
+    panel.search_var.set("spatial room_overlap")
+    app.root.update()
+    visible = panel.tree.get_children()
+    assert visible
+    assert all(
+        "spatial" in panel._issues_by_iid[iid]["rule"].casefold()
+        and "room_overlap" in panel._issues_by_iid[iid]["rule"].casefold()
+        for iid in visible
+    )
+
+    first = copy.deepcopy(issue)
+    second = copy.deepcopy(issue)
+    first["sequence"] = 9001
+    second["sequence"] = 9002
+    second["rule"] = "spatial.room_overlap.secondary"
+    panel.last_result = {
+        "issues": [first, second],
+        "summary": {
+            "status": "warning",
+            "issue_count": 2,
+            "error_count": 0,
+            "warning_count": 2,
+            "info_count": 0,
+        },
+    }
+    panel.search_var.set("")
+    panel._refresh_filter_values()
+    panel._populate()
+    app.root.update()
+
+    items = panel.tree.get_children()
+    assert len(items) == 2
+    panel.tree.selection_set(items)
+    panel.copy_selected()
+    copied = __import__("json").loads(panel.clipboard_get())
+    assert [item["sequence"] for item in copied] == [9001, 9002]
+    assert "2 diagnostics copied" in app.status_var.get()
+
+
+def test_problem_table_supports_columns_and_select_all_without_domain_mutation(app):
+    result, _issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    snapshot = copy.deepcopy(result)
+
+    assert panel.table_behavior.set_column_visible("level", False)
+    assert "level" not in panel.table_behavior.visible_columns()
+    assert panel.table_behavior.select_all()
+    assert len(panel.tree.selection()) == len(panel.tree.get_children())
+    panel.table_behavior.reset_column_layout()
+
+    assert panel.table_behavior.visible_columns() == (
+        "severity",
+        "code",
+        "description",
+        "object",
+        "level",
+        "source",
+    )
+    assert panel.last_result == snapshot

@@ -13,7 +13,9 @@ version-1 layouts that predate floor metadata are defaulted to a metric `Floor 1
 
 Floor data includes a stable ID, floor name, elevation, default ceiling height, and metric units.
 Rooms have stable IDs, X/Y position, length, width, height, floor elevation, optional pressure,
-an optional project-defined cleanroom `zone`, optional classification text, and an optional\n`analysis_room_name` link. Zone names are project-defined grouping labels; CleanroomX does not\ninfer regulatory classification or acceptance criteria from them.
+an optional project-defined cleanroom `zone`, optional classification text, and an optional
+`analysis_room_name` link. Zone names are project-defined grouping labels; CleanroomX does not
+infer regulatory classification or acceptance criteria from them.
 Devices use stable IDs and support doors, windows, generic wall openings, supply diffusers,
 return grilles, exhaust grilles, FFUs, equipment, sensors, and transfer openings. Wall-opening
 records may carry width, height, wall side, orientation, and swing metadata.

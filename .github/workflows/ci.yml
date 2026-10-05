@@ -338,20 +338,153 @@ jobs:
         shell: cmd
         run: start-cleanroomx.cmd --check
 
+  windows-native-installer:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install native packaging toolchain
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[bim]"
+          pip install pyinstaller==6.22.3 pillow==12.3.0
+          python -c "import ifcopenshell; print(ifcopenshell.version)"
+          pyinstaller --version
+      - name: Build standalone Windows workstation
+        shell: pwsh
+        run: |
+          python packaging\windows\build_icon.py
+          if (-not (Test-Path packaging\windows\cleanroomx.ico)) {
+            throw "Windows application icon was not generated"
+          }
+          pyinstaller --noconfirm --clean packaging\windows\CleanroomX.spec
+          if (-not (Test-Path dist\CleanroomX\CleanroomX.exe)) {
+            throw "Standalone CleanroomX executable was not produced"
+          }
+      - name: Smoke standalone workstation without Python on PATH
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist\CleanroomX\CleanroomX.exe").Path
+          $oldPath = $env:PATH
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $check = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
+            if ($check.ExitCode -ne 0) {
+              throw "Standalone CleanroomX --check failed with exit code $($check.ExitCode)"
+            }
+            $smoke = Start-Process -FilePath $exe -ArgumentList "--demo","--smoke" -Wait -PassThru
+            if ($smoke.ExitCode -ne 0) {
+              throw "Standalone CleanroomX demo smoke failed with exit code $($smoke.ExitCode)"
+            }
+          }
+          finally {
+            $env:PATH = $oldPath
+          }
+      - name: Build native per-user installer
+        shell: pwsh
+        run: |
+          $version = python -c "import pathlib,tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          $versionInfo = python -c "import pathlib,re,tomllib; v=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']; n=re.findall(r'\d+', v); print('.'.join((n + ['0'] * 4)[:4]))"
+          $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler not found"
+          }
+          & $iscc "/DMyAppVersion=$version" "/DMyVersionInfo=$versionInfo" "packaging\windows\CleanroomX.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
+          }
+          $installer = Get-ChildItem "dist-installer\CleanroomX-Setup-*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "Native installer was not produced"
+          }
+          Get-FileHash $installer.FullName -Algorithm SHA256
+      - name: Verify clean install, installed launch, repair-upgrade, and uninstall
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem "dist-installer\CleanroomX-Setup-*.exe" | Select-Object -First 1).FullName
+          $installDir = Join-Path $env:RUNNER_TEMP "CleanroomXInstalled"
+          $installArgs = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/DIR=$installDir"
+          )
+          $install = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "Clean install failed with exit code $($install.ExitCode)"
+          }
+          $installed = Join-Path $installDir "CleanroomX.exe"
+          if (-not (Test-Path $installed)) {
+            throw "Installed CleanroomX executable is missing"
+          }
+
+          $oldPath = $env:PATH
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $check = Start-Process -FilePath $installed -ArgumentList "--check" -Wait -PassThru
+            if ($check.ExitCode -ne 0) {
+              throw "Installed CleanroomX --check failed with exit code $($check.ExitCode)"
+            }
+            $smoke = Start-Process -FilePath $installed -ArgumentList "--demo","--smoke" -Wait -PassThru
+            if ($smoke.ExitCode -ne 0) {
+              throw "Installed CleanroomX demo smoke failed with exit code $($smoke.ExitCode)"
+            }
+          }
+          finally {
+            $env:PATH = $oldPath
+          }
+
+          $upgrade = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
+          if ($upgrade.ExitCode -ne 0) {
+            throw "Installer repair/upgrade path failed with exit code $($upgrade.ExitCode)"
+          }
+          if (-not (Test-Path $installed)) {
+            throw "CleanroomX executable disappeared after repair/upgrade"
+          }
+
+          $uninstaller = Join-Path $installDir "unins000.exe"
+          if (-not (Test-Path $uninstaller)) {
+            throw "Uninstaller was not created"
+          }
+          $remove = Start-Process -FilePath $uninstaller -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART"
+          ) -Wait -PassThru
+          if ($remove.ExitCode -ne 0) {
+            throw "Uninstall failed with exit code $($remove.ExitCode)"
+          }
+          Start-Sleep -Seconds 2
+          if (Test-Path $installed) {
+            throw "Installed executable remains after uninstall"
+          }
+
   required-ci:
     name: Required CI Gate
     if: ${{ always() }}
     needs:
       - test
       - windows-launcher-smoke
+      - windows-native-installer
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required CI jobs succeeded
         env:
           TEST_RESULT: ${{ needs.test.result }}
           WINDOWS_LAUNCHER_RESULT: ${{ needs.windows-launcher-smoke.result }}
+          WINDOWS_INSTALLER_RESULT: ${{ needs.windows-native-installer.result }}
         run: |
           echo "Python matrix result: ${TEST_RESULT}"
           echo "Windows launcher result: ${WINDOWS_LAUNCHER_RESULT}"
+          echo "Windows installer result: ${WINDOWS_INSTALLER_RESULT}"
           test "${TEST_RESULT}" = "success"
           test "${WINDOWS_LAUNCHER_RESULT}" = "success"
+          test "${WINDOWS_INSTALLER_RESULT}" = "success"

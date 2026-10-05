@@ -73,6 +73,7 @@ class TreeviewTableBehavior:
         self.sort_descending = False
         self._heading_text: dict[str, str] = {}
         self._column_vars: dict[str, tk.BooleanVar] = {}
+        self._context_column: str | None = None
 
         self._menu = tk.Menu(tree, tearoff=False)
         self._menu.add_command(
@@ -93,6 +94,17 @@ class TreeviewTableBehavior:
             label="Reset column layout",
             command=self.reset_column_layout,
         )
+        self._menu.add_separator()
+        self._menu.add_command(
+            label="Move column left",
+            command=lambda: self.move_column(self._context_column, -1),
+        )
+        self._move_left_index = int(self._menu.index("end"))
+        self._menu.add_command(
+            label="Move column right",
+            command=lambda: self.move_column(self._context_column, 1),
+        )
+        self._move_right_index = int(self._menu.index("end"))
         self._menu.add_separator()
 
         self._columns_menu = tk.Menu(self._menu, tearoff=False)
@@ -145,8 +157,18 @@ class TreeviewTableBehavior:
 
     def _context_menu(self, event: tk.Event):
         region = self.tree.identify_region(event.x, event.y)
+        self._context_column = None
         if region == "heading":
             self._sync_column_vars()
+            token = self.tree.identify_column(event.x)
+            if token.startswith("#") and token != "#0":
+                try:
+                    index = int(token[1:]) - 1
+                except ValueError:
+                    index = -1
+                visible = self.visible_columns()
+                if 0 <= index < len(visible):
+                    self._context_column = visible[index]
         else:
             iid = self.tree.identify_row(event.y)
             if iid:
@@ -156,11 +178,26 @@ class TreeviewTableBehavior:
                     self.tree.focus(iid)
             if not self.tree.selection():
                 return None
+        self._sync_move_commands()
         try:
             self._menu.tk_popup(event.x_root, event.y_root)
         finally:
             self._menu.grab_release()
         return "break"
+
+    def _sync_move_commands(self) -> None:
+        column = self._context_column
+        visible = list(self.visible_columns())
+        can_left = column in visible and visible.index(column) > 0
+        can_right = column in visible and visible.index(column) < len(visible) - 1
+        self._menu.entryconfigure(
+            self._move_left_index,
+            state="normal" if can_left else "disabled",
+        )
+        self._menu.entryconfigure(
+            self._move_right_index,
+            state="normal" if can_right else "disabled",
+        )
 
     def _ordered_children(self) -> list[str]:
         return list(self.tree.get_children(self.parent))
@@ -261,6 +298,19 @@ class TreeviewTableBehavior:
             return False
         self._sync_column_vars()
         return True
+
+    def move_column(self, column: str | None, delta: int) -> bool:
+        if column is None or int(delta) == 0:
+            return False
+        current = list(self.visible_columns())
+        if column not in current:
+            return False
+        index = current.index(column)
+        target = index + (-1 if int(delta) < 0 else 1)
+        if target < 0 or target >= len(current):
+            return False
+        current[index], current[target] = current[target], current[index]
+        return self.set_column_order(current)
 
     def set_column_order(self, columns: Iterable[str]) -> bool:
         requested = tuple(dict.fromkeys(str(item) for item in columns))

@@ -5035,11 +5035,21 @@ class CleanroomXApp:
                 f"Selected evidence: {entry.label}"
             )
             viewer = getattr(self, "proofgraph_viewer", None)
-            filter_var = getattr(viewer, "filter_var", None)
-            if filter_var is not None and target_id:
-                filter_var.set("All")
+            payload = entry.payload if isinstance(entry.payload, dict) else {}
+            focused = False
+            if viewer is not None and target_id:
+                focused = viewer.focus_node(
+                    target_id,
+                    node_type=str(payload.get("type") or ""),
+                    graph_id=str(payload.get("_proofgraph_id") or ""),
+                    node_key=str(payload.get("_proofgraph_key") or ""),
+                )
             self.status_var.set(
-                f"ProofGraph opened for search result: {entry.label}"
+                (
+                    f"ProofGraph focused on search result: {entry.label}"
+                    if focused
+                    else f"ProofGraph opened; search target is not present in the active persisted graph: {entry.label}"
+                )
             )
             return
 

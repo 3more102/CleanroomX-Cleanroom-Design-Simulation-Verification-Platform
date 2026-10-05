@@ -68,3 +68,40 @@ def test_proofgraph_expand_and_collapse_controls_tree_groups(viewer):
 
     widget._set_tree_open(True)
     assert bool(widget.tree.item("group:test", "open")) is True
+
+
+
+def test_proofgraph_relationship_selection_shows_edge_detail(viewer):
+    widget, _messages = viewer
+    source = {
+        "key": "requirement:req-1",
+        "type": "requirement",
+        "id": "req-1",
+        "label": "Pressure requirement",
+        "status": "",
+        "raw": {},
+    }
+    target = {
+        "key": "check:check-1",
+        "type": "check",
+        "id": "check-1",
+        "label": "Pressure check",
+        "status": "pass",
+        "raw": {},
+    }
+    edge = {
+        "source": source["key"],
+        "target": target["key"],
+        "relation": "verified_by",
+    }
+    widget._projection = {"nodes": [source, target], "edges": [edge]}
+    widget._nodes_by_key = {source["key"]: source, target["key"]: target}
+
+    widget._select_edge(edge)
+
+    detail = widget.detail.get("1.0", "end-1c")
+    assert "RELATIONSHIP" in detail
+    assert "verified_by" in detail
+    assert "Pressure requirement" in detail
+    assert "Pressure check" in detail
+    assert widget.selected_node() is None

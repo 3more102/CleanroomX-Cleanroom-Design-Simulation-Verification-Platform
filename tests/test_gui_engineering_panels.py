@@ -155,3 +155,43 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_workspace_presets_route_existing_engineering_surfaces(app):
+    app.apply_workspace_preset("simulation", persist=False)
+    app.root.update()
+    assert app.workspace_preset_var.get() == "simulation"
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.output_panel_visible_var.get() is True
+    assert app.output_notebook.select() == str(app.result_text.master)
+    assert app.spatial_workspace.inspector_visible() is False
+
+    app.apply_workspace_preset("verification", persist=False)
+    app.root.update()
+    assert app.workspace_preset_var.get() == "verification"
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert app.spatial_workspace.inspector_visible() is True
+
+    app.apply_workspace_preset("evidence", persist=False)
+    app.root.update()
+    assert app.workspace_preset_var.get() == "evidence"
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+    assert app.spatial_workspace.inspector_visible() is False
+
+    app.apply_workspace_preset("reporting", persist=False)
+    app.root.update()
+    assert app.workspace_preset_var.get() == "reporting"
+    assert app.notebook.select() == str(app.plot_canvas.master)
+    assert app.output_notebook.select() == str(app.report_text.master)
+
+
+def test_density_switch_updates_persisted_gui_state_without_project_mutation(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    app.set_density("compact", persist=False)
+    app.root.update()
+
+    assert app.density_var.get() == "compact"
+    assert app._ui_layout_state["density"] == "compact"
+    assert app.project.to_dict() == project_before

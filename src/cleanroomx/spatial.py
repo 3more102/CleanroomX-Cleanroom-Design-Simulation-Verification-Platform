@@ -11,6 +11,11 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from .gui_theme import attach_tooltip, status_style_name, theme_palette
+from .gui_widgets import (
+    EngineeringMetricRow,
+    canonical_status_text,
+    format_engineering_number,
+)
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1596,10 +1601,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_analysis_var = tk.StringVar(
             value="Select a room to inspect fresh engineering results."
         )
+        # Aggregate strings are retained for compatibility with existing GUI tests and
+        # external callers; the visible inspector uses the structured metric variables below.
         self._inspector_geometry_var = tk.StringVar(value="Geometry: —")
         self._inspector_pressure_var = tk.StringVar(value="Pressure: —")
         self._inspector_airflow_var = tk.StringVar(value="Airflow / ACH: —")
         self._inspector_compliance_var = tk.StringVar(value="Verification: —")
+        self._inspector_result_source_var = tk.StringVar(value="DESIGN INPUT")
+        self._inspector_sync_state_var = tk.StringVar(value="SYNC —")
+        self._inspector_classification_value_var = tk.StringVar(value="—")
+        self._inspector_area_value_var = tk.StringVar(value="—")
+        self._inspector_volume_value_var = tk.StringVar(value="—")
+        self._inspector_design_pressure_value_var = tk.StringVar(value="—")
+        self._inspector_result_pressure_value_var = tk.StringVar(value="—")
+        self._inspector_airflow_value_var = tk.StringVar(value="—")
+        self._inspector_ach_value_var = tk.StringVar(value="—")
+        self._inspector_verification_value_var = tk.StringVar(value="NOT CHECKED")
         self._theme_palette = theme_palette("dark")
 
         self._build()
@@ -1955,31 +1972,66 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 7),
         )
         engineering.pack(fill="x", pady=(0, 7))
+
+        state_strip = ttk.Frame(engineering, style="CX.MetricRow.TFrame")
+        state_strip.pack(fill="x", pady=(0, 5))
+        self._inspector_result_source_label = ttk.Label(
+            state_strip,
+            textvariable=self._inspector_result_source_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self._inspector_result_source_label.pack(side="left")
+        self._inspector_sync_state_label = ttk.Label(
+            state_strip,
+            textvariable=self._inspector_sync_state_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self._inspector_sync_state_label.pack(side="right")
+        attach_tooltip(
+            self._inspector_result_source_label,
+            "Shows whether the visible calculated metrics come from a fresh active-analysis result or only from configured design input.",
+        )
+        attach_tooltip(
+            self._inspector_sync_state_label,
+            "Engineering synchronization state between this spatial room and its linked analysis input.",
+        )
+
         ttk.Label(
             engineering,
             textvariable=self._inspector_analysis_var,
             style="CX.Muted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(anchor="w", fill="x", pady=(0, 5))
-        ttk.Label(
-            engineering,
-            textvariable=self._inspector_geometry_var,
-        ).pack(anchor="w", fill="x", pady=1)
-        ttk.Label(
-            engineering,
-            textvariable=self._inspector_pressure_var,
-        ).pack(anchor="w", fill="x", pady=1)
-        ttk.Label(
-            engineering,
-            textvariable=self._inspector_airflow_var,
-        ).pack(anchor="w", fill="x", pady=1)
-        self._inspector_compliance_label = ttk.Label(
-            engineering,
-            textvariable=self._inspector_compliance_var,
-            style="CX.Status.Neutral.TLabel",
+        ).pack(anchor="w", fill="x", pady=(0, 6))
+
+        metrics = ttk.Frame(engineering, style="CX.MetricRow.TFrame")
+        metrics.pack(fill="x")
+        for label, variable, unit in (
+            ("Classification", self._inspector_classification_value_var, ""),
+            ("Area", self._inspector_area_value_var, "m²"),
+            ("Volume", self._inspector_volume_value_var, "m³"),
+            ("Design pressure", self._inspector_design_pressure_value_var, "Pa"),
+            ("Calculated pressure", self._inspector_result_pressure_value_var, "Pa"),
+            ("Supply airflow", self._inspector_airflow_value_var, "m³/h"),
+            ("ACH", self._inspector_ach_value_var, "1/h"),
+        ):
+            EngineeringMetricRow(
+                metrics,
+                label=label,
+                value_var=variable,
+                unit=unit,
+            ).pack(fill="x", pady=1)
+
+        self._inspector_compliance_metric = EngineeringMetricRow(
+            metrics,
+            label="Verification",
+            value_var=self._inspector_verification_value_var,
+            status=True,
         )
-        self._inspector_compliance_label.pack(anchor="w", pady=(5, 0))
+        self._inspector_compliance_metric.pack(fill="x", pady=(3, 0))
+        # Keep the historical attribute for compatibility with callers that inspect
+        # the semantic style directly.
+        self._inspector_compliance_label = self._inspector_compliance_metric.value_label
 
         property_groups = (
             (
@@ -2760,15 +2812,33 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if selected is None or item is None or selected.kind != "room":
             self._inspector_analysis_var.set(
-                "Select a room to inspect fresh engineering results."
+                "Select a room to inspect configured design values and fresh calculated results."
             )
+            self._inspector_result_source_var.set("NO ROOM SELECTED")
+            self._inspector_result_source_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            self._inspector_sync_state_var.set("SYNC —")
+            self._inspector_sync_state_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            for variable in (
+                self._inspector_classification_value_var,
+                self._inspector_area_value_var,
+                self._inspector_volume_value_var,
+                self._inspector_design_pressure_value_var,
+                self._inspector_result_pressure_value_var,
+                self._inspector_airflow_value_var,
+                self._inspector_ach_value_var,
+            ):
+                variable.set("—")
+            self._inspector_verification_value_var.set("NOT CHECKED")
+            self._inspector_compliance_metric.set_status("not_checked")
+
             self._inspector_geometry_var.set("Geometry: —")
             self._inspector_pressure_var.set("Pressure: —")
             self._inspector_airflow_var.set("Airflow / ACH: —")
             self._inspector_compliance_var.set("Verification: —")
-            self._inspector_compliance_label.configure(
-                style="CX.Status.Neutral.TLabel"
-            )
             return
 
         length_m = _finite_number(item.get("length_m"), 0.0)
@@ -2776,6 +2846,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         height_m = _finite_number(item.get("height_m"), 0.0)
         area_m2 = max(0.0, length_m * width_m)
         volume_m3 = max(0.0, area_m2 * height_m)
+        self._inspector_area_value_var.set(
+            format_engineering_number(area_m2, precision=1)
+        )
+        self._inspector_volume_value_var.set(
+            format_engineering_number(volume_m3, precision=1)
+        )
+        self._inspector_classification_value_var.set(
+            str(item.get("classification") or "—")
+        )
+        design_pressure = item.get("pressure_pa")
+        self._inspector_design_pressure_value_var.set(
+            format_engineering_number(
+                design_pressure,
+                precision=1,
+                signed=True,
+            )
+        )
         self._inspector_geometry_var.set(
             f"Geometry: {area_m2:,.1f} m² · {volume_m3:,.1f} m³"
         )
@@ -2783,12 +2870,32 @@ class SpatialDesignWorkspace(ttk.Frame):
         analysis = self._analysis_getter()
         result = self._result_getter()
         room_id = selected.item_id
+        has_fresh_result = isinstance(result, dict) and bool(result)
+
+        sync = engineering_sync_status(self.layout, analysis)
+        room_sync = next(
+            (
+                record
+                for record in sync.get("rooms", [])
+                if record.get("room_id") == room_id
+            ),
+            None,
+        )
+        sync_state = str((room_sync or {}).get("state") or sync.get("overall") or "unmapped")
+        self._inspector_sync_state_var.set(
+            "SYNC " + sync_state.replace("_", " ").upper()
+        )
+        self._inspector_sync_state_label.configure(
+            style=status_style_name(
+                "pass" if sync_state == "synchronized" else "warning"
+            )
+        )
 
         def room_overlay(mode: str) -> dict | None:
             state = engineering_overlay_state(
                 self.layout,
                 analysis=analysis,
-                result=result if isinstance(result, dict) else None,
+                result=result if has_fresh_result else None,
                 mode=mode,
             )
             return next(
@@ -2805,39 +2912,64 @@ class SpatialDesignWorkspace(ttk.Frame):
         airflow = room_overlay("airflow")
         status = room_overlay("status")
 
-        if isinstance(result, dict):
+        if has_fresh_result:
             self._inspector_analysis_var.set(
-                "Fresh active-analysis results projected into this room."
+                "Calculated values are from the fresh active-analysis result; configured values remain explicit design inputs."
+            )
+            self._inspector_result_source_var.set("CALCULATED RESULT")
+            self._inspector_result_source_label.configure(
+                style="CX.Status.Simulation.TLabel"
             )
         else:
             self._inspector_analysis_var.set(
-                "No fresh active-analysis result is available; spatial values remain editable design inputs."
+                "No fresh active-analysis result. Calculated fields are intentionally blank; configured design values remain editable below."
+            )
+            self._inspector_result_source_var.set("DESIGN INPUT ONLY")
+            self._inspector_result_source_label.configure(
+                style="CX.Status.Neutral.TLabel"
             )
 
-        pressure_value = pressure.get("pressure_pa") if pressure else None
+        pressure_value = pressure.get("pressure_pa") if pressure and has_fresh_result else None
+        airflow_value = airflow.get("value") if airflow and has_fresh_result else None
+        ach_value = ach.get("value") if ach and has_fresh_result else None
+
+        self._inspector_result_pressure_value_var.set(
+            format_engineering_number(
+                pressure_value,
+                precision=1,
+                signed=True,
+            )
+        )
+        self._inspector_airflow_value_var.set(
+            format_engineering_number(airflow_value, precision=0)
+        )
+        self._inspector_ach_value_var.set(
+            format_engineering_number(ach_value, precision=1)
+        )
+
         self._inspector_pressure_var.set(
             "Pressure: —"
             if pressure_value is None
             else f"Pressure: {float(pressure_value):+.1f} Pa"
         )
-
-        ach_value = ach.get("value") if ach else None
-        airflow_value = airflow.get("value") if airflow else None
-        parts = []
+        aggregate_parts = []
         if isinstance(airflow_value, (int, float)):
-            parts.append(f"{float(airflow_value):,.0f} m³/h")
+            aggregate_parts.append(f"{float(airflow_value):,.0f} m³/h")
         if isinstance(ach_value, (int, float)):
-            parts.append(f"{float(ach_value):.1f} ACH")
+            aggregate_parts.append(f"{float(ach_value):.1f} ACH")
         self._inspector_airflow_var.set(
-            "Airflow / ACH: " + (" · ".join(parts) if parts else "—")
+            "Airflow / ACH: " + (" · ".join(aggregate_parts) if aggregate_parts else "—")
         )
 
-        state = str((status or {}).get("status") or "not_checked").lower()
-        label = state.replace("_", " ").upper()
-        self._inspector_compliance_var.set(f"Verification: {label}")
-        self._inspector_compliance_label.configure(
-            style=status_style_name(state)
+        state = (
+            str((status or {}).get("status") or "not_checked").lower()
+            if has_fresh_result
+            else "not_checked"
         )
+        label = canonical_status_text(state)
+        self._inspector_verification_value_var.set(label)
+        self._inspector_compliance_metric.set_status(state)
+        self._inspector_compliance_var.set(f"Verification: {label}")
 
     def _load_property_panel(self) -> None:
         item = self._selected_object()

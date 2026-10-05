@@ -2529,6 +2529,7 @@ class CleanroomXApp:
             on_open_results=self._activate_analysis_results_workspace,
             on_open_history=self.show_run_history,
             on_duplicate_analysis=self.duplicate_current_analysis,
+            on_select_analysis=self._select_analysis_from_simulation,
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
@@ -4354,6 +4355,17 @@ class CleanroomXApp:
         workspace = getattr(self, "simulation_workspace", None)
         if workspace is None:
             return
+        active_id = (
+            getattr(self, "_editor_analysis_id", None)
+            or self.project.active_analysis_id
+        )
+        workspace.set_analysis_options(
+            tuple(
+                (item.id, item.name, item.kind)
+                for item in self.project.analyses
+            ),
+            active_id=active_id,
+        )
         analysis = self._editor_analysis()
         if analysis is None:
             workspace.set_context(
@@ -4387,6 +4399,21 @@ class CleanroomXApp:
             latest_retained_utc=latest_retained_utc,
             history_available=history_available,
         )
+
+    def _select_analysis_from_simulation(self, analysis_id: str) -> None:
+        """Route Simulation scenario selection through the canonical navigator guard."""
+        target = str(analysis_id or "").strip()
+        if not target or not self.analysis_tree.exists(target):
+            self._refresh_simulation_workspace()
+            return
+        self.analysis_tree.selection_set(target)
+        self.analysis_tree.focus(target)
+        self.analysis_tree.see(target)
+        self._on_analysis_selected()
+        self._refresh_simulation_workspace()
+        if getattr(self, "_editor_analysis_id", None) == target:
+            self.notebook.select(self.simulation_workspace)
+            self.workspace_status_var.set("Workspace: Simulation")
 
     def _activate_simulation_workspace(self) -> None:
         if hasattr(self, "notebook") and hasattr(self, "simulation_workspace"):

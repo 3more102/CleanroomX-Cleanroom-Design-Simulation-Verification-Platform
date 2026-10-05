@@ -1546,13 +1546,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 7, 8, 4),
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
             commandbar,
             text="DESIGN",
-            style="CX.Section.TLabel",
+            style="CX.ToolbarGroup.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
             side="left", padx=2
@@ -1595,7 +1599,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1638,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1655,12 +1667,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="right", padx=(10, 2)
         )
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
             text="ENGINEERING OVERLAY",
-            style="CX.Section.TLabel",
+            style="CX.ToolbarGroup.TLabel",
         ).pack(side="left", padx=(0, 8))
         overlay_picker = ttk.Combobox(
             overlaybar,
@@ -3297,12 +3313,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered == _Hit("room", room["id"])
             outline = (
-                "#1d4ed8"
+                self._theme_palette["accent"]
                 if selected
                 else (
-                    "#0ea5e9"
+                    self._theme_palette["info"]
                     if hovered
-                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                    else (
+                        self._theme_palette["warning"]
+                        if room["id"] in warning_ids
+                        else self._theme_palette["strong_border"]
+                    )
                 )
             )
             fill = (
@@ -3333,7 +3353,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                         f"{room['height_m']:g} m{overlay_text}"
                     ),
                     justify="center",
-                    fill=self._theme_palette["text"],
+                    fill=(
+                        "#0F172A"
+                        if overlay_mode != "none"
+                        else self._theme_palette["text"]
+                    ),
                     tags=(f"room:{room['id']}", "room"),
                 )
             if selected:
@@ -3358,11 +3382,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+                outline=self._theme_palette["error"],
+                width=2,
+                dash=(5, 3),
+                tags=("validation",),
             )
             canvas.create_text(
-                (x0 + x1) / 2, (y0 + y1) / 2,
-                text="OVERLAP", fill="#991b1b", tags=("validation",)
+                (x0 + x1) / 2,
+                (y0 + y1) / 2,
+                text="OVERLAP",
+                fill=self._theme_palette["error"],
+                tags=("validation",),
             )
 
         if self._show_devices.get():
@@ -3385,12 +3415,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 selected = self.selected == _Hit("device", device["id"])
                 hovered = self._hovered == _Hit("device", device["id"])
                 device_outline = (
-                    "#c0392b"
+                    self._theme_palette["accent"]
                     if selected
                     else (
-                        "#0ea5e9"
+                        self._theme_palette["info"]
                         if hovered
-                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                        else (
+                            self._theme_palette["warning"]
+                            if device["id"] in warning_ids
+                            else self._theme_palette["strong_border"]
+                        )
                     )
                 )
                 tag = f"device:{device['id']}"

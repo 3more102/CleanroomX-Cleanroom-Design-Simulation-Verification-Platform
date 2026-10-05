@@ -71,12 +71,12 @@ class ProjectDashboard(ttk.Frame):
         ttk.Label(
             identity_text,
             textvariable=self._vars["project"],
-            style="CX.ViewTitle.TLabel",
+            style="CX.PanelTitle.TLabel",
         ).pack(anchor="w")
         ttk.Label(
             identity_text,
             textvariable=self._vars["location"],
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
         ).pack(anchor="w", pady=(2, 0))
 
         actions = ttk.Frame(identity, style="CX.Panel.TFrame")
@@ -114,7 +114,7 @@ class ProjectDashboard(ttk.Frame):
         ttk.Label(
             coverage_header,
             textvariable=self._vars["verification_detail"],
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
         ).pack(side="right")
         self.verification_progress = ttk.Progressbar(
             readiness,
@@ -127,7 +127,7 @@ class ProjectDashboard(ttk.Frame):
         ttk.Label(
             readiness,
             textvariable=self._vars["verification_coverage"],
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
         ).pack(anchor="w")
 
         system = ttk.LabelFrame(
@@ -151,7 +151,7 @@ class ProjectDashboard(ttk.Frame):
             ttk.Label(
                 cell,
                 text=label,
-                style="CX.Section.TLabel",
+                style="CX.PanelSection.TLabel",
             ).pack(anchor="w")
             value = tk.StringVar(value="—")
             self._system_values[key] = value
@@ -175,7 +175,7 @@ class ProjectDashboard(ttk.Frame):
         ttk.Label(
             issue_header,
             textvariable=self._vars["issues"],
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
         ).pack(side="left")
         if on_open_problems is not None:
             ttk.Button(
@@ -247,13 +247,20 @@ class ProjectDashboard(ttk.Frame):
         self._issue_by_iid.clear()
 
         candidates = [issue for issue in issues or [] if isinstance(issue, dict)]
+        def sequence_key(issue: dict[str, Any]) -> tuple[int, str]:
+            raw = issue.get("sequence")
+            try:
+                return (0, f"{int(raw):012d}")
+            except (TypeError, ValueError):
+                return (1, str(raw or ""))
+
         candidates.sort(
             key=lambda issue: (
                 self._SEVERITY_ORDER.get(
                     str(issue.get("severity") or "info").casefold(),
                     3,
                 ),
-                int(issue.get("sequence") or 0),
+                sequence_key(issue),
             )
         )
         important = [

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from tkinter import ttk
 
 import pytest
 
@@ -107,10 +108,7 @@ def test_surface_aware_label_styles_match_parent_surfaces():
     root.withdraw()
     try:
         palette = configure_ttk_theme(root, "dark")
-        style = tk.ttk.Style(root) if hasattr(tk, "ttk") else None
-        if style is None:
-            from tkinter import ttk
-            style = ttk.Style(root)
+        style = ttk.Style(root)
 
         assert style.lookup("CX.PanelTitle.TLabel", "background") == palette["panel"]
         assert style.lookup("CX.PanelMuted.TLabel", "background") == palette["panel"]

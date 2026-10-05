@@ -620,10 +620,10 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
 
     assert app.theme_var.get() == "dark"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-    assert app.plot_canvas.cget("background") == "#131920"
-    assert app.input_text.cget("background") == "#11161c"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#0C1626"
+    assert app.spatial_workspace.canvas_3d.cget("background") == "#08111F"
+    assert app.plot_canvas.cget("background") == "#0C1626"
+    assert app.input_text.cget("background") == "#0E1726"
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
@@ -663,9 +663,9 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
-        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-        assert second.plot_canvas.cget("background") == "#131920"
+        assert second.spatial_workspace.canvas_2d.cget("background") == "#0C1626"
+        assert second.spatial_workspace.canvas_3d.cget("background") == "#08111F"
+        assert second.plot_canvas.cget("background") == "#0C1626"
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
@@ -1005,3 +1005,41 @@ def test_window_size_persists_across_application_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+def test_industrial_status_rail_tracks_run_state_without_mutating_project(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    assert app.project_state_var.get() in {"UNSAVED", "SAVED", "MODIFIED"}
+    assert app.diagnostics_badge_var.get().startswith("PROBLEMS ")
+    assert app.verification_badge_var.get().startswith("VERIFY")
+    assert app.evidence_badge_var.get().startswith("EVIDENCE ")
+    assert app.run_state_var.get() == "IDLE"
+
+    app._set_running(True)
+    app.root.update_idletasks()
+    assert app.run_state_var.get() == "RUNNING"
+    assert app.run_state_badge.cget("style") == "CX.Info.TLabel"
+
+    app._set_running(False)
+    app.root.update_idletasks()
+    assert app.run_state_var.get() == "IDLE"
+    assert app.run_state_badge.cget("style") == "CX.MutedBadge.TLabel"
+    assert app.project.to_dict() == project_before
+
+
+def test_start_dashboard_uses_current_project_metrics(app):
+    app._refresh_engineering_panels()
+    app.root.update_idletasks()
+
+    spatial = app.project.metadata.get("spatial_design", {})
+    rooms = spatial.get("rooms", []) if isinstance(spatial, dict) else []
+    devices = spatial.get("devices", []) if isinstance(spatial, dict) else []
+
+    assert app.start_center.health_project_var.get() == app.project.name
+    assert app.start_center.health_analyses_var.get() == str(len(app.project.analyses))
+    assert app.start_center.health_rooms_var.get() == str(len(rooms))
+    assert app.start_center.health_devices_var.get() == str(len(devices))
+    assert app.start_center.health_problems_var.get().startswith("PROBLEMS ")
+    assert app.start_center.health_verify_var.get().startswith("VERIFY")
+    assert app.start_center.health_evidence_var.get().startswith("EVIDENCE ")

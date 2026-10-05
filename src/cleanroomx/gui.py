@@ -2577,6 +2577,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        verification_state = "unknown"
+        proofgraph_documents: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -2584,6 +2586,16 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            configured = int(summary.get("configured_analysis_count", 0) or 0)
+            current = int(summary.get("current_count", 0) or 0)
+            stale = int(summary.get("stale_count", 0) or 0)
+            not_verified = int(summary.get("not_verified_count", 0) or 0)
+            if configured and current == configured and stale == 0 and not_verified == 0:
+                verification_state = "verified"
+            elif stale:
+                verification_state = "stale"
+            elif not_verified:
+                verification_state = "unverified"
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -2621,10 +2633,9 @@ class CleanroomXApp:
         try:
             records = verification_run_history_records(self.project.metadata)
             viewer = getattr(self, "proofgraph_viewer", None)
+            proofgraph_documents = self._proofgraph_documents_from_records(records)
             if viewer is not None:
-                viewer.set_documents(
-                    self._proofgraph_documents_from_records(records)
-                )
+                viewer.set_documents(proofgraph_documents)
             lines = [
                 "PERSISTED VERIFICATION EVIDENCE",
                 "",
@@ -2650,6 +2661,7 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            proofgraph_documents = []
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
@@ -2677,7 +2689,65 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            dashboard.refresh(
+                engineering_dashboard_snapshot(
+                    self.project,
+                    diagnostics,
+                    proofgraph_count=len(proofgraph_documents),
+                    verification_state=verification_state,
+                )
+            )
+        self._refresh_shell_engineering_state(
+            diagnostics,
+            verification_state=verification_state,
+        )
         return diagnostics
+
+    def _set_shell_badge(self, key: str, text: str, status: str) -> None:
+        variable = getattr(self, f"shell_{key}_var", None)
+        label = getattr(self, f"_shell_{key}_label", None)
+        if variable is not None:
+            variable.set(text)
+        if label is not None:
+            label.configure(
+                style=f"CX.Status.{canonical_status(status)}.TLabel"
+            )
+
+    def _refresh_shell_engineering_state(
+        self,
+        diagnostics: dict | None,
+        *,
+        verification_state: str,
+    ) -> None:
+        summary = diagnostics.get("summary", {}) if isinstance(diagnostics, dict) else {}
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        if diagnostics is None:
+            self._set_shell_badge("model", "MODEL NOT EVALUATED", "unknown")
+            self._set_shell_badge("problems", "PROBLEMS —", "unknown")
+        elif errors:
+            self._set_shell_badge("model", "MODEL ISSUES", "fail")
+            self._set_shell_badge("problems", f"PROBLEMS {errors + warnings}", "fail")
+        elif warnings:
+            self._set_shell_badge("model", "MODEL ATTENTION", "warning")
+            self._set_shell_badge("problems", f"PROBLEMS {warnings}", "warning")
+        else:
+            self._set_shell_badge("model", "MODEL VALID", "pass")
+            self._set_shell_badge("problems", "PROBLEMS 0", "pass")
+
+        verify_label = {
+            "verified": "VERIFY CURRENT",
+            "stale": "VERIFY STALE",
+            "unverified": "VERIFY REQUIRED",
+        }.get(verification_state, "VERIFY UNKNOWN")
+        self._set_shell_badge(
+            "verification",
+            verify_label,
+            verification_state,
+        )
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
         if getattr(self, "problems_panel", None) is None:
@@ -5459,6 +5529,11 @@ class CleanroomXApp:
         else:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
+        self._set_shell_badge(
+            "save",
+            "UNSAVED" if has_unsaved_changes else "SAVED",
+            "warning" if has_unsaved_changes else "pass",
+        )
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
     def _report_external_save_conflict(self, path: Path) -> None:

@@ -102,6 +102,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.domain_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.error_count_var = tk.StringVar(value="ERROR 0")
         self.warning_count_var = tk.StringVar(value="WARNING 0")
@@ -110,6 +111,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.domain_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
@@ -131,6 +133,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         self.severity_picker.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Domain").pack(side="left")
+        self.domain_picker = ttk.Combobox(
+            toolbar,
+            textvariable=self.domain_var,
+            values=("All",),
+            state="readonly",
+            width=15,
+        )
+        self.domain_picker.pack(side="left", padx=(4, 8))
         ttk.Button(
             toolbar,
             text="Refresh",
@@ -145,6 +156,22 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             state="disabled",
         )
         self.locate_button.pack(side="left", padx=2)
+        self.previous_button = ttk.Button(
+            toolbar,
+            text="Previous",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(-1),
+            state="disabled",
+        )
+        self.previous_button.pack(side="left", padx=2)
+        self.next_button = ttk.Button(
+            toolbar,
+            text="Next",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(1),
+            state="disabled",
+        )
+        self.next_button.pack(side="left", padx=2)
         self.copy_button = ttk.Button(
             toolbar,
             text="Copy",
@@ -261,6 +288,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
+        self.tree.bind("<Alt-Up>", lambda event: self._select_relative(-1))
+        self.tree.bind("<Alt-Down>", lambda event: self._select_relative(1))
 
         detail_header = ttk.Frame(
             detail_frame,
@@ -379,6 +408,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        domain = self.domain_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -386,6 +416,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_domain = str(issue.get("category", "")).strip().casefold()
+            if domain and domain != "all" and issue_domain != domain:
                 continue
             if query:
                 haystack = " ".join(
@@ -452,6 +485,22 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     break
         self._show_selected_detail()
 
+    def _refresh_domain_values(self) -> None:
+        result = self.last_result if isinstance(self.last_result, dict) else {}
+        issues = result.get("issues", [])
+        domains = sorted(
+            {
+                str(issue.get("category", "")).strip()
+                for issue in issues
+                if isinstance(issue, dict) and str(issue.get("category", "")).strip()
+            },
+            key=str.casefold,
+        )
+        values = ("All", *domains)
+        self.domain_picker.configure(values=values)
+        if self.domain_var.get() not in values:
+            self.domain_var.set("All")
+
     def refresh(self) -> dict[str, Any] | None:
         try:
             result = analyze_project_diagnostics(
@@ -467,6 +516,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
+        self._refresh_domain_values()
         summary = result.get("summary", {})
         self.error_count_var.set(f"ERROR {int(summary.get('error_count', 0) or 0)}")
         self.warning_count_var.set(f"WARNING {int(summary.get('warning_count', 0) or 0)}")
@@ -494,6 +544,10 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         enabled = "normal" if issue is not None else "disabled"
         self.locate_button.configure(state=enabled)
         self.copy_button.configure(state=enabled)
+        rows = self.tree.get_children()
+        navigation_state = "normal" if len(rows) > 1 else "disabled"
+        self.previous_button.configure(state=navigation_state)
+        self.next_button.configure(state=navigation_state)
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:
@@ -522,6 +576,23 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 )
             self.detail.insert("1.0", empty)
         self.detail.configure(state="disabled")
+
+    def _select_relative(self, direction: int):
+        rows = list(self.tree.get_children())
+        if not rows:
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in rows:
+            index = rows.index(selection[0])
+            target_index = (index + (-1 if direction < 0 else 1)) % len(rows)
+        else:
+            target_index = 0 if direction >= 0 else len(rows) - 1
+        target = rows[target_index]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected_detail()
+        return "break"
 
     def _navigate_selected(self, event=None):
         issue = self.selected_issue()

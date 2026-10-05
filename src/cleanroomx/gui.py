@@ -3328,6 +3328,8 @@ class CleanroomXApp:
             on_open_demo=self._open_bundled_demo_from_start,
             on_open_recent=self._open_recent_project_from_start,
             on_forget_recent=self._forget_recent_project,
+            autosave_status_var=self.autosave_status_var,
+            on_open_recovery=self.show_recovery_center,
         )
         self.notebook.add(self.start_center, text="Start")
 

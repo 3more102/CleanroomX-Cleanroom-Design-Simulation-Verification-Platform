@@ -250,3 +250,52 @@ def test_problem_browser_surfaces_backend_failure_with_reference_and_retry_guida
     assert recorded[0][0] == "Refresh project diagnostics"
     assert isinstance(recorded[0][1], RuntimeError)
 
+
+def test_problem_browser_surfaces_backend_failure_with_reference_and_retry_guidance(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    report = GuiErrorReport(
+        reference="CX-DIAG-1234",
+        operation="Refresh project diagnostics",
+        exception_type="RuntimeError",
+        summary="synthetic diagnostics failure",
+        log_path=tmp_path / "cleanroomx-gui.log",
+    )
+    recorded = []
+
+    def fail_diagnostics(*_args, **_kwargs):
+        raise RuntimeError("synthetic diagnostics failure")
+
+    monkeypatch.setattr(
+        gui_panels_module,
+        "analyze_project_diagnostics",
+        fail_diagnostics,
+    )
+    monkeypatch.setattr(
+        gui_panels_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    panel = app.problems_panel
+    result = panel.refresh()
+    app.root.update()
+
+    assert result is None
+    assert panel.last_result is None
+    assert panel.last_error_report is report
+    assert panel.summary_var.get() == "Diagnostics unavailable · CX-DIAG-1234"
+    assert panel.visible_var.get() == "0 visible"
+    assert "CX-DIAG-1234" in app.status_var.get()
+    detail = panel.detail.get("1.0", "end").strip()
+    assert "Refresh project diagnostics did not complete." in detail
+    assert "synthetic diagnostics failure" in detail
+    assert "Error reference: CX-DIAG-1234" in detail
+    assert "Use Refresh to retry project diagnostics." in detail
+    assert "Traceback" not in detail
+    assert recorded
+    assert recorded[0][0] == "Refresh project diagnostics"
+    assert isinstance(recorded[0][1], RuntimeError)
+

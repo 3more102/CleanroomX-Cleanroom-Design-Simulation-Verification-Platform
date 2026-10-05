@@ -29,6 +29,17 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#0b1220",
         "plot": "#f8fbfd",
         "grid": "#c6d3df",
+        "surface_high": "#d3deea",
+        "border_strong": "#8197ad",
+        "secondary": "#2563eb",
+        "success": "#15803d",
+        "warning": "#b45309",
+        "danger": "#dc2626",
+        "info": "#0284c7",
+        "simulation": "#7c3aed",
+        "evidence": "#15803d",
+        "attention": "#ea580c",
+        "magenta": "#c026d3",
     },
     "dark": {
         "background": "#0B1220",
@@ -51,6 +62,17 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#07101D",
         "plot": "#0D1727",
         "grid": "#2A3D56",
+        "surface_high": "#1D2C45",
+        "border_strong": "#334A68",
+        "secondary": "#38BDF8",
+        "success": "#22C55E",
+        "warning": "#F59E0B",
+        "danger": "#EF4444",
+        "info": "#38BDF8",
+        "simulation": "#A78BFA",
+        "evidence": "#22C55E",
+        "attention": "#F97316",
+        "magenta": "#E879F9",
     },
 }
 
@@ -314,11 +336,11 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     # Restrained industrial semantic colors communicate engineering state
     # without competing with the design canvas.
     semantic = {
-        "success": "#22C55E",
-        "warning": "#F59E0B",
-        "danger": "#DC2626",
-        "info": "#38BDF8",
-        "violet": "#7C3AED",
+        "success": palette["success"],
+        "warning": palette["warning"],
+        "danger": palette["danger"],
+        "info": palette["info"],
+        "violet": palette["simulation"],
     }
 
     style.configure(
@@ -548,6 +570,89 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
         foreground=[("disabled", palette["disabled"])],
     )
+
+    # Compact instrumentation surfaces used by dashboard/status/inspector views.
+    style.configure(
+        "CX.Card.TFrame",
+        background=palette["surface_alt"],
+        bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
+        relief="flat",
+        borderwidth=1,
+        padding=(10, 8),
+    )
+    style.configure(
+        "CX.CardTitle.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.Kpi.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 15, "bold"),
+    )
+    style.configure(
+        "CX.CardBody.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 9),
+    )
+    style.configure(
+        "CX.Table.Treeview",
+        background=palette["tree"],
+        fieldbackground=palette["tree"],
+        foreground=palette["text"],
+        bordercolor=palette["border"],
+        rowheight=25,
+    )
+    style.map(
+        "CX.Table.Treeview",
+        background=[("selected", palette["selection"])],
+        foreground=[("selected", palette["selection_text"])],
+    )
+    style.configure(
+        "CX.Engineering.Horizontal.TProgressbar",
+        background=palette["accent"],
+        troughcolor=palette["surface_high"],
+        bordercolor=palette["border"],
+        lightcolor=palette["accent"],
+        darkcolor=palette["accent"],
+        thickness=9,
+    )
+
+    badge_styles = (
+        ("CX.Badge.Neutral.TLabel", palette["surface_high"], palette["text"]),
+        ("CX.Badge.Success.TLabel", semantic["success"], "#07131E"),
+        ("CX.Badge.Warning.TLabel", semantic["warning"], "#07131E"),
+        ("CX.Badge.Error.TLabel", semantic["danger"], "#FFFFFF"),
+        ("CX.Badge.Info.TLabel", semantic["info"], "#07131E"),
+        ("CX.Badge.Violet.TLabel", semantic["violet"], "#FFFFFF"),
+    )
+    for style_name, background, foreground in badge_styles:
+        style.configure(
+            style_name,
+            background=background,
+            foreground=foreground,
+            padding=(7, 2),
+            font=("TkDefaultFont", 8, "bold"),
+        )
+
+    for style_name, foreground in (
+        ("CX.Domain.Geometry.TLabel", palette["accent"]),
+        ("CX.Domain.HVAC.TLabel", palette["secondary"]),
+        ("CX.Domain.Pressure.TLabel", palette["simulation"]),
+        ("CX.Domain.Evidence.TLabel", palette["evidence"]),
+        ("CX.Domain.Warning.TLabel", palette["warning"]),
+    ):
+        style.configure(
+            style_name,
+            background=palette["surface_alt"],
+            foreground=foreground,
+            font=("TkDefaultFont", 8, "bold"),
+        )
 
     # Defaults for Tk-native widgets created after this call.
     root.option_add("*Text.background", palette["field"])

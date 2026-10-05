@@ -375,6 +375,62 @@ def _filtered_projection(
     }
 
 
+def _searched_projection(
+    projection: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    """Search GUI projection fields while retaining immediate graph context."""
+    terms = tuple(
+        token.casefold()
+        for token in str(query or "").split()
+        if token.strip()
+    )
+    if not terms:
+        return projection
+
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    matched: set[str] = set()
+    for node in nodes:
+        raw = node.get("raw", {})
+        try:
+            raw_text = json.dumps(
+                raw,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError):
+            raw_text = str(raw)
+        haystack = " ".join(
+            (
+                _text(node.get("type")),
+                _text(node.get("id")),
+                _text(node.get("label")),
+                _text(node.get("status")),
+                " ".join(str(flag) for flag in (node.get("flags") or ())),
+                raw_text,
+            )
+        ).casefold()
+        if all(term in haystack for term in terms):
+            matched.add(node["key"])
+
+    expanded = set(matched)
+    for edge in edges:
+        if edge["source"] in matched or edge["target"] in matched:
+            expanded.add(edge["source"])
+            expanded.add(edge["target"])
+
+    return {
+        "nodes": [node for node in nodes if node["key"] in expanded],
+        "edges": [
+            edge
+            for edge in edges
+            if edge["source"] in expanded and edge["target"] in expanded
+        ],
+    }
+
+
 class ProofGraphViewer(ttk.Frame):
     """Read-only tree + interactive graph view over canonical ProofGraph documents."""
 
@@ -397,6 +453,7 @@ class ProofGraphViewer(ttk.Frame):
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
+        self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
 
         toolbar = ttk.Frame(self, padding=(7, 5))
@@ -427,11 +484,19 @@ class ProofGraphViewer(ttk.Frame):
             width=20,
         )
         self.filter_picker.pack(side="left", padx=(5, 10))
+        ttk.Label(toolbar, text="Search").pack(side="left")
+        self.search = ttk.Entry(
+            toolbar,
+            textvariable=self.search_var,
+            width=24,
+        )
+        self.search.pack(side="left", padx=(5, 10))
         ttk.Label(toolbar, textvariable=self.summary_var).pack(
             side="right", padx=(10, 0)
         )
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        self.search_var.trace_add("write", lambda *_args: self._refresh())
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -526,7 +591,8 @@ class ProofGraphViewer(ttk.Frame):
 
     def _refresh(self) -> None:
         projection = proofgraph_projection(self._active_document())
-        self._projection = _filtered_projection(projection, self.filter_var.get())
+        filtered = _filtered_projection(projection, self.filter_var.get())
+        self._projection = _searched_projection(filtered, self.search_var.get())
         self._nodes_by_key = {
             node["key"]: node for node in self._projection.get("nodes", [])
         }

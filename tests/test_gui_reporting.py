@@ -5,6 +5,7 @@ from cleanroomx.gui_reporting import (
     REPORT_TYPES,
     ReportPreview,
     normalize_report_preview,
+    report_status_semantic,
 )
 
 
@@ -34,3 +35,13 @@ def test_report_preview_keeps_source_and_availability_explicit():
     )
     assert preview.available is True
     assert preview.source == "current project diagnostics"
+
+
+def test_report_status_semantics_do_not_turn_failures_green():
+    assert report_status_semantic("error") == "error"
+    assert report_status_semantic("FAIL") == "error"
+    assert report_status_semantic("warning") == "warning"
+    assert report_status_semantic("stale") == "warning"
+    assert report_status_semantic("pass") == "pass"
+    assert report_status_semantic("ready") == "pass"
+    assert report_status_semantic("unknown") == "neutral"

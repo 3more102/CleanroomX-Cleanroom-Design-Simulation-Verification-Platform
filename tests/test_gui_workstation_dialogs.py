@@ -243,6 +243,12 @@ def test_requirements_traceability_filters_canonical_requirements_and_mappings(a
     dialog._clear_filters()
     app.root.update()
     assert dialog.count_var.get() == "2 of 2 traceability rows"
+
+    assert dialog.focus_requirement("REQ-ACH") is True
+    app.root.update()
+    assert dialog.tree.selection() == ("requirement:REQ-ACH",)
+    assert "Minimum air changes" in dialog.detail.get("1.0", "end")
+    assert dialog.focus_requirement("REQ-MISSING") is False
     dialog.destroy()
 
 

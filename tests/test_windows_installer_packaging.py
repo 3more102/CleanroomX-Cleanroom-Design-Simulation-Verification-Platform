@@ -29,6 +29,8 @@ def test_installer_build_is_versioned_and_hashes_release_artifact():
 
     assert 'Get-Content -Raw (Join-Path $repoRoot "pyproject.toml")' in text
     assert "Inno Setup compiler not found" in text
+    assert "[Convert]::FromBase64String" in text
+    assert "CleanroomX.ico.b64" in text
     assert "Get-FileHash -Algorithm SHA256" in text
     assert "CleanroomX-Setup-$safeVersion-x64" in text
 

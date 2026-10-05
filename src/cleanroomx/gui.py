@@ -2970,7 +2970,7 @@ class CleanroomXApp:
         )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3162,6 +3162,187 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        commands.extend(self._engineering_search_commands())
+        return commands
+
+    def _open_search_spatial_item(self, kind: str, item_id: str) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            return
+        if workspace.select_item(kind, item_id, notify=True):
+            self._activate_spatial_workspace()
+            workspace.fit_selected()
+            self._sync_spatial_selection_status()
+
+    def _open_search_analysis(self, analysis_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(analysis_id):
+            return
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_analysis_selected()
+        self._activate_analysis_input_workspace()
+
+    def _open_search_diagnostic(self, sequence) -> None:
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return
+        self.show_problems_panel()
+        panel.search_var.set("")
+        panel.severity_var.set("All")
+        panel.category_var.set("All")
+        panel._populate()
+        for iid, issue in panel._issues_by_iid.items():
+            if issue.get("sequence") == sequence:
+                panel.tree.selection_set(iid)
+                panel.tree.focus(iid)
+                panel.tree.see(iid)
+                panel._show_selected_detail()
+                return
+
+    def _open_search_proofgraph_node(self, key: str) -> None:
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return
+        self._activate_proofgraph_workspace()
+        if viewer.select_node(key):
+            self.selection_status_var.set("Selected: ProofGraph node")
+
+    def _engineering_search_commands(self) -> list[PaletteCommand]:
+        commands: list[PaletteCommand] = []
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if isinstance(layout, dict):
+            rooms = layout.get("rooms", [])
+            if not isinstance(rooms, list):
+                rooms = []
+            for room in rooms[:250]:
+                if not isinstance(room, dict) or not room.get("id"):
+                    continue
+                room_id = str(room["id"])
+                name = str(room.get("name") or room_id)
+                classification = str(room.get("classification") or "")
+                commands.append(
+                    PaletteCommand(
+                        f"search.room.{room_id}",
+                        f"Room: {name}",
+                        "Object",
+                        lambda selected=room_id: self._open_search_spatial_item(
+                            "room",
+                            selected,
+                        ),
+                        keywords=(
+                            "room",
+                            room_id,
+                            classification,
+                            str(room.get("analysis_room_name") or ""),
+                        ),
+                    )
+                )
+
+            devices = layout.get("devices", [])
+            if not isinstance(devices, list):
+                devices = []
+            for device in devices[:250]:
+                if not isinstance(device, dict) or not device.get("id"):
+                    continue
+                device_id = str(device["id"])
+                name = str(device.get("name") or device_id)
+                device_type = str(device.get("type") or "device")
+                commands.append(
+                    PaletteCommand(
+                        f"search.device.{device_id}",
+                        f"Device: {name}",
+                        "Object",
+                        lambda selected=device_id: self._open_search_spatial_item(
+                            "device",
+                            selected,
+                        ),
+                        keywords=(
+                            "device",
+                            device_id,
+                            device_type,
+                            str(device.get("room_id") or ""),
+                        ),
+                    )
+                )
+
+        for analysis in self.project.analyses[:250]:
+            commands.append(
+                PaletteCommand(
+                    f"search.analysis.{analysis.id}",
+                    f"Analysis: {analysis.name}",
+                    "Analysis",
+                    lambda selected=analysis.id: self._open_search_analysis(selected),
+                    keywords=(
+                        analysis.id,
+                        analysis.kind,
+                        ANALYSIS_SPECS[analysis.kind].title,
+                    ),
+                )
+            )
+
+        panel = getattr(self, "problems_panel", None)
+        result = getattr(panel, "last_result", None)
+        issues = result.get("issues", []) if isinstance(result, dict) else []
+        if isinstance(issues, list):
+            for index, issue in enumerate(issues[:300]):
+                if not isinstance(issue, dict):
+                    continue
+                sequence = issue.get("sequence", index + 1)
+                rule = str(issue.get("rule") or "diagnostic")
+                element = issue.get("element")
+                if isinstance(element, dict):
+                    element_text = str(
+                        element.get("name")
+                        or element.get("id")
+                        or element.get("type")
+                        or "project"
+                    )
+                else:
+                    element_text = "project"
+                commands.append(
+                    PaletteCommand(
+                        f"search.diagnostic.{sequence}",
+                        f"Diagnostic: {rule} — {element_text}",
+                        "Diagnostic",
+                        lambda selected=sequence: self._open_search_diagnostic(selected),
+                        keywords=(
+                            str(issue.get("severity") or ""),
+                            str(issue.get("category") or ""),
+                            str(issue.get("message") or ""),
+                            element_text,
+                        ),
+                    )
+                )
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None:
+            for node in viewer.searchable_nodes()[:300]:
+                key = str(node.get("key") or "")
+                if not key:
+                    continue
+                label = str(node.get("label") or key)
+                node_type = str(node.get("type") or "node")
+                commands.append(
+                    PaletteCommand(
+                        f"search.proofgraph.{key}",
+                        f"{node_type.replace('_', ' ').title()}: {label}",
+                        "Evidence",
+                        lambda selected=key: self._open_search_proofgraph_node(
+                            selected
+                        ),
+                        keywords=(
+                            "proofgraph",
+                            "evidence",
+                            key,
+                            str(node.get("status") or ""),
+                        ),
+                    )
+                )
+
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

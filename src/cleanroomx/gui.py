@@ -1447,6 +1447,19 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (
+            ("design", "Design Workspace"),
+            ("simulation", "Simulation Workspace"),
+            ("verification", "Verification Workspace"),
+            ("evidence", "Evidence Workspace"),
+            ("reporting", "Reporting Workspace"),
+        ):
+            workspace_menu.add_command(
+                label=label,
+                command=lambda selected=value: self.activate_workspace_preset(selected),
+            )
+        view_menu.add_cascade(label="Workspace Presets", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2387,6 +2400,46 @@ class CleanroomXApp:
             "comfortable" if self.density_var.get() == "compact" else "compact"
         )
 
+    def activate_workspace_preset(self, value: str) -> None:
+        """Apply a deterministic shell layout for a major engineering workflow."""
+        preset = str(value or "").strip().casefold()
+        if preset not in {"design", "simulation", "verification", "evidence", "reporting"}:
+            raise ValueError(f"unsupported workspace preset: {value!r}")
+
+        self._restore_focus_workspace_snapshot(status=False)
+        workspace = getattr(self, "spatial_workspace", None)
+
+        # Presets only rearrange presentation surfaces.  They never mutate the
+        # project model, solver inputs, diagnostics, verification, or evidence.
+        self.navigator_panel_visible_var.set(preset != "reporting")
+        self.output_panel_visible_var.set(preset != "design")
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        if workspace is not None:
+            workspace.set_inspector_visible(preset == "design")
+
+        if preset == "design":
+            self._activate_spatial_workspace("split")
+        elif preset == "simulation":
+            self._activate_simulation_workspace()
+            if self._paned_contains(self.workspace_panes, self.output_panel):
+                self.output_notebook.select(self.result_text.master)
+        elif preset == "verification":
+            self._activate_dashboard_workspace()
+            if self._paned_contains(self.workspace_panes, self.output_panel):
+                self.output_notebook.select(self.problems_panel)
+        elif preset == "evidence":
+            self._activate_proofgraph_workspace()
+            if self._paned_contains(self.workspace_panes, self.output_panel):
+                self.output_notebook.select(self.evidence_text.master)
+        else:
+            self._activate_dashboard_workspace()
+            if self._paned_contains(self.workspace_panes, self.output_panel):
+                self.output_notebook.select(self.report_text.master)
+
+        self.root.after_idle(self._apply_saved_panel_sashes)
+        self.status_var.set(f"Workspace preset: {preset.title()}")
+
     def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
         snapshot = getattr(self, "_focus_workspace_snapshot", None)
         if snapshot is None:
@@ -3038,6 +3091,41 @@ class CleanroomXApp:
                 "Design",
                 lambda: self.spatial_workspace.fit_views(),
                 keywords=("zoom", "model"),
+            ),
+            PaletteCommand(
+                "workspace.preset.design",
+                "Switch to Design Workspace",
+                "Window",
+                lambda: self.activate_workspace_preset("design"),
+                keywords=("workspace", "layout", "design", "canvas"),
+            ),
+            PaletteCommand(
+                "workspace.preset.simulation",
+                "Switch to Simulation Workspace",
+                "Window",
+                lambda: self.activate_workspace_preset("simulation"),
+                keywords=("workspace", "layout", "solver", "results"),
+            ),
+            PaletteCommand(
+                "workspace.preset.verification",
+                "Switch to Verification Workspace",
+                "Window",
+                lambda: self.activate_workspace_preset("verification"),
+                keywords=("workspace", "layout", "problems", "diagnostics"),
+            ),
+            PaletteCommand(
+                "workspace.preset.evidence",
+                "Switch to Evidence Workspace",
+                "Window",
+                lambda: self.activate_workspace_preset("evidence"),
+                keywords=("workspace", "layout", "proofgraph", "traceability"),
+            ),
+            PaletteCommand(
+                "workspace.preset.reporting",
+                "Switch to Reporting Workspace",
+                "Window",
+                lambda: self.activate_workspace_preset("reporting"),
+                keywords=("workspace", "layout", "report", "dossier"),
             ),
             PaletteCommand(
                 "workspace.focus",

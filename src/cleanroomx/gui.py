@@ -1377,6 +1377,11 @@ class CleanroomXApp:
         menubar.add_cascade(label="Design", menu=design_menu)
 
         analyze_menu = tk.Menu(menubar, tearoff=False)
+        analyze_menu.add_command(
+            label="Simulation Workspace",
+            command=self._activate_simulation_workspace,
+        )
+        analyze_menu.add_separator()
         analyze_menu.add_command(label="Validate Input", command=self.validate_current)
         analyze_menu.add_command(
             label="Run Analysis", accelerator="F5", command=self.run_current
@@ -1387,6 +1392,15 @@ class CleanroomXApp:
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
+        verify_menu.add_command(
+            label="Verification Workspace",
+            command=self._activate_verification_workspace,
+        )
+        verify_menu.add_command(
+            label="Problems / Diagnostics",
+            command=self.show_problems_panel,
+        )
+        verify_menu.add_separator()
         verify_menu.add_command(
             label="Verify Project Requirements",
             command=self.run_project_requirements_verification,
@@ -1411,6 +1425,26 @@ class CleanroomXApp:
         )
         menubar.add_cascade(label="Verify", menu=verify_menu)
 
+        evidence_menu = tk.Menu(menubar, tearoff=False)
+        evidence_menu.add_command(
+            label="Evidence Workspace",
+            command=self._activate_evidence_workspace,
+        )
+        evidence_menu.add_command(
+            label="ProofGraph Explorer",
+            command=self._activate_proofgraph_workspace,
+        )
+        evidence_menu.add_separator()
+        evidence_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
+        evidence_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
+        menubar.add_cascade(label="Evidence", menu=evidence_menu)
+
         bim_menu = tk.Menu(menubar, tearoff=False)
         bim_menu.add_command(
             label="Import IFC Spatial Layout...",
@@ -1427,6 +1461,11 @@ class CleanroomXApp:
         menubar.add_cascade(label="BIM", menu=bim_menu)
 
         report_menu = tk.Menu(menubar, tearoff=False)
+        report_menu.add_command(
+            label="Reporting Workspace",
+            command=self._activate_reporting_workspace,
+        )
+        report_menu.add_separator()
         report_menu.add_command(
             label="Export Project Engineering Dossier...",
             command=self.export_project_engineering_dossier,

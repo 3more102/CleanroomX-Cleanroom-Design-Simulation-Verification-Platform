@@ -1265,6 +1265,8 @@ class CleanroomXApp:
         self.shell_model_var = tk.StringVar(value="MODEL NOT EVALUATED")
         self.shell_problems_var = tk.StringVar(value="PROBLEMS —")
         self.shell_verification_var = tk.StringVar(value="VERIFY UNKNOWN")
+        self.analysis_context_var = tk.StringVar(value="No analysis selected")
+        self.run_state_var = tk.StringVar(value="IDLE")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1904,6 +1906,48 @@ class CleanroomXApp:
 
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
+
+        simulationbar = ttk.Frame(
+            self.input_tab,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 5),
+        )
+        simulationbar.pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            simulationbar,
+            text="ANALYSIS / SIMULATION",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Label(
+            simulationbar,
+            textvariable=self.analysis_context_var,
+            style="CX.Muted.TLabel",
+        ).pack(side="left", fill="x", expand=True)
+        self._analysis_run_state_label = ttk.Label(
+            simulationbar,
+            textvariable=self.run_state_var,
+            style="CX.Status.unknown.TLabel",
+        )
+        self._analysis_run_state_label.pack(side="right", padx=(6, 0))
+        ttk.Button(
+            simulationbar,
+            text="Run",
+            style="CX.Primary.TButton",
+            command=self.run_current,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            simulationbar,
+            text="Validate",
+            style="CX.Compact.TButton",
+            command=self.validate_current,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            simulationbar,
+            text="History",
+            style="CX.Compact.TButton",
+            command=self.show_run_history,
+        ).pack(side="right", padx=2)
+
         input_notebook = ttk.Notebook(self.input_tab)
         input_notebook.pack(fill="both", expand=True)
 
@@ -4561,7 +4605,11 @@ class CleanroomXApp:
             json.dumps(analysis.input, indent=2, ensure_ascii=False, sort_keys=False),
         )
         self.input_text.edit_modified(False)
-        self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
+        spec = ANALYSIS_SPECS[analysis.kind]
+        self.analysis_context_var.set(
+            f"{analysis.name} · {spec.title} · {analysis.kind}"
+        )
+        self.status_var.set(f"{analysis.name} — {spec.title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
         if hasattr(self, "spatial_workspace"):
@@ -6131,11 +6179,23 @@ class CleanroomXApp:
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
 
+    def _set_analysis_run_state(self, text: str, status: str) -> None:
+        self.run_state_var.set(text)
+        label = getattr(self, "_analysis_run_state_label", None)
+        if label is not None:
+            label.configure(
+                style=f"CX.Status.{canonical_status(status)}.TLabel"
+            )
+
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        if running:
+            self._set_analysis_run_state("RUNNING", "running")
+        elif self.run_state_var.get() == "RUNNING":
+            self._set_analysis_run_state("IDLE", "unknown")
 
     def _poll_worker(self) -> None:
         try:
@@ -6146,10 +6206,12 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self._set_analysis_run_state("ABANDONED", "warning")
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._set_analysis_run_state("FAILED", "fail")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6193,6 +6255,11 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    run_semantic = canonical_status(run.status)
+                    self._set_analysis_run_state(
+                        f"COMPLETE · {str(run.status).upper()}",
+                        run_semantic,
+                    )
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"

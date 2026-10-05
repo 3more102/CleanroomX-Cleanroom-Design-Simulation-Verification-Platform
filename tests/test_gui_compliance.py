@@ -255,5 +255,5 @@ def test_navigator_and_command_palette_open_compliance_workspace(root, tmp_path)
     assert app.workspace_status_var.get() == "Workspace: Compliance Rule Packs"
     assert app.selection_status_var.get() == "Selected: Compliance Rule Packs"
 
-    commands = {item.command_id: item for item in app._command_palette_commands()}
+    commands = {item.id: item for item in app._command_palette_commands()}
     assert "compliance.open" in commands

@@ -472,6 +472,8 @@ def test_invalid_3d_projection_is_rejected(app):
 
 def test_shell_panels_collapse_and_restore_without_mutating_project(app):
     project_before = copy.deepcopy(app.project.to_dict())
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
 
     assert app._paned_contains(app.main_panes, app.navigator_panel)
     assert app._paned_contains(app.workspace_panes, app.output_panel)
@@ -503,6 +505,8 @@ def test_shell_panels_collapse_and_restore_without_mutating_project(app):
 
 
 def test_reset_panel_layout_restores_shell_panels(app):
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
     app.toggle_navigator_panel()
     app.toggle_output_panel()
     app.root.update()
@@ -555,6 +559,8 @@ def test_properties_action_reveals_hidden_design_inspector(app):
 
 def test_reset_panel_layout_restores_design_inspector_too(app):
     workspace = app.spatial_workspace
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
     workspace.set_inspector_visible(False)
     app.toggle_navigator_panel()
     app.toggle_output_panel()

@@ -6,6 +6,11 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_panels import (
+    _diagnostic_detail_lines,
+    diagnostic_filter_options,
+    diagnostic_matches_filters,
+)
 from .gui_theme import attach_tooltip, status_style_name
 
 
@@ -74,6 +79,7 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
+        self.target_type_var = tk.StringVar(value="All")
         self.state_var = tk.StringVar(value="NOT CHECKED")
         self.error_var = tk.StringVar(value="0")
         self.warning_var = tk.StringVar(value="0")
@@ -100,9 +106,9 @@ class DiagnosticsWorkspace(ttk.Frame):
         )
 
         filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
-        filters.pack(fill="x", pady=(0, 8))
+        filters.pack(fill="x", pady=(0, 4))
         ttk.Label(filters, text="Search").pack(side="left")
-        ttk.Entry(filters, textvariable=self.search_var, width=28).pack(
+        ttk.Entry(filters, textvariable=self.search_var, width=24).pack(
             side="left", padx=(4, 8)
         )
         ttk.Label(filters, text="Severity").pack(side="left")
@@ -113,51 +119,68 @@ class DiagnosticsWorkspace(ttk.Frame):
             state="readonly",
             width=10,
         ).pack(side="left", padx=(4, 8))
-        ttk.Label(filters, text="Category").pack(side="left")
+        ttk.Label(filters, text="Domain").pack(side="left")
         self.category_combo = ttk.Combobox(
             filters,
             textvariable=self.category_var,
             values=("All",),
             state="readonly",
-            width=18,
+            width=16,
         )
         self.category_combo.pack(side="left", padx=(4, 8))
-        ttk.Button(
+        ttk.Label(filters, text="Target").pack(side="left")
+        self.target_combo = ttk.Combobox(
             filters,
+            textvariable=self.target_type_var,
+            values=("All",),
+            state="readonly",
+            width=16,
+        )
+        self.target_combo.pack(side="left", padx=(4, 0))
+
+        actions = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 4))
+        actions.pack(fill="x", pady=(0, 8))
+        ttk.Button(
+            actions,
             text="Refresh",
             style="CX.Compact.TButton",
             command=self._refresh_requested,
         ).pack(side="left", padx=2)
         ttk.Button(
-            filters,
+            actions,
             text="Previous",
             style="CX.Compact.TButton",
             command=lambda: self._select_relative(-1),
         ).pack(side="left", padx=2)
         ttk.Button(
-            filters,
+            actions,
             text="Next",
             style="CX.Compact.TButton",
             command=lambda: self._select_relative(1),
         ).pack(side="left", padx=2)
         ttk.Button(
-            filters,
+            actions,
             text="Locate",
             style="CX.Primary.TButton",
             command=self._locate_selected,
         ).pack(side="left", padx=2)
         ttk.Button(
-            filters,
+            actions,
             text="Copy",
             style="CX.Compact.TButton",
             command=self._copy_selected,
         ).pack(side="left", padx=2)
         ttk.Button(
-            filters,
+            actions,
             text="Export…",
             style="CX.Compact.TButton",
             command=self._export_requested,
         ).pack(side="left", padx=2)
+        ttk.Label(
+            actions,
+            text="Alt+↑/↓ review · Enter locate · Ctrl+C copy",
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="right")
 
         counters = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 6))
         counters.pack(fill="x", pady=(0, 8))
@@ -206,6 +229,7 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.tree.bind("<Return>", self._locate_selected)
         self.tree.bind("<Alt-Up>", lambda _event: self._select_relative(-1))
         self.tree.bind("<Alt-Down>", lambda _event: self._select_relative(1))
+        self.tree.bind("<Control-c>", self._copy_selected_event)
 
         self.detail_title_var = tk.StringVar(value="No diagnostic selected")
         ttk.Label(
@@ -224,6 +248,7 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
         self.category_var.trace_add("write", lambda *_: self._populate())
+        self.target_type_var.trace_add("write", lambda *_: self._populate())
 
     @staticmethod
     def _counter(
@@ -290,6 +315,10 @@ class DiagnosticsWorkspace(ttk.Frame):
             )
         return "break"
 
+    def _copy_selected_event(self, _event=None):
+        self._copy_selected()
+        return "break"
+
     def _copy_selected(self) -> None:
         issue = self.selected_issue()
         if issue is None:
@@ -308,37 +337,17 @@ class DiagnosticsWorkspace(ttk.Frame):
 
     def _filtered_issues(self) -> list[dict[str, Any]]:
         state = diagnostics_workspace_projection(self._result)
-        severity = self.severity_var.get().strip().casefold()
-        category = self.category_var.get().strip().casefold()
-        query = self.search_var.get().strip().casefold()
-        visible: list[dict[str, Any]] = []
-        for issue in state["issues"]:
-            issue_severity = str(issue.get("severity") or "info").casefold()
-            issue_category = str(issue.get("category") or "general").casefold()
-            if severity != "all" and issue_severity != severity:
-                continue
-            if category != "all" and issue_category != category:
-                continue
-            if query:
-                haystack = " ".join(
-                    (
-                        str(issue.get("rule") or ""),
-                        str(issue.get("category") or ""),
-                        str(issue.get("message") or ""),
-                        str(issue.get("suggested_action") or ""),
-                        _element_text(issue),
-                        json.dumps(
-                            issue.get("details") or {},
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                ).casefold()
-                if query not in haystack:
-                    continue
-            visible.append(issue)
-        return visible
+        return [
+            issue
+            for issue in state["issues"]
+            if diagnostic_matches_filters(
+                issue,
+                severity=self.severity_var.get(),
+                category=self.category_var.get(),
+                target_type=self.target_type_var.get(),
+                query=self.search_var.get(),
+            )
+        ]
 
     def _populate(self) -> None:
         selected = self.selected_issue()
@@ -365,7 +374,8 @@ class DiagnosticsWorkspace(ttk.Frame):
                 tags=(f"severity_{severity}",),
             )
             self._issues_by_iid[iid] = issue
-        self.visible_var.set(f"{len(visible)} visible")
+        total = len(diagnostics_workspace_projection(self._result)["issues"])
+        self.visible_var.set(f"{len(visible)} / {total} visible")
 
         if selected_sequence is not None:
             for iid, issue in self._issues_by_iid.items():
@@ -393,31 +403,7 @@ class DiagnosticsWorkspace(ttk.Frame):
             severity = str(issue.get("severity") or "info").upper()
             rule = str(issue.get("rule") or "UNSPECIFIED")
             self.detail_title_var.set(f"{severity} · {rule}")
-            lines = [
-                str(issue.get("message") or "No diagnostic description supplied."),
-                "",
-                f"Affected object: {_element_text(issue)}",
-                f"Engineering domain: {issue.get('category') or 'general'}",
-            ]
-            action = str(issue.get("suggested_action") or "").strip()
-            if action:
-                lines.extend(("", "SUGGESTED RECOVERY", action))
-            details = issue.get("details")
-            if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "TECHNICAL DETAILS",
-                        json.dumps(
-                            details,
-                            indent=2,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                )
-            self.detail.insert("1.0", "\n".join(lines))
+            self.detail.insert("1.0", "\n".join(_diagnostic_detail_lines(issue)))
         self.detail.configure(state="disabled")
 
     def apply_theme(self, palette: dict[str, str]) -> None:
@@ -459,8 +445,12 @@ class DiagnosticsWorkspace(ttk.Frame):
         self.warning_var.set(str(state["warning_count"]))
         self.info_var.set(str(state["info_count"]))
 
-        categories = ("All",) + tuple(state["categories"])
+        categories = diagnostic_filter_options(state["issues"], "category")
+        targets = diagnostic_filter_options(state["issues"], "target_type")
         self.category_combo.configure(values=categories)
+        self.target_combo.configure(values=targets)
         if self.category_var.get() not in categories:
             self.category_var.set("All")
+        if self.target_type_var.get() not in targets:
+            self.target_type_var.set("All")
         self._populate()

@@ -36,8 +36,11 @@ jobs:
         run: >-
           python -m pytest -q
           tests/test_production_acceptance.py
+          tests/test_production_acceptance_contract.py
           tests/test_golden_reference_project.py
           tests/test_golden_facility_reference.py
+          tests/test_proofgraph_change_impact.py
+          tests/test_proofgraph_change_impact_cli.py
           tests/test_fault_injection_persistence.py
           tests/test_packaging_contract.py
           tests/test_windows_installer_packaging.py

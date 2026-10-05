@@ -129,6 +129,7 @@ def test_engineering_output_workspace_exposes_first_class_panels(app):
         "Console",
         "Evidence",
     ]
+    assert "Simulation" in tabs
     assert "Results" in tabs
     assert "Report" in tabs
 
@@ -190,12 +191,16 @@ def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     assert app.notebook.select() == str(app.input_tab)
 
 
-def test_completed_run_selects_results_in_bottom_workspace(app):
+def test_completed_run_selects_readable_simulation_summary(app):
     run = app.smoke_run_active()
     app.root.update()
 
     assert run.result
-    assert app.output_notebook.select() == str(app.result_text.master)
+    assert app.output_notebook.select() == str(app.simulation_panel)
+    assert app.simulation_panel.status_var.get() == str(run.status).upper()
+    assert app.simulation_panel.title_var.get() == run.title
+    assert app.simulation_panel.tree.get_children()
+    assert app.result_text.get("1.0", "end").strip()
     assert app.problems_panel.last_result is not None
     assert app.analysis_run_state_var.get() != "IDLE"
 

@@ -225,4 +225,10 @@ def test_failed_migrated_save_as_keeps_source_protection(tmp_path, monkeypatch):
     assert app.project_path == source
     assert app._migration_source_path == source.resolve()
     assert app._has_unsaved_changes() is True
-    assert errors == [("Save failed", "disk full")]
+    assert len(errors) == 1
+    title, message = errors[0]
+    assert title == "Save failed"
+    assert "Save project as did not complete." in message
+    assert "disk full" in message
+    assert "Error reference: CX-" in message
+    assert "Technical log:" in message

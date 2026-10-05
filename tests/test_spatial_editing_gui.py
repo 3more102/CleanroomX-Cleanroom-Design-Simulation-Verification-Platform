@@ -129,6 +129,53 @@ def test_editing_toolbar_controls_remain_visible(app, size):
 
 
 
+def test_spatial_delete_requires_confirmation_and_remains_undoable(app, monkeypatch):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    linked_ids = {
+        device["id"]
+        for device in workspace.layout["devices"]
+        if device.get("room_id") == room["id"]
+    }
+    before = copy.deepcopy(workspace.layout)
+    prompts: list[tuple[str, str]] = []
+
+    workspace.select_item("room", room["id"], notify=True)
+
+    def reject(title, prompt, **_kwargs):
+        prompts.append((title, prompt))
+        return False
+
+    monkeypatch.setattr("cleanroomx.spatial.messagebox.askyesno", reject)
+    assert workspace.delete_selected() is False
+    assert workspace.layout == before
+    assert workspace.selected == _Hit("room", room["id"])
+    assert prompts and "Delete room" in prompts[-1][0]
+    if linked_ids:
+        assert str(len(linked_ids)) in prompts[-1][1]
+
+    monkeypatch.setattr(
+        "cleanroomx.spatial.messagebox.askyesno",
+        lambda *_args, **_kwargs: True,
+    )
+    assert workspace.delete_selected() is True
+    app.root.update()
+
+    assert all(candidate["id"] != room["id"] for candidate in workspace.layout["rooms"])
+    assert linked_ids.isdisjoint(
+        {device["id"] for device in workspace.layout["devices"]}
+    )
+    assert workspace.selected is None
+    assert app.selection_status_var.get() == "Selected: —"
+
+    assert app.undo_project_edit() is True
+    app.root.update()
+    assert any(candidate["id"] == room["id"] for candidate in workspace.layout["rooms"])
+    assert linked_ids.issubset(
+        {device["id"] for device in workspace.layout["devices"]}
+    )
+
+
 def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     workspace = app.spatial_workspace
 

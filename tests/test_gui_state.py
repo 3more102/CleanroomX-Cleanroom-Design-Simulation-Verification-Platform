@@ -4,6 +4,7 @@ import json
 
 from cleanroomx.gui_state import (
     GUI_LAYOUT_STATE_VERSION,
+    GUI_WORKSPACE_PROFILES,
     clamp_window_size_to_display,
     load_gui_layout_state,
     normalize_gui_layout_state,
@@ -14,23 +15,27 @@ from cleanroomx.gui_state import (
 def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
     path = tmp_path / "gui-layout.json"
     state = load_gui_layout_state(path)
-    assert state == {
-        "version": GUI_LAYOUT_STATE_VERSION,
-        "navigator_visible": True,
-        "output_visible": True,
-        "inspector_visible": True,
-        "theme": "light",
-        "recent_projects": [],
-        "window_width": 1440,
-        "window_height": 900,
-        "navigator_fraction": 0.20,
-        "output_fraction": 0.72,
-        "inspector_fraction": 0.78,
-    }
+
+    assert state["version"] == GUI_LAYOUT_STATE_VERSION
+    assert state["navigator_visible"] is True
+    assert state["output_visible"] is True
+    assert state["inspector_visible"] is True
+    assert state["theme"] == "light"
+    assert state["recent_projects"] == []
+    assert state["window_width"] == 1440
+    assert state["window_height"] == 900
+    assert state["navigator_fraction"] == 0.20
+    assert state["output_fraction"] == 0.72
+    assert state["inspector_fraction"] == 0.78
+    assert state["active_workspace"] == "start"
+    assert tuple(state["workspace_layouts"]) == GUI_WORKSPACE_PROFILES
+    assert state["workspace_layouts"]["design"]["output_visible"] is False
+    assert state["workspace_layouts"]["simulation"]["inspector_visible"] is False
+    assert state["workspace_layouts"]["verification"]["output_fraction"] == 0.58
+    assert state["workspace_layouts"]["reporting"]["navigator_visible"] is False
 
     path.write_text("{broken", encoding="utf-8")
     assert load_gui_layout_state(path) == state
-
 
 def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     state = normalize_gui_layout_state(
@@ -53,6 +58,18 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "navigator_fraction": 0.31,
             "output_fraction": 2.0,
             "inspector_fraction": float("nan"),
+            "active_workspace": "unknown",
+            "workspace_layouts": {
+                "verification": {
+                    "navigator_visible": False,
+                    "output_visible": "bad",
+                    "inspector_visible": False,
+                    "navigator_fraction": 0.27,
+                    "output_fraction": 4.0,
+                    "inspector_fraction": 0.69,
+                },
+                "unknown": {"navigator_visible": False},
+            },
             "unexpected": "discard me",
         }
     )
@@ -71,6 +88,16 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["navigator_fraction"] == 0.31
     assert state["output_fraction"] == 0.72
     assert state["inspector_fraction"] == 0.78
+    assert state["active_workspace"] == "start"
+    assert tuple(state["workspace_layouts"]) == GUI_WORKSPACE_PROFILES
+    verification = state["workspace_layouts"]["verification"]
+    assert verification["navigator_visible"] is False
+    assert verification["output_visible"] is True
+    assert verification["inspector_visible"] is False
+    assert verification["navigator_fraction"] == 0.27
+    assert verification["output_fraction"] == 0.58
+    assert verification["inspector_fraction"] == 0.69
+    assert "unknown" not in state["workspace_layouts"]
     assert "unexpected" not in state
 
 
@@ -92,6 +119,17 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "navigator_fraction": 0.25,
             "output_fraction": 0.67,
             "inspector_fraction": 0.81,
+            "active_workspace": "evidence",
+            "workspace_layouts": {
+                "evidence": {
+                    "navigator_visible": False,
+                    "output_visible": True,
+                    "inspector_visible": False,
+                    "navigator_fraction": 0.24,
+                    "output_fraction": 0.61,
+                    "inspector_fraction": 0.79,
+                }
+            },
         },
     )
 
@@ -107,6 +145,9 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     ]
     assert payload["window_width"] == 1680
     assert payload["window_height"] == 1050
+    assert payload["active_workspace"] == "evidence"
+    assert payload["workspace_layouts"]["evidence"]["navigator_visible"] is False
+    assert payload["workspace_layouts"]["evidence"]["output_fraction"] == 0.61
     assert load_gui_layout_state(path) == payload
 
 
@@ -127,3 +168,62 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+
+def test_gui_layout_state_migrates_legacy_global_layout_into_start_workspace():
+    state = normalize_gui_layout_state(
+        {
+            "version": 4,
+            "navigator_visible": False,
+            "output_visible": True,
+            "inspector_visible": False,
+            "navigator_fraction": 0.29,
+            "output_fraction": 0.64,
+            "inspector_fraction": 0.83,
+        }
+    )
+
+    start = state["workspace_layouts"]["start"]
+    assert start == {
+        "navigator_visible": False,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.29,
+        "output_fraction": 0.64,
+        "inspector_fraction": 0.83,
+    }
+    assert state["active_workspace"] == "start"
+
+
+def test_gui_layout_state_keeps_workspace_layouts_independent():
+    state = normalize_gui_layout_state(
+        {
+            "active_workspace": "verification",
+            "workspace_layouts": {
+                "design": {
+                    "navigator_visible": True,
+                    "output_visible": False,
+                    "inspector_visible": True,
+                    "navigator_fraction": 0.19,
+                    "output_fraction": 0.75,
+                    "inspector_fraction": 0.80,
+                },
+                "verification": {
+                    "navigator_visible": False,
+                    "output_visible": True,
+                    "inspector_visible": False,
+                    "navigator_fraction": 0.28,
+                    "output_fraction": 0.62,
+                    "inspector_fraction": 0.71,
+                },
+            },
+        }
+    )
+
+    assert state["active_workspace"] == "verification"
+    assert state["workspace_layouts"]["design"]["navigator_visible"] is True
+    assert state["workspace_layouts"]["design"]["output_visible"] is False
+    assert state["workspace_layouts"]["verification"]["navigator_visible"] is False
+    assert state["workspace_layouts"]["verification"]["output_visible"] is True
+    assert state["workspace_layouts"]["verification"]["output_fraction"] == 0.62

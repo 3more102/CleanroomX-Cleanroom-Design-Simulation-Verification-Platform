@@ -2337,6 +2337,11 @@ class CleanroomXApp:
             apply_panel_theme = getattr(problems_panel, "apply_theme", None)
             if callable(apply_panel_theme):
                 apply_panel_theme(self.theme_var.get())
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            apply_dashboard_theme = getattr(dashboard, "apply_theme", None)
+            if callable(apply_dashboard_theme):
+                apply_dashboard_theme(self.theme_var.get())
         proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
         if proofgraph_viewer is not None:
             text_widgets.append(getattr(proofgraph_viewer, "detail", None))

@@ -37,6 +37,81 @@ from cleanroomx.run_history import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+
+def test_engineering_verification_panel_failures_preserve_incident_references(monkeypatch):
+    class ProblemsPanel:
+        def refresh(self):
+            return {"summary": {"status": "unavailable"}}
+
+    class Viewer:
+        def __init__(self):
+            self.documents = None
+
+        def set_documents(self, documents):
+            self.documents = documents
+
+    class Report:
+        def __init__(self, operation):
+            self.operation = operation
+            self.reference = (
+                "CX-CURRENCY" if "currency" in operation.lower() else "CX-EVIDENCE"
+            )
+
+        def user_message(self):
+            return (
+                f"{self.operation} did not complete.\n\n"
+                f"Error reference: {self.reference}"
+            )
+
+    recorded = []
+
+    def record(operation, exc):
+        recorded.append((operation, exc, exc.__traceback__ is not None))
+        return Report(operation)
+
+    def fail_currency(*args, **kwargs):
+        raise RuntimeError("synthetic currency refresh failure")
+
+    def fail_evidence(*args, **kwargs):
+        raise RuntimeError("synthetic evidence refresh failure")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.problems_panel = ProblemsPanel()
+    app.project = ProjectDocument(name="Diagnostics")
+    app.project_path = None
+    app.last_run = None
+    app._base_dir = lambda: None
+    app.verification_text = object()
+    app.evidence_text = object()
+    app.console_text = object()
+    app.proofgraph_viewer = Viewer()
+    rendered = {}
+    app._set_text = lambda widget, value: rendered.__setitem__(widget, value)
+
+    monkeypatch.setattr(
+        gui_module,
+        "assess_project_verification_currency",
+        fail_currency,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "verification_run_history_records",
+        fail_evidence,
+    )
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+
+    result = app._refresh_engineering_panels()
+
+    assert result == {"summary": {"status": "unavailable"}}
+    assert [item[0] for item in recorded] == [
+        "Refresh verification currency",
+        "Refresh verification evidence",
+    ]
+    assert all(item[2] is True for item in recorded)
+    assert "CX-CURRENCY" in rendered[app.verification_text]
+    assert "CX-EVIDENCE" in rendered[app.evidence_text]
+    assert app.proofgraph_viewer.documents == []
+
 def test_unit_hint_recognizes_engineering_units():
     assert unit_hint("$.fan_curve.points[0].airflow_m3_h") == "m³/h"
     assert unit_hint("$.air_density_kg_m3") == "kg/m³"

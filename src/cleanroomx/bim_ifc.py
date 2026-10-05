@@ -1532,6 +1532,30 @@ def _file_sha256(path: Path) -> str:
     return digest
 
 
+def _query_ifc_device_entities(
+    model: Any,
+    ifc_class: str,
+    *,
+    include_subtypes: bool | None = None,
+) -> Iterable[Any]:
+    """Query a device class while preserving explicit older-schema compatibility."""
+    try:
+        if include_subtypes is None:
+            return model.by_type(ifc_class)
+        return model.by_type(ifc_class, include_subtypes=include_subtypes)
+    except RuntimeError as exc:
+        lowered = str(exc).lower()
+        if "not found in schema" in lowered and ifc_class.lower() in lowered:
+            return ()
+        raise IfcImportError(
+            f"unable to enumerate IFC device entities for {ifc_class!r}"
+        ) from exc
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to enumerate IFC device entities for {ifc_class!r}"
+        ) from exc
+
+
 def extract_ifc_semantics(
     path: str | Path,
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -1647,16 +1671,13 @@ def extract_ifc_semantics(
 
         seen = {item["global_id"] for item in records}
         for ifc_class in _IFC_DEVICE_TYPES:
-            try:
-                if ifc_class == "IfcFlowTerminal":
-                    # IfcOpenShell includes subtypes by default; keep this generic query exact.
-                    entities = model.by_type(ifc_class, include_subtypes=False)
-                else:
-                    entities = model.by_type(ifc_class)
-            except Exception as exc:
-                raise IfcImportError(
-                    f"unable to enumerate IFC device entities for {ifc_class!r}"
-                ) from exc
+            entities = _query_ifc_device_entities(
+                model,
+                ifc_class,
+                include_subtypes=(
+                    False if ifc_class == "IfcFlowTerminal" else None
+                ),
+            )
             for entity in entities:
                 global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
                 if not global_id or global_id in seen:

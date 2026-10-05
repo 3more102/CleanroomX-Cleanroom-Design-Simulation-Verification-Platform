@@ -97,10 +97,7 @@ def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
             )
         )
 
-    details = _engineering_detail_pairs(
-        issue.get("details"),
-        include_collection_counts=True,
-    )
+    details = _engineering_detail_pairs(issue.get("details"))
     if details:
         lines.extend(("", "ENGINEERING DETAILS"))
         for label, rendered in details[:16]:

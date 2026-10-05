@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PINNED_ACTION_RE = re.compile(r"^\s*-?\s*uses:\s*[^@\s]+@([0-9a-f]{40})(?:\s|#|$)")
 
 
 def _text(relative: str) -> str:
@@ -118,8 +120,27 @@ def test_production_acceptance_workflow_executes_and_publishes_its_own_evidence(
     assert "python scripts/production_acceptance.py --output production-acceptance.json" in workflow
     assert "tests/test_production_acceptance.py" in workflow
     assert "tests/test_production_acceptance_contract.py" in workflow
+    assert "tests/test_proofgraph_change_impact.py" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
     assert "scripts/security_static_gate.py" in workflow
     assert "Upload production acceptance evidence" in workflow
     assert "name: CleanroomX-production-acceptance" in workflow
     assert "path: production-acceptance.json" in workflow
     assert "if-no-files-found: error" in workflow
+
+
+def test_all_workflow_action_references_are_immutable() -> None:
+    workflow_dir = ROOT / ".github" / "workflows"
+    workflows = sorted((*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")))
+    assert workflows
+
+    for workflow_path in workflows:
+        for line_number, line in enumerate(
+            workflow_path.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if "uses:" not in line.strip():
+                continue
+            assert PINNED_ACTION_RE.match(line), (
+                f"unpinned GitHub Action in {workflow_path.relative_to(ROOT)}:"
+                f"{line_number}: {line.strip()}"
+            )

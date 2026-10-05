@@ -5343,6 +5343,268 @@ class CleanroomXApp:
         visit("")
         self._navigator_tree_snapshot = snapshot
 
+    def _navigator_recent_category(self, item_id: str) -> str:
+        if item_id.startswith("room:"):
+            return "Room"
+        if item_id.startswith("device:"):
+            return "Device"
+        if item_id.startswith("nav-"):
+            return "Workspace"
+        return "Analysis"
+
+    def _navigator_item_is_actionable(self, item_id: str) -> bool:
+        if item_id.startswith(("room:", "device:")):
+            return True
+        if item_id in {"nav-proofgraph", "nav-evidence"}:
+            return True
+        return bool(item_id and not item_id.startswith("nav-"))
+
+    def _reset_navigator_recent_for_project(self) -> None:
+        token = id(self.project)
+        if token == getattr(self, "_navigator_recent_project_token", None):
+            return
+        self._navigator_recent_project_token = token
+        self._navigator_recent_ids = []
+        self._navigator_recent_display_to_id = {}
+        recent_var = getattr(self, "navigator_recent_var", None)
+        if recent_var is not None:
+            recent_var.set("")
+
+    def _refresh_navigator_recent_picker(self) -> None:
+        self._reset_navigator_recent_for_project()
+        tree = getattr(self, "analysis_tree", None)
+        picker = getattr(self, "navigator_recent_picker", None)
+        if tree is None or picker is None:
+            return
+        recent_ids = [
+            item_id
+            for item_id in getattr(self, "_navigator_recent_ids", [])
+            if tree.exists(item_id) and self._navigator_item_is_actionable(item_id)
+        ][:8]
+        self._navigator_recent_ids = recent_ids
+
+        display_to_id: dict[str, str] = {}
+        displays: list[str] = []
+        for item_id in recent_ids:
+            label = str(tree.item(item_id, "text") or item_id)
+            display = f"{label} · {self._navigator_recent_category(item_id)}"
+            if display in display_to_id:
+                display = f"{display} · {item_id}"
+            display_to_id[display] = item_id
+            displays.append(display)
+        self._navigator_recent_display_to_id = display_to_id
+        picker.configure(values=tuple(displays))
+        if self.navigator_recent_var.get() not in display_to_id:
+            self.navigator_recent_var.set("")
+
+    def _remember_navigator_item(self, item_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if (
+            tree is None
+            or not item_id
+            or not tree.exists(item_id)
+            or not self._navigator_item_is_actionable(item_id)
+        ):
+            return
+        self._reset_navigator_recent_for_project()
+        recent_ids = list(getattr(self, "_navigator_recent_ids", []))
+        if item_id in recent_ids:
+            recent_ids.remove(item_id)
+        recent_ids.insert(0, item_id)
+        self._navigator_recent_ids = recent_ids[:8]
+        self._refresh_navigator_recent_picker()
+
+    def clear_navigator_recent(self) -> None:
+        self._navigator_recent_ids = []
+        self._navigator_recent_display_to_id = {}
+        self.navigator_recent_var.set("")
+        picker = getattr(self, "navigator_recent_picker", None)
+        if picker is not None:
+            picker.configure(values=())
+        self.status_var.set("Recent navigator selections cleared")
+
+    def _open_navigator_item(self, item_id: str) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not item_id or not tree.exists(item_id):
+            return False
+        if self.navigator_filter_var.get():
+            self.navigator_filter_var.set("")
+        tree.selection_set(item_id)
+        tree.focus(item_id)
+        tree.see(item_id)
+        self._on_navigator_selected()
+        return True
+
+    def _on_recent_navigator_selected(self, _event=None) -> None:
+        item_id = self._navigator_recent_display_to_id.get(
+            self.navigator_recent_var.get()
+        )
+        if not self._open_navigator_item(item_id or ""):
+            self._refresh_navigator_recent_picker()
+
+    def _navigator_favorites_project_key(self) -> str | None:
+        path = getattr(self, "project_path", None)
+        if path is None:
+            return None
+        try:
+            return str(Path(path))
+        except (TypeError, ValueError, OSError):
+            return None
+
+    def _sync_navigator_favorites_for_project(self) -> None:
+        token = id(self.project)
+        key = self._navigator_favorites_project_key()
+        previous_token = getattr(self, "_navigator_favorites_project_token", None)
+        previous_key = getattr(self, "_navigator_favorites_loaded_key", None)
+        if token == previous_token and key == previous_key:
+            return
+        if token == previous_token:
+            if key is not None:
+                self._navigator_favorites_by_project[key] = list(
+                    getattr(self, "_navigator_favorite_ids", [])
+                )
+            self._navigator_favorites_loaded_key = key
+            return
+        self._navigator_favorites_project_token = token
+        self._navigator_favorites_loaded_key = key
+        self._navigator_favorite_ids = (
+            list(self._navigator_favorites_by_project.get(key, ()))
+            if key is not None
+            else []
+        )
+        self._navigator_favorite_display_to_id = {}
+        favorites_var = getattr(self, "navigator_favorites_var", None)
+        if favorites_var is not None:
+            favorites_var.set("")
+
+    def _store_current_navigator_favorites(self) -> None:
+        self._sync_navigator_favorites_for_project()
+        key = self._navigator_favorites_project_key()
+        if key is None:
+            return
+        favorite_ids = list(getattr(self, "_navigator_favorite_ids", []))
+        if favorite_ids:
+            self._navigator_favorites_by_project[key] = favorite_ids
+        else:
+            self._navigator_favorites_by_project.pop(key, None)
+
+    def _capture_navigator_favorites_state(self) -> dict[str, list[str]]:
+        self._store_current_navigator_favorites()
+        return {
+            path: list(item_ids)
+            for path, item_ids in self._navigator_favorites_by_project.items()
+            if item_ids
+        }
+
+    def _refresh_navigator_favorites_picker(self) -> None:
+        self._sync_navigator_favorites_for_project()
+        tree = getattr(self, "analysis_tree", None)
+        picker = getattr(self, "navigator_favorites_picker", None)
+        if tree is None or picker is None:
+            return
+        original = list(getattr(self, "_navigator_favorite_ids", []))
+        favorite_ids = [
+            item_id
+            for item_id in original
+            if tree.exists(item_id) and self._navigator_item_is_actionable(item_id)
+        ][:24]
+        self._navigator_favorite_ids = favorite_ids
+        if favorite_ids != original:
+            self._store_current_navigator_favorites()
+
+        display_to_id: dict[str, str] = {}
+        displays: list[str] = []
+        for item_id in favorite_ids:
+            label = str(tree.item(item_id, "text") or item_id)
+            display = f"{label} · {self._navigator_recent_category(item_id)}"
+            if display in display_to_id:
+                display = f"{display} · {item_id}"
+            display_to_id[display] = item_id
+            displays.append(display)
+        self._navigator_favorite_display_to_id = display_to_id
+        picker.configure(values=tuple(displays))
+        if self.navigator_favorites_var.get() not in display_to_id:
+            self.navigator_favorites_var.set("")
+        self._update_navigator_favorite_button()
+
+    def _is_navigator_favorite(self, item_id: str) -> bool:
+        self._sync_navigator_favorites_for_project()
+        return item_id in getattr(self, "_navigator_favorite_ids", ())
+
+    def _toggle_navigator_favorite(self, item_id: str) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        if (
+            tree is None
+            or not item_id
+            or not tree.exists(item_id)
+            or not self._navigator_item_is_actionable(item_id)
+        ):
+            return False
+        self._sync_navigator_favorites_for_project()
+        favorite_ids = list(getattr(self, "_navigator_favorite_ids", []))
+        if item_id in favorite_ids:
+            favorite_ids.remove(item_id)
+            added = False
+        else:
+            favorite_ids.insert(0, item_id)
+            favorite_ids = favorite_ids[:24]
+            added = True
+        self._navigator_favorite_ids = favorite_ids
+        self._store_current_navigator_favorites()
+        self._refresh_navigator_favorites_picker()
+        label = str(tree.item(item_id, "text") or item_id)
+        self.status_var.set(
+            f"{'Added to' if added else 'Removed from'} favorites: {label}"
+        )
+        self.root.after_idle(self._save_ui_layout_state)
+        return True
+
+    def toggle_selected_navigator_favorite(self) -> bool:
+        tree = getattr(self, "analysis_tree", None)
+        selection = tree.selection() if tree is not None else ()
+        if not selection:
+            self.status_var.set("Select an engineering item to favorite")
+            self._update_navigator_favorite_button()
+            return False
+        return self._toggle_navigator_favorite(selection[0])
+
+    def clear_navigator_favorites(self) -> None:
+        self._sync_navigator_favorites_for_project()
+        self._navigator_favorite_ids = []
+        self._navigator_favorite_display_to_id = {}
+        self.navigator_favorites_var.set("")
+        self._store_current_navigator_favorites()
+        picker = getattr(self, "navigator_favorites_picker", None)
+        if picker is not None:
+            picker.configure(values=())
+        self._update_navigator_favorite_button()
+        self.status_var.set("Project navigator favorites cleared")
+        self.root.after_idle(self._save_ui_layout_state)
+
+    def _on_favorite_navigator_selected(self, _event=None) -> None:
+        item_id = self._navigator_favorite_display_to_id.get(
+            self.navigator_favorites_var.get()
+        )
+        if not self._open_navigator_item(item_id or ""):
+            self._refresh_navigator_favorites_picker()
+
+    def _update_navigator_favorite_button(self) -> None:
+        button = getattr(self, "navigator_favorite_toggle_button", None)
+        tree = getattr(self, "analysis_tree", None)
+        if button is None or tree is None:
+            return
+        selection = tree.selection()
+        item_id = selection[0] if selection else ""
+        actionable = bool(
+            item_id
+            and tree.exists(item_id)
+            and self._navigator_item_is_actionable(item_id)
+        )
+        button.configure(
+            text="★" if actionable and self._is_navigator_favorite(item_id) else "☆",
+            state="normal" if actionable else "disabled",
+        )
+
     def _apply_navigator_filter(self) -> None:
         tree = getattr(self, "analysis_tree", None)
         snapshot = list(getattr(self, "_navigator_tree_snapshot", []))

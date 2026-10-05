@@ -1515,6 +1515,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._selection_summary_var = tk.StringVar(
+            value="Select a room, device, opening, or diagnostic-linked object."
+        )
+        self._selection_health_var = tk.StringVar(value="NO SELECTION")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1845,11 +1849,33 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_inspector_visible(False),
         )
         self._inspector_close_button.pack(side="right")
-        ttk.Label(
+        selection_card = ttk.Frame(
             inspector,
+            style="CX.Card.TFrame",
+            padding=(8, 7),
+        )
+        selection_card.pack(fill="x", pady=(3, 8))
+        selection_title = ttk.Frame(selection_card, style="CX.Card.TFrame")
+        selection_title.pack(fill="x")
+        ttk.Label(
+            selection_title,
             textvariable=self._selection_var,
-            wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            style="CX.CardValue.TLabel",
+            wraplength=230,
+        ).pack(side="left", fill="x", expand=True)
+        self._selection_health_badge = ttk.Label(
+            selection_title,
+            textvariable=self._selection_health_var,
+            style="CX.InfoBadge.TLabel",
+        )
+        self._selection_health_badge.pack(side="right", padx=(6, 0))
+        ttk.Label(
+            selection_card,
+            textvariable=self._selection_summary_var,
+            style="CX.CardHelper.TLabel",
+            justify="left",
+            wraplength=300,
+        ).pack(fill="x", pady=(4, 0))
 
         property_groups = (
             (
@@ -2614,6 +2640,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._selection_summary_var.set(
+                "Select a room, device, opening, or diagnostic-linked object."
+            )
+            self._selection_health_var.set("NO SELECTION")
+            self._selection_health_badge.configure(style="CX.InfoBadge.TLabel")
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2635,6 +2666,77 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+
+        selected_id = self.selected.item_id if self.selected is not None else ""
+        selected_issues = [
+            issue
+            for issue in self._validation_issues
+            if selected_id in {
+                str(value)
+                for value in issue.get("item_ids", [])
+            }
+        ]
+        severities = {
+            str(issue.get("severity") or "warning").strip().casefold()
+            for issue in selected_issues
+        }
+
+        if self.selected and self.selected.kind == "room":
+            length = _positive(item.get("length_m"), 0.1)
+            width = _positive(item.get("width_m"), 0.1)
+            height = _positive(item.get("height_m"), 0.1)
+            area = length * width
+            volume = area * height
+            pressure = _finite_number(item.get("pressure_pa"), 0.0)
+            classification = str(item.get("classification") or "Unclassified")
+            self._selection_summary_var.set(
+                f"Area {area:.2f} m² · Volume {volume:.2f} m³\n"
+                f"Design pressure {pressure:+.1f} Pa · {classification}"
+            )
+
+            sync = engineering_sync_status(self.layout, self._analysis_getter())
+            room_sync = next(
+                (
+                    record
+                    for record in sync["rooms"]
+                    if record["room_id"] == selected_id
+                ),
+                None,
+            )
+            sync_state = (
+                str(room_sync.get("state") or "unmapped")
+                if isinstance(room_sync, dict)
+                else "unmapped"
+            )
+            if "error" in severities:
+                self._selection_health_var.set("ERROR")
+                self._selection_health_badge.configure(style="CX.ErrorBadge.TLabel")
+            elif "warning" in severities:
+                self._selection_health_var.set("WARNING")
+                self._selection_health_badge.configure(style="CX.WarningBadge.TLabel")
+            elif sync_state == "synchronized":
+                self._selection_health_var.set("SYNCED")
+                self._selection_health_badge.configure(style="CX.SuccessBadge.TLabel")
+            else:
+                self._selection_health_var.set(sync_state.replace("_", " ").upper())
+                self._selection_health_badge.configure(style="CX.InfoBadge.TLabel")
+        else:
+            device_type = str(item.get("type") or "device").replace("_", " ").title()
+            room_id = str(item.get("room_id") or "Unassigned")
+            elevation = _finite_number(item.get("z_m"), 0.0)
+            self._selection_summary_var.set(
+                f"{device_type} · Room {room_id}\nElevation {elevation:.2f} m"
+            )
+            if "error" in severities:
+                self._selection_health_var.set("ERROR")
+                self._selection_health_badge.configure(style="CX.ErrorBadge.TLabel")
+            elif selected_issues:
+                self._selection_health_var.set("WARNING")
+                self._selection_health_badge.configure(style="CX.WarningBadge.TLabel")
+            else:
+                self._selection_health_var.set("PLACED")
+                self._selection_health_badge.configure(style="CX.SuccessBadge.TLabel")
+
         room_fields = {
             "name",
             "x_m",

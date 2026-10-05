@@ -6,6 +6,9 @@ import tkinter as tk
 from tkinter import ttk
 
 
+MAX_VISIBLE_RESULTS = 250
+
+
 @dataclass(frozen=True)
 class PaletteCommand:
     id: str
@@ -78,7 +81,7 @@ class CommandPalette(tk.Toplevel):
         ).pack(side="left")
         ttk.Label(
             header,
-            text="GLOBAL WORKSTATION ACTIONS",
+            text="GLOBAL ENGINEERING SEARCH",
             style="CX.Status.Info.TLabel",
         ).pack(side="right")
 
@@ -93,7 +96,7 @@ class CommandPalette(tk.Toplevel):
         self.search.pack(side="left", fill="x", expand=True)
         ttk.Label(
             search_host,
-            text="name · category · shortcut · keyword",
+            text="commands · analyses · rooms · devices · diagnostics · evidence",
             style="CX.Muted.TLabel",
         ).pack(side="right", padx=(10, 0))
 
@@ -154,7 +157,8 @@ class CommandPalette(tk.Toplevel):
         self._iid_to_command.clear()
 
         previous_category = None
-        for index, command in enumerate(self._filtered):
+        visible = self._filtered[:MAX_VISIBLE_RESULTS]
+        for index, command in enumerate(visible):
             iid = f"command-{index}"
             self._iid_to_command[iid] = command
             category = command.category or "General"
@@ -185,9 +189,12 @@ class CommandPalette(tk.Toplevel):
             )
 
         count = len(self._filtered)
-        self._summary.configure(
-            text=f"{count} COMMAND{'S' if count != 1 else ''}"
-        )
+        visible_count = min(count, MAX_VISIBLE_RESULTS)
+        if count > MAX_VISIBLE_RESULTS:
+            summary = f"{visible_count} OF {count} MATCHES"
+        else:
+            summary = f"{count} MATCH{'ES' if count != 1 else ''}"
+        self._summary.configure(text=summary)
 
     def _focus_first_result(self, _event=None):
         children = self.tree.get_children()

@@ -46,8 +46,7 @@ machine-wide administrative state.
 First produce the self-contained distribution, then compile the installer:
 
 ```powershell
-python -m pip install -e ".[bim]"
-python -m pip install "pyinstaller==6.22.3"
+python -m pip install -e ".[release]"
 .\scripts\build_windows_standalone.ps1
 .\scripts\build_windows_installer.ps1 -SkipStandaloneBuild
 ```
@@ -58,7 +57,8 @@ Run the complete install/upgrade/uninstall check with:
 .\scripts\test_windows_installer_lifecycle.ps1
 ```
 
-The build script reads the release version from `pyproject.toml`. The Inno
+The `[release]` extra pins the PyInstaller and IfcOpenShell versions used to create the
+self-contained payload. The build script reads the release version from `pyproject.toml`. The Inno
 Setup application identifier is stable across builds so an installer of a later
 CleanroomX version upgrades the same registered product rather than creating a
 parallel installation.

@@ -3367,8 +3367,180 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _palette_focus_analysis(self, analysis_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(analysis_id):
+            self.status_var.set(f"Analysis is no longer available: {analysis_id}")
+            return
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_analysis_selected()
+        if hasattr(self, "input_tab"):
+            self.notebook.select(self.input_tab)
+        analysis = self._current_analysis()
+        name = analysis.name if analysis is not None else analysis_id
+        self.selection_status_var.set(f"Selected: {name}")
+        self.workspace_status_var.set("Workspace: Input")
+
+    def _palette_focus_spatial(self, kind: str, item_id: str) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None:
+            return
+        self._activate_spatial_workspace("2d")
+        if not workspace.select_item(kind, item_id, notify=True):
+            self.status_var.set(f"Model object is no longer available: {item_id}")
+            return
+        workspace.fit_selected()
+        self.selection_status_var.set(workspace.selection_status_text())
+
+    def _palette_focus_diagnostic(self, sequence: Any) -> None:
+        self._activate_diagnostics_workspace()
+        workspace = getattr(self, "diagnostics_workspace", None)
+        if workspace is None or not workspace.select_issue_sequence(sequence):
+            self.status_var.set(f"Diagnostic is no longer available: {sequence}")
+            return
+        self.status_var.set(f"Diagnostic selected: {sequence}")
+
+    def _palette_focus_evidence_record(self, sequence: Any) -> None:
+        self._activate_evidence_workspace()
+        workspace = getattr(self, "evidence_workspace", None)
+        if workspace is None or not workspace.select_record_sequence(sequence):
+            self.status_var.set(f"Evidence record is no longer available: {sequence}")
+            return
+        self.status_var.set(f"Evidence record selected: {sequence}")
+
+    def _engineering_search_commands(self) -> list[PaletteCommand]:
+        commands: list[PaletteCommand] = []
+
+        for analysis in getattr(self.project, "analyses", ()):
+            analysis_id = str(analysis.id)
+            name = str(analysis.name or analysis_id)
+            kind = str(analysis.kind or "analysis")
+            commands.append(
+                PaletteCommand(
+                    f"search.analysis.{analysis_id}",
+                    f"Analysis · {name}",
+                    "Search · Analysis",
+                    lambda analysis_id=analysis_id: self._palette_focus_analysis(analysis_id),
+                    keywords=(analysis_id, name, kind, "analysis"),
+                    search_only=True,
+                )
+            )
+
+        workspace = getattr(self, "spatial_workspace", None)
+        layout = getattr(workspace, "layout", {}) if workspace is not None else {}
+        if isinstance(layout, dict):
+            for room in layout.get("rooms", ()):
+                if not isinstance(room, dict):
+                    continue
+                item_id = str(room.get("id") or "")
+                if not item_id:
+                    continue
+                name = str(room.get("name") or item_id)
+                classification = str(room.get("classification") or "")
+                commands.append(
+                    PaletteCommand(
+                        f"search.room.{item_id}",
+                        f"Room · {name}",
+                        "Search · Room",
+                        lambda item_id=item_id: self._palette_focus_spatial("room", item_id),
+                        keywords=(item_id, name, classification, "room", "zone"),
+                        search_only=True,
+                    )
+                )
+            for device in layout.get("devices", ()):
+                if not isinstance(device, dict):
+                    continue
+                item_id = str(device.get("id") or "")
+                if not item_id:
+                    continue
+                name = str(device.get("name") or item_id)
+                device_type = str(device.get("type") or "device")
+                room_id = str(device.get("room_id") or "")
+                commands.append(
+                    PaletteCommand(
+                        f"search.device.{item_id}",
+                        f"{device_type.replace('_', ' ').title()} · {name}",
+                        "Search · Device",
+                        lambda item_id=item_id: self._palette_focus_spatial("device", item_id),
+                        keywords=(item_id, name, device_type, room_id, "device", "equipment"),
+                        search_only=True,
+                    )
+                )
+
+        diagnostics = getattr(getattr(self, "diagnostics_workspace", None), "_result", None)
+        raw_issues = diagnostics.get("issues", ()) if isinstance(diagnostics, dict) else ()
+        if isinstance(raw_issues, list):
+            for issue in raw_issues:
+                if not isinstance(issue, dict):
+                    continue
+                sequence = issue.get("sequence")
+                rule = str(issue.get("rule") or "diagnostic")
+                message = str(issue.get("message") or "")
+                severity = str(issue.get("severity") or "")
+                category = str(issue.get("category") or "")
+                element = issue.get("element")
+                element = element if isinstance(element, dict) else {}
+                element_text = str(
+                    element.get("name")
+                    or element.get("id")
+                    or element.get("type")
+                    or "project"
+                )
+                commands.append(
+                    PaletteCommand(
+                        f"search.diagnostic.{sequence}",
+                        f"Diagnostic · {rule} · {element_text}",
+                        "Search · Diagnostic",
+                        lambda sequence=sequence: self._palette_focus_diagnostic(sequence),
+                        keywords=(rule, message, severity, category, element_text, "diagnostic", "drc"),
+                        search_only=True,
+                    )
+                )
+
+        try:
+            records = verification_run_history_records(self.project.metadata)
+        except Exception:
+            records = []
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            sequence = record.get("sequence")
+            analysis_name = str(
+                record.get("analysis_name")
+                or record.get("analysis_id")
+                or "analysis"
+            )
+            verification = record.get("verification")
+            status = str(
+                verification.get("status")
+                if isinstance(verification, dict)
+                else record.get("status")
+                or ""
+            )
+            commands.append(
+                PaletteCommand(
+                    f"search.evidence.{sequence}",
+                    f"Evidence · #{sequence} · {analysis_name}",
+                    "Search · Evidence",
+                    lambda sequence=sequence: self._palette_focus_evidence_record(sequence),
+                    keywords=(
+                        str(sequence),
+                        analysis_name,
+                        str(record.get("analysis_kind") or ""),
+                        status,
+                        str(record.get("completed_at_utc") or ""),
+                        "evidence",
+                        "ledger",
+                    ),
+                    search_only=True,
+                )
+            )
+        return commands
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3595,6 +3767,7 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        return commands + self._engineering_search_commands()
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

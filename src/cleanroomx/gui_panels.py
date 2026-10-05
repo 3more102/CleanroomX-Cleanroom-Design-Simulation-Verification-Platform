@@ -151,39 +151,6 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             style="CX.Compact.TButton",
             command=self.refresh,
         ).pack(side="left", padx=2)
-        self.locate_button = ttk.Button(
-            toolbar,
-            text="Locate",
-            style="CX.Primary.TButton",
-            command=self._navigate_selected,
-        )
-        self.locate_button.pack(side="left", padx=2)
-        ttk.Button(
-            toolbar,
-            text="Previous",
-            style="CX.Compact.TButton",
-            command=lambda: self._select_relative(-1),
-        ).pack(side="left", padx=2)
-        ttk.Button(
-            toolbar,
-            text="Next",
-            style="CX.Compact.TButton",
-            command=lambda: self._select_relative(1),
-        ).pack(side="left", padx=2)
-        ttk.Button(
-            toolbar,
-            text="Copy",
-            style="CX.Compact.TButton",
-            command=self.copy_selected,
-        ).pack(side="left", padx=2)
-        self.export_button = ttk.Button(
-            toolbar,
-            text="Export…",
-            command=self._export,
-            state="normal" if self._export_callback is not None else "disabled",
-        )
-        self.export_button.pack(side="left", padx=2)
-
         self.summary_label = ttk.Label(
             toolbar,
             textvariable=self.summary_var,
@@ -218,11 +185,45 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             textvariable=self.visible_count_var,
             style="CX.Status.Neutral.TLabel",
         ).pack(side="left", padx=(8, 4))
-        ttk.Label(
+        self.export_button = ttk.Button(
             counters,
-            text="F4/Shift+F4 next/previous · Double-click to locate",
-            style="CX.Muted.TLabel",
-        ).pack(side="right")
+            text="Export…",
+            style="CX.Compact.TButton",
+            command=self._export,
+            state="normal" if self._export_callback is not None else "disabled",
+        )
+        self.export_button.pack(side="right", padx=(2, 0))
+        ttk.Button(
+            counters,
+            text="Copy",
+            style="CX.Compact.TButton",
+            command=self.copy_selected,
+        ).pack(side="right", padx=2)
+        self.locate_button = ttk.Button(
+            counters,
+            text="Locate",
+            style="CX.Primary.TButton",
+            command=self._navigate_selected,
+        )
+        self.locate_button.pack(side="right", padx=2)
+        ttk.Button(
+            counters,
+            text="Next",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(1),
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            counters,
+            text="Previous",
+            style="CX.Compact.TButton",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            counters,
+            text="Reset filters",
+            style="CX.Compact.TButton",
+            command=self.reset_filters,
+        ).pack(side="right", padx=(8, 2))
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -530,6 +531,16 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.category_combo.configure(values=values)
         if self.category_var.get() not in values:
             self.category_var.set("All")
+
+    def reset_filters(self) -> None:
+        self.search_var.set("")
+        self.severity_var.set("All")
+        self.category_var.set("All")
+        self._sort_column = None
+        self._sort_reverse = False
+        self._update_sort_headings()
+        self._populate()
+        self._status_setter("Diagnostic filters cleared")
 
     def _select_relative(self, delta: int):
         rows = list(self.tree.get_children())

@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import theme_palette
 from .project_diagnostics import analyze_project_diagnostics
 
 
@@ -66,6 +67,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             command=self.refresh,
             style="CX.Compact.TButton",
         ).pack(side="left", padx=2)
+        self.locate_button = ttk.Button(
+            toolbar,
+            text="Locate",
+            command=self._navigate_selected,
+            style="CX.Primary.TButton",
+        )
+        self.locate_button.pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Copy",
@@ -162,21 +170,70 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
 
-        self.detail = tk.Text(
+        ttk.Label(
             detail_frame,
+            text="DIAGNOSTIC INSPECTOR",
+            style="CX.Section.TLabel",
+        ).pack(anchor="w", padx=7, pady=(5, 2))
+        self.detail_notebook = ttk.Notebook(detail_frame)
+        self.detail_notebook.pack(fill="both", expand=True, padx=5, pady=(0, 4))
+
+        summary_tab = ttk.Frame(self.detail_notebook)
+        technical_tab = ttk.Frame(self.detail_notebook)
+        self.detail_notebook.add(summary_tab, text="Summary")
+        self.detail_notebook.add(technical_tab, text="Technical")
+
+        self.summary_detail = tk.Text(
+            summary_tab,
             wrap="word",
-            height=4,
+            height=5,
             state="disabled",
             borderwidth=0,
         )
-        detail_scroll = ttk.Scrollbar(
-            detail_frame,
+        summary_scroll = ttk.Scrollbar(
+            summary_tab,
             orient="vertical",
-            command=self.detail.yview,
+            command=self.summary_detail.yview,
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
-        detail_scroll.pack(side="right", fill="y", pady=4)
+        self.summary_detail.configure(yscrollcommand=summary_scroll.set)
+        self.summary_detail.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(6, 0),
+            pady=4,
+        )
+        summary_scroll.pack(side="right", fill="y", pady=4)
+
+        self.technical_detail = tk.Text(
+            technical_tab,
+            wrap="none",
+            height=5,
+            state="disabled",
+            borderwidth=0,
+        )
+        technical_y = ttk.Scrollbar(
+            technical_tab,
+            orient="vertical",
+            command=self.technical_detail.yview,
+        )
+        technical_x = ttk.Scrollbar(
+            technical_tab,
+            orient="horizontal",
+            command=self.technical_detail.xview,
+        )
+        self.technical_detail.configure(
+            yscrollcommand=technical_y.set,
+            xscrollcommand=technical_x.set,
+        )
+        self.technical_detail.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=4)
+        technical_y.grid(row=0, column=1, sticky="ns", pady=4)
+        technical_x.grid(row=1, column=0, sticky="ew", padx=(6, 0))
+        technical_tab.rowconfigure(0, weight=1)
+        technical_tab.columnconfigure(0, weight=1)
+
+        # Backward-compatible handle for application-level native-widget theming.
+        self.detail = self.summary_detail
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
@@ -315,33 +372,67 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
-        if issue is not None:
+        for widget in (self.summary_detail, self.technical_detail):
+            widget.configure(state="normal")
+            widget.delete("1.0", "end")
+
+        if issue is None:
+            self.summary_detail.insert(
+                "1.0",
+                (
+                    "No diagnostic selected.\n\n"
+                    "Select an engineering issue to inspect its affected object, "
+                    "domain, recovery action, and technical details."
+                ),
+            )
+        else:
+            severity = str(issue.get("severity", "info")).upper()
+            code = str(issue.get("rule", ""))
+            domain = str(issue.get("category", "") or "General")
+            affected = self._element_text(issue)
+            level = self._level_text(issue)
+            suggested = str(issue.get("suggested_action", "") or "No recovery action supplied.")
             lines = [
-                f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
-                str(issue.get("message", "")),
+                f"{severity} · {code}",
                 "",
-                "Suggested action:",
-                str(issue.get("suggested_action", "")),
+                f"Affected object: {affected}",
+                f"Engineering domain: {domain}",
             ]
-            details = issue.get("details")
-            if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "Details:",
-                        json.dumps(
-                            details,
-                            indent=2,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
+            if level:
+                lines.append(f"Level / floor: {level}")
+            lines.extend(
+                (
+                    "",
+                    "Engineering explanation:",
+                    str(issue.get("message", "")),
+                    "",
+                    "Suggested recovery:",
+                    suggested,
                 )
-            self.detail.insert("1.0", "\n".join(lines))
-        self.detail.configure(state="disabled")
+            )
+            self.summary_detail.insert("1.0", "\n".join(lines))
+
+            technical_payload = {
+                "sequence": issue.get("sequence"),
+                "severity": issue.get("severity"),
+                "rule": issue.get("rule"),
+                "category": issue.get("category"),
+                "element": issue.get("element"),
+                "details": issue.get("details"),
+            }
+            self.technical_detail.insert(
+                "1.0",
+                json.dumps(
+                    technical_payload,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            )
+
+        for widget in (self.summary_detail, self.technical_detail):
+            widget.configure(state="disabled")
 
     def _navigate_selected(self, event=None):
         issue = self.selected_issue()
@@ -365,6 +456,34 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.clipboard_clear()
         self.clipboard_append(payload)
         self._status_setter("Diagnostic copied to clipboard")
+
+    def apply_theme(self, value: str) -> None:
+        """Retheme diagnostics without changing canonical issue state."""
+        palette = theme_palette(value)
+        for widget in (self.summary_detail, self.technical_detail):
+            widget.configure(
+                background=palette["field"],
+                foreground=palette["field_text"],
+                insertbackground=palette["text"],
+                selectbackground=palette["selection"],
+                selectforeground=palette["selection_text"],
+            )
+        self.tree.tag_configure(
+            "error",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "critical",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground=palette["warning"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure("info", foreground=palette["running"])
 
     def _export(self) -> None:
         if self._export_callback is None:

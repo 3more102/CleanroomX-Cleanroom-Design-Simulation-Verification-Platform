@@ -184,10 +184,12 @@ def unit_hint(path: str) -> str:
     return ""
 
 
-def spatial_navigator_issue_counts(layout: dict) -> dict[str, int]:
-    """Count canonical spatial validation warnings against their referenced items."""
+def spatial_navigator_issue_counts(issues: list[dict]) -> dict[str, int]:
+    """Count canonical spatial validation issues against their referenced items."""
     counts: dict[str, int] = {}
-    for issue in validate_layout(layout):
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
         item_ids = issue.get("item_ids", [])
         if not isinstance(item_ids, list):
             continue
@@ -5215,7 +5217,7 @@ class CleanroomXApp:
             devices = []
 
         model_issues = validate_layout(layout)
-        item_issue_counts = spatial_navigator_issue_counts(layout)
+        item_issue_counts = spatial_navigator_issue_counts(model_issues)
 
         previous_selection = tree.selection()
         previous_guard = self._selection_guard

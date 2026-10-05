@@ -5,9 +5,11 @@ import copy
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    _edge_detail_lines,
     _filtered_projection,
     _node_detail_lines,
     _searched_projection,
+    proofgraph_completeness_summary,
     proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
@@ -276,3 +278,44 @@ def test_proofgraph_search_keeps_matches_and_immediate_traceability_context():
     assert "verdict:verdict-pressure" in failed_keys
 
     assert _searched_projection(projection, "") is projection
+
+
+def test_proofgraph_completeness_summary_uses_explicit_persisted_states():
+    complete = proofgraph_completeness_summary(proofgraph_projection(_sample_graph()))
+    assert complete == {
+        "requirements": 1,
+        "evidence": 1,
+        "checks": 1,
+        "findings": 1,
+        "failed_findings": 1,
+        "missing_evidence": 0,
+    }
+
+    unresolved = proofgraph_completeness_summary(
+        proofgraph_projection(_unresolved_graph())
+    )
+    assert unresolved["requirements"] == 1
+    assert unresolved["evidence"] == 0
+    assert unresolved["checks"] == 1
+    assert unresolved["findings"] == 1
+    assert unresolved["failed_findings"] == 0
+    assert unresolved["missing_evidence"] == 1
+
+
+def test_proofgraph_edge_detail_explains_persisted_relationship():
+    projection = proofgraph_projection(_sample_graph())
+    nodes = {node["key"]: node for node in projection["nodes"]}
+    edge = next(
+        item
+        for item in projection["edges"]
+        if item["source"] == "evidence:evidence-pressure"
+        and item["target"] == "check:check-pressure"
+    )
+
+    rendered = "\n".join(_edge_detail_lines(edge, nodes))
+
+    assert "TRACEABILITY RELATION" in rendered
+    assert "SUPPORTS" in rendered
+    assert "pressure_pa" in rendered
+    assert "check-pressure" in rendered
+    assert "persisted ProofGraph" in rendered

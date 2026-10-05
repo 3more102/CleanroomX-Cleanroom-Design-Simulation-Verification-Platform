@@ -1081,6 +1081,8 @@ def test_spatial_inspector_surfaces_validation_and_sync_badges(app):
     workspace = app.spatial_workspace
     project_before = copy.deepcopy(app.project.to_dict())
 
+    app._activate_spatial_workspace()
+    workspace.show_inspector()
     workspace.redraw()
     app.root.update_idletasks()
     app.root.update()
@@ -1092,11 +1094,16 @@ def test_spatial_inspector_surfaces_validation_and_sync_badges(app):
     assert app.project.to_dict() == project_before
 
 
-def test_engineering_status_strip_stays_visible_at_minimum_window(app):
+def test_engineering_status_strip_adapts_without_stealing_laptop_workspace(app):
     app.root.geometry("1050x680")
     app.root.update_idletasks()
     app.root.update()
+    assert not app.engineering_strip.winfo_ismapped()
 
+    app.root.geometry("1440x900")
+    app.root.update_idletasks()
+    app.root.update()
+    assert app.engineering_strip.winfo_ismapped()
     for widget in (
         app.save_state_badge,
         app.problems_state_badge,

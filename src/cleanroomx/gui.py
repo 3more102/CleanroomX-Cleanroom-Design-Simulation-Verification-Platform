@@ -1727,12 +1727,17 @@ class CleanroomXApp:
         self.run_elapsed_var = tk.StringVar(value="—")
         self.task_status_var = tk.StringVar(value="Tasks: idle")
         self.navigator_filter_var = tk.StringVar(value="")
+        self.navigator_recent_var = tk.StringVar(value="")
+        self._navigator_recent_ids: list[str] = []
+        self._navigator_recent_display_to_id: dict[str, str] = {}
+        self._navigator_recent_project_token = id(self.project)
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
         self.workspace_profile_var = tk.StringVar(
             value=self._ui_layout_state["workspace_profile"]
         )
         self.focus_workspace_var = tk.BooleanVar(value=False)
+        self.fullscreen_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
         )
@@ -2007,6 +2012,12 @@ class CleanroomXApp:
             variable=self.focus_workspace_var,
             command=self._sync_focus_workspace,
         )
+        view_menu.add_checkbutton(
+            label="Full-screen Workspace",
+            accelerator="F11",
+            variable=self.fullscreen_var,
+            command=self._sync_fullscreen_workspace,
+        )
         view_menu.add_command(
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
@@ -2070,6 +2081,8 @@ class CleanroomXApp:
         self.root.bind("<Control-j>", lambda event: self.toggle_output_panel())
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
+        self.root.bind("<F11>", lambda event: self.toggle_fullscreen_workspace())
+        self.root.bind("<Escape>", lambda event: self.exit_fullscreen_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<Control-k>", lambda event: self.show_global_search())
@@ -2423,6 +2436,27 @@ class CleanroomXApp:
             text="×",
             width=3,
             command=lambda: self.navigator_filter_var.set(""),
+        ).pack(side="left", padx=(4, 0))
+
+        recent_row = ttk.Frame(navigator)
+        recent_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(recent_row, text="Recent").pack(side="left", padx=(0, 6))
+        self.navigator_recent_picker = ttk.Combobox(
+            recent_row,
+            textvariable=self.navigator_recent_var,
+            values=(),
+            state="readonly",
+        )
+        self.navigator_recent_picker.pack(side="left", fill="x", expand=True)
+        self.navigator_recent_picker.bind(
+            "<<ComboboxSelected>>",
+            self._on_recent_navigator_selected,
+        )
+        ttk.Button(
+            recent_row,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self.clear_navigator_recent,
         ).pack(side="left", padx=(4, 0))
 
         navigator_actions = ttk.Frame(navigator)
@@ -3266,6 +3300,32 @@ class CleanroomXApp:
             self._focus_workspace_snapshot is None
         )
 
+    def set_fullscreen_workspace(self, enabled: bool) -> None:
+        """Toggle native full-screen without changing project or panel state."""
+        target = bool(enabled)
+        try:
+            self.root.attributes("-fullscreen", target)
+        except tk.TclError:
+            self.fullscreen_var.set(False)
+            self.status_var.set("Full-screen workspace unavailable on this display")
+            return
+        self.fullscreen_var.set(target)
+        self.status_var.set(
+            "Full-screen workspace enabled — F11 or Esc to exit"
+            if target
+            else "Full-screen workspace disabled"
+        )
+
+    def _sync_fullscreen_workspace(self) -> None:
+        self.set_fullscreen_workspace(bool(self.fullscreen_var.get()))
+
+    def toggle_fullscreen_workspace(self) -> None:
+        self.set_fullscreen_workspace(not bool(self.fullscreen_var.get()))
+
+    def exit_fullscreen_workspace(self) -> None:
+        if bool(self.fullscreen_var.get()):
+            self.set_fullscreen_workspace(False)
+
     def _on_navigator_visibility_requested(self) -> None:
         target = bool(self.navigator_panel_visible_var.get())
         self._restore_focus_workspace_snapshot(status=False)
@@ -4088,7 +4148,22 @@ class CleanroomXApp:
                 "Window",
                 self.toggle_focus_workspace,
                 shortcut="Ctrl+Shift+F",
-                keywords=("fullscreen", "panels", "viewport", "zen"),
+                keywords=("panels", "viewport", "zen"),
+            ),
+            PaletteCommand(
+                "workspace.fullscreen",
+                "Toggle Full-screen Workspace",
+                "Window",
+                self.toggle_fullscreen_workspace,
+                shortcut="F11",
+                keywords=("fullscreen", "presentation", "viewport", "window"),
+            ),
+            PaletteCommand(
+                "workspace.reset",
+                "Reset Panel Layout",
+                "Workspace",
+                self.reset_panel_layout,
+                keywords=("layout", "restore", "panels", "navigator", "output"),
             ),
             PaletteCommand(
                 "bim.import",
@@ -5597,6 +5672,104 @@ class CleanroomXApp:
         visit("")
         self._navigator_tree_snapshot = snapshot
 
+    def _navigator_recent_category(self, item_id: str) -> str:
+        if item_id.startswith("room:"):
+            return "Room"
+        if item_id.startswith("device:"):
+            return "Device"
+        if item_id.startswith("nav-"):
+            return "Workspace"
+        return "Analysis"
+
+    def _reset_navigator_recent_for_project(self) -> None:
+        token = id(self.project)
+        if token == getattr(self, "_navigator_recent_project_token", None):
+            return
+        self._navigator_recent_project_token = token
+        self._navigator_recent_ids = []
+        self._navigator_recent_display_to_id = {}
+        recent_var = getattr(self, "navigator_recent_var", None)
+        if recent_var is not None:
+            recent_var.set("")
+
+    def _refresh_navigator_recent_picker(self) -> None:
+        self._reset_navigator_recent_for_project()
+        tree = getattr(self, "analysis_tree", None)
+        picker = getattr(self, "navigator_recent_picker", None)
+        if tree is None or picker is None:
+            return
+
+        recent_ids = [
+            item_id
+            for item_id in getattr(self, "_navigator_recent_ids", [])
+            if tree.exists(item_id)
+        ][:8]
+        self._navigator_recent_ids = recent_ids
+
+        display_to_id: dict[str, str] = {}
+        displays: list[str] = []
+        for item_id in recent_ids:
+            text_value = str(tree.item(item_id, "text") or item_id)
+            display = f"{text_value} · {self._navigator_recent_category(item_id)}"
+            if display in display_to_id:
+                display = f"{display} · {item_id}"
+            display_to_id[display] = item_id
+            displays.append(display)
+
+        self._navigator_recent_display_to_id = display_to_id
+        picker.configure(values=tuple(displays))
+        if self.navigator_recent_var.get() not in display_to_id:
+            self.navigator_recent_var.set("")
+
+    def _remember_navigator_item(self, item_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not item_id or not tree.exists(item_id):
+            return
+        if item_id.startswith("nav-") and item_id not in {
+            "nav-dashboard",
+            "nav-simulation",
+            "nav-diagnostics",
+            "nav-verification",
+            "nav-proofgraph",
+            "nav-evidence",
+            "nav-reports",
+            "nav-pressure",
+            "nav-airflow",
+            "nav-ach",
+            "nav-requirements",
+        }:
+            return
+
+        self._reset_navigator_recent_for_project()
+        recent_ids = list(getattr(self, "_navigator_recent_ids", []))
+        if item_id in recent_ids:
+            recent_ids.remove(item_id)
+        recent_ids.insert(0, item_id)
+        self._navigator_recent_ids = recent_ids[:8]
+        self._refresh_navigator_recent_picker()
+
+    def clear_navigator_recent(self) -> None:
+        self._navigator_recent_ids = []
+        self._navigator_recent_display_to_id = {}
+        self.navigator_recent_var.set("")
+        picker = getattr(self, "navigator_recent_picker", None)
+        if picker is not None:
+            picker.configure(values=())
+        self.status_var.set("Recent navigator selections cleared")
+
+    def _on_recent_navigator_selected(self, _event=None) -> None:
+        display = self.navigator_recent_var.get()
+        item_id = getattr(self, "_navigator_recent_display_to_id", {}).get(display)
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not item_id or not tree.exists(item_id):
+            self._refresh_navigator_recent_picker()
+            return
+        if self.navigator_filter_var.get():
+            self.navigator_filter_var.set("")
+        tree.selection_set(item_id)
+        tree.focus(item_id)
+        tree.see(item_id)
+
     def _apply_navigator_filter(self) -> None:
         tree = getattr(self, "analysis_tree", None)
         snapshot = list(getattr(self, "_navigator_tree_snapshot", []))
@@ -5688,12 +5861,14 @@ class CleanroomXApp:
             )
             return menu
         if item_id == "nav-dashboard":
+            self._remember_navigator_item(item_id)
             menu.add_command(
                 label="Open Dashboard",
                 command=lambda: self.notebook.select(self.dashboard),
             )
             return menu
         if item_id == "nav-proofgraph":
+            self._remember_navigator_item(item_id)
             menu.add_command(
                 label="Open ProofGraph",
                 command=self._activate_proofgraph_workspace,
@@ -5826,6 +6001,7 @@ class CleanroomXApp:
             )
         self._capture_navigator_tree()
         self._apply_navigator_filter()
+        self._refresh_navigator_recent_picker()
 
     def _sync_spatial_selection_status(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -5842,6 +6018,7 @@ class CleanroomXApp:
             return
         item_id = selection[0]
         if item_id.startswith("room:") or item_id.startswith("device:"):
+            self._remember_navigator_item(item_id)
             kind, spatial_id = item_id.split(":", 1)
             if hasattr(self, "spatial_workspace"):
                 self.spatial_workspace.select_item(kind, spatial_id)
@@ -5855,14 +6032,17 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Dashboard")
             return
         if item_id == "nav-simulation":
+            self._remember_navigator_item(item_id)
             self._activate_simulation_workspace()
             self.selection_status_var.set("Selected: Simulation / Results")
             return
         if item_id == "nav-diagnostics":
+            self._remember_navigator_item(item_id)
             self._activate_diagnostics_workspace()
             self.selection_status_var.set("Selected: DRC / Diagnostics")
             return
         if item_id == "nav-verification":
+            self._remember_navigator_item(item_id)
             self._activate_verification_workspace()
             self.selection_status_var.set("Selected: Verification")
             return
@@ -5871,14 +6051,17 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
+            self._remember_navigator_item(item_id)
             self._activate_evidence_workspace()
             self.selection_status_var.set("Selected: Evidence")
             return
         if item_id == "nav-reports":
+            self._remember_navigator_item(item_id)
             self._activate_reporting_workspace()
             self.selection_status_var.set("Selected: Reports")
             return
         if item_id in {"nav-pressure", "nav-airflow", "nav-ach"}:
+            self._remember_navigator_item(item_id)
             if hasattr(self, "spatial_workspace"):
                 overlay = {
                     "nav-pressure": "Pressure",
@@ -5891,6 +6074,7 @@ class CleanroomXApp:
                 self.selection_status_var.set(f"Selected: {overlay} engineering overlay")
             return
         if item_id == "nav-requirements":
+            self._remember_navigator_item(item_id)
             self.show_requirements_traceability()
             self.selection_status_var.set("Selected: Requirements traceability")
             return
@@ -5900,6 +6084,8 @@ class CleanroomXApp:
         analysis = self._current_analysis()
         if analysis is not None:
             self.selection_status_var.set(f"Selected: {analysis.name}")
+            if analysis.id == item_id:
+                self._remember_navigator_item(item_id)
 
     def _on_workspace_selection_change(self, kind: str, item_id: str) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -5911,6 +6097,7 @@ class CleanroomXApp:
             self._refresh_spatial_navigator()
         if not tree.exists(navigator_id):
             return
+        self._remember_navigator_item(navigator_id)
         previous_guard = self._selection_guard
         self._selection_guard = True
         try:

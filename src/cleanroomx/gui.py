@@ -3526,16 +3526,21 @@ class CleanroomXApp:
         return dict(self._ui_layout_state)
 
     def _save_ui_layout_state(self) -> None:
+        ui_state_path = getattr(self, "_ui_state_path", None)
+        if ui_state_path is None:
+            return
         try:
             save_gui_layout_state(
-                self._ui_state_path,
+                ui_state_path,
                 self._capture_ui_layout_state(),
             )
         except Exception as exc:
             report = record_gui_exception("Save workstation layout", exc)
-            self.status_var.set(
-                f"Workstation layout not saved · {report.reference}"
-            )
+            current_status = str(self.status_var.get() or "").strip()
+            if not current_status or current_status == "Ready":
+                self.status_var.set(
+                    f"Workstation layout not saved · {report.reference}"
+                )
 
     def _restore_ui_layout_state(self) -> None:
         self._focus_workspace_snapshot = None

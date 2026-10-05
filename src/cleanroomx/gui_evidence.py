@@ -248,7 +248,7 @@ class EvidenceWorkspace(ttk.Frame):
         self.graphs_var.set(str(state["proofgraph_count"]))
         if state["record_count"]:
             self.status_var.set("RETAINED")
-            self.status_label.configure(style=status_style_name("pass"))
+            self.status_label.configure(style=status_style_name("available"))
         else:
             self.status_var.set("NO RETAINED EVIDENCE")
             self.status_label.configure(style=status_style_name("neutral"))

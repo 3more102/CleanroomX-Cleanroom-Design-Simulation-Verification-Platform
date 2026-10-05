@@ -6262,6 +6262,7 @@ class CleanroomXApp:
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
+        self._set_analysis_run_state(run.status)
         self._set_text(
             self.result_text,
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),

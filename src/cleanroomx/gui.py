@@ -3960,9 +3960,13 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            report = record_gui_exception(
+                "Refresh verification currency",
+                exc,
+            )
             self._set_text(
                 self.verification_text,
-                f"Verification currency unavailable: {exc}\n",
+                report.user_message() + "\n",
             )
 
         try:
@@ -3996,12 +4000,16 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            report = record_gui_exception(
+                "Refresh persisted verification evidence",
+                exc,
+            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
             self._set_text(
                 self.evidence_text,
-                f"Verification evidence unavailable: {exc}\n",
+                report.user_message() + "\n",
             )
 
         diagnostic_summary = (
@@ -4177,21 +4185,33 @@ class CleanroomXApp:
         if not isinstance(diagnostics, dict):
             diagnostics = {}
 
+        search_warnings: list[tuple[str, str]] = []
         requirement_snapshot: dict = {}
         try:
             requirement_snapshot = project_requirement_traceability_snapshot(
                 self.project
             )
-        except Exception:
+        except Exception as exc:
+            report = record_gui_exception(
+                "Index requirement traceability for engineering search",
+                exc,
+            )
+            search_warnings.append(("Requirements", report.reference))
             requirement_snapshot = {}
 
         proofgraph_documents: list[dict] = []
         try:
             records = verification_run_history_records(self.project.metadata)
             proofgraph_documents = self._proofgraph_documents_from_records(records)
-        except Exception:
+        except Exception as exc:
+            report = record_gui_exception(
+                "Index persisted evidence for engineering search",
+                exc,
+            )
+            search_warnings.append(("Evidence", report.reference))
             proofgraph_documents = []
 
+        self._engineering_search_warnings = tuple(search_warnings)
         return build_engineering_search_entries(
             project=self.project,
             spatial_layout=layout,
@@ -4302,9 +4322,20 @@ class CleanroomXApp:
             on_activate=self._navigate_engineering_search_result,
             on_close=clear_reference,
         )
-        self.status_var.set(
-            f"Global engineering search indexed {len(entries)} project entities"
-        )
+        warnings = getattr(self, "_engineering_search_warnings", ())
+        if warnings:
+            warning_text = " · ".join(
+                f"{label}: {reference}" for label, reference in warnings
+            )
+            self.status_var.set(
+                "Global engineering search indexed "
+                f"{len(entries)} project entities with degraded sources · "
+                f"{warning_text}"
+            )
+        else:
+            self.status_var.set(
+                f"Global engineering search indexed {len(entries)} project entities"
+            )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
         return [
@@ -8366,7 +8397,9 @@ class CleanroomXApp:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
             except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+                # Preserve the original exception object and traceback until the
+                # main-thread GUI boundary records a durable technical reference.
+                self._queue.put(("error", generation, analysis_id, exc))
                 return
 
             self._queue.put(
@@ -8447,17 +8480,28 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    exc = (
+                        payload
+                        if isinstance(payload, BaseException)
+                        else RuntimeError(str(payload))
+                    )
                     simulation = getattr(self, "simulation_workspace", None)
                     if simulation is not None:
-                        simulation.set_failed(str(payload))
+                        simulation.set_failed(str(exc))
+                    report = self._show_operation_error(
+                        "Analysis failed",
+                        "Run analysis",
+                        exc,
+                    )
                     self._finish_active_run_task(
                         state="failed",
                         stage="Backend execution failed",
                         result="Execution error",
-                        detail=str(payload),
+                        detail=(
+                            f"{report.summary}\n"
+                            f"Error reference: {report.reference}"
+                        ),
                     )
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
                     history_evidence = None
                     history_error = None

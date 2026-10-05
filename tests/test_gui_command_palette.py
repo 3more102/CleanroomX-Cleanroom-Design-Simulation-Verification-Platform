@@ -5,7 +5,8 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.spatial import _Hit
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     PaletteCommand,
@@ -120,3 +121,30 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+
+def test_global_engineering_search_indexes_and_opens_project_objects(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    app.load_project_path(bundled_demo_project_path())
+    root.update()
+
+    commands = app._command_palette_commands()
+    ids = {command.id for command in commands}
+    assert "search.room.process" in ids
+    assert "search.device.supply-process" in ids
+    assert "search.analysis.hvac" in ids
+
+    room_command = next(
+        command
+        for command in commands
+        if command.id == "search.room.process"
+    )
+    room_command.callback()
+    root.update()
+
+    assert app.spatial_workspace.selected == _Hit("room", "process")
+    assert app.notebook.select() == str(app.spatial_workspace)

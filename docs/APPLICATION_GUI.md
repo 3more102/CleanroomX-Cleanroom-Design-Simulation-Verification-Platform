@@ -132,6 +132,16 @@ Problems can be searched and filtered by severity, diagnostic category, and affe
 
 The **Verification** view summarizes current verification-currency state from the existing verification authority; the **Evidence** view lists retained project-verification records without recomputing historical verdicts. These views are read-only projections over existing domain services and do not change solver, requirement, ProofGraph, or acceptance semantics.
 
+## Reporting and publication workspace
+
+The **Reporting** workspace is a first-class central publication surface rather than only a small output tab. It keeps **analysis-report readiness** separate from **project engineering dossier readiness** because those artifacts have different authorities and publication rules.
+
+The analysis-report side exposes only the current completed backend run for the selected analysis. Missing runs remain **not calculated**, input/provenance mismatches remain **stale**, and dependency-freshness failures remain **unavailable**. Markdown preview is populated only from the backend-generated report on a current run; the GUI does not fabricate report text or substitute missing engineering values with zeros. Markdown, portable HTML, and result-JSON actions are disabled until the current analysis report is publishable.
+
+The project-dossier side reflects the existing revision-bound dossier workflow. An unsaved project requires **Save Project** first, dirty project state requires the changes to be saved, and dossier export is unavailable while an analysis worker is active. A ready dossier still uses the existing export path, which verifies the saved project revision before and after generation and binds the dossier to the exact source-project SHA-256. The workspace also shows the canonical project-diagnostics summary at publication time so errors and warnings are visible without reimplementing diagnostics in the GUI.
+
+Use **Reports → Open Reporting Workspace**, the workspace selector, Ctrl+Alt+5, or the command palette to open this surface. Existing direct export commands remain available and continue to enforce their backend freshness and file-safety guards.
+
 ## ProofGraph explorer
 
 The **ProofGraph** workspace reads only ProofGraph documents retained in the canonical project-verification history. Before a graph is rendered, CleanroomX reparses it with the canonical `proofgraph_from_dict()` validator. Digest tampering, broken source/evidence references, invalid provenance, inconsistent finding/verdict closure, or invalid verification-run relationships therefore fail closed instead of being visualized as trusted evidence.

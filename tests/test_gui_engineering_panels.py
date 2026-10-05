@@ -78,12 +78,17 @@ def test_engineering_output_workspace_exposes_first_class_panels(app):
     assert app.verification_text.get("1.0", "end").strip()
     assert app.console_text.get("1.0", "end").strip()
     assert app.evidence_text.get("1.0", "end").strip()
+    assert app.diagnostics_status_var.get().startswith("Problems:")
 
 
 def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     result, issue = _force_room_overlap(app)
     assert result["summary"]["issue_count"] >= 1
     assert issue["element"]["type"] == "spatial_element"
+    summary = result["summary"]
+    assert app.diagnostics_status_var.get() == (
+        f"Problems: {summary['error_count']}E {summary['warning_count']}W"
+    )
 
     panel = app.problems_panel
     panel.search_var.set("room_overlap")

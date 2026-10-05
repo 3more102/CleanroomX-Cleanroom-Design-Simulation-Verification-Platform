@@ -143,6 +143,46 @@ def test_density_mode_is_presentation_only_and_persists_in_layout_state(app):
     assert app.project.to_dict() == project_before
 
 
+
+def test_workspace_presets_coordinate_existing_workstation_surfaces(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.activate_workspace_preset("design")
+    app.root.update()
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.navigator_panel_visible_var.get()
+    assert not app.output_panel_visible_var.get()
+    assert app.spatial_workspace.inspector_visible()
+    assert app.workspace_status_var.get() == "Workspace: Design"
+
+    app.activate_workspace_preset("simulation")
+    app.root.update()
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.output_panel_visible_var.get()
+    assert app.output_notebook.select() == str(app.simulation_panel)
+    assert not app.spatial_workspace.inspector_visible()
+
+    app.activate_workspace_preset("verification")
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.output_notebook.select() == str(app.problems_panel)
+
+    app.activate_workspace_preset("evidence")
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+
+    app.activate_workspace_preset("reporting")
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert not app.navigator_panel_visible_var.get()
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert app.project.to_dict() == project_before
+
+    with pytest.raises(ValueError, match="unsupported workspace preset"):
+        app.activate_workspace_preset("unknown")
+
+
 def test_engineering_output_workspace_exposes_first_class_panels(app):
     tabs = _tab_texts(app.output_notebook)
     assert tabs[:5] == [

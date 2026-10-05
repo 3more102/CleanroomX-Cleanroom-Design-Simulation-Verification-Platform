@@ -7,6 +7,7 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.autosave import AutosaveStatus
 from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui_errors import GuiErrorReport
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 
 
@@ -166,3 +167,81 @@ def test_gui_rejects_negative_autosave_interval_before_tk_startup():
     with pytest.raises(SystemExit) as exc:
         gui_module.main(["--autosave-interval-seconds", "-1", "--check"])
     assert exc.value.code == 2
+
+
+def test_checkpoint_recovery_failure_gets_durable_error_reference(
+    monkeypatch,
+    tmp_path,
+):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._has_unsaved_changes = lambda: True
+    app._build_recovery_snapshot = lambda: (_ for _ in ()).throw(
+        OSError("synthetic checkpoint failure")
+    )
+    app.autosave_status_var = Value("")
+    app.status_var = Value("")
+
+    report = GuiErrorReport(
+        reference="CX-RECOVERY-0001",
+        operation="Create recovery checkpoint",
+        exception_type="OSError",
+        summary="synthetic checkpoint failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    app._checkpoint_recovery()
+
+    assert app.autosave_status_var.value == "Autosave: failed · CX-RECOVERY-0001"
+    assert app.status_var.value == "Autosave failed · CX-RECOVERY-0001"
+    assert recorded[0][0] == "Create recovery checkpoint"
+    assert isinstance(recorded[0][1], OSError)
+
+
+def test_background_autosave_failure_is_logged_once_per_status_sequence(
+    monkeypatch,
+    tmp_path,
+):
+    class Manager:
+        def status(self):
+            return AutosaveStatus(
+                state="failed",
+                message="Autosave failed: synthetic worker failure",
+                sequence=7,
+            )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._autosave_manager = Manager()
+    app._autosave_status_sequence = 6
+    app.autosave_status_var = Value("")
+    app.status_var = Value("")
+    app.root = Root()
+
+    report = GuiErrorReport(
+        reference="CX-RECOVERY-0002",
+        operation="Background recovery autosave",
+        exception_type="RuntimeError",
+        summary="Autosave failed: synthetic worker failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    app._poll_autosave_status()
+    app._poll_autosave_status()
+
+    assert len(recorded) == 1
+    assert recorded[0][0] == "Background recovery autosave"
+    assert isinstance(recorded[0][1], RuntimeError)
+    assert app.autosave_status_var.value == "Autosave: failed · CX-RECOVERY-0002"
+    assert app.status_var.value == "Autosave failed · CX-RECOVERY-0002"
+    assert len(app.root.calls) == 2

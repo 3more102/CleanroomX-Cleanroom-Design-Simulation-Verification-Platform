@@ -470,6 +470,109 @@ class AnalysisPicker(tk.Toplevel):
         self.destroy()
 
 
+_HISTORY_MISSING = object()
+
+
+def _history_leaf_values(value, path: str = "") -> dict[str, object]:
+    leaves: dict[str, object] = {}
+
+    def visit(node, current: str) -> None:
+        if isinstance(node, dict):
+            if not node:
+                leaves[current or "(root)"] = {}
+                return
+            for key in sorted(node):
+                child = f"{current}.{key}" if current else str(key)
+                visit(node[key], child)
+            return
+        if isinstance(node, list):
+            if not node:
+                leaves[current or "(root)"] = []
+                return
+            for index, item in enumerate(node):
+                child = f"{current}[{index}]" if current else f"[{index}]"
+                visit(item, child)
+            return
+        leaves[current or "(root)"] = node
+
+    visit(value, path)
+    return leaves
+
+
+def _history_value_equal(left, right) -> bool:
+    if left is _HISTORY_MISSING or right is _HISTORY_MISSING:
+        return left is right
+    return json.dumps(
+        left,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ) == json.dumps(
+        right,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+
+
+def _history_display_value(value) -> str:
+    if value is _HISTORY_MISSING:
+        return "—"
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return value
+    return json.dumps(
+        value,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+
+
+def run_history_comparison_rows(
+    older: dict,
+    newer: dict,
+) -> list[dict[str, str]]:
+    """Return explicit input/result leaf changes between two validated run records."""
+    rows: list[dict[str, str]] = []
+    for scope, field in (("INPUT", "input_snapshot"), ("RESULT", "result")):
+        before = _history_leaf_values(older.get(field, {}))
+        after = _history_leaf_values(newer.get(field, {}))
+        for path in sorted(set(before) | set(after), key=str.casefold):
+            left = before.get(path, _HISTORY_MISSING)
+            right = after.get(path, _HISTORY_MISSING)
+            if _history_value_equal(left, right):
+                continue
+            if left is _HISTORY_MISSING:
+                change = "ADDED"
+            elif right is _HISTORY_MISSING:
+                change = "REMOVED"
+            elif (
+                isinstance(left, (int, float))
+                and not isinstance(left, bool)
+                and isinstance(right, (int, float))
+                and not isinstance(right, bool)
+            ):
+                delta = float(right) - float(left)
+                change = f"Δ {delta:+g}"
+            else:
+                change = "CHANGED"
+            rows.append(
+                {
+                    "scope": scope,
+                    "field": path,
+                    "before": _history_display_value(left),
+                    "after": _history_display_value(right),
+                    "change": change,
+                }
+            )
+    return rows
+
+
 class RunHistoryDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, metadata: dict):
         super().__init__(parent)
@@ -500,6 +603,7 @@ class RunHistoryDialog(tk.Toplevel):
             list_frame,
             columns=("time", "analysis", "kind", "status", "input"),
             show="tree headings",
+            selectmode="extended",
             height=10,
         )
         self.tree.heading("#0", text="#")
@@ -521,13 +625,76 @@ class RunHistoryDialog(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         list_scroll.pack(side="right", fill="y")
 
-        self.detail = tk.Text(detail_frame, wrap="none")
-        detail_scroll = ttk.Scrollbar(
-            detail_frame, orient="vertical", command=self.detail.yview
+        detail_tabs = ttk.Notebook(detail_frame)
+        detail_tabs.pack(fill="both", expand=True)
+        record_tab = ttk.Frame(detail_tabs)
+        compare_tab = ttk.Frame(detail_tabs)
+        detail_tabs.add(record_tab, text="Selected Record")
+        detail_tabs.add(compare_tab, text="Compare Runs")
+        self.detail_tabs = detail_tabs
+        self.compare_tab = compare_tab
+
+        self.detail = tk.Text(record_tab, wrap="none")
+        detail_scroll_y = ttk.Scrollbar(
+            record_tab, orient="vertical", command=self.detail.yview
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        detail_scroll_x = ttk.Scrollbar(
+            record_tab, orient="horizontal", command=self.detail.xview
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        record_tab.rowconfigure(0, weight=1)
+        record_tab.columnconfigure(0, weight=1)
+
+        self.compare_summary_var = tk.StringVar(
+            value="Select exactly two runs to compare retained inputs and results."
+        )
+        ttk.Label(
+            compare_tab,
+            textvariable=self.compare_summary_var,
+        ).pack(fill="x", padx=8, pady=(8, 5))
+        compare_host = ttk.Frame(compare_tab)
+        compare_host.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        columns = ("scope", "field", "before", "after", "change")
+        self.compare_tree = ttk.Treeview(
+            compare_host,
+            columns=columns,
+            show="headings",
+            selectmode="extended",
+        )
+        for column, label in (
+            ("scope", "Scope"),
+            ("field", "Field"),
+            ("before", "Older run"),
+            ("after", "Newer run"),
+            ("change", "Change"),
+        ):
+            self.compare_tree.heading(column, text=label)
+        self.compare_tree.column("scope", width=75, stretch=False)
+        self.compare_tree.column("field", width=320)
+        self.compare_tree.column("before", width=260)
+        self.compare_tree.column("after", width=260)
+        self.compare_tree.column("change", width=100, stretch=False)
+        compare_y = ttk.Scrollbar(
+            compare_host, orient="vertical", command=self.compare_tree.yview
+        )
+        compare_x = ttk.Scrollbar(
+            compare_host, orient="horizontal", command=self.compare_tree.xview
+        )
+        self.compare_tree.configure(
+            yscrollcommand=compare_y.set,
+            xscrollcommand=compare_x.set,
+        )
+        self.compare_tree.grid(row=0, column=0, sticky="nsew")
+        compare_y.grid(row=0, column=1, sticky="ns")
+        compare_x.grid(row=1, column=0, sticky="ew")
+        compare_host.rowconfigure(0, weight=1)
+        compare_host.columnconfigure(0, weight=1)
 
         for record in reversed(self.records):
             self.tree.insert(
@@ -547,6 +714,11 @@ class RunHistoryDialog(tk.Toplevel):
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(
+            buttons,
+            text="Compare selected",
+            command=self._show_comparison,
+        ).pack(side="left")
         ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
 
         children = self.tree.get_children()
@@ -559,7 +731,7 @@ class RunHistoryDialog(tk.Toplevel):
         selection = self.tree.selection()
         if not selection:
             return
-        sequence = int(selection[0])
+        sequence = int(selection[-1])
         record = next(
             item for item in self.records if item["sequence"] == sequence
         )
@@ -570,6 +742,47 @@ class RunHistoryDialog(tk.Toplevel):
             json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
         )
         self.detail.configure(state="disabled")
+        if len(selection) == 2:
+            self._show_comparison()
+
+    def _show_comparison(self) -> None:
+        selection = self.tree.selection()
+        for iid in self.compare_tree.get_children():
+            self.compare_tree.delete(iid)
+        if len(selection) != 2:
+            self.compare_summary_var.set(
+                "Select exactly two runs to compare retained inputs and results."
+            )
+            return
+
+        selected_records = [
+            next(
+                item for item in self.records
+                if item["sequence"] == int(iid)
+            )
+            for iid in selection
+        ]
+        older, newer = sorted(selected_records, key=lambda item: item["sequence"])
+        rows = run_history_comparison_rows(older, newer)
+        self.compare_summary_var.set(
+            f"Run #{older['sequence']} → #{newer['sequence']} · "
+            f"{len(rows)} changed input/result field(s) · "
+            f"{older['status']} → {newer['status']}"
+        )
+        for index, row in enumerate(rows):
+            self.compare_tree.insert(
+                "",
+                "end",
+                iid=f"compare:{index}",
+                values=(
+                    row["scope"],
+                    row["field"],
+                    row["before"],
+                    row["after"],
+                    row["change"],
+                ),
+            )
+        self.detail_tabs.select(self.compare_tab)
 
 
 class VerificationHistoryDialog(tk.Toplevel):

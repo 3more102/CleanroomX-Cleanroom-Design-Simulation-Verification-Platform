@@ -1515,6 +1515,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._engineering_context_var = tk.StringVar(
+            value="Select a room to inspect engineering results."
+        )
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1865,7 +1868,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
+            style="CX.ViewTitle.TLabel",
         ).pack(fill="x", pady=(3, 8))
+
+        engineering_context = ttk.LabelFrame(
+            inspector,
+            text="Engineering context",
+            padding=(8, 6),
+        )
+        engineering_context.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            engineering_context,
+            textvariable=self._engineering_context_var,
+            wraplength=300,
+            justify="left",
+        ).pack(fill="x", anchor="w")
 
         property_groups = (
             (
@@ -2625,10 +2642,41 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _selected_engineering_context_text(self) -> str:
+        if self.selected is None:
+            return "Select a room to inspect engineering results."
+        if self.selected.kind != "room":
+            return "Engineering result overlays are room-oriented; inspect the linked room for calculated values."
+
+        result = getattr(self, "_result_getter", lambda: None)()
+        lines: list[str] = []
+        for mode in ("pressure", "ach", "airflow", "status"):
+            overlay = engineering_overlay_state(
+                self.layout,
+                self._analysis_getter(),
+                result,
+                mode=mode,
+            )
+            record = next(
+                (
+                    item
+                    for item in overlay.get("rooms", [])
+                    if item.get("room_id") == self.selected.item_id
+                ),
+                None,
+            )
+            if record is None:
+                continue
+            label = str(record.get("label") or "").strip()
+            if label:
+                lines.append(label)
+        return "\n".join(lines) if lines else "No calculated room context is available for the current analysis."
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._engineering_context_var.set(self._selected_engineering_context_text())
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2650,6 +2698,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        self._engineering_context_var.set(self._selected_engineering_context_text())
         room_fields = {
             "name",
             "x_m",

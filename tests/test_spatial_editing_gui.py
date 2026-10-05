@@ -1056,3 +1056,96 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+def test_engineering_workspace_profiles_arrange_real_shell_without_mutating_project(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    workspace = app.spatial_workspace
+
+    app.activate_workspace_profile("design", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "design"
+    assert app.notebook.select() == str(workspace)
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+    assert workspace.inspector_visible()
+
+    app.activate_workspace_profile("simulation", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "simulation"
+    assert app.notebook.select() == str(app.input_tab)
+    assert app._paned_contains(app.main_panes, app.navigator_panel)
+    assert app._paned_contains(app.workspace_panes, app.output_panel)
+    assert not workspace.inspector_visible()
+
+    app.activate_workspace_profile("verification", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "verification"
+    assert app.notebook.select() == str(workspace)
+    assert app.output_notebook.select() == str(app.problems_panel)
+    assert workspace.inspector_visible()
+
+    app.activate_workspace_profile("evidence", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "evidence"
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.output_notebook.select() == str(app.evidence_text.master)
+    assert not workspace.inspector_visible()
+
+    app.activate_workspace_profile("reporting", persist=False)
+    app.root.update()
+    assert app.workspace_profile_var.get() == "reporting"
+    assert app.notebook.select() == str(app.reporting_workspace)
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert "No current analysis report" in app.reporting_preview.get("1.0", "end")
+
+    assert app.project.to_dict() == project_before
+
+
+def test_reporting_workspace_tracks_real_current_run(app):
+    run = app.smoke_run_active()
+    app.root.update()
+
+    app.activate_workspace_profile("reporting", persist=False)
+    app.root.update()
+
+    preview = app.reporting_preview.get("1.0", "end").strip()
+    assert preview == run.markdown.strip()
+    assert run.status in app.reporting_status_var.get()
+    assert app.output_notebook.select() == str(app.report_text.master)
+
+
+def test_workspace_profile_persists_across_application_restart(tmp_path):
+    state_path = tmp_path / "gui-workspace-layout.json"
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    first = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root.update()
+    first.activate_workspace_profile("evidence", persist=True)
+    first._autosave_manager.shutdown(wait=False)
+    root.destroy()
+
+    root2 = tk.Tk()
+    second = CleanroomXApp(
+        root2,
+        autosave_interval_seconds=0,
+        ui_state_path=state_path,
+    )
+    root2.update_idletasks()
+    root2.update()
+    try:
+        assert second.workspace_profile_var.get() == "evidence"
+        assert second.notebook.select() == str(second.proofgraph_viewer)
+        assert second.output_notebook.select() == str(second.evidence_text.master)
+    finally:
+        second._autosave_manager.shutdown(wait=False)
+        root2.destroy()

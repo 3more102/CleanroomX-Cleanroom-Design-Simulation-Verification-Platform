@@ -36,6 +36,23 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "canvas_3d",
         "plot",
         "grid",
+        "border_strong",
+        "info",
+        "success",
+        "warning",
+        "error",
+        "purple",
+        "orange",
+        "magenta",
+        "blue_surface",
+        "cyan_surface",
+        "green_surface",
+        "success_surface",
+        "warning_surface",
+        "error_surface",
+        "purple_surface",
+        "orange_surface",
+        "magenta_surface",
     }
     assert set(light) == required
     assert set(dark) == required
@@ -49,3 +66,15 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_dark_palette_matches_industrial_cleanroom_workstation_tokens():
+    dark = theme_palette("dark")
+    assert dark["background"] == "#0B1220"
+    assert dark["surface"] == "#111B2E"
+    assert dark["panel"] == "#17243A"
+    assert dark["accent"] == "#22D3EE"
+    assert dark["success"] == "#22C55E"
+    assert dark["warning"] == "#F59E0B"
+    assert dark["error"] == "#EF4444"
+    assert dark["purple"] == "#A78BFA"

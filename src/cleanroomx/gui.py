@@ -1990,9 +1990,13 @@ class CleanroomXApp:
             command=self.hide_output_panel,
         )
         self.output_close_button.pack(side="right")
+        self.output_summary_var = tk.StringVar(
+            value="Problems — · Errors — · Warnings — · Verification — · Evidence —"
+        )
         ttk.Label(
             output_host,
-            text="Diagnostics · verification currency · evidence · analysis output",
+            textvariable=self.output_summary_var,
+            style="CX.Section.TLabel",
         ).pack(fill="x", padx=8, pady=(4, 2))
 
         self.output_notebook = ttk.Notebook(output_host)
@@ -2275,6 +2279,7 @@ class CleanroomXApp:
         ]
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
+            problems_panel.apply_palette(palette)
             text_widgets.append(getattr(problems_panel, "detail", None))
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
@@ -2726,6 +2731,22 @@ class CleanroomXApp:
             verification_style = "CX.Status.Unknown.TLabel"
         self.verification_state_var.set(verification_state)
         self.verification_state_label.configure(style=verification_style)
+
+        output_summary = getattr(self, "output_summary_var", None)
+        if output_summary is not None:
+            issue_count = int(summary.get("issue_count", 0) or 0)
+            error_count = int(summary.get("error_count", 0) or 0)
+            warning_count = int(summary.get("warning_count", 0) or 0)
+            verification_text = (
+                f"{current_count}/{configured_count}"
+                if configured_count
+                else "not configured"
+            )
+            output_summary.set(
+                f"Problems {issue_count} · Errors {error_count} · "
+                f"Warnings {warning_count} · Verification {verification_text} · "
+                f"Evidence {len(records)}"
+            )
 
         proofgraph_documents = self._proofgraph_documents_from_records(records)
         dashboard = getattr(self, "dashboard", None)
@@ -4482,14 +4503,37 @@ class CleanroomXApp:
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
             return
+        if item_id in {"nav-building", "nav-hvac", "nav-devices", "nav-pressure"}:
+            domain = {
+                "nav-building": "Building / Geometry",
+                "nav-hvac": "HVAC / Airflow",
+                "nav-devices": "Devices / Openings",
+                "nav-pressure": "Pressure Network",
+            }[item_id]
+            self._activate_spatial_workspace()
+            self.workspace_status_var.set(f"Workspace: {domain}")
+            self.selection_status_var.set(f"Selected: {domain}")
+            return
+        if item_id == "nav-analyses":
+            self._activate_analysis_input_workspace()
+            self.selection_status_var.set("Selected: Analyses")
+            return
+        if item_id == "nav-requirements":
+            self.selection_status_var.set("Selected: Requirements")
+            self.show_requirements_traceability()
+            return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()
             self.selection_status_var.set("Selected: ProofGraph")
             return
-        if item_id == "nav-evidence":
-            if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
-                self.output_notebook.select(self.evidence_text.master)
-            self.selection_status_var.set("Selected: Evidence")
+        if item_id in {"nav-evidence", "nav-reports"}:
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            target = self.evidence_text if item_id == "nav-evidence" else self.report_text
+            self.output_notebook.select(target.master)
+            label = "Evidence" if item_id == "nav-evidence" else "Reports"
+            self.workspace_status_var.set(f"Workspace: {label}")
+            self.selection_status_var.set(f"Selected: {label}")
             return
         if item_id.startswith("nav-"):
             return

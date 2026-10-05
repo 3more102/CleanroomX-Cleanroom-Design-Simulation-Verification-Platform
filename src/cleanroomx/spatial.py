@@ -1865,7 +1865,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             identity_header,
             textvariable=self._inspector_kind_var,
-            style="CX.Section.TLabel",
+            style="CX.RaisedSection.TLabel",
         ).pack(side="left")
         self._inspector_state_badge = ttk.Label(
             identity_header,
@@ -1876,7 +1876,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             identity,
             textvariable=self._selection_var,
-            style="CX.ViewTitle.TLabel",
+            style="CX.RaisedTitle.TLabel",
             wraplength=310,
         ).pack(fill="x", anchor="w", pady=(5, 2))
         ttk.Label(
@@ -1884,6 +1884,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._inspector_summary_var,
             wraplength=310,
             justify="left",
+            style="CX.RaisedText.TLabel",
         ).pack(fill="x", anchor="w")
 
         property_groups = (

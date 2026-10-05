@@ -3487,6 +3487,7 @@ class CleanroomXApp:
         self.task_center = TaskCenter(
             self.output_notebook,
             on_change=self._on_task_center_change,
+            on_abandon=self._abandon_task_from_center,
         )
         self.task_center.apply_theme(self.theme_var.get())
         self.output_notebook.add(self.task_center, text="Tasks")
@@ -4197,6 +4198,18 @@ class CleanroomXApp:
             self.task_status_var.set(f"Tasks: idle · {total} session")
         else:
             self.task_status_var.set("Tasks: idle")
+
+    def _abandon_task_from_center(self, task_key: str) -> bool:
+        """Route task-center abandon through the real analysis controller."""
+        if (
+            task_key != getattr(self, "_active_run_task_id", None)
+            or not self._running
+            or self._abandon_requested
+        ):
+            self.status_var.set("Selected task cannot be abandoned")
+            return False
+        self.cancel_run()
+        return bool(self._abandon_requested)
 
     def show_task_center(self) -> None:
         self._restore_focus_workspace_snapshot(status=False)

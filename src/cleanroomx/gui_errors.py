@@ -13,6 +13,7 @@ import logging
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Callable
 import uuid
 
 from .gui_state import default_gui_layout_state_path
@@ -134,3 +135,58 @@ def record_gui_exception(
         summary=summary,
         log_path=written_path,
     )
+
+def make_gui_callback_exception_handler(
+    *,
+    operation: str = "Unhandled GUI callback",
+    status_setter: Callable[[str], object] | None = None,
+    notifier: Callable[[GuiErrorReport], object] | None = None,
+    log_path: str | Path | None = None,
+) -> Callable[[type[BaseException], BaseException, object], None]:
+    """Build a fail-safe Tk callback exception boundary.
+
+    Tk invokes report_callback_exception(exc_type, exc, traceback) for exceptions
+    that escape event callbacks. The returned handler preserves the original
+    traceback for technical logging, emits a stable error reference, and contains
+    failures in status/notifier presentation so reporting cannot become a second
+    GUI crash.
+    """
+
+    handling = False
+
+    def handler(
+        _exc_type: type[BaseException],
+        exc: BaseException,
+        traceback: object,
+    ) -> None:
+        nonlocal handling
+        if handling:
+            return
+        handling = True
+        try:
+            error = exc if isinstance(exc, BaseException) else RuntimeError(str(exc))
+            if error.__traceback__ is None and traceback is not None:
+                try:
+                    error = error.with_traceback(traceback)  # type: ignore[arg-type]
+                except (AttributeError, TypeError):
+                    pass
+            report = record_gui_exception(
+                operation,
+                error,
+                log_path=log_path,
+            )
+            if status_setter is not None:
+                try:
+                    status_setter(f"{report.operation} failed · {report.reference}")
+                except Exception:
+                    pass
+            if notifier is not None:
+                try:
+                    notifier(report)
+                except Exception:
+                    pass
+        finally:
+            handling = False
+
+    return handler
+

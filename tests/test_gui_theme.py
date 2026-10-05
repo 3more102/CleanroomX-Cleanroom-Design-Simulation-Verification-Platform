@@ -40,6 +40,11 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "warning",
         "error",
         "info",
+        "mode_design",
+        "mode_analyze",
+        "mode_verify",
+        "mode_evidence",
+        "mode_release",
     }
     assert set(light) == required
     assert set(dark) == required
@@ -68,3 +73,8 @@ def test_dark_palette_matches_cleanroomx_engineering_identity():
     assert dark["error"] == "#EF4444"
     assert dark["text"] == "#F1F5F9"
     assert dark["muted"] == "#94A3B8"
+    assert dark["mode_design"] == "#2DD4BF"
+    assert dark["mode_analyze"] == "#38BDF8"
+    assert dark["mode_verify"] == "#F59E0B"
+    assert dark["mode_evidence"] == "#A78BFA"
+    assert dark["mode_release"] == "#22C55E"

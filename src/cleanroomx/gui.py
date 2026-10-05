@@ -1858,6 +1858,10 @@ class CleanroomXApp:
         analyze_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analyze_menu.add_separator()
         analyze_menu.add_command(label="Run History...", command=self.show_run_history)
+        analyze_menu.add_command(
+            label="Duplicate Scenario",
+            command=self.duplicate_current_analysis,
+        )
         menubar.add_cascade(label="Analyze", menu=analyze_menu)
 
         verify_menu = tk.Menu(menubar, tearoff=False)
@@ -2524,6 +2528,7 @@ class CleanroomXApp:
             on_open_inputs=self._activate_analysis_input_workspace,
             on_open_results=self._activate_analysis_results_workspace,
             on_open_history=self.show_run_history,
+            on_duplicate_analysis=self.duplicate_current_analysis,
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
@@ -4114,6 +4119,13 @@ class CleanroomXApp:
                 "Analysis",
                 self.show_run_history,
                 keywords=("history", "retained", "compare", "evidence", "results"),
+            ),
+            PaletteCommand(
+                "analysis.duplicate",
+                "Duplicate Current Scenario",
+                "Analysis",
+                self.duplicate_current_analysis,
+                keywords=("duplicate", "scenario", "analysis", "baseline", "variant"),
             ),
             PaletteCommand(
                 "workspace.diagnostics",
@@ -7232,6 +7244,82 @@ class CleanroomXApp:
             return
         self._refresh_analysis_list(select_id=analysis_id)
         self._update_title()
+
+    def duplicate_current_analysis(self) -> bool:
+        """Duplicate the current analysis definition without copying run evidence."""
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before duplicating a scenario.",
+                parent=self.root,
+            )
+            return False
+
+        source = self._editor_analysis() or self._current_analysis()
+        if source is None:
+            self._notify(
+                "Select an analysis before duplicating a scenario.",
+                level="info",
+            )
+            return False
+        try:
+            self._commit_editor(source)
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot duplicate scenario",
+                f"Fix the current analysis input before duplicating it.\n\n{exc}",
+                parent=self.root,
+            )
+            return False
+
+        existing_names = {item.name.casefold() for item in self.project.analyses}
+        base_name = f"{source.name} Copy"
+        duplicate_name = base_name
+        suffix = 2
+        while duplicate_name.casefold() in existing_names:
+            duplicate_name = f"{base_name} {suffix}"
+            suffix += 1
+
+        analysis_id = f"{source.kind}-{uuid.uuid4().hex[:8]}"
+        duplicate = AnalysisDocument(
+            id=analysis_id,
+            name=duplicate_name,
+            kind=source.kind,
+            input=copy.deepcopy(source.input),
+        )
+
+        def mutate() -> None:
+            self.project.analyses.append(duplicate)
+            self.project.active_analysis_id = analysis_id
+            self._editor_analysis_id = analysis_id
+
+        try:
+            self._perform_project_edit(
+                f"Duplicate analysis {source.name} as {duplicate.name}",
+                mutate,
+            )
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot duplicate scenario",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        self._refresh_analysis_list(select_id=analysis_id)
+        self._update_title()
+        self.status_var.set(
+            f"Duplicated scenario: {source.name} → {duplicate.name}"
+        )
+        self._notify(
+            "Scenario duplicated",
+            level="success",
+            detail=(
+                f"{duplicate.name} has a new analysis identity. "
+                "Cached results and retained run evidence were not copied."
+            ),
+        )
+        return True
 
     def rename_analysis(self) -> None:
         if self._running:

@@ -34,6 +34,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
+        self.last_error: str | None = None
         self._sort_column = "severity"
         self._sort_descending = False
 
@@ -207,6 +208,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
+        self.tree.bind("<Control-c>", self._copy_selected_event)
         self.tree.bind("<F4>", lambda _event: self.navigate_relative(1))
         self.tree.bind("<Shift-F4>", lambda _event: self.navigate_relative(-1))
         self.tree.bind("<Button-3>", self._show_context_menu)
@@ -420,12 +422,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             )
         except Exception as exc:
             self.last_result = None
+            self.last_error = str(exc)
             self.summary_var.set(f"Diagnostics unavailable: {exc}")
             self.visible_var.set("0 visible")
             self._status_setter("Project diagnostics failed")
             self._populate()
             return None
 
+        self.last_error = None
         self.last_result = result
         summary = result.get("summary", {})
         self.summary_var.set(
@@ -489,7 +493,16 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 )
             self.detail.insert("1.0", "\n".join(lines))
         else:
-            if self._all_issues() and not self._filtered_issues():
+            if self.last_error:
+                self.detail.insert(
+                    "1.0",
+                    (
+                        "Project diagnostics could not be evaluated.\n\n"
+                        f"{self.last_error}\n\n"
+                        "Correct the project or referenced engineering input, then refresh diagnostics."
+                    ),
+                )
+            elif self._all_issues() and not self._filtered_issues():
                 self.detail.insert(
                     "1.0",
                     "No diagnostics match the active filters. Clear or adjust the filters to continue.",
@@ -554,6 +567,10 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
+        return "break"
+
+    def _copy_selected_event(self, _event=None):
+        self.copy_selected()
         return "break"
 
     def copy_selected(self) -> None:

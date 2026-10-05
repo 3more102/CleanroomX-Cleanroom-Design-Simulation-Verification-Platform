@@ -1540,13 +1540,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._projection_mode = tk.StringVar(value="Orthographic")
         self._section_enabled = tk.BooleanVar(value=False)
         self._section_height_var = tk.StringVar(value="2.40")
-        self._theme_palette = theme_palette("light")
+        self._inspector_analysis_var = tk.StringVar(
+            value="Select a room to inspect fresh engineering results."
+        )
+        self._inspector_pressure_var = tk.StringVar(value="Pressure: —")
+        self._inspector_airflow_var = tk.StringVar(value="Airflow / ACH: —")
+        self._inspector_compliance_var = tk.StringVar(value="Verification: —")
+        self._theme_palette = theme_palette("dark")
 
         self._build()
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(self, padding=(8, 7, 8, 4))
+        commandbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 7, 8, 4),
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1595,7 +1605,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        modebar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1644,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        viewbar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1655,7 +1673,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="right", padx=(10, 2)
         )
 
-        overlaybar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        overlaybar = ttk.Frame(
+            self,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 0, 8, 4),
+        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
@@ -1845,11 +1867,41 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_inspector_visible(False),
         )
         self._inspector_close_button.pack(side="right")
-        ttk.Label(
+        self._selection_label = ttk.Label(
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            style="CX.ViewTitle.TLabel",
+        )
+        self._selection_label.pack(fill="x", pady=(3, 8))
+
+        engineering = ttk.LabelFrame(
+            inspector,
+            text="Engineering snapshot",
+            padding=(8, 7),
+        )
+        engineering.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            engineering,
+            textvariable=self._inspector_analysis_var,
+            style="CX.Muted.TLabel",
+            wraplength=290,
+            justify="left",
+        ).pack(anchor="w", fill="x", pady=(0, 5))
+        ttk.Label(
+            engineering,
+            textvariable=self._inspector_pressure_var,
+        ).pack(anchor="w", fill="x", pady=1)
+        ttk.Label(
+            engineering,
+            textvariable=self._inspector_airflow_var,
+        ).pack(anchor="w", fill="x", pady=1)
+        self._inspector_compliance_label = ttk.Label(
+            engineering,
+            textvariable=self._inspector_compliance_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self._inspector_compliance_label.pack(anchor="w", pady=(5, 0))
 
         property_groups = (
             (
@@ -1910,6 +1962,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(
             inspector,
             text="Apply properties",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
@@ -2161,7 +2214,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         for px, py in points:
             canvas.create_line(
                 px - 5, py, px + 5, py,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, tags=("measurement",),
             )
             canvas.create_line(
                 px, py - 5, px, py + 5,
@@ -2173,18 +2226,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._current_tool_mode() == "area":
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                outline=self._theme_palette["simulation"], width=2, dash=(5, 3), tags=("measurement",),
             )
         else:
             canvas.create_line(
                 x0, y0, x1, y1,
-                fill="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, dash=(5, 3), tags=("measurement",),
             )
         canvas.create_text(
             (x0 + x1) / 2,
             (y0 + y1) / 2 - 10,
             text=self._measurement_result_var.get(),
-            fill="#5b21b6",
+            fill=self._theme_palette["simulation"],
             tags=("measurement",),
         )
 
@@ -2609,10 +2662,93 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _load_engineering_inspector_snapshot(self) -> None:
+        selected = self.selected
+        item = self._selected_object()
+        if selected is None or item is None or selected.kind != "room":
+            self._inspector_analysis_var.set(
+                "Select a room to inspect fresh engineering results."
+            )
+            self._inspector_pressure_var.set("Pressure: —")
+            self._inspector_airflow_var.set("Airflow / ACH: —")
+            self._inspector_compliance_var.set("Verification: —")
+            self._inspector_compliance_label.configure(
+                style="CX.Status.Neutral.TLabel"
+            )
+            return
+
+        analysis = self._analysis_getter()
+        result = self._result_getter()
+        room_id = selected.item_id
+
+        def room_overlay(mode: str) -> dict | None:
+            state = engineering_overlay_state(
+                self.layout,
+                analysis=analysis,
+                result=result if isinstance(result, dict) else None,
+                mode=mode,
+            )
+            return next(
+                (
+                    record
+                    for record in state.get("rooms", [])
+                    if record.get("room_id") == room_id
+                ),
+                None,
+            )
+
+        pressure = room_overlay("pressure")
+        ach = room_overlay("ach")
+        airflow = room_overlay("airflow")
+        status = room_overlay("status")
+
+        if isinstance(result, dict):
+            self._inspector_analysis_var.set(
+                "Fresh active-analysis results projected into this room."
+            )
+        else:
+            self._inspector_analysis_var.set(
+                "No fresh active-analysis result is available; spatial values remain editable design inputs."
+            )
+
+        pressure_value = pressure.get("pressure_pa") if pressure else None
+        self._inspector_pressure_var.set(
+            "Pressure: —"
+            if pressure_value is None
+            else f"Pressure: {float(pressure_value):+.1f} Pa"
+        )
+
+        ach_value = ach.get("value") if ach else None
+        airflow_value = airflow.get("value") if airflow else None
+        parts = []
+        if isinstance(airflow_value, (int, float)):
+            parts.append(f"{float(airflow_value):,.0f} m³/h")
+        if isinstance(ach_value, (int, float)):
+            parts.append(f"{float(ach_value):.1f} ACH")
+        self._inspector_airflow_var.set(
+            "Airflow / ACH: " + (" · ".join(parts) if parts else "—")
+        )
+
+        state = str((status or {}).get("status") or "not_checked").lower()
+        label = state.replace("_", " ").upper()
+        self._inspector_compliance_var.set(f"Verification: {label}")
+        self._inspector_compliance_label.configure(
+            style=(
+                "CX.Status.Pass.TLabel"
+                if state == "pass"
+                else "CX.Status.Fail.TLabel"
+                if state == "fail"
+                else "CX.Status.Warning.TLabel"
+                if state == "warning"
+                else "CX.Status.Neutral.TLabel"
+            )
+        )
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._load_engineering_inspector_snapshot()
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2634,6 +2770,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        self._load_engineering_inspector_snapshot()
         room_fields = {
             "name",
             "x_m",

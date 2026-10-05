@@ -3686,6 +3686,13 @@ class CleanroomXApp:
                 keywords=("fullscreen", "presentation", "viewport", "window"),
             ),
             PaletteCommand(
+                "workspace.reset",
+                "Reset Panel Layout",
+                "Workspace",
+                self.reset_panel_layout,
+                keywords=("layout", "restore", "panels", "navigator", "output"),
+            ),
+            PaletteCommand(
                 "bim.import",
                 "Import IFC Spatial Layout",
                 "BIM",

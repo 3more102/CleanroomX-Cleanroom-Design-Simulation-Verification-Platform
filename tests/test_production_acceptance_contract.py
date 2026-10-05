@@ -16,6 +16,7 @@ def test_required_production_workflows_are_least_privilege_and_credentialless() 
     for relative in (
         ".github/workflows/ci.yml",
         ".github/workflows/security.yml",
+        ".github/workflows/production-acceptance.yml",
         ".github/workflows/windows-installer.yml",
         ".github/workflows/windows-standalone.yml",
     ):
@@ -99,3 +100,21 @@ def test_production_acceptance_document_preserves_external_validation_boundary()
         "regulatory certification",
     ):
         assert phrase in document
+
+
+def test_named_production_acceptance_workflow_is_self_validating() -> None:
+    workflow = _text(".github/workflows/production-acceptance.yml")
+
+    assert "pull_request:" in workflow
+    assert "permissions:\n  contents: read" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "runs-on: ubuntu-24.04" in workflow
+    assert 'python -m pip install "pip==26.2.1"' in workflow
+    assert "scripts/production_acceptance.py" in workflow
+    assert "tests/test_production_acceptance.py" in workflow
+    assert "tests/test_production_acceptance_contract.py" in workflow
+    assert "tests/test_proofgraph_change_impact.py" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
+    assert "scripts/benchmark_spatial_validation.py" in workflow
+    assert "scripts/benchmark_project_bundle.py" in workflow
+    assert "actions/upload-artifact@" in workflow

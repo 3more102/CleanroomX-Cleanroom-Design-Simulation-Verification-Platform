@@ -375,6 +375,78 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     return rows
 
 
+def structured_json_entries(
+    value,
+    path: str = "$",
+    tokens: tuple[str | int, ...] = (),
+) -> list[tuple[str, tuple[str | int, ...], object, str]]:
+    """Return deterministic leaf/container rows with unambiguous edit tokens."""
+    rows: list[tuple[str, tuple[str | int, ...], object, str]] = []
+    if isinstance(value, dict):
+        if not value:
+            rows.append((path, tokens, {}, ""))
+        for key, item in value.items():
+            child = f"{path}.{key}"
+            rows.extend(
+                structured_json_entries(item, child, (*tokens, str(key)))
+            )
+    elif isinstance(value, list):
+        if not value:
+            rows.append((path, tokens, [], ""))
+        for index, item in enumerate(value):
+            rows.extend(
+                structured_json_entries(
+                    item,
+                    f"{path}[{index}]",
+                    (*tokens, index),
+                )
+            )
+    else:
+        rows.append((path, tokens, copy.deepcopy(value), unit_hint(path)))
+    return rows
+
+
+def replace_structured_json_value(
+    payload: dict,
+    tokens: tuple[str | int, ...],
+    value,
+) -> dict:
+    """Return a detached payload with exactly one existing scalar leaf replaced."""
+    if not isinstance(payload, dict):
+        raise ValueError("analysis input must be a JSON object")
+    if not tokens:
+        raise ValueError("the analysis input root cannot be replaced")
+    if isinstance(value, (dict, list)):
+        raise ValueError("structured editing accepts scalar JSON values only")
+
+    updated = copy.deepcopy(payload)
+    target = updated
+    for token in tokens[:-1]:
+        if isinstance(token, int):
+            if not isinstance(target, list) or not (0 <= token < len(target)):
+                raise ValueError("structured input path no longer exists")
+            target = target[token]
+        else:
+            if not isinstance(target, dict) or token not in target:
+                raise ValueError("structured input path no longer exists")
+            target = target[token]
+
+    leaf = tokens[-1]
+    if isinstance(leaf, int):
+        if not isinstance(target, list) or not (0 <= leaf < len(target)):
+            raise ValueError("structured input path no longer exists")
+        if isinstance(target[leaf], (dict, list)):
+            raise ValueError("structured editing accepts scalar leaves only")
+        target[leaf] = copy.deepcopy(value)
+    else:
+        if not isinstance(target, dict) or leaf not in target:
+            raise ValueError("structured input path no longer exists")
+        if isinstance(target[leaf], (dict, list)):
+            raise ValueError("structured editing accepts scalar leaves only")
+        target[leaf] = copy.deepcopy(value)
+    return updated
+
+
 class AnalysisPicker(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)

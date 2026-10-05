@@ -43,13 +43,10 @@ def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
         lines.extend(("", "ENGINEERING DETAILS"))
         for key, value in sorted(details.items()):
             label = str(key).replace("_", " ").strip().title()
-            if isinstance(value, (dict, list, tuple)):
-                rendered = json.dumps(
-                    value,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                )
+            if isinstance(value, dict):
+                rendered = f"{len(value)} field(s)"
+            elif isinstance(value, (list, tuple)):
+                rendered = f"{len(value)} item(s)"
             else:
                 rendered = str(value)
             lines.append(f"{label}: {rendered}")

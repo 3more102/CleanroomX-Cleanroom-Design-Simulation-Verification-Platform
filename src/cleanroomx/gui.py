@@ -6247,10 +6247,12 @@ class CleanroomXApp:
             state="disabled" if running else "normal",
             text="Running…" if running else "▶ Run",
         )
-        self.workflow_run_button.configure(
-            state="disabled" if running else "normal",
-            text="4  Running…" if running else "4  Run",
-        )
+        workflow_run_button = getattr(self, "workflow_run_button", None)
+        if workflow_run_button is not None:
+            workflow_run_button.configure(
+                state="disabled" if running else "normal",
+                text="4  Running…" if running else "4  Run",
+            )
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
         run_state = getattr(self, "run_state_var", None)

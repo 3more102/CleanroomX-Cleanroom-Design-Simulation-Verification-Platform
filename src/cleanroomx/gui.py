@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_dashboard import ProjectDashboard
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -1822,6 +1823,15 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
+        self.dashboard = ProjectDashboard(
+            self.notebook,
+            on_design=lambda: self._activate_spatial_workspace("split"),
+            on_problems=self.show_problems_panel,
+            on_verify=self._guided_save_and_verify,
+            on_proofgraph=self._activate_proofgraph_workspace,
+        )
+        self.notebook.add(self.dashboard, text="Dashboard")
+
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
             project_getter=lambda: self.project,
@@ -2514,6 +2524,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency_summary: dict = {}
+        evidence_record_count = 0
 
         try:
             currency = assess_project_verification_currency(
@@ -2521,6 +2533,7 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            currency_summary = summary if isinstance(summary, dict) else {}
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -2557,6 +2570,7 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            evidence_record_count = len(records)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents(
@@ -2614,6 +2628,44 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+            if not isinstance(layout, dict):
+                layout = {}
+            rooms = layout.get("rooms", [])
+            devices = layout.get("devices", [])
+            diagnostic_summary = (
+                diagnostics.get("summary", {})
+                if isinstance(diagnostics, dict)
+                else {}
+            )
+            last_run_text = (
+                f"{self.last_run.title} — {self.last_run.status}"
+                if self.last_run is not None
+                else "No analysis run in this session"
+            )
+            dashboard.set_snapshot(
+                {
+                    "project_name": self.project.name,
+                    "location": str(self.project_path) if self.project_path else "Unsaved project",
+                    "room_count": len(rooms) if isinstance(rooms, list) else 0,
+                    "device_count": len(devices) if isinstance(devices, list) else 0,
+                    "analysis_count": len(self.project.analyses),
+                    "evidence_count": evidence_record_count,
+                    "diagnostic_status": diagnostic_summary.get("status", "unknown"),
+                    "error_count": diagnostic_summary.get("error_count", 0),
+                    "warning_count": diagnostic_summary.get("warning_count", 0),
+                    "verification_configured": currency_summary.get("configured_analysis_count", 0),
+                    "verification_current": currency_summary.get("current_count", 0),
+                    "verification_stale": currency_summary.get("stale_count", 0),
+                    "verification_not_verified": currency_summary.get("not_verified_count", 0),
+                    "dirty": self._has_unsaved_changes(),
+                    "running": self._running,
+                    "last_run": last_run_text,
+                }
+            )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -2888,6 +2940,14 @@ class CleanroomXApp:
             self._refresh_start_center()
             self.notebook.select(self.start_center)
             self.workspace_status_var.set("Workspace: Start")
+
+    def _activate_dashboard_workspace(self) -> None:
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(dashboard)
+        self.workspace_status_var.set("Workspace: Dashboard")
 
     def _recent_project_records(self) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []
@@ -4019,6 +4079,7 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
+            ("nav-dashboard", "Dashboard"),
             ("nav-building", "Building"),
             ("nav-hvac", "HVAC Systems"),
             ("nav-devices", "Devices"),
@@ -4150,6 +4211,10 @@ class CleanroomXApp:
         if tree is None or not item_id or not tree.exists(item_id):
             return None
         menu = tk.Menu(self.root, tearoff=False)
+        if item_id == "nav-dashboard":
+            self._activate_dashboard_workspace()
+            self.selection_status_var.set("Selected: Dashboard")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
 

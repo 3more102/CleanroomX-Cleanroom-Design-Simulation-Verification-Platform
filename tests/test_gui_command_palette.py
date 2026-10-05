@@ -106,6 +106,7 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     labels = {command.label for command in commands}
 
     assert len(ids) == len(set(ids))
+    assert "Open Engineering Dashboard" in labels
     assert "Open 2D Workspace" in labels
     assert "Open 3D Workspace" in labels
     assert "Open ProofGraph Explorer" in labels

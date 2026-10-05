@@ -3121,6 +3121,10 @@ class CleanroomXApp:
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
 
+        proofgraph = getattr(self, "proofgraph_viewer", None)
+        if proofgraph is not None:
+            proofgraph.apply_theme(self.theme_var.get(), redraw=redraw)
+
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
             self._apply_menu_theme(menubar)

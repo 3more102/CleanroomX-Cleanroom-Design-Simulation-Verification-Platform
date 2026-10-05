@@ -7,8 +7,10 @@ import tkinter as tk
 
 import pytest
 
+import cleanroomx.gui_panels as gui_panels_module
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.project_diagnostics import PROJECT_DIAGNOSTICS_SCHEMA
+from cleanroomx.runtime_diagnostics import GuiIncidentReport
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, _Hit
 
 
@@ -199,3 +201,37 @@ def test_problem_browser_supports_engineering_filters_sorting_and_relative_navig
     assert selected is not None
     if len(all_items) > 1:
         assert selected is not panel._issues_by_iid[all_items[0]]
+
+
+def test_project_diagnostics_failure_uses_operator_safe_incident_reference(app, monkeypatch):
+    failure = RuntimeError("sensitive backend detail")
+    report = GuiIncidentReport(
+        reference="CX-DIAG-1234",
+        operation="Refresh project diagnostics",
+        exception_type="RuntimeError",
+        summary="sensitive backend detail",
+        log_path=None,
+    )
+    monkeypatch.setattr(
+        gui_panels_module,
+        "analyze_project_diagnostics",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(failure),
+    )
+    monkeypatch.setattr(
+        gui_panels_module,
+        "record_gui_exception",
+        lambda operation, exc: report,
+    )
+
+    panel = app.problems_panel
+    assert panel.refresh() is None
+    app.root.update()
+
+    assert panel.last_result is None
+    assert panel.last_error_report is report
+    assert panel.summary_var.get() == "Diagnostics unavailable · CX-DIAG-1234"
+    assert panel.visible_var.get() == "0 visible"
+    detail = panel.detail.get("1.0", "end").strip()
+    assert "Refresh project diagnostics did not complete." in detail
+    assert "Error reference: CX-DIAG-1234" in detail
+    assert "did not modify project data" in detail

@@ -3531,8 +3531,11 @@ class CleanroomXApp:
                 self._ui_state_path,
                 self._capture_ui_layout_state(),
             )
-        except Exception:
-            return
+        except Exception as exc:
+            report = record_gui_exception("Save workstation layout", exc)
+            self.status_var.set(
+                f"Workstation layout not saved · {report.reference}"
+            )
 
     def _restore_ui_layout_state(self) -> None:
         self._focus_workspace_snapshot = None

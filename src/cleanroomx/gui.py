@@ -1265,7 +1265,7 @@ class CleanroomXApp:
         self.project_state_var = tk.StringVar(value="UNSAVED")
         self.diagnostics_status_var = tk.StringVar(value="DRC —")
         self.verification_badge_var = tk.StringVar(value="VERIFY —")
-        self.evidence_badge_var = tk.StringVar(value="EVIDENCE —")
+        self.evidence_badge_var = tk.StringVar(value="EVIDENCE —")\n        self.simulation_badge_var = tk.StringVar(value="SIM IDLE")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1623,7 +1623,19 @@ class CleanroomXApp:
             textvariable=self.evidence_badge_var,
             style="CX.Status.Neutral.TLabel",
         )
-        self.evidence_badge.pack(side="left")
+        self.evidence_badge.pack(side="left", padx=(0, 4))
+        self.simulation_badge = ttk.Label(
+            healthbar,
+            textvariable=self.simulation_badge_var,
+            style="CX.Status.Purple.TLabel",
+        )
+        self.simulation_badge.pack(side="left", padx=(0, 4))
+        self.simulation_progress = ttk.Progressbar(
+            healthbar,
+            mode="indeterminate",
+            length=72,
+        )
+        self.simulation_progress.pack(side="left", padx=(0, 2))
 
         commandbar = ttk.Frame(
             self.root,
@@ -6197,6 +6209,19 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        progress = getattr(self, "simulation_progress", None)
+        if running:
+            self._set_engineering_badge(
+                "simulation_badge",
+                "simulation_badge_var",
+                "SIM RUNNING",
+                "info",
+            )
+            if progress is not None:
+                progress.start(12)
+        else:
+            if progress is not None:
+                progress.stop()
 
     def _poll_worker(self) -> None:
         try:
@@ -6207,10 +6232,22 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self._set_engineering_badge(
+                        "simulation_badge",
+                        "simulation_badge_var",
+                        "SIM ABANDONED",
+                        "orange",
+                    )
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._set_engineering_badge(
+                        "simulation_badge",
+                        "simulation_badge_var",
+                        "SIM FAIL",
+                        "error",
+                    )
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6254,6 +6291,18 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    run_status = str(getattr(run, "status", "") or "").casefold()
+                    simulation_state = (
+                        "success"
+                        if run_status in {"pass", "passed", "success", "ok"}
+                        else "warning"
+                    )
+                    self._set_engineering_badge(
+                        "simulation_badge",
+                        "simulation_badge_var",
+                        f"SIM {str(run.status).upper()}",
+                        simulation_state,
+                    )
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"

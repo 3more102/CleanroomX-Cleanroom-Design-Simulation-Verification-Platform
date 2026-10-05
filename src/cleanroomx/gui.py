@@ -69,6 +69,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
+from .gui_dashboard import ProjectHealthDashboard
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
@@ -1448,6 +1449,10 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        view_menu.add_command(
+            label="Project Dashboard",
+            command=self._activate_dashboard_workspace,
+        )
         workspace_menu = tk.Menu(view_menu, tearoff=False)
         for profile, label in (
             ("design", "Design Workspace"),
@@ -1846,6 +1851,18 @@ class CleanroomXApp:
             on_open_recent=self._open_recent_project_from_start,
         )
         self.notebook.add(self.start_center, text="Start")
+
+        self.project_dashboard = ProjectHealthDashboard(
+            self.notebook,
+            on_design=lambda: self.activate_workspace_profile("design"),
+            on_analysis=self._activate_analysis_input_workspace,
+            on_problems=self.show_problems_panel,
+            on_verification=lambda: self.activate_workspace_profile("verification"),
+            on_evidence=lambda: self.activate_workspace_profile("evidence"),
+            on_reporting=lambda: self.activate_workspace_profile("reporting"),
+            on_diagnostic=self._open_diagnostic_search_result,
+        )
+        self.notebook.add(self.project_dashboard, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -2630,6 +2647,7 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        proofgraph_documents: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -2673,11 +2691,10 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            proofgraph_documents = self._proofgraph_documents_from_records(records)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
-                viewer.set_documents(
-                    self._proofgraph_documents_from_records(records)
-                )
+                viewer.set_documents(proofgraph_documents)
             lines = [
                 "PERSISTED VERIFICATION EVIDENCE",
                 "",
@@ -2730,6 +2747,13 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+        dashboard = getattr(self, "project_dashboard", None)
+        if dashboard is not None:
+            dashboard.refresh(
+                self.project,
+                diagnostics,
+                proofgraph_documents,
+            )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -2865,6 +2889,13 @@ class CleanroomXApp:
                 "Window",
                 self._activate_start_workspace,
                 keywords=("home", "recent", "example"),
+            ),
+            PaletteCommand(
+                "workspace.dashboard",
+                "Open Project Dashboard",
+                "Window",
+                self._activate_dashboard_workspace,
+                keywords=("health", "status", "overview", "kpi"),
             ),
             PaletteCommand(
                 "workspace.2d",
@@ -3281,6 +3312,15 @@ class CleanroomXApp:
             self._refresh_start_center()
             self.notebook.select(self.start_center)
             self.workspace_status_var.set("Workspace: Start")
+
+    def _activate_dashboard_workspace(self) -> None:
+        dashboard = getattr(self, "project_dashboard", None)
+        if dashboard is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(dashboard)
+        self.workspace_status_var.set("Workspace: Dashboard")
+        self.status_var.set("Project health dashboard opened")
 
     def _recent_project_records(self) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []

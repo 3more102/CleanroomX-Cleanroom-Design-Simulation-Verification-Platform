@@ -44,14 +44,14 @@ launch.
 On Windows with Python 3.12:
 
 ```powershell
-python -m pip install --upgrade pip
+python -m pip install "pip==26.2.1"
 pip install -e ".[release]"
 .\scripts\build_windows_standalone.ps1
 ```
 
-The release extra pins both PyInstaller and IfcOpenShell to the reviewed
-versions used by CI. The repository source revision and workflow run identify
-the remaining build inputs.
+The release build pins pip, the setuptools PEP 517 backend, PyInstaller, and
+IfcOpenShell to the reviewed versions used by CI. The repository source
+revision and workflow run identify the remaining build inputs.
 
 ## Distribution modes
 

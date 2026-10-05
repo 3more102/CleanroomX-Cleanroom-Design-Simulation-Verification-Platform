@@ -5,7 +5,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .gui_theme import status_style_name, theme_palette
+from .gui_theme import attach_tooltip, status_style_name, theme_palette
 
 
 def _status_style(value: Any) -> str:
@@ -89,6 +89,76 @@ def system_status_projection(
     )
 
 
+def project_readiness_projection(
+    snapshot: dict[str, Any] | None,
+) -> tuple[int, str, str]:
+    """Summarize explicit subsystem state without inventing compliance results."""
+    modules = system_status_projection(snapshot)
+    scores: list[float] = []
+    attention = 0
+    failed = 0
+    unready = 0
+
+    healthy_states = {
+        "ready",
+        "current",
+        "pass",
+        "passed",
+        "ok",
+        "healthy",
+        "completed",
+        "success",
+        "verified",
+    }
+    attention_states = {
+        "warning",
+        "warn",
+        "stale",
+        "incomplete",
+        "degraded",
+        "attention",
+        "running",
+        "calculating",
+        "queued",
+    }
+    failed_states = {"fail", "failed", "error", "critical", "blocked"}
+
+    for name, raw_state, _detail in modules:
+        state = str(raw_state or "").strip().lower().replace("_", " ")
+        if state in healthy_states or (state == "available" and name != "ANALYSIS"):
+            scores.append(1.0)
+        elif state in attention_states or (state == "available" and name == "ANALYSIS"):
+            scores.append(0.5)
+            attention += 1
+        elif state in failed_states:
+            scores.append(0.0)
+            failed += 1
+        else:
+            scores.append(0.0)
+            unready += 1
+
+    percent = int(round(100.0 * sum(scores) / len(scores))) if scores else 0
+    if failed:
+        state = "fail"
+    elif percent == 100:
+        state = "ready"
+    elif percent > 0:
+        state = "warning" if attention else "incomplete"
+    else:
+        state = "not checked"
+
+    detail_parts = [
+        f"{sum(score == 1.0 for score in scores)}/{len(scores)} subsystems ready"
+    ]
+    if attention:
+        detail_parts.append(f"{attention} attention")
+    if failed:
+        detail_parts.append(f"{failed} failed")
+    if unready:
+        detail_parts.append(f"{unready} not checked")
+    return percent, state, " · ".join(detail_parts)
+
+
 class EngineeringDashboard(ttk.Frame):
     """Dense, display-only engineering project health surface."""
 
@@ -120,6 +190,11 @@ class EngineeringDashboard(ttk.Frame):
         self.evidence_var = tk.StringVar(value="0 records")
         self.evidence_detail_var = tk.StringVar(value="No persisted verification evidence")
         self.issue_summary_var = tk.StringVar(value="No project diagnostics evaluated")
+        self.readiness_var = tk.StringVar(value="NOT CHECKED")
+        self.readiness_detail_var = tk.StringVar(
+            value="0/5 subsystems ready · readiness is a workflow summary, not a compliance verdict"
+        )
+        self.readiness_percent_var = tk.StringVar(value="0%")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(5, weight=1)
@@ -223,17 +298,50 @@ class EngineeringDashboard(ttk.Frame):
         progress_host = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 7))
         progress_host.grid(row=3, column=0, sticky="new", pady=(0, 10))
         progress_host.columnconfigure(1, weight=1)
+
+        ttk.Label(
+            progress_host,
+            text="Project readiness",
+            style="CX.SurfaceSection.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.readiness_progress = ttk.Progressbar(
+            progress_host,
+            mode="determinate",
+            maximum=100,
+            style="CX.Warning.Horizontal.TProgressbar",
+        )
+        self.readiness_progress.grid(row=0, column=1, sticky="ew")
+        ttk.Label(
+            progress_host,
+            textvariable=self.readiness_percent_var,
+            style="CX.SurfaceMuted.TLabel",
+            width=6,
+            anchor="e",
+        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        self.readiness_label = ttk.Label(
+            progress_host,
+            textvariable=self.readiness_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.readiness_label.grid(row=0, column=3, sticky="e", padx=(4, 0))
+        attach_tooltip(
+            self.readiness_progress,
+            "Readiness is derived only from explicit model, diagnostics, verification, "
+            "analysis, and evidence states. It is a workflow summary, not a compliance verdict.",
+        )
+
         ttk.Label(
             progress_host,
             text="Verification currency",
             style="CX.SurfaceSection.TLabel",
-        ).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        ).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=(7, 0))
         self.verification_progress = ttk.Progressbar(
             progress_host,
             mode="determinate",
             maximum=100,
+            style="CX.Simulation.Horizontal.TProgressbar",
         )
-        self.verification_progress.grid(row=0, column=1, sticky="ew")
+        self.verification_progress.grid(row=1, column=1, sticky="ew", pady=(7, 0))
         self.verification_percent_var = tk.StringVar(value="0%")
         ttk.Label(
             progress_host,
@@ -241,7 +349,12 @@ class EngineeringDashboard(ttk.Frame):
             style="CX.SurfaceMuted.TLabel",
             width=6,
             anchor="e",
-        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        ).grid(row=1, column=2, sticky="e", padx=(8, 0), pady=(7, 0))
+        ttk.Label(
+            progress_host,
+            textvariable=self.readiness_detail_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
     def _build_system_status(self) -> None:
         host = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 7))
@@ -420,8 +533,37 @@ class EngineeringDashboard(ttk.Frame):
         )
         self.verification_value.configure(style=_status_style(verification_status))
         percent = int(round((current / configured) * 100)) if configured else 0
-        self.verification_progress.configure(value=percent)
+        self.verification_progress.configure(
+            value=percent,
+            style=(
+                "CX.Success.Horizontal.TProgressbar"
+                if verification_status == "current"
+                else "CX.Warning.Horizontal.TProgressbar"
+                if verification_status in {"stale", "incomplete"}
+                else "CX.Simulation.Horizontal.TProgressbar"
+            ),
+        )
         self.verification_percent_var.set(f"{percent}%")
+
+        readiness_percent, readiness_state, readiness_detail = project_readiness_projection(
+            self._snapshot
+        )
+        self.readiness_progress.configure(
+            value=readiness_percent,
+            style=(
+                "CX.Success.Horizontal.TProgressbar"
+                if readiness_state == "ready"
+                else "CX.Fail.Horizontal.TProgressbar"
+                if readiness_state == "fail"
+                else "CX.Warning.Horizontal.TProgressbar"
+            ),
+        )
+        self.readiness_percent_var.set(f"{readiness_percent}%")
+        self.readiness_var.set(readiness_state.upper().replace("_", " "))
+        self.readiness_detail_var.set(
+            f"{readiness_detail} · readiness is a workflow summary, not a compliance verdict"
+        )
+        self.readiness_label.configure(style=_status_style(readiness_state))
 
         rooms = int(model.get("room_count") or 0)
         area = float(model.get("total_floor_area_m2") or 0.0)

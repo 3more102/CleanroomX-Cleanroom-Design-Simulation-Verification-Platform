@@ -7,6 +7,7 @@ import pytest
 from cleanroomx.gui_proofgraph import (
     _filtered_projection,
     _node_detail_lines,
+    _searched_projection,
     proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
@@ -256,3 +257,22 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "Status: FAIL" in rendered
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
+
+
+
+def test_proofgraph_search_keeps_matches_and_immediate_traceability_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _searched_projection(projection, "pressure_solver")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+    assert "ifc:3IFC" not in keys
+
+    failed = _searched_projection(projection, "fail pressure")
+    failed_keys = {node["key"] for node in failed["nodes"]}
+    assert "finding:finding-pressure" in failed_keys
+    assert "verdict:verdict-pressure" in failed_keys
+
+    assert _searched_projection(projection, "") is projection

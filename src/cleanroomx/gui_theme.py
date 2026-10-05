@@ -295,6 +295,24 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         padding=(7, 3),
     )
     style.configure(
+        "CX.StatusAccent.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        padding=(7, 3),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.Toolbar.TLabel",
+        background=palette["surface"],
+        foreground=palette["text"],
+    )
+    style.configure(
+        "CX.ToolbarSection.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
         "CX.Accent.TLabel",
         background=palette["background"],
         foreground=palette["accent"],

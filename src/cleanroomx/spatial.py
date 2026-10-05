@@ -4833,6 +4833,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._resize_room_id is not None:
             self._replace_selection(hit)
             modifier_selection = False
+        elif (
+            hit is not None
+            and not modifier_selection
+            and hit in self.selected_hits()
+            and len(self.selected_hits()) > 1
+        ):
+            self.selected = hit
         else:
             self._update_click_selection(hit, state)
         if hit is None:
@@ -4843,7 +4850,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         if (
             hit is not None
             and item is not None
-            and len(self._selected_hits) == 1
             and not modifier_selection
         ):
             self._drag_anchor = self._canvas_to_world(event.x, event.y)
@@ -4912,19 +4918,39 @@ class SpatialDesignWorkspace(ttk.Frame):
                 grid_m=grid,
                 snap_to_grid=snap_to_grid,
             )
-            item["x_m"] = new_x
-            item["y_m"] = new_y
             actual_dx = new_x - old_x
             actual_dy = new_y - old_y
-            if (
-                self.selected is not None
-                and self.selected.kind == "room"
-                and (actual_dx or actual_dy)
-            ):
+            selected_hits = self.selected_hits()
+            if len(selected_hits) > 1 and (actual_dx or actual_dy):
+                selected_room_ids = {
+                    hit.item_id for hit in selected_hits if hit.kind == "room"
+                }
+                selected_device_ids = {
+                    hit.item_id for hit in selected_hits if hit.kind == "device"
+                }
+                for room in self.layout["rooms"]:
+                    if room["id"] in selected_room_ids:
+                        room["x_m"] += actual_dx
+                        room["y_m"] += actual_dy
                 for device in self.layout["devices"]:
-                    if device.get("room_id") == item["id"]:
+                    if (
+                        device["id"] in selected_device_ids
+                        or device.get("room_id") in selected_room_ids
+                    ):
                         device["x_m"] += actual_dx
                         device["y_m"] += actual_dy
+            else:
+                item["x_m"] = new_x
+                item["y_m"] = new_y
+                if (
+                    self.selected is not None
+                    and self.selected.kind == "room"
+                    and (actual_dx or actual_dy)
+                ):
+                    for device in self.layout["devices"]:
+                        if device.get("room_id") == item["id"]:
+                            device["x_m"] += actual_dx
+                            device["y_m"] += actual_dy
         self._load_property_panel()
         self.redraw()
 
@@ -5014,11 +5040,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             and self._drag_history_before is not None
         ):
             history_before, selection_before = self._drag_history_before
-            message = (
-                "Room resized"
-                if self._resize_room_id is not None
-                else "Spatial item moved"
-            )
+            if self._resize_room_id is not None:
+                message = "Room resized"
+            elif len(self.selected_hits()) > 1:
+                message = f"Moved {len(self.selected_hits())} selected spatial objects"
+            else:
+                message = "Spatial item moved"
             self._persist(
                 message,
                 history_before=history_before,

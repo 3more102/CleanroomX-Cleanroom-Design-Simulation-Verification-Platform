@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_errors import make_gui_callback_exception_handler
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -7282,6 +7283,21 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke:
+        status_setter = getattr(
+            getattr(app, "status_var", None),
+            "set",
+            None,
+        )
+        root.report_callback_exception = make_gui_callback_exception_handler(
+            operation="Unhandled GUI callback",
+            status_setter=status_setter if callable(status_setter) else None,
+            notifier=lambda report: messagebox.showerror(
+                "Unexpected application error",
+                report.user_message(),
+                parent=root,
+            ),
+        )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]
         lines = [

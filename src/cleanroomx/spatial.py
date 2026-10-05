@@ -165,7 +165,7 @@ def normalize_layout(value: Any) -> dict:
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            for field in ("classification", "analysis_room_name"):
+            for field in ("zone", "classification", "analysis_room_name"):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
                     if text:
@@ -1993,6 +1993,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             (
                 "Cleanroom",
                 (
+                    ("zone", "Zone", ""),
                     ("classification", "Classification", ""),
                     ("pressure_pa", "Design pressure", "Pa"),
                     ("analysis_room_name", "Analysis link", ""),
@@ -2335,6 +2336,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         name = str(item.get("name") or self.selected.item_id)
         if self.selected.kind == "room":
             parts = [f"Room: {name}"]
+            zone = str(item.get("zone") or "").strip()
+            if zone:
+                parts.append(f"Zone: {zone}")
             classification = str(item.get("classification") or "").strip()
             if classification:
                 parts.append(classification)
@@ -2748,6 +2752,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "height_m",
             "floor_elevation_m",
             "pressure_pa",
+            "zone",
             "classification",
             "analysis_room_name",
         }

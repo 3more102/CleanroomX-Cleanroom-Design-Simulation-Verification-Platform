@@ -397,6 +397,8 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
 
 
 class AnalysisPicker(tk.Toplevel):
+    """Searchable catalog over canonical application-layer analysis workflows."""
+
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
         self.title("Add analysis")
@@ -445,9 +447,14 @@ class AnalysisPicker(tk.Toplevel):
         ttk.Button(
             filters,
             text="Clear",
+            style="CX.Compact.TButton",
             command=self._clear_filters,
         ).pack(side="left")
-        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
+        ttk.Label(
+            filters,
+            textvariable=self.count_var,
+            style="CX.Muted.TLabel",
+        ).pack(side="right")
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=12, pady=6)
@@ -470,40 +477,112 @@ class AnalysisPicker(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
-        for item in analysis_catalog():
-            source = "Built-in"
-            plugin = item.get("plugin")
-            if isinstance(plugin, dict):
-                identity = (
-                    plugin.get("distribution_name")
-                    or plugin.get("entry_point_name")
-                    or item["key"]
-                )
-                version = plugin.get("distribution_version")
-                source = f"Plugin: {identity}" + (
-                    f" {version}" if version else ""
-                )
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=12, pady=(6, 12))
+        ttk.Button(
+            buttons,
+            text="Cancel",
+            style="CX.Compact.TButton",
+            command=self.destroy,
+        ).pack(side="right")
+        self.add_button = ttk.Button(
+            buttons,
+            text="Add",
+            command=self._accept,
+            style="CX.Primary.TButton",
+        )
+        self.add_button.pack(side="right", padx=(0, 6))
+
+        self.search_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
+        self.tree.bind("<Double-1>", lambda event: self._accept())
+        self.tree.bind("<Return>", lambda event: self._accept())
+        self.bind("<Escape>", lambda event: self.destroy())
+        self._populate()
+
+        configure_toplevel_geometry(
+            self,
+            1020,
+            500,
+            min_width=760,
+            min_height=420,
+        )
+        self.search_entry.focus_set()
+
+    @staticmethod
+    def _catalog_source(item: dict) -> str:
+        source = "Built-in"
+        plugin = item.get("plugin")
+        if isinstance(plugin, dict):
+            identity = (
+                plugin.get("distribution_name")
+                or plugin.get("entry_point_name")
+                or item["key"]
+            )
+            version = plugin.get("distribution_version")
+            source = f"Plugin: {identity}" + (
+                f" {version}" if version else ""
+            )
+        return source
+
+    def _filtered_catalog(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
+        visible = []
+        for item in self._catalog:
+            item_category = str(item.get("category", ""))
+            if category and category != "all" and item_category.casefold() != category:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(item.get("key", "")),
+                        str(item.get("title", "")),
+                        item_category,
+                        str(item.get("description", "")),
+                        self._catalog_source(item),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(item)
+        return visible
+
+    def _populate(self) -> None:
+        previous = self.tree.selection()
+        selected = previous[0] if previous else None
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+
+        visible = self._filtered_catalog()
+        for item in visible:
             self.tree.insert(
                 "",
                 "end",
                 iid=item["key"],
                 text=item["title"],
-                values=(item["category"], source, item["description"]),
+                values=(
+                    item["category"],
+                    self._catalog_source(item),
+                    item["description"],
+                ),
             )
 
-        buttons = ttk.Frame(self)
-        buttons.pack(fill="x", padx=12, pady=(6, 12))
-        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
-        ttk.Button(buttons, text="Add", command=self._accept).pack(
-            side="right", padx=(0, 6)
+        self.count_var.set(f"{len(visible)} of {len(self._catalog)} workflows")
+        children = self.tree.get_children()
+        target = selected if selected and self.tree.exists(selected) else (
+            children[0] if children else None
         )
-        self.tree.bind("<Double-1>", lambda event: self._accept())
-        first = self.tree.get_children()
-        if first:
-            self.tree.selection_set(first[0])
-            self.tree.focus(first[0])
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self.add_button.configure(state="normal" if children else "disabled")
 
-        configure_toplevel_geometry(self, 1020, 470)
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.category_var.set("All")
+        self.search_entry.focus_set()
 
     def _accept(self) -> None:
         selection = self.tree.selection()

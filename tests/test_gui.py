@@ -213,18 +213,19 @@ def test_gui_requirements_traceability_reports_empty_project(monkeypatch):
     app.root = object()
     app.project = ProjectDocument(name="No requirements")
 
-    infos = []
+    notifications = []
+    app._notify = lambda message, **kwargs: notifications.append((message, kwargs))
     monkeypatch.setattr(
         gui_module.messagebox,
         "showinfo",
-        lambda title, message, **kwargs: infos.append((title, message)),
+        lambda *args, **kwargs: pytest.fail("informational empty state must be non-modal"),
     )
 
     assert app.show_requirements_traceability() is False
-    assert infos == [
+    assert notifications == [
         (
-            "Project Requirements Traceability",
             "No persisted project requirements or evidence mappings exist yet.",
+            {"level": "info"},
         )
     ]
 
@@ -1680,7 +1681,8 @@ def test_gui_project_dossier_export_writes_revision_bound_json(monkeypatch, tmp_
         CleanroomXApp,
     )
 
-    info_calls = []
+    notifications = []
+    app._notify = lambda message, **kwargs: notifications.append((message, kwargs))
     monkeypatch.setattr(
         gui_module.filedialog,
         "asksaveasfilename",
@@ -1689,7 +1691,7 @@ def test_gui_project_dossier_export_writes_revision_bound_json(monkeypatch, tmp_
     monkeypatch.setattr(
         gui_module.messagebox,
         "showinfo",
-        lambda title, message, **kwargs: info_calls.append((title, message)),
+        lambda *args, **kwargs: pytest.fail("successful dossier export must be non-modal"),
     )
 
     app.export_project_engineering_dossier()
@@ -1699,8 +1701,9 @@ def test_gui_project_dossier_export_writes_revision_bound_json(monkeypatch, tmp_
     assert payload["source_project_revision"] == revision.sha256
     assert len(payload["dossier_sha256"]) == 64
     assert "Exported project dossier" in app.status_var.value
-    assert info_calls[-1][0] == "Project dossier exported"
-    assert payload["dossier_sha256"] in info_calls[-1][1]
+    assert notifications[-1][0] == "Project dossier exported"
+    assert notifications[-1][1]["level"] == "success"
+    assert payload["dossier_sha256"] in notifications[-1][1]["detail"]
 
 
 def test_gui_project_dossier_export_rejects_external_project_change(
@@ -1813,7 +1816,8 @@ def test_gui_project_requirements_verification_reports_verified_pass(
         }
 
     calls = []
-    infos = []
+    notifications = []
+    app._notify = lambda message, **kwargs: notifications.append((message, kwargs))
     warnings = []
     errors = []
     monkeypatch.setattr(
@@ -1824,7 +1828,7 @@ def test_gui_project_requirements_verification_reports_verified_pass(
     monkeypatch.setattr(
         gui_module.messagebox,
         "showinfo",
-        lambda title, message, **kwargs: infos.append((title, message)),
+        lambda *args, **kwargs: pytest.fail("successful verification must be non-modal"),
     )
     monkeypatch.setattr(
         gui_module.messagebox,
@@ -1842,8 +1846,9 @@ def test_gui_project_requirements_verification_reports_verified_pass(
     assert calls == [(project_path, "room-a")]
     assert errors == []
     assert warnings == []
-    assert infos[-1][0] == "Project requirements verified"
-    assert "Verification SHA-256" in infos[-1][1]
+    assert notifications[-1][0] == "Project requirements verified"
+    assert notifications[-1][1]["level"] == "success"
+    assert "Verification SHA-256" in notifications[-1][1]["detail"]
     assert "Project requirements verified" in app.status_var.value
 
 
@@ -2141,18 +2146,19 @@ def test_gui_verification_history_empty_is_reported(monkeypatch):
     app.project = ProjectDocument(name="No verification history")
     app.status_var = Status()
 
-    infos = []
+    notifications = []
+    app._notify = lambda message, **kwargs: notifications.append((message, kwargs))
     monkeypatch.setattr(
         gui_module.messagebox,
         "showinfo",
-        lambda title, message, **kwargs: infos.append((title, message)),
+        lambda *args, **kwargs: pytest.fail("informational empty state must be non-modal"),
     )
 
     assert app.show_verification_history() is False
-    assert infos == [
+    assert notifications == [
         (
-            "Project Verification History",
             "No persisted project requirements verification records exist yet.",
+            {"level": "info"},
         )
     ]
 

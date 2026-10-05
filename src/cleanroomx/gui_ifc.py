@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 import tkinter as tk
 from tkinter import ttk
+from .gui_geometry import configure_toplevel_geometry
 
 
 def _items(value: Any) -> list[dict[str, Any]]:
@@ -124,8 +125,13 @@ class IfcImportReviewDialog(tk.Toplevel):
         self.accepted = False
         self.snapshot = dict(snapshot)
         self.title("Review IFC Import")
-        self.geometry("1040x720")
-        self.minsize(840, 560)
+        configure_toplevel_geometry(
+            self,
+            width=1040,
+            height=720,
+            min_width=840,
+            min_height=560,
+        )
         self.transient(parent)
         self.grab_set()
 

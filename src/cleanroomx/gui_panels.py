@@ -41,7 +41,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(7, 5))
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
         toolbar.pack(fill="x")
 
         ttk.Label(toolbar, text="PROBLEMS", style="CX.Section.TLabel").pack(
@@ -60,17 +60,25 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
-            side="left", padx=2
+        ttk.Button(
+            toolbar, text="Refresh", style="CX.Compact.TButton", command=self.refresh
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar, text="Copy", style="CX.Compact.TButton", command=self.copy_selected
+        ).pack(side="left", padx=2)
+        self.locate_button = ttk.Button(
+            toolbar,
+            text="Locate / Inspect",
+            style="CX.Secondary.TButton",
+            command=self._navigate_selected,
         )
-        ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
-            side="left", padx=2
-        )
+        self.locate_button.pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
             command=self._export,
             state="normal" if self._export_callback is not None else "disabled",
+            style="CX.Compact.TButton",
         )
         self.export_button.pack(side="left", padx=2)
 
@@ -78,6 +86,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             toolbar,
             textvariable=self.summary_var,
             anchor="e",
+            style="CX.InfoBadge.TLabel",
         ).pack(side="right", fill="x", expand=True, padx=(12, 0))
 
         body = ttk.Panedwindow(self, orient="vertical")
@@ -95,6 +104,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             show="headings",
             selectmode="browse",
             height=7,
+            style="CX.Card.Treeview",
         )
         headings = {
             "severity": "Severity",
@@ -142,6 +152,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.columnconfigure(0, weight=1)
 
         self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self.tree.tag_configure("warning", font=("TkDefaultFont", 9, "bold"))
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
@@ -161,6 +172,19 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+
+    def apply_theme(self, palette: dict[str, str]) -> None:
+        """Apply semantic diagnostic colors without changing diagnostic data."""
+        self.tree.tag_configure("error", foreground=palette["error"])
+        self.tree.tag_configure("warning", foreground=palette["warning"])
+        self.tree.tag_configure("info", foreground=palette["info"])
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
@@ -301,7 +325,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         issue = self.selected_issue()
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        if issue is not None:
+        if issue is None:
+            self.detail.insert(
+                "1.0",
+                "No diagnostic selected. Select an issue to inspect its engineering context.\n",
+            )
+        else:
             lines = [
                 f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
                 str(issue.get("message", "")),

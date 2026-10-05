@@ -6,7 +6,10 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
-from cleanroomx.gui_evidence import evidence_workspace_projection
+from cleanroomx.gui_evidence import (
+    evidence_record_matches_filters,
+    evidence_workspace_projection,
+)
 
 
 def test_evidence_projection_preserves_retained_record_semantics():
@@ -103,3 +106,107 @@ def test_evidence_workspace_retained_state_is_not_a_pass_verdict(app):
 
     assert app.evidence_workspace.status_var.get() == "RETAINED"
     assert app.evidence_workspace.status_label.cget("style") == "CX.Status.Info.TLabel"
+
+
+
+def test_evidence_record_filters_use_persisted_ledger_fields_only():
+    row = {
+        "sequence": 7,
+        "completed": "2026-10-05T08:00:00Z",
+        "analysis_id": "room-a",
+        "analysis_name": "Room A",
+        "analysis_kind": "room_verification",
+        "status": "pass",
+        "identity": "abc123",
+        "record_sha256": "def456",
+    }
+
+    assert evidence_record_matches_filters(
+        row,
+        verdict="pass",
+        analysis_kind="room_verification",
+        query="room 2026",
+    )
+    assert evidence_record_matches_filters(row, query="abc123")
+    assert not evidence_record_matches_filters(row, verdict="fail")
+    assert not evidence_record_matches_filters(row, query="pressure cascade")
+
+
+def test_evidence_workspace_filters_retained_records_and_preserves_counts(app):
+    app.evidence_workspace.refresh(
+        {
+            "evidence_records": [
+                {
+                    "sequence": 1,
+                    "analysis_id": "room-a",
+                    "analysis_name": "Room A",
+                    "analysis_kind": "ach",
+                    "completed_at_utc": "2026-10-05T08:00:00Z",
+                    "verification": {"status": "pass", "verified": True},
+                    "evidence": [{"id": "ev-1"}],
+                    "proofgraphs": [{"id": "pg-a"}],
+                },
+                {
+                    "sequence": 2,
+                    "analysis_id": "zone-b",
+                    "analysis_name": "Zone B",
+                    "analysis_kind": "pressure",
+                    "completed_at_utc": "2026-10-05T09:00:00Z",
+                    "verification": {"status": "fail", "verified": True},
+                    "evidence": [{"id": "ev-2"}, {"id": "ev-3"}],
+                    "proofgraphs": [{"id": "pg-b"}],
+                },
+            ]
+        }
+    )
+    panel = app.evidence_workspace
+    app.root.update_idletasks()
+
+    assert panel.records_var.get() == "2"
+    assert panel.evidence_var.get() == "3"
+    assert panel.graphs_var.get() == "2"
+    assert panel.visible_var.get() == "2 / 2 visible"
+
+    panel.verdict_var.set("fail")
+    app.root.update_idletasks()
+    assert len(panel.tree.get_children()) == 1
+    assert panel.visible_var.get() == "1 / 2 visible"
+    assert next(iter(panel._rows.values()))["sequence"] == 2
+
+    panel.verdict_var.set("All")
+    panel.search_var.set("room ach")
+    app.root.update_idletasks()
+    assert len(panel.tree.get_children()) == 1
+    assert next(iter(panel._rows.values()))["sequence"] == 1
+
+
+def test_evidence_workspace_relative_review_wraps_visible_records(app):
+    app.evidence_workspace.refresh(
+        {
+            "evidence_records": [
+                {
+                    "sequence": 1,
+                    "analysis_name": "A",
+                    "analysis_kind": "ach",
+                    "verification": {"status": "pass"},
+                },
+                {
+                    "sequence": 2,
+                    "analysis_name": "B",
+                    "analysis_kind": "pressure",
+                    "verification": {"status": "warning"},
+                },
+            ]
+        }
+    )
+    panel = app.evidence_workspace
+    children = panel.tree.get_children()
+    assert len(children) == 2
+    panel.tree.selection_set(children[0])
+    panel.tree.focus(children[0])
+
+    panel._select_relative(1)
+    assert panel._rows[panel.tree.selection()[0]]["sequence"] == 1
+
+    panel._select_relative(1)
+    assert panel._rows[panel.tree.selection()[0]]["sequence"] == 2

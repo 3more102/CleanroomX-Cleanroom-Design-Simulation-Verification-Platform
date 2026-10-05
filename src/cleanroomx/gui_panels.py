@@ -96,6 +96,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._export_callback = export_callback
         self._status_setter = status_setter or (lambda _message: None)
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
+        self._sort_column: str | None = None
+        self._sort_reverse = False
+        self._tree_headings: dict[str, str] = {}
         self.last_result: dict[str, Any] | None = None
         self._theme_name = "dark"
         self._palette = theme_palette(self._theme_name)
@@ -247,6 +250,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "level": "Level",
             "domain": "Domain",
         }
+        self._tree_headings = dict(headings)
         widths = {
             "severity": 90,
             "code": 220,
@@ -256,7 +260,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "domain": 150,
         }
         for column in columns:
-            self.tree.heading(column, text=headings[column])
+            self.tree.heading(
+                column,
+                text=headings[column],
+                command=lambda key=column: self._set_sort_column(key),
+            )
             self.tree.column(
                 column,
                 width=widths[column],
@@ -439,7 +447,75 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 if query not in haystack:
                     continue
             visible.append(issue)
+        if self._sort_column is not None:
+            visible.sort(
+                key=lambda issue: self._diagnostic_sort_value(
+                    issue,
+                    self._sort_column or "code",
+                ),
+                reverse=self._sort_reverse,
+            )
         return visible
+
+    @staticmethod
+    def _diagnostic_sort_value(
+        issue: dict[str, Any],
+        column: str,
+    ) -> tuple[Any, ...]:
+        severity_order = {
+            "critical": 0,
+            "error": 1,
+            "warning": 2,
+            "info": 3,
+        }
+        if column == "severity":
+            severity = str(issue.get("severity", "")).strip().casefold()
+            return (severity_order.get(severity, 99), severity)
+        if column == "code":
+            return (str(issue.get("rule", "")).casefold(),)
+        if column == "description":
+            return (str(issue.get("message", "")).casefold(),)
+        if column == "object":
+            element = issue.get("element")
+            if isinstance(element, dict):
+                value = (
+                    element.get("name")
+                    or element.get("id")
+                    or element.get("type")
+                    or ""
+                )
+            else:
+                value = ""
+            return (str(value).casefold(),)
+        if column == "level":
+            details = issue.get("details")
+            if isinstance(details, dict):
+                for key in ("level", "level_name", "floor", "floor_name"):
+                    if details.get(key) not in (None, ""):
+                        return (str(details.get(key)).casefold(),)
+            return ("",)
+        if column == "domain":
+            return (str(issue.get("category", "")).casefold(),)
+        return ("",)
+
+    def _set_sort_column(self, column: str) -> None:
+        if column not in self._tree_headings:
+            return
+        if self._sort_column == column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column
+            self._sort_reverse = False
+        for key, label in self._tree_headings.items():
+            suffix = ""
+            if key == self._sort_column:
+                suffix = " ▼" if self._sort_reverse else " ▲"
+            self.tree.heading(
+                key,
+                text=label + suffix,
+                command=lambda selected=key: self._set_sort_column(selected),
+            )
+        self._populate()
 
     def _populate(self) -> None:
         selection = self.tree.selection()

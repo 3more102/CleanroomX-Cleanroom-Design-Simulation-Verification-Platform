@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .proofgraph_io import proofgraph_from_dict
+from .gui_theme import theme_palette
 
 
 _TYPE_ORDER = {
@@ -394,13 +395,20 @@ class ProofGraphViewer(ttk.Frame):
         self._tree_key_by_iid: dict[str, str] = {}
         self._canvas_key_by_item: dict[int, str] = {}
         self._selected_key: str | None = None
+        self._theme_name = "dark"
+        self._palette = theme_palette(self._theme_name)
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
 
-        toolbar = ttk.Frame(self, padding=(7, 5))
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         toolbar.pack(fill="x")
+        ttk.Label(
+            toolbar,
+            text="PROOFGRAPH TRACEABILITY",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 10))
         ttk.Label(toolbar, text="Graph").pack(side="left")
         self.graph_picker = ttk.Combobox(
             toolbar,
@@ -454,9 +462,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.canvas = tk.Canvas(
             graph_host,
-            background="#f7f9fb",
+            background=self._palette["canvas_2d"],
             highlightthickness=1,
-            highlightbackground="#c7d0d9",
+            highlightbackground=self._palette["border"],
         )
         graph_y = ttk.Scrollbar(graph_host, orient="vertical", command=self.canvas.yview)
         graph_x = ttk.Scrollbar(graph_host, orient="horizontal", command=self.canvas.xview)
@@ -577,27 +585,53 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def apply_theme(self, value: Any, *, redraw: bool = True) -> None:
+        self._theme_name = str(value or "dark")
+        self._palette = theme_palette(self._theme_name)
+        self.canvas.configure(
+            background=self._palette["canvas_2d"],
+            highlightbackground=self._palette["border"],
+        )
+        self.detail.configure(
+            background=self._palette["field"],
+            foreground=self._palette["field_text"],
+            insertbackground=self._palette["text"],
+            selectbackground=self._palette["selection"],
+            selectforeground=self._palette["selection_text"],
+        )
+        if redraw:
+            self._draw_graph()
+
+    def _node_accent(self, node: dict[str, Any]) -> str:
         status = _text(node.get("status")).casefold()
         if status in {"fail", "failed", "error"}:
-            return "#fee2e2"
+            return self._palette["error"]
         if status in {"warning", "warn"}:
-            return "#fef3c7"
-        if status == "pass":
-            return "#dcfce7"
+            return self._palette["warning"]
+        if status in {"pass", "passed"}:
+            return self._palette["success"]
         return {
-            "requirement": "#dbeafe",
-            "model_object": "#e0f2fe",
-            "ifc": "#e0e7ff",
-            "source": "#f1f5f9",
-            "calculation": "#ede9fe",
-            "evidence": "#f3e8ff",
-            "check": "#fef9c3",
-            "finding": "#ffedd5",
-            "verdict": "#e2e8f0",
-            "verification_run": "#d1fae5",
-        }.get(node.get("type"), "#f8fafc")
+            "requirement": "#2563EB",
+            "model_object": self._palette["accent"],
+            "ifc": self._palette["info"],
+            "source": self._palette["secondary_text"],
+            "calculation": self._palette["simulation"],
+            "evidence": self._palette["evidence"],
+            "check": self._palette["warning"],
+            "finding": self._palette["attention"],
+            "verdict": self._palette["info"],
+            "verification_run": self._palette["success"],
+        }.get(node.get("type"), self._palette["muted"])
+
+    def _node_fill(self, node: dict[str, Any]) -> str:
+        status = _text(node.get("status")).casefold()
+        if status in {"fail", "failed", "error"}:
+            return self._palette["error_surface"]
+        if status in {"warning", "warn"}:
+            return self._palette["warning_surface"]
+        if status in {"pass", "passed"}:
+            return self._palette["success_surface"]
+        return self._palette["surface_alt"]
 
     def _draw_graph(self) -> None:
         canvas = self.canvas
@@ -611,7 +645,8 @@ class ProofGraphViewer(ttk.Frame):
                 24,
                 anchor="nw",
                 text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                fill=self._palette["muted"],
+                font=("TkDefaultFont", 10),
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -636,6 +671,24 @@ class ProofGraphViewer(ttk.Frame):
                     margin_y + row * y_spacing,
                 )
 
+        for column in sorted(by_column):
+            column_nodes = by_column[column]
+            if not column_nodes:
+                continue
+            title = _NODE_TITLES.get(
+                column_nodes[0]["type"],
+                column_nodes[0]["type"].replace("_", " ").title(),
+            )
+            x = margin_x + column * x_spacing
+            canvas.create_text(
+                x,
+                24,
+                anchor="w",
+                text=title.upper(),
+                fill=self._palette["muted"],
+                font=("TkDefaultFont", 8, "bold"),
+            )
+
         for edge in edges:
             source = positions.get(edge["source"])
             target = positions.get(edge["target"])
@@ -646,15 +699,17 @@ class ProofGraphViewer(ttk.Frame):
                 source[1] + 24,
                 target[0],
                 target[1] + 24,
-                fill="#94a3b8",
+                fill=self._palette["border_strong"],
                 width=1,
                 arrow="last",
+                arrowshape=(7, 8, 3),
             )
 
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
+            accent = self._node_accent(node)
+            outline = self._palette["accent"] if selected else accent
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,
@@ -665,19 +720,30 @@ class ProofGraphViewer(ttk.Frame):
                 outline=outline,
                 width=width,
             )
+            stripe = canvas.create_rectangle(
+                x,
+                y,
+                x + 5,
+                y + 48,
+                fill=accent,
+                outline=accent,
+                width=0,
+            )
             label = node["label"]
             if len(label) > 32:
                 label = label[:29] + "…"
             status = f"\n{node['status'].upper()}" if node.get("status") else ""
             text_item = canvas.create_text(
-                x + 80,
+                x + 82,
                 y + 24,
-                width=148,
+                width=142,
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=self._palette["text"],
+                font=("TkDefaultFont", 8, "bold" if selected else "normal"),
             )
             self._canvas_key_by_item[rect] = node["key"]
+            self._canvas_key_by_item[stripe] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]
 
         width = margin_x + (max(by_column) + 1) * x_spacing + 190

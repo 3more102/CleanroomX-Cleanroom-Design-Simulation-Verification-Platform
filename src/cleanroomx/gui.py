@@ -7619,11 +7619,13 @@ class CleanroomXApp:
         if not self._confirm_project_replacement():
             return
         self._save_ui_layout_state()
-        self._discard_current_autosave()
-        self._discard_restored_recovery()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.shutdown(wait=False)
+            # Drain the active writer before deleting recovery evidence. Otherwise
+            # an in-flight write can publish a new artifact after cleanup begins.
+            manager.shutdown(wait=True)
+        self._discard_current_autosave()
+        self._discard_restored_recovery()
         self.root.destroy()
 
 

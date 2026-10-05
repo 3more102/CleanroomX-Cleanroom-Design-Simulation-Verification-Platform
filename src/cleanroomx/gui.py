@@ -3252,6 +3252,9 @@ class CleanroomXApp:
         notebook = getattr(self, "output_notebook", None)
         if panel is not None and notebook is not None:
             notebook.select(panel)
+            search_entry = getattr(panel, "search_entry", None)
+            if search_entry is not None:
+                search_entry.focus_set()
         self.status_var.set("Output: Problems")
 
     def toggle_design_inspector(self) -> None:
@@ -3525,9 +3528,14 @@ class CleanroomXApp:
                 )
                 return
 
-        if element_type == "spatial_element" and element_id:
+        if element_type in {"spatial_element", "room", "device"} and element_id:
             workspace = self.spatial_workspace
-            for kind in ("room", "device"):
+            candidate_kinds = (
+                (element_type,)
+                if element_type in {"room", "device"}
+                else ("room", "device")
+            )
+            for kind in candidate_kinds:
                 if workspace.select_item(kind, element_id, notify=True):
                     self._activate_spatial_workspace()
                     workspace.fit_selected()
@@ -3613,6 +3621,20 @@ class CleanroomXApp:
                 shortcut="Ctrl+S",
             ),
             PaletteCommand(
+                "file.save_as",
+                "Save Project As",
+                "File",
+                self.save_project_as,
+                keywords=("copy", "destination", "project"),
+            ),
+            PaletteCommand(
+                "file.open_bundle",
+                "Open Portable Project Bundle",
+                "File",
+                self.open_portable_project_bundle,
+                keywords=("bundle", "archive", "zip", "project"),
+            ),
+            PaletteCommand(
                 "workspace.start",
                 "Open Start Center",
                 "Window",
@@ -3689,6 +3711,13 @@ class CleanroomXApp:
                 keywords=("problems", "errors", "warnings"),
             ),
             PaletteCommand(
+                "verification.problems",
+                "Open Project Problems",
+                "Verification",
+                self.show_problems_panel,
+                keywords=("diagnostics", "errors", "warnings", "findings"),
+            ),
+            PaletteCommand(
                 "verification.run",
                 "Verify Project Requirements",
                 "Verification",
@@ -3722,6 +3751,13 @@ class CleanroomXApp:
                 "Report",
                 self.export_project_engineering_dossier,
                 keywords=("report", "evidence"),
+            ),
+            PaletteCommand(
+                "project.revisions",
+                "Browse Saved Project Revisions",
+                "Project",
+                self.show_saved_revisions,
+                keywords=("history", "restore", "revision", "snapshot"),
             ),
             PaletteCommand(
                 "recovery.open",

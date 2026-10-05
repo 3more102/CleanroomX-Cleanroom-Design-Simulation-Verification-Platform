@@ -36,6 +36,17 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "canvas_3d",
         "plot",
         "grid",
+        "surface_high",
+        "border_strong",
+        "secondary",
+        "success",
+        "warning",
+        "danger",
+        "info",
+        "simulation",
+        "evidence",
+        "attention",
+        "magenta",
     }
     assert set(light) == required
     assert set(dark) == required
@@ -49,3 +60,21 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_dark_palette_matches_industrial_engineering_semantics():
+    dark = theme_palette("dark")
+
+    assert dark["background"] == "#0B1220"
+    assert dark["surface"] == "#111B2E"
+    assert dark["surface_alt"] == "#17243A"
+    assert dark["surface_high"] == "#1D2C45"
+    assert dark["border"] == "#263750"
+    assert dark["border_strong"] == "#334A68"
+    assert dark["accent"] == "#22D3EE"
+    assert dark["secondary"] == "#38BDF8"
+    assert dark["success"] == "#22C55E"
+    assert dark["warning"] == "#F59E0B"
+    assert dark["danger"] == "#EF4444"
+    assert dark["simulation"] == "#A78BFA"
+    assert dark["background"].lower() != "#000000"

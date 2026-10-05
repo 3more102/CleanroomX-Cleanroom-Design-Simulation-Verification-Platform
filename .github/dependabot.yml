@@ -8,9 +8,6 @@ updates:
       time: "04:00"
       timezone: UTC
     open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - security
 
   - package-ecosystem: github-actions
     directory: /
@@ -20,6 +17,3 @@ updates:
       time: "04:15"
       timezone: UTC
     open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - security

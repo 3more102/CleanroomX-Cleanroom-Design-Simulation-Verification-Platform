@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .proofgraph_io import proofgraph_from_dict
+from .gui_theme import theme_palette
 
 
 _TYPE_ORDER = {
@@ -517,6 +518,7 @@ class ProofGraphViewer(ttk.Frame):
         self._positions_by_key: dict[str, tuple[float, float]] = {}
         self._graph_scale = 1.0
         self._pan_active = False
+        self._palette = theme_palette("light")
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
@@ -628,9 +630,10 @@ class ProofGraphViewer(ttk.Frame):
 
         self.canvas = tk.Canvas(
             graph_host,
-            background="#f7f9fb",
+            background=self._palette["plot"],
             highlightthickness=1,
-            highlightbackground="#c7d0d9",
+            highlightbackground=self._palette["border"],
+            highlightcolor=self._palette["accent"],
         )
         graph_y = ttk.Scrollbar(graph_host, orient="vertical", command=self.canvas.yview)
         graph_x = ttk.Scrollbar(graph_host, orient="horizontal", command=self.canvas.xview)
@@ -671,6 +674,25 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
         detail_scroll.pack(side="right", fill="y", pady=(0, 6))
+        self.apply_theme("light")
+
+    def apply_theme(self, theme_name: str) -> None:
+        """Apply the shared workstation palette without changing graph semantics."""
+        self._palette = theme_palette(theme_name)
+        palette = self._palette
+        self.canvas.configure(
+            background=palette["plot"],
+            highlightbackground=palette["border"],
+            highlightcolor=palette["accent"],
+        )
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+        self._draw_graph()
 
     def set_documents(self, documents: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> None:
         unique: dict[str, dict[str, Any]] = {}
@@ -826,12 +848,67 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.yview_moveto(0.0)
         self._status_setter(f"ProofGraph fit to view · {self.zoom_var.get()}")
 
-    def focus_node(self, key: str) -> bool:
-        if key not in self._nodes_by_key:
-            return False
-        self._select_key(key)
-        self._center_key(key)
-        return True
+    def focus_node(
+        self,
+        key_or_id: str,
+        *,
+        node_type: str | None = None,
+        graph_id: str | None = None,
+        node_key: str | None = None,
+    ) -> bool:
+        """Reveal, select and center one persisted ProofGraph node.
+
+        Presentation-only search/filter state is cleared when needed.  Callers may
+        provide the exact projected key, or a canonical node id plus optional type
+        and graph identity.  No graph or engineering evidence is mutated.
+        """
+        wanted = _text(key_or_id)
+        wanted_type = _text(node_type).casefold()
+        wanted_graph = _text(graph_id)
+        wanted_key = _text(node_key)
+
+        if wanted_graph:
+            for document in self._documents:
+                identities = {
+                    _text(document.get("id")),
+                    _text(document.get("graph_sha256")),
+                }
+                if wanted_graph in identities:
+                    self.graph_var.set(self._document_label(document))
+                    break
+
+        # Search navigation must not fail merely because a presentation filter hid
+        # the requested persisted node.
+        if self.filter_var.get() != "All":
+            self.filter_var.set("All")
+        if self.search_var.get():
+            self.search_var.set("")
+        self._refresh()
+
+        if wanted_key and wanted_key in self._nodes_by_key:
+            self._select_key(wanted_key)
+            self._center_key(wanted_key)
+            return True
+        if wanted in self._nodes_by_key:
+            self._select_key(wanted)
+            self._center_key(wanted)
+            return True
+
+        for node in self._projection.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            node_id = _text(node.get("id"))
+            if not node_id or node_id != wanted:
+                continue
+            if wanted_type and _text(node.get("type")).casefold() != wanted_type:
+                continue
+            key = _text(node.get("key"))
+            if not key:
+                continue
+            self._select_key(key)
+            self._center_key(key)
+            return True
+        return False
 
     def _center_key(self, key: str) -> None:
         position = self._positions_by_key.get(key)
@@ -910,27 +987,27 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def _node_fill(self, node: dict[str, Any]) -> str:
+        palette = self._palette
         status = _text(node.get("status")).casefold()
         if status in {"fail", "failed", "error"}:
-            return "#fee2e2"
+            return palette["error_surface"]
         if status in {"warning", "warn"}:
-            return "#fef3c7"
+            return palette["warning_surface"]
         if status == "pass":
-            return "#dcfce7"
+            return palette["success_surface"]
         return {
-            "requirement": "#dbeafe",
-            "model_object": "#e0f2fe",
-            "ifc": "#e0e7ff",
-            "source": "#f1f5f9",
-            "calculation": "#ede9fe",
-            "evidence": "#f3e8ff",
-            "check": "#fef9c3",
-            "finding": "#ffedd5",
-            "verdict": "#e2e8f0",
-            "verification_run": "#d1fae5",
-        }.get(node.get("type"), "#f8fafc")
+            "requirement": palette["info_surface"],
+            "model_object": palette["surface_alt"],
+            "ifc": palette["selection"],
+            "source": palette["surface_elevated"],
+            "calculation": palette["simulation_surface"],
+            "evidence": palette["success_surface"],
+            "check": palette["warning_surface"],
+            "finding": palette["attention_surface"],
+            "verdict": palette["surface_elevated"],
+            "verification_run": palette["info_surface"],
+        }.get(node.get("type"), palette["panel"])
 
     def _draw_graph(self) -> None:
         canvas = self.canvas
@@ -944,7 +1021,7 @@ class ProofGraphViewer(ttk.Frame):
                 24,
                 anchor="nw",
                 text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                fill=self._palette["secondary_text"],
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -980,7 +1057,7 @@ class ProofGraphViewer(ttk.Frame):
                 source[1] + 24 * scale,
                 target[0],
                 target[1] + 24 * scale,
-                fill="#94a3b8",
+                fill=self._palette["muted"],
                 width=1,
                 arrow="last",
             )
@@ -988,7 +1065,11 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
+            outline = (
+                self._palette["accent"]
+                if selected
+                else self._palette["border_strong"]
+            )
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,
@@ -1009,7 +1090,7 @@ class ProofGraphViewer(ttk.Frame):
                 width=max(96, int(148 * scale)),
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=self._palette["text"],
             )
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]

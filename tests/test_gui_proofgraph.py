@@ -5,6 +5,7 @@ import copy
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    _edge_detail_lines,
     _filtered_projection,
     _node_detail_lines,
     _searched_projection,
@@ -258,6 +259,25 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
 
+
+
+def test_proofgraph_edge_detail_explains_direction_and_endpoint_context():
+    projection = proofgraph_projection(_sample_graph())
+    nodes = {node["key"]: node for node in projection["nodes"]}
+    edge = next(
+        item
+        for item in projection["edges"]
+        if item["relation"] == "checked_by"
+    )
+
+    rendered = "\n".join(_edge_detail_lines(edge, nodes))
+
+    assert "TRACEABILITY RELATIONSHIP" in rendered
+    assert "CHECKED BY" in rendered
+    assert "Source: REQUIREMENT · Room pressure" in rendered
+    assert "Target: CHECK · check-pressure" in rendered
+    assert "Direction: source → target" in rendered
+    assert "{\"" not in rendered
 
 
 def test_proofgraph_search_keeps_matches_and_immediate_traceability_context():

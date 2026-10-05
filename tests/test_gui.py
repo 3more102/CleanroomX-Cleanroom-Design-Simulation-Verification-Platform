@@ -1317,6 +1317,58 @@ def test_gui_launch_validates_registry_before_creating_tk_root(monkeypatch):
     assert root_created == []
 
 
+def test_gui_startup_project_open_failure_uses_diagnostic_boundary(monkeypatch):
+    class Root:
+        def mainloop(self):
+            self.mainloop_called = True
+
+    root = Root()
+    captured = {}
+
+    class App:
+        def __init__(self, root_arg, *, autosave_interval_seconds):
+            assert root_arg is root
+            self.project = ProjectDocument(name="Startup")
+            self.project.analyses = []
+
+        def offer_startup_recovery(self):
+            return False
+
+        def load_project_path(self, path):
+            raise ValueError("invalid startup project")
+
+        def _show_operation_error(self, title, operation, exc):
+            captured.update(
+                {
+                    "title": title,
+                    "operation": operation,
+                    "exception": exc,
+                }
+            )
+
+    monkeypatch.setattr(gui_module, "validate_application_registry", lambda: {
+        "plugin_issue_count": 0,
+        "plugin_issues": [],
+    })
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("startup open must use the diagnostic boundary")
+        ),
+    )
+
+    assert main(["broken.cleanroomx.json"]) == 0
+
+    assert captured["title"] == "Open failed"
+    assert captured["operation"] == "Open startup project"
+    assert isinstance(captured["exception"], ValueError)
+    assert str(captured["exception"]) == "invalid startup project"
+    assert root.mainloop_called is True
+
+
 def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)

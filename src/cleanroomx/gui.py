@@ -70,7 +70,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
-from .gui_panels import ProjectDiagnosticsPanel
+from .gui_panels import ProjectDiagnosticsPanel, filter_project_diagnostics_result
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
@@ -3323,6 +3323,12 @@ class CleanroomXApp:
         )
 
     def export_project_diagnostics(self, _result: dict | None = None) -> None:
+        filter_spec = (
+            _result.get("_gui_filter")
+            if isinstance(_result, dict)
+            and isinstance(_result.get("_gui_filter"), dict)
+            else None
+        )
         try:
             if self._editor_analysis() is not None:
                 self._commit_editor()
@@ -3339,6 +3345,8 @@ class CleanroomXApp:
         result = self._refresh_engineering_panels()
         if result is None:
             return
+        if filter_spec is not None:
+            result = filter_project_diagnostics_result(result, filter_spec)
         path = filedialog.asksaveasfilename(
             parent=self.root,
             title="Export CleanroomX project diagnostics",

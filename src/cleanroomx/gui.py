@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_compliance import ComplianceRulePackPanel
 from .gui_constraints import ConstraintManagerDialog
 from .gui_requirements import RequirementsEditorDialog
 from .gui_command_palette import CommandPalette, PaletteCommand
@@ -2272,6 +2273,10 @@ class CleanroomXApp:
             command=self._refresh_engineering_panels,
         )
         verify_menu.add_command(
+            label="Compliance Rule Pack Manager",
+            command=self._activate_compliance_workspace,
+        )
+        verify_menu.add_command(
             label="Requirements Editor...",
             accelerator="Ctrl+Alt+R",
             command=self.show_requirements_editor,
@@ -2800,6 +2805,14 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
+        self.compliance_panel = ComplianceRulePackPanel(
+            self.notebook,
+            input_getter=self._active_compliance_input,
+            input_setter=self._apply_compliance_input,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.compliance_panel, text="Compliance")
+
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
@@ -3107,6 +3120,9 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+        compliance_panel = getattr(self, "compliance_panel", None)
+        if compliance_panel is not None:
+            compliance_panel.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -3338,6 +3354,93 @@ class CleanroomXApp:
         self._ui_layout_state = normalize_gui_layout_state({})
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
+
+    def _active_compliance_input(self) -> dict | None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            return None
+        if self._editor_analysis_id == analysis.id and hasattr(self, "input_text"):
+            text = self.input_text.get("1.0", "end-1c").strip()
+            if text:
+                try:
+                    payload = _strict_json_loads(text)
+                except (json.JSONDecodeError, ValueError):
+                    return None
+                return payload if isinstance(payload, dict) else None
+        return copy.deepcopy(analysis.input)
+
+    def _apply_compliance_input(self, payload: dict, description: str) -> bool:
+        if self._running:
+            self.status_var.set(
+                "Compliance rule editing is disabled while an analysis is running"
+            )
+            return False
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            self.status_var.set(
+                "Select a compliance rule-pack analysis before editing rules"
+            )
+            return False
+        try:
+            validate_analysis_input(
+                "compliance_check",
+                payload,
+                base_dir=self._base_dir(),
+            )
+            candidate = copy.deepcopy(payload)
+            self._perform_project_edit(
+                description,
+                lambda: setattr(analysis, "input", candidate),
+            )
+        except Exception as exc:
+            self.status_var.set(f"Compliance rule edit rejected: {exc}")
+            return False
+        self._invalidate_last_run_for(analysis.id)
+        self._load_analysis_into_editor(analysis)
+        self._update_title()
+        self._schedule_project_diagnostics_refresh()
+        return True
+
+    def _activate_compliance_workspace(self) -> None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            if analysis is not None:
+                try:
+                    self._commit_editor(analysis)
+                except Exception as exc:
+                    self.status_var.set(
+                        f"Cannot open compliance manager until current input is valid: {exc}"
+                    )
+                    return
+            analysis = next(
+                (
+                    item
+                    for item in self.project.analyses
+                    if item.kind == "compliance_check"
+                ),
+                None,
+            )
+            if analysis is None:
+                self.status_var.set(
+                    "No compliance rule-pack analysis is configured in this project"
+                )
+                return
+            self.project.active_analysis_id = analysis.id
+            if self.analysis_tree.exists(analysis.id):
+                self.analysis_tree.selection_set(analysis.id)
+                self.analysis_tree.focus(analysis.id)
+                self.analysis_tree.see(analysis.id)
+            self._load_analysis_into_editor(analysis)
+        else:
+            try:
+                self._commit_editor(analysis)
+            except Exception as exc:
+                self.status_var.set(f"Cannot open compliance manager: {exc}")
+                return
+        self.compliance_panel.refresh()
+        self.notebook.select(self.compliance_panel)
+        self.workspace_status_var.set("Workspace: Compliance")
+        self.status_var.set(f"Compliance rules: {analysis.name}")
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)

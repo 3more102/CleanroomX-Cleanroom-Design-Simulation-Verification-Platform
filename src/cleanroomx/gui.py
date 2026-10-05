@@ -6141,9 +6141,30 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
+        self._set_run_state("ABANDONING")
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
+
+    def _set_run_state(self, state: str) -> None:
+        """Update execution-state presentation without changing solver semantics."""
+        token = str(state or "IDLE").strip().upper()
+        state_var = getattr(self, "run_state_var", None)
+        if state_var is not None:
+            state_var.set(token)
+        badge = getattr(self, "run_state_badge", None)
+        if badge is None:
+            return
+        styles = {
+            "IDLE": "CX.Status.Neutral.TLabel",
+            "RUNNING": "CX.Status.Simulation.TLabel",
+            "ABANDONING": "CX.Status.Warning.TLabel",
+            "ABANDONED": "CX.Status.Warning.TLabel",
+            "COMPLETE": "CX.Status.Info.TLabel",
+            "FAILED": "CX.Status.Fail.TLabel",
+            "STALE": "CX.Status.Warning.TLabel",
+        }
+        badge.configure(style=styles.get(token, "CX.Status.Info.TLabel"))
 
     def _set_running(self, running: bool) -> None:
         self._running = running
@@ -6151,20 +6172,12 @@ class CleanroomXApp:
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
         progress = getattr(self, "run_progress", None)
-        badge = getattr(self, "run_state_badge", None)
-        state_var = getattr(self, "run_state_var", None)
         if running:
-            if state_var is not None:
-                state_var.set("RUNNING")
-            if badge is not None:
-                badge.configure(style="CX.InfoBadge.TLabel")
+            self._set_run_state("RUNNING")
             if progress is not None:
                 progress.start(70)
         else:
-            if state_var is not None:
-                state_var.set("IDLE")
-            if badge is not None:
-                badge.configure(style="CX.SuccessBadge.TLabel")
+            self._set_run_state("IDLE")
             if progress is not None:
                 progress.stop()
                 progress.configure(value=0)
@@ -6178,10 +6191,12 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self._set_run_state("ABANDONED")
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._set_run_state("FAILED")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6199,6 +6214,7 @@ class CleanroomXApp:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
                         self._invalidate_last_run_for(analysis_id)
+                        self._set_run_state("STALE")
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
                         )
@@ -6207,6 +6223,7 @@ class CleanroomXApp:
             run, analysis.kind, analysis.input, base_dir=self._base_dir()
         ):
                         self._invalidate_last_run_for(analysis_id)
+                        self._set_run_state("STALE")
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
@@ -6225,6 +6242,7 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    self._set_run_state("COMPLETE")
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"
@@ -6508,6 +6526,7 @@ class CleanroomXApp:
         self.last_run = run
         self.last_run_analysis_id = analysis.id
         self._render_run(run)
+        self._set_run_state("COMPLETE")
         return run
 
     def _on_close(self) -> None:

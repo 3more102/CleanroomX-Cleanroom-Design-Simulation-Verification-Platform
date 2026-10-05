@@ -1889,7 +1889,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._device_categories_button = ttk.Menubutton(
             viewbar,
-            text="Categories 10/10",
+            text=f"Categories {len(DEVICE_TYPES)}/{len(DEVICE_TYPES)}",
             style="CX.Compact.TButton",
         )
         category_menu = tk.Menu(self._device_categories_button, tearoff=False)
@@ -2314,6 +2314,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._property_vars[key] = var
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
+                if unit == "m":
+                    attach_tooltip(
+                        entry,
+                        "Length input accepts metres directly or a registered compatible unit such as mm, cm, ft, or in.",
+                    )
+                elif unit == "Pa":
+                    attach_tooltip(
+                        entry,
+                        "Pressure input accepts Pa directly or a registered compatible unit such as kPa, mbar, psi, inH2O, or mmH2O.",
+                    )
                 entry.bind(
                     "<KeyRelease>",
                     self._on_property_edit,

@@ -67,6 +67,8 @@ def test_industrial_dashboard_and_status_chrome_are_first_class(app):
     assert app.save_state_var.get() == "SAVED"
     assert app.diagnostics_state_var.get().startswith("DIAGNOSTICS ")
     assert app.verification_state_var.get()
+    assert "Problems " in app.output_summary_var.get()
+    assert "Verification " in app.output_summary_var.get()
 
     app.analysis_tree.selection_set("nav-dashboard")
     app.analysis_tree.focus("nav-dashboard")
@@ -76,6 +78,37 @@ def test_industrial_dashboard_and_status_chrome_are_first_class(app):
     assert app.notebook.select() == str(app.dashboard)
     assert app.workspace_status_var.get() == "Workspace: Dashboard"
     assert app.selection_status_var.get() == "Selected: Dashboard"
+
+
+
+def test_engineering_navigator_routes_workstation_domains_and_outputs(app):
+    app.analysis_tree.selection_set("nav-building")
+    app.analysis_tree.focus("nav-building")
+    app._on_navigator_selected()
+    app.root.update()
+
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.workspace_status_var.get() == "Workspace: Building / Geometry"
+
+    app.hide_output_panel()
+    assert not app.output_panel_visible_var.get()
+    app.analysis_tree.selection_set("nav-reports")
+    app.analysis_tree.focus("nav-reports")
+    app._on_navigator_selected()
+    app.root.update()
+
+    assert app.output_panel_visible_var.get()
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert app.workspace_status_var.get() == "Workspace: Reports"
+
+
+def test_problem_severity_colors_follow_active_theme_palette(app):
+    app.set_theme("dark", persist=False)
+    app.root.update()
+
+    assert app.problems_panel.tree.tag_configure("error", "foreground") == app._theme_palette["error"]
+    assert app.problems_panel.tree.tag_configure("warning", "foreground") == app._theme_palette["warning"]
+    assert app.problems_panel.tree.tag_configure("info", "foreground") == app._theme_palette["info"]
 
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):

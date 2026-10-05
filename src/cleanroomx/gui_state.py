@@ -4,17 +4,19 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .gui_theme import normalize_theme_name
+from .gui_theme import normalize_density_name, normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_VERSION = 5
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
     "theme": "light",
+    "density": "comfortable",
+    "workspace_preset": "start",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -95,6 +97,12 @@ def _normalize_recent_projects(value: Any) -> list[str]:
     return recent
 
 
+def _normalize_workspace_preset(value: Any) -> str:
+    name = str(value or "").strip().lower()
+    supported = {"start", "design", "simulation", "verification", "evidence", "reporting"}
+    return name if name in supported else "start"
+
+
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
@@ -116,6 +124,10 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
         "theme": normalize_theme_name(source.get("theme")),
+        "density": normalize_density_name(source.get("density")),
+        "workspace_preset": _normalize_workspace_preset(
+            source.get("workspace_preset")
+        ),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),

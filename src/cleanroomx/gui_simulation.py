@@ -214,7 +214,7 @@ class SimulationWorkspace(ttk.Frame):
                 "surface never creates a second editable analysis state."
             ),
             style="CX.PanelMuted.TLabel",
-            wraplength=300,
+            wraplength=210,
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
 
@@ -232,7 +232,7 @@ class SimulationWorkspace(ttk.Frame):
                 "convergence field. Otherwise the state remains NOT REPORTED."
             ),
             style="CX.PanelMuted.TLabel",
-            wraplength=300,
+            wraplength=210,
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
 
@@ -245,7 +245,7 @@ class SimulationWorkspace(ttk.Frame):
             result,
             textvariable=self.result_var,
             style="CX.PanelTitle.TLabel",
-            wraplength=430,
+            wraplength=250,
             justify="left",
         ).pack(anchor="w", pady=(0, 8))
         self._kv(result, "Calculated result fields", self.result_fields_var)
@@ -258,7 +258,7 @@ class SimulationWorkspace(ttk.Frame):
                 "and evidence remain distinct artifacts."
             ),
             style="CX.PanelMuted.TLabel",
-            wraplength=430,
+            wraplength=250,
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
 

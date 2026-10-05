@@ -287,4 +287,9 @@ def test_proofgraph_search_keeps_matching_nodes_and_immediate_trace_context():
     assert "model_object:room-a" in keys
     assert "evidence:evidence-pressure" in keys
 
+    searched = _search_projection(projection, "pressure solver")
+    keys = {node["key"] for node in searched["nodes"]}
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+
     assert _search_projection(projection, "   ") is projection

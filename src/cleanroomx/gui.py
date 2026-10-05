@@ -6923,7 +6923,7 @@ class CleanroomXApp:
         )
 
     def _mark_run_task_abandon_requested(self) -> None:
-        task_id = self._active_run_task_id
+        task_id = getattr(self, "_active_run_task_id", None)
         center = getattr(self, "task_center", None)
         if not task_id or center is None:
             return
@@ -6937,7 +6937,7 @@ class CleanroomXApp:
             pass
 
     def _finish_run_task(self, state: str, result: str) -> None:
-        task_id = self._active_run_task_id
+        task_id = getattr(self, "_active_run_task_id", None)
         center = getattr(self, "task_center", None)
         self._active_run_task_id = None
         if not task_id or center is None:

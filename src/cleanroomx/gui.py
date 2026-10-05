@@ -79,6 +79,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_tasks import TaskCenter
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -2110,6 +2111,7 @@ class CleanroomXApp:
         self._run_generation = 0
         self._running = False
         self._abandon_requested = False
+        self._active_task_id: str | None = None
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -2125,6 +2127,7 @@ class CleanroomXApp:
         self.model_status_var = tk.StringVar(value="Model: ready")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
+        self.task_status_var = tk.StringVar(value="Tasks: idle")
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
@@ -2331,6 +2334,10 @@ class CleanroomXApp:
             label="Command Palette...",
             accelerator="Ctrl+Shift+P",
             command=self.show_command_palette,
+        )
+        tools_menu.add_command(
+            label="Task Center",
+            command=self.show_task_center,
         )
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
@@ -2906,6 +2913,11 @@ class CleanroomXApp:
         self.evidence_text = self._add_text_tab(
             "Evidence", notebook=self.output_notebook
         )
+        self.task_center = TaskCenter(
+            self.output_notebook,
+            status_setter=self.status_var.set,
+        )
+        self.output_notebook.add(self.task_center, text="Tasks")
         self.result_text = self._add_text_tab(
             "Results", notebook=self.output_notebook
         )
@@ -2941,6 +2953,10 @@ class CleanroomXApp:
             anchor="e",
             width=34,
         ).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=8
+        )
+        ttk.Label(status_bar, textvariable=self.task_status_var).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -3170,6 +3186,9 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+        task_center = getattr(self, "task_center", None)
+        if task_center is not None:
+            text_widgets.append(getattr(task_center, "detail", None))
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -3347,6 +3366,23 @@ class CleanroomXApp:
         if panel is not None and notebook is not None:
             notebook.select(panel)
         self.status_var.set("Output: Problems")
+
+    def show_task_center(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+        panel = getattr(self, "task_center", None)
+        notebook = getattr(self, "output_notebook", None)
+        if panel is not None and notebook is not None:
+            notebook.select(panel)
+        self.status_var.set("Output: Background Tasks")
+
+    def _sync_task_status(self) -> None:
+        panel = getattr(self, "task_center", None)
+        running = panel.running_count() if panel is not None else int(self._running)
+        self.task_status_var.set(
+            f"Tasks: {running} running" if running else "Tasks: idle"
+        )
 
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -3811,6 +3847,13 @@ class CleanroomXApp:
                 self.run_current,
                 shortcut="F5",
                 keywords=("solver", "calculate"),
+            ),
+            PaletteCommand(
+                "tasks.open",
+                "Open Task Center",
+                "Window",
+                self.show_task_center,
+                keywords=("background", "jobs", "progress", "worker"),
             ),
             PaletteCommand(
                 "verification.refresh",
@@ -7055,7 +7098,16 @@ class CleanroomXApp:
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
         self._abandon_requested = False
+        self._active_task_id = f"analysis:{generation}"
+        task_center = getattr(self, "task_center", None)
+        if task_center is not None:
+            task_center.start_task(
+                self._active_task_id,
+                f"Analysis · {analysis.name}",
+                message=f"Backend workflow: {kind}",
+            )
         self._set_running(True)
+        self._sync_task_status()
         self.status_var.set(f"Running {analysis.name}...")
 
         def worker() -> None:
@@ -7087,6 +7139,12 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
+        task_center = getattr(self, "task_center", None)
+        if task_center is not None and self._active_task_id is not None:
+            task_center.mark_abandon_requested(
+                self._active_task_id,
+                "UI abandonment requested; waiting for the backend worker to exit.",
+            )
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
@@ -7106,10 +7164,29 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    task_center = getattr(self, "task_center", None)
+                    if task_center is not None and self._active_task_id is not None:
+                        task_center.finish_task(
+                            self._active_task_id,
+                            "abandoned",
+                            result="Worker exited after abandon request",
+                        )
+                    self._active_task_id = None
+                    self._sync_task_status()
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    task_center = getattr(self, "task_center", None)
+                    if task_center is not None and self._active_task_id is not None:
+                        task_center.finish_task(
+                            self._active_task_id,
+                            "failed",
+                            result="Analysis failed",
+                            message=str(payload),
+                        )
+                    self._active_task_id = None
+                    self._sync_task_status()
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -7127,6 +7204,15 @@ class CleanroomXApp:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
                         self._invalidate_last_run_for(analysis_id)
+                        task_center = getattr(self, "task_center", None)
+                        if task_center is not None and self._active_task_id is not None:
+                            task_center.finish_task(
+                                self._active_task_id,
+                                "discarded",
+                                result="Analysis removed before completion",
+                            )
+                        self._active_task_id = None
+                        self._sync_task_status()
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
                         )
@@ -7135,6 +7221,15 @@ class CleanroomXApp:
             run, analysis.kind, analysis.input, base_dir=self._base_dir()
         ):
                         self._invalidate_last_run_for(analysis_id)
+                        task_center = getattr(self, "task_center", None)
+                        if task_center is not None and self._active_task_id is not None:
+                            task_center.finish_task(
+                                self._active_task_id,
+                                "discarded",
+                                result="Inputs changed before completion",
+                            )
+                        self._active_task_id = None
+                        self._sync_task_status()
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
@@ -7153,6 +7248,19 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    task_center = getattr(self, "task_center", None)
+                    if task_center is not None and self._active_task_id is not None:
+                        task_center.finish_task(
+                            self._active_task_id,
+                            "completed",
+                            result=f"{run.title} · {run.status}",
+                            message=(
+                                "" if history_error is None
+                                else "Analysis completed, but run-history evidence was not updated."
+                            ),
+                        )
+                    self._active_task_id = None
+                    self._sync_task_status()
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"
@@ -7175,6 +7283,9 @@ class CleanroomXApp:
                         )
         except queue.Empty:
             pass
+        task_center = getattr(self, "task_center", None)
+        if task_center is not None:
+            task_center.refresh_elapsed()
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:

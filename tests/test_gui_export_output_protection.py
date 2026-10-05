@@ -50,7 +50,7 @@ def test_gui_generic_export_refuses_project_source(monkeypatch, tmp_path):
     ) is False
 
     assert project_path.read_bytes() == before
-    assert app.status_var.value == "Result export failed"
+    assert app.status_var.value.startswith("Export result failed · CX-")
     assert errors
     assert "project source" in errors[-1][1]
 
@@ -384,7 +384,7 @@ def test_gui_unsaved_project_protects_absolute_dependency(monkeypatch, tmp_path)
     ) is False
 
     assert dependency.read_bytes() == before
-    assert app.status_var.value == "Result export failed"
+    assert app.status_var.value.startswith("Export result failed · CX-")
     assert errors
     assert "external dependency" in errors[-1][1]
 

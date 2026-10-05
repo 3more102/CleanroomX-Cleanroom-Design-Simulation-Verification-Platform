@@ -242,6 +242,22 @@ def test_simulation_workspace_marks_run_history_integrity_unavailable():
         root.destroy()
 
 
+def test_simulation_navigator_context_menu_does_not_navigate_until_invoked(app):
+    before = app.notebook.select()
+
+    menu = app._build_navigator_context_menu("nav-simulation")
+    app.root.update_idletasks()
+
+    assert isinstance(menu, tk.Menu)
+    assert app.notebook.select() == before
+    labels = [
+        str(menu.entrycget(index, "label"))
+        for index in range(int(menu.index("end")) + 1)
+        if str(menu.type(index)) == "command"
+    ]
+    assert "Open Simulation" in labels
+
+
 def test_navigator_routes_simulation_to_first_class_workspace(app):
     app.analysis_tree.selection_set("nav-simulation")
     app.analysis_tree.focus("nav-simulation")

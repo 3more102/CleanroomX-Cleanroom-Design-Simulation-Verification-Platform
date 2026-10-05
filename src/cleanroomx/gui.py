@@ -3538,6 +3538,10 @@ class CleanroomXApp:
         if reporting is not None:
             reporting.apply_theme(self.theme_var.get())
 
+        proofgraph = getattr(self, "proofgraph_viewer", None)
+        if proofgraph is not None:
+            proofgraph.apply_theme(self.theme_var.get())
+
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
             self._apply_menu_theme(menubar)

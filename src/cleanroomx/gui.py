@@ -3152,6 +3152,11 @@ class CleanroomXApp:
             navigate_callback=self._navigate_project_diagnostic,
             export_callback=self.export_project_diagnostics,
             status_setter=self.status_var.set,
+            table_layout=self._table_layout_state("project_diagnostics"),
+            on_table_layout_change=lambda layout: self._store_table_layout_state(
+                "project_diagnostics",
+                layout,
+            ),
         )
         self.output_notebook.add(self.problems_panel, text="Problems")
         self.diagnostics_text = self._add_text_tab(
@@ -3170,6 +3175,11 @@ class CleanroomXApp:
             self.output_notebook,
             on_change=self._on_task_center_change,
             on_abandon=self._abandon_task_from_center,
+            table_layout=self._table_layout_state("task_center"),
+            on_table_layout_change=lambda layout: self._store_table_layout_state(
+                "task_center",
+                layout,
+            ),
         )
         self.task_center.apply_theme(self.theme_var.get())
         self.output_notebook.add(self.task_center, text="Tasks")
@@ -3435,6 +3445,23 @@ class CleanroomXApp:
         self.root.after_idle(self._apply_saved_panel_sashes)
         if persist:
             self.root.after_idle(self._save_ui_layout_state)
+
+    def _table_layout_state(self, key: str) -> dict:
+        layouts = self._ui_layout_state.get("table_layouts", {})
+        if not isinstance(layouts, dict):
+            return {}
+        layout = layouts.get(key, {})
+        return copy.deepcopy(layout) if isinstance(layout, dict) else {}
+
+    def _store_table_layout_state(self, key: str, layout: dict) -> None:
+        state = dict(self._ui_layout_state)
+        layouts = copy.deepcopy(state.get("table_layouts", {}))
+        if not isinstance(layouts, dict):
+            layouts = {}
+        layouts[str(key)] = copy.deepcopy(layout)
+        state["table_layouts"] = layouts
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        self.root.after_idle(self._save_ui_layout_state)
 
     def _capture_ui_layout_state(self) -> dict:
         self._capture_current_workspace_layout()

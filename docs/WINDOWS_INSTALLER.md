@@ -58,7 +58,10 @@ Run the complete install/upgrade/uninstall check with:
 .\scripts\test_windows_installer_lifecycle.ps1
 ```
 
-The build script reads the release version from `pyproject.toml`. The Inno
+The Windows release workflow pins pip; `pyproject.toml` pins the setuptools
+build backend; and the `release` extra pins the frozen-build Python
+dependencies to the same versions used by CI. The build script reads the release version from
+`pyproject.toml`. The Inno
 Setup application identifier is stable across builds so an installer of a later
 CleanroomX version upgrades the same registered product rather than creating a
 parallel installation.

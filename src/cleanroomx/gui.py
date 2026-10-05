@@ -1337,10 +1337,14 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, snapshot: dict):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
-        self.geometry("1480x760")
+        self.geometry("1480x780")
         self.minsize(1080, 580)
         self.transient(parent)
         self._details: dict[str, dict] = {}
+        self._traceability_rows: dict[str, dict[str, str]] = {}
+        self.search_var = tk.StringVar()
+        self.type_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
 
         ttk.Label(
             self,
@@ -1352,7 +1356,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 f"Actively mapped requirements: "
                 f"{snapshot['active_mapped_requirement_count']}"
             ),
-            font=("TkDefaultFont", 10, "bold"),
+            style="CX.Section.TLabel",
         ).pack(anchor="w", padx=10, pady=(10, 3))
 
         ttk.Label(
@@ -1373,6 +1377,41 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 "requirements, change acceptance criteria, or rewrite mappings."
             ),
         ).pack(anchor="w", padx=10, pady=(0, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=10, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=34,
+        )
+        self.search_entry.pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Type").pack(side="left")
+        self.type_combo = ttk.Combobox(
+            filters,
+            textvariable=self.type_filter_var,
+            values=("All", "Requirement", "Mapping"),
+            state="readonly",
+            width=14,
+        )
+        self.type_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Expand all",
+            command=lambda: self._set_roots_open(True),
+        ).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            filters,
+            text="Collapse all",
+            command=lambda: self._set_roots_open(False),
+        ).pack(side="left", padx=2)
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -1401,21 +1440,32 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.column("analysis", width=240)
         self.tree.column("criterion", width=360)
 
-        tree_scroll = ttk.Scrollbar(
+        tree_scroll_y = ttk.Scrollbar(
             tree_frame,
             orient="vertical",
             command=self.tree.yview,
         )
-        self.tree.configure(yscrollcommand=tree_scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        tree_scroll.pack(side="right", fill="y")
+        tree_scroll_x = ttk.Scrollbar(
+            tree_frame,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
+        self.tree.configure(
+            yscrollcommand=tree_scroll_y.set,
+            xscrollcommand=tree_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        tree_scroll_y.grid(row=0, column=1, sticky="ns")
+        tree_scroll_x.grid(row=1, column=0, sticky="ew")
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
 
-        requirements_root = "traceability:requirements"
-        mappings_root = "traceability:mappings"
+        self.requirements_root = "traceability:requirements"
+        self.mappings_root = "traceability:mappings"
         self.tree.insert(
             "",
             "end",
-            iid=requirements_root,
+            iid=self.requirements_root,
             text="Requirements",
             values=(
                 "Registry",
@@ -1427,7 +1477,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
             ),
             open=True,
         )
-        self._details[requirements_root] = {
+        self._details[self.requirements_root] = {
             "requirements_sha256": snapshot.get("requirements_sha256"),
             "requirement_set_count": snapshot["requirement_set_count"],
             "requirement_count": snapshot["requirement_count"],
@@ -1436,7 +1486,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
             iid = f"requirement:{item['id']}"
             scope_text = ", ".join(item["scope"]) if item["scope"] else "project"
             self.tree.insert(
-                requirements_root,
+                self.requirements_root,
                 "end",
                 iid=iid,
                 text=item["id"],
@@ -1450,11 +1500,16 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 ),
             )
             self._details[iid] = item["detail"]
+            self._index_traceability_row(
+                iid,
+                self.requirements_root,
+                "Requirement",
+            )
 
         self.tree.insert(
             "",
             "end",
-            iid=mappings_root,
+            iid=self.mappings_root,
             text="Evidence mappings",
             values=(
                 "Registry",
@@ -1466,7 +1521,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
             ),
             open=True,
         )
-        self._details[mappings_root] = {
+        self._details[self.mappings_root] = {
             "mappings_sha256": snapshot.get("mappings_sha256"),
             "mapping_count": snapshot["mapping_count"],
             "active_mapping_count": snapshot["active_mapping_count"],
@@ -1488,7 +1543,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 separators=(",", ":"),
             )
             self.tree.insert(
-                mappings_root,
+                self.mappings_root,
                 "end",
                 iid=iid,
                 text=item["id"],
@@ -1502,35 +1557,123 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 ),
             )
             self._details[iid] = item["detail"]
+            self._index_traceability_row(
+                iid,
+                self.mappings_root,
+                "Mapping",
+            )
 
         self.detail = tk.Text(detail_frame, wrap="none")
-        detail_scroll = ttk.Scrollbar(
+        detail_scroll_y = ttk.Scrollbar(
             detail_frame,
             orient="vertical",
             command=self.detail.yview,
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        detail_scroll_x = ttk.Scrollbar(
+            detail_frame,
+            orient="horizontal",
+            command=self.detail.xview,
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        detail_frame.rowconfigure(0, weight=1)
+        detail_frame.columnconfigure(0, weight=1)
         self.detail.configure(state="disabled")
 
+        self.search_var.trace_add("write", lambda *_: self._apply_filter())
+        self.type_filter_var.trace_add("write", lambda *_: self._apply_filter())
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
-        first_requirement = self.tree.get_children(requirements_root)
-        first_mapping = self.tree.get_children(mappings_root)
-        initial = (
-            first_requirement[0]
-            if first_requirement
-            else first_mapping[0]
-            if first_mapping
-            else requirements_root
-        )
-        self.tree.selection_set(initial)
-        self.tree.focus(initial)
-        self._show_selected()
+        self.bind("<Control-f>", lambda event: self.search_entry.focus_set())
+        self.bind("<Escape>", lambda event: self.destroy())
+
+        self._apply_filter()
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=10, pady=(0, 10))
         ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+    def _index_traceability_row(
+        self,
+        iid: str,
+        parent: str,
+        kind: str,
+    ) -> None:
+        item = self.tree.item(iid)
+        detail = self._details.get(iid, {})
+        search_text = " ".join(
+            (
+                iid,
+                str(item.get("text", "")),
+                " ".join(str(value) for value in item.get("values", ())),
+                json.dumps(
+                    detail,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    allow_nan=False,
+                ),
+            )
+        ).casefold()
+        self._traceability_rows[iid] = {
+            "parent": parent,
+            "kind": kind,
+            "search_text": search_text,
+        }
+
+    def _visible_traceability_rows(self) -> list[str]:
+        query = self.search_var.get().strip().casefold()
+        kind = self.type_filter_var.get().strip().casefold()
+        visible = []
+        for iid, row in self._traceability_rows.items():
+            if kind and kind != "all" and row["kind"].casefold() != kind:
+                continue
+            if query and query not in row["search_text"]:
+                continue
+            visible.append(iid)
+        return visible
+
+    def _apply_filter(self) -> None:
+        selection = self.tree.selection()
+        selected = selection[0] if selection else None
+        for iid in self._traceability_rows:
+            self.tree.detach(iid)
+
+        visible = self._visible_traceability_rows()
+        for iid in visible:
+            row = self._traceability_rows[iid]
+            self.tree.move(iid, row["parent"], "end")
+
+        self.count_var.set(
+            f"{len(visible)} of {len(self._traceability_rows)} traceability rows"
+        )
+        self._set_roots_open(True)
+
+        if selected in visible or selected in (
+            self.requirements_root,
+            self.mappings_root,
+        ):
+            target = selected
+        elif visible:
+            target = visible[0]
+        else:
+            target = self.requirements_root
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.type_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _set_roots_open(self, opened: bool) -> None:
+        self.tree.item(self.requirements_root, open=opened)
+        self.tree.item(self.mappings_root, open=opened)
 
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
@@ -1539,10 +1682,18 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         detail = self._details.get(selection[0], {})
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        self.detail.insert(
-            "1.0",
-            json.dumps(detail, indent=2, sort_keys=True, ensure_ascii=False),
-        )
+        if detail:
+            self.detail.insert(
+                "1.0",
+                json.dumps(
+                    detail,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ),
+            )
+        else:
+            self.detail.insert("1.0", "No canonical detail is available for this row.")
         self.detail.configure(state="disabled")
 
 

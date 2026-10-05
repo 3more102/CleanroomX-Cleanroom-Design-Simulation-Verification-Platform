@@ -211,3 +211,12 @@ def test_application_task_center_abandon_uses_existing_cancel_controller(app):
         app._abandon_requested = False
         app._active_run_task_id = None
         app.cancel_button.configure(state="disabled")
+
+
+def test_status_bar_surfaces_canonical_verification_currency(app):
+    app._refresh_engineering_panels()
+    app.root.update_idletasks()
+
+    value = app.verification_status_var.get()
+    assert value.startswith("Verify: ")
+    assert value != "Verify: —"

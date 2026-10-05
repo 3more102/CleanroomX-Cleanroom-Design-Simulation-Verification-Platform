@@ -216,9 +216,7 @@ def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
 def test_diagnostics_table_exposes_domain_and_selection_action_state(app):
     panel = app.problems_panel
     assert panel.tree.heading("domain", "text") == "Domain"
-    assert "Critical" in panel.tree.master.master.winfo_toplevel().tk.call(
-        panel.severity_var._tk, "set", panel.severity_var._name
-    ) if False else True
+    assert "Critical" in tuple(panel.severity_picker.cget("values"))
 
     panel.tree.selection_remove(panel.tree.selection())
     panel._show_selected_detail()

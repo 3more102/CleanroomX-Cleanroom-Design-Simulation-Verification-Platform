@@ -1505,7 +1505,7 @@ def engineering_overlay_state(
     }
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Hit:
     kind: str
     item_id: str
@@ -1550,6 +1550,10 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
+        self._multi_selection: set[_Hit] = set()
+        self._selection_box_anchor: tuple[float, float] | None = None
+        self._selection_box_current: tuple[float, float] | None = None
+        self._selection_box_additive = False
         self._hovered: _Hit | None = None
         self._snap_indicator_world: tuple[float, float] | None = None
         self._drag_anchor: tuple[float, float] | None = None
@@ -2197,7 +2201,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Button-2>", self._on_pan_down)
         self.canvas_2d.bind("<B2-Motion>", self._on_pan_drag)
         self.canvas_2d.bind("<Button-3>", self._on_context_menu_2d)
-        self.canvas_2d.bind("<Control-Button-1>", self._on_context_menu_2d)
+        self.canvas_2d.bind("<Control-Button-1>", self._on_left_down)
         self.canvas_2d.bind("<Leave>", self._on_canvas_leave)
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
         self.canvas_2d.bind(
@@ -2298,6 +2302,69 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _hit_key(kind: str, item_id: str) -> str:
         return f"{kind}:{item_id}"
 
+    @staticmethod
+    def _selection_modifier_active(event: tk.Event | None) -> bool:
+        state = int(getattr(event, "state", 0) or 0)
+        return bool(state & 0x0001 or state & 0x0004)
+
+    @staticmethod
+    def _selection_sort_key(hit: _Hit) -> tuple[int, str]:
+        return (0 if hit.kind == "room" else 1, hit.item_id)
+
+    def _selection_hits(self) -> set[_Hit]:
+        hits = set(getattr(self, "_multi_selection", set()))
+        if self.selected is not None:
+            hits.add(self.selected)
+        return hits
+
+    def selected_hits(self) -> tuple[_Hit, ...]:
+        """Return the transient viewport selection in deterministic order."""
+        return tuple(sorted(self._selection_hits(), key=self._selection_sort_key))
+
+    def _object_for_hit(self, hit: _Hit | None) -> dict | None:
+        if hit is None:
+            return None
+        collection = self.layout["rooms"] if hit.kind == "room" else self.layout["devices"]
+        return next(
+            (item for item in collection if str(item.get("id")) == hit.item_id),
+            None,
+        )
+
+    def _set_selection(
+        self,
+        hit: _Hit | None,
+        *,
+        additive: bool = False,
+        toggle: bool = False,
+    ) -> None:
+        hits = self._selection_hits() if additive else set()
+        if hit is None:
+            if not additive:
+                hits.clear()
+                self.selected = None
+        elif additive and toggle and hit in hits:
+            hits.remove(hit)
+            if self.selected == hit:
+                self.selected = (
+                    min(hits, key=self._selection_sort_key) if hits else None
+                )
+        else:
+            hits.add(hit)
+            self.selected = hit
+
+        valid_hits = {
+            candidate
+            for candidate in hits
+            if self._object_for_hit(candidate) is not None
+        }
+        if self.selected is not None and self.selected not in valid_hits:
+            self.selected = (
+                min(valid_hits, key=self._selection_sort_key)
+                if valid_hits
+                else None
+            )
+        self._multi_selection = valid_hits
+
     def _current_tool_mode(self) -> str:
         variable = getattr(self, "_tool_mode", None)
         return variable.get() if variable is not None else "select"
@@ -2346,15 +2413,20 @@ class SpatialDesignWorkspace(ttk.Frame):
         return False
 
     def hide_selected(self) -> None:
-        if self.selected is None:
+        hits = self._selection_hits()
+        if not hits:
             self._status_setter("Select a room or device to hide")
             return
-        self._hidden_item_ids.add(
-            self._hit_key(self.selected.kind, self.selected.item_id)
-        )
-        if self._isolated_item == self.selected:
+        for hit in hits:
+            self._hidden_item_ids.add(self._hit_key(hit.kind, hit.item_id))
+        if self._isolated_item in hits:
             self._isolated_item = None
-        self._status_setter("Selection hidden from spatial views")
+        count = len(hits)
+        self._status_setter(
+            "Selection hidden from spatial views"
+            if count == 1
+            else f"{count} selected objects hidden from spatial views"
+        )
         self.redraw()
 
     def isolate_selected(self) -> None:
@@ -2394,7 +2466,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_escape(self, event=None):
-        self.clear_measurement()
+        if self._selection_box_anchor is not None:
+            self._selection_box_anchor = None
+            self._selection_box_current = None
+            self._selection_box_additive = False
+            self.redraw()
+            self._status_setter("Box selection cancelled")
+            return "break"
+        if self._current_tool_mode() != "select" or self._measurement_points:
+            self.clear_measurement()
+            return "break"
+        if self._selection_hits():
+            self._set_selection(None)
+            self._load_property_panel()
+            self.redraw()
+            self._status_setter("Spatial selection cleared")
         return "break"
 
     def _handle_measure_click(self, x: float, y: float) -> None:
@@ -2462,7 +2548,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         collection = self.layout["rooms"] if kind == "room" else self.layout["devices"]
         if not any(str(item.get("id")) == item_id for item in collection):
             return False
-        self.selected = _Hit(kind, item_id)
+        self._set_selection(_Hit(kind, item_id))
         self._load_property_panel()
         self.redraw()
         if notify:
@@ -2475,6 +2561,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             return "Selected: —"
 
         name = str(item.get("name") or self.selected.item_id)
+        selection_count = len(self._selection_hits())
+        count_prefix = f"{selection_count} selected · " if selection_count > 1 else ""
         if self.selected.kind == "room":
             parts = [f"Room: {name}"]
             classification = str(item.get("classification") or "").strip()
@@ -2483,7 +2571,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             pressure = item.get("pressure_pa")
             if isinstance(pressure, (int, float)) and math.isfinite(float(pressure)):
                 parts.append(f"{float(pressure):g} Pa")
-            return " · ".join(parts)
+            return count_prefix + " · ".join(parts)
 
         device_type = str(item.get("type") or "device").replace("_", " ").title()
         parts = [f"{device_type}: {name}"]
@@ -2498,7 +2586,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         if room is not None:
             parts.append(str(room.get("name") or room_id))
-        return " · ".join(parts)
+        return count_prefix + " · ".join(parts)
 
     def viewport_status_text(self) -> str:
         mode = self._workspace_mode.get()
@@ -2538,6 +2626,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._measurement_result_var.set("Ready")
         self._hidden_item_ids.clear()
         self._isolated_item = None
+        self._multi_selection.clear()
+        self._selection_box_anchor = None
+        self._selection_box_current = None
+        self._selection_box_additive = False
         self._hovered_3d = None
         project = self._project_getter()
         analysis = self._analysis_getter()
@@ -2574,7 +2666,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             f"{_finite_number(view.get('section_height_m'), self.layout['floor']['elevation_m'] + 2.4):.2f}"
         )
         if self.selected and not self._selected_object():
-            self.selected = None
+            self._set_selection(None)
+        elif self.selected is not None:
+            self._set_selection(self.selected)
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
@@ -2738,9 +2832,10 @@ class SpatialDesignWorkspace(ttk.Frame):
     def restore_history_selection(
         self, selection: tuple[str, str] | None
     ) -> None:
-        self.selected = _Hit(*selection) if selection is not None else None
+        restored = _Hit(*selection) if selection is not None else None
+        self._set_selection(restored)
         if self.selected and not self._selected_object():
-            self.selected = None
+            self._set_selection(None)
         self._load_property_panel()
         self.redraw()
 
@@ -2816,10 +2911,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _selected_object(self) -> dict | None:
-        if self.selected is None:
-            return None
-        collection = self.layout["rooms"] if self.selected.kind == "room" else self.layout["devices"]
-        return next((item for item in collection if item["id"] == self.selected.item_id), None)
+        return self._object_for_hit(self.selected)
 
     def _warning_item_ids(self) -> set[str]:
         warning_ids = {
@@ -3229,6 +3321,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         selection_text = f"{prefix}: {item.get('name', '')}"
+        selection_count = len(self._selection_hits())
+        if selection_count > 1:
+            selection_text = f"{selection_count} selected · Primary {selection_text}"
         if self.selected and self.selected.kind == "room":
             sync = engineering_sync_status(self.layout, self._analysis_getter())
             room_sync = next(
@@ -3333,7 +3428,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         selection_before = self._selection_state()
         kind = self.selected.kind
         self.layout = candidate
-        self.selected = _Hit(kind, item_id)
+        self._set_selection(_Hit(kind, item_id))
         self._load_property_panel()
         message = (
             "Duplicated room and devices; enter pressure and link analysis for the new room"
@@ -3364,7 +3459,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "floor_elevation_m": self.layout["floor"]["elevation_m"],
         }
         self.layout["rooms"].append(room)
-        self.selected = _Hit("room", room["id"])
+        self._set_selection(_Hit("room", room["id"]))
         self._load_property_panel()
         self._persist(
             f"Added {room['name']}",
@@ -3423,7 +3518,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if device_type == "door":
             device["swing"] = "left"
         self.layout["devices"].append(device)
-        self.selected = _Hit("device", device["id"])
+        self._set_selection(_Hit("device", device["id"]))
         self._load_property_panel()
         self._persist(
             f"Added {device_type}",
@@ -3432,21 +3527,26 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def delete_selected(self) -> None:
-        if self.selected is None:
+        hits = self._selection_hits()
+        if not hits:
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        collection_name = "rooms" if self.selected.kind == "room" else "devices"
-        item_id = self.selected.item_id
-        self.layout[collection_name] = [item for item in self.layout[collection_name] if item["id"] != item_id]
-        if self.selected.kind == "room":
-            self.layout["devices"] = [
-                item for item in self.layout["devices"] if item.get("room_id") != item_id
-            ]
-        self.selected = None
+        room_ids = {hit.item_id for hit in hits if hit.kind == "room"}
+        device_ids = {hit.item_id for hit in hits if hit.kind == "device"}
+        self.layout["rooms"] = [
+            item for item in self.layout["rooms"] if item["id"] not in room_ids
+        ]
+        self.layout["devices"] = [
+            item
+            for item in self.layout["devices"]
+            if item["id"] not in device_ids and item.get("room_id") not in room_ids
+        ]
+        self._set_selection(None)
         self._load_property_panel()
+        count = len(hits)
         self._persist(
-            "Deleted spatial item",
+            "Deleted spatial item" if count == 1 else f"Deleted {count} spatial items",
             history_before=history_before,
             selection_before=selection_before,
         )
@@ -3487,22 +3587,43 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def fit_selected(self) -> None:
-        item = self._selected_object()
-        if item is None or self.selected is None:
+        hits = self._selection_hits()
+        selected_items = [
+            (hit, self._object_for_hit(hit))
+            for hit in sorted(hits, key=self._selection_sort_key)
+        ]
+        selected_items = [
+            (hit, item) for hit, item in selected_items if item is not None
+        ]
+        if not selected_items:
             self._status_setter("Select a room or device to fit")
             return
 
-        if self.selected.kind == "room":
-            min_x = item["x_m"]
-            min_y = item["y_m"]
-            max_x = min_x + item["length_m"]
-            max_y = min_y + item["width_m"]
-        else:
-            half = max(0.5, float(item.get("width_m", 0.4)))
-            min_x = item["x_m"] - half
-            min_y = item["y_m"] - half
-            max_x = item["x_m"] + half
-            max_y = item["y_m"] + half
+        bounds: list[tuple[float, float, float, float]] = []
+        for hit, item in selected_items:
+            if hit.kind == "room":
+                bounds.append(
+                    (
+                        item["x_m"],
+                        item["y_m"],
+                        item["x_m"] + item["length_m"],
+                        item["y_m"] + item["width_m"],
+                    )
+                )
+            else:
+                half = max(0.5, float(item.get("width_m", 0.4)))
+                bounds.append(
+                    (
+                        item["x_m"] - half,
+                        item["y_m"] - half,
+                        item["x_m"] + half,
+                        item["y_m"] + half,
+                    )
+                )
+        min_x = min(value[0] for value in bounds)
+        min_y = min(value[1] for value in bounds)
+        max_x = max(value[2] for value in bounds)
+        max_y = max(value[3] for value in bounds)
 
         width_m = max(0.5, max_x - min_x)
         height_m = max(0.5, max_y - min_y)
@@ -3528,30 +3649,36 @@ class SpatialDesignWorkspace(ttk.Frame):
         model_cy = (all_min_y + all_max_y) / 2.0
         floor_z = self.layout["floor"]["elevation_m"]
         points_3d: list[tuple[float, float, float]] = []
-        if self.selected.kind == "room":
-            z0 = item.get("floor_elevation_m", floor_z)
-            z1 = z0 + item["height_m"]
-            for x in (min_x - model_cx, max_x - model_cx):
-                for y in (min_y - model_cy, max_y - model_cy):
-                    points_3d.append((x, y, z0))
-                    points_3d.append((x, y, z1))
-        else:
-            room = next(
-                (
-                    room
-                    for room in self.layout["rooms"]
-                    if room["id"] == item.get("room_id")
-                ),
-                None,
-            )
-            z = (
-                (room.get("floor_elevation_m", floor_z) if room else floor_z)
-                + item.get("z_m", 0.0)
-            )
-            for x in (min_x - model_cx, max_x - model_cx):
-                for y in (min_y - model_cy, max_y - model_cy):
-                    points_3d.append((x, y, z))
-                    points_3d.append((x, y, z + max(0.5, item.get("height_m", 0.2))))
+        for hit, item in selected_items:
+            if hit.kind == "room":
+                item_min_x = item["x_m"]
+                item_min_y = item["y_m"]
+                item_max_x = item_min_x + item["length_m"]
+                item_max_y = item_min_y + item["width_m"]
+                z0 = item.get("floor_elevation_m", floor_z)
+                z1 = z0 + item["height_m"]
+                for x in (item_min_x - model_cx, item_max_x - model_cx):
+                    for y in (item_min_y - model_cy, item_max_y - model_cy):
+                        points_3d.append((x, y, z0))
+                        points_3d.append((x, y, z1))
+            else:
+                room = next(
+                    (
+                        room
+                        for room in self.layout["rooms"]
+                        if room["id"] == item.get("room_id")
+                    ),
+                    None,
+                )
+                z = (
+                    (room.get("floor_elevation_m", floor_z) if room else floor_z)
+                    + item.get("z_m", 0.0)
+                )
+                half = max(0.5, float(item.get("width_m", 0.4)))
+                for x in (item["x_m"] - half - model_cx, item["x_m"] + half - model_cx):
+                    for y in (item["y_m"] - half - model_cy, item["y_m"] + half - model_cy):
+                        points_3d.append((x, y, z))
+                        points_3d.append((x, y, z + max(0.5, item.get("height_m", 0.2))))
 
         if points_3d:
             zoom_3d, pan_3d_x, pan_3d_y = fit_3d_view(
@@ -3568,7 +3695,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             self.layout["view"]["pan_3d_x"] = pan_3d_x
             self.layout["view"]["pan_3d_y"] = pan_3d_y
 
-        self._status_setter("View fitted to selected object")
+        count = len(selected_items)
+        self._status_setter(
+            "View fitted to selected object"
+            if count == 1
+            else f"View fitted to {count} selected objects"
+        )
         self.redraw()
 
     def _visible_3d_points(self) -> list[tuple[float, float, float]]:
@@ -3904,6 +4036,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
         warning_ids = self._warning_item_ids()
+        selected_hits = self._selection_hits()
 
         for room in self.layout["rooms"]:
             if not self._is_item_visible("room", room["id"]):
@@ -3913,8 +4046,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["x_m"] + room["length_m"],
                 room["y_m"] + room["width_m"],
             )
-            selected = self.selected == _Hit("room", room["id"])
-            hovered = self._hovered == _Hit("room", room["id"])
+            room_hit = _Hit("room", room["id"])
+            selected = room_hit in selected_hits
+            primary = self.selected == room_hit
+            hovered = self._hovered == room_hit
             outline = (
                 self._theme_palette["accent"]
                 if selected
@@ -3959,7 +4094,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     fill=self._theme_palette["text"],
                     tags=(f"room:{room['id']}", "room"),
                 )
-            if selected:
+            if primary:
                 self._draw_room_dimensions_2d(room, x0, y0, x1, y1)
                 handle = 6
                 canvas.create_rectangle(
@@ -4005,8 +4140,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if not self._is_item_visible("device", device["id"]):
                     continue
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
-                selected = self.selected == _Hit("device", device["id"])
-                hovered = self._hovered == _Hit("device", device["id"])
+                device_hit = _Hit("device", device["id"])
+                selected = device_hit in selected_hits
+                hovered = self._hovered == device_hit
                 device_outline = (
                     self._theme_palette["accent"]
                     if selected
@@ -4059,6 +4195,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._draw_engineering_legend(canvas, overlay)
         self._draw_measurement_overlay()
+        self._draw_selection_box()
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -4071,6 +4208,65 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 fill=self._theme_palette["muted"],
             )
+
+    def _draw_selection_box(self) -> None:
+        anchor = self._selection_box_anchor
+        current = self._selection_box_current
+        if anchor is None or current is None:
+            return
+        self.canvas_2d.create_rectangle(
+            anchor[0],
+            anchor[1],
+            current[0],
+            current[1],
+            outline=self._theme_palette["accent"],
+            width=2,
+            dash=(5, 3),
+            tags=("selection_box",),
+        )
+
+    def _apply_selection_box(
+        self,
+        anchor: tuple[float, float],
+        current: tuple[float, float],
+        *,
+        additive: bool,
+    ) -> None:
+        x0, x1 = sorted((anchor[0], current[0]))
+        y0, y1 = sorted((anchor[1], current[1]))
+        item_ids = self.canvas_2d.find_overlapping(x0, y0, x1, y1)
+        hits: set[_Hit] = set()
+        for item_id in item_ids:
+            hit = self._parse_hit(self.canvas_2d.gettags(item_id))
+            if (
+                hit is not None
+                and self._object_for_hit(hit) is not None
+                and self._is_item_visible(hit.kind, hit.item_id)
+            ):
+                hits.add(hit)
+
+        combined = self._selection_hits() if additive else set()
+        combined.update(hits)
+        self._multi_selection = combined
+        if hits:
+            self.selected = min(hits, key=self._selection_sort_key)
+        elif not additive:
+            self.selected = None
+        if self.selected is not None:
+            self._multi_selection.add(self.selected)
+        self._load_property_panel()
+        self._notify_selection_change()
+        count = len(self._selection_hits())
+        self._status_setter(
+            "No spatial objects selected"
+            if count == 0
+            else (
+                "Selected 1 spatial object"
+                if count == 1
+                else f"Selected {count} spatial objects"
+            )
+        )
+        self.redraw()
 
     def _draw_room_dimensions_2d(
         self,
@@ -4215,7 +4411,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = self._parse_hit(self.canvas_2d.gettags(current[0])) if current else None
         if hit is None:
             return "break"
-        self.selected = hit
+        self._set_selection(hit)
         self._load_property_panel()
         self._notify_selection_change()
         self.redraw()
@@ -4307,6 +4503,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
         warning_ids = self._warning_item_ids()
+        selected_hits = self._selection_hits()
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
@@ -4348,8 +4545,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if overlay_mode != "none"
                 else self._theme_palette["surface_alt"]
             )
-            selected = self.selected == _Hit("room", room["id"])
-            hovered = self._hovered_3d == _Hit("room", room["id"])
+            room_hit = _Hit("room", room["id"])
+            selected = room_hit in selected_hits
+            hovered = self._hovered_3d == room_hit
             outline = (
                 self._theme_palette["accent"]
                 if selected
@@ -4426,8 +4624,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                     else floor_z
                 )
                 tag = f"device:{device['id']}"
-                selected = self.selected == _Hit("device", device["id"])
-                hovered = self._hovered_3d == _Hit("device", device["id"])
+                device_hit = _Hit("device", device["id"])
+                selected = device_hit in selected_hits
+                hovered = self._hovered_3d == device_hit
                 device_outline = (
                     self._theme_palette["accent"]
                     if selected
@@ -4584,21 +4783,38 @@ class SpatialDesignWorkspace(ttk.Frame):
         current = self.canvas_2d.find_withtag("current")
         hit = None
         self._resize_room_id = None
+        additive = self._selection_modifier_active(event)
         if current:
             tags = self.canvas_2d.gettags(current[0])
             resize_tag = next(
                 (tag for tag in tags if tag.startswith("resize:")),
                 None,
             )
-            if resize_tag is not None:
+            if resize_tag is not None and not additive:
                 room_id = resize_tag.split(":", 1)[1]
                 hit = _Hit("room", room_id)
                 self._resize_room_id = room_id
             else:
                 hit = self._parse_hit(tags)
-        self.selected = hit
+        if hit is None:
+            self._drag_anchor = None
+            self._drag_item_origin = None
+            self._drag_history_before = None
+            self._selection_box_anchor = (event.x, event.y)
+            self._selection_box_current = (event.x, event.y)
+            self._selection_box_additive = additive
+            if not additive:
+                self._set_selection(None)
+            self._load_property_panel()
+            self.redraw()
+            return
+
+        self._selection_box_anchor = None
+        self._selection_box_current = None
+        self._selection_box_additive = False
+        self._set_selection(hit, additive=additive, toggle=additive)
         item = self._selected_object()
-        if hit is not None and item is not None:
+        if not additive and self.selected == hit and item is not None:
             self._drag_anchor = self._canvas_to_world(event.x, event.y)
             self._drag_item_origin = (item["x_m"], item["y_m"])
             self._drag_history_before = (
@@ -4615,6 +4831,10 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_drag(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if self._selection_box_anchor is not None:
+            self._selection_box_current = (event.x, event.y)
+            self._draw_2d()
             return
         item = self._selected_object()
         if item is None or self._drag_anchor is None:
@@ -4668,6 +4888,15 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_up(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if self._selection_box_anchor is not None:
+            anchor = self._selection_box_anchor
+            current = self._selection_box_current or (event.x, event.y)
+            additive = self._selection_box_additive
+            self._selection_box_anchor = None
+            self._selection_box_current = None
+            self._selection_box_additive = False
+            self._apply_selection_box(anchor, current, additive=additive)
             return
         if (
             self._drag_anchor is not None
@@ -4866,7 +5095,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
         if hit is None:
             return
-        self.selected = hit
+        additive = self._selection_modifier_active(event)
+        self._set_selection(hit, additive=additive, toggle=additive)
         self._load_property_panel()
         self._notify_selection_change()
         self.redraw()

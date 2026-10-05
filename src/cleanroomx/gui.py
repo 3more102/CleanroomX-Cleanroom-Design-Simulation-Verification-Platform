@@ -1914,6 +1914,11 @@ class CleanroomXApp:
 
         self.workspace_panes = ttk.Panedwindow(content, orient="vertical")
         self.workspace_panes.pack(fill="both", expand=True)
+        self.workspace_panes.bind(
+            "<Configure>",
+            self._maintain_compact_workspace_density,
+            add="+",
+        )
 
         workspace_host = ttk.Frame(self.workspace_panes)
         self.workspace_panes.add(workspace_host, weight=5)
@@ -2129,6 +2134,25 @@ class CleanroomXApp:
             anchor="e",
             style="CX.ToolbarMuted.TLabel",
         ).pack(side="right")
+
+    def _maintain_compact_workspace_density(self, _event=None) -> None:
+        """Protect the engineering viewport from toolbar clipping on laptop-height windows."""
+        panes = getattr(self, "workspace_panes", None)
+        output = getattr(self, "output_panel", None)
+        if panes is None or output is None or len(panes.panes()) < 2:
+            return
+        if not self.output_panel_visible_var.get() or not self._paned_contains(panes, output):
+            return
+        height = panes.winfo_height()
+        if height <= 1 or height > 560:
+            return
+        target = int(round(height * 0.80))
+        try:
+            current = panes.sashpos(0)
+            if current < target:
+                panes.sashpos(0, target)
+        except tk.TclError:
+            return
 
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:

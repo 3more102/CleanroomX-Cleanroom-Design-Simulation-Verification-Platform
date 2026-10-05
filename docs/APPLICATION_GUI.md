@@ -102,6 +102,27 @@ The **Abandon** action suppresses the pending result but does not force-terminat
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
+## Project requirements editor
+
+**Verify → Requirements Editor…** (Ctrl+Alt+R) creates and maintains the
+canonical project requirement registry without leaving the desktop. Requirement
+sets record their source and revision. Individual requirements retain explicit
+discipline/category, source/reference, applicability, scope, verification
+method, required evidence, lifecycle status, units, target or minimum/maximum
+criterion, and tolerance.
+
+Every proposed mutation is normalized through the canonical requirements parser
+and then validated as a complete candidate project before it replaces the
+in-memory metadata. Existing active requirement-to-analysis evidence mappings
+therefore block destructive deletion/renaming that would orphan traceability.
+Successful edits use the project-wide transaction stream, so Undo/Redo,
+autosave, stale-evidence assessment, diagnostics, ProofGraph, and reports see
+the same authoritative requirement state.
+
+The existing **Requirements Traceability…** view remains read-only by design:
+use the editor to change project criteria and the traceability view to inspect
+the resulting requirement → analysis/evidence routing.
+
 ## Project constraint manager
 
 **Verify → Project Constraints…** (Ctrl+Alt+C) edits project-owned engineering

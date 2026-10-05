@@ -32,19 +32,39 @@ def filter_commands(
     if not tokens:
         return items
 
-    matches: list[PaletteCommand] = []
-    for command in items:
-        haystack = " ".join(
-            (
-                command.label,
-                command.category,
-                command.shortcut,
-                *command.keywords,
-            )
-        ).casefold()
-        if all(token in haystack for token in tokens):
-            matches.append(command)
-    return matches
+    ranked: list[tuple[int, int, PaletteCommand]] = []
+    for index, command in enumerate(items):
+        label = command.label.casefold()
+        category = command.category.casefold()
+        shortcut = command.shortcut.casefold()
+        keywords = tuple(keyword.casefold() for keyword in command.keywords)
+        haystack = " ".join((label, category, shortcut, *keywords))
+        if any(token not in haystack for token in tokens):
+            continue
+
+        score = 0
+        label_words = label.split()
+        for token in tokens:
+            if label == token:
+                score += 120
+            elif label.startswith(token):
+                score += 60
+            elif any(word.startswith(token) for word in label_words):
+                score += 45
+            elif token in label:
+                score += 30
+            elif shortcut == token:
+                score += 24
+            elif token in category:
+                score += 16
+            elif any(token in keyword for keyword in keywords):
+                score += 10
+            else:
+                score += 4
+        ranked.append((-score, index, command))
+
+    ranked.sort(key=lambda item: (item[0], item[1], item[2].label.casefold()))
+    return [command for _score, _index, command in ranked]
 
 
 class CommandPalette(tk.Toplevel):

@@ -37,6 +37,8 @@ def test_ci_contract_retains_supported_matrix_golden_validation_and_performance(
     assert "scripts/benchmark_project_bundle.py" in workflow
     assert "Build wheel and verify installed application" in workflow
     assert "Run desktop GUI smoke from installed wheel" in workflow
+    assert "cleanroomx-proofgraph-diff --help" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
 
 
 def test_security_contract_retains_static_hostile_input_and_fault_injection_gates() -> None:

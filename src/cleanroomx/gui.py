@@ -2125,6 +2125,8 @@ class CleanroomXApp:
             on_persist=self.persist_project_requirements_verification,
             on_traceability=self.show_requirements_traceability,
             on_history=self.show_verification_history,
+            on_diagnostics=self._activate_diagnostics_workspace,
+            on_evidence=self._activate_evidence_workspace,
         )
         self.notebook.add(self.verification_workspace, text="Verification")
 

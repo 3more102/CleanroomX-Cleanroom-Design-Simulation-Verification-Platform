@@ -637,11 +637,14 @@ def test_desktop_exports_portable_bundle_through_real_service(tmp_path, monkeypa
         "asksaveasfilename",
         lambda **kwargs: str(target),
     )
-    messages = []
+    notifications = []
+    app._notify = lambda message, **kwargs: notifications.append((message, kwargs))
     monkeypatch.setattr(
         gui_module.messagebox,
         "showinfo",
-        lambda title, message, parent=None: messages.append((title, message)),
+        lambda *args, **kwargs: pytest.fail(
+            "successful portable bundle export must be non-modal"
+        ),
     )
 
     app.export_portable_project_bundle()
@@ -649,7 +652,9 @@ def test_desktop_exports_portable_bundle_through_real_service(tmp_path, monkeypa
     report = inspect_project_bundle(target)
     assert report["dependency_count"] == 2
     assert "Portable project exported" in app.status_var.value
-    assert messages and messages[0][0] == "Portable project exported"
+    assert notifications[-1][0] == "Portable project exported"
+    assert notifications[-1][1]["level"] == "success"
+    assert report["bundle_sha256"] in notifications[-1][1]["detail"]
 
 
 def test_desktop_opens_bundle_only_after_verified_extraction(tmp_path, monkeypatch):

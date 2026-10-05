@@ -2115,6 +2115,10 @@ class CleanroomXApp:
             Path(value)
             for value in self._ui_layout_state["recent_projects"]
         ]
+        self._navigator_favorites_by_project: dict[str, list[str]] = {
+            str(path): list(item_ids)
+            for path, item_ids in self._ui_layout_state["navigator_favorites"].items()
+        }
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -2143,6 +2147,15 @@ class CleanroomXApp:
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
         self.navigator_filter_var = tk.StringVar(value="")
+        self.navigator_recent_var = tk.StringVar(value="")
+        self.navigator_favorites_var = tk.StringVar(value="")
+        self._navigator_recent_ids: list[str] = []
+        self._navigator_recent_display_to_id: dict[str, str] = {}
+        self._navigator_recent_project_token = id(self.project)
+        self._navigator_favorite_ids: list[str] = []
+        self._navigator_favorite_display_to_id: dict[str, str] = {}
+        self._navigator_favorites_project_token = id(self.project)
+        self._navigator_favorites_loaded_key: str | None = None
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.fullscreen_var = tk.BooleanVar(value=False)
@@ -2692,6 +2705,56 @@ class CleanroomXApp:
             command=lambda: self.navigator_filter_var.set(""),
         ).pack(side="left", padx=(4, 0))
 
+        recent_row = ttk.Frame(navigator)
+        recent_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(recent_row, text="Recent").pack(side="left", padx=(0, 6))
+        self.navigator_recent_picker = ttk.Combobox(
+            recent_row,
+            textvariable=self.navigator_recent_var,
+            values=(),
+            state="readonly",
+        )
+        self.navigator_recent_picker.pack(side="left", fill="x", expand=True)
+        self.navigator_recent_picker.bind(
+            "<<ComboboxSelected>>",
+            self._on_recent_navigator_selected,
+        )
+        ttk.Button(
+            recent_row,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self.clear_navigator_recent,
+        ).pack(side="left", padx=(4, 0))
+
+        favorites_row = ttk.Frame(navigator)
+        favorites_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(favorites_row, text="Favorites").pack(side="left", padx=(0, 6))
+        self.navigator_favorites_picker = ttk.Combobox(
+            favorites_row,
+            textvariable=self.navigator_favorites_var,
+            values=(),
+            state="readonly",
+        )
+        self.navigator_favorites_picker.pack(side="left", fill="x", expand=True)
+        self.navigator_favorites_picker.bind(
+            "<<ComboboxSelected>>",
+            self._on_favorite_navigator_selected,
+        )
+        self.navigator_favorite_toggle_button = ttk.Button(
+            favorites_row,
+            text="☆",
+            width=3,
+            style="CX.Compact.TButton",
+            command=self.toggle_selected_navigator_favorite,
+        )
+        self.navigator_favorite_toggle_button.pack(side="left", padx=(4, 0))
+        ttk.Button(
+            favorites_row,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self.clear_navigator_favorites,
+        ).pack(side="left", padx=(4, 0))
+
         navigator_actions = ttk.Frame(navigator)
         navigator_actions.pack(fill="x", pady=(0, 6))
         self.navigator_add_analysis_button = ttk.Button(
@@ -3159,6 +3222,7 @@ class CleanroomXApp:
                     str(path)
                     for path in self._recent_project_paths[:8]
                 ],
+                "navigator_favorites": self._capture_navigator_favorites_state(),
                 "window_width": width,
                 "window_height": height,
                 "active_workspace": self._current_workspace_profile(),

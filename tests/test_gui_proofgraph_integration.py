@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -180,6 +181,58 @@ def test_proofgraph_model_object_navigation_syncs_viewport_and_project_browser(a
     assert app.notebook.select() == str(workspace)
     assert workspace.layout["rooms"] == geometry_before["rooms"]
     assert workspace.layout["devices"] == geometry_before["devices"]
+
+
+def test_proofgraph_canvas_tracks_light_and_dark_workstation_theme(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    viewer = app.proofgraph_viewer
+
+    viewer.set_documents([document])
+    viewer._select_key(f"model_object:{room['id']}")
+    app.root.update()
+
+    app.set_theme("dark", persist=False)
+    app.root.update()
+
+    dark = theme_palette("dark")
+    assert viewer.canvas.cget("background") == dark["plot"]
+    assert viewer.canvas.cget("highlightbackground") == dark["border"]
+    assert viewer.detail.cget("background") == dark["field"]
+    assert viewer.detail.cget("foreground") == dark["field_text"]
+
+    text_items = [
+        item
+        for item in viewer.canvas.find_all()
+        if viewer.canvas.type(item) == "text"
+    ]
+    rectangle_items = [
+        item
+        for item in viewer.canvas.find_all()
+        if viewer.canvas.type(item) == "rectangle"
+    ]
+    assert text_items
+    assert rectangle_items
+    assert {
+        viewer.canvas.itemcget(item, "fill")
+        for item in text_items
+    } <= {dark["field_text"], dark["muted"]}
+    assert dark["accent"] in {
+        viewer.canvas.itemcget(item, "outline")
+        for item in rectangle_items
+    }
+
+    app.set_theme("light", persist=False)
+    app.root.update()
+
+    light = theme_palette("light")
+    assert viewer.canvas.cget("background") == light["plot"]
+    assert viewer.detail.cget("background") == light["field"]
+    assert light["accent"] in {
+        viewer.canvas.itemcget(item, "outline")
+        for item in viewer.canvas.find_all()
+        if viewer.canvas.type(item) == "rectangle"
+    }
 
 
 def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):

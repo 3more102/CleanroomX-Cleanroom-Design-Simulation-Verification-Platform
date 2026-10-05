@@ -320,6 +320,48 @@ def test_room_context_menu_exposes_real_editing_actions(app):
     assert "Link Analysis…" in labels
 
 
+def test_marquee_selection_selects_visible_spatial_objects_without_mutation(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    room_points = []
+    for room in rooms[:2]:
+        x0, y0 = workspace._world_to_canvas(room["x_m"], room["y_m"])
+        x1, y1 = workspace._world_to_canvas(
+            room["x_m"] + room["length_m"],
+            room["y_m"] + room["width_m"],
+        )
+        room_points.extend(((x0, y0), (x1, y1)))
+    left = int(min(point[0] for point in room_points) - 8)
+    top = int(min(point[1] for point in room_points) - 8)
+    right = int(max(point[0] for point in room_points) + 8)
+    bottom = int(max(point[1] for point in room_points) + 8)
+
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    down = type("Event", (), {"x": left, "y": top, "state": 0})()
+    drag = type("Event", (), {"x": right, "y": bottom, "state": 0})()
+    up = type("Event", (), {"x": right, "y": bottom, "state": 0})()
+
+    workspace._on_left_down(down)
+    workspace._on_left_drag(drag)
+    assert workspace.canvas_2d.find_withtag("selection_box")
+    workspace._on_left_up(up)
+    app.root.update()
+
+    selected = set(workspace.selected_hits())
+    assert _Hit("room", rooms[0]["id"]) in selected
+    assert _Hit("room", rooms[1]["id"]) in selected
+    assert len(selected) >= 2
+    assert workspace.canvas_2d.find_withtag("selection_box") == ()
+    assert app.selection_status_var.get().startswith(
+        f"Selected: {len(selected)} objects ·"
+    )
+    assert app.project.to_dict() == project_before
+
+
 def test_shift_and_control_click_support_non_mutating_multi_selection(app):
     workspace = app.spatial_workspace
     rooms = workspace.layout["rooms"]

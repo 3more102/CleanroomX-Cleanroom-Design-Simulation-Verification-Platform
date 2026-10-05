@@ -6,6 +6,7 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewTableBehavior
 from .gui_theme import attach_tooltip, status_style_name, theme_palette
 
 
@@ -273,6 +274,11 @@ class AnalysisResultPanel(ttk.Frame):
         self.tree.column("class", width=112, minwidth=96, stretch=False, anchor="center")
         self.tree.column("field", width=410, minwidth=180, stretch=True)
         self.tree.column("value", width=330, minwidth=160, stretch=True)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("class", "field", "value"),
+            copy_columns=("class", "field", "value"),
+        )
         yscroll = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -356,6 +362,7 @@ class AnalysisResultPanel(ttk.Frame):
         if verdict:
             details.append(f"{verdict} verdict")
         self.count_var.set(" · ".join(details))
+        self.table_behavior.reapply_sort()
 
     def refresh(self, run: Any | None) -> None:
         self._rows = []

@@ -1697,6 +1697,24 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.item(self.requirements_root, open=opened)
         self.tree.item(self.mappings_root, open=opened)
 
+    def focus_requirement(self, requirement_id: str) -> bool:
+        """Reveal and focus one canonical requirement without mutating the registry."""
+        iid = f"requirement:{str(requirement_id).strip()}"
+        if iid not in self._traceability_rows:
+            return False
+        self.search_var.set("")
+        self.type_filter_var.set("All")
+        # Trace callbacks rebuild the tree synchronously; explicitly reattach for
+        # compatibility with lightweight/fake Tk variables used by unit tests.
+        row = self._traceability_rows[iid]
+        self.tree.move(iid, row["parent"], "end")
+        self.tree.item(self.requirements_root, open=True)
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected()
+        return True
+
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -4069,7 +4087,7 @@ class CleanroomXApp:
             return
 
         if target_type == "requirement":
-            self.show_requirements_traceability()
+            self.show_requirements_traceability(target_id or None)
             self.selection_status_var.set(
                 f"Selected requirement: {target_id or entry.label}"
             )
@@ -5075,7 +5093,10 @@ class CleanroomXApp:
         )
         return True
 
-    def show_requirements_traceability(self) -> bool:
+    def show_requirements_traceability(
+        self,
+        requirement_id: str | None = None,
+    ) -> bool:
         try:
             snapshot = project_requirement_traceability_snapshot(self.project)
         except (
@@ -5101,7 +5122,17 @@ class CleanroomXApp:
             )
             return False
 
-        RequirementsTraceabilityDialog(self.root, snapshot)
+        dialog = RequirementsTraceabilityDialog(self.root, snapshot)
+        if requirement_id:
+            focused = dialog.focus_requirement(requirement_id)
+            if focused:
+                self.status_var.set(
+                    f"Requirements traceability focused on {requirement_id}"
+                )
+            else:
+                self.status_var.set(
+                    f"Requirements traceability opened; {requirement_id} is not present"
+                )
         return True
 
     def _project_verification_target(

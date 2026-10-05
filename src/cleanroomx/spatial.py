@@ -3035,13 +3035,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 continue
             row.pack(fill="x", pady=2)
 
-    def _set_property_error(self, message: str) -> None:
-        self._property_error_var.set(str(message or ""))
-        if self._property_error_var.get():
-            if not self._property_error_label.winfo_manager():
-                self._property_error_label.pack(fill="x", pady=(2, 5))
+    def _set_property_error(self, message: str) -> bool:
+        variable = getattr(self, "_property_error_var", None)
+        label = getattr(self, "_property_error_label", None)
+        if variable is None or label is None:
+            return False
+        variable.set(str(message or ""))
+        if variable.get():
+            if not label.winfo_manager():
+                label.pack(fill="x", pady=(2, 5))
         else:
-            self._property_error_label.pack_forget()
+            label.pack_forget()
+        return True
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -3055,7 +3060,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 {key: variable.get() for key, variable in self._property_vars.items()},
             )
         except ValueError as exc:
-            self._set_property_error(str(exc))
+            if not self._set_property_error(str(exc)):
+                messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
             self._status_setter("Properties not applied: " + str(exc))
             return
         self._set_property_error("")

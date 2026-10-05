@@ -377,6 +377,118 @@ def _filtered_projection(
 
 
 
+def _searched_projection(
+    projection: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    """Filter presentation nodes by text while retaining immediate graph context."""
+    tokens = [token for token in _text(query).casefold().split() if token]
+    if not tokens:
+        return projection
+
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    matched: set[str] = set()
+    for node in nodes:
+        raw = node.get("raw")
+        raw_text = (
+            json.dumps(raw, sort_keys=True, ensure_ascii=False, allow_nan=False)
+            if isinstance(raw, dict)
+            else ""
+        )
+        haystack = " ".join(
+            (
+                _text(node.get("label")),
+                _text(node.get("id")),
+                _text(node.get("type")),
+                _text(node.get("status")),
+                " ".join(str(flag) for flag in node.get("flags") or ()),
+                raw_text,
+            )
+        ).casefold()
+        if all(token in haystack for token in tokens):
+            matched.add(node["key"])
+
+    expanded = set(matched)
+    for edge in edges:
+        if edge["source"] in matched or edge["target"] in matched:
+            expanded.add(edge["source"])
+            expanded.add(edge["target"])
+
+    return {
+        "nodes": [node for node in nodes if node["key"] in expanded],
+        "edges": [
+            edge
+            for edge in edges
+            if edge["source"] in expanded and edge["target"] in expanded
+        ],
+    }
+
+
+def proofgraph_completeness_summary(
+    projection: dict[str, Any],
+) -> dict[str, int]:
+    """Summarize persisted traceability topology without deriving compliance."""
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    requirement_keys = {
+        node["key"] for node in nodes if node.get("type") == "requirement"
+    }
+    check_keys = {node["key"] for node in nodes if node.get("type") == "check"}
+    evidence_keys = {
+        node["key"] for node in nodes if node.get("type") == "evidence"
+    }
+    verdict_nodes = [node for node in nodes if node.get("type") == "verdict"]
+    unresolved_findings = [
+        node
+        for node in nodes
+        if node.get("type") == "finding"
+        and "unresolved" in set(node.get("flags") or ())
+    ]
+
+    requirements_with_checks = {
+        edge["source"]
+        for edge in edges
+        if edge.get("relation") == "checked_by"
+        and edge.get("source") in requirement_keys
+        and edge.get("target") in check_keys
+    }
+    checks_with_evidence = {
+        edge["target"]
+        for edge in edges
+        if edge.get("relation") == "supports"
+        and edge.get("source") in evidence_keys
+        and edge.get("target") in check_keys
+    }
+    failing_verdicts = sum(
+        1
+        for node in verdict_nodes
+        if _text(node.get("status")).casefold() in {"fail", "failed", "error"}
+    )
+    warning_verdicts = sum(
+        1
+        for node in verdict_nodes
+        if _text(node.get("status")).casefold() in {"warning", "warn", "not_checked"}
+    )
+    passing_verdicts = sum(
+        1
+        for node in verdict_nodes
+        if _text(node.get("status")).casefold() in {"pass", "passed"}
+    )
+    return {
+        "requirements": len(requirement_keys),
+        "requirements_with_checks": len(requirements_with_checks),
+        "checks": len(check_keys),
+        "checks_with_evidence": len(checks_with_evidence),
+        "evidence": len(evidence_keys),
+        "unresolved_findings": len(unresolved_findings),
+        "verdicts": len(verdict_nodes),
+        "passing_verdicts": passing_verdicts,
+        "warning_verdicts": warning_verdicts,
+        "failing_verdicts": failing_verdicts,
+    }
+
+
 def _node_detail_lines(node: dict[str, Any]) -> list[str]:
     """Format a ProofGraph node for engineering review without raw JSON dumping."""
     node_type = str(node.get("type") or "node").replace("_", " ").upper()
@@ -459,7 +571,9 @@ class ProofGraphViewer(ttk.Frame):
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
+        self.search_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
+        self.coverage_var = tk.StringVar(value="TRACEABILITY —")
 
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         toolbar.pack(fill="x")
@@ -494,11 +608,15 @@ class ProofGraphViewer(ttk.Frame):
             width=20,
         )
         self.filter_picker.pack(side="left", padx=(5, 10))
+        ttk.Label(toolbar, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(toolbar, textvariable=self.search_var, width=22)
+        self.search_entry.pack(side="left", padx=(5, 10))
         ttk.Label(toolbar, textvariable=self.summary_var).pack(
             side="right", padx=(10, 0)
         )
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        self.search_var.trace_add("write", lambda *_: self._refresh())
 
         lifecycle = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(8, 5))
         lifecycle.pack(fill="x", padx=6, pady=(0, 5))
@@ -523,6 +641,11 @@ class ProofGraphViewer(ttk.Frame):
                     style="CX.SurfaceMuted.TLabel",
                 ).pack(side="left", padx=3)
             ttk.Label(lifecycle, text=label, style=style_name).pack(side="left", padx=1)
+        ttk.Label(
+            lifecycle,
+            textvariable=self.coverage_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).pack(side="right", padx=(10, 0))
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -570,6 +693,8 @@ class ProofGraphViewer(ttk.Frame):
         graph_host.columnconfigure(0, weight=1)
         self.canvas.bind("<Button-1>", self._on_canvas_selected)
         self.canvas.bind("<Double-1>", self._navigate_selected)
+        self.canvas.bind("<ButtonPress-2>", self._start_canvas_pan)
+        self.canvas.bind("<B2-Motion>", self._drag_canvas_pan)
         self.canvas.bind("<Configure>", lambda _event: self._draw_graph())
 
         detail_header = ttk.Frame(detail_host, style="CX.PanelHeader.TFrame")
@@ -636,7 +761,8 @@ class ProofGraphViewer(ttk.Frame):
 
     def _refresh(self) -> None:
         projection = proofgraph_projection(self._active_document())
-        self._projection = _filtered_projection(projection, self.filter_var.get())
+        filtered = _filtered_projection(projection, self.filter_var.get())
+        self._projection = _searched_projection(filtered, self.search_var.get())
         self._nodes_by_key = {
             node["key"]: node for node in self._projection.get("nodes", [])
         }
@@ -654,6 +780,16 @@ class ProofGraphViewer(ttk.Frame):
             if all_nodes
             else "No persisted ProofGraph evidence"
         )
+        summary = proofgraph_completeness_summary(projection)
+        if all_nodes:
+            self.coverage_var.set(
+                "TRACEABILITY "
+                f"{summary['requirements_with_checks']}/{summary['requirements']} req checked · "
+                f"{summary['checks_with_evidence']}/{summary['checks']} checks evidenced · "
+                f"{summary['unresolved_findings']} unresolved"
+            )
+        else:
+            self.coverage_var.set("TRACEABILITY —")
 
     def _populate_tree(self) -> None:
         for iid in self.tree.get_children():
@@ -868,6 +1004,12 @@ class ProofGraphViewer(ttk.Frame):
         if key:
             self._select_key(key)
 
+    def _start_canvas_pan(self, event) -> None:
+        self.canvas.scan_mark(event.x, event.y)
+
+    def _drag_canvas_pan(self, event) -> None:
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+
     def _on_canvas_selected(self, _event=None) -> None:
         current = self.canvas.find_withtag("current")
         if not current:
@@ -888,6 +1030,33 @@ class ProofGraphViewer(ttk.Frame):
                 "No traceability node selected. Select a node to inspect its persisted engineering evidence.",
             )
         self.detail.configure(state="disabled")
+
+    def select_node(self, node_identity: str, *, node_type: str | None = None) -> bool:
+        """Select a persisted ProofGraph node by projection key or canonical id."""
+        identity = _text(node_identity)
+        requested_type = _text(node_type).casefold()
+        if not identity:
+            return False
+
+        for document in self._documents:
+            projection = proofgraph_projection(document)
+            for node in projection.get("nodes", []):
+                if not isinstance(node, dict):
+                    continue
+                node_key = _text(node.get("key"))
+                node_id = _text(node.get("id"))
+                current_type = _text(node.get("type")).casefold()
+                if requested_type and current_type != requested_type:
+                    continue
+                if identity not in {node_key, node_id}:
+                    continue
+                self.graph_var.set(self._document_label(document))
+                self.filter_var.set("All")
+                self.search_var.set("")
+                self._refresh()
+                self._select_key(node_key)
+                return True
+        return False
 
     def selected_node(self) -> dict[str, Any] | None:
         node = self._nodes_by_key.get(self._selected_key or "")

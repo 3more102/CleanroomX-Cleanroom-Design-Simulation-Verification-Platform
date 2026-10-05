@@ -431,6 +431,88 @@ def test_run_worker_records_original_background_exception(monkeypatch):
     assert app._queue.get_nowait() == ("error", 1, "a", report)
 
 
+def test_run_worker_records_run_history_evidence_failure_without_losing_result(
+    monkeypatch,
+):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input=payload,
+    )
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    report = GuiErrorReport(
+        reference="CX-TEST-HISTORY",
+        operation="Prepare run-history evidence",
+        exception_type="RuntimeError",
+        summary="synthetic history evidence failure",
+        log_path=None,
+    )
+    recorded = []
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._queue = queue.Queue()
+    app._runs_by_analysis = {}
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    app.status_var = Status()
+
+    monkeypatch.setattr(gui_module, "run_analysis", lambda *args, **kwargs: run)
+    monkeypatch.setattr(
+        gui_module,
+        "build_run_history_evidence",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic history evidence failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: (
+            recorded.append((operation, exc))
+            or report
+        ),
+    )
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    assert len(recorded) == 1
+    assert recorded[0][0] == "Prepare run-history evidence"
+    assert isinstance(recorded[0][1], RuntimeError)
+    assert str(recorded[0][1]) == "synthetic history evidence failure"
+    assert app._queue.get_nowait() == (
+        "stage",
+        1,
+        "a",
+        "Finalizing run-history evidence",
+    )
+    kind, generation, analysis_id, payload_result = app._queue.get_nowait()
+    assert (kind, generation, analysis_id) == ("success", 1, "a")
+    assert payload_result == (run, None, report)
+
+
 def test_background_analysis_failure_surfaces_diagnostic_reference(
     monkeypatch,
     tmp_path,

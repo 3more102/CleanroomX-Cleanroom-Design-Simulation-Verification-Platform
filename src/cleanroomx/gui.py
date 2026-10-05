@@ -92,6 +92,7 @@ from .gui_theme import (
     normalize_theme_name,
 )
 from .gui_proofgraph import ProofGraphViewer
+from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -6445,32 +6446,15 @@ class CleanroomXApp:
             return False
 
         existing_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
-        has_existing_layout = bool(
-            isinstance(existing_layout, dict)
-            and (existing_layout.get("rooms") or existing_layout.get("devices"))
-        )
-        if has_existing_layout:
-            warning = (
-                "This project already contains an unlinked spatial layout. The IFC "
-                "import will replace that spatial layout and establish a new IFC "
-                "identity baseline."
-            )
-        else:
-            warning = "This will establish the project's first IFC identity baseline."
-
-        confirmed = messagebox.askyesno(
-            "Import IFC spatial layout?",
-            (
-                f"{warning}\n\n"
-                f"Source: {provenance['source_name']}\n"
-                f"Rooms: {len(preview['rooms'])}\n"
-                f"Devices: {len(preview['devices'])}\n"
-                f"Source SHA-256: {provenance['source_sha256']}\n\n"
-                "Engineering analysis inputs are not changed automatically. Continue?"
+        review_snapshot = ifc_import_review_snapshot(
+            semantics,
+            provenance,
+            preview,
+            existing_layout=(
+                existing_layout if isinstance(existing_layout, dict) else None
             ),
-            parent=self.root,
         )
-        if not confirmed:
+        if not show_ifc_import_review(self.root, review_snapshot):
             self.status_var.set("IFC import cancelled")
             return False
 

@@ -400,3 +400,17 @@ def test_problem_panel_can_reveal_issue_from_global_navigation(app):
     assert app.problems_panel.selected_issue()["sequence"] == issue["sequence"]
     assert app.problems_panel.severity_var.get() == "All"
     assert app.problems_panel.search_var.get() == ""
+
+
+def test_density_modes_reconfigure_real_treeview_metrics(app):
+    from tkinter import ttk
+
+    app.set_density("compact", persist=False)
+    compact_height = int(ttk.Style(app.root).lookup("Treeview", "rowheight"))
+    app.set_density("comfortable", persist=False)
+    comfortable_height = int(ttk.Style(app.root).lookup("Treeview", "rowheight"))
+
+    assert app.density_var.get() == "comfortable"
+    assert compact_height == 23
+    assert comfortable_height == 29
+    assert comfortable_height > compact_height

@@ -102,15 +102,63 @@ def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app, monkeypatch
     before = copy.deepcopy(workspace.layout)
     can_undo = app._project_history.can_undo
     errors = []
-    monkeypatch.setattr("cleanroomx.spatial.messagebox.showerror", lambda *args, **kwargs: errors.append(args))
+    monkeypatch.setattr(
+        "cleanroomx.spatial.messagebox.showerror",
+        lambda *args, **kwargs: errors.append(args),
+    )
     workspace._property_vars["name"].set("Should not apply")
     workspace._property_vars["height_m"].set("NaN")
     workspace.apply_properties()
-    assert errors and "Height" in errors[0][1]
+    assert errors == []
+    assert "Height (m) must be a finite number" in workspace._property_error_var.get()
+    assert "invalid" in workspace._property_entries["height_m"].state()
     assert workspace.layout == before
     assert app.project.metadata["spatial_layout"] == before
     assert app._project_history.can_undo == can_undo
     assert workspace._property_vars["height_m"].get() == "NaN"
+
+
+def test_property_draft_survives_selection_change_and_can_be_reverted(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    original_name = first["name"]
+
+    workspace.select_item("room", first["id"])
+    workspace._property_vars["name"].set("Pending room name")
+    workspace._on_property_edit()
+    assert "modified" in workspace._property_filter_summary_var.get()
+    assert str(workspace._property_revert_button.cget("state")) == "normal"
+
+    workspace.select_item("room", second["id"])
+    workspace.select_item("room", first["id"])
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == "Pending room name"
+    assert first["name"] == original_name
+    assert "modified" in workspace._property_filter_summary_var.get()
+
+    workspace.revert_property_edits()
+    app.root.update()
+
+    assert workspace._property_vars["name"].get() == original_name
+    assert "modified" not in workspace._property_filter_summary_var.get()
+    assert str(workspace._property_revert_button.cget("state")) == "disabled"
+
+
+def test_property_draft_merges_with_canvas_geometry_updates(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    workspace._property_vars["classification"].set("Pending classification")
+    workspace._on_property_edit()
+
+    new_x = room["x_m"] + workspace.layout["grid_m"]
+    room["x_m"] = new_x
+    workspace._load_property_panel()
+
+    assert workspace._property_vars["classification"].get() == "Pending classification"
+    assert float(workspace._property_vars["x_m"].get()) == pytest.approx(new_x)
+    assert room.get("classification") != "Pending classification"
 
 
 @pytest.mark.parametrize("size", ["1050x680", "1440x900"])

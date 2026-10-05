@@ -68,21 +68,26 @@ def diagnostic_matches_filters(
     severity: str = "All",
     category: str = "All",
     target_type: str = "All",
+    rule: str = "All",
     query: str = "",
 ) -> bool:
     """Evaluate diagnostics-panel filters without changing backend diagnostic data."""
     severity_token = str(severity or "").strip().casefold()
     category_token = str(category or "").strip().casefold()
     target_token = str(target_type or "").strip().casefold()
+    rule_token = str(rule or "").strip().casefold()
     issue_severity = str(issue.get("severity") or "").strip().casefold()
     issue_category = str(issue.get("category") or "").strip().casefold()
     issue_target = _diagnostic_target_type(issue).casefold()
+    issue_rule = str(issue.get("rule") or "").strip().casefold()
 
     if severity_token not in {"", "all"} and issue_severity != severity_token:
         return False
     if category_token not in {"", "all"} and issue_category != category_token:
         return False
     if target_token not in {"", "all"} and issue_target != target_token:
+        return False
+    if rule_token not in {"", "all"} and issue_rule != rule_token:
         return False
 
     query_token = str(query or "").strip().casefold()
@@ -184,6 +189,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.object_var = tk.StringVar(value="All")
+        self.rule_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.visible_var = tk.StringVar(value="0 visible")
         self.error_count_var = tk.StringVar(value="ERROR 0")
@@ -196,6 +202,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.severity_var,
             self.category_var,
             self.object_var,
+            self.rule_var,
         ):
             variable.trace_add("write", lambda *_: self._populate())
 
@@ -289,17 +296,34 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=18,
         )
         self.object_combo.pack(side="left", padx=(4, 8))
-        ttk.Button(
-            filterbar,
-            text="Clear filters",
-            style="CX.Compact.TButton",
-            command=self.clear_filters,
-        ).pack(side="left", padx=2)
         ttk.Label(
             filterbar,
             textvariable=self.visible_var,
             style="CX.Muted.TLabel",
         ).pack(side="right", padx=(12, 0))
+
+        rulebar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 3))
+        rulebar.pack(fill="x")
+        ttk.Label(rulebar, text="Rule / code").pack(side="left")
+        self.rule_combo = ttk.Combobox(
+            rulebar,
+            textvariable=self.rule_var,
+            values=("All",),
+            state="readonly",
+            width=28,
+        )
+        self.rule_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            rulebar,
+            text="Reset filters",
+            style="CX.Compact.TButton",
+            command=self.clear_filters,
+        ).pack(side="left", padx=2)
+        ttk.Label(
+            rulebar,
+            text="Exact rule filter · Search supports multiple terms",
+            style="CX.Muted.TLabel",
+        ).pack(side="left", padx=(10, 0))
 
         counters = ttk.Frame(
             self,
@@ -539,56 +563,30 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             {self._element_type(issue) for issue in issues},
             key=str.casefold,
         )
+        rules = diagnostic_filter_options(issues, "rule")
         self.category_combo.configure(values=("All", *categories))
         self.object_combo.configure(values=("All", *objects))
+        self.rule_combo.configure(values=rules)
         if self.category_var.get() not in {"All", *categories}:
             self.category_var.set("All")
         if self.object_var.get() not in {"All", *objects}:
             self.object_var.set("All")
+        if self.rule_var.get() not in rules:
+            self.rule_var.set("All")
 
     def _filtered_issues(self) -> list[dict[str, Any]]:
-        issues = self._all_issues()
-        severity = self.severity_var.get().strip().casefold()
-        category = self.category_var.get().strip().casefold()
-        object_type = self.object_var.get().strip().casefold()
-        query = self.search_var.get().strip().casefold()
-        visible: list[dict[str, Any]] = []
-        for issue in issues:
-            issue_severity = str(issue.get("severity", "")).casefold()
-            if severity and severity != "all" and issue_severity != severity:
-                continue
-            issue_category = str(issue.get("category", "")).casefold()
-            if category and category != "all" and issue_category != category:
-                continue
-            issue_object_type = self._element_type(issue).casefold()
-            if (
-                object_type
-                and object_type != "all"
-                and issue_object_type != object_type
-            ):
-                continue
-            if query:
-                haystack = " ".join(
-                    (
-                        str(issue.get("rule", "")),
-                        str(issue.get("category", "")),
-                        str(issue.get("message", "")),
-                        str(issue.get("suggested_action", "")),
-                        self._element_text(issue),
-                        self._element_type(issue),
-                        self._level_text(issue),
-                        json.dumps(
-                            issue.get("details", {}),
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        ),
-                    )
-                ).casefold()
-                if query not in haystack:
-                    continue
-            visible.append(issue)
-        return visible
+        return [
+            issue
+            for issue in self._all_issues()
+            if diagnostic_matches_filters(
+                issue,
+                severity=self.severity_var.get(),
+                category=self.category_var.get(),
+                target_type=self.object_var.get(),
+                rule=self.rule_var.get(),
+                query=self.search_var.get(),
+            )
+        ]
 
     def _sort_value(self, issue: dict[str, Any]):
         column = self._sort_column
@@ -625,6 +623,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.set("All")
         self.category_var.set("All")
         self.object_var.set("All")
+        self.rule_var.set("All")
         self.search_entry.focus_set()
 
     def _populate(self) -> None:

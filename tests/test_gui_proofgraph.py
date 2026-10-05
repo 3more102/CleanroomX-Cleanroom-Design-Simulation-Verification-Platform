@@ -4,7 +4,12 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    _search_projection,
+    proofgraph_projection,
+    proofgraph_projection_summary,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -224,6 +229,45 @@ def test_proofgraph_filters_keep_immediate_context_without_deriving_new_verdicts
     calculation_keys = {node["key"] for node in calculations["nodes"]}
     assert "calculation:pressure_solver" in calculation_keys
     assert "evidence:evidence-pressure" in calculation_keys
+
+
+def test_proofgraph_summary_counts_persisted_verdicts_and_evidence_gaps():
+    verified = proofgraph_projection_summary(
+        proofgraph_projection(_sample_graph())
+    )
+    assert verified["requirement_count"] == 1
+    assert verified["evidence_count"] == 1
+    assert verified["verdict_count"] == 1
+    assert verified["pass_count"] == 0
+    assert verified["fail_count"] == 1
+    assert verified["not_checked_count"] == 0
+    assert verified["unresolved_evidence_count"] == 0
+
+    unresolved = proofgraph_projection_summary(
+        proofgraph_projection(_unresolved_graph())
+    )
+    assert unresolved["requirement_count"] == 1
+    assert unresolved["evidence_count"] == 0
+    assert unresolved["verdict_count"] == 1
+    assert unresolved["not_checked_count"] == 1
+    assert unresolved["unresolved_evidence_count"] == 1
+
+
+def test_proofgraph_search_uses_persisted_traceability_text_and_keeps_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _search_projection(projection, "pressure_solver")
+    keys = {node["key"] for node in searched["nodes"]}
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+
+    source_search = _search_projection(projection, "facility.ifc")
+    source_keys = {node["key"] for node in source_search["nodes"]}
+    assert "source:source-ifc" in source_keys
+    assert "evidence:evidence-pressure" in source_keys
+
+    missing = _search_projection(projection, "definitely-missing")
+    assert missing == {"nodes": [], "edges": []}
 
 
 def test_unresolved_evidence_filter_uses_canonical_not_checked_state():

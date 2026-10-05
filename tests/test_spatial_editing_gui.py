@@ -320,6 +320,37 @@ def test_room_context_menu_exposes_real_editing_actions(app):
     assert "Link Analysis…" in labels
 
 
+def test_multi_selection_bulk_hide_delete_and_undo(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first_hit = _Hit("room", rooms[0]["id"])
+    second_hit = _Hit("room", rooms[1]["id"])
+    original_room_count = len(rooms)
+
+    workspace._set_selected_hits([first_hit, second_hit])
+    workspace._load_property_panel()
+    workspace.hide_selected()
+    app.root.update()
+
+    assert not workspace._is_item_visible(first_hit.kind, first_hit.item_id)
+    assert not workspace._is_item_visible(second_hit.kind, second_hit.item_id)
+    workspace.show_all()
+    assert workspace._is_item_visible(first_hit.kind, first_hit.item_id)
+    assert workspace._is_item_visible(second_hit.kind, second_hit.item_id)
+
+    workspace.delete_selected()
+    app.root.update()
+
+    assert len(workspace.layout["rooms"]) == original_room_count - 2
+    assert workspace.selected_hits() == ()
+    assert app.undo_project_edit() is True
+    app.root.update()
+    assert len(workspace.layout["rooms"]) == original_room_count
+    assert any(room["id"] == first_hit.item_id for room in workspace.layout["rooms"])
+    assert any(room["id"] == second_hit.item_id for room in workspace.layout["rooms"])
+
+
 def test_marquee_selection_selects_visible_spatial_objects_without_mutation(app):
     workspace = app.spatial_workspace
     rooms = workspace.layout["rooms"]

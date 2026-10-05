@@ -155,3 +155,54 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_dashboard_projects_live_engineering_health_without_mutating_project(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    tabs = _tab_texts(app.notebook)
+    assert "Dashboard" in tabs
+
+    app._activate_dashboard_workspace()
+    app.root.update()
+
+    layout = app.project.metadata[SPATIAL_METADATA_KEY]
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.workspace_status_var.get() == "Workspace: Dashboard"
+    assert app.dashboard.rooms_var.get() == str(len(layout["rooms"]))
+    assert app.dashboard.devices_var.get() == str(len(layout["devices"]))
+    assert app.dashboard.analyses_var.get() == str(len(app.project.analyses))
+    assert len(app.dashboard.health_tree.get_children()) == 4
+    assert app.project.to_dict() == project_before
+
+
+def test_navigator_dashboard_and_shell_health_badges_are_first_class(app):
+    assert app.analysis_tree.exists("nav-dashboard")
+    app.analysis_tree.selection_set("nav-dashboard")
+    app.analysis_tree.focus("nav-dashboard")
+    app._on_navigator_selected()
+    app.root.update()
+
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.project_state_var.get() in {"SAVED", "UNSAVED", "RUNNING"}
+    assert app.diagnostics_state_var.get().startswith("DIAGNOSTICS")
+    assert app.verification_state_var.get().startswith("VERIFY")
+    assert app.evidence_state_var.get().startswith("EVIDENCE")
+
+
+def test_problem_detail_is_engineering_focused_not_raw_json_dump(app):
+    _result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    target_iid = next(
+        iid
+        for iid, candidate in panel._issues_by_iid.items()
+        if candidate["sequence"] == issue["sequence"]
+    )
+    panel.tree.selection_set(target_iid)
+    panel.tree.focus(target_iid)
+    panel._show_selected_detail()
+    text = panel.detail.get("1.0", "end").strip()
+
+    assert "Affected object:" in text
+    assert "Engineering domain:" in text
+    assert "Recommended recovery" in text
+    assert not text.startswith("{")

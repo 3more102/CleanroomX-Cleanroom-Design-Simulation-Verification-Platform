@@ -5773,7 +5773,8 @@ class CleanroomXApp:
 
         save_badge_var = getattr(self, "shell_save_badge_var", None)
         save_badge = getattr(self, "shell_save_badge", None)
-        if self.project_path is None:
+        project_path = getattr(self, "project_path", None)
+        if project_path is None:
             save_text = "UNSAVED" if has_unsaved_changes else "NEW PROJECT"
             save_style = (
                 "CX.Status.Warning.TLabel"

@@ -6,6 +6,8 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_proofgraph import proofgraph_projection
+
 
 @dataclass(frozen=True)
 class SearchEntry:
@@ -237,6 +239,65 @@ def build_engineering_search_entries(
                 ),
             )
 
+    mappings = snapshot.get("mappings", [])
+    if isinstance(mappings, list):
+        for mapping in mappings:
+            if not isinstance(mapping, dict):
+                continue
+            mapping_id = _text(mapping.get("id"))
+            if not mapping_id:
+                continue
+            requirement_id = _text(mapping.get("requirement_id"))
+            requirement_title = _text(mapping.get("requirement_title"))
+            property_name = _text(mapping.get("property_name"))
+            analysis_id = _text(mapping.get("analysis_id"))
+            subject_ref = _text(mapping.get("subject_ref")) or "project"
+            status = _text(mapping.get("status"))
+            reference_state = _text(mapping.get("reference_state"))
+            label = " → ".join(
+                part
+                for part in (
+                    requirement_title or requirement_id,
+                    property_name,
+                )
+                if part
+            ) or mapping_id
+            _append_unique(
+                entries,
+                seen,
+                SearchEntry(
+                    key=f"mapping:{mapping_id}",
+                    category="Evidence Mapping",
+                    label=label,
+                    detail=" · ".join(
+                        part
+                        for part in (
+                            mapping_id,
+                            status,
+                            reference_state,
+                            subject_ref,
+                            analysis_id,
+                        )
+                        if part
+                    ),
+                    target_type="mapping",
+                    target_id=mapping_id,
+                    keywords=(
+                        requirement_id,
+                        requirement_title,
+                        property_name,
+                        analysis_id,
+                        subject_ref,
+                        status,
+                        reference_state,
+                        "evidence",
+                        "mapping",
+                        "traceability",
+                    ),
+                    payload=mapping,
+                ),
+            )
+
     for document_index, document in enumerate(proofgraph_documents):
         if not isinstance(document, dict):
             continue
@@ -244,10 +305,16 @@ def build_engineering_search_entries(
             _text(document.get("id") or document.get("graph_sha256"))
             or str(document_index)
         )
-        nodes = document.get("nodes", [])
-        if not isinstance(nodes, list):
-            continue
-        for node_index, node in enumerate(nodes):
+        # Persisted verification history stores canonical ProofGraph documents,
+        # while older callers/tests may supply the GUI projection shape directly.
+        # Route canonical documents through the same validated projection boundary
+        # used by the Evidence workspace so search never invents graph semantics.
+        nodes = document.get("nodes")
+        if isinstance(nodes, list):
+            projected_nodes = nodes
+        else:
+            projected_nodes = proofgraph_projection(document).get("nodes", [])
+        for node_index, node in enumerate(projected_nodes):
             if not isinstance(node, dict):
                 continue
             node_id = _text(node.get("id") or node.get("key"))
@@ -257,20 +324,22 @@ def build_engineering_search_entries(
                 continue
             node_type = _text(node.get("type"))
             status = _text(node.get("status"))
+            payload = dict(node)
+            payload["_proofgraph_id"] = graph_id
+            if node_key:
+                payload["_proofgraph_key"] = node_key
             _append_unique(
                 entries,
                 seen,
                 SearchEntry(
-                    key=f"proof:{graph_id}:{node_id or node_index}",
+                    key=f"proof:{graph_id}:{node_key or node_id or node_index}",
                     category="Evidence",
                     label=label,
                     detail=" · ".join(
                         part for part in (node_type, status, node_id) if part
                     ),
                     target_type="evidence",
-                    target_id=node_key or (
-                        f"{node_type}:{node_id}" if node_type and node_id else node_id
-                    ),
+                    target_id=node_id,
                     keywords=(
                         node_type,
                         status,
@@ -279,7 +348,7 @@ def build_engineering_search_entries(
                         "evidence",
                         "provenance",
                     ),
-                    payload=node,
+                    payload=payload,
                 ),
             )
 

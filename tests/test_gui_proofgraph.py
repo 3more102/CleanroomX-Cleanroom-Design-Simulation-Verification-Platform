@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import copy
+import os
+import tkinter as tk
 
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    ProofGraphViewer,
     _filtered_projection,
     _node_detail_lines,
+    _node_relation_lines,
+    _projection_status_summary,
     _searched_projection,
     proofgraph_projection,
 )
@@ -276,3 +281,72 @@ def test_proofgraph_search_keeps_matches_and_immediate_traceability_context():
     assert "verdict:verdict-pressure" in failed_keys
 
     assert _searched_projection(projection, "") is projection
+
+
+
+def test_proofgraph_status_summary_uses_only_persisted_states():
+    projection = proofgraph_projection(_sample_graph())
+    summary = _projection_status_summary(projection)
+
+    assert summary["total"] == len(projection["nodes"])
+    assert summary["fail"] == 2
+    assert summary["warning"] == 0
+    assert summary["unresolved"] == 0
+    assert summary["evidence"] >= 2
+
+    unresolved = _projection_status_summary(
+        proofgraph_projection(_unresolved_graph())
+    )
+    assert unresolved["unresolved"] == 1
+    assert unresolved["pass"] == 0
+
+
+def test_proofgraph_relation_lines_show_immediate_trace_links():
+    projection = proofgraph_projection(_sample_graph())
+
+    lines = _node_relation_lines(
+        projection,
+        "finding:finding-pressure",
+    )
+    rendered = "\n".join(lines)
+
+    assert "TRACE LINKS" in rendered
+    assert "← produces: check-pressure" in rendered
+    assert "→ verdict: Requirement not satisfied" in rendered
+
+
+@pytest.fixture
+def proofgraph_root():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.geometry("1000x650")
+    try:
+        yield root
+    finally:
+        root.destroy()
+
+
+def test_proofgraph_viewer_fit_and_focus_selected_node(proofgraph_root):
+    statuses: list[str] = []
+    viewer = ProofGraphViewer(
+        proofgraph_root,
+        status_setter=statuses.append,
+    )
+    viewer.pack(fill="both", expand=True)
+    viewer.set_documents([_sample_graph()])
+    proofgraph_root.update()
+
+    viewer._select_key("finding:finding-pressure")
+    assert "finding:finding-pressure" in viewer._canvas_bbox_by_key
+
+    assert viewer.focus_selected() == "break"
+    assert statuses[-1].startswith("Focused ProofGraph node:")
+
+    assert viewer.fit_graph() == "break"
+    assert 0.45 <= viewer._zoom <= 2.5
+    assert viewer.zoom_label.cget("text").endswith("%")
+    assert statuses[-1].startswith("ProofGraph fitted at ")

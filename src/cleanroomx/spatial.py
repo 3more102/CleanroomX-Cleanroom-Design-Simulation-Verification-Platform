@@ -10,7 +10,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
-from .gui_theme import theme_palette
+from .gui_theme import status_style_name, theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1543,6 +1543,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_analysis_var = tk.StringVar(
             value="Select a room to inspect fresh engineering results."
         )
+        self._inspector_geometry_var = tk.StringVar(value="Geometry: —")
         self._inspector_pressure_var = tk.StringVar(value="Pressure: —")
         self._inspector_airflow_var = tk.StringVar(value="Airflow / ACH: —")
         self._inspector_compliance_var = tk.StringVar(value="Verification: —")
@@ -1898,6 +1899,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             engineering,
+            textvariable=self._inspector_geometry_var,
+        ).pack(anchor="w", fill="x", pady=1)
+        ttk.Label(
+            engineering,
             textvariable=self._inspector_pressure_var,
         ).pack(anchor="w", fill="x", pady=1)
         ttk.Label(
@@ -2241,7 +2246,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_line(
                 px, py - 5, px, py + 5,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, tags=("measurement",),
             )
         if len(points) != 2:
             return
@@ -2692,6 +2697,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._inspector_analysis_var.set(
                 "Select a room to inspect fresh engineering results."
             )
+            self._inspector_geometry_var.set("Geometry: —")
             self._inspector_pressure_var.set("Pressure: —")
             self._inspector_airflow_var.set("Airflow / ACH: —")
             self._inspector_compliance_var.set("Verification: —")
@@ -2699,6 +2705,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 style="CX.Status.Neutral.TLabel"
             )
             return
+
+        length_m = _finite_number(item.get("length_m"), 0.0)
+        width_m = _finite_number(item.get("width_m"), 0.0)
+        height_m = _finite_number(item.get("height_m"), 0.0)
+        area_m2 = max(0.0, length_m * width_m)
+        volume_m3 = max(0.0, area_m2 * height_m)
+        self._inspector_geometry_var.set(
+            f"Geometry: {area_m2:,.1f} m² · {volume_m3:,.1f} m³"
+        )
 
         analysis = self._analysis_getter()
         result = self._result_getter()
@@ -2756,21 +2771,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         label = state.replace("_", " ").upper()
         self._inspector_compliance_var.set(f"Verification: {label}")
         self._inspector_compliance_label.configure(
-            style=(
-                "CX.Status.Pass.TLabel"
-                if state == "pass"
-                else "CX.Status.Fail.TLabel"
-                if state == "fail"
-                else "CX.Status.Warning.TLabel"
-                if state == "warning"
-                else "CX.Status.Neutral.TLabel"
-            )
+            style=status_style_name(state)
         )
 
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
-            self._selection_var.set("No selection")
+            self._selection_var.set(
+                "No object selected — select a room, device, opening, or equipment item."
+            )
             self._load_engineering_inspector_snapshot()
             for key, var in self._property_vars.items():
                 var.set("")

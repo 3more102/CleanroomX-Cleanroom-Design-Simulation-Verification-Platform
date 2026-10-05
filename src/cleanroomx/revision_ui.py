@@ -5,6 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_windowing import fit_window_to_display
 from .project_revisions import ProjectRevisionScan
 
 
@@ -14,8 +15,13 @@ class ProjectRevisionCenter(tk.Toplevel):
     def __init__(self, parent: tk.Misc, scan: ProjectRevisionScan):
         super().__init__(parent)
         self.title("Saved project revisions")
-        self.geometry("1020x600")
-        self.minsize(760, 430)
+        fit_window_to_display(
+            self,
+            preferred_width=1020,
+            preferred_height=600,
+            minimum_width=760,
+            minimum_height=430,
+        )
         self.transient(parent)
         self.grab_set()
         self.result: Path | None = None

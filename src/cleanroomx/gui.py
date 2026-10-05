@@ -4343,10 +4343,6 @@ class CleanroomXApp:
         if tree is None or not item_id or not tree.exists(item_id):
             return None
         menu = tk.Menu(self.root, tearoff=False)
-        if item_id == "nav-dashboard":
-            self._activate_dashboard_workspace()
-            self.selection_status_var.set("Selected: Dashboard")
-            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
 
@@ -4513,6 +4509,10 @@ class CleanroomXApp:
         if not selection:
             return
         item_id = selection[0]
+        if item_id == "nav-dashboard":
+            self._activate_dashboard_workspace()
+            self.selection_status_var.set("Selected: Dashboard")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
             if hasattr(self, "spatial_workspace"):

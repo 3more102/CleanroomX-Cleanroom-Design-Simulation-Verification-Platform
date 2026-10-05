@@ -1204,7 +1204,7 @@ def test_stale_result_is_invalidated_when_matching_analysis_input_changes():
     assert cleared[-1] == ("plot", None)
 
 
-def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
+def test_open_project_reports_invalid_project_through_diagnostic_boundary(monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app._running = False
     app.root = object()
@@ -1214,7 +1214,16 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
         raise ValueError("invalid project")
 
     app.load_project_path = fail_load
-    captured = {}
+    reported = {}
+    app._show_operation_error = (
+        lambda title, operation, exc: reported.update(
+            {
+                "title": title,
+                "operation": operation,
+                "exception": exc,
+            }
+        )
+    )
     monkeypatch.setattr(
         gui_module.filedialog,
         "askopenfilename",
@@ -1223,16 +1232,17 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
     monkeypatch.setattr(
         gui_module.messagebox,
         "showerror",
-        lambda title, message, parent=None: captured.update(
-            {"title": title, "message": message, "parent": parent}
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("open_project must use the centralized diagnostic boundary")
         ),
     )
 
     app.open_project()
 
-    assert captured["title"] == "Open failed"
-    assert captured["message"] == "invalid project"
-    assert captured["parent"] is app.root
+    assert reported["title"] == "Open failed"
+    assert reported["operation"] == "Open project"
+    assert isinstance(reported["exception"], ValueError)
+    assert str(reported["exception"]) == "invalid project"
 
 
 def test_per_analysis_run_cache_restores_without_forcing_result_tab():

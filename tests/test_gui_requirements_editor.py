@@ -5,6 +5,7 @@ import copy
 import pytest
 
 import cleanroomx.gui_requirements as gui_requirements_module
+
 from cleanroomx.gui_requirements import (
     RequirementsEditorDialog,
     add_requirement,
@@ -242,4 +243,3 @@ def test_requirements_editor_keeps_validation_failures_user_facing(monkeypatch) 
     assert messages[0][0] == "Requirements update failed"
     assert "minimum must be <= maximum" in messages[0][1]
     assert "Existing requirement/evidence mappings are preserved." in messages[0][1]
-

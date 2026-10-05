@@ -1,3 +1,5 @@
+from cleanroomx.application import AnalysisRun
+from cleanroomx.gui import analysis_run_overview
 from cleanroomx.gui_theme import status_style_name, theme_palette
 
 
@@ -28,3 +30,25 @@ def test_status_style_name_is_consistent_for_engineering_states():
     assert status_style_name("STALE") == "CX.Stale.TLabel"
     assert status_style_name("UNVERIFIED") == "CX.Simulation.TLabel"
     assert status_style_name("not checked") == "CX.MutedBadge.TLabel"
+
+
+
+def test_analysis_run_overview_separates_configured_and_calculated_values():
+    run = AnalysisRun(
+        kind="room_verification",
+        title="Room verification",
+        status="PASS",
+        input_snapshot={"room": "CR-104", "required_pressure_pa": 12.5},
+        result={"calculated_pressure_pa": 14.2, "status": "PASS"},
+        markdown="# report",
+        diagnostics={"summary": {"status": "PASS"}},
+        plot=None,
+    )
+
+    text = analysis_run_overview(run)
+
+    assert "CONFIGURED INPUTS" in text
+    assert "required pressure pa: 12.5 Pa" in text
+    assert "CALCULATED RESULTS" in text
+    assert "calculated pressure pa: 14.2 Pa" in text
+    assert "Status reported by backend: PASS" in text

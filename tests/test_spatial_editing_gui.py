@@ -119,6 +119,54 @@ def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app, monkeypatch
     assert workspace._property_vars["height_m"].get() == "NaN"
 
 
+def test_multi_selection_inspector_exposes_mixed_values_and_applies_batch_edit(app):
+    workspace = app.spatial_workspace
+    first, second = workspace.layout["rooms"][:2]
+    first["pressure_pa"] = 10.0
+    second["pressure_pa"] = 25.0
+
+    workspace._set_selected_hits(
+        [_Hit("room", first["id"]), _Hit("room", second["id"])]
+    )
+    workspace._load_property_panel()
+    app.root.update()
+
+    assert workspace._property_vars["pressure_pa"].get() == "— Mixed —"
+    assert "2 rooms selected" in workspace._selection_var.get()
+    assert "2 selected" in workspace._property_filter_summary_var.get()
+    assert str(workspace._property_apply_button.cget("text")) == "Apply to 2 objects"
+    assert not workspace._property_rows["name"].winfo_manager()
+    assert workspace._property_rows["pressure_pa"].winfo_manager()
+
+    workspace._property_vars["pressure_pa"].set("17.5")
+    workspace._on_property_edit()
+    assert "modified" in workspace._property_filter_summary_var.get()
+
+    workspace.apply_properties()
+    app.root.update()
+
+    current = {room["id"]: room for room in workspace.layout["rooms"]}
+    assert current[first["id"]]["pressure_pa"] == pytest.approx(17.5)
+    assert current[second["id"]]["pressure_pa"] == pytest.approx(17.5)
+    assert "2 rooms selected" in workspace._selection_var.get()
+
+
+def test_multi_selection_inspector_refuses_cross_kind_batch_edit(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    device = workspace.layout["devices"][0]
+
+    workspace._set_selected_hits(
+        [_Hit("room", room["id"]), _Hit("device", device["id"])]
+    )
+    workspace._load_property_panel()
+    app.root.update()
+
+    assert "batch editing requires" in workspace._selection_var.get()
+    assert str(workspace._property_apply_button.cget("state")) == "disabled"
+    assert workspace._editable_property_fields() == set()
+
+
 def test_property_draft_survives_selection_change_and_can_be_reverted(app):
     workspace = app.spatial_workspace
     first, second = workspace.layout["rooms"][:2]

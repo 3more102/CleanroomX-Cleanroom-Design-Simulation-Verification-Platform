@@ -14,11 +14,14 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "background": "#eef3f8",
         "surface": "#f8fafc",
         "surface_alt": "#e8eef5",
+        "surface_elevated": "#dde7f1",
         "panel": "#ffffff",
         "text": "#172033",
         "muted": "#5f6f84",
         "border": "#c7d2df",
+        "border_strong": "#93a7bd",
         "accent": "#0284c7",
+        "accent_secondary": "#2563eb",
         "accent_hover": "#0369a1",
         "accent_text": "#ffffff",
         "selection": "#dbeafe",
@@ -35,6 +38,18 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "warning": "#b45309",
         "error": "#dc2626",
         "info": "#0284c7",
+        "healthy": "#65a30d",
+        "attention": "#ea580c",
+        "simulation": "#7c3aed",
+        "evidence": "#16a34a",
+        "domain_geometry": "#0891b2",
+        "domain_hvac": "#2563eb",
+        "domain_airflow": "#0d9488",
+        "domain_pressure": "#7c3aed",
+        "domain_electrical": "#ca8a04",
+        "domain_utilities": "#ea580c",
+        "domain_safety": "#dc2626",
+        "domain_verification": "#059669",
         "mode_dashboard": "#0284C7",
         "mode_design": "#0F766E",
         "mode_analyze": "#0369A1",
@@ -46,11 +61,14 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "background": "#0B1220",
         "surface": "#111B2E",
         "surface_alt": "#17243A",
+        "surface_elevated": "#1D2C45",
         "panel": "#111B2E",
         "text": "#F1F5F9",
         "muted": "#94A3B8",
         "border": "#263750",
+        "border_strong": "#334A68",
         "accent": "#22D3EE",
+        "accent_secondary": "#38BDF8",
         "accent_hover": "#38BDF8",
         "accent_text": "#07111F",
         "selection": "#164E63",
@@ -67,6 +85,18 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "warning": "#F59E0B",
         "error": "#EF4444",
         "info": "#38BDF8",
+        "healthy": "#84CC16",
+        "attention": "#F97316",
+        "simulation": "#A78BFA",
+        "evidence": "#22C55E",
+        "domain_geometry": "#22D3EE",
+        "domain_hvac": "#38BDF8",
+        "domain_airflow": "#2DD4BF",
+        "domain_pressure": "#A78BFA",
+        "domain_electrical": "#FACC15",
+        "domain_utilities": "#F97316",
+        "domain_safety": "#EF4444",
+        "domain_verification": "#10B981",
         "mode_dashboard": "#22D3EE",
         "mode_design": "#2DD4BF",
         "mode_analyze": "#38BDF8",
@@ -108,6 +138,90 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure("CX.Surface.TFrame", background=palette["surface"])
     style.configure("CX.Panel.TFrame", background=palette["panel"])
     style.configure("CX.Card.TFrame", background=palette["surface_alt"])
+    style.configure(
+        "CX.SubtlePanel.TFrame",
+        background=palette["surface_elevated"],
+        bordercolor=palette["border"],
+        relief="solid",
+        borderwidth=1,
+    )
+    style.configure(
+        "CX.Hero.TFrame",
+        background=palette["surface"],
+        bordercolor=palette["border_strong"],
+        relief="solid",
+        borderwidth=1,
+        padding=(20, 16),
+    )
+    style.configure(
+        "CX.HeroBrand.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 18, "bold"),
+    )
+    style.configure(
+        "CX.HeroTitle.TLabel",
+        background=palette["surface"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 11, "bold"),
+    )
+    style.configure(
+        "CX.HeroMuted.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "CX.Card.TLabelframe",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "CX.Card.TLabelframe.Label",
+        background=palette["surface_alt"],
+        foreground=palette["accent_secondary"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.Card.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+    )
+    style.configure(
+        "CX.CardMuted.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "CX.CardTitle.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.Instrument.TFrame",
+        background=palette["surface_elevated"],
+        bordercolor=palette["border"],
+        relief="solid",
+        borderwidth=1,
+        padding=(8, 6),
+    )
+    style.configure(
+        "CX.InstrumentLabel.TLabel",
+        background=palette["surface_elevated"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.InstrumentValue.TLabel",
+        background=palette["surface_elevated"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
     style.configure(
         "CX.Topbar.TFrame",
         background=palette["surface"],
@@ -617,6 +731,20 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         relief="flat",
     )
+    style.configure(
+        "CX.Card.Treeview",
+        background=palette["tree"],
+        fieldbackground=palette["tree"],
+        foreground=palette["text"],
+        rowheight=27,
+        bordercolor=palette["border"],
+        relief="flat",
+    )
+    style.map(
+        "CX.Card.Treeview",
+        background=[("selected", palette["selection"])],
+        foreground=[("selected", palette["selection_text"])],
+    )
     style.map(
         "CX.Navigator.Treeview",
         background=[("selected", palette["selection"])],
@@ -760,11 +888,62 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 8, "bold"),
     )
 
+    style.configure(
+        "CX.Readiness.Horizontal.TProgressbar",
+        troughcolor=palette["surface_alt"],
+        background=palette["accent"],
+        bordercolor=palette["border"],
+        lightcolor=palette["accent"],
+        darkcolor=palette["accent"],
+        thickness=9,
+    )
+
+    status_styles = {
+        "Pass": palette["success"],
+        "Fail": palette["error"],
+        "Warning": palette["warning"],
+        "Simulation": palette["simulation"],
+        "Info": palette["info"],
+        "Neutral": palette["muted"],
+    }
+    for status_name, status_color in status_styles.items():
+        style.configure(
+            f"CX.Status.{status_name}.TLabel",
+            background=palette["surface_alt"],
+            foreground=status_color,
+            padding=(6, 2),
+            font=("TkDefaultFont", 8, "bold"),
+        )
+
+    domain_styles = {
+        "Geometry": palette["domain_geometry"],
+        "HVAC": palette["domain_hvac"],
+        "Airflow": palette["domain_airflow"],
+        "Pressure": palette["domain_pressure"],
+        "Electrical": palette["domain_electrical"],
+        "Utilities": palette["domain_utilities"],
+        "Safety": palette["domain_safety"],
+        "Evidence": palette["evidence"],
+        "Verification": palette["domain_verification"],
+        "Simulation": palette["simulation"],
+    }
+    for domain_name, domain_color in domain_styles.items():
+        style.configure(
+            f"CX.Domain{domain_name}.TLabel",
+            background=palette["surface_alt"],
+            foreground=domain_color,
+            font=("TkDefaultFont", 8, "bold"),
+        )
+
     for name, color in (
         ("Success", palette["success"]),
         ("Warning", palette["warning"]),
         ("Error", palette["error"]),
         ("Info", palette["info"]),
+        ("Healthy", palette["healthy"]),
+        ("Attention", palette["attention"]),
+        ("Simulation", palette["simulation"]),
+        ("Evidence", palette["evidence"]),
     ):
         style.configure(
             f"CX.{name}.TLabel",

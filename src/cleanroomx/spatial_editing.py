@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 
+from .engineering_units import (
+    EngineeringUnitConversionError,
+    convert_engineering_value,
+)
 from .spatial_integrity import validate_spatial_layout_document
 
 
@@ -24,6 +29,20 @@ _FIELD_LABELS = {
     "pressure_pa": "Pressure (Pa)",
     "orientation_deg": "Orientation (degrees)",
 }
+
+_FIELD_TARGET_UNITS = {
+    "x_m": "m",
+    "y_m": "m",
+    "z_m": "m",
+    "length_m": "m",
+    "width_m": "m",
+    "height_m": "m",
+    "floor_elevation_m": "m",
+    "pressure_pa": "Pa",
+}
+_QUANTITY_INPUT_RE = re.compile(
+    r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(\S(?:.*\S)?)\s*$"
+)
 
 
 def _selected_item(layout: dict, kind: str, item_id: str) -> dict:
@@ -41,7 +60,22 @@ def _number(text: str, field: str, *, positive: bool = False) -> float:
     try:
         number = float(text)
     except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError(f"{label} must be a finite number") from exc
+        target_unit = _FIELD_TARGET_UNITS.get(field)
+        match = _QUANTITY_INPUT_RE.match(str(text or ""))
+        if target_unit is None or match is None:
+            raise ValueError(f"{label} must be a finite number") from exc
+        try:
+            numeric = float(match.group(1))
+            conversion = convert_engineering_value(
+                numeric,
+                source_unit=match.group(2).strip(),
+                target_unit=target_unit,
+            )
+            number = conversion.output_value
+        except (ValueError, OverflowError, EngineeringUnitConversionError) as unit_exc:
+            raise ValueError(
+                f"{label} must be a finite number in {target_unit} or a supported compatible unit"
+            ) from unit_exc
     if not math.isfinite(number):
         raise ValueError(f"{label} must be a finite number")
     if positive and number <= 0:

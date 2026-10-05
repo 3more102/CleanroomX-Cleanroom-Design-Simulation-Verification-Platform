@@ -102,6 +102,8 @@ def test_production_acceptance_workflow_executes_and_publishes_its_own_evidence(
     assert "python scripts/production_acceptance.py --output production-acceptance.json" in workflow
     assert "tests/test_production_acceptance.py" in workflow
     assert "tests/test_production_acceptance_contract.py" in workflow
+    assert "tests/test_proofgraph_change_impact.py" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
     assert "scripts/security_static_gate.py" in workflow
     assert "Upload production acceptance evidence" in workflow
     assert "name: CleanroomX-production-acceptance" in workflow

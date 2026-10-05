@@ -242,3 +242,27 @@ def test_project_readiness_projection_does_not_invent_readiness():
     assert percent == 0
     assert state == "not checked"
     assert "5 not checked" in detail
+
+
+def test_dashboard_health_cards_navigate_to_subsystem_workspaces():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    opened: list[str] = []
+    dashboard = EngineeringDashboard(root, on_module=opened.append)
+    dashboard.pack(fill="both", expand=True)
+    try:
+        root.update()
+        dashboard.diagnostics_value.event_generate("<Button-1>")
+        root.update()
+        assert opened == ["diagnostics"]
+
+        dashboard.verification_value.event_generate("<Button-1>")
+        root.update()
+        assert opened == ["diagnostics", "verification"]
+    finally:
+        root.destroy()

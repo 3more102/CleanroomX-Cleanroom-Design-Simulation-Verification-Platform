@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import uuid
@@ -81,12 +82,12 @@ def _logger_for(path: Path) -> logging.Logger:
         encoding="utf-8",
         delay=True,
     )
-    handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)sZ %(levelname)s %(name)s %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S",
-        )
+    formatter = logging.Formatter(
+        "%(asctime)sZ %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
     )
+    formatter.converter = time.gmtime
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
 

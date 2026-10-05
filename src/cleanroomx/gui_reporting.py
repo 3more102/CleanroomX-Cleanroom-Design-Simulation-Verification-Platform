@@ -202,7 +202,7 @@ class ReportingWorkspace(ttk.Frame):
             actions,
             text="Refresh",
             style="CX.Compact.TButton",
-            command=self.refresh,
+            command=lambda: self.refresh(announce=True),
         ).pack(side="left", padx=(0, 4))
         self.dossier_button = ttk.Button(
             actions,
@@ -357,7 +357,7 @@ class ReportingWorkspace(ttk.Frame):
         action()
         self.refresh()
 
-    def refresh(self) -> dict[str, Any]:
+    def refresh(self, *, announce: bool = False) -> dict[str, Any]:
         snapshot = dict(self.snapshot_getter() or {})
         self.last_snapshot = snapshot
 
@@ -402,7 +402,7 @@ class ReportingWorkspace(ttk.Frame):
         )
         self._set_preview(str(snapshot.get("preview", "Reporting state unavailable.")))
 
-        if self.status_setter is not None:
+        if announce and self.status_setter is not None:
             self.status_setter(
                 "Reporting workspace refreshed — "
                 + ("analysis report ready" if analysis_ready else "analysis report not ready")

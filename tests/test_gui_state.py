@@ -20,6 +20,9 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "output_visible": True,
         "inspector_visible": True,
         "theme": "light",
+        "active_workspace": "start",
+        "design_mode": "split",
+        "output_tab": "problems",
         "recent_projects": [],
         "window_width": 1440,
         "window_height": 900,
@@ -40,6 +43,9 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "output_visible": "no",
             "inspector_visible": True,
             "theme": "neon",
+            "active_workspace": "invented",
+            "design_mode": "quad",
+            "output_tab": 123,
             "recent_projects": [
                 "alpha.cleanroomx.json",
                 "",
@@ -62,6 +68,9 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["output_visible"] is True
     assert state["inspector_visible"] is True
     assert state["theme"] == "light"
+    assert state["active_workspace"] == "start"
+    assert state["design_mode"] == "split"
+    assert state["output_tab"] == "problems"
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
@@ -83,6 +92,9 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "output_visible": True,
             "inspector_visible": False,
             "theme": "dark",
+            "active_workspace": "proofgraph",
+            "design_mode": "3d",
+            "output_tab": "evidence",
             "recent_projects": [
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
@@ -101,6 +113,9 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     assert payload["navigator_visible"] is False
     assert payload["inspector_visible"] is False
     assert payload["theme"] == "dark"
+    assert payload["active_workspace"] == "proofgraph"
+    assert payload["design_mode"] == "3d"
+    assert payload["output_tab"] == "evidence"
     assert payload["recent_projects"] == [
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",

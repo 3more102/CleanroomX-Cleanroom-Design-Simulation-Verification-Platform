@@ -190,8 +190,12 @@ class TreeviewTableBehavior:
             if iid not in selection:
                 self.tree.selection_set(iid)
                 self.tree.focus(iid)
-        if not self.tree.selection():
-            return None
+
+        has_selection = bool(self.tree.selection())
+        has_rows = bool(self._ordered_children())
+        self._menu.entryconfigure(0, state="normal" if has_selection else "disabled")
+        self._menu.entryconfigure(1, state="normal" if has_selection else "disabled")
+        self._menu.entryconfigure(2, state="normal" if has_rows else "disabled")
         try:
             self._menu.tk_popup(event.x_root, event.y_root)
         finally:

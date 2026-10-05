@@ -4,7 +4,11 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (
+    _filtered_projection,
+    proofgraph_node_colors,
+    proofgraph_projection,
+)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +239,17 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+def test_proofgraph_node_colors_preserve_engineering_semantics():
+    requirement = proofgraph_node_colors({"type": "requirement"}, "dark")
+    evidence = proofgraph_node_colors({"type": "evidence"}, "dark")
+    failed = proofgraph_node_colors(
+        {"type": "verdict", "status": "fail"},
+        "dark",
+    )
+
+    assert requirement["outline"] == "#38BDF8"
+    assert evidence["outline"] == "#22C55E"
+    assert failed["outline"] == "#EF4444"
+    assert failed["text"] == "#FECACA"

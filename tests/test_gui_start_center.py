@@ -37,6 +37,17 @@ def test_start_center_is_initial_workspace(app):
     assert app.start_center.recent_tree.get_children() == ()
 
 
+def test_start_center_uses_live_autosave_status_and_exposes_recovery_workflow(app):
+    assert app.start_center.autosave_status_var is app.autosave_status_var
+    assert app.start_center.autosave_status_var.get() == "Autosave: disabled"
+    assert str(app.start_center.recovery_button.cget("state")) == "normal"
+
+    app.autosave_status_var.set("Autosave: clean")
+    app.root.update_idletasks()
+
+    assert app.start_center.autosave_status_var.get() == "Autosave: clean"
+
+
 def test_loading_project_switches_to_design_and_updates_recent_projects(app):
     path = bundled_demo_project_path()
 
@@ -81,9 +92,10 @@ def test_start_center_recent_search_and_remove_only_updates_recent_state(app, tm
 
     app.start_center.recent_search_var.set("")
     app.root.update()
-    assert len(app.start_center.recent_tree.get_children()) == 1
-    values = app.start_center.recent_tree.item(recent[0], "values")
-    assert values[0] == str(path.resolve(strict=False))
+    remaining = app.start_center.recent_tree.get_children()
+    assert len(remaining) == 1
+    values = app.start_center.recent_tree.item(remaining[0], "values")
+    assert values[0] == str(beta.resolve(strict=False))
 
 
 def test_start_center_can_be_reopened_without_mutating_project(app):

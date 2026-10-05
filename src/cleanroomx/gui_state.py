@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 5
+GUI_LAYOUT_STATE_VERSION = 6
 GUI_WORKSPACE_PROFILES = (
     "start",
     "design",
@@ -76,6 +76,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "inspector_visible": True,
     "theme": "light",
     "recent_projects": [],
+    "navigator_favorites": {},
     "window_width": 1440,
     "window_height": 900,
     "navigator_fraction": 0.20,
@@ -155,6 +156,44 @@ def _normalize_recent_projects(value: Any) -> list[str]:
         if len(recent) >= 8:
             break
     return recent
+
+
+def _normalize_navigator_favorites(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for raw_path, raw_items in value.items():
+        if len(normalized) >= 16:
+            break
+        if not isinstance(raw_path, str) or not isinstance(raw_items, list):
+            continue
+        project_path = raw_path.strip()
+        if not project_path or chr(0) in project_path or len(project_path) > 4096:
+            continue
+        try:
+            Path(project_path)
+        except (OSError, ValueError):
+            continue
+        favorites: list[str] = []
+        seen: set[str] = set()
+        for raw_item in raw_items:
+            if not isinstance(raw_item, str):
+                continue
+            item_id = raw_item.strip()
+            if (
+                not item_id
+                or chr(0) in item_id
+                or len(item_id) > 256
+                or item_id in seen
+            ):
+                continue
+            seen.add(item_id)
+            favorites.append(item_id)
+            if len(favorites) >= 24:
+                break
+        if favorites:
+            normalized[project_path] = favorites
+    return normalized
 
 
 def _normalize_workspace_name(value: Any) -> str:
@@ -245,6 +284,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         "theme": normalize_theme_name(source.get("theme")),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
+        ),
+        "navigator_favorites": _normalize_navigator_favorites(
+            source.get("navigator_favorites")
         ),
         "window_width": _bounded_dimension(
             source.get("window_width"),

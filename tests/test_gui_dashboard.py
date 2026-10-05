@@ -5,15 +5,19 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui_dashboard import EngineeringDashboard, _status_style
+from cleanroomx.gui_dashboard import (
+    EngineeringDashboard,
+    _status_style,
+    system_status_projection,
+)
 
 
 def test_dashboard_status_styles_are_semantic_and_deterministic():
     assert _status_style("pass") == "CX.Status.Pass.TLabel"
     assert _status_style("verified") == "CX.Status.Pass.TLabel"
     assert _status_style("fail") == "CX.Status.Fail.TLabel"
-    assert _status_style("stale") == "CX.Status.Warning.TLabel"
-    assert _status_style("running") == "CX.Status.Simulation.TLabel"
+    assert _status_style("stale") == "CX.Status.Attention.TLabel"
+    assert _status_style("running") == "CX.Status.Running.TLabel"
     assert _status_style("unknown") == "CX.Status.Neutral.TLabel"
 
 
@@ -121,9 +125,68 @@ def test_dashboard_issue_rows_are_semantic_and_actionable():
         iid = dashboard.issue_tree.get_children()[0]
         assert "error" in dashboard.issue_tree.item(iid, "tags")
         dashboard.issue_tree.selection_set(iid)
+        dashboard._on_issue_selection()
         assert dashboard.selected_issue() == issue
+        assert str(dashboard.locate_issue_button.cget("state")) == "normal"
         assert dashboard._open_selected_issue() == "break"
         assert opened == [issue]
     finally:
         root.destroy()
 
+
+
+def test_system_status_projection_uses_only_explicit_project_state():
+    projected = dict(
+        (name, (state, detail))
+        for name, state, detail in system_status_projection(
+            {
+                "diagnostics": {"summary": {"status": "warning", "issue_count": 2}},
+                "verification": {
+                    "configured_analysis_count": 4,
+                    "current_count": 3,
+                    "stale_count": 1,
+                    "not_verified_count": 0,
+                },
+                "model": {"room_count": 8},
+                "analysis_count": 4,
+                "last_run": {"title": "Pressure Network", "status": "completed"},
+                "evidence": {"record_count": 7, "proofgraph_count": 4},
+            }
+        )
+    )
+
+    assert projected["MODEL"] == ("available", "8 rooms")
+    assert projected["DIAGNOSTICS"] == ("warning", "2 issues")
+    assert projected["VERIFICATION"][0] == "stale"
+    assert "1 stale" in projected["VERIFICATION"][1]
+    assert projected["ANALYSIS"] == ("completed", "Pressure Network")
+    assert projected["EVIDENCE"] == ("available", "7 records · 4 graphs")
+
+
+def test_system_status_projection_does_not_invent_pass_for_missing_state():
+    projected = dict(
+        (name, state)
+        for name, state, _detail in system_status_projection({})
+    )
+    assert projected["MODEL"] == "not checked"
+    assert projected["DIAGNOSTICS"] == "not checked"
+    assert projected["VERIFICATION"] == "not checked"
+    assert projected["ANALYSIS"] == "not checked"
+    assert projected["EVIDENCE"] == "not checked"
+
+
+def test_system_status_projection_marks_partial_verification_unverified():
+    projected = dict(
+        (name, state)
+        for name, state, _detail in system_status_projection(
+            {
+                "verification": {
+                    "configured_analysis_count": 3,
+                    "current_count": 1,
+                    "stale_count": 0,
+                    "not_verified_count": 2,
+                }
+            }
+        )
+    )
+    assert projected["VERIFICATION"] == "unverified"

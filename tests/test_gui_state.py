@@ -20,7 +20,10 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "output_visible": True,
         "inspector_visible": True,
         "theme": "dark",
+        "density": "compact",
+        "workspace_profile": "design",
         "recent_projects": [],
+        "navigator_favorites": {},
         "window_width": 1440,
         "window_height": 900,
         "navigator_fraction": 0.20,
@@ -48,6 +51,19 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
                 "alpha.cleanroomx.json",
                 "beta.cleanroomx.json",
             ],
+            "navigator_favorites": {
+                "/projects/alpha.cleanroomx.json": [
+                    "nav-diagnostics",
+                    "nav-diagnostics",
+                    "",
+                    42,
+                    "room:room-a",
+                ],
+                "": ["nav-evidence"],
+                "/projects/bad.cleanroomx.json": "not-a-list",
+            },
+            "density": "oversized",
+            "workspace_profile": "unknown",
             "window_width": 640,
             "window_height": "broken",
             "navigator_fraction": 0.31,
@@ -62,10 +78,15 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["output_visible"] is True
     assert state["inspector_visible"] is True
     assert state["theme"] == "light"
+    assert state["density"] == "compact"
+    assert state["workspace_profile"] == "design"
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
         "beta.cleanroomx.json",
     ]
+    assert state["navigator_favorites"] == {
+        "/projects/alpha.cleanroomx.json": ["nav-diagnostics", "room:room-a"]
+    }
     assert state["window_width"] == 1440
     assert state["window_height"] == 900
     assert state["navigator_fraction"] == 0.31
@@ -87,6 +108,14 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
                 "/projects/clean-a.cleanroomx.json",
                 "/projects/clean-b.cleanroomx.json",
             ],
+            "navigator_favorites": {
+                "/projects/clean-a.cleanroomx.json": [
+                    "nav-diagnostics",
+                    "room:room-a",
+                ]
+            },
+            "density": "comfortable",
+            "workspace_profile": "verification",
             "window_width": 1680,
             "window_height": 1050,
             "navigator_fraction": 0.25,
@@ -105,6 +134,11 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
         "/projects/clean-a.cleanroomx.json",
         "/projects/clean-b.cleanroomx.json",
     ]
+    assert payload["navigator_favorites"] == {
+        "/projects/clean-a.cleanroomx.json": ["nav-diagnostics", "room:room-a"]
+    }
+    assert payload["density"] == "comfortable"
+    assert payload["workspace_profile"] == "verification"
     assert payload["window_width"] == 1680
     assert payload["window_height"] == 1050
     assert load_gui_layout_state(path) == payload
@@ -127,3 +161,22 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_gui_layout_state_limits_navigator_favorites():
+    state = normalize_gui_layout_state(
+        {
+            "navigator_favorites": {
+                f"/projects/project-{project}.cleanroomx.json": [
+                    f"room:room-{item}" for item in range(30)
+                ]
+                for project in range(20)
+            }
+        }
+    )
+
+    assert len(state["navigator_favorites"]) == 16
+    first = state["navigator_favorites"]["/projects/project-0.cleanroomx.json"]
+    assert len(first) == 24
+    assert first[0] == "room:room-0"
+    assert first[-1] == "room:room-23"

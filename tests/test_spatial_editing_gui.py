@@ -1035,7 +1035,7 @@ def test_start_dashboard_uses_current_project_metrics(app):
     app._refresh_engineering_panels()
     app.root.update_idletasks()
 
-    spatial = app.project.metadata.get("spatial_design", {})
+    spatial = app.spatial_workspace.layout
     rooms = spatial.get("rooms", []) if isinstance(spatial, dict) else []
     devices = spatial.get("devices", []) if isinstance(spatial, dict) else []
 

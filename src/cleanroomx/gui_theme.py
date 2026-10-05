@@ -43,8 +43,10 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "requirement": "#2563EB",
         "info_surface": "#E0F2FE",
         "simulation": "#7C3AED",
+        "simulation_surface": "#EDE9FE",
         "evidence": "#16A34A",
         "attention": "#EA580C",
+        "attention_surface": "#FFEDD5",
         "magenta": "#C026D3",
     },
     "dark": {
@@ -82,8 +84,10 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "requirement": "#2563EB",
         "info_surface": "#102D42",
         "simulation": "#A78BFA",
+        "simulation_surface": "#2B2144",
         "evidence": "#22C55E",
         "attention": "#F97316",
+        "attention_surface": "#3A2112",
         "magenta": "#E879F9",
     },
 }
@@ -105,10 +109,16 @@ def status_style_name(value: Any) -> str:
         return "CX.Status.Pass.TLabel"
     if token in {"fail", "failed", "error", "critical", "blocked"}:
         return "CX.Status.Fail.TLabel"
-    if token in {"warning", "warn", "stale", "incomplete", "degraded", "attention"}:
+    if token in {"warning", "warn", "incomplete", "degraded"}:
         return "CX.Status.Warning.TLabel"
-    if token in {"running", "simulation", "calculating", "queued"}:
+    if token in {"stale", "attention"}:
+        return "CX.Status.Attention.TLabel"
+    if token in {"running", "calculating", "queued"}:
+        return "CX.Status.Running.TLabel"
+    if token in {"simulation"}:
         return "CX.Status.Simulation.TLabel"
+    if token in {"unverified"}:
+        return "CX.Status.Unverified.TLabel"
     if token in {"info", "informational", "available"}:
         return "CX.Status.Info.TLabel"
     return "CX.Status.Neutral.TLabel"
@@ -238,6 +248,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure("CX.App.TFrame", background=palette["background"])
     style.configure("CX.Topbar.TFrame", background=palette["surface"])
     style.configure("CX.Toolbar.TFrame", background=palette["surface"], padding=(4, 3))
+    style.configure("CX.Statusbar.TFrame", background=palette["surface"], borderwidth=1, relief="solid")
+    style.configure("CX.Statusbar.TLabel", background=palette["surface"], foreground=palette["secondary_text"], font=("TkDefaultFont", 8))
+    style.configure("CX.StatusbarMuted.TLabel", background=palette["surface"], foreground=palette["muted"], font=("TkDefaultFont", 8))
     style.configure("CX.Navigator.TFrame", background=palette["navigation"])
     style.configure("CX.Panel.TFrame", background=palette["panel"])
     style.configure("CX.Surface.TFrame", background=palette["surface_alt"])
@@ -643,7 +656,25 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     )
     _configure_status_style(
         style,
+        "CX.Status.Running.TLabel",
+        foreground=palette["accent"],
+        background=palette["info_surface"],
+    )
+    _configure_status_style(
+        style,
         "CX.Status.Simulation.TLabel",
+        foreground=palette["simulation"],
+        background=palette["simulation_surface"],
+    )
+    _configure_status_style(
+        style,
+        "CX.Status.Attention.TLabel",
+        foreground=palette["attention"],
+        background=palette["attention_surface"],
+    )
+    _configure_status_style(
+        style,
+        "CX.Status.Unverified.TLabel",
         foreground=palette["simulation"],
         background=palette["surface_alt"],
     )

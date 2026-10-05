@@ -5,6 +5,7 @@ import copy
 import pytest
 
 import cleanroomx.gui_constraints as gui_constraints_module
+
 from cleanroomx.project import ProjectDocument, project_from_dict
 from cleanroomx.gui_constraints import (
     ConstraintManagerDialog,
@@ -194,7 +195,7 @@ def test_constraint_editor_records_unexpected_apply_failures(monkeypatch) -> Non
 
     class Report:
         def user_message(self):
-            return "Constraint editor failed.\n\nError reference: CX-CONSTRAINTS"
+            return "Constraint editor failed.\n\nError reference: CX-CONSTRAINT"
 
     def record(operation, exc):
         incidents.append((operation, type(exc).__name__, str(exc)))
@@ -207,23 +208,27 @@ def test_constraint_editor_records_unexpected_apply_failures(monkeypatch) -> Non
         lambda title, message, **kwargs: messages.append((title, message)),
     )
 
-    assert dialog._apply("Update constraint", lambda _project: None) is False
+    assert dialog._apply("Update rule", lambda _project: None) is False
     assert incidents == [
         (
-            "Constraint editor: Update constraint",
+            "Constraint editor: Update rule",
             "RuntimeError",
             "synthetic constraint editor failure",
         )
     ]
-    assert messages[0][0] == "Constraint update failed"
-    assert "Error reference: CX-CONSTRAINTS" in messages[0][1]
+    assert messages == [
+        (
+            "Constraint update failed",
+            "Constraint editor failed.\n\nError reference: CX-CONSTRAINT",
+        )
+    ]
 
 
 def test_constraint_editor_keeps_validation_failures_user_facing(monkeypatch) -> None:
     dialog = ConstraintManagerDialog.__new__(ConstraintManagerDialog)
 
     def fail_apply(_description, _mutation):
-        raise ValueError("operator must be one of the supported values")
+        raise ValueError("minimum must be positive")
 
     dialog._apply_project_edit = fail_apply
     messages = []
@@ -238,11 +243,5 @@ def test_constraint_editor_keeps_validation_failures_user_facing(monkeypatch) ->
         lambda title, message, **kwargs: messages.append((title, message)),
     )
 
-    assert dialog._apply("Update constraint", lambda _project: None) is False
-    assert messages == [
-        (
-            "Constraint update failed",
-            "operator must be one of the supported values",
-        )
-    ]
-
+    assert dialog._apply("Update rule", lambda _project: None) is False
+    assert messages == [("Constraint update failed", "minimum must be positive")]

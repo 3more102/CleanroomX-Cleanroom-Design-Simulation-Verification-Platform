@@ -6230,7 +6230,9 @@ class CleanroomXApp:
         )
 
     def _set_analysis_run_state(self, text: str, status: str) -> None:
-        self.run_state_var.set(text)
+        variable = getattr(self, "run_state_var", None)
+        if variable is not None:
+            variable.set(text)
         label = getattr(self, "_analysis_run_state_label", None)
         if label is not None:
             label.configure(
@@ -6242,9 +6244,10 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        run_state = getattr(self, "run_state_var", None)
         if running:
             self._set_analysis_run_state("RUNNING", "running")
-        elif self.run_state_var.get() == "RUNNING":
+        elif run_state is not None and run_state.get() == "RUNNING":
             self._set_analysis_run_state("IDLE", "unknown")
 
     def _poll_worker(self) -> None:

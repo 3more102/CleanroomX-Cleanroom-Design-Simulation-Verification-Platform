@@ -2270,6 +2270,15 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+            apply_panel_theme = getattr(problems_panel, "apply_theme", None)
+            if callable(apply_panel_theme):
+                apply_panel_theme(self.theme_var.get())
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            text_widgets.append(getattr(proofgraph_viewer, "detail", None))
+            apply_graph_theme = getattr(proofgraph_viewer, "apply_theme", None)
+            if callable(apply_graph_theme):
+                apply_graph_theme(self.theme_var.get())
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(

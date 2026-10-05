@@ -1986,6 +1986,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="CX.Section.TLabel",
         )
         action_row = ttk.Frame(inspector)
+        self._property_action_row = action_row
         action_row.pack(fill="x", pady=(2, 6))
         self._property_validation_label = ttk.Label(
             action_row,
@@ -2770,7 +2771,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         for group, section in self._property_sections.items():
             if group_counts[group]:
                 if not section.winfo_manager():
-                    section.pack(fill="x", pady=(0, 7))
+                    section.pack(
+                        fill="x",
+                        pady=(0, 7),
+                        before=self._property_action_row,
+                    )
             else:
                 section.pack_forget()
 

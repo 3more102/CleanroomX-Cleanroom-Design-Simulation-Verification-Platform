@@ -3233,7 +3233,7 @@ class CleanroomXApp:
         )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3432,6 +3432,116 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        commands.extend(self._engineering_search_commands())
+        return commands
+
+    def _engineering_search_commands(self) -> list[PaletteCommand]:
+        """Project current engineering entities into the existing global palette."""
+        commands: list[PaletteCommand] = []
+
+        for analysis in getattr(self.project, "analyses", ()):
+            analysis_id = str(getattr(analysis, "id", "") or "")
+            if not analysis_id:
+                continue
+            name = str(getattr(analysis, "name", "") or analysis_id)
+            kind = str(getattr(analysis, "kind", "") or "")
+            commands.append(
+                PaletteCommand(
+                    f"entity.analysis.{analysis_id}",
+                    f"Analysis · {name}",
+                    "Find / Analysis",
+                    lambda target=analysis_id: self._focus_search_analysis(target),
+                    keywords=(analysis_id, kind, "analysis", "simulation"),
+                )
+            )
+
+        workspace = getattr(self, "spatial_workspace", None)
+        layout = getattr(workspace, "layout", {}) if workspace is not None else {}
+        if isinstance(layout, dict):
+            for kind, collection_name in (("room", "rooms"), ("device", "devices")):
+                records = layout.get(collection_name, [])
+                if not isinstance(records, list):
+                    continue
+                for record in records:
+                    if not isinstance(record, dict):
+                        continue
+                    item_id = str(record.get("id") or "").strip()
+                    if not item_id:
+                        continue
+                    name = str(record.get("name") or item_id)
+                    item_type = str(record.get("type") or kind)
+                    classification = str(record.get("classification") or "")
+                    commands.append(
+                        PaletteCommand(
+                            f"entity.{kind}.{item_id}",
+                            f"{kind.title()} · {name}",
+                            "Find / Model",
+                            lambda item_kind=kind, target=item_id: self._focus_search_spatial_item(
+                                item_kind,
+                                target,
+                            ),
+                            keywords=(
+                                item_id,
+                                item_type,
+                                classification,
+                                kind,
+                                "model",
+                            ),
+                        )
+                    )
+
+        panel = getattr(self, "problems_panel", None)
+        result = getattr(panel, "last_result", None)
+        issues = result.get("issues", []) if isinstance(result, dict) else []
+        if isinstance(issues, list):
+            for index, issue in enumerate(issues):
+                if not isinstance(issue, dict):
+                    continue
+                rule = str(issue.get("rule") or issue.get("code") or "diagnostic")
+                message = str(issue.get("message") or "")
+                severity = str(issue.get("severity") or "")
+                category = str(issue.get("category") or "")
+                sequence = str(issue.get("sequence") or index + 1)
+                element = issue.get("element")
+                element_text = (
+                    " ".join(str(value) for value in element.values())
+                    if isinstance(element, dict)
+                    else ""
+                )
+                commands.append(
+                    PaletteCommand(
+                        f"entity.diagnostic.{sequence}.{index}",
+                        f"Diagnostic · {rule}",
+                        "Find / Diagnostics",
+                        lambda target=issue: self._navigate_project_diagnostic(target),
+                        keywords=(
+                            message,
+                            severity,
+                            category,
+                            element_text,
+                            "diagnostic",
+                            "problem",
+                        ),
+                    )
+                )
+        return commands
+
+    def _focus_search_analysis(self, analysis_id: str) -> None:
+        if not hasattr(self, "analysis_tree") or not self.analysis_tree.exists(analysis_id):
+            self.status_var.set(f"Analysis not available: {analysis_id}")
+            return
+        self.analysis_tree.selection_set(analysis_id)
+        self.analysis_tree.focus(analysis_id)
+        self.analysis_tree.see(analysis_id)
+        self._on_navigator_selected()
+
+    def _focus_search_spatial_item(self, kind: str, item_id: str) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None or not workspace.select_item(kind, item_id, notify=True):
+            self.status_var.set(f"Model object not available: {item_id}")
+            return
+        self._activate_spatial_workspace()
+        self._sync_spatial_selection_status()
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

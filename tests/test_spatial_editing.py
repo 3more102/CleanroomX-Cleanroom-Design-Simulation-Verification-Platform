@@ -210,17 +210,30 @@ def test_workspace_duplicate_is_one_history_transaction_with_selection(layout):
     assert project.metadata["spatial_layout"] is workspace.layout
 
 
-def test_workspace_rejected_properties_keep_model_history_and_editor_text(layout, monkeypatch):
+def test_workspace_rejected_properties_keep_model_history_and_editor_text(layout):
     workspace, project, events = _workspace(layout)
     before = project.metadata["spatial_layout"]
+
     class Value:
         def get(self):
             return "not a number"
+
+    class Message:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
     workspace._property_vars = {"height_m": Value()}
-    errors = []
-    monkeypatch.setattr("cleanroomx.spatial.messagebox.showerror", lambda *args, **kwargs: errors.append(args))
+    workspace._property_validation_var = Message()
+    workspace._property_entries = {}
+    workspace._property_rows = {}
+    workspace.focus_get = lambda: None
+
     workspace.apply_properties()
-    assert errors and "Height" in errors[0][1]
+
+    assert "Height" in workspace._property_validation_var.value
     assert events["changes"] == events["history"] == []
     assert project.metadata["spatial_layout"] is before
     assert workspace.layout is before

@@ -826,12 +826,67 @@ class ProofGraphViewer(ttk.Frame):
         self.canvas.yview_moveto(0.0)
         self._status_setter(f"ProofGraph fit to view · {self.zoom_var.get()}")
 
-    def focus_node(self, key: str) -> bool:
-        if key not in self._nodes_by_key:
-            return False
-        self._select_key(key)
-        self._center_key(key)
-        return True
+    def focus_node(
+        self,
+        key_or_id: str,
+        *,
+        node_type: str | None = None,
+        graph_id: str | None = None,
+        node_key: str | None = None,
+    ) -> bool:
+        """Reveal, select and center one persisted ProofGraph node.
+
+        Presentation-only search/filter state is cleared when needed.  Callers may
+        provide the exact projected key, or a canonical node id plus optional type
+        and graph identity.  No graph or engineering evidence is mutated.
+        """
+        wanted = _text(key_or_id)
+        wanted_type = _text(node_type).casefold()
+        wanted_graph = _text(graph_id)
+        wanted_key = _text(node_key)
+
+        if wanted_graph:
+            for document in self._documents:
+                identities = {
+                    _text(document.get("id")),
+                    _text(document.get("graph_sha256")),
+                }
+                if wanted_graph in identities:
+                    self.graph_var.set(self._document_label(document))
+                    break
+
+        # Search navigation must not fail merely because a presentation filter hid
+        # the requested persisted node.
+        if self.filter_var.get() != "All":
+            self.filter_var.set("All")
+        if self.search_var.get():
+            self.search_var.set("")
+        self._refresh()
+
+        if wanted_key and wanted_key in self._nodes_by_key:
+            self._select_key(wanted_key)
+            self._center_key(wanted_key)
+            return True
+        if wanted in self._nodes_by_key:
+            self._select_key(wanted)
+            self._center_key(wanted)
+            return True
+
+        for node in self._projection.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            node_id = _text(node.get("id"))
+            if not node_id or node_id != wanted:
+                continue
+            if wanted_type and _text(node.get("type")).casefold() != wanted_type:
+                continue
+            key = _text(node.get("key"))
+            if not key:
+                continue
+            self._select_key(key)
+            self._center_key(key)
+            return True
+        return False
 
     def _center_key(self, key: str) -> None:
         position = self._positions_by_key.get(key)

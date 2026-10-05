@@ -69,6 +69,13 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
     assert light["canvas_2d"] != dark["canvas_2d"]
 
 
+def test_execution_completion_uses_shared_healthy_status_semantics():
+    assert status_style_name("completed") == "CX.Status.Pass.TLabel"
+    assert status_style_name("success") == "CX.Status.Pass.TLabel"
+    assert status_style_name("blocked") == "CX.Status.Fail.TLabel"
+    assert status_style_name("stale") == "CX.Status.Attention.TLabel"
+
+
 def test_theme_palette_returns_independent_copy():
     first = theme_palette("dark")
     second = theme_palette("dark")

@@ -1512,7 +1512,7 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(self.root, style="CX.Topbar.TFrame", padding=(10, 6, 10, 5))
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
@@ -1656,6 +1656,7 @@ class CleanroomXApp:
         ttk.Label(
             workflowbar,
             text="GUIDED WORKFLOW",
+            style="CX.ToolbarTitle.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Separator(workflowbar, orient="vertical").pack(
             side="left", fill="y", padx=(0, 6)
@@ -1714,7 +1715,7 @@ class CleanroomXApp:
         self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
-        navigator = ttk.Frame(panes, padding=(8, 7))
+        navigator = ttk.Frame(panes, style="CX.Panel.TFrame", padding=(8, 7))
         self.navigator_panel = navigator
         panes.add(navigator, weight=1)
         navigator_header = ttk.Frame(
@@ -1800,7 +1801,7 @@ class CleanroomXApp:
             lambda *_: self._apply_navigator_filter(),
         )
 
-        content = ttk.Frame(panes)
+        content = ttk.Frame(panes, style="CX.Panel.TFrame")
         self.content_panel = content
         panes.add(content, weight=5)
 
@@ -1900,7 +1901,7 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
-        output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        output_host = ttk.Frame(self.workspace_panes, style="CX.Panel.TFrame", padding=(0, 5, 0, 0))
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(
@@ -1957,25 +1958,26 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(self.root, style="CX.StatusBar.TFrame", padding=(8, 4))
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.StatusAccent.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.model_status_var, style="CX.Status.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.selection_status_var, style="CX.Status.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(status_bar, textvariable=self.workspace_status_var, style="CX.Status.TLabel").pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -1984,6 +1986,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.Status.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +1995,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.Status.TLabel",
         ).pack(side="right")
 
     @staticmethod

@@ -466,6 +466,27 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             font=("TkDefaultFont", 8, "bold"),
             padding=(7, 3),
         )
+        style.configure(
+            f"CX.{semantic}.TButton",
+            background=palette["surface_alt"],
+            foreground=color,
+            bordercolor=color,
+            lightcolor=color,
+            darkcolor=color,
+            padding=(9, 5),
+        )
+        style.map(
+            f"CX.{semantic}.TButton",
+            background=[
+                ("active", palette["surface"]),
+                ("pressed", palette["selection"]),
+                ("disabled", palette["surface_alt"]),
+            ],
+            foreground=[
+                ("disabled", palette["disabled"]),
+                ("!disabled", color),
+            ],
+        )
 
     # Defaults for Tk-native widgets created after this call.
     root.option_add("*Text.background", palette["field"])

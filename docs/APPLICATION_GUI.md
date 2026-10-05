@@ -132,6 +132,14 @@ Problems can be searched and filtered by severity. Double-clicking a spatial iss
 
 The **Verification** view summarizes current verification-currency state from the existing verification authority; the **Evidence** view lists retained project-verification records without recomputing historical verdicts. These views are read-only projections over existing domain services and do not change solver, requirement, ProofGraph, or acceptance semantics.
 
+## Engineering task center
+
+The persistent bottom workspace includes a first-class **Task Center** for long-running engineering operations. Analysis runs are recorded with their real start time, live elapsed duration, backend workflow detail, terminal state, and result/failure message. The Task Center is available from the Project Navigator, **View → Task Center**, **Ctrl+Shift+J**, and the command palette; the status bar also reports the active-task count.
+
+The panel deliberately does not invent percentage progress when a backend operation does not expose a measured completion fraction. Analysis execution is therefore shown as running with elapsed time until the backend returns. **Abandon selected** preserves the existing CleanroomX worker-safety contract: it marks the task as **ABANDON REQUESTED** and waits for the Python worker to exit before the task becomes **ABANDONED** and another run may start. Completed results that can no longer be attached safely because an analysis was removed or its inputs changed are retained as **DISCARDED** task records rather than being presented as valid results.
+
+Finished task records can be cleared from the panel without changing project data, run history, verification evidence, or solver output.
+
 ## ProofGraph explorer
 
 The **ProofGraph** workspace reads only ProofGraph documents retained in the canonical project-verification history. Before a graph is rendered, CleanroomX reparses it with the canonical `proofgraph_from_dict()` validator. Digest tampering, broken source/evidence references, invalid provenance, inconsistent finding/verdict closure, or invalid verification-run relationships therefore fail closed instead of being visualized as trusted evidence.

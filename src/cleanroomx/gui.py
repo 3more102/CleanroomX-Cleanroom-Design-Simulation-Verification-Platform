@@ -95,6 +95,7 @@ from .gui_theme import (
 )
 from .gui_proofgraph import ProofGraphViewer
 from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
+from .gui_errors import record_gui_exception
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -4676,6 +4677,22 @@ class CleanroomXApp:
         self._refresh_start_center()
         self._save_ui_layout_state()
 
+    def _show_operation_error(
+        self,
+        title: str,
+        operation: str,
+        exc: BaseException,
+    ):
+        """Report a GUI-boundary failure without leaking stack traces to dialogs."""
+        report = record_gui_exception(operation, exc)
+        self.status_var.set(f"{operation} failed · {report.reference}")
+        messagebox.showerror(
+            title,
+            report.user_message(),
+            parent=self.root,
+        )
+        return report
+
     def _open_recent_project_from_start(self, path: str) -> None:
         if self._running:
             messagebox.showwarning(
@@ -4698,7 +4715,7 @@ class CleanroomXApp:
         try:
             self.load_project_path(candidate)
         except Exception as exc:
-            messagebox.showerror("Open failed", str(exc), parent=self.root)
+            self._show_operation_error("Open failed", "Open project", exc)
 
     def _open_bundled_demo_from_start(self) -> None:
         if self._running:
@@ -4713,7 +4730,11 @@ class CleanroomXApp:
         try:
             self.load_project_path(bundled_demo_project_path())
         except Exception as exc:
-            messagebox.showerror("Open example failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "Open example failed",
+                "Open bundled demonstration project",
+                exc,
+            )
 
     def _import_ifc_from_start(self) -> None:
         if self.import_ifc_spatial_layout():
@@ -5417,10 +5438,10 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("Project requirements verification failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project requirements verification failed",
-                str(exc),
-                parent=self.root,
+                "Verify project requirements",
+                exc,
             )
             return False
 
@@ -5480,10 +5501,10 @@ class CleanroomXApp:
             return False
         except Exception as exc:
             self.status_var.set("Project verification persistence failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Project verification persistence failed",
-                str(exc),
-                parent=self.root,
+                "Persist project verification evidence",
+                exc,
             )
             return False
 
@@ -5491,12 +5512,26 @@ class CleanroomXApp:
             self.load_project_path(project_path)
         except Exception as exc:
             self.status_var.set("Verification persisted; project reload failed")
+            report = record_gui_exception(
+                "Reload project after persisted verification",
+                exc,
+            )
+            self.status_var.set(
+                "Verification persisted; project reload failed · "
+                f"{report.reference}"
+            )
             messagebox.showerror(
                 "Verification persisted; reload failed",
                 (
-                    f"The verification record was committed, but the project could "
-                    f"not be reloaded into the desktop session.\n\n{exc}\n\n"
-                    f"Record SHA-256: {persisted.record['record_sha256']}"
+                    "The verification record was committed, but the project could "
+                    "not be reloaded into the desktop session.\n\n"
+                    f"Record SHA-256: {persisted.record['record_sha256']}\n"
+                    f"Error reference: {report.reference}\n"
+                    + (
+                        f"Technical log: {report.log_path}"
+                        if report.log_path is not None
+                        else "Technical logging was unavailable."
+                    )
                 ),
                 parent=self.root,
             )
@@ -6656,7 +6691,11 @@ class CleanroomXApp:
             preview = layout_from_ifc_semantics(semantics)
         except Exception as exc:
             self.status_var.set("IFC import failed")
-            messagebox.showerror("IFC import failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "IFC import failed",
+                "Parse and preview IFC baseline",
+                exc,
+            )
             return False
 
         existing_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
@@ -6689,7 +6728,11 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC import failed")
-            messagebox.showerror("IFC import failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "IFC import failed",
+                "Apply reviewed IFC baseline",
+                exc,
+            )
             return False
 
         self._refresh_after_ifc_edit()
@@ -6732,10 +6775,10 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC re-import review failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "IFC re-import review failed",
-                str(exc),
-                parent=self.root,
+                "Review IFC re-import plan",
+                exc,
             )
             return None
 
@@ -6781,10 +6824,10 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC re-import planning failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "IFC re-import planning failed",
-                str(exc),
-                parent=self.root,
+                "Plan IFC re-import",
+                exc,
             )
             return False
 
@@ -6832,7 +6875,11 @@ class CleanroomXApp:
             )
         except Exception as exc:
             self.status_var.set("IFC re-import failed")
-            messagebox.showerror("IFC re-import failed", str(exc), parent=self.root)
+            self._show_operation_error(
+                "IFC re-import failed",
+                "Apply reviewed IFC re-import",
+                exc,
+            )
             return False
 
         self._refresh_after_ifc_edit()
@@ -7763,7 +7810,7 @@ class CleanroomXApp:
             self._report_external_save_conflict(self.project_path)
             return
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc), parent=self.root)
+            self._show_operation_error("Save failed", "Save project", exc)
             return
 
         self.project_path = saved_path
@@ -7927,7 +7974,7 @@ class CleanroomXApp:
             self._report_external_save_conflict(destination)
             return
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc), parent=self.root)
+            self._show_operation_error("Save failed", "Save project as", exc)
             return
 
         self.project = candidate
@@ -8172,10 +8219,10 @@ class CleanroomXApp:
                 )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 f"{label} export failed",
-                str(exc),
-                parent=self.root,
+                f"Export {label.lower()}",
+                exc,
             )
             return False
         self.status_var.set(f"Exported {label.lower()} — {target.name}")

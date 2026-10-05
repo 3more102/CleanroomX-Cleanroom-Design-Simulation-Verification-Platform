@@ -13,6 +13,7 @@ from cleanroomx.gui_notifications import (
     notification_style_name,
 )
 from cleanroomx.gui_theme import configure_ttk_theme
+from cleanroomx.run_history import RUN_HISTORY_METADATA_KEY
 
 
 def test_notification_projection_is_semantic_and_deterministic():
@@ -119,7 +120,7 @@ def test_successful_validation_uses_non_modal_notification(app, monkeypatch):
 
 
 def test_empty_run_history_is_informational_notification(app, monkeypatch):
-    app.project.metadata.pop("cleanroomx.run_history", None)
+    app.project.metadata.pop(RUN_HISTORY_METADATA_KEY, None)
     modal_calls = []
     monkeypatch.setattr(
         "cleanroomx.gui.messagebox.showinfo",

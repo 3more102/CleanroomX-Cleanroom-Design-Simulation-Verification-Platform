@@ -1671,6 +1671,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             padding=(8, 0, 8, 4),
         )
         overlaybar.pack(fill="x")
+
+        # Reserve critical validation controls first so they remain visible at
+        # the supported 1050 px laptop width before optional overlay detail.
+        ttk.Button(
+            overlaybar,
+            text="Validate",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.report_validation,
+        ).pack(side="right", padx=(8, 2))
+        ttk.Label(
+            overlaybar,
+            textvariable=self._validation_var,
+        ).pack(side="right", padx=(8, 2))
+
         ttk.Label(
             overlaybar,
             text="ENGINEERING OVERLAY",
@@ -1696,18 +1711,6 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
-        ttk.Label(
-            overlaybar,
-            textvariable=self._validation_var,
-        ).pack(side="right", padx=(8, 2))
-        ttk.Button(
-            overlaybar,
-            text="Validate",
-            width=8,
-            style="CX.Compact.TButton",
-            command=self.report_validation,
-        ).pack(side="right", padx=(8, 2))
-
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
 

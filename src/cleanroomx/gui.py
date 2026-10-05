@@ -4743,22 +4743,42 @@ class CleanroomXApp:
                 workflow,
             )
         except ProjectSaveDurabilityError as exc:
+            reload_error = None
             try:
                 self.load_project_path(project_path)
-            except Exception:
+            except Exception as candidate_reload_error:
+                reload_error = candidate_reload_error
                 GUI_RUNTIME_LOGGER.exception(
                     "Failed to reload project after durability warning path=%s",
                     project_path,
                 )
-            self.status_var.set(
-                "Verification bytes committed; save durability not confirmed"
-            )
+
+            if reload_error is None:
+                self.status_var.set(
+                    "Verification bytes committed; save durability not confirmed"
+                )
+                reload_note = ""
+            else:
+                self.status_var.set(
+                    "Verification bytes committed; durability unconfirmed; "
+                    "project reload failed"
+                )
+                reload_note = (
+                    "\n\nThe desktop could not reload the committed project revision:\n"
+                    f"{reload_error}\n\n"
+                    "The on-disk project bytes were committed and verified, but this "
+                    "desktop session may show an older project state. Reopen the "
+                    "project from disk and confirm the verification record before "
+                    "further edits."
+                )
+
             messagebox.showwarning(
                 "Verification save durability not confirmed",
                 (
                     "CleanroomX wrote and verified the project bytes containing the "
                     "verification record, but filesystem directory durability could "
-                    "not be confirmed.\n\n"
+                    "not be confirmed."
+                    f"{reload_note}\n\n"
                     f"Committed project SHA-256: {exc.committed_revision.sha256}"
                 ),
                 parent=self.root,

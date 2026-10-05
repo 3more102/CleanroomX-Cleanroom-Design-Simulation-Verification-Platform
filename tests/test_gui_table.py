@@ -120,3 +120,23 @@ def test_table_behavior_supports_column_visibility_and_order(root) -> None:
 
     behavior.show_all_columns()
     assert behavior.visible_columns() == ("name", "value")
+
+
+def test_table_behavior_moves_and_resets_visible_column_order(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    assert behavior.move_column("value", -1) is True
+    assert behavior.visible_columns() == ("value", "name")
+    assert behavior.move_column("value", -1) is False
+    assert behavior.move_column("name", 1) is False
+
+    assert behavior.reset_column_order() is True
+    assert behavior.visible_columns() == ("name", "value")
+
+    assert behavior.set_column_visible("value", False) is True
+    assert behavior.reset_column_order() is True
+    assert behavior.visible_columns() == ("name",)

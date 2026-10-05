@@ -111,6 +111,10 @@ def test_compliance_panel_uses_backend_findings_and_filters(root):
     }
     assert len(panel.tree.get_children()) == 3
     assert panel.validation_var.get() == "FAIL"
+    identity = panel.identity_var.get()
+    assert "Pack project-criteria v1.0" in identity
+    assert "criteria SHA-256" in identity
+    assert "evidence SHA-256" in identity
 
     panel.status_filter_var.set("Fail")
     root.update()

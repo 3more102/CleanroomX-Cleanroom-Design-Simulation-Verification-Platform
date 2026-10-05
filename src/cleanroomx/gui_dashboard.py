@@ -83,15 +83,15 @@ class EngineeringDashboard(ttk.Frame):
         card = ttk.Frame(parent, style="CX.Card.TFrame", padding=(12, 10))
         card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 5, 5))
         card.columnconfigure(0, weight=1)
-        ttk.Label(card, text=title, style="CX.Section.TLabel").grid(
+        ttk.Label(card, text=title, style="CX.PanelSection.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        value = ttk.Label(card, textvariable=value_var, style="CX.ViewTitle.TLabel")
+        value = ttk.Label(card, textvariable=value_var, style="CX.PanelTitle.TLabel")
         value.grid(row=1, column=0, sticky="w", pady=(6, 2))
         ttk.Label(
             card,
             textvariable=detail_var,
-            style="CX.Muted.TLabel",
+            style="CX.PanelMuted.TLabel",
             wraplength=250,
             justify="left",
         ).grid(row=2, column=0, sticky="w")
@@ -146,7 +146,7 @@ class EngineeringDashboard(ttk.Frame):
         ttk.Label(
             progress_host,
             text="Verification currency",
-            style="CX.Section.TLabel",
+            style="CX.SurfaceSection.TLabel",
         ).grid(row=0, column=0, sticky="w", padx=(0, 10))
         self.verification_progress = ttk.Progressbar(
             progress_host,
@@ -158,7 +158,7 @@ class EngineeringDashboard(ttk.Frame):
         ttk.Label(
             progress_host,
             textvariable=self.verification_percent_var,
-            style="CX.Muted.TLabel",
+            style="CX.SurfaceMuted.TLabel",
             width=6,
             anchor="e",
         ).grid(row=0, column=2, sticky="e", padx=(8, 0))

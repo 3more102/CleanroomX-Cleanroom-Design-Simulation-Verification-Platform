@@ -5,6 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from .gui_display import configure_toplevel_geometry
 from .autosave import (
     RecoveryCandidate,
     RecoveryScan,
@@ -156,8 +157,13 @@ class RecoveryInspectDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, candidate: RecoveryCandidate):
         super().__init__(parent)
         self.title("Inspect recovery")
-        self.geometry("820x700")
-        self.minsize(680, 500)
+        configure_toplevel_geometry(
+            self,
+            820,
+            700,
+            min_width=680,
+            min_height=500,
+        )
         self.transient(parent)
         self.grab_set()
 
@@ -257,8 +263,13 @@ class RecoveryCenter(tk.Toplevel):
     def __init__(self, parent: tk.Misc, scan: RecoveryScan):
         super().__init__(parent)
         self.title("Recover unsaved CleanroomX work")
-        self.geometry("980x520")
-        self.minsize(780, 400)
+        configure_toplevel_geometry(
+            self,
+            980,
+            520,
+            min_width=780,
+            min_height=400,
+        )
         self.transient(parent)
         self.grab_set()
         self.result: Path | None = None

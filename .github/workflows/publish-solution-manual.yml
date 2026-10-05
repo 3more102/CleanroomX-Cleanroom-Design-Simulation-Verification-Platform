@@ -27,8 +27,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PDF renderer
-        run: python -m pip install --disable-pip-version-check reportlab
+      - name: Install pinned PDF renderer
+        run: python -m pip install --disable-pip-version-check "reportlab==5.0.1"
 
       - name: Build solution manual PDF
         run: |

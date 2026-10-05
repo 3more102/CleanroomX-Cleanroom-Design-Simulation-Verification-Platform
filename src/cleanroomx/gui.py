@@ -5565,16 +5565,16 @@ class CleanroomXApp:
             f"Imported IFC spatial layout — {len(layout['rooms'])} room(s), "
             f"{len(layout['devices'])} device(s); save the project to persist it."
         )
-        messagebox.showinfo(
+        self._notify(
             "IFC spatial layout imported",
-            (
-                f"Source: {provenance['source_name']}\n"
-                f"Rooms: {len(layout['rooms'])}\n"
-                f"Devices: {len(layout['devices'])}\n"
-                f"SHA-256: {provenance['source_sha256']}\n\n"
+            level="success",
+            detail=(
+                f"Source: {provenance['source_name']} · "
+                f"Rooms: {len(layout['rooms'])} · "
+                f"Devices: {len(layout['devices'])} · "
+                f"SHA-256: {provenance['source_sha256']} · "
                 "Engineering analysis inputs were not changed automatically."
             ),
-            parent=self.root,
         )
         return True
 
@@ -6172,14 +6172,14 @@ class CleanroomXApp:
             f"Portable project exported — {report['dependency_count']} "
             f"dependency file(s)"
         )
-        messagebox.showinfo(
+        self._notify(
             "Portable project exported",
-            (
-                f"Created {Path(path).name}.\n\n"
-                f"Dependencies packaged: {report['dependency_count']}\n"
+            level="success",
+            detail=(
+                f"Created {Path(path).name} · "
+                f"Dependencies packaged: {report['dependency_count']} · "
                 f"Bundle SHA-256: {report['bundle_sha256']}"
             ),
-            parent=self.root,
         )
 
     def export_project_engineering_dossier(self) -> None:
@@ -6321,14 +6321,14 @@ class CleanroomXApp:
             ),
         ):
             return
-        messagebox.showinfo(
+        self._notify(
             "Project dossier exported",
-            (
-                f"Created {Path(path).name}.\n\n"
-                f"Source project SHA-256: {dossier['source_project_revision']}\n"
+            level="success",
+            detail=(
+                f"Created {Path(path).name} · "
+                f"Source project SHA-256: {dossier['source_project_revision']} · "
                 f"Dossier SHA-256: {dossier['dossier_sha256']}"
             ),
-            parent=self.root,
         )
 
     def load_project_path(self, path: str | Path) -> None:

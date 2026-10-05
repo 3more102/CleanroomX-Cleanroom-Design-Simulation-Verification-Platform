@@ -334,6 +334,59 @@ def project_requirement_traceability_snapshot(
         "mappings": mapping_rows,
     }
 
+def _compact_engineering_rows(
+    value: dict,
+    *,
+    limit: int,
+) -> list[str]:
+    rows: list[str] = []
+    for path, raw_value, unit in flatten_json(value):
+        if len(rows) >= limit:
+            break
+        display_path = path.removeprefix("$.").replace("_", " ")
+        display_value = raw_value
+        try:
+            parsed = json.loads(raw_value)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+            display_value = f"{parsed:,.6g}"
+        suffix = f" {unit}" if unit else ""
+        rows.append(f"{display_path}: {display_value}{suffix}")
+    return rows
+
+
+def analysis_run_overview(run: AnalysisRun) -> str:
+    """Human-readable presentation of immutable configured input vs calculated output."""
+    input_rows = _compact_engineering_rows(dict(run.input_snapshot), limit=12)
+    result_rows = _compact_engineering_rows(dict(run.result), limit=16)
+    lines = [
+        "SIMULATION / ANALYSIS RUN",
+        "",
+        f"Workflow: {run.title}",
+        f"Backend: {run.kind}",
+        f"Run state: {run.status}",
+        "",
+        "CONFIGURED INPUTS",
+    ]
+    lines.extend(input_rows or ["No scalar configured inputs available in this workflow."])
+    if len(flatten_json(dict(run.input_snapshot))) > len(input_rows):
+        lines.append("… additional configured inputs available in the Input workspace")
+    lines.extend(("", "CALCULATED RESULTS"))
+    lines.extend(result_rows or ["No scalar calculated results available."])
+    if len(flatten_json(dict(run.result))) > len(result_rows):
+        lines.append("… additional calculated results available in the Results tab")
+    lines.extend(
+        (
+            "",
+            "RUN STATUS / DIAGNOSTICS",
+            f"Status reported by backend: {run.status}",
+            "Detailed diagnostics remain available in the Diagnostics tab.",
+        )
+    )
+    return "\n".join(lines) + "\n"
+
+
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
     if isinstance(value, dict):
@@ -1974,7 +2027,7 @@ class CleanroomXApp:
         output_header.pack(fill="x")
         ttk.Label(
             output_header,
-            text="OUTPUT / VERIFICATION",
+            text="ENGINEERING CONSOLE",
             style="CX.PanelHeader.TLabel",
         ).pack(side="left")
         self.output_close_button = ttk.Button(
@@ -1987,7 +2040,7 @@ class CleanroomXApp:
         self.output_close_button.pack(side="right")
         ttk.Label(
             output_host,
-            text="Diagnostics · verification currency · evidence · analysis output",
+            text="Problems · simulation · verification · evidence · technical output",
         ).pack(fill="x", padx=8, pady=(4, 2))
 
         self.output_notebook = ttk.Notebook(output_host)
@@ -2013,6 +2066,9 @@ class CleanroomXApp:
         )
         self.evidence_text = self._add_text_tab(
             "Evidence", notebook=self.output_notebook
+        )
+        self.simulation_text = self._add_text_tab(
+            "Simulation", notebook=self.output_notebook
         )
         self.result_text = self._add_text_tab(
             "Results", notebook=self.output_notebook
@@ -2281,6 +2337,7 @@ class CleanroomXApp:
                 "verification_text",
                 "console_text",
                 "evidence_text",
+                "simulation_text",
             )
         ]
         problems_panel = getattr(self, "problems_panel", None)
@@ -6222,6 +6279,7 @@ class CleanroomXApp:
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
+        self._set_text(self.simulation_text, analysis_run_overview(run))
         self._set_text(
             self.result_text,
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),
@@ -6237,7 +6295,7 @@ class CleanroomXApp:
             self.spatial_workspace._load_property_panel()
         self._refresh_engineering_panels()
         if select_results:
-            self.output_notebook.select(self.result_text.master)
+            self.output_notebook.select(self.simulation_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

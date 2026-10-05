@@ -140,3 +140,21 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+
+def test_search_only_entries_are_lazy_until_query():
+    noop = lambda: None
+    commands = [
+        PaletteCommand("save", "Save Project", "File", noop),
+        PaletteCommand(
+            "room-a",
+            "Room · ISO 7 Suite",
+            "Search · Room",
+            noop,
+            keywords=("room-a", "iso 7"),
+            search_only=True,
+        ),
+    ]
+
+    assert [item.id for item in filter_commands(commands, "")] == ["save"]
+    assert [item.id for item in filter_commands(commands, "ISO 7")] == ["room-a"]

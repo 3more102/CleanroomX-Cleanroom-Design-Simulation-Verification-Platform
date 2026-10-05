@@ -3604,6 +3604,7 @@ class CleanroomXApp:
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+        self._refresh_engineering_navigator(diagnostics)
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -5266,6 +5267,110 @@ class CleanroomXApp:
         self._discard_restored_recovery()
         return True
 
+    def _refresh_engineering_navigator(
+        self,
+        diagnostics: dict | None = None,
+    ) -> None:
+        """Project engineering state projected into the navigator without inference."""
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+
+        if tree.exists("nav-requirements"):
+            for child in tree.get_children("nav-requirements"):
+                tree.delete(child)
+            try:
+                snapshot = project_requirement_traceability_snapshot(self.project)
+                requirements = [
+                    item
+                    for item in snapshot.get("requirements", [])
+                    if isinstance(item, dict) and item.get("id")
+                ]
+                tree.item(
+                    "nav-requirements",
+                    text=f"Requirements ({len(requirements)})",
+                )
+                for item in requirements:
+                    requirement_id = str(item["id"])
+                    title = str(item.get("title") or requirement_id)
+                    status = str(item.get("status") or "unknown").upper()
+                    applicability = str(item.get("applicability") or "").upper()
+                    suffix = (
+                        f" · {applicability}"
+                        if applicability and applicability != "APPLICABLE"
+                        else ""
+                    )
+                    tree.insert(
+                        "nav-requirements",
+                        "end",
+                        iid=f"requirement:{requirement_id}",
+                        text=f"[{status}{suffix}] {title}",
+                    )
+            except Exception:
+                tree.item("nav-requirements", text="Requirements (unavailable)")
+
+        if tree.exists("nav-diagnostics"):
+            for child in tree.get_children("nav-diagnostics"):
+                tree.delete(child)
+            summary = (
+                diagnostics.get("summary", {})
+                if isinstance(diagnostics, dict)
+                else {}
+            )
+            errors = int(summary.get("error_count", 0) or 0)
+            warnings = int(summary.get("warning_count", 0) or 0)
+            infos = int(summary.get("info_count", 0) or 0)
+            total = int(summary.get("issue_count", errors + warnings + infos) or 0)
+            tree.item(
+                "nav-diagnostics",
+                text=f"Diagnostics ({errors} E · {warnings} W · {infos} I)",
+            )
+            if total:
+                for severity, count in (
+                    ("error", errors),
+                    ("warning", warnings),
+                    ("info", infos),
+                ):
+                    if count:
+                        tree.insert(
+                            "nav-diagnostics",
+                            "end",
+                            iid=f"nav-diagnostics:{severity}",
+                            text=f"{severity.title()}s ({count})",
+                        )
+            else:
+                tree.insert(
+                    "nav-diagnostics",
+                    "end",
+                    iid="nav-diagnostics:clear",
+                    text="No diagnostics reported",
+                )
+
+        try:
+            records = verification_run_history_records(self.project.metadata)
+        except Exception:
+            records = []
+        if tree.exists("nav-evidence"):
+            tree.item("nav-evidence", text=f"Evidence ({len(records)} retained)")
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        graph_count = len(getattr(viewer, "_documents", [])) if viewer is not None else 0
+        if tree.exists("nav-proofgraph"):
+            tree.item("nav-proofgraph", text=f"ProofGraph ({graph_count})")
+
+    def _open_navigator_diagnostics(self, severity: str | None = None) -> None:
+        self.show_problems_panel()
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return
+        panel.clear_filters()
+        normalized = str(severity or "").strip().casefold()
+        if normalized in {"error", "warning", "info"}:
+            panel.severity_var.set(normalized.title())
+            self.status_var.set(f"Diagnostics: {normalized.title()}")
+        else:
+            self.status_var.set("Diagnostics: All")
+
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         self._restore_navigator_tree()
         for item in self.analysis_tree.get_children():
@@ -5278,6 +5383,7 @@ class CleanroomXApp:
             ("nav-pressure", "Pressure Network"),
             ("nav-analyses", "Analyses"),
             ("nav-requirements", "Requirements"),
+            ("nav-diagnostics", "Diagnostics"),
             ("nav-proofgraph", "ProofGraph"),
             ("nav-evidence", "Evidence"),
             ("nav-reports", "Reports"),
@@ -5576,14 +5682,46 @@ class CleanroomXApp:
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
             return
+        if item_id.startswith("requirement:"):
+            self._open_requirement_search_result(item_id.split(":", 1)[1])
+            self.selection_status_var.set("Selected: Requirement")
+            return
+        if item_id == "nav-requirements":
+            self.show_requirements_traceability()
+            self.selection_status_var.set("Selected: Requirements")
+            return
+        if item_id == "nav-diagnostics":
+            self._open_navigator_diagnostics()
+            self.selection_status_var.set("Selected: Diagnostics")
+            return
+        if item_id.startswith("nav-diagnostics:"):
+            severity = item_id.split(":", 1)[1]
+            self._open_navigator_diagnostics(
+                severity if severity in {"error", "warning", "info"} else None
+            )
+            self.selection_status_var.set("Selected: Diagnostics")
+            return
         if item_id == "nav-proofgraph":
             self._activate_proofgraph_workspace()
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
+            self._restore_focus_workspace_snapshot(status=False)
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
+            self.status_var.set("Output: Evidence")
+            return
+        if item_id == "nav-reports":
+            self._restore_focus_workspace_snapshot(status=False)
+            self.output_panel_visible_var.set(True)
+            self._sync_output_panel_visibility()
+            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+                self.output_notebook.select(self.report_text.master)
+            self.selection_status_var.set("Selected: Reports")
+            self.status_var.set("Output: Report")
             return
         if item_id.startswith("nav-"):
             return

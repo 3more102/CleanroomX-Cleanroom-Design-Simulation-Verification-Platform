@@ -356,7 +356,7 @@ def configure_ttk_theme(
     style.configure(
         "CX.AppBar.TFrame",
         background=palette["surface"],
-        padding=metrics["danger_padding"],
+        padding=metrics["appbar_padding"],
     )
     style.configure(
         "CX.Brand.TLabel",
@@ -478,7 +478,7 @@ def configure_ttk_theme(
         background=palette["error"],
         foreground="#FFFFFF",
         bordercolor=palette["error"],
-        padding=metrics["appbar_padding"],
+        padding=metrics["danger_padding"],
     )
     style.map(
         "CX.Danger.TButton",

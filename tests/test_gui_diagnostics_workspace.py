@@ -93,3 +93,49 @@ def test_canonical_project_diagnostics_feed_central_workbench(app):
         issue.get("rule") == "spatial.room_overlap"
         for issue in app.diagnostics_workspace._issues_by_iid.values()
     )
+
+
+def test_diagnostics_workspace_supports_semantic_rows_and_relative_navigation(app):
+    result = {
+        "summary": {
+            "status": "error",
+            "issue_count": 2,
+            "error_count": 1,
+            "warning_count": 1,
+            "info_count": 0,
+        },
+        "issues": [
+            {
+                "sequence": 1,
+                "severity": "error",
+                "category": "analysis",
+                "rule": "analysis.invalid",
+                "message": "Invalid analysis input",
+                "suggested_action": "Correct the input.",
+            },
+            {
+                "sequence": 2,
+                "severity": "warning",
+                "category": "spatial",
+                "rule": "spatial.review",
+                "message": "Review spatial model",
+                "suggested_action": "Inspect the model.",
+            },
+        ],
+    }
+    panel = app.diagnostics_workspace
+    panel.refresh(result)
+    app.root.update_idletasks()
+
+    children = panel.tree.get_children()
+    assert len(children) == 2
+    assert panel.tree.item(children[0], "tags") == ("severity_error",)
+    assert panel.tree.item(children[1], "tags") == ("severity_warning",)
+
+    panel.tree.selection_set(children[0])
+    panel.tree.focus(children[0])
+    panel._select_relative(1)
+    assert panel.selected_issue()["sequence"] == 2
+
+    panel._select_relative(1)
+    assert panel.selected_issue()["sequence"] == 1

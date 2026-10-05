@@ -2236,6 +2236,7 @@ class CleanroomXApp:
                 state["inspector_fraction"],
                 workspace._body.winfo_width(),
             )
+        self._clamp_workspace_vertical_split()
 
     def _capture_ui_layout_state(self) -> dict:
         self._remember_current_panel_fractions()

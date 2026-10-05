@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import tkinter as tk
 from tkinter import ttk
@@ -112,10 +112,14 @@ class TaskCenter(ttk.Frame):
         *,
         on_change: Callable[[int, int], None] | None = None,
         on_abandon: Callable[[str], bool] | None = None,
+        table_layout: Mapping[str, Any] | None = None,
+        on_table_layout_change: Callable[[dict[str, Any]], None] | None = None,
     ):
         super().__init__(master, padding=(8, 6))
         self._on_change = on_change or (lambda _active, _total: None)
         self._on_abandon = on_abandon
+        self._table_layout = dict(table_layout or {})
+        self._on_table_layout_change = on_table_layout_change
         self._records: dict[str, TaskRecord] = {}
         self._order: list[str] = []
         self.state_filter_var = tk.StringVar(value="All")
@@ -230,6 +234,8 @@ class TaskCenter(ttk.Frame):
                 "duration",
                 "result",
             ),
+            layout_state=self._table_layout,
+            on_layout_change=self._on_table_layout_change,
         )
         yscroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(table_host, orient="horizontal", command=self.tree.xview)

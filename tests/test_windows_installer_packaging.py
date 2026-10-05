@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_inno_installer_is_per_user_registered_and_self_contained():
+def test_inno_installer_is_per_user_registered_branded_and_self_contained():
     text = (ROOT / "packaging" / "windows" / "CleanroomX.iss").read_text(
         encoding="utf-8"
     )
@@ -12,7 +12,12 @@ def test_inno_installer_is_per_user_registered_and_self_contained():
     assert "AppId={{8F32C7AA-9A76-4C56-82EE-CE29DA3587E1}" in text
     assert "PrivilegesRequired=lowest" in text
     assert "DefaultDirName={localappdata}\\Programs\\CleanroomX" in text
+    assert "SetupIconFile=CleanroomX.ico" in text
     assert "UninstallDisplayIcon={app}\\CleanroomX.exe" in text
+    assert "VersionInfoCompany=CleanroomX contributors" in text
+    assert "VersionInfoDescription=CleanroomX Engineering Workstation Installer" in text
+    assert "VersionInfoProductName=CleanroomX" in text
+    assert "VersionInfoProductVersion={#MyAppVersion}" in text
     assert 'Source: "..\\..\\dist\\windows-standalone\\CleanroomX\\*"' in text
     assert 'Filename: "{app}\\CleanroomX.exe"' in text
 

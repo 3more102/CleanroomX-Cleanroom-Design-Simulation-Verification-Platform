@@ -5627,7 +5627,12 @@ class CleanroomXApp:
     def _navigator_item_is_actionable(self, item_id: str) -> bool:
         if item_id.startswith(("room:", "device:")):
             return True
-        if item_id in {"nav-proofgraph", "nav-evidence"}:
+        if item_id in {
+            "nav-simulation",
+            "nav-requirements",
+            "nav-proofgraph",
+            "nav-evidence",
+        }:
             return True
         return bool(item_id and not item_id.startswith("nav-"))
 
@@ -5980,10 +5985,17 @@ class CleanroomXApp:
             )
             return menu
         if item_id == "nav-simulation":
-            self._remember_navigator_item(item_id)
-            self.activate_workspace_profile("simulation")
-            self.selection_status_var.set("Selected: Simulation / Results")
-            return
+            menu.add_command(
+                label="Open Simulation Workspace",
+                command=lambda: self.activate_workspace_profile("simulation"),
+            )
+            return menu
+        if item_id == "nav-requirements":
+            menu.add_command(
+                label="Open Requirements Traceability...",
+                command=self.show_requirements_traceability,
+            )
+            return menu
         if item_id == "nav-proofgraph":
             menu.add_command(
                 label="Open ProofGraph",
@@ -6134,6 +6146,16 @@ class CleanroomXApp:
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
                 self._sync_proofgraph_spatial_selection(kind, spatial_id)
+            return
+        if item_id == "nav-simulation":
+            self._remember_navigator_item(item_id)
+            self.activate_workspace_profile("simulation")
+            self.selection_status_var.set("Selected: Simulation / Results")
+            return
+        if item_id == "nav-requirements":
+            self._remember_navigator_item(item_id)
+            self.show_requirements_traceability()
+            self.selection_status_var.set("Selected: Requirements")
             return
         if item_id == "nav-proofgraph":
             self._remember_navigator_item(item_id)

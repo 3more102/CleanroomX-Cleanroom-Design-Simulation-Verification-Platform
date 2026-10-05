@@ -70,6 +70,9 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_compliance import ComplianceRulePackPanel
+from .gui_constraints import ConstraintManagerDialog
+from .gui_requirements import RequirementsEditorDialog
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -2269,6 +2272,20 @@ class CleanroomXApp:
             accelerator="F8",
             command=self._refresh_engineering_panels,
         )
+        verify_menu.add_command(
+            label="Requirements Editor...",
+            accelerator="Ctrl+Alt+R",
+            command=self.show_requirements_editor,
+        )
+        verify_menu.add_command(
+            label="Project Constraints...",
+            accelerator="Ctrl+Alt+C",
+            command=self.show_constraint_manager,
+        )
+        verify_menu.add_command(
+            label="Compliance Rule Pack Manager",
+            command=self._activate_compliance_workspace,
+        )
         verify_menu.add_separator()
         verify_menu.add_command(
             label="Requirements Traceability...",
@@ -2390,6 +2407,8 @@ class CleanroomXApp:
         self.root.bind("<Control-i>", lambda event: self.toggle_design_inspector())
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
+        self.root.bind("<Control-Alt-c>", lambda event: self.show_constraint_manager())
+        self.root.bind("<Control-Alt-r>", lambda event: self.show_requirements_editor())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
@@ -2785,6 +2804,14 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
+        self.compliance_panel = ComplianceRulePackPanel(
+            self.notebook,
+            input_getter=self._active_compliance_input,
+            input_setter=self._apply_compliance_input,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.compliance_panel, text="Compliance")
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
@@ -3325,6 +3352,93 @@ class CleanroomXApp:
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 
+    def _active_compliance_input(self) -> dict | None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            return None
+        if self._editor_analysis_id == analysis.id and hasattr(self, "input_text"):
+            text = self.input_text.get("1.0", "end-1c").strip()
+            if text:
+                try:
+                    payload = _strict_json_loads(text)
+                except (json.JSONDecodeError, ValueError):
+                    return None
+                return payload if isinstance(payload, dict) else None
+        return copy.deepcopy(analysis.input)
+
+    def _apply_compliance_input(self, payload: dict, description: str) -> bool:
+        if self._running:
+            self.status_var.set(
+                "Compliance rule editing is disabled while an analysis is running"
+            )
+            return False
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            self.status_var.set(
+                "Select a compliance rule-pack analysis before editing rules"
+            )
+            return False
+        try:
+            validate_analysis_input(
+                "compliance_check",
+                payload,
+                base_dir=self._base_dir(),
+            )
+            candidate = copy.deepcopy(payload)
+            self._perform_project_edit(
+                description,
+                lambda: setattr(analysis, "input", candidate),
+            )
+        except Exception as exc:
+            self.status_var.set(f"Compliance rule edit rejected: {exc}")
+            return False
+        self._invalidate_last_run_for(analysis.id)
+        self._load_analysis_into_editor(analysis)
+        self._update_title()
+        self._schedule_project_diagnostics_refresh()
+        return True
+
+    def _activate_compliance_workspace(self) -> None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            if analysis is not None:
+                try:
+                    self._commit_editor(analysis)
+                except Exception as exc:
+                    self.status_var.set(
+                        f"Cannot open compliance manager until current input is valid: {exc}"
+                    )
+                    return
+            analysis = next(
+                (
+                    item
+                    for item in self.project.analyses
+                    if item.kind == "compliance_check"
+                ),
+                None,
+            )
+            if analysis is None:
+                self.status_var.set(
+                    "No compliance rule-pack analysis is configured in this project"
+                )
+                return
+            self.project.active_analysis_id = analysis.id
+            if self.analysis_tree.exists(analysis.id):
+                self.analysis_tree.selection_set(analysis.id)
+                self.analysis_tree.focus(analysis.id)
+                self.analysis_tree.see(analysis.id)
+            self._load_analysis_into_editor(analysis)
+        else:
+            try:
+                self._commit_editor(analysis)
+            except Exception as exc:
+                self.status_var.set(f"Cannot open compliance manager: {exc}")
+                return
+        self.compliance_panel.refresh()
+        self.notebook.select(self.compliance_panel)
+        self.workspace_status_var.set("Workspace: Compliance")
+        self.status_var.set(f"Compliance rules: {analysis.name}")
+
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
         if viewer is None:
@@ -3732,6 +3846,20 @@ class CleanroomXApp:
                 "Verification",
                 self.show_requirements_traceability,
                 keywords=("requirements", "evidence", "trace"),
+            ),
+            PaletteCommand(
+                "requirements.edit",
+                "Edit Project Requirements",
+                "Verification",
+                self.show_requirements_editor,
+                keywords=("requirements", "criteria", "urs", "edit"),
+            ),
+            PaletteCommand(
+                "constraints.open",
+                "Open Project Constraints",
+                "Verification",
+                self.show_constraint_manager,
+                keywords=("constraints", "criteria", "rule pack", "tolerance"),
             ),
             PaletteCommand(
                 "report.dossier",
@@ -4336,6 +4464,89 @@ class CleanroomXApp:
             base_dir=self._base_dir(),
         )
         return True
+
+    def _apply_requirements_editor_edit(self, description, mutation):
+        if self._running:
+            raise RuntimeError(
+                "abandon the current analysis before editing project requirements"
+            )
+        if not self._prepare_project_history_action("edit project requirements"):
+            raise RuntimeError(
+                "current project fields must be valid before requirements can be edited"
+            )
+        return self._perform_project_edit(
+            description,
+            lambda: mutation(self.project),
+        )
+
+    def _requirements_editor_changed(self) -> None:
+        self._refresh_engineering_panels()
+        self._schedule_project_diagnostics_refresh()
+        self._update_title()
+        self.status_var.set(
+            "Project requirements updated; dependent verification evidence may now be stale."
+        )
+
+    def show_requirements_editor(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before editing project requirements.",
+                parent=self.root,
+            )
+            return
+        dialog = RequirementsEditorDialog(
+            self.root,
+            project_getter=lambda: self.project,
+            apply_project_edit=self._apply_requirements_editor_edit,
+            on_changed=self._requirements_editor_changed,
+        )
+        self._fit_dialog_to_display(dialog)
+        dialog.focus_set()
+
+    def _apply_constraint_manager_edit(self, description, mutation):
+        if self._running:
+            raise RuntimeError(
+                "abandon the current analysis before editing project constraints"
+            )
+        if not self._prepare_project_history_action("edit project constraints"):
+            raise RuntimeError(
+                "current project fields must be valid before constraints can be edited"
+            )
+        return self._perform_project_edit(
+            description,
+            lambda: mutation(self.project),
+        )
+
+    def _constraint_manager_changed(self, analysis_id: str | None) -> None:
+        if analysis_id is not None:
+            try:
+                self.project.analysis_by_id(analysis_id)
+            except (KeyError, ValueError):
+                analysis_id = None
+        self._refresh_analysis_list(select_id=analysis_id)
+        self._refresh_engineering_panels()
+        self._schedule_project_diagnostics_refresh()
+        self.status_var.set(
+            "Project constraints updated; save the project to persist them."
+        )
+
+    def show_constraint_manager(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before editing project constraints.",
+                parent=self.root,
+            )
+            return
+        dialog = ConstraintManagerDialog(
+            self.root,
+            project_getter=lambda: self.project,
+            apply_project_edit=self._apply_constraint_manager_edit,
+            on_changed=self._constraint_manager_changed,
+        )
+        self._fit_dialog_to_display(dialog)
+        dialog.focus_set()
 
     def show_requirements_traceability(self) -> bool:
         try:

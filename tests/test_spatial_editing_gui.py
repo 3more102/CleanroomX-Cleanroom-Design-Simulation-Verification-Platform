@@ -633,6 +633,26 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     assert app.project.to_dict() == project_before
 
 
+def test_density_switch_is_view_only_and_compacts_engineering_tables(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    style = ttk.Style(app.root)
+
+    comfortable_rowheight = int(style.lookup("Treeview", "rowheight"))
+    app.set_density("compact", persist=False)
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert app.density_var.get() == "compact"
+    assert int(style.lookup("Treeview", "rowheight")) < comfortable_rowheight
+    assert app.project.to_dict() == project_before
+
+    app.toggle_density()
+    app.root.update()
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == comfortable_rowheight
+    assert app.project.to_dict() == project_before
+
+
 def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     state_path = tmp_path / "gui-theme-layout.json"
     try:

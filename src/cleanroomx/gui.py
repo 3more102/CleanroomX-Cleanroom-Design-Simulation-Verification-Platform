@@ -7283,17 +7283,18 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
-    runtime_status_callback = getattr(
-        getattr(app, "status_var", None),
-        "set",
-        None,
-    )
-    if not callable(runtime_status_callback):
-        runtime_status_callback = None
-    app.runtime_log_path = install_tk_exception_handler(
-        root,
-        status_callback=runtime_status_callback,
-    )
+    if not args.smoke:
+        runtime_status_callback = getattr(
+            getattr(app, "status_var", None),
+            "set",
+            None,
+        )
+        if not callable(runtime_status_callback):
+            runtime_status_callback = None
+        app.runtime_log_path = install_tk_exception_handler(
+            root,
+            status_callback=runtime_status_callback,
+        )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]
         lines = [

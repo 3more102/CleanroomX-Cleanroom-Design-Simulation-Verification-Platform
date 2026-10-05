@@ -56,9 +56,9 @@ class CommandPalette(tk.Toplevel):
         on_close: Callable[[], None] | None = None,
     ):
         super().__init__(parent)
-        self.title("CleanroomX Command Palette")
-        self.geometry("680x430")
-        self.minsize(520, 320)
+        self.title("CleanroomX Commands")
+        self.geometry("720x470")
+        self.minsize(560, 340)
         self.transient(parent.winfo_toplevel())
         self._commands = list(commands)
         self._filtered: list[PaletteCommand] = []
@@ -68,15 +68,36 @@ class CommandPalette(tk.Toplevel):
 
         shell = ttk.Frame(self, padding=12)
         shell.pack(fill="both", expand=True)
-        ttk.Label(
-            shell,
-            text="COMMAND PALETTE",
-            style="CX.Section.TLabel",
-        ).pack(anchor="w")
-        self.search = ttk.Entry(shell, textvariable=self._query_var)
-        self.search.pack(fill="x", pady=(6, 8))
 
-        body = ttk.Frame(shell)
+        header = ttk.Frame(shell, style="CX.PanelHeader.TFrame", padding=(10, 8))
+        header.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            header,
+            text="COMMAND PALETTE",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            header,
+            text="GLOBAL WORKSTATION ACTIONS",
+            style="CX.Status.Info.TLabel",
+        ).pack(side="right")
+
+        search_host = ttk.Frame(shell, style="CX.SubtlePanel.TFrame", padding=(8, 6))
+        search_host.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            search_host,
+            text="Search",
+            style="CX.Section.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        self.search = ttk.Entry(search_host, textvariable=self._query_var)
+        self.search.pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            search_host,
+            text="name · category · shortcut · keyword",
+            style="CX.Muted.TLabel",
+        ).pack(side="right", padx=(10, 0))
+
+        body = ttk.Frame(shell, style="CX.Panel.TFrame")
         body.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
             body,
@@ -85,23 +106,34 @@ class CommandPalette(tk.Toplevel):
             selectmode="browse",
         )
         self.tree.heading("#0", text="Command")
-        self.tree.heading("category", text="Category")
+        self.tree.heading("category", text="Engineering Area")
         self.tree.heading("shortcut", text="Shortcut")
-        self.tree.column("#0", width=330, minwidth=220)
-        self.tree.column("category", width=145, minwidth=100)
-        self.tree.column("shortcut", width=120, minwidth=90, stretch=False)
+        self.tree.column("#0", width=360, minwidth=220)
+        self.tree.column("category", width=170, minwidth=110)
+        self.tree.column("shortcut", width=130, minwidth=90, stretch=False)
         scroll = ttk.Scrollbar(body, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
-        footer = ttk.Frame(shell)
+        footer = ttk.Frame(shell, style="CX.Toolbar.TFrame", padding=(8, 5))
         footer.pack(fill="x", pady=(8, 0))
-        self._summary = ttk.Label(footer, text="")
+        self._summary = ttk.Label(
+            footer,
+            text="",
+            style="CX.Status.Neutral.TLabel",
+        )
         self._summary.pack(side="left")
+        self._empty_hint = ttk.Label(
+            footer,
+            text="",
+            style="CX.ToolbarMuted.TLabel",
+        )
+        self._empty_hint.pack(side="left", padx=(8, 0))
         ttk.Label(
             footer,
-            text="Enter run  •  Esc close",
+            text="Enter  Run  ·  ↓  Results  ·  Esc  Close",
+            style="CX.ToolbarMuted.TLabel",
         ).pack(side="right")
 
         self._query_var.trace_add("write", lambda *_: self._refresh())
@@ -121,22 +153,40 @@ class CommandPalette(tk.Toplevel):
             self.tree.delete(item)
         self._iid_to_command.clear()
 
+        previous_category = None
         for index, command in enumerate(self._filtered):
             iid = f"command-{index}"
             self._iid_to_command[iid] = command
+            category = command.category or "General"
+            category_changed = category != previous_category
             self.tree.insert(
                 "",
                 "end",
                 iid=iid,
                 text=command.label,
-                values=(command.category, command.shortcut or "—"),
+                values=(category, command.shortcut or "—"),
+                tags=("category_break",) if category_changed and index else (),
             )
+            previous_category = category
+
         if self._filtered:
             first = self.tree.get_children()[0]
             self.tree.selection_set(first)
             self.tree.focus(first)
+            self._empty_hint.configure(text="")
+        else:
+            query = self._query_var.get().strip()
+            self._empty_hint.configure(
+                text=(
+                    f'No command matches "{query}".'
+                    if query
+                    else "No commands are registered."
+                )
+            )
+
+        count = len(self._filtered)
         self._summary.configure(
-            text=f"{len(self._filtered)} command{'s' if len(self._filtered) != 1 else ''}"
+            text=f"{count} COMMAND{'S' if count != 1 else ''}"
         )
 
     def _focus_first_result(self, _event=None):

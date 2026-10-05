@@ -102,6 +102,43 @@ def theme_palette(value: Any) -> dict[str, str]:
     return deepcopy(_THEME_PALETTES[normalize_theme_name(value)])
 
 
+def normalize_density_name(value: Any) -> str:
+    token = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "compact": "compact",
+        "engineering": "compact",
+        "engineering_compact": "compact",
+        "comfortable": "comfortable",
+    }
+    return aliases.get(token, "compact")
+
+
+def apply_ttk_density(root: tk.Misc, value: Any) -> str:
+    """Apply presentation-only workstation density metrics."""
+    density = normalize_density_name(value)
+    style = ttk.Style(root)
+    compact = density == "compact"
+    button_padding = (8, 5) if compact else (10, 7)
+    compact_button_padding = (6, 3) if compact else (8, 5)
+    primary_padding = (11, 5) if compact else (13, 7)
+    field_padding = (5, 4) if compact else (7, 6)
+    tab_padding = (10, 5) if compact else (12, 7)
+    row_height = 25 if compact else 31
+    navigator_row_height = 27 if compact else 33
+
+    style.configure("TButton", padding=button_padding)
+    style.configure("CX.Primary.TButton", padding=primary_padding)
+    style.configure("CX.Compact.TButton", padding=compact_button_padding)
+    style.configure("CX.Danger.TButton", padding=compact_button_padding)
+    style.configure("TEntry", padding=field_padding)
+    style.configure("TSpinbox", padding=field_padding)
+    style.configure("TCombobox", padding=field_padding)
+    style.configure("TNotebook.Tab", padding=tab_padding)
+    style.configure("Treeview", rowheight=row_height)
+    style.configure("CX.Navigator.Treeview", rowheight=navigator_row_height)
+    return density
+
+
 def status_style_name(value: Any) -> str:
     """Return the canonical semantic badge style for an engineering state."""
     token = str(value or "").strip().lower().replace(" ", "_")

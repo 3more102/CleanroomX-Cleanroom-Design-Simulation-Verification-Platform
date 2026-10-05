@@ -6420,6 +6420,11 @@ class CleanroomXApp:
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
         except Exception as exc:
             self.status_var.set("Cannot run — invalid input")
+            simulation = getattr(self, "simulation_workspace", None)
+            if simulation is not None:
+                simulation.set_blocked(
+                    "Input validation failed; the backend solver was not started."
+                )
             messagebox.showerror("Cannot run analysis", str(exc), parent=self.root)
             return
 
@@ -6437,6 +6442,15 @@ class CleanroomXApp:
         )
         self._set_run_elapsed_indicator("0.0 s")
         self._set_running(True)
+        simulation = getattr(self, "simulation_workspace", None)
+        if simulation is not None:
+            simulation.set_context(
+                analysis_name=analysis.name,
+                analysis_kind=analysis.kind,
+                analysis_input=analysis.input,
+                last_run=self._runs_by_analysis.get(analysis.id),
+                running=True,
+            )
         self.status_var.set(f"Running {analysis.name}...")
         self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
 
@@ -6447,6 +6461,14 @@ class CleanroomXApp:
                 self._queue.put(("error", generation, analysis_id, str(exc)))
                 return
 
+            self._queue.put(
+                (
+                    "stage",
+                    generation,
+                    analysis_id,
+                    "Finalizing run-history evidence…",
+                )
+            )
             history_evidence = None
             history_error = None
             try:
@@ -6473,6 +6495,9 @@ class CleanroomXApp:
             "ABANDON REQUESTED",
             "CX.Status.Warning.TLabel",
         )
+        simulation = getattr(self, "simulation_workspace", None)
+        if simulation is not None:
+            simulation.set_abandon_requested()
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
@@ -6486,7 +6511,11 @@ class CleanroomXApp:
         ):
             return
         elapsed = max(0.0, time.monotonic() - started)
-        self._set_run_elapsed_indicator(f"{elapsed:.1f} s")
+        elapsed_text = f"{elapsed:.1f} s"
+        self._set_run_elapsed_indicator(elapsed_text)
+        simulation = getattr(self, "simulation_workspace", None)
+        if simulation is not None:
+            simulation.set_elapsed(elapsed_text)
         self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
 
     def _set_running(self, running: bool) -> None:
@@ -6510,6 +6539,16 @@ class CleanroomXApp:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
                 if generation != self._run_generation:
                     continue
+                if kind == "stage":
+                    if not self._abandon_requested:
+                        simulation = getattr(self, "simulation_workspace", None)
+                        if simulation is not None:
+                            simulation.set_execution(
+                                state="running",
+                                stage=str(payload),
+                                elapsed=self.run_elapsed_var.get(),
+                            )
+                    continue
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
@@ -6517,6 +6556,9 @@ class CleanroomXApp:
                         "ABANDONED",
                         "CX.Status.Warning.TLabel",
                     )
+                    simulation = getattr(self, "simulation_workspace", None)
+                    if simulation is not None:
+                        simulation.set_abandoned()
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
@@ -6525,6 +6567,9 @@ class CleanroomXApp:
                         "FAILED",
                         "CX.Status.Fail.TLabel",
                     )
+                    simulation = getattr(self, "simulation_workspace", None)
+                    if simulation is not None:
+                        simulation.set_failed(str(payload))
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6542,6 +6587,11 @@ class CleanroomXApp:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
                         self._invalidate_last_run_for(analysis_id)
+                        simulation = getattr(self, "simulation_workspace", None)
+                        if simulation is not None:
+                            simulation.set_discarded(
+                                "Completed result discarded because the analysis no longer exists."
+                            )
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
                         )
@@ -6550,6 +6600,11 @@ class CleanroomXApp:
             run, analysis.kind, analysis.input, base_dir=self._base_dir()
         ):
                         self._invalidate_last_run_for(analysis_id)
+                        simulation = getattr(self, "simulation_workspace", None)
+                        if simulation is not None:
+                            simulation.set_discarded(
+                                "Completed result discarded because the active inputs changed."
+                            )
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
@@ -6611,6 +6666,8 @@ class CleanroomXApp:
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
+        if hasattr(self, "simulation_workspace"):
+            self.simulation_workspace.set_completed(run)
         if hasattr(self, "analysis_result_panel"):
             self.analysis_result_panel.refresh(run)
         self._set_text(

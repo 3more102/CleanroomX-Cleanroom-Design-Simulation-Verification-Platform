@@ -1170,9 +1170,13 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
         ),
     )
     assert app._write_export_file(str(target), "payload", label="Result") is False
-    assert app.status_var.value == "Result export failed"
+    assert app.status_var.value.startswith("Export result failed · CX-")
+    error_reference = app.status_var.value.rsplit(" · ", 1)[1]
     assert captured["title"] == "Result export failed"
-    assert captured["message"] == "disk full"
+    assert "Export result did not complete." in captured["message"]
+    assert "disk full" in captured["message"]
+    assert f"Error reference: {error_reference}" in captured["message"]
+    assert "Traceback" not in captured["message"]
     assert captured["parent"] is app.root
 
 

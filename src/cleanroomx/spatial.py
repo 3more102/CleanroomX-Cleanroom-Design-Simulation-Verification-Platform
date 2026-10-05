@@ -1892,7 +1892,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(\n                inspector,\n                text=group_name.upper(),\n                padding=(8, 6),\n                style="CX.Card.TLabelframe",\n            )
+            section = ttk.LabelFrame(
+                inspector,
+                text=group_name.upper(),
+                padding=(8, 6),
+                style="CX.Card.TLabelframe",
+            )
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -3672,7 +3677,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ]
         canvas.create_polygon(
             *sum(floor_points, ()),
-            fill=self._theme_palette["surface_alt"],\n            outline=self._theme_palette["strong_border"],\n            width=1,\n            tags=("floor3d",),
+            fill=self._theme_palette["surface_alt"],
+            outline=self._theme_palette["strong_border"],
+            width=1,
+            tags=("floor3d",),
         )
 
         section_height = self._active_section_height()

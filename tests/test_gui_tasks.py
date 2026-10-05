@@ -7,7 +7,11 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
-from cleanroomx.gui_tasks import EngineeringTaskCenter, EngineeringTaskModel
+from cleanroomx.gui_tasks import (
+    EngineeringTaskCenter,
+    EngineeringTaskModel,
+    _progress_text,
+)
 
 
 def test_engineering_task_model_records_real_elapsed_and_terminal_state():
@@ -69,6 +73,13 @@ def test_engineering_task_model_never_invents_progress_and_clears_only_finished(
     assert model.remove_finished() == 1
     assert len(model) == 1
     assert model.snapshot("run:b").state == "running"
+
+
+def test_task_progress_labels_never_invent_a_percentage():
+    assert _progress_text("running") == "Indeterminate"
+    assert _progress_text("abandon_requested") == "Waiting for worker"
+    assert _progress_text("completed") == "Complete"
+    assert "%" not in _progress_text("running")
 
 
 def test_engineering_task_model_rejects_duplicate_active_identifier():
@@ -168,6 +179,12 @@ def test_cleanroomx_shell_tracks_analysis_task_without_faking_backend_cancellati
 
         commands = {command.id for command in app._command_palette_commands()}
         assert "workspace.tasks" in commands
+        assert app.analysis_tree.exists("nav-tasks")
+        app.analysis_tree.selection_set("nav-tasks")
+        app.analysis_tree.focus("nav-tasks")
+        app.analysis_tree.event_generate("<<TreeviewSelect>>")
+        root.update()
+        assert app.output_notebook.select() == str(app.task_center)
         assert callback_errors == []
     finally:
         root.destroy()

@@ -479,6 +479,22 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             font=("TkDefaultFont", 8, "bold"),
         )
 
+    readiness_progress_styles = {
+        "Success": "success",
+        "Warning": "warning",
+        "Neutral": "accent",
+    }
+    for name, color_key in readiness_progress_styles.items():
+        style.configure(
+            f"CX.Readiness.{name}.Horizontal.TProgressbar",
+            background=palette[color_key],
+            troughcolor=palette["surface_alt"],
+            bordercolor=palette["border"],
+            lightcolor=palette[color_key],
+            darkcolor=palette[color_key],
+            thickness=7,
+        )
+
     style.configure(
         "Vertical.TScrollbar",
         background=palette["surface_alt"],

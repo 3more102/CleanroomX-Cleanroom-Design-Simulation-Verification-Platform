@@ -199,6 +199,43 @@ def test_recovered_save_as_preserves_original_and_cleans_recovery(
     assert app._autosave_manager.saved == [destination]
 
 
+
+def test_discard_choice_defers_recovery_cleanup_until_replacement_commits(
+    tmp_path, monkeypatch
+):
+    app = _app_for_restore(tmp_path / "recovery")
+    app._has_unsaved_changes = lambda: True
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("restored")
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesnocancel",
+        lambda *args, **kwargs: False,
+    )
+
+    assert app._confirm_project_replacement() is True
+    assert discarded == []
+
+
+def test_successful_project_load_commits_recovery_cleanup(tmp_path):
+    source = save_project_document(tmp_path / "replacement.cleanroomx.json", _project())
+    app = _app_for_restore(tmp_path / "recovery")
+    discarded = []
+    app._discard_current_autosave = lambda: discarded.append("autosave")
+    app._discard_restored_recovery = lambda: discarded.append("restored")
+    app._refresh_engineering_panels = lambda: None
+    app._capture_saved_state = lambda: None
+    app._remember_recent_project = lambda _path: None
+    app._activate_spatial_workspace = lambda *args, **kwargs: None
+
+    app.load_project_path(source)
+
+    assert discarded == ["autosave", "restored"]
+    assert app.project_path == source
+    assert app.project.name == "Source Project"
+
+
 def test_show_recovery_center_restores_selected_artifact(tmp_path, monkeypatch):
     source, artifact, recovery_dir = _make_recovery(tmp_path, '{"value": 2}')
     scan = gui_module.scan_recovery_artifacts(recovery_dir)

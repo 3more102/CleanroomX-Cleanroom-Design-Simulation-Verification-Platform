@@ -500,6 +500,25 @@ class ProofGraphViewer(ttk.Frame):
         self.graph_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
 
+        lifecycle = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(8, 5))
+        lifecycle.pack(fill="x", padx=6, pady=(0, 5))
+        ttk.Label(lifecycle, text="TRACEABILITY", style="CX.SurfaceSection.TLabel").pack(side="left", padx=(0, 10))
+        self.lifecycle_stage_labels: list[ttk.Label] = []
+        stages = (
+            ("REQUIREMENT", "CX.Status.Info.TLabel"),
+            ("MODEL", "CX.Status.Info.TLabel"),
+            ("CALCULATION", "CX.Status.Simulation.TLabel"),
+            ("VERIFICATION", "CX.Status.Warning.TLabel"),
+            ("EVIDENCE", "CX.Status.Pass.TLabel"),
+            ("REPORT", "CX.Status.Neutral.TLabel"),
+        )
+        for index, (stage, style_name) in enumerate(stages):
+            if index:
+                ttk.Label(lifecycle, text="→", style="CX.SurfaceMuted.TLabel").pack(side="left", padx=3)
+            label = ttk.Label(lifecycle, text=stage, style=style_name)
+            label.pack(side="left", padx=1)
+            self.lifecycle_stage_labels.append(label)
+
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
 

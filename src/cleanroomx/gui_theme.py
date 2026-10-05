@@ -599,6 +599,23 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         darkcolor=palette["accent"],
     )
 
+    # Semantic progress variants keep project health, verification currency, and
+    # solver activity visually consistent without encoding meaning in text alone.
+    for progress_style, progress_color in (
+        ("CX.Success.Horizontal.TProgressbar", palette["success"]),
+        ("CX.Warning.Horizontal.TProgressbar", palette["warning"]),
+        ("CX.Fail.Horizontal.TProgressbar", palette["error"]),
+        ("CX.Simulation.Horizontal.TProgressbar", palette["simulation"]),
+    ):
+        style.configure(
+            progress_style,
+            background=progress_color,
+            troughcolor=palette["surface_alt"],
+            bordercolor=palette["border"],
+            lightcolor=progress_color,
+            darkcolor=progress_color,
+        )
+
     style.configure(
         "CX.PanelHeader.TFrame",
         background=palette["surface_alt"],

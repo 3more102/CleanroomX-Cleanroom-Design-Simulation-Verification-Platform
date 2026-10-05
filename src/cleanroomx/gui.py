@@ -2846,9 +2846,9 @@ class CleanroomXApp:
 
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
-            metrics = layout_metrics(
-                self.project.metadata.get(SPATIAL_METADATA_KEY, {})
-            )
+            spatial_layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+            metrics = layout_metrics(spatial_layout)
+            model_validation_issue_count = len(validate_layout(spatial_layout))
             device_count = sum(
                 int(value)
                 for value in metrics.get("device_counts", {}).values()
@@ -2865,6 +2865,7 @@ class CleanroomXApp:
                     "model": {
                         **metrics,
                         "device_count": device_count,
+                        "validation_issue_count": model_validation_issue_count,
                     },
                     "analysis_count": len(self.project.analyses),
                     "last_run": (

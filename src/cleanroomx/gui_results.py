@@ -9,9 +9,59 @@ from tkinter import ttk
 from .gui_theme import theme_palette
 
 
+_UNIT_SUFFIXES: tuple[tuple[str, str], ...] = (
+    ("_m3_h", "m³/h"),
+    ("_m3_s", "m³/s"),
+    ("_kg_m3", "kg/m³"),
+    ("_m2_s", "m²/s"),
+    ("_m2", "m²"),
+    ("_m3", "m³"),
+    ("_pa", "Pa"),
+    ("_kw", "kW"),
+    ("_w", "W"),
+    ("_c", "°C"),
+    ("_percent", "%"),
+    ("_minutes", "min"),
+    ("_um", "µm"),
+    ("_m", "m"),
+)
+
+
+def _unit_hint(path: str) -> str:
+    key = str(path or "").rsplit(".", 1)[-1].split("[", 1)[0].lower()
+    for suffix, unit in _UNIT_SUFFIXES:
+        if key.endswith(suffix):
+            return unit
+    if key.endswith("_1_h") or key == "ach":
+        return "1/h"
+    return ""
+
+
 def _humanize(value: Any) -> str:
     text = str(value or "").replace("_", " ").replace(".", " / ").strip()
     return " ".join(part.capitalize() for part in text.split())
+
+
+def _result_class(path: Any) -> str:
+    """Classify result rows so calculated/configured/verdict data stay distinct."""
+    text = str(path or "").strip().lower()
+    leaf = text.rsplit(".", 1)[-1].split("[", 1)[0]
+    tokens = set(
+        part
+        for part in text.replace("[", ".").replace("]", "").replace("_", ".").split(".")
+        if part
+    )
+    if any(token.startswith("require") or token in {"target", "limit", "criterion", "criteria"} for token in tokens):
+        return "REQUIREMENT"
+    if (
+        leaf in {"status", "verdict", "compliance", "result_status"}
+        or any(token in {"verdict", "compliance"} for token in tokens)
+        or leaf.endswith("_status")
+    ):
+        return "VERDICT"
+    if any(token in {"metadata", "meta", "provenance", "source", "version", "timestamp"} for token in tokens):
+        return "METADATA"
+    return "CALCULATED"
 
 
 def _format_scalar(value: Any) -> str:
@@ -80,7 +130,11 @@ def _flatten_result(value: Any, *, limit: int = 120) -> list[tuple[str, str]]:
                     )
                 )
             return
-        rows.append((path or "Result", _format_scalar(node)))
+        rendered = _format_scalar(node)
+        unit = _unit_hint(path)
+        if unit and isinstance(node, (int, float)) and not isinstance(node, bool):
+            rendered = f"{rendered} {unit}"
+        rows.append((path or "Result", rendered))
 
     visit(value, "", 0)
     return rows
@@ -132,17 +186,19 @@ class AnalysisResultPanel(ttk.Frame):
             justify="left",
         ).pack(fill="x", pady=(0, 8))
 
-        columns = ("field", "value")
+        columns = ("class", "field", "value")
         self.tree = ttk.Treeview(
             self,
             columns=columns,
             show="headings",
             selectmode="browse",
         )
-        self.tree.heading("field", text="Calculated field")
+        self.tree.heading("class", text="Class")
+        self.tree.heading("field", text="Engineering field")
         self.tree.heading("value", text="Value")
-        self.tree.column("field", width=430, minwidth=180, stretch=True)
-        self.tree.column("value", width=360, minwidth=160, stretch=True)
+        self.tree.column("class", width=112, minwidth=96, stretch=False, anchor="center")
+        self.tree.column("field", width=410, minwidth=180, stretch=True)
+        self.tree.column("value", width=330, minwidth=160, stretch=True)
         yscroll = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -153,6 +209,16 @@ class AnalysisResultPanel(ttk.Frame):
         palette = theme_palette(value)
         self.tree.tag_configure("row_even", background=palette["tree"])
         self.tree.tag_configure("row_odd", background=palette["surface_alt"])
+        self.tree.tag_configure("calculated", foreground=palette["text"])
+        self.tree.tag_configure("requirement", foreground=palette["requirement"])
+        self.tree.tag_configure("metadata", foreground=palette["muted"])
+        self.tree.tag_configure("verdict_pass", foreground=palette["success"])
+        self.tree.tag_configure("verdict_warning", foreground=palette["warning"])
+        self.tree.tag_configure(
+            "verdict_fail",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
 
     def clear(self) -> None:
         self.refresh(None)
@@ -180,15 +246,29 @@ class AnalysisResultPanel(ttk.Frame):
 
         self.title_var.set(title)
         self.status_var.set(status.upper().replace("_", " "))
-        diagnostic_count = len(diagnostics) if isinstance(diagnostics, list) else 0
+        diagnostic_count = (
+            len(diagnostics)
+            if isinstance(diagnostics, (dict, list, tuple))
+            else 0
+        )
         self.summary_var.set(
             f"Calculated result snapshot · {diagnostic_count} diagnostic"
             f"{'s' if diagnostic_count != 1 else ''}. "
             "This view presents canonical run output; verification verdicts are shown separately."
         )
-        self.count_var.set(
-            f"{len(rows)} displayed field{'s' if len(rows) != 1 else ''}"
-        )
+        classes = [_result_class(path) for path, _rendered in rows]
+        class_counts = {
+            name: classes.count(name)
+            for name in ("CALCULATED", "REQUIREMENT", "VERDICT", "METADATA")
+        }
+        summary_parts = [f"{len(rows)} fields"]
+        if class_counts["CALCULATED"]:
+            summary_parts.append(f"{class_counts['CALCULATED']} calc")
+        if class_counts["REQUIREMENT"]:
+            summary_parts.append(f"{class_counts['REQUIREMENT']} req")
+        if class_counts["VERDICT"]:
+            summary_parts.append(f"{class_counts['VERDICT']} verdict")
+        self.count_var.set(" · ".join(summary_parts))
         self.status_label.configure(
             style=(
                 "CX.Status.Fail.TLabel"
@@ -202,10 +282,25 @@ class AnalysisResultPanel(ttk.Frame):
         )
 
         for index, (path, rendered) in enumerate(rows):
+            semantic = _result_class(path)
+            semantic_tag = semantic.lower()
+            if semantic == "VERDICT":
+                token = str(rendered).strip().lower()
+                if token in {"fail", "failed", "error", "critical", "no", "false"}:
+                    semantic_tag = "verdict_fail"
+                elif token in {"warning", "warn", "stale", "incomplete"}:
+                    semantic_tag = "verdict_warning"
+                elif token in {"pass", "passed", "ok", "success", "completed", "yes", "true"}:
+                    semantic_tag = "verdict_pass"
+                else:
+                    semantic_tag = "metadata"
             self.tree.insert(
                 "",
                 "end",
                 iid=f"result-{index}",
-                values=(_humanize(path), rendered),
-                tags=("row_even" if index % 2 == 0 else "row_odd",),
+                values=(semantic, _humanize(path), rendered),
+                tags=(
+                    "row_even" if index % 2 == 0 else "row_odd",
+                    semantic_tag,
+                ),
             )

@@ -5,7 +5,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .gui_theme import status_style_name, theme_palette
+from .gui_theme import attach_tooltip, status_style_name, theme_palette
 
 
 def _status_style(value: Any) -> str:
@@ -22,6 +22,133 @@ def _count(summary: dict[str, Any], *keys: str) -> int:
     return 0
 
 
+def system_status_projection(snapshot: dict[str, Any] | None) -> tuple[tuple[str, str, str], ...]:
+    """Project explicit project state into compact workstation status modules."""
+    data = snapshot if isinstance(snapshot, dict) else {}
+    diagnostics = data.get("diagnostics", {})
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    summary = diagnostics.get("summary", {})
+    summary = summary if isinstance(summary, dict) else {}
+    verification = data.get("verification", {})
+    verification = verification if isinstance(verification, dict) else {}
+    model = data.get("model", {})
+    model = model if isinstance(model, dict) else {}
+    evidence = data.get("evidence", {})
+    evidence = evidence if isinstance(evidence, dict) else {}
+
+    rooms = int(model.get("room_count") or 0)
+    model_issues = int(model.get("validation_issue_count") or 0)
+    configured = _count(verification, "configured_analysis_count")
+    current = _count(verification, "current_count")
+    stale = _count(verification, "stale_count")
+    not_verified = _count(verification, "not_verified_count")
+    records = int(evidence.get("record_count") or 0)
+    graphs = int(evidence.get("proofgraph_count") or 0)
+    analyses = int(data.get("analysis_count") or 0)
+    last_run = data.get("last_run")
+
+    if configured <= 0:
+        verification_state, verification_detail = "not checked", "No configured analyses"
+    elif current == configured and stale == 0 and not_verified == 0:
+        verification_state, verification_detail = "current", f"{current}/{configured} current"
+    elif stale > 0:
+        verification_state, verification_detail = "stale", f"{stale} stale · {current}/{configured} current"
+    else:
+        verification_state, verification_detail = "incomplete", f"{not_verified} not verified · {current}/{configured} current"
+
+    diagnostic_state = str(summary.get("status") or "not checked")
+    issue_count = _count(summary, "issue_count", "total_count")
+    if isinstance(last_run, dict):
+        analysis_state = str(last_run.get("status") or "unknown")
+        analysis_detail = str(last_run.get("title") or "Latest analysis")
+    else:
+        analysis_state = "available" if analyses else "not checked"
+        analysis_detail = f"{analyses} configured · not run" if analyses else "No analysis configured"
+
+    model_state = "not checked" if not rooms else "warning" if model_issues else "ready"
+    model_detail = f"{rooms} room{'s' if rooms != 1 else ''}"
+    if model_issues:
+        model_detail += f" · {model_issues} validation issue{'s' if model_issues != 1 else ''}"
+
+    return (
+        ("MODEL", model_state, model_detail),
+        ("DIAGNOSTICS", diagnostic_state, f"{issue_count} issue{'s' if issue_count != 1 else ''}"),
+        ("VERIFICATION", verification_state, verification_detail),
+        ("ANALYSIS", analysis_state, analysis_detail),
+        ("EVIDENCE", "available" if records or graphs else "not checked", f"{records} record{'s' if records != 1 else ''} · {graphs} graph{'s' if graphs != 1 else ''}"),
+    )
+
+
+def project_readiness_projection(
+    snapshot: dict[str, Any] | None,
+) -> tuple[int, str, str]:
+    """Summarize explicit subsystem state without inventing compliance results."""
+    modules = system_status_projection(snapshot)
+    scores: list[float] = []
+    attention = 0
+    failed = 0
+    unready = 0
+
+    healthy_states = {
+        "ready",
+        "current",
+        "pass",
+        "passed",
+        "ok",
+        "healthy",
+        "completed",
+        "success",
+        "verified",
+    }
+    attention_states = {
+        "warning",
+        "warn",
+        "stale",
+        "incomplete",
+        "degraded",
+        "attention",
+        "running",
+        "calculating",
+        "queued",
+    }
+    failed_states = {"fail", "failed", "error", "critical", "blocked"}
+
+    for name, raw_state, _detail in modules:
+        state = str(raw_state or "").strip().lower().replace("_", " ")
+        if state in healthy_states or (state == "available" and name != "ANALYSIS"):
+            scores.append(1.0)
+        elif state in attention_states or (state == "available" and name == "ANALYSIS"):
+            scores.append(0.5)
+            attention += 1
+        elif state in failed_states:
+            scores.append(0.0)
+            failed += 1
+        else:
+            scores.append(0.0)
+            unready += 1
+
+    percent = int(round(100.0 * sum(scores) / len(scores))) if scores else 0
+    if failed:
+        state = "fail"
+    elif percent == 100:
+        state = "ready"
+    elif percent > 0:
+        state = "warning" if attention else "incomplete"
+    else:
+        state = "not checked"
+
+    detail_parts = [
+        f"{sum(score == 1.0 for score in scores)}/{len(scores)} subsystems ready"
+    ]
+    if attention:
+        detail_parts.append(f"{attention} attention")
+    if failed:
+        detail_parts.append(f"{failed} failed")
+    if unready:
+        detail_parts.append(f"{unready} not checked")
+    return percent, state, " · ".join(detail_parts)
+
+
 class EngineeringDashboard(ttk.Frame):
     """Dense, display-only engineering project health surface."""
 
@@ -35,6 +162,10 @@ class EngineeringDashboard(ttk.Frame):
         self._snapshot: dict[str, Any] = {}
         self._on_issue = on_issue
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
+        self._theme_name = "dark"
+        self._palette = theme_palette(self._theme_name)
+        self.system_status_vars: dict[str, tuple[tk.StringVar, tk.StringVar]] = {}
+        self.system_status_labels: dict[str, ttk.Label] = {}
 
         self.project_var = tk.StringVar(value="Untitled project")
         self.location_var = tk.StringVar(value="Unsaved project")
@@ -49,14 +180,21 @@ class EngineeringDashboard(ttk.Frame):
         self.evidence_var = tk.StringVar(value="0 records")
         self.evidence_detail_var = tk.StringVar(value="No persisted verification evidence")
         self.issue_summary_var = tk.StringVar(value="No project diagnostics evaluated")
+        self.readiness_var = tk.StringVar(value="NOT CHECKED")
+        self.readiness_detail_var = tk.StringVar(
+            value="0/5 subsystems ready · readiness is not a compliance verdict"
+        )
+        self.readiness_percent_var = tk.StringVar(value="0%")
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(4, weight=1)
+        self.rowconfigure(5, weight=1)
 
         self._build_header()
         self._build_instruments()
         self._build_progress()
+        self._build_system_status()
         self._build_issue_table()
+        self.apply_theme("dark")
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame")
@@ -150,17 +288,50 @@ class EngineeringDashboard(ttk.Frame):
         progress_host = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 7))
         progress_host.grid(row=3, column=0, sticky="new", pady=(0, 10))
         progress_host.columnconfigure(1, weight=1)
+
+        ttk.Label(
+            progress_host,
+            text="Project readiness",
+            style="CX.SurfaceSection.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.readiness_progress = ttk.Progressbar(
+            progress_host,
+            mode="determinate",
+            maximum=100,
+            style="CX.Warning.Horizontal.TProgressbar",
+        )
+        self.readiness_progress.grid(row=0, column=1, sticky="ew")
+        ttk.Label(
+            progress_host,
+            textvariable=self.readiness_percent_var,
+            style="CX.SurfaceMuted.TLabel",
+            width=6,
+            anchor="e",
+        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        self.readiness_label = ttk.Label(
+            progress_host,
+            textvariable=self.readiness_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.readiness_label.grid(row=0, column=3, sticky="e", padx=(4, 0))
+        attach_tooltip(
+            self.readiness_progress,
+            "Readiness is derived only from explicit model, diagnostics, verification, "
+            "analysis, and evidence states. It is a workflow summary, not a compliance verdict.",
+        )
+
         ttk.Label(
             progress_host,
             text="Verification currency",
             style="CX.SurfaceSection.TLabel",
-        ).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        ).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=(7, 0))
         self.verification_progress = ttk.Progressbar(
             progress_host,
             mode="determinate",
             maximum=100,
+            style="CX.Simulation.Horizontal.TProgressbar",
         )
-        self.verification_progress.grid(row=0, column=1, sticky="ew")
+        self.verification_progress.grid(row=1, column=1, sticky="ew", pady=(7, 0))
         self.verification_percent_var = tk.StringVar(value="0%")
         ttk.Label(
             progress_host,
@@ -168,11 +339,37 @@ class EngineeringDashboard(ttk.Frame):
             style="CX.SurfaceMuted.TLabel",
             width=6,
             anchor="e",
-        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        ).grid(row=1, column=2, sticky="e", padx=(8, 0), pady=(7, 0))
+        ttk.Label(
+            progress_host,
+            textvariable=self.readiness_detail_var,
+            style="CX.SurfaceMuted.TLabel",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
+
+    def _build_system_status(self) -> None:
+        host = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 7))
+        host.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        for column in range(5):
+            host.columnconfigure(column, weight=1)
+
+        for column, key in enumerate(
+            ("MODEL", "DIAGNOSTICS", "VERIFICATION", "ANALYSIS", "EVIDENCE")
+        ):
+            state_var = tk.StringVar(value="NOT CHECKED")
+            detail_var = tk.StringVar(value="No current state")
+            self.system_status_vars[key] = (state_var, detail_var)
+            module = ttk.Frame(host, style="CX.Card.TFrame", padding=(8, 6))
+            module.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 3, 3))
+            module.columnconfigure(0, weight=1)
+            ttk.Label(module, text=key, style="CX.PanelSection.TLabel").grid(row=0, column=0, sticky="w")
+            label = ttk.Label(module, textvariable=state_var, style="CX.Status.Neutral.TLabel")
+            label.grid(row=1, column=0, sticky="w", pady=(4, 2))
+            ttk.Label(module, textvariable=detail_var, style="CX.PanelMuted.TLabel", wraplength=190, justify="left").grid(row=2, column=0, sticky="w")
+            self.system_status_labels[key] = label
 
     def _build_issue_table(self) -> None:
         host = ttk.Frame(self)
-        host.grid(row=4, column=0, sticky="nsew")
+        host.grid(row=5, column=0, sticky="nsew")
         host.rowconfigure(1, weight=1)
         host.columnconfigure(0, weight=1)
 
@@ -217,12 +414,14 @@ class EngineeringDashboard(ttk.Frame):
         self.issue_tree.bind("<Return>", self._open_selected_issue)
 
     def apply_theme(self, value: Any) -> None:
-        """Keep dashboard severity cues legible in both workstation themes."""
-        palette = theme_palette(value)
-        self.issue_tree.tag_configure("critical", foreground=palette["error"])
-        self.issue_tree.tag_configure("error", foreground=palette["error"])
-        self.issue_tree.tag_configure("warning", foreground=palette["warning"])
-        self.issue_tree.tag_configure("info", foreground=palette["info"])
+        self._theme_name = str(value or "dark")
+        self._palette = theme_palette(self._theme_name)
+        self.issue_tree.tag_configure("row_even", background=self._palette["tree"])
+        self.issue_tree.tag_configure("row_odd", background=self._palette["surface_alt"])
+        self.issue_tree.tag_configure("critical", foreground=self._palette["error"], font=("TkDefaultFont", 9, "bold"))
+        self.issue_tree.tag_configure("error", foreground=self._palette["error"], font=("TkDefaultFont", 9, "bold"))
+        self.issue_tree.tag_configure("warning", foreground=self._palette["warning"])
+        self.issue_tree.tag_configure("info", foreground=self._palette["info"])
 
     def selected_issue(self) -> dict[str, Any] | None:
         selection = self.issue_tree.selection()
@@ -295,8 +494,39 @@ class EngineeringDashboard(ttk.Frame):
         )
         self.verification_value.configure(style=_status_style(verification_status))
         percent = int(round((current / configured) * 100)) if configured else 0
-        self.verification_progress.configure(value=percent)
+        self.verification_progress.configure(
+            value=percent,
+            style=(
+                "CX.Success.Horizontal.TProgressbar"
+                if verification_status == "current"
+                else "CX.Warning.Horizontal.TProgressbar"
+                if verification_status in {"stale", "incomplete"}
+                else "CX.Simulation.Horizontal.TProgressbar"
+            ),
+        )
         self.verification_percent_var.set(f"{percent}%")
+
+        readiness_percent, readiness_status, readiness_detail = (
+            project_readiness_projection(self._snapshot)
+        )
+        self.readiness_percent_var.set(f"{readiness_percent}%")
+        self.readiness_var.set(readiness_status.upper().replace("_", " "))
+        self.readiness_detail_var.set(
+            f"{readiness_detail} · readiness is not a compliance verdict"
+        )
+        self.readiness_label.configure(style=_status_style(readiness_status))
+        self.readiness_progress.configure(
+            value=readiness_percent,
+            style=(
+                "CX.Success.Horizontal.TProgressbar"
+                if readiness_status == "ready"
+                else "CX.Fail.Horizontal.TProgressbar"
+                if readiness_status == "fail"
+                else "CX.Warning.Horizontal.TProgressbar"
+                if readiness_status in {"warning", "incomplete"}
+                else "CX.Simulation.Horizontal.TProgressbar"
+            ),
+        )
 
         rooms = int(model.get("room_count") or 0)
         area = float(model.get("total_floor_area_m2") or 0.0)
@@ -320,6 +550,12 @@ class EngineeringDashboard(ttk.Frame):
         self.evidence_var.set(f"{records} records")
         self.evidence_detail_var.set(f"{graphs} ProofGraph artifact{'s' if graphs != 1 else ''} retained")
 
+        for key, state, detail in system_status_projection(self._snapshot):
+            state_var, detail_var = self.system_status_vars[key]
+            state_var.set(state.upper().replace("_", " "))
+            detail_var.set(detail)
+            self.system_status_labels[key].configure(style=_status_style(state))
+
         issues = diagnostics.get("issues", [])
         issues = issues if isinstance(issues, list) else []
         severity_rank = {"critical": 0, "error": 1, "warning": 2, "info": 3}
@@ -334,13 +570,13 @@ class EngineeringDashboard(ttk.Frame):
             self.issue_tree.delete(iid)
         self._issues_by_iid.clear()
         for index, issue in enumerate(ordered[:12], start=1):
-            severity_token = str(issue.get("severity") or "info").strip().lower()
-            severity = severity_token.upper()
-            iid = f"issue-{index}"
+            severity = str(issue.get("severity") or "info").upper()
+            severity_token = str(issue.get("severity") or "info").lower()
+            row_tag = "row_even" if index % 2 == 0 else "row_odd"
             self.issue_tree.insert(
                 "",
                 "end",
-                iid=iid,
+                iid=f"issue-{index}",
                 values=(
                     severity,
                     str(issue.get("rule") or ""),
@@ -348,9 +584,9 @@ class EngineeringDashboard(ttk.Frame):
                     str(issue.get("category") or ""),
                     str(issue.get("message") or ""),
                 ),
-                tags=(severity_token,),
+                tags=(row_tag, severity_token),
             )
-            self._issues_by_iid[iid] = issue
+            self._issues_by_iid[f"issue-{index}"] = issue
         self.issue_summary_var.set(
             "No unresolved issues"
             if not ordered

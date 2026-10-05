@@ -102,6 +102,18 @@ The **Abandon** action suppresses the pending result but does not force-terminat
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
+## Engineering workstation profiles, search, tasks, and density
+
+The desktop shell provides task-oriented **Start**, **Design**, **Simulation**, **Verification**, **Evidence**, and **Reporting** workspace profiles. Profiles route the central notebook and navigator/output/inspector visibility to the engineering task without changing project data. The active profile is persisted as GUI-only state; the existing pane visibility and sash positions remain independently restorable, and **Focus Workspace** remains a temporary non-persistent view.
+
+**Reporting** is a first-class central workspace rather than only an output tab. It previews the Markdown from the current provenance-checked analysis run and exposes the existing project dossier, Markdown, portable HTML, and result-JSON exporters. If no current run exists, the workspace says so explicitly instead of manufacturing report content.
+
+**Engineering Search** (`Ctrl+K`) builds a navigation-only index from current CleanroomX projections. It searches analyses, spatial rooms and devices, canonical project requirements, current canonical diagnostics, and validated ProofGraph nodes. Opening a result routes back to the existing authoritative workbench: model objects select and fit in Design, analyses open Inputs, requirements open filtered traceability, diagnostics use the Problems navigation path, and evidence focuses the validated ProofGraph node. Search never evaluates requirements or computes engineering values.
+
+The **Tasks** output view records the real lifecycle of background analysis workers: task name, state, UTC start time, elapsed duration, result, failure/abandon detail, and session history. When a backend does not expose numeric progress, CleanroomX reports **Indeterminate** rather than inventing a percentage. The status bar exposes whether a task is running. The existing Abandon semantics remain unchanged: the UI records the abandon request and does not allow another backend run until the worker actually exits.
+
+The **View → Density** menu offers **Comfortable** and **Compact** engineering density. Density is a presentation preference applied through shared design-system tokens for rows, tabs, buttons, toolbars, and panel headers; it is persisted separately from project data and does not change calculations or stored engineering values.
+
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.

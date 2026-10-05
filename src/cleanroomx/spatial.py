@@ -2651,6 +2651,98 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _room_engineering_summary(self, item: dict) -> str:
+        area = float(item.get("length_m", 0.0)) * float(item.get("width_m", 0.0))
+        volume = area * float(item.get("height_m", 0.0))
+        classification = str(item.get("classification") or "Unclassified")
+        pressure = item.get("pressure_pa")
+        pressure_text = (
+            f"{float(pressure):+.1f} Pa"
+            if isinstance(pressure, (int, float))
+            else "Not configured"
+        )
+        lines = [
+            f"Area {area:.1f} m²  ·  Volume {volume:.1f} m³",
+            f"Class {classification}  ·  Pressure {pressure_text}",
+        ]
+
+        result = self._result_getter()
+        analysis = self._analysis_getter()
+        room_id = str(item.get("id") or "")
+        if isinstance(result, dict) and room_id:
+            ach_overlay = engineering_overlay_state(
+                self.layout,
+                analysis,
+                result,
+                mode="ach",
+            )
+            ach = next(
+                (
+                    record
+                    for record in ach_overlay.get("rooms", [])
+                    if record.get("room_id") == room_id
+                ),
+                None,
+            )
+            if isinstance(ach, dict) and isinstance(ach.get("value"), (int, float)):
+                ach_status = str(ach.get("status") or "").upper()
+                suffix = (
+                    f" · {ach_status}"
+                    if ach_status not in {"", "UNAVAILABLE", "NOT_CHECKED"}
+                    else ""
+                )
+                lines.append(f"ACH {float(ach['value']):.1f} 1/h{suffix}")
+
+            airflow_overlay = engineering_overlay_state(
+                self.layout,
+                analysis,
+                result,
+                mode="airflow",
+            )
+            airflow = next(
+                (
+                    record
+                    for record in airflow_overlay.get("rooms", [])
+                    if record.get("room_id") == room_id
+                ),
+                None,
+            )
+            if isinstance(airflow, dict):
+                details = airflow.get("details")
+                if isinstance(details, dict) and details:
+                    values = []
+                    for prefix, key in (
+                        ("S", "supply_m3_h"),
+                        ("R", "return_m3_h"),
+                        ("E", "exhaust_m3_h"),
+                    ):
+                        value = details.get(key)
+                        if isinstance(value, (int, float)):
+                            values.append(f"{prefix} {float(value):,.0f}")
+                    if values:
+                        lines.append("Airflow " + " · ".join(values) + " m³/h")
+
+            status_overlay = engineering_overlay_state(
+                self.layout,
+                analysis,
+                result,
+                mode="status",
+            )
+            room_status = next(
+                (
+                    record
+                    for record in status_overlay.get("rooms", [])
+                    if record.get("room_id") == room_id
+                ),
+                None,
+            )
+            if isinstance(room_status, dict):
+                status = str(room_status.get("status") or "").upper()
+                if status not in {"", "UNAVAILABLE", "NOT_CHECKED"}:
+                    lines.append(f"Verification {status}")
+
+        return "\n".join(lines)
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
@@ -2681,19 +2773,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
         if self.selected and self.selected.kind == "room":
-            area = float(item.get("length_m", 0.0)) * float(item.get("width_m", 0.0))
-            volume = area * float(item.get("height_m", 0.0))
-            classification = str(item.get("classification") or "Unclassified")
-            pressure = item.get("pressure_pa")
-            pressure_text = (
-                f"{float(pressure):+.1f} Pa"
-                if isinstance(pressure, (int, float))
-                else "Not configured"
-            )
-            self._inspector_summary_var.set(
-                f"Area {area:.1f} m²  ·  Volume {volume:.1f} m³\n"
-                f"Class {classification}  ·  Pressure {pressure_text}"
-            )
+            self._inspector_summary_var.set(self._room_engineering_summary(item))
         else:
             device_type = str(item.get("type") or "device").upper()
             room_id = str(item.get("room_id") or "Unassigned")

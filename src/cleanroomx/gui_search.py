@@ -240,11 +240,23 @@ def build_engineering_search_entries(
         graph_id = _text(document.get("id") or document.get("graph_sha256")) or str(document_index)
         nodes = document.get("nodes", [])
         if not isinstance(nodes, list):
+            try:
+                # Canonical persisted ProofGraph documents expose domain collections
+                # rather than a pre-flattened "nodes" array. Reuse the validated GUI
+                # projection so global search sees exactly what the evidence viewer sees.
+                from .gui_proofgraph import proofgraph_projection
+
+                nodes = proofgraph_projection(document).get("nodes", [])
+            except Exception:
+                nodes = []
+        if not isinstance(nodes, list):
             continue
         for node_index, node in enumerate(nodes):
             if not isinstance(node, dict):
                 continue
-            node_id = _text(node.get("id") or node.get("key"))
+            node_key = _text(node.get("key"))
+            node_id = _text(node.get("id"))
+            target_id = node_key or node_id
             label = _text(node.get("label") or node.get("title") or node_id)
             if not label:
                 continue
@@ -255,13 +267,13 @@ def build_engineering_search_entries(
                 entries,
                 seen,
                 SearchEntry(
-                    key=f"proof:{graph_id}:{node_id or node_index}",
+                    key=f"proof:{graph_id}:{target_id or node_index}",
                     category="Evidence",
                     label=label,
                     detail=detail,
                     target_type="evidence",
-                    target_id=node_id,
-                    keywords=(node_type, status, "proofgraph", "evidence", "provenance"),
+                    target_id=target_id,
+                    keywords=(node_type, status, node_id, "proofgraph", "evidence", "provenance"),
                     payload=node,
                 ),
             )

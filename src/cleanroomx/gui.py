@@ -79,6 +79,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -445,8 +446,13 @@ class AnalysisPicker(tk.Toplevel):
         self.bind("<Escape>", lambda event: self.destroy())
         self._populate()
 
-        self.geometry("1020x500")
-        self.minsize(760, 420)
+        fit_window_to_display(
+            self,
+            preferred_width=1020,
+            preferred_height=500,
+            minimum_width=760,
+            minimum_height=420,
+        )
         self.search_entry.focus_set()
 
     @staticmethod
@@ -537,8 +543,13 @@ class RunHistoryDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, metadata: dict):
         super().__init__(parent)
         self.title("Analysis Run History")
-        self.geometry("1180x700")
-        self.minsize(900, 520)
+        fit_window_to_display(
+            self,
+            preferred_width=1180,
+            preferred_height=700,
+            minimum_width=900,
+            minimum_height=520,
+        )
         self.transient(parent)
 
         summary = validate_run_history(metadata)
@@ -807,8 +818,13 @@ class VerificationHistoryDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1460x800")
-        self.minsize(1080, 600)
+        fit_window_to_display(
+            self,
+            preferred_width=1460,
+            preferred_height=800,
+            minimum_width=1080,
+            minimum_height=600,
+        )
         self.transient(parent)
 
         metadata = project.metadata

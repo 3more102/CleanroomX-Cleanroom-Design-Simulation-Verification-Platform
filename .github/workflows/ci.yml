@@ -222,6 +222,14 @@ jobs:
       - name: Exercise spatial editing with real Tk widgets
         if: matrix.python-version == '3.13'
         run: xvfb-run -a python -m pytest -q tests/test_spatial_editing_gui.py
+      - name: Exercise engineering workstation GUI with real Tk widgets
+        if: matrix.python-version == '3.13'
+        run: >-
+          xvfb-run -a python -m pytest -q
+          tests/test_gui_engineering_panels.py
+          tests/test_gui_command_palette.py
+          tests/test_gui_proofgraph_integration.py
+          tests/test_gui_dashboard.py
       - name: Run representative v0.100 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

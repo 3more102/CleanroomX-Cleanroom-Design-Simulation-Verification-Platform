@@ -4,6 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_display import configure_toplevel_geometry
 from .project_revisions import ProjectRevisionScan
 
 
@@ -13,8 +14,13 @@ class ProjectRevisionCenter(tk.Toplevel):
     def __init__(self, parent: tk.Misc, scan: ProjectRevisionScan):
         super().__init__(parent)
         self.title("Saved project revisions")
-        self.geometry("920x500")
-        self.minsize(720, 380)
+        configure_toplevel_geometry(
+            self,
+            920,
+            500,
+            min_width=720,
+            min_height=380,
+        )
         self.transient(parent)
         self.grab_set()
         self.result: Path | None = None

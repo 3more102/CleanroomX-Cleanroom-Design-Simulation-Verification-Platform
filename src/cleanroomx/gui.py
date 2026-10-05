@@ -405,11 +405,49 @@ class AnalysisPicker(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
+        self._catalog = list(analysis_catalog())
+        self.search_var = tk.StringVar()
+        self.category_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
+
         ttk.Label(
             self,
             text="Choose a CleanroomX backend workflow",
-            font=("TkDefaultFont", 11, "bold"),
+            style="CX.Section.TLabel",
         ).pack(anchor="w", padx=12, pady=(12, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=12, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=32,
+        )
+        self.search_entry.pack(side="left", padx=(4, 10))
+        ttk.Label(filters, text="Category").pack(side="left")
+        categories = sorted(
+            {
+                str(item.get("category", "")).strip()
+                for item in self._catalog
+                if str(item.get("category", "")).strip()
+            },
+            key=str.casefold,
+        )
+        self.category_combo = ttk.Combobox(
+            filters,
+            textvariable=self.category_var,
+            values=("All", *categories),
+            state="readonly",
+            width=18,
+        )
+        self.category_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=12, pady=6)
@@ -997,6 +1035,18 @@ class VerificationHistoryDialog(tk.Toplevel):
             item["analysis_id"]: item
             for item in currency.get("analyses", [])
         }
+        self._context_by_sequence = {
+            record["sequence"]: verification_history_record_currency_context(
+                record,
+                self.currency_by_analysis.get(record["analysis_id"]),
+            )
+            for record in self.records
+        }
+        self.search_var = tk.StringVar()
+        self.status_filter_var = tk.StringVar(value="All")
+        self.currency_filter_var = tk.StringVar(value="All")
+        self.count_var = tk.StringVar()
+
         ttk.Label(
             self,
             text=(
@@ -1012,6 +1062,74 @@ class VerificationHistoryDialog(tk.Toplevel):
                 "labeled historical."
             ),
         ).pack(fill="x", padx=10, pady=(0, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=10, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=30,
+        )
+        self.search_entry.pack(side="left", padx=(4, 8))
+
+        statuses = sorted(
+            {
+                str(record.get("verification", {}).get("status", "")).strip()
+                for record in self.records
+                if isinstance(record.get("verification"), dict)
+                and str(record["verification"].get("status", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Historical status").pack(side="left")
+        self.status_combo = ttk.Combobox(
+            filters,
+            textvariable=self.status_filter_var,
+            values=("All", *statuses),
+            state="readonly",
+            width=14,
+        )
+        self.status_combo.pack(side="left", padx=(4, 8))
+
+        currencies = sorted(
+            {
+                str(context.get("state", "")).strip()
+                for context in self._context_by_sequence.values()
+                if str(context.get("state", "")).strip()
+            },
+            key=str.casefold,
+        )
+        ttk.Label(filters, text="Currency").pack(side="left")
+        self.currency_combo = ttk.Combobox(
+            filters,
+            textvariable=self.currency_filter_var,
+            values=("All", *currencies),
+            state="readonly",
+            width=22,
+        )
+        self.currency_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Previous",
+            command=lambda: self._select_relative(-1),
+        ).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            filters,
+            text="Next",
+            command=lambda: self._select_relative(1),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            filters,
+            text="Copy record",
+            command=self._copy_selected,
+        ).pack(side="left", padx=2)
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -1057,9 +1175,20 @@ class VerificationHistoryDialog(tk.Toplevel):
             orient="vertical",
             command=self.tree.yview,
         )
-        self.tree.configure(yscrollcommand=list_scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        list_scroll.pack(side="right", fill="y")
+        list_scroll_x = ttk.Scrollbar(
+            list_frame,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
+        self.tree.configure(
+            yscrollcommand=list_scroll.set,
+            xscrollcommand=list_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        list_scroll.grid(row=0, column=1, sticky="ns")
+        list_scroll_x.grid(row=1, column=0, sticky="ew")
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
 
         detail_tabs = ttk.Notebook(detail_frame)
         detail_tabs.pack(fill="both", expand=True)
@@ -1153,44 +1282,23 @@ class VerificationHistoryDialog(tk.Toplevel):
         record_tab.rowconfigure(0, weight=1)
         record_tab.columnconfigure(0, weight=1)
 
-        for record in reversed(self.records):
-            verification = record["verification"]
-            context = verification_history_record_currency_context(
-                record,
-                self.currency_by_analysis.get(record["analysis_id"]),
-            )
-            currency_text = str(context["state"])
-            mismatch_reasons = context.get("mismatch_reasons", [])
-            if mismatch_reasons:
-                currency_text += " (" + ", ".join(
-                    str(reason) for reason in mismatch_reasons
-                ) + ")"
-            self.tree.insert(
-                "",
-                "end",
-                iid=str(record["sequence"]),
-                text=str(record["sequence"]),
-                values=(
-                    record["completed_at_utc"],
-                    record["analysis_name"],
-                    record["analysis_kind"],
-                    verification["status"],
-                    currency_text,
-                    "yes" if verification["verified"] else "no",
-                    record["verification_identity_sha256"][:16] + "…",
-                ),
-            )
+        for variable in (
+            self.search_var,
+            self.status_filter_var,
+            self.currency_filter_var,
+        ):
+            variable.trace_add("write", lambda *_: self._populate_records())
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        self.tree.bind("<F4>", lambda event: self._select_relative(1))
+        self.tree.bind("<Shift-F4>", lambda event: self._select_relative(-1))
+        self.tree.bind("<Control-c>", lambda event: self._copy_selected())
+        self.bind("<Escape>", lambda event: self.destroy())
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=10, pady=(0, 10))
         ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
 
-        children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
-            self._show_selected()
+        self._populate_records()
 
     @staticmethod
     def _display_value(value) -> str:
@@ -1203,17 +1311,156 @@ class VerificationHistoryDialog(tk.Toplevel):
             separators=(",", ":"),
         )
 
-    def _show_selected(self, event=None) -> None:
+    @staticmethod
+    def _currency_text(context: dict) -> str:
+        text = str(context.get("state", "unknown"))
+        mismatch_reasons = context.get("mismatch_reasons", [])
+        if mismatch_reasons:
+            text += " (" + ", ".join(
+                str(reason) for reason in mismatch_reasons
+            ) + ")"
+        return text
+
+    def _filtered_records(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        status = self.status_filter_var.get().strip().casefold()
+        currency = self.currency_filter_var.get().strip().casefold()
+        visible = []
+        for record in reversed(self.records):
+            verification = record.get("verification")
+            if not isinstance(verification, dict):
+                continue
+            record_status = str(verification.get("status", ""))
+            context = self._context_by_sequence.get(record["sequence"], {})
+            context_state = str(context.get("state", ""))
+            if status and status != "all" and record_status.casefold() != status:
+                continue
+            if currency and currency != "all" and context_state.casefold() != currency:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(record.get("sequence", "")),
+                        str(record.get("completed_at_utc", "")),
+                        str(record.get("analysis_name", "")),
+                        str(record.get("analysis_kind", "")),
+                        record_status,
+                        self._currency_text(context),
+                        "verified" if verification.get("verified") else "not verified",
+                        str(record.get("verification_identity_sha256", "")),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(record)
+        return visible
+
+    def _populate_records(self) -> None:
+        selection = self.tree.selection()
+        selected = selection[0] if selection else None
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        visible = self._filtered_records()
+        for record in visible:
+            verification = record["verification"]
+            context = self._context_by_sequence.get(record["sequence"], {})
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(record["sequence"]),
+                text=str(record["sequence"]),
+                values=(
+                    record["completed_at_utc"],
+                    record["analysis_name"],
+                    record["analysis_kind"],
+                    verification["status"],
+                    self._currency_text(context),
+                    "yes" if verification["verified"] else "no",
+                    record["verification_identity_sha256"][:16] + "…",
+                ),
+            )
+        self.count_var.set(f"{len(visible)} of {len(self.records)} records")
+
+        children = self.tree.get_children()
+        if selected and self.tree.exists(selected):
+            target = selected
+        else:
+            target = children[0] if children else None
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self._show_selected()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.status_filter_var.set("All")
+        self.currency_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _selected_record(self) -> dict | None:
         selection = self.tree.selection()
         if not selection:
-            return
+            return None
         sequence = int(selection[0])
-        record = next(
-            item for item in self.records if item["sequence"] == sequence
+        return next(
+            (item for item in self.records if item["sequence"] == sequence),
+            None,
         )
+
+    def _select_relative(self, step: int):
+        children = list(self.tree.get_children())
+        if not children:
+            return "break"
+        selection = self.tree.selection()
+        if selection and selection[0] in children:
+            index = children.index(selection[0])
+            target = children[(index + step) % len(children)]
+        else:
+            target = children[0 if step >= 0 else -1]
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected()
+        return "break"
+
+    def _copy_selected(self) -> None:
+        record = self._selected_record()
+        if record is None:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(
+            json.dumps(
+                record,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+        )
+
+    def _show_selected(self, event=None) -> None:
+        record = self._selected_record()
 
         for item in self.requirement_tree.get_children():
             self.requirement_tree.delete(item)
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+
+        if record is None:
+            if self.records and not self._filtered_records():
+                self.detail.insert(
+                    "1.0",
+                    "No retained verification records match the active filters.",
+                )
+            else:
+                self.detail.insert(
+                    "1.0",
+                    "No retained verification records are available.",
+                )
+            self.detail.configure(state="disabled")
+            return
+
         for index, row in enumerate(verification_history_requirement_rows(record)):
             parent_id = f"finding:{index}"
             subject = row["subject_ref"] if row["subject_ref"] is not None else "project"
@@ -1290,8 +1537,6 @@ class VerificationHistoryDialog(tk.Toplevel):
                     ),
                 )
 
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
         self.detail.insert(
             "1.0",
             json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
@@ -1325,7 +1570,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 f"Actively mapped requirements: "
                 f"{snapshot['active_mapped_requirement_count']}"
             ),
-            font=("TkDefaultFont", 10, "bold"),
+            style="CX.Section.TLabel",
         ).pack(anchor="w", padx=10, pady=(10, 3))
 
         ttk.Label(
@@ -1346,6 +1591,41 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 "requirements, change acceptance criteria, or rewrite mappings."
             ),
         ).pack(anchor="w", padx=10, pady=(0, 6))
+
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", padx=10, pady=(0, 6))
+        ttk.Label(filters, text="Search").pack(side="left")
+        self.search_entry = ttk.Entry(
+            filters,
+            textvariable=self.search_var,
+            width=34,
+        )
+        self.search_entry.pack(side="left", padx=(4, 8))
+        ttk.Label(filters, text="Type").pack(side="left")
+        self.type_combo = ttk.Combobox(
+            filters,
+            textvariable=self.type_filter_var,
+            values=("All", "Requirement", "Mapping"),
+            state="readonly",
+            width=14,
+        )
+        self.type_combo.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            command=self._clear_filters,
+        ).pack(side="left")
+        ttk.Button(
+            filters,
+            text="Expand all",
+            command=lambda: self._set_roots_open(True),
+        ).pack(side="left", padx=(10, 2))
+        ttk.Button(
+            filters,
+            text="Collapse all",
+            command=lambda: self._set_roots_open(False),
+        ).pack(side="left", padx=2)
+        ttk.Label(filters, textvariable=self.count_var).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -1374,21 +1654,32 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         self.tree.column("analysis", width=240)
         self.tree.column("criterion", width=360)
 
-        tree_scroll = ttk.Scrollbar(
+        tree_scroll_y = ttk.Scrollbar(
             tree_frame,
             orient="vertical",
             command=self.tree.yview,
         )
-        self.tree.configure(yscrollcommand=tree_scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        tree_scroll.pack(side="right", fill="y")
+        tree_scroll_x = ttk.Scrollbar(
+            tree_frame,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
+        self.tree.configure(
+            yscrollcommand=tree_scroll_y.set,
+            xscrollcommand=tree_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        tree_scroll_y.grid(row=0, column=1, sticky="ns")
+        tree_scroll_x.grid(row=1, column=0, sticky="ew")
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
 
-        requirements_root = "traceability:requirements"
-        mappings_root = "traceability:mappings"
+        self.requirements_root = "traceability:requirements"
+        self.mappings_root = "traceability:mappings"
         self.tree.insert(
             "",
             "end",
-            iid=requirements_root,
+            iid=self.requirements_root,
             text="Requirements",
             values=(
                 "Registry",
@@ -1400,7 +1691,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
             ),
             open=True,
         )
-        self._details[requirements_root] = {
+        self._details[self.requirements_root] = {
             "requirements_sha256": snapshot.get("requirements_sha256"),
             "requirement_set_count": snapshot["requirement_set_count"],
             "requirement_count": snapshot["requirement_count"],
@@ -1409,7 +1700,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
             iid = f"requirement:{item['id']}"
             scope_text = ", ".join(item["scope"]) if item["scope"] else "project"
             self.tree.insert(
-                requirements_root,
+                self.requirements_root,
                 "end",
                 iid=iid,
                 text=item["id"],
@@ -1423,11 +1714,16 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 ),
             )
             self._details[iid] = item["detail"]
+            self._index_traceability_row(
+                iid,
+                self.requirements_root,
+                "Requirement",
+            )
 
         self.tree.insert(
             "",
             "end",
-            iid=mappings_root,
+            iid=self.mappings_root,
             text="Evidence mappings",
             values=(
                 "Registry",
@@ -1439,7 +1735,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
             ),
             open=True,
         )
-        self._details[mappings_root] = {
+        self._details[self.mappings_root] = {
             "mappings_sha256": snapshot.get("mappings_sha256"),
             "mapping_count": snapshot["mapping_count"],
             "active_mapping_count": snapshot["active_mapping_count"],
@@ -1461,7 +1757,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 separators=(",", ":"),
             )
             self.tree.insert(
-                mappings_root,
+                self.mappings_root,
                 "end",
                 iid=iid,
                 text=item["id"],
@@ -1475,35 +1771,123 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 ),
             )
             self._details[iid] = item["detail"]
+            self._index_traceability_row(
+                iid,
+                self.mappings_root,
+                "Mapping",
+            )
 
         self.detail = tk.Text(detail_frame, wrap="none")
-        detail_scroll = ttk.Scrollbar(
+        detail_scroll_y = ttk.Scrollbar(
             detail_frame,
             orient="vertical",
             command=self.detail.yview,
         )
-        self.detail.configure(yscrollcommand=detail_scroll.set)
-        self.detail.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        detail_scroll_x = ttk.Scrollbar(
+            detail_frame,
+            orient="horizontal",
+            command=self.detail.xview,
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        detail_frame.rowconfigure(0, weight=1)
+        detail_frame.columnconfigure(0, weight=1)
         self.detail.configure(state="disabled")
 
+        self.search_var.trace_add("write", lambda *_: self._apply_filter())
+        self.type_filter_var.trace_add("write", lambda *_: self._apply_filter())
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
-        first_requirement = self.tree.get_children(requirements_root)
-        first_mapping = self.tree.get_children(mappings_root)
-        initial = (
-            first_requirement[0]
-            if first_requirement
-            else first_mapping[0]
-            if first_mapping
-            else requirements_root
-        )
-        self.tree.selection_set(initial)
-        self.tree.focus(initial)
-        self._show_selected()
+        self.bind("<Control-f>", lambda event: self.search_entry.focus_set())
+        self.bind("<Escape>", lambda event: self.destroy())
+
+        self._apply_filter()
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=10, pady=(0, 10))
         ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+    def _index_traceability_row(
+        self,
+        iid: str,
+        parent: str,
+        kind: str,
+    ) -> None:
+        item = self.tree.item(iid)
+        detail = self._details.get(iid, {})
+        search_text = " ".join(
+            (
+                iid,
+                str(item.get("text", "")),
+                " ".join(str(value) for value in item.get("values", ())),
+                json.dumps(
+                    detail,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    allow_nan=False,
+                ),
+            )
+        ).casefold()
+        self._traceability_rows[iid] = {
+            "parent": parent,
+            "kind": kind,
+            "search_text": search_text,
+        }
+
+    def _visible_traceability_rows(self) -> list[str]:
+        query = self.search_var.get().strip().casefold()
+        kind = self.type_filter_var.get().strip().casefold()
+        visible = []
+        for iid, row in self._traceability_rows.items():
+            if kind and kind != "all" and row["kind"].casefold() != kind:
+                continue
+            if query and query not in row["search_text"]:
+                continue
+            visible.append(iid)
+        return visible
+
+    def _apply_filter(self) -> None:
+        selection = self.tree.selection()
+        selected = selection[0] if selection else None
+        for iid in self._traceability_rows:
+            self.tree.detach(iid)
+
+        visible = self._visible_traceability_rows()
+        for iid in visible:
+            row = self._traceability_rows[iid]
+            self.tree.move(iid, row["parent"], "end")
+
+        self.count_var.set(
+            f"{len(visible)} of {len(self._traceability_rows)} traceability rows"
+        )
+        self._set_roots_open(True)
+
+        if selected in visible or selected in (
+            self.requirements_root,
+            self.mappings_root,
+        ):
+            target = selected
+        elif visible:
+            target = visible[0]
+        else:
+            target = self.requirements_root
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        self._show_selected()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.type_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _set_roots_open(self, opened: bool) -> None:
+        self.tree.item(self.requirements_root, open=opened)
+        self.tree.item(self.mappings_root, open=opened)
 
     def _show_selected(self, event=None) -> None:
         selection = self.tree.selection()
@@ -1512,10 +1896,18 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
         detail = self._details.get(selection[0], {})
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
-        self.detail.insert(
-            "1.0",
-            json.dumps(detail, indent=2, sort_keys=True, ensure_ascii=False),
-        )
+        if detail:
+            self.detail.insert(
+                "1.0",
+                json.dumps(
+                    detail,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ),
+            )
+        else:
+            self.detail.insert("1.0", "No canonical detail is available for this row.")
         self.detail.configure(state="disabled")
 
 
@@ -1545,7 +1937,7 @@ class IfcReimportPlanDialog(tk.Toplevel):
         ttk.Label(
             self,
             text=status,
-            font=("TkDefaultFont", 11, "bold"),
+            style="CX.Section.TLabel",
         ).pack(anchor="w", padx=12, pady=(12, 4))
 
         summary = report.get("summary", {})
@@ -1580,41 +1972,215 @@ class IfcReimportPlanDialog(tk.Toplevel):
         self.tree.column("spatial", width=210)
         self.tree.column("local", width=105, stretch=False)
         self.tree.column("source", width=105, stretch=False)
-        scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        scroll_y = ttk.Scrollbar(
+            table_frame,
+            orient="vertical",
+            command=self.tree.yview,
+        )
+        scroll_x = ttk.Scrollbar(
+            table_frame,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
+        self.tree.configure(
+            yscrollcommand=scroll_y.set,
+            xscrollcommand=scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        table_frame.rowconfigure(0, weight=1)
+        table_frame.columnconfigure(0, weight=1)
+        self.tree.tag_configure("conflict", font=("TkDefaultFont", 9, "bold"))
 
-        for item in report.get("changes", ()):
-            if not isinstance(item, dict):
-                continue
-            global_id = str(item.get("global_id", ""))
-            self.tree.insert(
-                "",
-                "end",
-                text=global_id,
-                values=(
-                    item.get("action", ""),
-                    item.get("kind", ""),
-                    item.get("spatial_id", ""),
-                    "yes" if item.get("local_changed") else "no",
-                    "yes" if item.get("source_changed") else "no",
-                ),
-            )
+        self.detail = tk.Text(
+            detail_frame,
+            wrap="none",
+            state="disabled",
+            borderwidth=0,
+        )
+        detail_scroll_y = ttk.Scrollbar(
+            detail_frame,
+            orient="vertical",
+            command=self.detail.yview,
+        )
+        detail_scroll_x = ttk.Scrollbar(
+            detail_frame,
+            orient="horizontal",
+            command=self.detail.xview,
+        )
+        self.detail.configure(
+            yscrollcommand=detail_scroll_y.set,
+            xscrollcommand=detail_scroll_x.set,
+        )
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_scroll_y.grid(row=0, column=1, sticky="ns")
+        detail_scroll_x.grid(row=1, column=0, sticky="ew")
+        detail_frame.rowconfigure(0, weight=1)
+        detail_frame.columnconfigure(0, weight=1)
+
+        for variable in (
+            self.search_var,
+            self.action_filter_var,
+            self.kind_filter_var,
+        ):
+            variable.trace_add("write", lambda *_: self._populate())
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        self.tree.bind("<Control-c>", lambda event: self._copy_selected())
+        self.bind("<Control-f>", lambda event: self.search_entry.focus_set())
+        self.bind("<Escape>", lambda event: self.destroy())
+
+        self._populate()
 
         validation_error = report.get("candidate_validation_error")
         if validation_error:
             ttk.Label(
                 self,
                 text=f"Merged-layout validation: {validation_error}",
-                wraplength=980,
+                wraplength=1060,
             ).pack(anchor="w", padx=12, pady=(6, 0))
 
         footer = ttk.Frame(self)
         footer.pack(fill="x", padx=12, pady=12)
         ttk.Button(footer, text="Close", command=self.destroy).pack(side="right")
 
+    def _filtered_changes(self) -> list[dict]:
+        query = self.search_var.get().strip().casefold()
+        action = self.action_filter_var.get().strip().casefold()
+        kind = self.kind_filter_var.get().strip().casefold()
+        visible = []
+        for item in self.changes:
+            item_action = str(item.get("action", ""))
+            item_kind = str(item.get("kind", ""))
+            if action and action != "all" and item_action.casefold() != action:
+                continue
+            if kind and kind != "all" and item_kind.casefold() != kind:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(item.get("global_id", "")),
+                        item_action,
+                        item_kind,
+                        str(item.get("spatial_id", "")),
+                        json.dumps(
+                            item,
+                            sort_keys=True,
+                            ensure_ascii=False,
+                            allow_nan=False,
+                        ),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(item)
+        return visible
 
+    def _populate(self) -> None:
+        selection = self.tree.selection()
+        selected_item = (
+            self._change_by_iid.get(selection[0])
+            if selection
+            else None
+        )
+        selected_global_id = (
+            str(selected_item.get("global_id", ""))
+            if isinstance(selected_item, dict)
+            else None
+        )
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._change_by_iid.clear()
+
+        visible = self._filtered_changes()
+        for index, item in enumerate(visible, start=1):
+            global_id = str(item.get("global_id", ""))
+            iid = f"change:{index}"
+            action = str(item.get("action", ""))
+            tags = ("conflict",) if action.casefold() == "conflict" else ()
+            self.tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=global_id,
+                values=(
+                    action,
+                    item.get("kind", ""),
+                    item.get("spatial_id", ""),
+                    "yes" if item.get("local_changed") else "no",
+                    "yes" if item.get("source_changed") else "no",
+                ),
+                tags=tags,
+            )
+            self._change_by_iid[iid] = item
+
+        self.count_var.set(f"{len(visible)} of {len(self.changes)} changes")
+        children = self.tree.get_children()
+        target = None
+        if selected_global_id is not None:
+            for iid, item in self._change_by_iid.items():
+                if str(item.get("global_id", "")) == selected_global_id:
+                    target = iid
+                    break
+        if target is None and children:
+            target = children[0]
+        if target is not None:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.tree.see(target)
+        self._show_selected()
+
+    def _clear_filters(self) -> None:
+        self.search_var.set("")
+        self.action_filter_var.set("All")
+        self.kind_filter_var.set("All")
+        self.search_entry.focus_set()
+
+    def _selected_change(self) -> dict | None:
+        selection = self.tree.selection()
+        if not selection:
+            return None
+        return self._change_by_iid.get(selection[0])
+
+    def _copy_selected(self) -> None:
+        item = self._selected_change()
+        if item is None:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(
+            json.dumps(
+                item,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+        )
+
+    def _show_selected(self, event=None) -> None:
+        item = self._selected_change()
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        if item is not None:
+            self.detail.insert(
+                "1.0",
+                json.dumps(
+                    item,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ),
+            )
+        elif self.changes and not self._filtered_changes():
+            self.detail.insert(
+                "1.0",
+                "No IFC re-import changes match the active filters.",
+            )
+        else:
+            self.detail.insert(
+                "1.0",
+                "No IFC entity changes are present in this re-import plan.",
+            )
+        self.detail.configure(state="disabled")
 
 
 class CleanroomXApp:
@@ -2546,6 +3112,7 @@ class CleanroomXApp:
             on_import_ifc=self._import_ifc_from_start,
             on_open_demo=self._open_bundled_demo_from_start,
             on_open_recent=self._open_recent_project_from_start,
+            on_forget_recent=self._forget_recent_project,
         )
         self.notebook.add(self.start_center, text="Start")
 

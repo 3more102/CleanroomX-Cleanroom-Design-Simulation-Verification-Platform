@@ -90,6 +90,9 @@ def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
     assert workspace.layout == edited
     run = app.smoke_run_active()
     assert run.result
+    assert app.simulation_text.get("1.0", "end").strip()
+    assert "CONFIGURED INPUTS" in app.simulation_text.get("1.0", "end")
+    assert "CALCULATED RESULTS" in app.simulation_text.get("1.0", "end")
     assert app.result_text.get("1.0", "end").strip()
     assert app.report_text.get("1.0", "end").strip()
 
@@ -1043,3 +1046,19 @@ def test_start_dashboard_uses_current_project_metrics(app):
     assert app.start_center.health_problems_var.get().startswith("PROBLEMS ")
     assert app.start_center.health_verify_var.get().startswith("VERIFY")
     assert app.start_center.health_evidence_var.get().startswith("EVIDENCE ")
+
+
+def test_contextual_inspector_shows_real_room_engineering_summary(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+
+    assert workspace.select_item("room", room["id"], notify=False)
+    app.root.update_idletasks()
+
+    assert workspace._inspector_kind_var.get() == "ROOM"
+    assert workspace._selection_var.get() == room["name"]
+    summary = workspace._inspector_summary_var.get()
+    assert "m²" in summary
+    assert "m³" in summary
+    assert workspace._inspector_state_var.get()
+    assert workspace._inspector_state_badge.cget("style").startswith("CX.")

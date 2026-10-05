@@ -3716,8 +3716,185 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _focus_analysis_from_search(self, analysis_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(analysis_id):
+            self.status_var.set(f"Analysis is no longer available: {analysis_id}")
+            return
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_analysis_selected()
+        self._activate_analysis_input_workspace()
+
+    def _focus_spatial_from_search(self, kind: str, item_id: str) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None or not workspace.select_item(kind, item_id, notify=True):
+            self.status_var.set(f"{kind.title()} is no longer available: {item_id}")
+            return
+        self._activate_spatial_workspace()
+        workspace.fit_selected()
+        self._sync_spatial_selection_status()
+
+    def _open_diagnostic_from_search(self, issue: dict) -> None:
+        self.show_problems_panel()
+        panel = getattr(self, "problems_panel", None)
+        sequence = issue.get("sequence")
+        if panel is not None:
+            for iid, candidate in panel._issues_by_iid.items():
+                if candidate.get("sequence") == sequence:
+                    panel.tree.selection_set(iid)
+                    panel.tree.focus(iid)
+                    panel.tree.see(iid)
+                    panel._show_selected_detail()
+                    break
+        self._navigate_project_diagnostic(issue)
+
+    def _focus_proofgraph_from_search(self, key: str) -> None:
+        self._activate_evidence_workspace()
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None or not viewer.focus_node(key):
+            self.status_var.set("ProofGraph node is no longer available")
+            return
+        node = viewer.selected_node()
+        if node is not None:
+            self.status_var.set(
+                f"ProofGraph: {node.get('label') or node.get('id') or key}"
+            )
+
+    def _engineering_search_commands(self) -> list[PaletteCommand]:
+        """Build query-only navigation entries from currently loaded engineering data."""
+        commands: list[PaletteCommand] = []
+
+        for analysis in self.project.analyses:
+            analysis_id = str(analysis.id)
+            commands.append(
+                PaletteCommand(
+                    f"search.analysis.{analysis_id}",
+                    f"Analysis · {analysis.name}",
+                    "Engineering Search",
+                    lambda value=analysis_id: self._focus_analysis_from_search(value),
+                    keywords=(
+                        "analysis",
+                        analysis_id,
+                        str(analysis.name),
+                        str(analysis.kind),
+                    ),
+                    search_only=True,
+                )
+            )
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if isinstance(layout, dict):
+            for kind, collection in (
+                ("room", layout.get("rooms", [])),
+                ("device", layout.get("devices", [])),
+            ):
+                if not isinstance(collection, list):
+                    continue
+                for item in collection:
+                    if not isinstance(item, dict) or not item.get("id"):
+                        continue
+                    item_id = str(item["id"])
+                    name = str(item.get("name") or item_id)
+                    item_type = str(item.get("type") or kind)
+                    commands.append(
+                        PaletteCommand(
+                            f"search.{kind}.{item_id}",
+                            f"{kind.title()} · {name}",
+                            "Engineering Search",
+                            lambda selected_kind=kind, selected_id=item_id: (
+                                self._focus_spatial_from_search(
+                                    selected_kind,
+                                    selected_id,
+                                )
+                            ),
+                            keywords=(
+                                kind,
+                                item_id,
+                                name,
+                                item_type,
+                            ),
+                            search_only=True,
+                        )
+                    )
+
+        panel = getattr(self, "problems_panel", None)
+        result = getattr(panel, "last_result", None) if panel is not None else None
+        issues = result.get("issues", []) if isinstance(result, dict) else []
+        if isinstance(issues, list):
+            for index, issue in enumerate(issues):
+                if not isinstance(issue, dict):
+                    continue
+                sequence = issue.get("sequence", index + 1)
+                rule = str(issue.get("rule") or "diagnostic")
+                severity = str(issue.get("severity") or "info")
+                message = str(issue.get("message") or "")
+                element = issue.get("element")
+                element_text = ""
+                if isinstance(element, dict):
+                    element_text = str(
+                        element.get("name")
+                        or element.get("id")
+                        or element.get("type")
+                        or ""
+                    )
+                commands.append(
+                    PaletteCommand(
+                        f"search.diagnostic.{sequence}.{index}",
+                        f"Diagnostic · {rule} · {element_text or severity.upper()}",
+                        "Engineering Search",
+                        lambda selected=copy.deepcopy(issue): (
+                            self._open_diagnostic_from_search(selected)
+                        ),
+                        keywords=(
+                            "diagnostic",
+                            rule,
+                            severity,
+                            message,
+                            element_text,
+                        ),
+                        search_only=True,
+                    )
+                )
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None:
+            try:
+                nodes = viewer.searchable_nodes()
+            except (TypeError, ValueError):
+                nodes = []
+            for index, node in enumerate(nodes):
+                key = str(node.get("key") or "")
+                if not key:
+                    continue
+                label = str(node.get("label") or node.get("id") or key)
+                node_type = str(node.get("type") or "node")
+                status = str(node.get("status") or "")
+                commands.append(
+                    PaletteCommand(
+                        f"search.proofgraph.{index}.{key}",
+                        f"ProofGraph · {label}",
+                        "Engineering Search",
+                        lambda selected_key=key: self._focus_proofgraph_from_search(
+                            selected_key
+                        ),
+                        keywords=(
+                            "proofgraph",
+                            "evidence",
+                            node_type,
+                            key,
+                            label,
+                            status,
+                        ),
+                        search_only=True,
+                    )
+                )
+
+        return commands
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3908,6 +4085,8 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        commands.extend(self._engineering_search_commands())
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

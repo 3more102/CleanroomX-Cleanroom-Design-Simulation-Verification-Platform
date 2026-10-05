@@ -5,6 +5,7 @@ import copy
 import pytest
 
 import cleanroomx.gui_constraints as gui_constraints_module
+
 from cleanroomx.project import ProjectDocument, project_from_dict
 from cleanroomx.gui_constraints import (
     ConstraintManagerDialog,
@@ -181,7 +182,6 @@ def test_constraint_snapshot_surfaces_invalid_existing_input_without_crashing() 
     assert snapshot[0]["valid"] is False
     assert snapshot[0]["rules"] == []
     assert "non-empty array" in snapshot[0]["error"]
-
 
 def test_constraint_editor_records_unexpected_apply_failures(monkeypatch) -> None:
     dialog = ConstraintManagerDialog.__new__(ConstraintManagerDialog)

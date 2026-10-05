@@ -239,6 +239,65 @@ def build_engineering_search_entries(
                 ),
             )
 
+    mappings = snapshot.get("mappings", [])
+    if isinstance(mappings, list):
+        for mapping in mappings:
+            if not isinstance(mapping, dict):
+                continue
+            mapping_id = _text(mapping.get("id"))
+            if not mapping_id:
+                continue
+            requirement_id = _text(mapping.get("requirement_id"))
+            requirement_title = _text(mapping.get("requirement_title"))
+            property_name = _text(mapping.get("property_name"))
+            analysis_id = _text(mapping.get("analysis_id"))
+            subject_ref = _text(mapping.get("subject_ref")) or "project"
+            status = _text(mapping.get("status"))
+            reference_state = _text(mapping.get("reference_state"))
+            label = " → ".join(
+                part
+                for part in (
+                    requirement_title or requirement_id,
+                    property_name,
+                )
+                if part
+            ) or mapping_id
+            _append_unique(
+                entries,
+                seen,
+                SearchEntry(
+                    key=f"mapping:{mapping_id}",
+                    category="Evidence Mapping",
+                    label=label,
+                    detail=" · ".join(
+                        part
+                        for part in (
+                            mapping_id,
+                            status,
+                            reference_state,
+                            subject_ref,
+                            analysis_id,
+                        )
+                        if part
+                    ),
+                    target_type="mapping",
+                    target_id=mapping_id,
+                    keywords=(
+                        requirement_id,
+                        requirement_title,
+                        property_name,
+                        analysis_id,
+                        subject_ref,
+                        status,
+                        reference_state,
+                        "evidence",
+                        "mapping",
+                        "traceability",
+                    ),
+                    payload=mapping,
+                ),
+            )
+
     for document_index, document in enumerate(proofgraph_documents):
         if not isinstance(document, dict):
             continue

@@ -5,7 +5,7 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     PaletteCommand,
@@ -117,3 +117,47 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+
+
+def test_search_only_entries_require_a_query():
+    noop = lambda: None
+    normal = PaletteCommand("normal", "Run", "Action", noop)
+    object_entry = PaletteCommand(
+        "room-a",
+        "Room · ISO 7",
+        "Engineering Search",
+        noop,
+        keywords=("room", "iso-7"),
+        search_only=True,
+    )
+
+    assert filter_commands([normal, object_entry], "") == [normal]
+    assert filter_commands([normal, object_entry], "ISO 7") == [object_entry]
+
+
+def test_application_palette_searches_loaded_engineering_objects(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    app.load_project_path(bundled_demo_project_path())
+    root.update()
+
+    layout = app.project.metadata["spatial"]
+    room = next(item for item in layout["rooms"] if item.get("id"))
+    room_name = str(room.get("name") or room["id"])
+
+    commands = app._command_palette_commands()
+    visible_without_query = filter_commands(commands, "")
+    assert all(not command.search_only for command in visible_without_query)
+
+    matches = filter_commands(commands, room_name)
+    room_matches = [
+        command
+        for command in matches
+        if command.id == f"search.room.{room['id']}"
+    ]
+    assert len(room_matches) == 1
+    assert room_matches[0].category == "Engineering Search"

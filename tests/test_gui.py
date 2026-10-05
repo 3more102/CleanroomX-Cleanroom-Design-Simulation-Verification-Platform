@@ -2238,3 +2238,89 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
 
+
+
+def test_gui_project_dossier_revision_failure_uses_structured_error_boundary(
+    monkeypatch,
+    tmp_path,
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Dossier revision failure"),
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._project_file_revision = capture_project_file_revision(project_path)
+    app.status_var = type("Status", (), {"set": lambda self, value: None})()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+    captured = []
+    app._show_operation_error = (
+        lambda title, operation, exc: captured.append((title, operation, exc))
+    )
+
+    monkeypatch.setattr(
+        gui_module,
+        "capture_project_file_revision",
+        lambda _path: (_ for _ in ()).throw(OSError("synthetic revision failure")),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert len(captured) == 1
+    title, operation, exc = captured[0]
+    assert title == "Project dossier export blocked"
+    assert operation == "Prepare project dossier export"
+    assert isinstance(exc, OSError)
+
+
+def test_gui_project_dossier_build_failure_uses_structured_error_boundary(
+    monkeypatch,
+    tmp_path,
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Dossier build failure"),
+    )
+    revision = capture_project_file_revision(project_path)
+    destination = tmp_path / "dossier.json"
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.status_var = type("Status", (), {"set": lambda self, value: None})()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+    captured = []
+    app._show_operation_error = (
+        lambda title, operation, exc: captured.append((title, operation, exc))
+    )
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "build_project_engineering_dossier",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic dossier build failure")
+        ),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert len(captured) == 1
+    title, operation, exc = captured[0]
+    assert title == "Project dossier export failed"
+    assert operation == "Build project dossier"
+    assert isinstance(exc, RuntimeError)
+    assert not destination.exists()

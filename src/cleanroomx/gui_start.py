@@ -4,6 +4,8 @@ from collections.abc import Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import status_style_name
+
 
 class StartCenter(ttk.Frame):
     """Professional zero-state surface; all project actions stay in the app layer."""
@@ -18,14 +20,28 @@ class StartCenter(ttk.Frame):
         on_open_demo: Callable[[], None],
         on_open_recent: Callable[[str], None],
         on_forget_recent: Callable[[str], None] | None = None,
+        on_workspace: Callable[[str], None] | None = None,
+        on_show_problems: Callable[[], None] | None = None,
+        on_show_recovery: Callable[[], None] | None = None,
     ):
         super().__init__(master, padding=(34, 28))
         self._on_open_recent = on_open_recent
         self._on_forget_recent = on_forget_recent
+        self._on_workspace = on_workspace
+        self._on_show_problems = on_show_problems
+        self._on_show_recovery = on_show_recovery
         self._recent_paths: dict[str, str] = {}
         self._recent_records: list[dict[str, str]] = []
         self.recent_search_var = tk.StringVar()
         self.recent_count_var = tk.StringVar(value="0 recent projects")
+        self.project_name_var = tk.StringVar(value="Untitled Project")
+        self.project_path_var = tk.StringVar(value="Not yet saved")
+        self.project_state_var = tk.StringVar(value="Ready")
+        self.project_counts_var = tk.StringVar(value="0 analyses • 0 rooms • 0 devices")
+        self.project_diagnostics_var = tk.StringVar(value="Problems: unavailable")
+        self.project_verification_var = tk.StringVar(value="Verification: unavailable")
+        self.project_evidence_var = tk.StringVar(value="Evidence: 0 retained records")
+        self.project_recovery_var = tk.StringVar(value="Recovery: no saved recovery candidates")
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
@@ -77,20 +93,100 @@ class StartCenter(ttk.Frame):
             command=on_open_demo,
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
-        capabilities = ttk.LabelFrame(self, text="Engineering workspace", padding=18)
-        capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        health = ttk.LabelFrame(self, text="Active Project", padding=14)
+        health.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        health.columnconfigure(0, weight=1)
+
+        headline = ttk.Frame(health)
+        headline.grid(row=0, column=0, sticky="ew")
+        headline.columnconfigure(0, weight=1)
         ttk.Label(
-            capabilities,
-            text=(
-                "2D / 3D / Split engineering views\n"
-                "Project Navigator + contextual properties\n"
-                "Analysis + verification overlays\n"
-                "IDE-style deterministic diagnostics\n"
-                "ProofGraph + evidence traceability\n"
-                "IFC semantic import / re-import review"
-            ),
+            headline,
+            textvariable=self.project_name_var,
+            style="CX.Section.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        self.project_state_label = ttk.Label(
+            headline,
+            textvariable=self.project_state_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.project_state_label.grid(row=0, column=1, sticky="e", padx=(10, 0))
+
+        ttk.Label(
+            health,
+            textvariable=self.project_path_var,
+            style="CX.Muted.TLabel",
+            wraplength=470,
             justify="left",
-        ).pack(anchor="w")
+        ).grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        ttk.Label(
+            health,
+            textvariable=self.project_counts_var,
+        ).grid(row=2, column=0, sticky="w", pady=(8, 0))
+
+        self.project_diagnostics_label = ttk.Label(
+            health,
+            textvariable=self.project_diagnostics_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.project_diagnostics_label.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self.project_verification_label = ttk.Label(
+            health,
+            textvariable=self.project_verification_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.project_verification_label.grid(row=4, column=0, sticky="w", pady=(5, 0))
+        ttk.Label(
+            health,
+            textvariable=self.project_evidence_var,
+        ).grid(row=5, column=0, sticky="w", pady=(7, 0))
+        self.project_recovery_label = ttk.Label(
+            health,
+            textvariable=self.project_recovery_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.project_recovery_label.grid(row=6, column=0, sticky="w", pady=(4, 0))
+
+        workspace_actions = ttk.Frame(health)
+        workspace_actions.grid(row=7, column=0, sticky="ew", pady=(10, 0))
+        for column in range(3):
+            workspace_actions.columnconfigure(column, weight=1)
+        for index, (label, profile) in enumerate(
+            (
+                ("Design", "design"),
+                ("Simulation", "simulation"),
+                ("Verification", "verification"),
+                ("Evidence", "evidence"),
+                ("Reporting", "reporting"),
+            )
+        ):
+            ttk.Button(
+                workspace_actions,
+                text=label,
+                style="CX.Compact.TButton",
+                command=lambda selected=profile: self._open_workspace(selected),
+                state="normal" if self._on_workspace is not None else "disabled",
+            ).grid(
+                row=index // 3,
+                column=index % 3,
+                sticky="ew",
+                padx=2,
+                pady=2,
+            )
+        ttk.Button(
+            workspace_actions,
+            text="Problems",
+            style="CX.Compact.TButton",
+            command=self._open_problems,
+            state="normal" if self._on_show_problems is not None else "disabled",
+        ).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
+        ttk.Button(
+            workspace_actions,
+            text="Recovery Center",
+            style="CX.Compact.TButton",
+            command=self._open_recovery,
+            state="normal" if self._on_show_recovery is not None else "disabled",
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", padx=2, pady=(2, 0))
 
         recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
         recent.grid(
@@ -189,6 +285,140 @@ class StartCenter(ttk.Frame):
         examples.columnconfigure(0, weight=1)
 
         self.recent_search_var.trace_add("write", lambda *_: self._populate_recent())
+
+    def _open_workspace(self, profile: str) -> None:
+        if self._on_workspace is not None:
+            self._on_workspace(profile)
+
+    def _open_problems(self) -> None:
+        if self._on_show_problems is not None:
+            self._on_show_problems()
+
+    def _open_recovery(self) -> None:
+        if self._on_show_recovery is not None:
+            self._on_show_recovery()
+
+    def set_active_project(self, summary: dict[str, object]) -> None:
+        """Render a truthful, read-only project-health snapshot.
+
+        The application layer owns all engineering calculations. This surface only
+        formats supplied canonical diagnostics, verification, evidence, and recovery
+        state and never derives engineering acceptance values itself.
+        """
+        name = str(summary.get("name") or "Untitled Project")
+        path = str(summary.get("path") or "").strip()
+        dirty = bool(summary.get("dirty", False))
+        analysis_count = int(summary.get("analysis_count", 0) or 0)
+        room_count = int(summary.get("room_count", 0) or 0)
+        device_count = int(summary.get("device_count", 0) or 0)
+
+        self.project_name_var.set(name)
+        self.project_path_var.set(path if path else "Not yet saved")
+        self.project_counts_var.set(
+            f"{analysis_count} analyses • {room_count} rooms • {device_count} devices"
+        )
+
+        diagnostics_available = bool(summary.get("diagnostics_available", False))
+        error_count = int(summary.get("error_count", 0) or 0)
+        warning_count = int(summary.get("warning_count", 0) or 0)
+        if not diagnostics_available:
+            diagnostic_state = "neutral"
+            diagnostic_text = "Problems: unavailable"
+        elif error_count:
+            diagnostic_state = "fail"
+            diagnostic_text = (
+                f"Problems: {error_count} error"
+                f"{'s' if error_count != 1 else ''} • {warning_count} warning"
+                f"{'s' if warning_count != 1 else ''}"
+            )
+        elif warning_count:
+            diagnostic_state = "warning"
+            diagnostic_text = (
+                f"Problems: {warning_count} warning"
+                f"{'s' if warning_count != 1 else ''}"
+            )
+        else:
+            diagnostic_state = "pass"
+            diagnostic_text = "Problems: clear"
+        self.project_diagnostics_var.set(diagnostic_text)
+        self.project_diagnostics_label.configure(
+            style=status_style_name(diagnostic_state)
+        )
+
+        verification_available = bool(summary.get("verification_available", False))
+        configured_count = int(summary.get("configured_analysis_count", 0) or 0)
+        current_count = int(summary.get("current_count", 0) or 0)
+        stale_count = int(summary.get("stale_count", 0) or 0)
+        unverifiable_count = int(
+            summary.get("dependency_freshness_unverifiable_count", 0) or 0
+        )
+        not_verified_count = int(summary.get("not_verified_count", 0) or 0)
+        if not verification_available:
+            verification_state = "neutral"
+            verification_text = "Verification: unavailable"
+        elif configured_count == 0:
+            verification_state = "neutral"
+            verification_text = "Verification: not configured"
+        elif stale_count or unverifiable_count or not_verified_count:
+            verification_state = "warning"
+            verification_text = (
+                "Verification: "
+                f"{current_count} current • {stale_count} stale • "
+                f"{not_verified_count} not verified • "
+                f"{unverifiable_count} freshness unverified"
+            )
+        else:
+            verification_state = "pass"
+            verification_text = f"Verification: {current_count} configured analyses current"
+        self.project_verification_var.set(verification_text)
+        self.project_verification_label.configure(
+            style=status_style_name(verification_state)
+        )
+
+        evidence_count = int(summary.get("evidence_record_count", 0) or 0)
+        self.project_evidence_var.set(
+            f"Evidence: {evidence_count} retained verification "
+            f"record{'s' if evidence_count != 1 else ''}"
+        )
+
+        recovery_count = int(summary.get("recovery_count", 0) or 0)
+        recovery_issue_count = int(summary.get("recovery_issue_count", 0) or 0)
+        if recovery_issue_count:
+            recovery_state = "warning"
+            recovery_text = (
+                f"Recovery: {recovery_count} candidate"
+                f"{'s' if recovery_count != 1 else ''} • "
+                f"{recovery_issue_count} unreadable"
+            )
+        elif recovery_count:
+            recovery_state = "warning"
+            recovery_text = (
+                f"Recovery: {recovery_count} saved candidate"
+                f"{'s' if recovery_count != 1 else ''}"
+            )
+        else:
+            recovery_state = "neutral"
+            recovery_text = "Recovery: no saved recovery candidates"
+        self.project_recovery_var.set(recovery_text)
+        self.project_recovery_label.configure(style=status_style_name(recovery_state))
+
+        if error_count:
+            project_state = "fail"
+            project_state_text = f"{error_count} open error{'s' if error_count != 1 else ''}"
+        elif warning_count or stale_count or unverifiable_count or not_verified_count:
+            project_state = "warning"
+            project_state_text = "Review required"
+        elif dirty:
+            project_state = "warning"
+            project_state_text = "Unsaved changes"
+        elif path:
+            project_state = "pass"
+            project_state_text = "Saved"
+        else:
+            project_state = "neutral"
+            project_state_text = "Unsaved project"
+        self.project_state_var.set(project_state_text)
+        self.project_state_label.configure(style=status_style_name(project_state))
 
     def set_recent_projects(self, records: list[dict[str, str]]) -> None:
         self._recent_records = []

@@ -7412,11 +7412,10 @@ class CleanroomXApp:
             project_path = extract_project_bundle(bundle, destination)
             self.load_project_path(project_path)
         except Exception as exc:
-            self.status_var.set("Portable project open failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Portable project open failed",
-                str(exc),
-                parent=self.root,
+                "Open portable project bundle",
+                exc,
             )
             return
         self.status_var.set(f"Opened portable project — {project_path.parent.name}")
@@ -7457,11 +7456,10 @@ class CleanroomXApp:
                 source_project_path=self._autosave_source_path(),
             )
         except Exception as exc:
-            self.status_var.set("Portable project export failed")
-            messagebox.showerror(
+            self._show_operation_error(
                 "Portable project export failed",
-                str(exc),
-                parent=self.root,
+                "Export portable project bundle",
+                exc,
             )
             return
 

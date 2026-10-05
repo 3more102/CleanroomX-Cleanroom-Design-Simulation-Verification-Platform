@@ -35,6 +35,7 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "warning": "#b45309",
         "error": "#dc2626",
         "info": "#0284c7",
+        "mode_dashboard": "#0284C7",
         "mode_design": "#0F766E",
         "mode_analyze": "#0369A1",
         "mode_verify": "#B45309",
@@ -66,6 +67,7 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "warning": "#F59E0B",
         "error": "#EF4444",
         "info": "#38BDF8",
+        "mode_dashboard": "#22D3EE",
         "mode_design": "#2DD4BF",
         "mode_analyze": "#38BDF8",
         "mode_verify": "#F59E0B",
@@ -248,6 +250,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     # Workstation modes use semantic industrial colors. Text remains explicit,
     # so color reinforces hierarchy without becoming the only status signal.
     mode_accents = {
+        "Dashboard": palette["mode_dashboard"],
         "Design": palette["mode_design"],
         "Analyze": palette["mode_analyze"],
         "Verify": palette["mode_verify"],
@@ -684,6 +687,24 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.Helper.TLabel",
         background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.CardSection.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["accent_hover"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.CardValue.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.CardHelper.TLabel",
+        background=palette["surface_alt"],
         foreground=palette["muted"],
         font=("TkDefaultFont", 8),
     )

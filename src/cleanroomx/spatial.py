@@ -3052,21 +3052,25 @@ class SpatialDesignWorkspace(ttk.Frame):
         }
 
     def _clear_property_error(self) -> None:
-        self._property_error_var.set("")
+        error_var = getattr(self, "_property_error_var", None)
+        if error_var is not None:
+            error_var.set("")
         label = getattr(self, "_property_error_label", None)
         if label is not None:
             try:
                 label.pack_forget()
             except tk.TclError:
                 pass
-        for entry in self._property_entries.values():
+        for entry in getattr(self, "_property_entries", {}).values():
             try:
                 entry.state(["!invalid"])
             except tk.TclError:
                 pass
 
     def _show_property_error(self, message: str) -> None:
-        self._property_error_var.set(message)
+        error_var = getattr(self, "_property_error_var", None)
+        if error_var is not None:
+            error_var.set(message)
         label = getattr(self, "_property_error_label", None)
         if label is not None:
             try:
@@ -3074,12 +3078,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             except tk.TclError:
                 pass
         field = self._property_error_field(message)
-        for key, entry in self._property_entries.items():
+        for key, entry in getattr(self, "_property_entries", {}).items():
             try:
                 entry.state(["invalid"] if key == field else ["!invalid"])
             except tk.TclError:
                 pass
-        entry = self._property_entries.get(field or "")
+        entry = getattr(self, "_property_entries", {}).get(field or "")
         if entry is not None:
             try:
                 entry.focus_set()

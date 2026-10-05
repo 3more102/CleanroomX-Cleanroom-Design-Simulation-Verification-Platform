@@ -14,7 +14,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
-    "theme": "light",
+    "theme": "dark",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -115,7 +115,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             if isinstance(source.get("inspector_visible"), bool)
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
-        "theme": normalize_theme_name(source.get("theme")),
+        "theme": normalize_theme_name(\n            source.get("theme", _DEFAULT_GUI_LAYOUT_STATE["theme"])\n        ),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),

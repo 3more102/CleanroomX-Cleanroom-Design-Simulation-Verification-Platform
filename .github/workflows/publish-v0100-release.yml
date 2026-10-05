@@ -1,11 +1,7 @@
 name: Publish CleanroomX v0.100.0
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/publish-v0100-release.yml
+  workflow_dispatch:
 
 permissions:
   contents: write

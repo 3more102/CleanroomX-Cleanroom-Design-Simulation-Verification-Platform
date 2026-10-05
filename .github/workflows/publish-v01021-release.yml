@@ -1,13 +1,7 @@
 name: Publish CleanroomX v0.102.1
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,17 +9,16 @@ permissions:
 jobs:
   publish:
     name: Publish immutable v0.102.1 release
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
       TAG: v0.102.1
-      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+      TARGET_SHA: dbcaec8c8a74820b7e9fb3e4b88fba8ebfac6dc5
     steps:
       - name: Check out exact successful CI commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 pinned 2026-10-01
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ env.TARGET_SHA }}
 
       - name: Qualify current main and immutable tag
         id: closure

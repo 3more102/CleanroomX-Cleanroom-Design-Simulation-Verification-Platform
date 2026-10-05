@@ -147,8 +147,21 @@ def _ensure_recovery_dir(path: Path) -> Path:
     if os.name != "nt":
         try:
             path.chmod(0o700)
-        except OSError:
-            pass
+        except OSError as exc:
+            raise PermissionError(
+                f"could not secure recovery directory permissions: {path}"
+            ) from exc
+        try:
+            mode = path.stat().st_mode & 0o777
+        except OSError as exc:
+            raise OSError(
+                f"could not verify recovery directory permissions: {path}"
+            ) from exc
+        if mode & 0o077:
+            raise PermissionError(
+                f"recovery directory permissions remain too broad: {path} "
+                f"(mode {mode:#05o}; required 0o700)"
+            )
     return path
 
 

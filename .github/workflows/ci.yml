@@ -227,6 +227,8 @@ jobs:
           tests/test_gui_dashboard.py
           tests/test_gui_results.py
           tests/test_gui_simulation.py
+          tests/test_gui_assurance.py
+          tests/test_gui_reporting.py
           tests/test_gui_panels.py
           tests/test_gui_panels_formatting.py
           tests/test_gui_proofgraph.py

@@ -1259,6 +1259,7 @@ class CleanroomXApp:
         self.problems_state_var = tk.StringVar(value="PROBLEMS —")
         self.verification_state_var = tk.StringVar(value="VERIFY —")
         self.evidence_state_var = tk.StringVar(value="EVIDENCE —")
+        self.run_state_var = tk.StringVar(value="IDLE")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -1600,6 +1601,19 @@ class CleanroomXApp:
             style="CX.Badge.Neutral.TLabel",
         )
         self.evidence_state_badge.pack(side="left", padx=4)
+        self.run_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.run_state_var,
+            style="CX.Badge.Neutral.TLabel",
+        )
+        self.run_state_badge.pack(side="left", padx=4)
+        self.run_progress = ttk.Progressbar(
+            engineering_strip,
+            mode="indeterminate",
+            length=90,
+            style="CX.Engineering.Horizontal.TProgressbar",
+        )
+        self.run_progress.pack(side="left", padx=(3, 0))
 
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
@@ -2802,7 +2816,9 @@ class CleanroomXApp:
         stale = int(verify_summary.get("stale_count", 0) or 0)
         not_verified = int(verify_summary.get("not_verified_count", 0) or 0)
         if configured:
-            self.verification_state_var.set(f"VERIFY {current}/{configured} CURRENT")
+            self.verification_state_var.set(
+                f"VERIFY {current}/{configured}" + (" CURRENT" if current == configured else "")
+            )
             if current == configured:
                 style = "CX.Badge.Success.TLabel"
             elif stale:
@@ -2828,7 +2844,7 @@ class CleanroomXApp:
                 notebook.tab(self.problems_panel, text=f"Problems {visible_problems}")
                 verification_attention = stale + not_verified
                 notebook.tab(
-                    self.verification_text,
+                    self.verification_text.master,
                     text=(
                         f"Verification {verification_attention}"
                         if verification_attention
@@ -2836,7 +2852,7 @@ class CleanroomXApp:
                     ),
                 )
                 notebook.tab(
-                    self.evidence_text,
+                    self.evidence_text.master,
                     text=f"Evidence {retained}" if retained else "Evidence",
                 )
             except tk.TclError:
@@ -6227,9 +6243,34 @@ class CleanroomXApp:
 
     def _set_running(self, running: bool) -> None:
         self._running = running
-        self.run_button.configure(state="disabled" if running else "normal")
+        self.run_button.configure(
+            state="disabled" if running else "normal",
+            text="Running…" if running else "▶ Run",
+        )
+        self.workflow_run_button.configure(
+            state="disabled" if running else "normal",
+            text="4  Running…" if running else "4  Run",
+        )
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        run_state = getattr(self, "run_state_var", None)
+        run_badge = getattr(self, "run_state_badge", None)
+        progress = getattr(self, "run_progress", None)
+        if run_state is not None:
+            run_state.set("RUNNING" if running else "IDLE")
+        if run_badge is not None:
+            run_badge.configure(
+                style=(
+                    "CX.Badge.Info.TLabel"
+                    if running
+                    else "CX.Badge.Neutral.TLabel"
+                )
+            )
+        if progress is not None:
+            if running:
+                progress.start(12)
+            else:
+                progress.stop()
 
     def _poll_worker(self) -> None:
         try:

@@ -123,14 +123,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             side="left", padx=(4, 8)
         )
         ttk.Label(toolbar, text="Severity").pack(side="left")
-        severity = ttk.Combobox(
+        self.severity_picker = ttk.Combobox(
             toolbar,
             textvariable=self.severity_var,
             values=("All", "Critical", "Error", "Warning", "Info"),
             state="readonly",
             width=10,
         )
-        severity.pack(side="left", padx=(4, 8))
+        self.severity_picker.pack(side="left", padx=(4, 8))
         ttk.Button(
             toolbar,
             text="Refresh",

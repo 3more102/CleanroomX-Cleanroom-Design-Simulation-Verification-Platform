@@ -1,15 +1,23 @@
 #ifndef AppVersion
   #error AppVersion must be defined by the build pipeline
 #endif
+#ifndef AppFileVersion
+  #error AppFileVersion must be defined by the build pipeline
+#endif
 #ifndef SourceDir
   #error SourceDir must be defined by the build pipeline
 #endif
 #ifndef OutputDir
   #error OutputDir must be defined by the build pipeline
 #endif
+#ifndef AppIconPath
+  #error AppIconPath must be defined by the build pipeline
+#endif
 #ifndef OutputBaseFilename
   #define OutputBaseFilename "CleanroomX-Setup"
 #endif
+
+#define AppExeName "CleanroomX.exe"
 
 [Setup]
 AppId={{8A609071-4521-4B60-B8D2-ACAD5BF53A72}
@@ -33,8 +41,11 @@ WizardStyle=modern
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
-UninstallDisplayIcon={app}\CleanroomX.exe
 UsePreviousAppDir=yes
+SetupIconFile={#AppIconPath}
+UninstallDisplayIcon={app}\{#AppExeName}
+VersionInfoVersion={#AppFileVersion}
+VersionInfoProductVersion={#AppVersion}
 VersionInfoProductName=CleanroomX
 VersionInfoDescription=CleanroomX Windows Installer
 VersionInfoCompany=CleanroomX contributors
@@ -43,11 +54,11 @@ VersionInfoCompany=CleanroomX contributors
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\CleanroomX"; Filename: "{app}\CleanroomX.exe"
-Name: "{autodesktop}\CleanroomX"; Filename: "{app}\CleanroomX.exe"; Tasks: desktopicon
+Name: "{group}\CleanroomX"; Filename: "{app}\{#AppExeName}"
+Name: "{autodesktop}\CleanroomX"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\CleanroomX.exe"; Description: "Launch CleanroomX"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; Description: "Launch CleanroomX"; Flags: nowait postinstall skipifsilent

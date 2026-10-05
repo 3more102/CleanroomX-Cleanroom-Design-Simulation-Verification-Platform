@@ -35,11 +35,16 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.category_var = tk.StringVar(value="All")
+        self.element_type_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
+        self.filter_summary_var = tk.StringVar(value="0 visible")
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.category_var.trace_add("write", lambda *_: self._populate())
+        self.element_type_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, padding=(7, 5), style="CX.Toolbar.TFrame")
@@ -91,6 +96,50 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         ttk.Label(
             toolbar,
             textvariable=self.summary_var,
+            anchor="e",
+        ).pack(side="right", fill="x", expand=True, padx=(12, 0))
+
+        filterbar = ttk.Frame(self, padding=(7, 0, 7, 5), style="CX.Toolbar.TFrame")
+        filterbar.pack(fill="x")
+        ttk.Label(filterbar, text="Domain").pack(side="left")
+        self.category_filter = ttk.Combobox(
+            filterbar,
+            textvariable=self.category_var,
+            values=("All",),
+            state="readonly",
+            width=18,
+        )
+        self.category_filter.pack(side="left", padx=(4, 8))
+        ttk.Label(filterbar, text="Object").pack(side="left")
+        self.element_type_filter = ttk.Combobox(
+            filterbar,
+            textvariable=self.element_type_var,
+            values=("All",),
+            state="readonly",
+            width=18,
+        )
+        self.element_type_filter.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filterbar,
+            text="Clear filters",
+            command=self.clear_filters,
+            style="CX.Compact.TButton",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            filterbar,
+            text="Previous",
+            command=lambda: self._select_relative(-1),
+            style="CX.Compact.TButton",
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            filterbar,
+            text="Next",
+            command=lambda: self._select_relative(1),
+            style="CX.Compact.TButton",
+        ).pack(side="left", padx=2)
+        ttk.Label(
+            filterbar,
+            textvariable=self.filter_summary_var,
             anchor="e",
         ).pack(side="right", fill="x", expand=True, padx=(12, 0))
 
@@ -248,6 +297,13 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         )
 
     @staticmethod
+    def _element_type_text(issue: dict[str, Any]) -> str:
+        element = issue.get("element")
+        if not isinstance(element, dict):
+            return "project"
+        return str(element.get("type") or "project")
+
+    @staticmethod
     def _level_text(issue: dict[str, Any]) -> str:
         details = issue.get("details")
         if not isinstance(details, dict):
@@ -266,6 +322,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        category = self.category_var.get().strip().casefold()
+        element_type = self.element_type_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -273,6 +331,16 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_category = str(issue.get("category", "") or "General").casefold()
+            if category and category != "all" and issue_category != category:
+                continue
+            issue_element_type = self._element_type_text(issue).casefold()
+            if (
+                element_type
+                and element_type != "all"
+                and issue_element_type != element_type
+            ):
                 continue
             if query:
                 haystack = " ".join(
@@ -307,7 +375,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.tree.delete(item)
         self._issues_by_iid.clear()
 
-        for index, issue in enumerate(self._filtered_issues(), start=1):
+        visible_issues = self._filtered_issues()
+        for index, issue in enumerate(visible_issues, start=1):
             sequence = issue.get("sequence", index)
             iid = f"issue:{sequence}"
             if self.tree.exists(iid):
@@ -336,6 +405,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     self.tree.focus(iid)
                     self.tree.see(iid)
                     break
+        total = 0
+        if isinstance(self.last_result, dict):
+            issues = self.last_result.get("issues")
+            total = len(issues) if isinstance(issues, list) else 0
+        self.filter_summary_var.set(
+            f"{len(visible_issues)} visible · {total} total"
+            if total
+            else "0 visible"
+        )
         self._show_selected_detail()
 
     def refresh(self) -> dict[str, Any] | None:
@@ -352,6 +430,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
+        self._refresh_filter_choices()
         summary = result.get("summary", {})
         self.summary_var.set(
             "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
@@ -364,11 +443,65 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._populate()
         return result
 
+    def _refresh_filter_choices(self) -> None:
+        issues = []
+        if isinstance(self.last_result, dict):
+            candidate = self.last_result.get("issues")
+            if isinstance(candidate, list):
+                issues = [issue for issue in candidate if isinstance(issue, dict)]
+
+        categories = sorted(
+            {
+                str(issue.get("category", "") or "General")
+                for issue in issues
+            },
+            key=str.casefold,
+        )
+        element_types = sorted(
+            {self._element_type_text(issue) for issue in issues},
+            key=str.casefold,
+        )
+        category_values = ("All", *categories)
+        element_values = ("All", *element_types)
+        self.category_filter.configure(values=category_values)
+        self.element_type_filter.configure(values=element_values)
+        if self.category_var.get() not in category_values:
+            self.category_var.set("All")
+        if self.element_type_var.get() not in element_values:
+            self.element_type_var.set("All")
+
+    def clear_filters(self) -> None:
+        self.search_var.set("")
+        self.severity_var.set("All")
+        self.category_var.set("All")
+        self.element_type_var.set("All")
+
     def selected_issue(self) -> dict[str, Any] | None:
         selection = self.tree.selection()
         if not selection:
             return None
         return self._issues_by_iid.get(selection[0])
+
+    def _select_relative(self, delta: int) -> None:
+        items = list(self.tree.get_children())
+        if not items:
+            self._status_setter("No visible diagnostics")
+            return
+        selection = self.tree.selection()
+        if selection and selection[0] in items:
+            index = (items.index(selection[0]) + delta) % len(items)
+        else:
+            index = 0 if delta >= 0 else len(items) - 1
+        iid = items[index]
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._show_selected_detail()
+        issue = self._issues_by_iid.get(iid)
+        if issue is not None:
+            self._status_setter(
+                f"Diagnostic {index + 1}/{len(items)} · {issue.get('rule', '')}"
+            )
 
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()

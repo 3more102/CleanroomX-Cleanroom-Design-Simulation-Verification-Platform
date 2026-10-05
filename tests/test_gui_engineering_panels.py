@@ -112,6 +112,45 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     assert app.notebook.select() == str(app.spatial_workspace)
 
 
+def test_room_diagnostic_navigation_opens_spatial_room(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    issue = {
+        "rule": "engineering_sync.geometry_newer",
+        "element": {
+            "type": "room",
+            "id": room["id"],
+            "name": room["name"],
+        },
+    }
+
+    app._navigate_project_diagnostic(issue)
+    app.root.update()
+
+    assert app.spatial_workspace.selected == _Hit("room", room["id"])
+    assert app.notebook.select() == str(app.spatial_workspace)
+
+
+def test_problem_refresh_failure_shows_actionable_detail(app, monkeypatch):
+    panel = app.problems_panel
+
+    def _fail(*_args, **_kwargs):
+        raise ValueError("referenced airflow input is unreadable")
+
+    monkeypatch.setattr(
+        "cleanroomx.gui_panels.analyze_project_diagnostics",
+        _fail,
+    )
+
+    assert panel.refresh() is None
+    app.root.update()
+
+    detail = panel.detail.get("1.0", "end").strip()
+    assert "could not be evaluated" in detail
+    assert "referenced airflow input is unreadable" in detail
+    assert "refresh diagnostics" in detail
+    assert panel.last_error == "referenced airflow input is unreadable"
+
+
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     analysis = app.project.analyses[0]
     issue = {

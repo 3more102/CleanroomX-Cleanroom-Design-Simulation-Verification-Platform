@@ -238,6 +238,23 @@ def test_requirements_navigator_opens_traceability(app, monkeypatch):
 
 
 
+def test_direct_workspace_tab_navigation_keeps_shell_identity_synchronized(app):
+    cases = (
+        (app.spatial_workspace, "Workspace: Design"),
+        (app.simulation_workspace, "Workspace: Simulation"),
+        (app.diagnostics_workspace, "Workspace: Diagnostics"),
+        (app.verification_workspace, "Workspace: Verification"),
+        (app.evidence_workspace, "Workspace: Evidence"),
+        (app.reporting_workspace, "Workspace: Reporting"),
+        (app.input_tab, "Workspace: Analysis Input"),
+        (app.proofgraph_viewer, "Workspace: ProofGraph"),
+    )
+    for widget, expected in cases:
+        app.notebook.select(widget)
+        app.root.update()
+        assert app.workspace_status_var.get() == expected
+
+
 def test_status_bar_health_summary_uses_canonical_engineering_counts(app):
     result, _issue = _force_room_overlap(app)
     summary = result["summary"]

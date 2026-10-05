@@ -164,6 +164,81 @@ def _engineering_detail_pairs(value: Any, *, prefix: str = "") -> list[tuple[str
     return pairs
 
 
+def _diagnostic_target_type(issue: dict[str, Any]) -> str:
+    element = issue.get("element")
+    if not isinstance(element, dict):
+        return "project"
+    return str(element.get("type") or "project").strip() or "project"
+
+
+def diagnostic_filter_options(
+    issues: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    field: str,
+) -> tuple[str, ...]:
+    """Return deterministic GUI filter choices from canonical diagnostic records."""
+    values: set[str] = set()
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        if field == "target_type":
+            value = _diagnostic_target_type(issue)
+        else:
+            value = str(issue.get(field) or "").strip()
+        if value:
+            values.add(value)
+    return ("All", *sorted(values, key=str.casefold))
+
+
+def diagnostic_matches_filters(
+    issue: dict[str, Any],
+    *,
+    severity: str = "All",
+    category: str = "All",
+    target_type: str = "All",
+    query: str = "",
+) -> bool:
+    """Evaluate diagnostics-panel filters without changing backend diagnostic data."""
+    severity_token = str(severity or "").strip().casefold()
+    category_token = str(category or "").strip().casefold()
+    target_token = str(target_type or "").strip().casefold()
+    issue_severity = str(issue.get("severity") or "").strip().casefold()
+    issue_category = str(issue.get("category") or "").strip().casefold()
+    issue_target = _diagnostic_target_type(issue).casefold()
+
+    if severity_token not in {"", "all"} and issue_severity != severity_token:
+        return False
+    if category_token not in {"", "all"} and issue_category != category_token:
+        return False
+    if target_token not in {"", "all"} and issue_target != target_token:
+        return False
+
+    query_token = str(query or "").strip().casefold()
+    if not query_token:
+        return True
+    element = issue.get("element")
+    if not isinstance(element, dict):
+        element = {}
+    haystack = " ".join(
+        (
+            str(issue.get("rule", "")),
+            str(issue.get("category", "")),
+            str(issue.get("severity", "")),
+            str(issue.get("message", "")),
+            str(issue.get("suggested_action", "")),
+            str(element.get("type", "")),
+            str(element.get("id", "")),
+            str(element.get("name", "")),
+            json.dumps(
+                issue.get("details", {}),
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            ),
+        )
+    ).casefold()
+    return all(token in haystack for token in query_token.split())
+
+
 def _diagnostic_detail_lines(issue: dict[str, Any]) -> list[str]:
     """Render one canonical diagnostic as a compact engineering inspector summary."""
     severity = str(issue.get("severity") or "info").upper()

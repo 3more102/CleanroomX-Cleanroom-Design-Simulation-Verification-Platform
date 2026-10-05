@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 5
+GUI_LAYOUT_STATE_VERSION = 6
 _WORKSPACE_PROFILES = {
     "start",
     "design",
@@ -23,6 +23,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "output_visible": True,
     "inspector_visible": True,
     "theme": "dark",
+    "density": "compact",
     "workspace_profile": "start",
     "recent_projects": [],
     "window_width": 1440,
@@ -31,6 +32,11 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
 }
+
+
+def normalize_density_name(value: Any) -> str:
+    name = str(value or "").strip().casefold()
+    return name if name in {"compact", "comfortable"} else _DEFAULT_GUI_LAYOUT_STATE["density"]
 
 
 def normalize_workspace_profile(value: Any) -> str:
@@ -137,6 +143,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
         "theme": normalized_theme,
+        "density": normalize_density_name(source.get("density")),
         "workspace_profile": normalize_workspace_profile(
             source.get("workspace_profile")
         ),

@@ -620,16 +620,16 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
 
     assert app.theme_var.get() == "dark"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-    assert app.plot_canvas.cget("background") == "#131920"
-    assert app.input_text.cget("background") == "#11161c"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#0e1a2a"
+    assert app.spatial_workspace.canvas_3d.cget("background") == "#08111d"
+    assert app.plot_canvas.cget("background") == "#0d1726"
+    assert app.input_text.cget("background") == "#0f1a2a"
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
     app.root.update()
     assert app.theme_var.get() == "light"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#edf5fa"
     assert app.project.to_dict() == project_before
 
 
@@ -663,9 +663,9 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
-        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-        assert second.plot_canvas.cget("background") == "#131920"
+        assert second.spatial_workspace.canvas_2d.cget("background") == "#0e1a2a"
+        assert second.spatial_workspace.canvas_3d.cget("background") == "#08111d"
+        assert second.plot_canvas.cget("background") == "#0d1726"
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()

@@ -3456,6 +3456,12 @@ class CleanroomXApp:
             screen_width,
             screen_height,
         )
+        table_layouts = dict(state.get("table_layouts", {}))
+        problems_panel = getattr(self, "problems_panel", None)
+        problems_behavior = getattr(problems_panel, "table_behavior", None)
+        if problems_behavior is not None:
+            table_layouts["problems"] = problems_behavior.layout_state()
+
         state.update(
             {
                 "theme": normalize_theme_name(self.theme_var.get()),
@@ -3465,6 +3471,7 @@ class CleanroomXApp:
                     for path in self._recent_project_paths[:8]
                 ],
                 "navigator_favorites": self._capture_navigator_favorites_state(),
+                "table_layouts": table_layouts,
                 "window_width": width,
                 "window_height": height,
                 "active_workspace": self._current_workspace_profile(),
@@ -3510,6 +3517,11 @@ class CleanroomXApp:
         )
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
+        problems_panel = getattr(self, "problems_panel", None)
+        problems_behavior = getattr(problems_panel, "table_behavior", None)
+        table_layout = state.get("table_layouts", {}).get("problems")
+        if problems_behavior is not None and isinstance(table_layout, dict):
+            problems_behavior.apply_layout_state(table_layout)
         self.status_var.set("Ready")
 
     def _apply_menu_theme(self, menu: tk.Menu) -> None:

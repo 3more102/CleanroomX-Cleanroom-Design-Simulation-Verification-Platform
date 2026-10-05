@@ -2812,10 +2812,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         key = self._property_selection_key()
         if key is None:
             return
-        if not dirty:
-            self._property_drafts.pop(key, None)
+        drafts = getattr(self, "_property_drafts", None)
+        if drafts is None:
             return
-        self._property_drafts[key] = {
+        if not dirty:
+            drafts.pop(key, None)
+            return
+        drafts[key] = {
             "baseline": self._canonical_property_values(),
             "values": self._property_values_for_selection(),
         }
@@ -2833,9 +2836,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if str(item.get("id") or "")
             }
         )
+        drafts = getattr(self, "_property_drafts", None)
+        if drafts is None:
+            return
         self._property_drafts = {
             key: draft
-            for key, draft in self._property_drafts.items()
+            for key, draft in drafts.items()
             if key in valid
         }
 
@@ -2845,26 +2851,58 @@ class SpatialDesignWorkspace(ttk.Frame):
         dirty: bool,
         error: str | None,
     ) -> None:
+        """Publish draft state without requiring a realized Tk inspector.
+
+        Spatial editing logic is also exercised by unit harnesses that
+        intentionally construct the workspace without calling the GUI builder.
+        Keep the model-facing path usable there while enriching the real GUI
+        whenever the presentation widgets exist.
+        """
         self._property_draft_is_dirty = dirty
         self._property_draft_error = error
+
+        draft_var = getattr(self, "_property_draft_var", None)
+        apply_button = getattr(self, "_property_apply_button", None)
+        reset_button = getattr(self, "_property_reset_button", None)
+
+        def publish(text: str, *, apply_enabled: bool, reset_enabled: bool) -> None:
+            if draft_var is not None:
+                draft_var.set(text)
+            if apply_button is not None:
+                apply_button.state(
+                    ["!disabled"] if apply_enabled else ["disabled"]
+                )
+            if reset_button is not None:
+                reset_button.state(
+                    ["!disabled"] if reset_enabled else ["disabled"]
+                )
+
         if self._selected_object() is None:
-            self._property_draft_var.set("Draft: select an object")
-            self._property_apply_button.state(["disabled"])
-            self._property_reset_button.state(["disabled"])
+            publish(
+                "Draft: select an object",
+                apply_enabled=False,
+                reset_enabled=False,
+            )
             return
         if error is not None:
-            self._property_draft_var.set(f"Draft: INVALID · {error}")
-            self._property_apply_button.state(["disabled"])
-            self._property_reset_button.state(["!disabled"])
+            publish(
+                f"Draft: INVALID · {error}",
+                apply_enabled=False,
+                reset_enabled=True,
+            )
             return
         if dirty:
-            self._property_draft_var.set("Draft: valid · unapplied changes")
-            self._property_apply_button.state(["!disabled"])
-            self._property_reset_button.state(["!disabled"])
+            publish(
+                "Draft: valid · unapplied changes",
+                apply_enabled=True,
+                reset_enabled=True,
+            )
             return
-        self._property_draft_var.set("Draft: matches stored values")
-        self._property_apply_button.state(["disabled"])
-        self._property_reset_button.state(["disabled"])
+        publish(
+            "Draft: matches stored values",
+            apply_enabled=False,
+            reset_enabled=False,
+        )
 
     def _validate_property_draft(self) -> bool:
         item = self._selected_object()
@@ -2899,8 +2937,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._selected_object() is None:
             return
         key = self._property_selection_key()
-        if key is not None:
-            self._property_drafts.pop(key, None)
+        drafts = getattr(self, "_property_drafts", None)
+        if key is not None and drafts is not None:
+            drafts.pop(key, None)
         self._load_property_panel()
         self._status_setter("Property edits reset to stored values")
 
@@ -3046,16 +3085,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._status_setter("Properties not applied: " + str(exc))
             return
         key = self._property_selection_key()
+        drafts = getattr(self, "_property_drafts", None)
         if candidate == self.layout:
-            if key is not None:
-                self._property_drafts.pop(key, None)
+            if key is not None and drafts is not None:
+                drafts.pop(key, None)
             self._load_property_panel()
             self._status_setter("No property changes to apply")
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        if key is not None:
-            self._property_drafts.pop(key, None)
+        if key is not None and drafts is not None:
+            drafts.pop(key, None)
         self.layout = candidate
         self._load_property_panel()
         self._persist(

@@ -338,20 +338,40 @@ jobs:
         shell: cmd
         run: start-cleanroomx.cmd --check
 
+  native-bim-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install checkout with native BIM dependency
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,bim]
+      - name: Run native IfcOpenShell parser smoke
+        run: python -m pytest -q tests/test_bim_ifc_native.py
+
   required-ci:
     name: Required CI Gate
     if: ${{ always() }}
     needs:
       - test
       - windows-launcher-smoke
+      - native-bim-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required CI jobs succeeded
         env:
           TEST_RESULT: ${{ needs.test.result }}
           WINDOWS_LAUNCHER_RESULT: ${{ needs.windows-launcher-smoke.result }}
+          NATIVE_BIM_RESULT: ${{ needs.native-bim-smoke.result }}
         run: |
           echo "Python matrix result: ${TEST_RESULT}"
           echo "Windows launcher result: ${WINDOWS_LAUNCHER_RESULT}"
+          echo "Native BIM result: ${NATIVE_BIM_RESULT}"
           test "${TEST_RESULT}" = "success"
           test "${WINDOWS_LAUNCHER_RESULT}" = "success"
+          test "${NATIVE_BIM_RESULT}" = "success"

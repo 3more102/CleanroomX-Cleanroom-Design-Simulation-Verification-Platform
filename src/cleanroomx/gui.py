@@ -1512,18 +1512,22 @@ class CleanroomXApp:
     def _build_layout(self) -> None:
         # Keep the application chrome compact enough that the engineering
         # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        topbar = ttk.Frame(
+            self.root,
+            style="CX.Topbar.TFrame",
+            padding=(10, 6, 10, 6),
+        )
         topbar.pack(fill="x")
-        ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
+        ttk.Label(topbar, text="CLEANROOMX", style="CX.TopbarBrand.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 12)
         )
-        ttk.Label(topbar, text="Project").grid(
+        ttk.Label(topbar, text="Project", style="CX.Topbar.TLabel").grid(
             row=0, column=1, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
+        ttk.Label(topbar, text="Description", style="CX.Topbar.TLabel").grid(
             row=0, column=3, sticky="w", padx=(0, 5)
         )
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
@@ -1542,7 +1546,11 @@ class CleanroomXApp:
         )
         self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Danger.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
@@ -1656,6 +1664,7 @@ class CleanroomXApp:
         ttk.Label(
             workflowbar,
             text="GUIDED WORKFLOW",
+            style="CX.ToolbarLabel.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Separator(workflowbar, orient="vertical").pack(
             side="left", fill="y", padx=(0, 6)
@@ -1714,7 +1723,11 @@ class CleanroomXApp:
         self.main_panes = panes
         panes.pack(fill="both", expand=True, padx=10, pady=(2, 6))
 
-        navigator = ttk.Frame(panes, padding=(8, 7))
+        navigator = ttk.Frame(
+            panes,
+            padding=(8, 7),
+            style="CX.Sidebar.TFrame",
+        )
         self.navigator_panel = navigator
         panes.add(navigator, weight=1)
         navigator_header = ttk.Frame(
@@ -1735,9 +1748,13 @@ class CleanroomXApp:
             command=self.hide_navigator_panel,
         )
         self.navigator_close_button.pack(side="right")
-        filter_row = ttk.Frame(navigator)
+        filter_row = ttk.Frame(navigator, style="CX.Sidebar.TFrame")
         filter_row.pack(fill="x", pady=(0, 6))
-        ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 6))
+        ttk.Label(
+            filter_row,
+            text="FILTER",
+            style="CX.Sidebar.TLabel",
+        ).pack(side="left", padx=(0, 6))
         navigator_filter = ttk.Entry(
             filter_row,
             textvariable=self.navigator_filter_var,
@@ -1750,7 +1767,7 @@ class CleanroomXApp:
             command=lambda: self.navigator_filter_var.set(""),
         ).pack(side="left", padx=(4, 0))
 
-        navigator_actions = ttk.Frame(navigator)
+        navigator_actions = ttk.Frame(navigator, style="CX.Sidebar.TFrame")
         navigator_actions.pack(fill="x", pady=(0, 6))
         self.navigator_add_analysis_button = ttk.Button(
             navigator_actions,
@@ -1800,7 +1817,7 @@ class CleanroomXApp:
             lambda *_: self._apply_navigator_filter(),
         )
 
-        content = ttk.Frame(panes)
+        content = ttk.Frame(panes, style="CX.Workspace.TFrame")
         self.content_panel = content
         panes.add(content, weight=5)
 
@@ -1900,7 +1917,11 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
-        output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        output_host = ttk.Frame(
+            self.workspace_panes,
+            padding=(0, 5, 0, 0),
+            style="CX.Workspace.TFrame",
+        )
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(
@@ -1924,6 +1945,7 @@ class CleanroomXApp:
         ttk.Label(
             output_host,
             text="Diagnostics · verification currency · evidence · analysis output",
+            style="CX.PanelHint.TLabel",
         ).pack(fill="x", padx=8, pady=(4, 2))
 
         self.output_notebook = ttk.Notebook(output_host)
@@ -1957,25 +1979,42 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(
+            self.root,
+            style="CX.Statusbar.TFrame",
+            padding=(8, 4),
+        )
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.StatusStrong.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.model_status_var,
+            style="CX.Statusbar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.selection_status_var,
+            style="CX.Statusbar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.workspace_status_var,
+            style="CX.Statusbar.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -1984,6 +2023,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.Statusbar.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +2032,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.Statusbar.TLabel",
         ).pack(side="right")
 
     @staticmethod

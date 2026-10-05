@@ -6,8 +6,7 @@ built from the already-smoke-tested self-contained workstation distribution.
 The installer is an Inno Setup package with a stable application identity. It
 installs under the current user's local application data, creates a Start Menu
 entry, registers an uninstaller, and does not require a separate Python
-installation.
-
+installation. The icon and Windows product metadata are generated deterministically from repository source and project version.\n
 ## Release gate
 
 The `Windows Installer Lifecycle` workflow uses a fresh `windows-2025`

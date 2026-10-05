@@ -135,6 +135,47 @@ def test_source_revision_change_flags_unchanged_downstream_records_as_stale() ->
     assert impact["impact"]["impacted_requirement_ids"] == ["REQ-1"]
 
 
+def test_provenance_source_revision_change_marks_unchanged_evidence_stale() -> None:
+    baseline = _graph()
+    secondary_source = EvidenceSource(
+        id="secondary-source",
+        kind="commissioning",
+        reference="tab-results.csv",
+        revision="d" * 64,
+    )
+    evidence = replace(
+        baseline.evidence[0],
+        provenance=(
+            ProvenanceRecord(
+                id="PROV-1",
+                source_id=secondary_source.id,
+                origin="tab-results.csv",
+            ),
+        ),
+    )
+    baseline = replace(
+        baseline,
+        evidence_sources=(baseline.evidence_sources[0], secondary_source),
+        evidence=(evidence,),
+    )
+    candidate = replace(
+        baseline,
+        evidence_sources=(
+            baseline.evidence_sources[0],
+            replace(secondary_source, revision="e" * 64),
+        ),
+    )
+
+    impact = compare_proofgraphs(baseline, candidate)
+
+    assert impact["changes"]["evidence_sources"]["changed_ids"] == ["secondary-source"]
+    assert impact["changes"]["evidence"]["changed_ids"] == []
+    assert impact["potentially_stale_candidate"]["evidence_ids"] == ["EV-1"]
+    assert impact["potentially_stale_candidate"]["finding_ids"] == ["FINDING-1"]
+    assert impact["potentially_stale_candidate"]["verdict_ids"] == ["VERDICT-1"]
+    assert impact["potentially_stale_candidate"]["verification_run_ids"] == ["RUN-1"]
+
+
 def test_changed_evidence_propagates_impact_to_downstream_verification() -> None:
     baseline = _graph()
     changed_evidence = replace(baseline.evidence[0], value=14.0)

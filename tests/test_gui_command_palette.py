@@ -5,7 +5,7 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     PaletteCommand,
@@ -140,3 +140,34 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+def test_global_palette_indexes_current_engineering_entities(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    app.load_project_path(bundled_demo_project_path())
+    root.update()
+
+    commands = app._command_palette_commands()
+    by_category = {}
+    for command in commands:
+        by_category.setdefault(command.category, []).append(command)
+
+    assert by_category["Find / Analysis"]
+    assert by_category["Find / Model"]
+    assert by_category["Find / Diagnostics"]
+
+    room_command = next(
+        command
+        for command in by_category["Find / Model"]
+        if command.id.startswith("entity.room.")
+    )
+    room_command.callback()
+    root.update()
+
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.spatial_workspace.selected is not None
+    assert app.spatial_workspace.selected.kind == "room"
+

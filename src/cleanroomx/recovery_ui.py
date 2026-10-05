@@ -13,6 +13,7 @@ from .autosave import (
     quarantine_recovery_artifact,
 )
 from .recovery_diff import compare_recovery_to_source, format_recovery_comparison
+from .gui_windowing import fit_window_to_display
 
 
 _RELATION_LABELS = {
@@ -156,8 +157,13 @@ class RecoveryInspectDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, candidate: RecoveryCandidate):
         super().__init__(parent)
         self.title("Inspect recovery")
-        self.geometry("820x700")
-        self.minsize(680, 500)
+        fit_window_to_display(
+            self,
+            preferred_width=820,
+            preferred_height=700,
+            minimum_width=680,
+            minimum_height=500,
+        )
         self.transient(parent)
         self.grab_set()
 
@@ -257,8 +263,13 @@ class RecoveryCenter(tk.Toplevel):
     def __init__(self, parent: tk.Misc, scan: RecoveryScan):
         super().__init__(parent)
         self.title("Recover unsaved CleanroomX work")
-        self.geometry("980x520")
-        self.minsize(780, 400)
+        fit_window_to_display(
+            self,
+            preferred_width=980,
+            preferred_height=520,
+            minimum_width=780,
+            minimum_height=400,
+        )
         self.transient(parent)
         self.grab_set()
         self.result: Path | None = None

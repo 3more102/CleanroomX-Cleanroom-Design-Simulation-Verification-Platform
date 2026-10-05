@@ -2226,6 +2226,7 @@ class CleanroomXApp:
             else default_gui_layout_state_path()
         )
         self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
+        self._ui_layout_save_error_reference: str | None = None
         window_width, window_height = clamp_window_size_to_display(
             self._ui_layout_state["window_width"],
             self._ui_layout_state["window_height"],
@@ -3478,8 +3479,22 @@ class CleanroomXApp:
                 self._ui_state_path,
                 self._capture_ui_layout_state(),
             )
-        except Exception:
+        except Exception as exc:
+            reference = self._ui_layout_save_error_reference
+            if reference is None:
+                report = record_gui_exception(
+                    "Save workstation layout",
+                    exc,
+                )
+                reference = report.reference
+                self._ui_layout_save_error_reference = reference
+            status_var = getattr(self, "status_var", None)
+            if status_var is not None:
+                status_var.set(
+                    f"Layout preferences not saved · {reference}"
+                )
             return
+        self._ui_layout_save_error_reference = None
 
     def _restore_ui_layout_state(self) -> None:
         self._focus_workspace_snapshot = None
@@ -3960,9 +3975,13 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            report = record_gui_exception(
+                "Refresh verification currency",
+                exc,
+            )
             self._set_text(
                 self.verification_text,
-                f"Verification currency unavailable: {exc}\n",
+                report.user_message() + "\n",
             )
 
         try:
@@ -3996,12 +4015,16 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            report = record_gui_exception(
+                "Refresh persisted verification evidence",
+                exc,
+            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
             self._set_text(
                 self.evidence_text,
-                f"Verification evidence unavailable: {exc}\n",
+                report.user_message() + "\n",
             )
 
         diagnostic_summary = (
@@ -4177,21 +4200,33 @@ class CleanroomXApp:
         if not isinstance(diagnostics, dict):
             diagnostics = {}
 
+        search_warnings: list[tuple[str, str]] = []
         requirement_snapshot: dict = {}
         try:
             requirement_snapshot = project_requirement_traceability_snapshot(
                 self.project
             )
-        except Exception:
+        except Exception as exc:
+            report = record_gui_exception(
+                "Index requirement traceability for engineering search",
+                exc,
+            )
+            search_warnings.append(("Requirements", report.reference))
             requirement_snapshot = {}
 
         proofgraph_documents: list[dict] = []
         try:
             records = verification_run_history_records(self.project.metadata)
             proofgraph_documents = self._proofgraph_documents_from_records(records)
-        except Exception:
+        except Exception as exc:
+            report = record_gui_exception(
+                "Index persisted evidence for engineering search",
+                exc,
+            )
+            search_warnings.append(("Evidence", report.reference))
             proofgraph_documents = []
 
+        self._engineering_search_warnings = tuple(search_warnings)
         return build_engineering_search_entries(
             project=self.project,
             spatial_layout=layout,
@@ -4302,9 +4337,19 @@ class CleanroomXApp:
             on_activate=self._navigate_engineering_search_result,
             on_close=clear_reference,
         )
-        self.status_var.set(
-            f"Global engineering search indexed {len(entries)} project entities"
-        )
+        warnings = getattr(self, "_engineering_search_warnings", ())
+        if warnings:
+            warning_text = " · ".join(
+                f"{label}: {reference}" for label, reference in warnings
+            )
+            self.status_var.set(
+                f"Global search indexed {len(entries)} entities with degraded sources · "
+                f"{warning_text}"
+            )
+        else:
+            self.status_var.set(
+                f"Global engineering search indexed {len(entries)} project entities"
+            )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
         return [

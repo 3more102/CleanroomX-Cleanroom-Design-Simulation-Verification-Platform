@@ -1565,6 +1565,7 @@ class CleanroomXApp:
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
 
         engineering_strip = ttk.Frame(topbar, style="CX.Topbar.TFrame")
+        self.engineering_strip = engineering_strip
         engineering_strip.grid(
             row=1,
             column=1,
@@ -2120,6 +2121,26 @@ class CleanroomXApp:
             anchor="e",
             style="CX.Status.TLabel",
         ).pack(side="right")
+
+        self.root.bind("<Configure>", self._on_root_workstation_resize, add="+")
+        self.root.after_idle(self._sync_engineering_strip_visibility)
+
+    def _on_root_workstation_resize(self, event=None) -> None:
+        if event is not None and getattr(event, "widget", None) is not self.root:
+            return
+        self._sync_engineering_strip_visibility()
+
+    def _sync_engineering_strip_visibility(self) -> None:
+        strip = getattr(self, "engineering_strip", None)
+        if strip is None:
+            return
+        # Preserve the full engineering canvas at the supported laptop minimum.
+        # The lower status bar still exposes model/selection/workspace state.
+        compact = self.root.winfo_width() < 1180 or self.root.winfo_height() < 760
+        if compact:
+            strip.grid_remove()
+        else:
+            strip.grid()
 
     @staticmethod
     def _paned_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:

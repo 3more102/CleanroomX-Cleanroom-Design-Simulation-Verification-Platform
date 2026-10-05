@@ -1678,6 +1678,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="readonly",
             width=13,
         )
+        self._overlay_picker = overlay_picker
         overlay_picker.pack(side="left")
         attach_tooltip(
             overlay_picker,

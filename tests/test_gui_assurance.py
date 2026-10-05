@@ -9,6 +9,7 @@ from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_assurance import (
     EvidenceWorkspace,
     VerificationWorkspace,
+    evidence_record_matches_filters,
     evidence_record_projection,
     verification_summary_projection,
 )
@@ -79,6 +80,90 @@ def test_evidence_record_projection_separates_historical_verdict_from_currency()
         {"analysis_id": "a1", "state": "current", "latest_record": {"sequence": 8}},
     )
     assert historical["currency_state"] == "historical"
+
+
+def test_evidence_record_filters_match_only_explicit_ledger_fields():
+    row = {
+        "sequence": 12,
+        "completed_at_utc": "2026-10-05T08:00:00Z",
+        "analysis_id": "pressure-a",
+        "analysis_name": "Pressure cascade",
+        "analysis_kind": "pressure_verification",
+        "verification_status": "pass",
+        "currency_state": "stale",
+        "record_sha256": "abc123",
+        "source_revision": "rev456",
+    }
+
+    assert evidence_record_matches_filters(row)
+    assert evidence_record_matches_filters(row, verdict="PASS")
+    assert evidence_record_matches_filters(row, currency="STALE")
+    assert evidence_record_matches_filters(row, query="pressure abc123")
+    assert not evidence_record_matches_filters(row, verdict="fail")
+    assert not evidence_record_matches_filters(row, currency="current")
+    assert not evidence_record_matches_filters(row, query="airflow")
+
+
+def test_evidence_workspace_filters_retained_records_without_changing_total_count():
+    root = _root()
+    workspace = EvidenceWorkspace(
+        root,
+        on_history=lambda: None,
+        on_proofgraph=lambda: None,
+        on_report=lambda: None,
+    )
+    try:
+        records = [
+            {
+                "sequence": 1,
+                "completed_at_utc": "2026-10-05T07:00:00Z",
+                "analysis_id": "a1",
+                "analysis_name": "Pressure",
+                "analysis_kind": "pressure_verification",
+                "verification": {"status": "pass", "verified": True, "complete": True},
+                "evidence": [{}],
+            },
+            {
+                "sequence": 2,
+                "completed_at_utc": "2026-10-05T08:00:00Z",
+                "analysis_id": "a2",
+                "analysis_name": "Airflow",
+                "analysis_kind": "airflow_verification",
+                "verification": {"status": "fail", "verified": False, "complete": True},
+                "evidence": [{}, {}],
+            },
+        ]
+        currency = {
+            "analyses": [
+                {"analysis_id": "a1", "state": "stale", "latest_record": {"sequence": 1}},
+                {"analysis_id": "a2", "state": "current", "latest_record": {"sequence": 2}},
+            ]
+        }
+        workspace.refresh(records, proofgraph_count=1, currency=currency)
+        root.update_idletasks()
+
+        assert workspace.record_count_var.get() == "2"
+        assert workspace.visible_var.get() == "2 / 2 visible"
+
+        workspace.verdict_filter_var.set("fail")
+        root.update_idletasks()
+        assert workspace.record_count_var.get() == "2"
+        assert workspace.visible_var.get() == "1 / 2 visible"
+        assert len(workspace.tree.get_children()) == 1
+        assert "Airflow" in workspace.detail.get("1.0", "end")
+
+        workspace.verdict_filter_var.set("All")
+        workspace.currency_filter_var.set("stale")
+        root.update_idletasks()
+        assert workspace.visible_var.get() == "1 / 2 visible"
+        assert "Pressure" in workspace.detail.get("1.0", "end")
+
+        workspace.search_var.set("does-not-exist")
+        root.update_idletasks()
+        assert workspace.visible_var.get() == "0 / 2 visible"
+        assert "match the current evidence filters" in workspace.detail.get("1.0", "end")
+    finally:
+        root.destroy()
 
 
 def _root():

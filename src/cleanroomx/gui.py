@@ -1537,6 +1537,7 @@ class CleanroomXApp:
             topbar,
             text="Validate",
             command=self.validate_current,
+            style="CX.Info.TButton",
         ).grid(row=0, column=5, padx=2)
         self.run_button = ttk.Button(
             topbar,
@@ -1546,7 +1547,11 @@ class CleanroomXApp:
         )
         self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Warning.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
@@ -1574,7 +1579,7 @@ class CleanroomXApp:
             commandbar,
             text="Problems",
             width=8,
-            style="CX.Compact.TButton",
+            style="CX.Warning.TButton",
             command=self.show_problems_panel,
         )
         self.toolbar_problems_button.pack(side="right", padx=1)
@@ -1971,6 +1976,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.Statusbar.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -1992,6 +1998,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.Statusbar.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2000,6 +2007,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.Statusbar.TLabel",
         ).pack(side="right")
 
     @staticmethod

@@ -22,7 +22,7 @@ def engineering_overview_snapshot(
     analysis_count: int,
     diagnostics: dict[str, Any] | None,
     verification_currency: dict[str, Any] | None,
-    evidence_record_count: int,
+    evidence_record_count: int | None,
     running: bool,
     unsaved: bool,
 ) -> dict[str, Any]:
@@ -88,12 +88,21 @@ def engineering_overview_snapshot(
         verification_state = "pass"
         verification_detail = f"{current}/{configured} configured analyses current"
 
-    evidence_count = max(0, int(evidence_record_count or 0))
+    evidence_available = evidence_record_count is not None
+    evidence_count = (
+        max(0, int(evidence_record_count or 0))
+        if evidence_available
+        else 0
+    )
     evidence_state = "pass" if evidence_count else "neutral"
     evidence_detail = (
         f"{evidence_count} retained verification record(s)"
         if evidence_count
-        else "No persisted verification evidence"
+        else (
+            "No persisted verification evidence"
+            if evidence_available
+            else "Verification evidence history unavailable"
+        )
     )
 
     project_state = "warning" if unsaved else "pass"
@@ -156,7 +165,7 @@ def engineering_overview_snapshot(
                 "target": "simulation",
             }
         )
-    if not evidence_count:
+    if evidence_available and not evidence_count:
         actions.append(
             {
                 "severity": "info",
@@ -229,7 +238,7 @@ def engineering_overview_snapshot(
             {
                 "id": "evidence",
                 "title": "Persisted evidence",
-                "value": str(evidence_count),
+                "value": str(evidence_count) if evidence_available else "Unavailable",
                 "detail": evidence_detail,
                 "state": evidence_state,
                 "target": "evidence",

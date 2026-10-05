@@ -26,6 +26,11 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "accent",
         "accent_hover",
         "accent_text",
+        "secondary",
+        "success",
+        "warning",
+        "error",
+        "info",
         "selection",
         "selection_text",
         "field",
@@ -49,3 +54,12 @@ def test_theme_palette_returns_independent_copy():
     second = theme_palette("dark")
     first["background"] = "#000000"
     assert second["background"] != "#000000"
+
+
+def test_industrial_palette_exposes_semantic_engineering_colors():
+    dark = theme_palette("dark")
+    assert dark["accent"] == "#22d3ee"
+    assert dark["success"] == "#22c55e"
+    assert dark["warning"] == "#f59e0b"
+    assert dark["error"] == "#ef4444"
+    assert dark["background"] != "#000000"

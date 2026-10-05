@@ -735,6 +735,22 @@ class ProofGraphViewer(ttk.Frame):
         height = margin_y + max_rows * y_spacing + 70
         canvas.configure(scrollregion=(0, 0, width, height))
 
+    def searchable_nodes(self) -> list[dict[str, Any]]:
+        try:
+            projection = proofgraph_projection(self._active_document())
+        except (TypeError, ValueError):
+            return []
+        nodes = projection.get("nodes", [])
+        return [dict(node) for node in nodes if isinstance(node, dict)]
+
+    def select_node(self, key: str) -> bool:
+        self.filter_var.set("All")
+        self._refresh()
+        if key not in self._nodes_by_key:
+            return False
+        self._select_key(key)
+        return True
+
     def _select_key(self, key: str | None) -> None:
         if key not in self._nodes_by_key:
             return

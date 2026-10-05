@@ -70,6 +70,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_dashboard import EngineeringDashboard
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -1260,6 +1261,9 @@ class CleanroomXApp:
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
+        self.save_state_var = tk.StringVar(value="UNSAVED")
+        self.diagnostics_state_var = tk.StringVar(value="NOT CHECKED")
+        self.verification_state_var = tk.StringVar(value="UNVERIFIED")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1510,43 +1514,70 @@ class CleanroomXApp:
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
     def _build_layout(self) -> None:
-        # Keep the application chrome compact enough that the engineering
-        # workspace remains fully usable at the supported 1050×680 minimum.
-        topbar = ttk.Frame(self.root, padding=(10, 5, 10, 4))
+        # Compact industrial application bar: active project, engineering state,
+        # and common execution controls stay visible without stealing workspace area.
+        topbar = ttk.Frame(
+            self.root,
+            style="CX.AppBar.TFrame",
+            padding=(10, 6, 10, 5),
+        )
         topbar.pack(fill="x")
         ttk.Label(topbar, text="CLEANROOMX", style="CX.Brand.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 12)
+            row=0, column=0, sticky="w", padx=(0, 14)
         )
-        ttk.Label(topbar, text="Project").grid(
-            row=0, column=1, sticky="w", padx=(0, 5)
-        )
+        ttk.Label(
+            topbar, text="PROJECT", style="CX.AppBarMeta.TLabel"
+        ).grid(row=0, column=1, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
             row=0, column=2, sticky="ew", padx=(0, 10)
         )
-        ttk.Label(topbar, text="Description").grid(
-            row=0, column=3, sticky="w", padx=(0, 5)
-        )
-        ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
+        ttk.Label(
+            topbar, text="DESCRIPTION", style="CX.AppBarMeta.TLabel"
+        ).grid(row=0, column=3, sticky="w", padx=(0, 5))
+        ttk.Entry(topbar, textvariable=self.description_var, width=24).grid(
             row=0, column=4, sticky="ew", padx=(0, 10)
         )
+        self.save_state_label = ttk.Label(
+            topbar,
+            textvariable=self.save_state_var,
+            style="CX.Status.Warning.TLabel",
+        )
+        self.save_state_label.grid(row=0, column=5, padx=2)
+        self.diagnostics_state_label = ttk.Label(
+            topbar,
+            textvariable=self.diagnostics_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.diagnostics_state_label.grid(row=0, column=6, padx=2)
+        self.verification_state_label = ttk.Label(
+            topbar,
+            textvariable=self.verification_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.verification_state_label.grid(row=0, column=7, padx=2)
         ttk.Button(
             topbar,
             text="Validate",
             command=self.validate_current,
-        ).grid(row=0, column=5, padx=2)
+            style="CX.Compact.TButton",
+        ).grid(row=0, column=8, padx=(8, 2))
         self.run_button = ttk.Button(
             topbar,
             text="▶ Run",
             command=self.run_current,
             style="CX.Primary.TButton",
         )
-        self.run_button.grid(row=0, column=6, padx=2)
+        self.run_button.grid(row=0, column=9, padx=2)
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="CX.Danger.TButton",
         )
-        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
-        topbar.columnconfigure(2, weight=1)
-        topbar.columnconfigure(4, weight=2)
+        self.cancel_button.grid(row=0, column=10, padx=(2, 0))
+        topbar.columnconfigure(2, weight=2)
+        topbar.columnconfigure(4, weight=3)
 
         commandbar = ttk.Frame(
             self.root,
@@ -1821,6 +1852,16 @@ class CleanroomXApp:
             on_open_recent=self._open_recent_project_from_start,
         )
         self.notebook.add(self.start_center, text="Start")
+
+        self.dashboard = EngineeringDashboard(
+            self.notebook,
+            on_open_design=lambda: self._activate_spatial_workspace("split"),
+            on_open_problems=self.show_problems_panel,
+            on_verify=self.run_project_requirements_verification,
+            on_run=self.run_current,
+            on_open_proofgraph=self._activate_proofgraph_workspace,
+        )
+        self.notebook.add(self.dashboard, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -2514,6 +2555,8 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        currency: dict = {}
+        records: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -2600,6 +2643,75 @@ class CleanroomXApp:
             if isinstance(diagnostics, dict)
             else {}
         )
+        diagnostic_state = str(summary.get("status", "unknown")).upper()
+        self.diagnostics_state_var.set(
+            "DIAGNOSTICS PASS"
+            if diagnostic_state == "PASS"
+            else (
+                "DIAGNOSTICS FAIL"
+                if summary.get("error_count", 0)
+                else (
+                    "DIAGNOSTICS WARN"
+                    if summary.get("warning_count", 0)
+                    else "DIAGNOSTICS UNKNOWN"
+                )
+            )
+        )
+        self.diagnostics_state_label.configure(
+            style=(
+                "CX.Status.Pass.TLabel"
+                if diagnostic_state == "PASS"
+                else (
+                    "CX.Status.Fail.TLabel"
+                    if summary.get("error_count", 0)
+                    else (
+                        "CX.Status.Warning.TLabel"
+                        if summary.get("warning_count", 0)
+                        else "CX.Status.Unknown.TLabel"
+                    )
+                )
+            )
+        )
+
+        currency_summary = (
+            currency.get("summary", {}) if isinstance(currency, dict) else {}
+        )
+        configured_count = int(currency_summary.get("configured_analysis_count", 0) or 0)
+        current_count = int(currency_summary.get("current_count", 0) or 0)
+        stale_count = int(currency_summary.get("stale_count", 0) or 0)
+        not_verified_count = int(currency_summary.get("not_verified_count", 0) or 0)
+        if configured_count > 0 and current_count == configured_count and not stale_count and not not_verified_count:
+            verification_state = "VERIFIED"
+            verification_style = "CX.Status.Verified.TLabel"
+        elif stale_count:
+            verification_state = f"VERIFY STALE {stale_count}"
+            verification_style = "CX.Status.Stale.TLabel"
+        elif current_count:
+            verification_state = f"VERIFY {current_count}/{configured_count}"
+            verification_style = "CX.Status.Warning.TLabel"
+        else:
+            verification_state = "UNVERIFIED"
+            verification_style = "CX.Status.Unknown.TLabel"
+        self.verification_state_var.set(verification_state)
+        self.verification_state_label.configure(style=verification_style)
+
+        proofgraph_documents = self._proofgraph_documents_from_records(records)
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            dashboard.set_snapshot(
+                project_name=self.project.name,
+                analysis_count=len(self.project.analyses),
+                diagnostics=diagnostics if isinstance(diagnostics, dict) else None,
+                verification_currency=currency if isinstance(currency, dict) else None,
+                verification_records=records,
+                last_run_status=(
+                    getattr(self.last_run, "status", None)
+                    if self.last_run is not None
+                    else None
+                ),
+                proofgraph_count=len(proofgraph_documents),
+            )
+
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",
@@ -2749,6 +2861,13 @@ class CleanroomXApp:
                 "Window",
                 self._activate_start_workspace,
                 keywords=("home", "recent", "example"),
+            ),
+            PaletteCommand(
+                "workspace.dashboard",
+                "Open Engineering Dashboard",
+                "Window",
+                lambda: self.notebook.select(self.dashboard),
+                keywords=("health", "readiness", "status", "verification"),
             ),
             PaletteCommand(
                 "workspace.2d",
@@ -4019,6 +4138,7 @@ class CleanroomXApp:
             self.analysis_tree.delete(item)
 
         sections = (
+            ("nav-dashboard", "Dashboard"),
             ("nav-building", "Building"),
             ("nav-hvac", "HVAC Systems"),
             ("nav-devices", "Devices"),
@@ -4316,6 +4436,13 @@ class CleanroomXApp:
         if not selection:
             return
         item_id = selection[0]
+        if item_id == "nav-dashboard":
+            dashboard = getattr(self, "dashboard", None)
+            if dashboard is not None:
+                self.notebook.select(dashboard)
+                self.workspace_status_var.set("Workspace: Dashboard")
+                self.selection_status_var.set("Selected: Dashboard")
+            return
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
             if hasattr(self, "spatial_workspace"):
@@ -5372,6 +5499,19 @@ class CleanroomXApp:
         has_unsaved_changes = self._has_unsaved_changes()
         if has_unsaved_changes:
             self._schedule_recovery_checkpoint()
+
+        save_state_var = getattr(self, "save_state_var", None)
+        if save_state_var is not None:
+            save_state_var.set("UNSAVED" if has_unsaved_changes else "SAVED")
+        save_state_label = getattr(self, "save_state_label", None)
+        if save_state_label is not None:
+            save_state_label.configure(
+                style=(
+                    "CX.Status.Warning.TLabel"
+                    if has_unsaved_changes
+                    else "CX.Status.Pass.TLabel"
+                )
+            )
 
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):

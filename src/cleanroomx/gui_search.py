@@ -274,7 +274,7 @@ def build_engineering_search_entries(
                     target_type="evidence",
                     target_id=target_id,
                     keywords=(node_type, status, node_id, "proofgraph", "evidence", "provenance"),
-                    payload=node,
+                    payload={"graph_id": graph_id, "node": node},
                 ),
             )
 

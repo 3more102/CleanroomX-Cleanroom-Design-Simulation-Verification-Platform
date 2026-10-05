@@ -77,6 +77,7 @@ from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
     load_gui_layout_state,
+    normalize_density_name,
     normalize_gui_layout_state,
     normalize_workspace_profile,
     save_gui_layout_state,
@@ -1501,6 +1502,7 @@ class CleanroomXApp:
         self.analysis_run_state_var = tk.StringVar(value="IDLE")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
         self.workspace_profile_var = tk.StringVar(
             value=self._ui_layout_state["workspace_profile"]
         )
@@ -1537,6 +1539,7 @@ class CleanroomXApp:
         self._theme_palette = configure_ttk_theme(
             self.root,
             self.theme_var.get(),
+            density=self.density_var.get(),
         )
 
     def _build_menu(self) -> None:
@@ -1753,6 +1756,18 @@ class CleanroomXApp:
                 command=lambda mode=value: self.set_theme(mode),
             )
         view_menu.add_cascade(label="Theme", menu=theme_menu)
+        density_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (
+            ("compact", "Compact / Engineering"),
+            ("comfortable", "Comfortable"),
+        ):
+            density_menu.add_radiobutton(
+                label=label,
+                variable=self.density_var,
+                value=value,
+                command=lambda mode=value: self.set_density(mode),
+            )
+        view_menu.add_cascade(label="Density", menu=density_menu)
         view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
@@ -2550,6 +2565,7 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "density": normalize_density_name(self.density_var.get()),
                 "workspace_profile": normalize_workspace_profile(
                     self.workspace_profile_var.get()
                 ),
@@ -2578,6 +2594,7 @@ class CleanroomXApp:
         self.focus_workspace_var.set(False)
         state = self._ui_layout_state
         self.theme_var.set(normalize_theme_name(state["theme"]))
+        self.density_var.set(normalize_density_name(state.get("density")))
         self.set_theme(self.theme_var.get(), persist=False)
         self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
         self.output_panel_visible_var.set(bool(state["output_visible"]))
@@ -2678,7 +2695,11 @@ class CleanroomXApp:
     def set_theme(self, value: str, *, persist: bool = True) -> None:
         theme = normalize_theme_name(value)
         self.theme_var.set(theme)
-        self._theme_palette = configure_ttk_theme(self.root, theme)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            theme,
+            density=self.density_var.get(),
+        )
         self._apply_theme_to_native_widgets()
         state = dict(getattr(self, "_ui_layout_state", {}))
         state["theme"] = theme
@@ -2689,6 +2710,22 @@ class CleanroomXApp:
 
     def toggle_theme(self) -> None:
         self.set_theme("dark" if self.theme_var.get() == "light" else "light")
+
+    def set_density(self, value: str, *, persist: bool = True) -> None:
+        density = normalize_density_name(value)
+        self.density_var.set(density)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            self.theme_var.get(),
+            density=density,
+        )
+        self._apply_theme_to_native_widgets()
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["density"] = density
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(f"Density: {density.title()}")
 
     def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
         snapshot = getattr(self, "_focus_workspace_snapshot", None)
@@ -3387,6 +3424,20 @@ class CleanroomXApp:
                 "Window",
                 lambda: self.apply_workspace_profile("reporting"),
                 keywords=("report", "dossier", "export"),
+            ),
+            PaletteCommand(
+                "density.compact",
+                "Use Compact Engineering Density",
+                "Window",
+                lambda: self.set_density("compact"),
+                keywords=("dense", "rows", "spacing"),
+            ),
+            PaletteCommand(
+                "density.comfortable",
+                "Use Comfortable Density",
+                "Window",
+                lambda: self.set_density("comfortable"),
+                keywords=("rows", "spacing", "large"),
             ),
             PaletteCommand(
                 "workspace.2d",

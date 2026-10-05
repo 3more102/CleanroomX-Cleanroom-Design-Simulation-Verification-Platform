@@ -1514,7 +1514,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_mode = tk.StringVar(value="Pressure")
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
-        self._selection_var = tk.StringVar(value="No selection")\n        self._inspector_summary_var = tk.StringVar(\n            value="Select a room, opening, device, or equipment item to inspect."\n        )
+        self._selection_var = tk.StringVar(value="No selection")
+        self._inspector_summary_var = tk.StringVar(
+            value="Select a room, opening, device, or equipment item to inspect."
+        )
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1546,7 +1549,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        commandbar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 7, 8, 4)\n        )
+        commandbar = ttk.Frame(
+            self, style="CX.Toolbar.TFrame", padding=(8, 7, 8, 4)
+        )
         commandbar.pack(fill="x")
 
         ttk.Label(
@@ -1595,7 +1600,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._redo_button.pack(side="left", padx=2)
 
-        modebar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)\n        )
+        modebar = ttk.Frame(
+            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)
+        )
         modebar.pack(fill="x")
         ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
@@ -1630,7 +1637,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        viewbar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)\n        )
+        viewbar = ttk.Frame(
+            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)
+        )
         viewbar.pack(fill="x")
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
@@ -1655,7 +1664,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="right", padx=(10, 2)
         )
 
-        overlaybar = ttk.Frame(\n            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)\n        )
+        overlaybar = ttk.Frame(
+            self, style="CX.Toolbar.TFrame", padding=(8, 0, 8, 4)
+        )
         overlaybar.pack(fill="x")
         ttk.Label(
             overlaybar,
@@ -3703,7 +3714,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ]
         canvas.create_polygon(
             *sum(floor_points, ()),
-            fill=self._theme_palette["surface_alt"],\n            outline=self._theme_palette["border_strong"],\n            width=1, tags=("floor3d",),
+            fill=self._theme_palette["surface_alt"],
+            outline=self._theme_palette["border_strong"],
+            width=1, tags=("floor3d",),
         )
 
         section_height = self._active_section_height()

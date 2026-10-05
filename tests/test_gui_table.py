@@ -120,3 +120,42 @@ def test_table_behavior_supports_column_visibility_and_order(root) -> None:
 
     behavior.show_all_columns()
     assert behavior.visible_columns() == ("name", "value")
+
+
+
+def test_table_behavior_moves_and_resets_visible_columns(root) -> None:
+    tree = ttk.Treeview(
+        root,
+        columns=("a", "b", "c"),
+        show="headings",
+        selectmode="extended",
+    )
+    for column in ("a", "b", "c"):
+        tree.heading(column, text=column.upper())
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("a", "b", "c"),
+    )
+
+    assert behavior.move_column("b", -1) is True
+    assert behavior.visible_columns() == ("b", "a", "c")
+    assert behavior.move_column("b", -1) is False
+    assert behavior.move_column("c", 1) is False
+
+    assert behavior.set_column_visible("a", False) is True
+    assert behavior.visible_columns() == ("b", "c")
+    behavior.reset_column_layout()
+    assert behavior.visible_columns() == ("a", "b", "c")
+
+
+def test_table_behavior_optional_copy_binding_preserves_screen_specific_ctrl_c(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+        bind_copy=False,
+    )
+
+    bindings = tree.bind("<Control-c>")
+    assert "_copy_event" not in str(bindings)
+    assert behavior.visible_columns() == ("name", "value")

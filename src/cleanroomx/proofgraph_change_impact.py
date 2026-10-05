@@ -162,8 +162,12 @@ def compare_proofgraphs(
 
     stale_candidate_evidence_ids: set[str] = set()
     for evidence in candidate.evidence:
+        source_dependency_ids = {evidence.source_id}
+        source_dependency_ids.update(
+            provenance.source_id for provenance in evidence.provenance
+        )
         if (
-            evidence.source_id in changed_source_ids
+            source_dependency_ids & changed_source_ids
             and _candidate_unchanged(
                 evidence.id, baseline_evidence, candidate_evidence
             )
@@ -256,6 +260,16 @@ def compare_proofgraphs(
             ):
                 impacted_action_ids.add(action.id)
 
+    stale_candidate_action_ids = {
+        action.id
+        for action in candidate.corrective_actions
+        if action.id in impacted_action_ids
+        and action.id not in directly_changed_action_ids
+        and _candidate_unchanged(
+            action.id, baseline_actions, candidate_actions
+        )
+    }
+
     directly_changed_run_ids = _changed_ids(changes["verification_runs"])
     impacted_run_ids = set(directly_changed_run_ids)
     for graph in (baseline, candidate):
@@ -317,6 +331,7 @@ def compare_proofgraphs(
             "evidence_ids": sorted(stale_candidate_evidence_ids),
             "finding_ids": sorted(stale_candidate_finding_ids),
             "verdict_ids": sorted(stale_candidate_verdict_ids),
+            "corrective_action_ids": sorted(stale_candidate_action_ids),
             "verification_run_ids": sorted(stale_candidate_run_ids),
         },
     }

@@ -29,28 +29,62 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "canvas_3d": "#111820",
         "plot": "#ffffff",
         "grid": "#d7dee7",
+        "border_strong": "#94a3b8",
+        "info": "#0284c7",
+        "success": "#15803d",
+        "warning": "#b45309",
+        "error": "#b91c1c",
+        "purple": "#7c3aed",
+        "orange": "#c2410c",
+        "magenta": "#be185d",
+        "blue_surface": "#dbeafe",
+        "cyan_surface": "#cffafe",
+        "green_surface": "#dcfce7",
+        "success_surface": "#dcfce7",
+        "warning_surface": "#fef3c7",
+        "error_surface": "#fee2e2",
+        "purple_surface": "#ede9fe",
+        "orange_surface": "#ffedd5",
+        "magenta_surface": "#fce7f3",
     },
     "dark": {
-        "background": "#14191f",
-        "surface": "#1b2129",
-        "surface_alt": "#232a33",
-        "panel": "#1e252d",
-        "text": "#e6edf3",
-        "muted": "#9aa7b4",
-        "border": "#394451",
-        "accent": "#2f81f7",
-        "accent_hover": "#58a6ff",
-        "accent_text": "#ffffff",
-        "selection": "#264f78",
-        "selection_text": "#ffffff",
-        "field": "#11161c",
-        "field_text": "#e6edf3",
-        "tree": "#171d24",
-        "disabled": "#6f7b87",
-        "canvas_2d": "#1b222a",
-        "canvas_3d": "#0d1117",
-        "plot": "#131920",
-        "grid": "#33404c",
+        "background": "#0B1220",
+        "surface": "#111B2E",
+        "surface_alt": "#142034",
+        "panel": "#17243A",
+        "text": "#F1F5F9",
+        "muted": "#94A3B8",
+        "border": "#263750",
+        "accent": "#22D3EE",
+        "accent_hover": "#38BDF8",
+        "accent_text": "#07131F",
+        "selection": "#164E63",
+        "selection_text": "#F1F5F9",
+        "field": "#0E1728",
+        "field_text": "#F1F5F9",
+        "tree": "#101A2B",
+        "disabled": "#64748B",
+        "canvas_2d": "#0B1526",
+        "canvas_3d": "#08101D",
+        "plot": "#0D1728",
+        "grid": "#20314A",
+        "border_strong": "#334A68",
+        "info": "#38BDF8",
+        "success": "#22C55E",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "purple": "#A78BFA",
+        "orange": "#F97316",
+        "magenta": "#E879F9",
+        "blue_surface": "#102A4A",
+        "cyan_surface": "#0D3340",
+        "green_surface": "#12351F",
+        "success_surface": "#12351F",
+        "warning_surface": "#3A2A0D",
+        "error_surface": "#3A161B",
+        "purple_surface": "#2C214A",
+        "orange_surface": "#3A2112",
+        "magenta_surface": "#3A1738",
     },
 }
 
@@ -218,7 +252,8 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         fieldbackground=palette["tree"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        rowheight=24,
+        rowheight=25,
+        borderwidth=0,
     )
     style.map(
         "Treeview",
@@ -231,6 +266,8 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9, "bold"),
+        padding=(7, 5),
+        relief="flat",
     )
     style.map(
         "Treeview.Heading",
@@ -334,11 +371,115 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.map(
         "CX.Compact.TButton",
         background=[
-            ("active", palette["surface"]),
+            ("active", palette["panel"]),
             ("pressed", palette["selection"]),
             ("disabled", palette["surface_alt"]),
         ],
         foreground=[("disabled", palette["disabled"])],
+    )
+
+    style.configure(
+        "CX.Topbar.TFrame",
+        background=palette["surface"],
+        padding=(2, 1),
+    )
+    style.configure(
+        "CX.Topbar.TLabel",
+        background=palette["surface"],
+        foreground=palette["text"],
+    )
+    style.configure(
+        "CX.TopbarMuted.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "CX.Healthbar.TFrame",
+        background=palette["surface"],
+        padding=(0, 2),
+    )
+    style.configure(
+        "CX.StatusBar.TFrame",
+        background=palette["surface"],
+        padding=(8, 4),
+    )
+    style.configure(
+        "CX.StatusBar.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.Card.TFrame",
+        background=palette["panel"],
+        relief="flat",
+        borderwidth=1,
+    )
+    style.configure(
+        "CX.CardTitle.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.CardValue.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 11, "bold"),
+    )
+
+    status_styles = {
+        "Success": ("success_surface", "success"),
+        "Warning": ("warning_surface", "warning"),
+        "Error": ("error_surface", "error"),
+        "Info": ("cyan_surface", "info"),
+        "Purple": ("purple_surface", "purple"),
+        "Orange": ("orange_surface", "orange"),
+        "Neutral": ("surface_alt", "muted"),
+    }
+    for name, (background_key, foreground_key) in status_styles.items():
+        style.configure(
+            f"CX.Status.{name}.TLabel",
+            background=palette[background_key],
+            foreground=palette[foreground_key],
+            padding=(7, 3),
+            font=("TkDefaultFont", 8, "bold"),
+        )
+
+    domain_styles = {
+        "Geometry": "accent",
+        "HVAC": "info",
+        "Airflow": "accent",
+        "Pressure": "purple",
+        "Electrical": "warning",
+        "Utilities": "orange",
+        "Safety": "error",
+        "Evidence": "success",
+        "Verification": "success",
+        "Simulation": "purple",
+    }
+    for name, foreground_key in domain_styles.items():
+        style.configure(
+            f"CX.Domain.{name}.TLabel",
+            background=palette["surface_alt"],
+            foreground=palette[foreground_key],
+            padding=(6, 2),
+            font=("TkDefaultFont", 8, "bold"),
+        )
+
+    style.configure(
+        "Vertical.TScrollbar",
+        background=palette["surface_alt"],
+        troughcolor=palette["background"],
+        bordercolor=palette["background"],
+        arrowcolor=palette["muted"],
+    )
+    style.configure(
+        "Horizontal.TScrollbar",
+        background=palette["surface_alt"],
+        troughcolor=palette["background"],
+        bordercolor=palette["background"],
+        arrowcolor=palette["muted"],
     )
 
     # Defaults for Tk-native widgets created after this call.

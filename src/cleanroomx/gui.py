@@ -1416,11 +1416,7 @@ class CleanroomXApp:
         )
         evidence_menu.add_command(
             label="Persisted Evidence Panel",
-            command=lambda: (
-                self.output_panel_visible_var.set(True),
-                self._sync_output_panel_visibility(),
-                self._select_output_tab("Evidence"),
-            ),
+            command=self.show_evidence_panel,
         )
         menubar.add_cascade(label="Evidence", menu=evidence_menu)
 
@@ -2590,6 +2586,13 @@ class CleanroomXApp:
         if panel is not None and notebook is not None:
             notebook.select(panel)
         self.status_var.set("Output: Problems")
+
+    def show_evidence_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+        self._select_output_tab("Evidence")
+        self.status_var.set("Output: Evidence")
 
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)

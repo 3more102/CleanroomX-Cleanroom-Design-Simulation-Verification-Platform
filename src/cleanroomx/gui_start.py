@@ -24,7 +24,7 @@ class StartCenter(ttk.Frame):
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(4, weight=1)
 
         brand = ttk.Frame(self)
         brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(4, 22))
@@ -45,8 +45,67 @@ class StartCenter(ttk.Frame):
             justify="left",
         ).pack(anchor="w", pady=(8, 0))
 
+        self.health_project_var = tk.StringVar(value="Unsaved project")
+        self.health_rooms_var = tk.StringVar(value="0")
+        self.health_analyses_var = tk.StringVar(value="0")
+        self.health_devices_var = tk.StringVar(value="0")
+        self.health_problems_var = tk.StringVar(value="—")
+        self.health_verify_var = tk.StringVar(value="VERIFY —")
+        self.health_evidence_var = tk.StringVar(value="EVIDENCE 0")
+
+        health = ttk.Frame(self, style="CX.Panel.TFrame", padding=(14, 11))
+        health.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 16))
+        ttk.Label(health, text="PROJECT HEALTH", style="CX.PanelTitle.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 18)
+        )
+        ttk.Label(
+            health,
+            textvariable=self.health_project_var,
+            style="CX.Panel.TLabel",
+        ).grid(row=1, column=0, sticky="w", padx=(0, 18), pady=(2, 0))
+
+        metric_specs = (
+            ("ROOMS", self.health_rooms_var),
+            ("ANALYSES", self.health_analyses_var),
+            ("DEVICES", self.health_devices_var),
+        )
+        for column, (label, variable) in enumerate(metric_specs, start=1):
+            ttk.Label(
+                health,
+                textvariable=variable,
+                style="CX.Metric.TLabel",
+                anchor="center",
+            ).grid(row=0, column=column, sticky="ew", padx=8)
+            ttk.Label(
+                health,
+                text=label,
+                style="CX.Panel.TLabel",
+                anchor="center",
+            ).grid(row=1, column=column, sticky="ew", padx=8)
+            health.columnconfigure(column, weight=1)
+
+        self.health_problems_label = ttk.Label(
+            health,
+            textvariable=self.health_problems_var,
+            style="CX.MutedBadge.TLabel",
+        )
+        self.health_problems_label.grid(row=0, column=4, rowspan=2, padx=6)
+        self.health_verify_label = ttk.Label(
+            health,
+            textvariable=self.health_verify_var,
+            style="CX.MutedBadge.TLabel",
+        )
+        self.health_verify_label.grid(row=0, column=5, rowspan=2, padx=6)
+        self.health_evidence_label = ttk.Label(
+            health,
+            textvariable=self.health_evidence_var,
+            style="CX.MutedBadge.TLabel",
+        )
+        self.health_evidence_label.grid(row=0, column=6, rowspan=2, padx=6)
+        health.columnconfigure(0, weight=2)
+
         actions = ttk.LabelFrame(self, text="Start", padding=18)
-        actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        actions.grid(row=2, column=0, sticky="nsew", padx=(0, 10))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
         ttk.Button(
@@ -73,7 +132,7 @@ class StartCenter(ttk.Frame):
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
         capabilities = ttk.LabelFrame(self, text="Engineering workspace", padding=18)
-        capabilities.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        capabilities.grid(row=2, column=1, sticky="nsew", padx=(10, 0))
         ttk.Label(
             capabilities,
             text=(
@@ -89,7 +148,7 @@ class StartCenter(ttk.Frame):
 
         recent = ttk.LabelFrame(self, text="Recent Projects", padding=12)
         recent.grid(
-            row=2,
+            row=4,
             column=0,
             columnspan=2,
             sticky="nsew",
@@ -152,6 +211,43 @@ class StartCenter(ttk.Frame):
             row=0, column=1, rowspan=2, sticky="e", padx=(18, 0)
         )
         examples.columnconfigure(0, weight=1)
+
+    def set_project_health(self, snapshot: dict[str, object]) -> None:
+        """Update the start dashboard from already-computed project state."""
+        from .gui_theme import status_style_name
+
+        self.health_project_var.set(
+            str(snapshot.get("project_name") or "Unsaved project")
+        )
+        self.health_rooms_var.set(str(snapshot.get("room_count", 0)))
+        self.health_analyses_var.set(str(snapshot.get("analysis_count", 0)))
+        self.health_devices_var.set(str(snapshot.get("device_count", 0)))
+
+        errors = int(snapshot.get("error_count", 0) or 0)
+        warnings = int(snapshot.get("warning_count", 0) or 0)
+        problems = errors + warnings
+        self.health_problems_var.set(f"PROBLEMS {problems}")
+        self.health_problems_label.configure(
+            style=status_style_name(
+                "FAIL" if errors else ("WARNING" if warnings else "PASS")
+            )
+        )
+
+        verify_text = str(snapshot.get("verification") or "VERIFY —")
+        self.health_verify_var.set(verify_text)
+        verify_status = "VERIFIED" if "/" in verify_text else "NOT CHECKED"
+        self.health_verify_label.configure(style=status_style_name(verify_status))
+
+        evidence_text = str(snapshot.get("evidence") or "EVIDENCE 0")
+        self.health_evidence_var.set(evidence_text)
+        evidence_count = 0
+        try:
+            evidence_count = int(evidence_text.rsplit(" ", 1)[-1])
+        except (TypeError, ValueError):
+            evidence_count = 0
+        self.health_evidence_label.configure(
+            style=status_style_name("VERIFIED" if evidence_count else "NOT CHECKED")
+        )
 
     def set_recent_projects(self, records: list[dict[str, str]]) -> None:
         for item in self.recent_tree.get_children():

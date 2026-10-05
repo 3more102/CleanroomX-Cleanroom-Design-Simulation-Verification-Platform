@@ -56,13 +56,17 @@ if ($OutputBaseFilename -notmatch '^[A-Za-z0-9._-]+$') {
 }
 
 $isccCommand = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
-$iscc = if ($isccCommand) {
-    $isccCommand.Source
-} else {
-    Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Inno Setup 6\ISCC.exe"
+$isccCandidates = @()
+if ($isccCommand) {
+    $isccCandidates += $isccCommand.Source
 }
-if (-not (Test-Path $iscc -PathType Leaf)) {
-    throw "Inno Setup compiler not found. Expected ISCC.exe on PATH or under Program Files (x86)."
+$isccCandidates += @(
+    (Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Inno Setup 7\ISCC.exe"),
+    (Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Inno Setup 6\ISCC.exe")
+)
+$iscc = $isccCandidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
+if (-not $iscc) {
+    throw "Inno Setup compiler not found. Expected ISCC.exe on PATH or Inno Setup 7/6 under Program Files (x86)."
 }
 
 $outputDir = Join-Path $repoRoot "dist\windows-installer"

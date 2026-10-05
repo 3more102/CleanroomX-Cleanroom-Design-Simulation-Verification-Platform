@@ -1524,6 +1524,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_labels: dict[str, str] = {}
+        self._property_visible_fields: set[str] = set()
+        self._property_filter_var = tk.StringVar()
+        self._property_status_var = tk.StringVar(
+            value="Select an object to edit properties"
+        )
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1543,6 +1549,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._theme_palette = theme_palette("light")
 
         self._build()
+        self._property_filter_var.trace_add(
+            "write",
+            lambda *_: self._refresh_property_visibility(),
+        )
         self.refresh()
 
     def _build(self) -> None:
@@ -1849,7 +1859,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 6))
+
+        property_filter = ttk.Frame(inspector)
+        property_filter.pack(fill="x", pady=(0, 7))
+        ttk.Label(property_filter, text="Filter").pack(side="left")
+        ttk.Entry(
+            property_filter,
+            textvariable=self._property_filter_var,
+            width=18,
+        ).pack(side="left", fill="x", expand=True, padx=(5, 5))
+        ttk.Button(
+            property_filter,
+            text="Reset",
+            width=6,
+            style="CX.Compact.TButton",
+            command=self.reset_property_editor,
+        ).pack(side="right")
 
         property_groups = (
             (
@@ -1899,19 +1925,37 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
+                self._property_labels[key] = label
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
+                entry.bind(
+                    "<Return>",
+                    lambda _event: self.apply_properties(),
+                )
                 self._property_entries[key] = entry
+                var.trace_add(
+                    "write",
+                    lambda *_: self._on_property_editor_changed(),
+                )
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
+        property_actions = ttk.Frame(inspector)
+        property_actions.pack(fill="x", pady=(2, 4))
+        ttk.Label(
+            property_actions,
+            textvariable=self._property_status_var,
+            anchor="w",
+            wraplength=205,
+        ).pack(side="left", fill="x", expand=True)
         ttk.Button(
-            inspector,
+            property_actions,
             text="Apply properties",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
-        ).pack(anchor="e", pady=(2, 6))
+        ).pack(side="right")
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
             fill="x", pady=(3, 0)
@@ -2609,17 +2653,57 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _refresh_property_visibility(self) -> None:
+        query = self._property_filter_var.get().strip().casefold()
+        for key, row in self._property_rows.items():
+            label = self._property_labels.get(key, key)
+            matches = not query or query in f"{label} {key}".casefold()
+            if key in self._property_visible_fields and matches:
+                row.pack(fill="x", pady=2)
+            else:
+                row.pack_forget()
+
+    def _on_property_editor_changed(self) -> None:
+        item = self._selected_object()
+        if item is None:
+            self._property_status_var.set("Select an object to edit properties")
+            return
+        dirty = False
+        for key in self._property_visible_fields:
+            variable = self._property_vars.get(key)
+            if variable is None:
+                continue
+            model_value = item.get(key, "")
+            model_text = "" if model_value is None else str(model_value)
+            if variable.get().strip() != model_text.strip():
+                dirty = True
+                break
+        self._property_status_var.set(
+            "Unsaved property edits" if dirty else "Values match model"
+        )
+
+    def reset_property_editor(self) -> None:
+        if self._selected_object() is None:
+            self._property_status_var.set("Select an object to edit properties")
+            return
+        self._load_property_panel()
+        self._status_setter("Property editor reset to current model values")
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
-            for key, var in self._property_vars.items():
+            self._property_visible_fields = set()
+            for var in self._property_vars.values():
                 var.set("")
-                row = self._property_rows.get(key)
-                if row is not None:
-                    row.pack_forget()
+            self._refresh_property_visibility()
+            self._property_status_var.set("Select an object to edit properties")
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+        prefix = (
+            "Room"
+            if self.selected and self.selected.kind == "room"
+            else item.get("type", "Device").title()
+        )
         selection_text = f"{prefix}: {item.get('name', '')}"
         if self.selected and self.selected.kind == "room":
             sync = engineering_sync_status(self.layout, self._analysis_getter())
@@ -2658,20 +2742,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             "wall_side",
             "swing",
         }
-        visible_fields = (
+        self._property_visible_fields = (
             room_fields
             if self.selected and self.selected.kind == "room"
             else device_fields
         )
         for key, var in self._property_vars.items():
-            row = self._property_rows.get(key)
-            if row is not None:
-                if key in visible_fields:
-                    row.pack(fill="x", pady=2)
-                else:
-                    row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        self._refresh_property_visibility()
+        self._property_status_var.set("Values match model")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -2685,18 +2765,23 @@ class SpatialDesignWorkspace(ttk.Frame):
                 {key: variable.get() for key, variable in self._property_vars.items()},
             )
         except ValueError as exc:
+            self._property_status_var.set("Invalid: " + str(exc))
             messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
             self._status_setter("Properties not applied: " + str(exc))
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        if candidate != self.layout:
+        changed = candidate != self.layout
+        if changed:
             self.layout = candidate
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",
             history_before=history_before,
             selection_before=selection_before,
+        )
+        self._property_status_var.set(
+            "Properties applied" if changed else "No property changes"
         )
 
     def duplicate_selected(self) -> None:

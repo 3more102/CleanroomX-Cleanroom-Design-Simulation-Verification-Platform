@@ -2764,6 +2764,11 @@ class CleanroomXApp:
         self.output_panel_visible_var.set(False)
         self._sync_output_panel_visibility()
 
+    def show_output_panel(self) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+
     def toggle_output_panel(self) -> None:
         target = not bool(self.output_panel_visible_var.get())
         self._restore_focus_workspace_snapshot(status=False)

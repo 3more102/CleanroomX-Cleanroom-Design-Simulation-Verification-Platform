@@ -134,6 +134,8 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open ProofGraph Explorer" in labels
     assert "Open Analysis Run History" in labels
     assert "Duplicate Current Scenario" in labels
+    assert "Toggle Selected Navigator Favorite" in labels
+    assert "Clear Project Navigator Favorites" in labels
     assert "Verify Project Requirements" in labels
     assert "Import IFC Spatial Layout" in labels
 

@@ -426,6 +426,34 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("active", palette["accent"]),
         ],
     )
+    for step_name in ("Design", "Analyze", "Verify", "Evidence", "Release"):
+        step_color = mode_colors[step_name]
+        style.configure(
+            f"CX.Step{step_name}.TButton",
+            background=palette["surface"],
+            foreground=step_color,
+            bordercolor=palette["border"],
+            padding=(9, 4),
+            font=("TkDefaultFont", 8, "bold"),
+            relief="flat",
+        )
+        style.map(
+            f"CX.Step{step_name}.TButton",
+            background=[
+                ("active", mode_active_surfaces[step_name]),
+                ("pressed", mode_active_surfaces[step_name]),
+                ("disabled", palette["surface"]),
+            ],
+            foreground=[
+                ("active", step_color),
+                ("pressed", step_color),
+                ("disabled", palette["disabled"]),
+            ],
+            bordercolor=[
+                ("focus", step_color),
+                ("active", step_color),
+            ],
+        )
     for step_name, step_color in mode_accents.items():
         style.configure(
             f"CX.Step{step_name}.TButton",

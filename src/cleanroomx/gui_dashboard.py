@@ -167,10 +167,12 @@ class EngineeringDashboard(ttk.Frame):
         master: tk.Misc,
         *,
         on_issue: Callable[[dict[str, Any]], None] | None = None,
+        on_module: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(master, padding=(14, 12))
         self._snapshot: dict[str, Any] = {}
         self._on_issue = on_issue
+        self._on_module = on_module
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self._theme_name = "dark"
         self._palette = theme_palette(self._theme_name)
@@ -234,23 +236,43 @@ class EngineeringDashboard(ttk.Frame):
         title: str,
         value_var: tk.StringVar,
         detail_var: tk.StringVar,
+        action: str | None = None,
     ) -> tuple[ttk.Frame, ttk.Label]:
         card = ttk.Frame(parent, style="CX.Card.TFrame", padding=(12, 10))
         card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 5, 5))
         card.columnconfigure(0, weight=1)
-        ttk.Label(card, text=title, style="CX.PanelSection.TLabel").grid(
-            row=0, column=0, sticky="w"
-        )
+        title_label = ttk.Label(card, text=title, style="CX.PanelSection.TLabel")
+        title_label.grid(row=0, column=0, sticky="w")
         value = ttk.Label(card, textvariable=value_var, style="CX.PanelTitle.TLabel")
         value.grid(row=1, column=0, sticky="w", pady=(6, 2))
-        ttk.Label(
+        detail_label = ttk.Label(
             card,
             textvariable=detail_var,
             style="CX.PanelMuted.TLabel",
             wraplength=250,
             justify="left",
-        ).grid(row=2, column=0, sticky="w")
+        )
+        detail_label.grid(row=2, column=0, sticky="w")
+        if action is not None and self._on_module is not None:
+            self._bind_module_action((card, title_label, value, detail_label), action)
         return card, value
+
+    def _bind_module_action(self, widgets: tuple[tk.Misc, ...], action: str) -> None:
+        if self._on_module is None:
+            return
+
+        def open_workspace(_event=None, key=action):
+            if self._on_module is not None:
+                self._on_module(key)
+            return "break"
+
+        for widget in widgets:
+            widget.bind("<Button-1>", open_workspace, add="+")
+            try:
+                widget.configure(cursor="hand2")
+            except tk.TclError:
+                pass
+        attach_tooltip(widgets[0], f"Open {action.title()} workspace")
 
     def _build_instruments(self) -> None:
         instruments = ttk.Frame(self)
@@ -264,6 +286,7 @@ class EngineeringDashboard(ttk.Frame):
             title="DIAGNOSTICS",
             value_var=self.diagnostics_var,
             detail_var=self.diagnostics_detail_var,
+            action="diagnostics",
         )
         _, self.verification_value = self._card(
             instruments,
@@ -271,6 +294,7 @@ class EngineeringDashboard(ttk.Frame):
             title="VERIFICATION",
             value_var=self.verification_var,
             detail_var=self.verification_detail_var,
+            action="verification",
         )
         self._card(
             instruments,
@@ -278,6 +302,7 @@ class EngineeringDashboard(ttk.Frame):
             title="DESIGN MODEL",
             value_var=self.model_var,
             detail_var=self.model_detail_var,
+            action="design",
         )
         self._card(
             instruments,
@@ -285,6 +310,7 @@ class EngineeringDashboard(ttk.Frame):
             title="ANALYSIS",
             value_var=self.analysis_var,
             detail_var=self.analysis_detail_var,
+            action="analysis",
         )
         self._card(
             instruments,
@@ -292,6 +318,7 @@ class EngineeringDashboard(ttk.Frame):
             title="EVIDENCE",
             value_var=self.evidence_var,
             detail_var=self.evidence_detail_var,
+            action="evidence",
         )
 
     def _build_progress(self) -> None:

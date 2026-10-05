@@ -620,10 +620,10 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
 
     assert app.theme_var.get() == "dark"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-    assert app.plot_canvas.cget("background") == "#131920"
-    assert app.input_text.cget("background") == "#11161c"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#0B1526"
+    assert app.spatial_workspace.canvas_3d.cget("background") == "#08101D"
+    assert app.plot_canvas.cget("background") == "#0D1728"
+    assert app.input_text.cget("background") == "#0E1728"
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()

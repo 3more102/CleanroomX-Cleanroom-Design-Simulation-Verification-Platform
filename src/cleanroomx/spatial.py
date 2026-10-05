@@ -1683,7 +1683,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
             side="left", padx=2
         )
-        device_button = ttk.Menubutton(commandbar, text="+ Device / opening")
+        device_button = ttk.Menubutton(commandbar, text="+ Device")
         device_menu = tk.Menu(device_button, tearoff=False)
         device_button.configure(menu=device_menu)
         device_button.pack(side="left", padx=2)
@@ -1709,6 +1709,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(commandbar, text="Delete", width=7, command=self.delete_selected).pack(
             side="left", padx=2
         )
+        ttk.Button(
+            commandbar,
+            text="Validate",
+            width=8,
+            style="CX.Compact.TButton",
+            command=self.report_validation,
+        ).pack(side="left", padx=2)
         ttk.Separator(commandbar, orient="vertical").pack(
             side="left", fill="y", padx=7
         )
@@ -1758,16 +1765,9 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
-        ttk.Button(
-            viewbar,
-            text="Validate",
-            width=8,
-            style="CX.Compact.TButton",
-            command=self.report_validation,
-        ).pack(side="left", padx=(2, 8))
         ttk.Checkbutton(
             viewbar, text="Grid", variable=self._show_grid, command=self.redraw
-        ).pack(side="left", padx=(0, 6))
+        ).pack(side="left", padx=(2, 6))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Labels", self._show_labels, "show_labels"),

@@ -1149,3 +1149,45 @@ def test_workspace_profile_persists_across_application_restart(tmp_path):
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
+
+
+def test_global_engineering_search_indexes_and_navigates_real_model_objects(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    records = app._engineering_search_records()
+
+    assert any(record.kind == "Analysis" for record in records)
+    room_record = next(record for record in records if record.kind == "Room")
+    analysis_record = next(record for record in records if record.kind == "Analysis")
+
+    app._navigate_engineering_search_record(room_record)
+    app.root.update()
+    room_id = room_record.payload["id"]
+    assert app.spatial_workspace.selected == _Hit("room", room_id)
+    assert app.notebook.select() == str(app.spatial_workspace)
+
+    app._navigate_engineering_search_record(analysis_record)
+    app.root.update()
+    analysis_id = analysis_record.payload["analysis_id"]
+    assert app.analysis_tree.selection() == (analysis_id,)
+    assert app.notebook.select() == str(app.input_tab)
+    assert app.project.to_dict() == project_before
+
+
+def test_global_engineering_search_window_is_singleton_and_view_only(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.show_engineering_search()
+    app.root.update()
+    first = app._engineering_search_window
+    assert first is not None
+    assert first.winfo_exists()
+    assert first.tree.get_children()
+
+    app.show_engineering_search()
+    app.root.update()
+    assert app._engineering_search_window is first
+
+    first._close()
+    app.root.update()
+    assert app._engineering_search_window is None
+    assert app.project.to_dict() == project_before

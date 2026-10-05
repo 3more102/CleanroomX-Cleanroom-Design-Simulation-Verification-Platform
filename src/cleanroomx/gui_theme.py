@@ -96,6 +96,22 @@ def theme_palette(value: Any) -> dict[str, str]:
     return deepcopy(_THEME_PALETTES[normalize_theme_name(value)])
 
 
+def status_style_name(value: Any) -> str:
+    """Return the canonical semantic badge style for an engineering state."""
+    token = str(value or "").strip().lower().replace(" ", "_")
+    if token in {"pass", "passed", "ok", "ready", "current", "healthy", "verified"}:
+        return "CX.Status.Pass.TLabel"
+    if token in {"fail", "failed", "error", "critical", "blocked"}:
+        return "CX.Status.Fail.TLabel"
+    if token in {"warning", "warn", "stale", "incomplete", "degraded", "attention"}:
+        return "CX.Status.Warning.TLabel"
+    if token in {"running", "simulation", "calculating", "queued"}:
+        return "CX.Status.Simulation.TLabel"
+    if token in {"info", "informational", "available"}:
+        return "CX.Status.Info.TLabel"
+    return "CX.Status.Neutral.TLabel"
+
+
 def _configure_status_style(
     style: ttk.Style,
     name: str,

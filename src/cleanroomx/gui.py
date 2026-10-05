@@ -79,6 +79,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
+from .runtime_diagnostics import install_tk_exception_handler
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -7265,6 +7266,10 @@ def main(argv: list[str] | None = None) -> int:
     app = CleanroomXApp(
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
+    )
+    app.runtime_log_path = install_tk_exception_handler(
+        root,
+        status_callback=app.status_var.set,
     )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]

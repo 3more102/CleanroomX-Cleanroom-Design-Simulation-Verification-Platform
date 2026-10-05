@@ -74,6 +74,7 @@ from .gui_panels import ProjectDiagnosticsPanel, VerificationEvidencePanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
+from .gui_reporting import ReportingWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -2053,6 +2054,16 @@ class CleanroomXApp:
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
+        self.reporting_workspace = ReportingWorkspace(
+            self.notebook,
+            on_export_dossier=self.export_project_engineering_dossier,
+            on_export_markdown=self.export_report_markdown,
+            on_export_html=self.export_report_html,
+            on_export_result_json=self.export_result_json,
+            on_export_run_bundle=self.export_run_bundle_json,
+        )
+        self.notebook.add(self.reporting_workspace, text="Reporting")
+
         self.input_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.input_tab, text="Input")
         input_notebook = ttk.Notebook(self.input_tab)
@@ -2483,6 +2494,9 @@ class CleanroomXApp:
         evidence_panel = getattr(self, "evidence_panel", None)
         if evidence_panel is not None:
             evidence_panel.apply_theme(self.theme_var.get())
+        reporting_workspace = getattr(self, "reporting_workspace", None)
+        if reporting_workspace is not None:
+            text_widgets.append(getattr(reporting_workspace, "preview", None))
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -2815,8 +2829,7 @@ class CleanroomXApp:
             if hasattr(self, "evidence_panel"):
                 self.output_notebook.select(self.evidence_panel)
         else:
-            if hasattr(self, "dashboard"):
-                self.notebook.select(self.dashboard)
+            self._activate_reporting_workspace()
             if hasattr(self, "report_text"):
                 self.output_notebook.select(self.report_text.master)
 
@@ -3367,6 +3380,13 @@ class CleanroomXApp:
                 keywords=("solver", "run", "analysis", "results"),
             ),
             PaletteCommand(
+                "workspace.reporting",
+                "Open Reporting Workspace",
+                "Report",
+                self._activate_reporting_workspace,
+                keywords=("dossier", "markdown", "html", "publication", "report"),
+            ),
+            PaletteCommand(
                 "analysis.validate",
                 "Validate Current Analysis Input",
                 "Analysis",
@@ -3717,6 +3737,24 @@ class CleanroomXApp:
             self.show_output_panel()
             self.output_notebook.select(self.analysis_result_panel)
 
+    def _refresh_reporting_workspace(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        run = self._current_fresh_run()
+        workspace.set_context(
+            project_name=self.project.name,
+            project_saved=self.project_path is not None,
+            project_dirty=self._has_unsaved_changes(),
+            run=run,
+        )
+
+    def _activate_reporting_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "reporting_workspace"):
+            self._refresh_reporting_workspace()
+            self.notebook.select(self.reporting_workspace)
+            self.workspace_status_var.set("Workspace: Reporting")
+
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
         if self._running:
@@ -3778,6 +3816,8 @@ class CleanroomXApp:
         self.last_run_analysis_id = None
         if hasattr(self, "analysis_result_panel"):
             self.analysis_result_panel.clear()
+        if hasattr(self, "reporting_workspace"):
+            self._refresh_reporting_workspace()
         self._set_text(self.result_text, "")
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
@@ -5125,9 +5165,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Evidence")
             return
         if item_id == "nav-reports":
-            if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.report_text.master)
+            self._activate_reporting_workspace()
             self.selection_status_var.set("Selected: Reports")
             return
         if item_id in {"nav-pressure", "nav-airflow", "nav-ach"}:
@@ -7025,6 +7063,8 @@ class CleanroomXApp:
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         if hasattr(self, "simulation_workspace"):
             self.simulation_workspace.set_completed(run)
+        if hasattr(self, "reporting_workspace"):
+            self._refresh_reporting_workspace()
         if hasattr(self, "analysis_result_panel"):
             self.analysis_result_panel.refresh(run)
         self._set_text(

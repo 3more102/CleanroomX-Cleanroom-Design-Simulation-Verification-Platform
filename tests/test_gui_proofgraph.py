@@ -350,3 +350,31 @@ def test_proofgraph_viewer_fit_and_focus_selected_node(proofgraph_root):
     assert 0.45 <= viewer._zoom <= 2.5
     assert viewer.zoom_label.cget("text").endswith("%")
     assert statuses[-1].startswith("ProofGraph fitted at ")
+
+
+
+def test_proofgraph_viewer_tree_review_and_hover_feedback(proofgraph_root):
+    viewer = ProofGraphViewer(proofgraph_root)
+    viewer.pack(fill="both", expand=True)
+    viewer.set_documents([_sample_graph()])
+    proofgraph_root.update()
+
+    viewer.collapse_tree()
+    assert all(
+        not bool(viewer.tree.item(iid, "open"))
+        for iid in viewer.tree.get_children("")
+    )
+
+    viewer.expand_tree()
+    assert all(
+        bool(viewer.tree.item(iid, "open"))
+        for iid in viewer.tree.get_children("")
+    )
+
+    key = "evidence:evidence-pressure"
+    rect = viewer._canvas_rect_by_key[key]
+    viewer._set_hovered_key(key)
+    assert float(viewer.canvas.itemcget(rect, "width")) == 2.0
+
+    viewer._clear_canvas_hover()
+    assert float(viewer.canvas.itemcget(rect, "width")) == 1.0

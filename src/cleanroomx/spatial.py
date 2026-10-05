@@ -1577,6 +1577,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_metadata: dict[str, tuple[str, str]] = {}
+        self._property_search_var = tk.StringVar(value="")
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1610,6 +1612,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._theme_palette = theme_palette("dark")
 
         self._build()
+        self._property_search_var.trace_add(
+            "write",
+            lambda *_: self._load_property_panel(),
+        )
         self.refresh()
 
     def _build(self) -> None:
@@ -1946,7 +1952,31 @@ class SpatialDesignWorkspace(ttk.Frame):
             wraplength=310,
             style="CX.ViewTitle.TLabel",
         )
-        self._selection_label.pack(fill="x", pady=(3, 8))
+        self._selection_label.pack(fill="x", pady=(3, 6))
+
+        property_search = ttk.Frame(inspector, style="CX.Toolbar.TFrame")
+        property_search.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            property_search,
+            text="Filter properties",
+            style="CX.Muted.TLabel",
+        ).pack(side="left", padx=(0, 6))
+        property_search_entry = ttk.Entry(
+            property_search,
+            textvariable=self._property_search_var,
+        )
+        property_search_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            property_search,
+            text="Clear",
+            width=6,
+            style="CX.Compact.TButton",
+            command=lambda: self._property_search_var.set(""),
+        ).pack(side="left", padx=(5, 0))
+        attach_tooltip(
+            property_search_entry,
+            "Filter editable properties by engineering name, internal field, or unit.",
+        )
 
         engineering = ttk.LabelFrame(
             inspector,
@@ -2073,6 +2103,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
+                self._property_metadata[key] = (label, unit)
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
                         side="left", padx=(4, 0)
@@ -2972,10 +3003,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self.selected and self.selected.kind == "room"
             else device_fields
         )
+        property_query = self._property_search_var.get().strip().casefold()
         for key, var in self._property_vars.items():
             row = self._property_rows.get(key)
             if row is not None:
-                if key in visible_fields:
+                label, unit = self._property_metadata.get(key, (key, ""))
+                matches_query = (
+                    not property_query
+                    or property_query
+                    in " ".join((key, label, unit)).casefold()
+                )
+                if key in visible_fields and matches_query:
                     row.pack(fill="x", pady=2)
                 else:
                     row.pack_forget()

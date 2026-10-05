@@ -3155,8 +3155,177 @@ class CleanroomXApp:
             label="Project diagnostics",
         )
 
+    def _open_analysis_search_result(self, analysis_id: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(analysis_id):
+            self.status_var.set(f"Analysis {analysis_id} is no longer available")
+            return
+        tree.selection_set(analysis_id)
+        tree.focus(analysis_id)
+        tree.see(analysis_id)
+        self._on_analysis_selected()
+        self._activate_analysis_input_workspace()
+
+    def _open_spatial_search_result(self, kind: str, item_id: str) -> None:
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is None or not workspace.select_item(kind, item_id, notify=True):
+            self.status_var.set(f"{kind.title()} {item_id} is no longer available")
+            return
+        self._activate_spatial_workspace()
+        workspace.fit_selected()
+        self._sync_spatial_selection_status()
+
+    def _open_evidence_search_result(self, sequence: int) -> None:
+        self._activate_evidence_workspace()
+        workspace = getattr(self, "evidence_workspace", None)
+        if workspace is not None and workspace.select_sequence(sequence):
+            self.selection_status_var.set(f"Selected: Evidence record #{sequence}")
+        else:
+            self.status_var.set(f"Evidence record #{sequence} is no longer available")
+
+    def _engineering_search_commands(self) -> list[PaletteCommand]:
+        """Index current project entities into the existing command-palette surface."""
+        commands: list[PaletteCommand] = []
+
+        for analysis in self.project.analyses:
+            commands.append(
+                PaletteCommand(
+                    f"search.analysis.{analysis.id}",
+                    f"Analysis · {analysis.name}",
+                    "Search / Analysis",
+                    lambda analysis_id=analysis.id: self._open_analysis_search_result(
+                        analysis_id
+                    ),
+                    keywords=(
+                        analysis.id,
+                        analysis.kind,
+                        ANALYSIS_SPECS[analysis.kind].title,
+                    ),
+                )
+            )
+
+        layout = self.project.metadata.get(SPATIAL_METADATA_KEY, {})
+        if isinstance(layout, dict):
+            for kind, collection in (
+                ("room", layout.get("rooms", [])),
+                ("device", layout.get("devices", [])),
+            ):
+                if not isinstance(collection, list):
+                    continue
+                for item in collection:
+                    if not isinstance(item, dict):
+                        continue
+                    item_id = str(item.get("id") or "").strip()
+                    if not item_id:
+                        continue
+                    name = str(item.get("name") or item_id)
+                    detail = str(
+                        item.get("kind")
+                        or item.get("type")
+                        or item.get("classification")
+                        or ""
+                    )
+                    commands.append(
+                        PaletteCommand(
+                            f"search.{kind}.{item_id}",
+                            f"{kind.title()} · {name}",
+                            f"Search / {kind.title()}",
+                            lambda entity_kind=kind, entity_id=item_id: self._open_spatial_search_result(
+                                entity_kind, entity_id
+                            ),
+                            keywords=(item_id, detail, "spatial", "model"),
+                        )
+                    )
+
+        problems = getattr(getattr(self, "problems_panel", None), "last_result", None)
+        issues = problems.get("issues", []) if isinstance(problems, dict) else []
+        if isinstance(issues, list):
+            for index, issue in enumerate(issues):
+                if not isinstance(issue, dict):
+                    continue
+                element = issue.get("element")
+                element = element if isinstance(element, dict) else {}
+                sequence = issue.get("sequence", index + 1)
+                rule = str(issue.get("rule") or "diagnostic")
+                message = str(issue.get("message") or rule)
+                commands.append(
+                    PaletteCommand(
+                        f"search.diagnostic.{sequence}.{index}",
+                        f"Diagnostic · {rule}",
+                        "Search / Diagnostics",
+                        lambda selected=copy.deepcopy(issue): self._navigate_project_diagnostic(
+                            selected
+                        ),
+                        keywords=(
+                            str(issue.get("severity") or ""),
+                            message,
+                            str(element.get("name") or ""),
+                            str(element.get("id") or ""),
+                            str(issue.get("category") or ""),
+                        ),
+                    )
+                )
+
+        try:
+            traceability = project_requirement_traceability_snapshot(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ):
+            traceability = {}
+        requirements = traceability.get("requirements", []) if isinstance(traceability, dict) else []
+        if isinstance(requirements, list):
+            for requirement in requirements:
+                if not isinstance(requirement, dict):
+                    continue
+                requirement_id = str(requirement.get("id") or "").strip()
+                if not requirement_id:
+                    continue
+                commands.append(
+                    PaletteCommand(
+                        f"search.requirement.{requirement_id}",
+                        f"Requirement · {requirement.get('title') or requirement_id}",
+                        "Search / Requirements",
+                        self.show_requirements_traceability,
+                        keywords=(
+                            requirement_id,
+                            str(requirement.get("set_title") or ""),
+                            str(requirement.get("source") or ""),
+                            str(requirement.get("status") or ""),
+                        ),
+                    )
+                )
+
+        try:
+            evidence_records = verification_run_history_records(self.project.metadata)
+        except VerificationRunHistoryIntegrityError:
+            evidence_records = []
+        for record in evidence_records:
+            sequence = record.get("sequence")
+            if not isinstance(sequence, int) or isinstance(sequence, bool):
+                continue
+            verification = record.get("verification")
+            verification = verification if isinstance(verification, dict) else {}
+            commands.append(
+                PaletteCommand(
+                    f"search.evidence.{sequence}",
+                    f"Evidence record #{sequence} · {record.get('analysis_name') or record.get('analysis_id') or 'analysis'}",
+                    "Search / Evidence",
+                    lambda selected_sequence=sequence: self._open_evidence_search_result(
+                        selected_sequence
+                    ),
+                    keywords=(
+                        str(record.get("analysis_kind") or ""),
+                        str(record.get("completed_at_utc") or ""),
+                        str(verification.get("status") or ""),
+                        str(record.get("record_sha256") or ""),
+                    ),
+                )
+            )
+        return commands
+
     def _command_palette_commands(self) -> list[PaletteCommand]:
-        return [
+        commands = [
             PaletteCommand(
                 "file.new",
                 "New Project",
@@ -3327,6 +3496,8 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+        commands.extend(self._engineering_search_commands())
+        return commands
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

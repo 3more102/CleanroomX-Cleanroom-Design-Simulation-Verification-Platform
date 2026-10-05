@@ -1578,7 +1578,7 @@ class CleanroomXApp:
         ttk.Label(brand_block, text="CLEANROOMX", style="CX.TopbarBrand.TLabel").pack(anchor="w")
         ttk.Label(
             brand_block,
-            text="INDUSTRIAL ENGINEERING WORKSTATION",
+            text="ENGINEERING WORKSTATION",
             style="CX.ProductSub.TLabel",
         ).pack(anchor="w", pady=(1, 0))
 
@@ -1587,7 +1587,7 @@ class CleanroomXApp:
             text="ACTIVE PROJECT",
             style="CX.ProductSub.TLabel",
         ).grid(row=0, column=1, sticky="w", padx=(0, 5))
-        ttk.Entry(topbar, textvariable=self.name_var, width=24).grid(
+        ttk.Entry(topbar, textvariable=self.name_var, width=18).grid(
             row=0, column=2, sticky="ew", padx=(0, 8)
         )
 

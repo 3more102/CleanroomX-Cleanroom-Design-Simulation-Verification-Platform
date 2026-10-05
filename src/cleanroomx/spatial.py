@@ -1683,6 +1683,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._snap_indicator_world: tuple[float, float] | None = None
         self._drag_anchor: tuple[float, float] | None = None
         self._drag_item_origin: tuple[float, float] | None = None
+        self._box_select_anchor_canvas: tuple[int, int] | None = None
+        self._box_select_current_canvas: tuple[int, int] | None = None
+        self._box_select_state: int = 0
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._orbit_anchor: tuple[int, int] | None = None
@@ -2524,6 +2527,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_escape(self, event=None):
+        self._box_select_anchor_canvas = None
+        self._box_select_current_canvas = None
+        self._box_select_state = 0
+        self.canvas_2d.delete("selection_box")
         self.clear_measurement()
         return "break"
 
@@ -2599,6 +2606,14 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def selected_hits(self) -> tuple[_Hit, ...]:
         return tuple(self._selected_hits)
+
+    def _set_selected_hits(self, hits: list[_Hit] | tuple[_Hit, ...]) -> None:
+        ordered: list[_Hit] = []
+        for hit in hits:
+            if hit not in ordered and self._hit_exists(hit):
+                ordered.append(hit)
+        self._selected_hits = ordered
+        self.selected = ordered[-1] if ordered else None
 
     def _update_click_selection(self, hit: _Hit | None, state: int) -> None:
         shift = bool(state & 0x0001)
@@ -4758,6 +4773,10 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
+        self._box_select_anchor_canvas = None
+        self._box_select_current_canvas = None
+        self._box_select_state = 0
+        self.canvas_2d.delete("selection_box")
         if self._current_tool_mode() in {"distance", "area"}:
             self._handle_measure_click(event.x, event.y)
             return
@@ -4783,6 +4802,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             modifier_selection = False
         else:
             self._update_click_selection(hit, state)
+        if hit is None:
+            self._box_select_anchor_canvas = (int(event.x), int(event.y))
+            self._box_select_current_canvas = (int(event.x), int(event.y))
+            self._box_select_state = state
         item = self._selected_object()
         if (
             hit is not None
@@ -4806,6 +4829,21 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_drag(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if self._box_select_anchor_canvas is not None:
+            self._box_select_current_canvas = (int(event.x), int(event.y))
+            self.canvas_2d.delete("selection_box")
+            x0, y0 = self._box_select_anchor_canvas
+            self.canvas_2d.create_rectangle(
+                x0,
+                y0,
+                int(event.x),
+                int(event.y),
+                outline=self._theme_palette["accent"],
+                width=1,
+                dash=(4, 3),
+                tags=("selection_box",),
+            )
             return
         item = self._selected_object()
         if item is None or self._drag_anchor is None:
@@ -4857,8 +4895,85 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._load_property_panel()
         self.redraw()
 
+    def _box_selection_hits(
+        self,
+        x0: int,
+        y0: int,
+        x1: int,
+        y1: int,
+    ) -> list[_Hit]:
+        left, right = sorted((x0, x1))
+        top, bottom = sorted((y0, y1))
+        hits: list[_Hit] = []
+        for room in self.layout["rooms"]:
+            hit = _Hit("room", room["id"])
+            if not self._is_item_visible(hit.kind, hit.item_id):
+                continue
+            rx0, ry0 = self._world_to_canvas(room["x_m"], room["y_m"])
+            rx1, ry1 = self._world_to_canvas(
+                room["x_m"] + room["length_m"],
+                room["y_m"] + room["width_m"],
+            )
+            room_left, room_right = sorted((rx0, rx1))
+            room_top, room_bottom = sorted((ry0, ry1))
+            if (
+                room_right >= left
+                and room_left <= right
+                and room_bottom >= top
+                and room_top <= bottom
+            ):
+                hits.append(hit)
+        if self._show_devices.get():
+            for device in self.layout["devices"]:
+                hit = _Hit("device", device["id"])
+                if not self._is_item_visible(hit.kind, hit.item_id):
+                    continue
+                dx, dy = self._world_to_canvas(device["x_m"], device["y_m"])
+                if left <= dx <= right and top <= dy <= bottom:
+                    hits.append(hit)
+        return hits
+
+    def _apply_box_selection(
+        self,
+        hits: list[_Hit],
+        *,
+        state: int,
+    ) -> None:
+        if state & 0x0004:
+            updated = list(self._selected_hits)
+            for hit in hits:
+                if hit in updated:
+                    updated.remove(hit)
+                else:
+                    updated.append(hit)
+            self._set_selected_hits(updated)
+        elif state & 0x0001:
+            self._set_selected_hits([*self._selected_hits, *hits])
+        else:
+            self._set_selected_hits(hits)
+
     def _on_left_up(self, event: tk.Event) -> None:
         if self._current_tool_mode() != "select":
+            return
+        if self._box_select_anchor_canvas is not None:
+            x0, y0 = self._box_select_anchor_canvas
+            x1, y1 = (
+                self._box_select_current_canvas
+                or (int(event.x), int(event.y))
+            )
+            state = self._box_select_state
+            self._box_select_anchor_canvas = None
+            self._box_select_current_canvas = None
+            self._box_select_state = 0
+            self.canvas_2d.delete("selection_box")
+            if abs(x1 - x0) >= 4 or abs(y1 - y0) >= 4:
+                self._apply_box_selection(
+                    self._box_selection_hits(x0, y0, x1, y1),
+                    state=state,
+                )
+                self._load_property_panel()
+                self._notify_selection_change()
+                self.redraw()
             return
         if (
             self._drag_anchor is not None

@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_theme import theme_palette
 from .project_diagnostics import analyze_project_diagnostics
 
 
@@ -39,6 +40,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._summary_base_text = "Project diagnostics not evaluated"
         self._sort_column: str | None = None
         self._sort_reverse = False
+        self._theme_palette = theme_palette("light")
         self._build()
 
         self.search_var.trace_add("write", lambda *_: self._populate())
@@ -165,7 +167,6 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
@@ -187,6 +188,31 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+        self.apply_theme("light")
+
+    def apply_theme(self, value: Any) -> None:
+        palette = theme_palette(value)
+        self._theme_palette = palette
+        self.tree.tag_configure(
+            "error",
+            foreground=palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground=palette["warning"],
+        )
+        self.tree.tag_configure(
+            "info",
+            foreground=palette["info"],
+        )
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:

@@ -1671,7 +1671,7 @@ class CleanroomXApp:
             workflowbar,
             text="1  Design",
             width=9,
-            style="CX.Step.TButton",
+            style="CX.StepDesign.TButton",
             command=lambda: self._activate_spatial_workspace("split"),
         )
         self.workflow_design_button.pack(side="left", padx=1)
@@ -1679,7 +1679,7 @@ class CleanroomXApp:
             workflowbar,
             text="2  Inputs",
             width=9,
-            style="CX.Step.TButton",
+            style="CX.StepAnalyze.TButton",
             command=self._activate_analysis_input_workspace,
         )
         self.workflow_input_button.pack(side="left", padx=1)
@@ -1687,7 +1687,7 @@ class CleanroomXApp:
             workflowbar,
             text="3  Validate",
             width=10,
-            style="CX.Step.TButton",
+            style="CX.StepVerify.TButton",
             command=self.validate_current,
         )
         self.workflow_validate_button.pack(side="left", padx=1)
@@ -1703,7 +1703,7 @@ class CleanroomXApp:
             workflowbar,
             text="5  Save & Verify",
             width=14,
-            style="CX.Step.TButton",
+            style="CX.StepRelease.TButton",
             command=self._guided_save_and_verify,
         )
         self.workflow_verify_button.pack(side="left", padx=1)
@@ -1711,7 +1711,7 @@ class CleanroomXApp:
             workflowbar,
             text="6  Report",
             width=9,
-            style="CX.Step.TButton",
+            style="CX.StepEvidence.TButton",
             command=self.export_project_engineering_dossier,
         )
         self.workflow_report_button.pack(side="left", padx=1)
@@ -3049,7 +3049,7 @@ class CleanroomXApp:
         for name, button in buttons.items():
             button.configure(
                 style=(
-                    "CX.ModeActive.TButton"
+                    f"CX.Mode{name.title()}Active.TButton"
                     if name == key
                     else "CX.Mode.TButton"
                 )

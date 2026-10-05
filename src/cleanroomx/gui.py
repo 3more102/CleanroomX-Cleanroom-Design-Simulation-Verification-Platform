@@ -8377,17 +8377,20 @@ class CleanroomXApp:
                 ("stage", generation, analysis_id, "Finalizing run-history evidence")
             )
             history_evidence = None
-            history_error = None
+            history_issue = None
             try:
                 history_evidence = build_run_history_evidence(payload, result)
             except Exception as exc:  # audit preparation must not hide a valid result
-                history_error = str(exc)
+                history_issue = record_gui_exception(
+                    f"Prepare run-history evidence ({kind})",
+                    exc,
+                )
             self._queue.put(
                 (
                     "success",
                     generation,
                     analysis_id,
-                    (result, history_evidence, history_error),
+                    (result, history_evidence, history_issue),
                 )
             )
 
@@ -8482,14 +8485,14 @@ class CleanroomXApp:
                     )
                 else:
                     history_evidence = None
-                    history_error = None
+                    history_issue = None
                     run = payload
                     if (
                         isinstance(payload, tuple)
                         and len(payload) == 3
                         and isinstance(payload[0], AnalysisRun)
                     ):
-                        run, history_evidence, history_error = payload
+                        run, history_evidence, history_issue = payload
 
                     try:
                         analysis = self.project.analysis_by_id(analysis_id)
@@ -8534,19 +8537,22 @@ class CleanroomXApp:
                         )
                         continue
 
-                    if history_error is None:
+                    if history_issue is None:
                         try:
                             self._record_completed_run(
                                 analysis, run, history_evidence
                             )
                         except RunHistoryIntegrityError as exc:
-                            history_error = str(exc)
+                            history_issue = record_gui_exception(
+                                "Persist run-history audit record",
+                                exc,
+                            )
 
                     self._runs_by_analysis[analysis_id] = run
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
-                    if history_error is None:
+                    if history_issue is None:
                         self._finish_active_run_task(
                             state="completed",
                             stage="Result accepted into current session",
@@ -8560,14 +8566,28 @@ class CleanroomXApp:
                             f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
+                        if isinstance(history_issue, GuiErrorReport):
+                            history_detail = (
+                                f"{history_issue.summary}\n"
+                                f"Error reference: {history_issue.reference}"
+                            )
+                            history_message = history_issue.user_message()
+                            status_suffix = f" · {history_issue.reference}"
+                        else:
+                            # Compatibility with a queued success produced by an
+                            # older in-process worker during a live development reload.
+                            history_detail = str(history_issue)
+                            history_message = history_detail
+                            status_suffix = ""
                         self._finish_active_run_task(
                             state="completed",
                             stage="Result accepted; audit history not updated",
                             result=str(run.status or "completed").upper(),
-                            detail=str(history_error),
+                            detail=history_detail,
                         )
                         self.status_var.set(
-                            f"Completed — {run.title}; run history was not updated."
+                            f"Completed — {run.title}; run history was not updated"
+                            f"{status_suffix}."
                         )
                         messagebox.showwarning(
                             "Run history not updated",
@@ -8577,7 +8597,7 @@ class CleanroomXApp:
                                 "evidence could not be prepared or the existing history failed "
                                 "integrity validation. Existing history was left unchanged. "
                                 "Export the run bundle if this result must be retained.\n\n"
-                                f"{history_error}"
+                                f"{history_message}"
                             ),
                             parent=self.root,
                         )

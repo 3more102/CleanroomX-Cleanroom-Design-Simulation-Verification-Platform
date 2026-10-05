@@ -40,6 +40,18 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "canvas_3d",
         "plot",
         "grid",
+        "info",
+        "simulation",
+        "evidence",
+        "pass",
+        "warning",
+        "error",
+        "stale",
+        "suppressed",
+        "pass_surface",
+        "warning_surface",
+        "error_surface",
+        "stale_surface",
     }
     assert set(light) == required
     assert set(dark) == required
@@ -61,3 +73,12 @@ def test_density_name_normalization_is_strict_and_deterministic():
     assert normalize_density_name("") == "comfortable"
     assert normalize_density_name("ultra-dense") == "comfortable"
     assert normalize_density_name(None) == "comfortable"
+
+
+def test_semantic_state_tokens_remain_distinct_in_each_theme():
+    for theme in ("light", "dark"):
+        palette = theme_palette(theme)
+        assert palette["pass"] != palette["warning"]
+        assert palette["warning"] != palette["error"]
+        assert palette["pass_surface"] != palette["warning_surface"]
+        assert palette["warning_surface"] != palette["error_surface"]

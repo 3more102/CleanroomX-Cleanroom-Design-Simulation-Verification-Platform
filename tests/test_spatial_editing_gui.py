@@ -998,6 +998,29 @@ def test_status_bar_uses_human_readable_spatial_selection_context(app):
     assert app.project.to_dict() == project_before
 
 
+def test_status_bar_tracks_live_cursor_grid_and_snap_context_without_model_mutation(app):
+    workspace = app.spatial_workspace
+    project_before = copy.deepcopy(app.project.to_dict())
+    grid_m = workspace.layout["grid_m"]
+    world_x = workspace.layout["rooms"][0]["x_m"] + 0.37
+    world_y = workspace.layout["rooms"][0]["y_m"] + 0.41
+    canvas_x, canvas_y = workspace._world_to_canvas(world_x, world_y)
+    event = type("Event", (), {"x": int(canvas_x), "y": int(canvas_y)})()
+
+    workspace._on_motion(event)
+    app.root.update()
+
+    status = app.engineering_context_var.get()
+    assert f"Grid {grid_m:g} m" in status
+    assert "Snap ON" in status
+    assert "x " in status and " y " in status
+    assert app.project.to_dict() == project_before
+
+    workspace._set_view_flag("snap_to_grid", False)
+    app.root.update()
+    assert "Snap OFF" in app.engineering_context_var.get()
+
+
 def test_status_bar_tracks_live_viewport_mode_zoom_and_projection(app):
     workspace = app.spatial_workspace
     workspace.layout["view"]["zoom_2d"] = 1.25

@@ -142,3 +142,32 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+
+def test_filter_commands_ranks_label_prefix_above_keyword_only_match():
+    noop = lambda: None
+    commands = [
+        PaletteCommand(
+            "keyword",
+            "Open Evidence Workspace",
+            "Evidence",
+            noop,
+            keywords=("simulation", "run"),
+        ),
+        PaletteCommand(
+            "label",
+            "Run Current Analysis",
+            "Analysis",
+            noop,
+            keywords=("solver",),
+        ),
+        PaletteCommand(
+            "category",
+            "Open Result History",
+            "Run",
+            noop,
+        ),
+    ]
+
+    matches = filter_commands(commands, "run")
+    assert [item.id for item in matches] == ["label", "category", "keyword"]

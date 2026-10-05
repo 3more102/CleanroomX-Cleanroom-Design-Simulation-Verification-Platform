@@ -230,6 +230,78 @@ def test_selection_modifier_mapping_is_deterministic():
     assert spatial_module.SpatialDesignWorkspace._selection_mode_from_event(Event(0x0005)) == "toggle"
 
 
+def test_multi_object_inspector_shows_mixed_values_and_applies_common_edit(app):
+    workspace = app.spatial_workspace
+    room_a = workspace.layout["rooms"][0]
+    room_b = workspace.layout["rooms"][1]
+    hits = (_Hit("room", room_a["id"]), _Hit("room", room_b["id"]))
+
+    workspace._set_selected_hits(hits)
+    workspace._load_property_panel()
+    app.root.update()
+
+    assert "2 objects selected" in workspace._selection_var.get()
+    assert workspace._property_vars["x_m"].get() == spatial_module._MIXED_PROPERTY_VALUE
+    assert "2 selected" in workspace._property_filter_var.get()
+    assert workspace._property_apply_button.cget("text") == "Apply to 2"
+
+    workspace._property_vars["height_m"].set("4.25")
+    workspace.apply_properties()
+    app.root.update()
+
+    selected_rooms = {
+        room["id"]: room
+        for room in workspace.layout["rooms"]
+        if room["id"] in {room_a["id"], room_b["id"]}
+    }
+    assert selected_rooms[room_a["id"]]["height_m"] == 4.25
+    assert selected_rooms[room_b["id"]]["height_m"] == 4.25
+    assert workspace.selected_hits() == hits
+
+
+def test_invalid_multi_object_edit_is_atomic(app, monkeypatch):
+    workspace = app.spatial_workspace
+    room_a = workspace.layout["rooms"][0]
+    room_b = workspace.layout["rooms"][1]
+    workspace._set_selected_hits(
+        (_Hit("room", room_a["id"]), _Hit("room", room_b["id"]))
+    )
+    workspace._load_property_panel()
+    before = copy.deepcopy(workspace.layout)
+    can_undo = app._project_history.can_undo
+    errors = []
+    monkeypatch.setattr(
+        "cleanroomx.spatial.messagebox.showerror",
+        lambda *args, **kwargs: errors.append(args),
+    )
+
+    workspace._property_vars["height_m"].set("NaN")
+    workspace.apply_properties()
+
+    assert errors and "Height" in errors[0][1]
+    assert workspace.layout == before
+    assert app.project.metadata["spatial_layout"] == before
+    assert app._project_history.can_undo == can_undo
+
+
+def test_multi_object_inspector_only_exposes_common_fields(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    device = workspace.layout["devices"][0]
+    workspace._set_selected_hits(
+        (_Hit("room", room["id"]), _Hit("device", device["id"]))
+    )
+    workspace._load_property_panel()
+    app.root.update()
+
+    common = workspace._property_fields_for_selection()
+    assert {"name", "x_m", "y_m", "width_m", "height_m"} <= common
+    assert "pressure_pa" not in common
+    assert "room_id" not in common
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
+    assert workspace._property_rows["room_id"].winfo_manager() == ""
+
+
 def test_project_navigator_and_workspace_selection_stay_synchronized(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

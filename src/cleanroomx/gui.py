@@ -1703,7 +1703,7 @@ class CleanroomXApp:
             workflowbar,
             text="5  Save & Verify",
             width=14,
-            style="CX.StepRelease.TButton",
+            style="CX.StepVerify.TButton",
             command=self._guided_save_and_verify,
         )
         self.workflow_verify_button.pack(side="left", padx=1)
@@ -1711,7 +1711,7 @@ class CleanroomXApp:
             workflowbar,
             text="6  Report",
             width=9,
-            style="CX.StepEvidence.TButton",
+            style="CX.StepRelease.TButton",
             command=self.export_project_engineering_dossier,
         )
         self.workflow_report_button.pack(side="left", padx=1)

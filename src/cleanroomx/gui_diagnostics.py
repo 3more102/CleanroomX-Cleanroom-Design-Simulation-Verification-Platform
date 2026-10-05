@@ -119,39 +119,44 @@ class DiagnosticsWorkspace(ttk.Frame):
 
         filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
         filters.pack(fill="x", pady=(0, 4))
-        ttk.Label(filters, text="Search").pack(side="left")
-        ttk.Entry(filters, textvariable=self.search_var, width=24).pack(
+        filter_primary = ttk.Frame(filters, style="CX.Toolbar.TFrame")
+        filter_primary.pack(fill="x")
+        ttk.Label(filter_primary, text="Search").pack(side="left")
+        ttk.Entry(filter_primary, textvariable=self.search_var, width=24).pack(
             side="left", padx=(4, 8)
         )
-        ttk.Label(filters, text="Severity").pack(side="left")
+        ttk.Label(filter_primary, text="Severity").pack(side="left")
         ttk.Combobox(
-            filters,
+            filter_primary,
             textvariable=self.severity_var,
             values=("All", "Error", "Warning", "Info"),
             state="readonly",
             width=10,
         ).pack(side="left", padx=(4, 8))
-        ttk.Label(filters, text="Rule").pack(side="left")
+        ttk.Label(filter_primary, text="Rule").pack(side="left")
         self.rule_combo = ttk.Combobox(
-            filters,
+            filter_primary,
             textvariable=self.rule_var,
             values=("All",),
             state="readonly",
             width=22,
         )
-        self.rule_combo.pack(side="left", padx=(4, 8))
-        ttk.Label(filters, text="Domain").pack(side="left")
+        self.rule_combo.pack(side="left", padx=(4, 0))
+
+        filter_context = ttk.Frame(filters, style="CX.Toolbar.TFrame")
+        filter_context.pack(fill="x", pady=(4, 0))
+        ttk.Label(filter_context, text="Domain").pack(side="left")
         self.category_combo = ttk.Combobox(
-            filters,
+            filter_context,
             textvariable=self.category_var,
             values=("All",),
             state="readonly",
             width=16,
         )
         self.category_combo.pack(side="left", padx=(4, 8))
-        ttk.Label(filters, text="Target").pack(side="left")
+        ttk.Label(filter_context, text="Target").pack(side="left")
         self.target_combo = ttk.Combobox(
-            filters,
+            filter_context,
             textvariable=self.target_type_var,
             values=("All",),
             state="readonly",
@@ -159,8 +164,8 @@ class DiagnosticsWorkspace(ttk.Frame):
         )
         self.target_combo.pack(side="left", padx=(4, 0))
         ttk.Button(
-            filters,
-            text="Reset",
+            filter_context,
+            text="Reset filters",
             style="CX.Compact.TButton",
             command=self._reset_filters,
         ).pack(side="right", padx=(8, 0))

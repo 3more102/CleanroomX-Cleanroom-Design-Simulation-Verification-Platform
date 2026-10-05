@@ -341,6 +341,21 @@ jobs:
       - name: Smoke CMD checkout launcher
         shell: cmd
         run: start-cleanroomx.cmd --check
+      - name: Verify installed GUI-subsystem desktop launcher
+        shell: pwsh
+        run: |
+          $entryPoints = python -c "import importlib.metadata as m; print([ep.value for ep in m.distribution('cleanroomx').entry_points if ep.group == 'gui_scripts' and ep.name == 'cleanroomx-desktop'])"
+          if ($entryPoints -notmatch "cleanroomx.gui:main") {
+            throw "cleanroomx-desktop is not registered as a gui_scripts entry point"
+          }
+          $desktop = (Get-Command cleanroomx-desktop).Source
+          if (-not (Test-Path $desktop)) {
+            throw "cleanroomx-desktop launcher was not installed"
+          }
+          $process = Start-Process -FilePath $desktop -ArgumentList "--check" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "cleanroomx-desktop --check failed with exit code $($process.ExitCode)"
+          }
 
   required-ci:
     name: Required CI Gate

@@ -8,6 +8,7 @@ from tkinter import ttk
 
 import pytest
 
+import cleanroomx.spatial as spatial_module
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_state import load_gui_layout_state
 from cleanroomx.project import save_project_document
@@ -675,6 +676,56 @@ def test_shell_panel_visibility_persists_across_app_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+
+def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
+    app,
+    monkeypatch,
+):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+
+    class AcceptedDialog:
+        result = {
+            "name": "Production Level",
+            "elevation_m": 1.25,
+            "default_ceiling_height_m": 3.6,
+            "grid_m": 0.25,
+        }
+
+    monkeypatch.setattr(
+        spatial_module,
+        "FloorPropertiesDialog",
+        lambda *args, **kwargs: AcceptedDialog(),
+    )
+    monkeypatch.setattr(workspace, "wait_window", lambda dialog: None)
+
+    workspace.edit_floor()
+    app.root.update()
+
+    assert workspace.layout["floor"]["name"] == "Production Level"
+    assert workspace.layout["floor"]["elevation_m"] == 1.25
+    assert workspace.layout["floor"]["default_ceiling_height_m"] == 3.6
+    assert workspace.layout["grid_m"] == 0.25
+    assert app.project.metadata["spatial_layout"] == workspace.layout
+
+    assert app.undo_project_edit()
+    assert workspace.layout == before
+    assert app.redo_project_edit()
+    applied = copy.deepcopy(workspace.layout)
+
+    class CancelledDialog:
+        result = None
+
+    monkeypatch.setattr(
+        spatial_module,
+        "FloorPropertiesDialog",
+        lambda *args, **kwargs: CancelledDialog(),
+    )
+    workspace.edit_floor()
+    app.root.update()
+    assert workspace.layout == applied
 def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     project_before = copy.deepcopy(app.project.to_dict())
 

@@ -72,3 +72,29 @@ def test_recent_project_list_is_deduplicated(app):
 
     recent = app.start_center.recent_tree.get_children()
     assert len(recent) == 1
+
+
+def test_startup_layout_restore_does_not_override_explicit_project_load(tmp_path):
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+
+    callback_errors = []
+    root.report_callback_exception = lambda *args: callback_errors.append(args)
+    application = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    try:
+        application.load_project_path(bundled_demo_project_path())
+        root.update()
+
+        assert application.notebook.select() == str(application.spatial_workspace)
+        assert application.workspace_preset_var.get() == "design"
+        assert callback_errors == []
+    finally:
+        root.destroy()

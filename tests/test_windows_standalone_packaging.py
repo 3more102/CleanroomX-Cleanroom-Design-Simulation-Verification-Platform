@@ -1,3 +1,4 @@
+import base64
 import subprocess
 import sys
 import tomllib
@@ -8,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-standalone.yml"
 BUILD_SCRIPT = ROOT / "scripts" / "build_windows_standalone.ps1"
 ENTRY_POINT = ROOT / "packaging" / "cleanroomx_desktop_entry.py"
-ICON = ROOT / "packaging" / "windows" / "CleanroomX.ico"
+ICON_PAYLOAD = ROOT / "packaging" / "windows" / "CleanroomX.ico.b64"
 VERSION_SCRIPT = ROOT / "scripts" / "write_windows_version_info.py"
 
 
@@ -29,6 +30,7 @@ def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked()
     assert "--onedir" in script
     assert "--collect-data cleanroomx" in script
     assert "--collect-all ifcopenshell" in script
+    assert "[Convert]::FromBase64String" in script
     assert "--icon $iconPath" in script
     assert "--version-file $versionFile" in script
     assert "CleanroomX Engineering Workstation" in script
@@ -37,8 +39,8 @@ def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked()
     assert '-ArgumentList "--check"' in script
 
 
-def test_windows_icon_is_a_real_multi_image_ico() -> None:
-    payload = ICON.read_bytes()
+def test_windows_icon_payload_decodes_to_a_real_multi_image_ico() -> None:
+    payload = base64.b64decode(ICON_PAYLOAD.read_text(encoding="ascii").strip(), validate=True)
 
     assert payload[:4] == b"\x00\x00\x01\x00"
     assert int.from_bytes(payload[4:6], "little") >= 4

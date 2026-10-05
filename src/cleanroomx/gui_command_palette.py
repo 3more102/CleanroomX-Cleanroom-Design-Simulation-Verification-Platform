@@ -14,6 +14,7 @@ class PaletteCommand:
     callback: Callable[[], None]
     shortcut: str = ""
     keywords: tuple[str, ...] = ()
+    search_only: bool = False
 
 
 def filter_commands(
@@ -28,7 +29,7 @@ def filter_commands(
     ]
     items = list(commands)
     if not tokens:
-        return items
+        return [command for command in items if not command.search_only]
 
     matches: list[PaletteCommand] = []
     for command in items:
@@ -78,7 +79,7 @@ class CommandPalette(tk.Toplevel):
         ).pack(side="left")
         ttk.Label(
             header,
-            text="GLOBAL WORKSTATION ACTIONS",
+            text="COMMANDS + ENGINEERING SEARCH",
             style="CX.Status.Info.TLabel",
         ).pack(side="right")
 
@@ -93,7 +94,7 @@ class CommandPalette(tk.Toplevel):
         self.search.pack(side="left", fill="x", expand=True)
         ttk.Label(
             search_host,
-            text="name · category · shortcut · keyword",
+            text="command · room · device · analysis · diagnostic · evidence",
             style="CX.Muted.TLabel",
         ).pack(side="right", padx=(10, 0))
 

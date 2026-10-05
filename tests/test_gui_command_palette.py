@@ -5,10 +5,11 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     PaletteCommand,
+    MAX_VISIBLE_RESULTS,
     filter_commands,
 )
 
@@ -140,3 +141,61 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert app._command_palette_window is not None
     assert app._command_palette_window.winfo_exists()
     app._command_palette_window._close()
+
+
+
+def test_command_palette_limits_rendered_rows_but_keeps_full_search_index(root):
+    commands = [
+        PaletteCommand(
+            f"item-{index}",
+            f"Engineering object {index}",
+            "Search / Object",
+            lambda: None,
+            keywords=(f"object-{index}",),
+        )
+        for index in range(MAX_VISIBLE_RESULTS + 25)
+    ]
+    palette = CommandPalette(root, commands=commands)
+    try:
+        root.update()
+        assert len(palette.tree.get_children()) == MAX_VISIBLE_RESULTS
+        assert palette._summary.cget("text") == (
+            f"{MAX_VISIBLE_RESULTS} OF {MAX_VISIBLE_RESULTS + 25} MATCHES"
+        )
+
+        palette._query_var.set(f"object-{MAX_VISIBLE_RESULTS + 24}")
+        root.update()
+        children = palette.tree.get_children()
+        assert len(children) == 1
+        assert palette.tree.item(children[0], "text") == (
+            f"Engineering object {MAX_VISIBLE_RESULTS + 24}"
+        )
+    finally:
+        palette._close()
+
+
+def test_application_palette_indexes_current_engineering_entities(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    app.load_project_path(bundled_demo_project_path())
+    root.update()
+
+    commands = app._engineering_search_commands()
+    categories = {command.category for command in commands}
+    labels = [command.label for command in commands]
+
+    assert "Search / Analysis" in categories
+    assert "Search / Room" in categories
+    assert any(label.startswith("Analysis · ") for label in labels)
+    assert any(label.startswith("Room · ") for label in labels)
+
+    room_command = next(
+        command for command in commands if command.category == "Search / Room"
+    )
+    room_command.callback()
+    root.update()
+    assert app.notebook.select() == str(app.spatial_workspace)
+    assert app.spatial_workspace.selected is not None

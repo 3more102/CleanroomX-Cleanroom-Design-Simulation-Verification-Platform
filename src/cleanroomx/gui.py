@@ -1267,6 +1267,7 @@ class CleanroomXApp:
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
         self.shell_model_badge_var = tk.StringVar(value="MODEL READY")
+        self.shell_save_badge_var = tk.StringVar(value="NEW PROJECT")
         self.shell_diagnostics_badge_var = tk.StringVar(value="DIAGNOSTICS —")
         self.shell_verification_badge_var = tk.StringVar(value="VERIFY —")
         self.shell_evidence_badge_var = tk.StringVar(value="EVIDENCE —")
@@ -1591,6 +1592,12 @@ class CleanroomXApp:
             style="CX.Status.Pass.TLabel",
         )
         self.shell_model_badge.pack(side="left", padx=2)
+        self.shell_save_badge = ttk.Label(
+            statebar,
+            textvariable=self.shell_save_badge_var,
+            style="CX.Status.Info.TLabel",
+        )
+        self.shell_save_badge.pack(side="left", padx=2)
         self.shell_diagnostics_badge = ttk.Label(
             statebar,
             textvariable=self.shell_diagnostics_badge_var,
@@ -1615,6 +1622,10 @@ class CleanroomXApp:
             style="CX.Status.Neutral.TLabel",
         )
         self.run_state_label.pack(side="right", padx=(4, 0))
+        attach_tooltip(
+            self.shell_save_badge,
+            "Explicit project file state. UNSAVED means the current engineering model differs from the last explicit save.",
+        )
         attach_tooltip(
             self.shell_diagnostics_badge,
             "Project diagnostics summary. F8 refreshes the currently enabled diagnostic rules.",
@@ -1892,6 +1903,7 @@ class CleanroomXApp:
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_navigator_selected)
         self.analysis_tree.bind("<Button-3>", self._show_navigator_context_menu)
         self.analysis_tree.tag_configure("section", font=("TkDefaultFont", 9, "bold"))
+        self._configure_navigator_domain_tags()
         self.navigator_filter_var.trace_add(
             "write",
             lambda *_: self._apply_navigator_filter(),
@@ -2349,6 +2361,8 @@ class CleanroomXApp:
                 background=palette["plot"],
                 highlightbackground=palette["border"],
             )
+
+        self._configure_navigator_domain_tags()
 
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
@@ -4268,6 +4282,29 @@ class CleanroomXApp:
         self._discard_restored_recovery()
         return True
 
+    def _configure_navigator_domain_tags(self) -> None:
+        """Apply semantic engineering-domain accents to the project navigator."""
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+        palette = theme_palette(self.theme_var.get())
+        colors = {
+            "domain_overview": palette["secondary_text"],
+            "domain_geometry": palette["accent"],
+            "domain_hvac": palette["info"],
+            "domain_airflow": palette["accent"],
+            "domain_pressure": palette["simulation"],
+            "domain_utilities": palette["attention"],
+            "domain_simulation": palette["simulation"],
+            "domain_diagnostics": palette["warning"],
+            "domain_requirements": palette["requirement"],
+            "domain_verification": palette["success"],
+            "domain_evidence": palette["evidence"],
+            "domain_reports": palette["secondary_text"],
+        }
+        for tag, color in colors.items():
+            tree.tag_configure(tag, foreground=color)
+
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         self._restore_navigator_tree()
         for item in self.analysis_tree.get_children():
@@ -4288,13 +4325,28 @@ class CleanroomXApp:
             ("nav-evidence", "Evidence"),
             ("nav-reports", "Reports"),
         )
+        section_tags = {
+            "nav-dashboard": "domain_overview",
+            "nav-building": "domain_geometry",
+            "nav-hvac": "domain_hvac",
+            "nav-devices": "domain_utilities",
+            "nav-pressure": "domain_pressure",
+            "nav-analyses": "domain_simulation",
+            "nav-simulation": "domain_simulation",
+            "nav-diagnostics": "domain_diagnostics",
+            "nav-requirements": "domain_requirements",
+            "nav-verification": "domain_verification",
+            "nav-proofgraph": "domain_verification",
+            "nav-evidence": "domain_evidence",
+            "nav-reports": "domain_reports",
+        }
         for iid, label in sections:
             self.analysis_tree.insert(
                 "",
                 "end",
                 iid=iid,
                 text=label,
-                tags=("section",),
+                tags=("section", section_tags[iid]),
                 open=iid in {"nav-building", "nav-hvac", "nav-analyses"},
             )
 
@@ -4303,12 +4355,14 @@ class CleanroomXApp:
             "end",
             iid="nav-airflow",
             text="Airflow overlay",
+            tags=("domain_airflow",),
         )
         self.analysis_tree.insert(
             "nav-hvac",
             "end",
             iid="nav-ach",
             text="ACH overlay",
+            tags=("domain_airflow",),
         )
 
         for analysis in self.project.analyses:
@@ -4318,6 +4372,7 @@ class CleanroomXApp:
                 iid=analysis.id,
                 text=analysis.name,
                 values=(analysis.kind,),
+                tags=("domain_simulation",),
             )
         self._refresh_spatial_navigator()
 
@@ -4536,6 +4591,7 @@ class CleanroomXApp:
                     iid="nav-floor",
                     text=floor_name,
                     open=True,
+                    tags=("domain_geometry",),
                 )
                 for room in rooms:
                     if not isinstance(room, dict) or not room.get("id"):
@@ -4546,6 +4602,7 @@ class CleanroomXApp:
                         "end",
                         iid=f"room:{room_id}",
                         text=str(room.get("name") or room_id),
+                        tags=("domain_geometry",),
                     )
 
             if tree.exists("nav-devices"):
@@ -4562,6 +4619,7 @@ class CleanroomXApp:
                         "end",
                         iid=f"device:{device_id}",
                         text=f"{name}  [{device_type}]",
+                        tags=("domain_utilities",),
                     )
 
             if previous_selection:
@@ -5712,6 +5770,27 @@ class CleanroomXApp:
         has_unsaved_changes = self._has_unsaved_changes()
         if has_unsaved_changes:
             self._schedule_recovery_checkpoint()
+
+        save_badge_var = getattr(self, "shell_save_badge_var", None)
+        save_badge = getattr(self, "shell_save_badge", None)
+        if self.project_path is None:
+            save_text = "UNSAVED" if has_unsaved_changes else "NEW PROJECT"
+            save_style = (
+                "CX.Status.Warning.TLabel"
+                if has_unsaved_changes
+                else "CX.Status.Info.TLabel"
+            )
+        else:
+            save_text = "UNSAVED" if has_unsaved_changes else "SAVED"
+            save_style = (
+                "CX.Status.Warning.TLabel"
+                if has_unsaved_changes
+                else "CX.Status.Pass.TLabel"
+            )
+        if save_badge_var is not None:
+            save_badge_var.set(save_text)
+        if save_badge is not None:
+            save_badge.configure(style=save_style)
 
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):

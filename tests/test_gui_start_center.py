@@ -262,3 +262,26 @@ def test_start_center_primary_controls_fit_supported_minimum_window(app):
             <= center.winfo_rooty() + center.winfo_height()
         ), control
 
+def test_start_workspace_uses_focused_home_layout(app):
+    app._activate_start_workspace()
+    app.root.update_idletasks()
+    app.root.update()
+
+    assert app.navigator_panel_visible_var.get() is False
+    assert app.output_panel_visible_var.get() is False
+    assert not app._paned_contains(app.main_panes, app.navigator_panel)
+    assert not app._paned_contains(app.workspace_panes, app.output_panel)
+
+
+def test_start_center_keyboard_focus_tracks_recent_project_state(app):
+    app._activate_start_workspace()
+    app.root.update_idletasks()
+    app.root.update()
+    assert app.root.focus_get() == app.start_center.new_project_button
+
+    app.load_project_path(bundled_demo_project_path())
+    app._activate_start_workspace()
+    app.root.update_idletasks()
+    app.root.update()
+    assert app.root.focus_get() == app.start_center.recent_search_entry
+

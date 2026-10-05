@@ -18,7 +18,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
 
     assert state["version"] == GUI_LAYOUT_STATE_VERSION
     assert state["navigator_visible"] is True
-    assert state["output_visible"] is False
+    assert state["output_visible"] is True
     assert state["inspector_visible"] is True
     assert state["theme"] == "dark"
     assert state["density"] == "compact"

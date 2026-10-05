@@ -2861,6 +2861,13 @@ class CleanroomXApp:
                 keywords=("home", "recent", "example"),
             ),
             PaletteCommand(
+                "workspace.dashboard",
+                "Open Engineering Dashboard",
+                "Window",
+                self._activate_dashboard_workspace,
+                keywords=("health", "status", "diagnostics", "verification", "evidence"),
+            ),
+            PaletteCommand(
                 "workspace.2d",
                 "Open 2D Workspace",
                 "Design",

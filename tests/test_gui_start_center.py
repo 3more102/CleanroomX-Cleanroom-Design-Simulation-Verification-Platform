@@ -108,3 +108,105 @@ def test_start_center_recent_search_and_remove_only_updates_recent_state(app, tm
     app.start_center.recent_search_var.set("")
     app.root.update()
     assert len(app.start_center.recent_tree.get_children()) == 1
+
+def test_start_center_project_health_reflects_canonical_project_state(app):
+    path = bundled_demo_project_path()
+    app.load_project_path(path)
+    project_before = app.project.to_dict()
+
+    app._activate_start_workspace()
+    app.root.update()
+
+    snapshot = app._start_center_health_snapshot()
+    center = app.start_center
+    assert center.project_name_var.get() == app.project.name
+    assert center.project_path_var.get() == str(path)
+    assert center.project_counts_var.get() == (
+        f"{len(app.project.analyses)} analyses • "
+        f"{snapshot['room_count']} rooms • {snapshot['device_count']} devices"
+    )
+
+    diagnostics = app.problems_panel.last_result
+    assert diagnostics is not None
+    diagnostic_summary = diagnostics["summary"]
+    if diagnostic_summary["error_count"]:
+        assert f"{diagnostic_summary['error_count']} error" in center.project_diagnostics_var.get()
+    elif diagnostic_summary["warning_count"]:
+        assert f"{diagnostic_summary['warning_count']} warning" in center.project_diagnostics_var.get()
+    else:
+        assert center.project_diagnostics_var.get() == "Problems: clear"
+
+    assert center.project_verification_var.get().startswith("Verification:")
+    assert center.project_evidence_var.get().startswith("Evidence:")
+    assert center.project_recovery_var.get().startswith("Recovery:")
+    assert app.project.to_dict() == project_before
+
+
+def test_start_center_workspace_shortcuts_use_canonical_profiles_without_mutation(app):
+    app.load_project_path(bundled_demo_project_path())
+    project_before = app.project.to_dict()
+
+    expectations = (
+        ("design", app.spatial_workspace),
+        ("simulation", app.simulation_workspace),
+        ("verification", app.spatial_workspace),
+        ("evidence", app.proofgraph_viewer),
+        ("reporting", app.reporting_workspace),
+    )
+    for profile, expected_widget in expectations:
+        app.start_center._open_workspace(profile)
+        app.root.update()
+        assert app.workspace_profile_var.get() == profile
+        assert app.notebook.select() == str(expected_widget)
+
+    assert app.project.to_dict() == project_before
+
+
+def test_start_center_health_semantics_distinguish_error_warning_and_missing_state(app):
+    center = app.start_center
+    center.set_active_project(
+        {
+            "name": "Health Test",
+            "path": "/tmp/health.cleanroomx.json",
+            "dirty": False,
+            "analysis_count": 3,
+            "room_count": 4,
+            "device_count": 5,
+            "diagnostics_available": True,
+            "error_count": 2,
+            "warning_count": 1,
+            "verification_available": True,
+            "configured_analysis_count": 2,
+            "current_count": 1,
+            "stale_count": 1,
+            "dependency_freshness_unverifiable_count": 0,
+            "not_verified_count": 0,
+            "evidence_record_count": 2,
+            "recovery_count": 1,
+            "recovery_issue_count": 0,
+        }
+    )
+    app.root.update()
+
+    assert center.project_state_var.get() == "2 open errors"
+    assert center.project_state_label.cget("style") == "CX.Status.Fail.TLabel"
+    assert "2 errors" in center.project_diagnostics_var.get()
+    assert center.project_diagnostics_label.cget("style") == "CX.Status.Fail.TLabel"
+    assert "1 stale" in center.project_verification_var.get()
+    assert center.project_verification_label.cget("style") == "CX.Status.Warning.TLabel"
+    assert "1 saved candidate" in center.project_recovery_var.get()
+
+    center.set_active_project(
+        {
+            "name": "No Data",
+            "path": "",
+            "dirty": False,
+            "diagnostics_available": False,
+            "verification_available": False,
+        }
+    )
+    app.root.update()
+    assert center.project_state_var.get() == "Unsaved project"
+    assert center.project_diagnostics_var.get() == "Problems: unavailable"
+    assert center.project_verification_var.get() == "Verification: unavailable"
+

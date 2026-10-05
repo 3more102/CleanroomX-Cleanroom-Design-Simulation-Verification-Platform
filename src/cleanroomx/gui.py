@@ -2226,6 +2226,7 @@ class CleanroomXApp:
             else default_gui_layout_state_path()
         )
         self._ui_layout_state = load_gui_layout_state(self._ui_state_path)
+        self._ui_layout_save_error_reference: str | None = None
         window_width, window_height = clamp_window_size_to_display(
             self._ui_layout_state["window_width"],
             self._ui_layout_state["window_height"],
@@ -3478,8 +3479,22 @@ class CleanroomXApp:
                 self._ui_state_path,
                 self._capture_ui_layout_state(),
             )
-        except Exception:
+        except Exception as exc:
+            reference = self._ui_layout_save_error_reference
+            if reference is None:
+                report = record_gui_exception(
+                    "Save workstation layout",
+                    exc,
+                )
+                reference = report.reference
+                self._ui_layout_save_error_reference = reference
+            status_var = getattr(self, "status_var", None)
+            if status_var is not None:
+                status_var.set(
+                    f"Layout preferences not saved · {reference}"
+                )
             return
+        self._ui_layout_save_error_reference = None
 
     def _restore_ui_layout_state(self) -> None:
         self._focus_workspace_snapshot = None

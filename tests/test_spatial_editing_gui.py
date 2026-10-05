@@ -320,6 +320,79 @@ def test_room_context_menu_exposes_real_editing_actions(app):
     assert "Link Analysis…" in labels
 
 
+def test_multi_selection_drag_moves_group_and_owned_devices_once(app):
+    workspace = app.spatial_workspace
+    rooms = workspace.layout["rooms"]
+    assert len(rooms) >= 2
+    first, second = rooms[:2]
+    selected_room_ids = {first["id"], second["id"]}
+    first_hit = _Hit("room", first["id"])
+    second_hit = _Hit("room", second["id"])
+    workspace._set_selected_hits([first_hit, second_hit])
+    workspace._load_property_panel()
+
+    before_rooms = {
+        room["id"]: (room["x_m"], room["y_m"])
+        for room in workspace.layout["rooms"]
+        if room["id"] in selected_room_ids
+    }
+    before_devices = {
+        device["id"]: (device["x_m"], device["y_m"])
+        for device in workspace.layout["devices"]
+        if device.get("room_id") in selected_room_ids
+    }
+
+    primary = second
+    room_item = workspace.canvas_2d.find_withtag(f"room:{primary['id']}")[0]
+    for item_id in workspace.canvas_2d.find_withtag("current"):
+        workspace.canvas_2d.dtag(item_id, "current")
+    workspace.canvas_2d.addtag_withtag("current", room_item)
+
+    center_x = primary["x_m"] + primary["length_m"] / 2
+    center_y = primary["y_m"] + primary["width_m"] / 2
+    down_x, down_y = workspace._world_to_canvas(center_x, center_y)
+    drag_x, drag_y = workspace._world_to_canvas(center_x + 1.0, center_y)
+    down = type(
+        "Event",
+        (),
+        {"x": int(down_x), "y": int(down_y), "state": 0},
+    )()
+    drag = type(
+        "Event",
+        (),
+        {"x": int(drag_x), "y": int(drag_y), "state": 0},
+    )()
+
+    workspace._on_left_down(down)
+    assert workspace.selected_hits() == (first_hit, second_hit)
+    workspace._on_left_drag(drag)
+    workspace._on_left_up(drag)
+    app.root.update()
+
+    for room in workspace.layout["rooms"]:
+        if room["id"] not in selected_room_ids:
+            continue
+        before_x, before_y = before_rooms[room["id"]]
+        assert room["x_m"] == pytest.approx(before_x + 1.0)
+        assert room["y_m"] == pytest.approx(before_y)
+
+    for device in workspace.layout["devices"]:
+        if device["id"] not in before_devices:
+            continue
+        before_x, before_y = before_devices[device["id"]]
+        assert device["x_m"] == pytest.approx(before_x + 1.0)
+        assert device["y_m"] == pytest.approx(before_y)
+
+    assert app.undo_project_edit() is True
+    app.root.update()
+    for room in workspace.layout["rooms"]:
+        if room["id"] in before_rooms:
+            assert (room["x_m"], room["y_m"]) == before_rooms[room["id"]]
+    for device in workspace.layout["devices"]:
+        if device["id"] in before_devices:
+            assert (device["x_m"], device["y_m"]) == before_devices[device["id"]]
+
+
 def test_multi_selection_bulk_hide_delete_and_undo(app):
     workspace = app.spatial_workspace
     rooms = workspace.layout["rooms"]

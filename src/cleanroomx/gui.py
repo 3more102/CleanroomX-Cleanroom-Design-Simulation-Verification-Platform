@@ -1919,7 +1919,11 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
-        self.dashboard = EngineeringDashboard(self.notebook)
+        self.dashboard = EngineeringDashboard(
+            self.notebook,
+            on_issue=self._navigate_project_diagnostic,
+        )
+        self.dashboard.apply_theme(self.theme_var.get())
         self.notebook.add(self.dashboard, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
@@ -2059,25 +2063,42 @@ class CleanroomXApp:
             "Report", notebook=self.output_notebook
         )
 
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
+        status_bar = ttk.Frame(
+            self.root,
+            style="CX.Toolbar.TFrame",
+            padding=(8, 4),
+        )
         status_bar.pack(fill="x", side="bottom")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
             anchor="w",
+            style="CX.Topbar.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.model_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.model_status_var,
+            style="CX.ToolbarMuted.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.selection_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.selection_status_var,
+            style="CX.ToolbarMuted.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
+        ttk.Label(
+            status_bar,
+            textvariable=self.workspace_status_var,
+            style="CX.ToolbarMuted.TLabel",
+        ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
@@ -2086,6 +2107,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
+            style="CX.ToolbarMuted.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2094,6 +2116,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
+            style="CX.ToolbarMuted.TLabel",
         ).pack(side="right")
 
     @staticmethod
@@ -2338,6 +2361,10 @@ class CleanroomXApp:
         result_panel = getattr(self, "analysis_result_panel", None)
         if result_panel is not None and hasattr(result_panel, "apply_theme"):
             result_panel.apply_theme(self.theme_var.get())
+
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None and hasattr(dashboard, "apply_theme"):
+            dashboard.apply_theme(self.theme_var.get())
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):

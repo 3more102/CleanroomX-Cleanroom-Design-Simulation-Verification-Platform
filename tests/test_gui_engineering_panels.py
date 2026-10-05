@@ -60,6 +60,27 @@ def _force_room_overlap(app: CleanroomXApp) -> tuple[dict, dict]:
     return result, issue
 
 
+def test_engineering_dashboard_uses_live_project_state(app):
+    assert "Dashboard" in _tab_texts(app.notebook)
+
+    result = app._refresh_engineering_panels()
+    assert result is not None
+    assert app.project.name in app.dashboard_project_var.get()
+    assert "issue" in app.dashboard_diagnostics_var.get().lower()
+    assert app.dashboard_verification_var.get() != "Not evaluated"
+    assert app.dashboard_evidence_var.get()
+
+    assert app.run_state_var.get() == "IDLE"
+    app._set_running(True)
+    app.root.update()
+    assert app.run_state_var.get() == "RUNNING"
+    assert app.run_state_badge.cget("style") == "CX.SimulationBadge.TLabel"
+    app._set_running(False)
+    app.root.update()
+    assert app.run_state_var.get() == "IDLE"
+    assert app.run_state_badge.cget("style") == "CX.SuccessBadge.TLabel"
+
+
 def test_engineering_output_workspace_exposes_first_class_panels(app):
     tabs = _tab_texts(app.output_notebook)
     assert tabs[:5] == [

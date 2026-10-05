@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 5
+GUI_LAYOUT_STATE_VERSION = 6
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -16,6 +16,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "inspector_visible": True,
     "theme": "light",
     "workspace_profile": "start",
+    "density": "comfortable",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -103,6 +104,11 @@ def _normalize_workspace_profile(value: Any) -> str:
     return _DEFAULT_GUI_LAYOUT_STATE["workspace_profile"]
 
 
+def _normalize_density(value: Any) -> str:
+    density = str(value or "").strip().casefold()
+    return density if density in {"comfortable", "compact"} else "comfortable"
+
+
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
@@ -127,6 +133,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         "workspace_profile": _normalize_workspace_profile(
             source.get("workspace_profile")
         ),
+        "density": _normalize_density(source.get("density")),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),

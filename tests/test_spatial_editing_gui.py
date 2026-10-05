@@ -193,6 +193,7 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
     app.root.update()
 
     assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["zone"].winfo_manager() == "pack"
     assert workspace._property_rows["analysis_room_name"].winfo_manager() == "pack"
     assert workspace._property_rows["room_id"].winfo_manager() == ""
 
@@ -202,6 +203,7 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
 
     assert workspace._property_rows["room_id"].winfo_manager() == "pack"
     assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
+    assert workspace._property_rows["zone"].winfo_manager() == ""
     assert workspace._property_rows["classification"].winfo_manager() == ""
 
 

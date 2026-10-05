@@ -70,18 +70,24 @@ class StartCenter(ttk.Frame):
         actions.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
-        ttk.Button(
+        self.new_project_button = ttk.Button(
             actions,
             text="New Project",
             style="CX.Primary.TButton",
             command=on_new,
-        ).grid(row=0, column=0, sticky="ew", padx=5, pady=5)
-        ttk.Button(
+        )
+        self.new_project_button.grid(
+            row=0, column=0, sticky="ew", padx=5, pady=5
+        )
+        self.open_project_button = ttk.Button(
             actions,
             text="Open Project",
             style="CX.Primary.TButton",
             command=on_open,
-        ).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        )
+        self.open_project_button.grid(
+            row=0, column=1, sticky="ew", padx=5, pady=5
+        )
         ttk.Button(
             actions,
             text="Import IFC",
@@ -295,6 +301,13 @@ class StartCenter(ttk.Frame):
         examples.columnconfigure(0, weight=1)
 
         self.recent_search_var.trace_add("write", lambda *_: self._populate_recent())
+
+    def focus_default(self) -> None:
+        """Place keyboard focus on the most useful Home control."""
+        if self._recent_records:
+            self.recent_search_entry.focus_set()
+        else:
+            self.new_project_button.focus_set()
 
     def _open_workspace(self, profile: str) -> None:
         if self._on_workspace is not None:

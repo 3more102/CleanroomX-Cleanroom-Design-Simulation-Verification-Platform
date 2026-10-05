@@ -72,6 +72,7 @@ from .project_diagnostics_cli import (
 from .gui_panels import ProjectDiagnosticsPanel, SimulationSummaryPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_command_palette import CommandPalette, PaletteCommand
+from .gui_search import EngineeringSearchItem, GlobalEngineeringSearch
 from .gui_state import (
     clamp_window_size_to_display,
     default_gui_layout_state_path,
@@ -82,7 +83,7 @@ from .gui_state import (
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .gui_widgets import TreeviewColumnSorter, attach_tooltip
-from .gui_proofgraph import ProofGraphViewer
+from .gui_proofgraph import ProofGraphViewer, proofgraph_projection
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -1453,6 +1454,7 @@ class CleanroomXApp:
         self._project_diagnostics_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
+        self._global_search_window: GlobalEngineeringSearch | None = None
         self._ui_state_path = (
             Path(ui_state_path)
             if ui_state_path is not None
@@ -1689,6 +1691,11 @@ class CleanroomXApp:
             accelerator="Ctrl+Shift+P",
             command=self.show_command_palette,
         )
+        tools_menu.add_command(
+            label="Global Engineering Search...",
+            accelerator="Ctrl+K",
+            command=self.show_global_search,
+        )
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -1777,6 +1784,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
+        self.root.bind("<Control-k>", lambda event: self.show_global_search())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -3485,6 +3493,14 @@ class CleanroomXApp:
                 keywords=("report", "evidence"),
             ),
             PaletteCommand(
+                "search.global",
+                "Open Global Engineering Search",
+                "Window",
+                self.show_global_search,
+                shortcut="Ctrl+K",
+                keywords=("find", "object", "diagnostic", "requirement", "evidence"),
+            ),
+            PaletteCommand(
                 "recovery.open",
                 "Open Recovery Center",
                 "Project",
@@ -3492,6 +3508,160 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+
+    def _open_navigator_search_item(self, iid: str) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None or not tree.exists(iid):
+            return
+        self.navigator_panel_visible_var.set(True)
+        self._sync_navigator_panel_visibility()
+        tree.selection_set(iid)
+        tree.focus(iid)
+        tree.see(iid)
+        self._on_navigator_selected()
+
+    def _open_diagnostic_search_item(self, issue: dict) -> None:
+        self.show_problems_panel()
+        panel = getattr(self, "problems_panel", None)
+        if panel is not None and panel.select_issue(issue):
+            self._navigate_project_diagnostic(issue)
+
+    def _open_proofgraph_search_item(
+        self,
+        document_label: str,
+        node_key: str,
+    ) -> None:
+        self._activate_proofgraph_workspace()
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None and viewer.open_node(document_label, node_key):
+            self.status_var.set("ProofGraph node opened from global search")
+
+    def _engineering_search_items(self) -> list[EngineeringSearchItem]:
+        items: list[EngineeringSearchItem] = []
+        tree = getattr(self, "analysis_tree", None)
+        if tree is not None:
+            def visit(parent: str = "") -> None:
+                for iid in tree.get_children(parent):
+                    info = tree.item(iid)
+                    tags = set(info.get("tags") or ())
+                    label = str(info.get("text") or iid)
+                    parent_iid = tree.parent(iid)
+                    context = (
+                        str(tree.item(parent_iid, "text"))
+                        if parent_iid
+                        else "Project Navigator"
+                    )
+                    values = tuple(str(value) for value in info.get("values") or ())
+                    if "section" not in tags:
+                        items.append(
+                            EngineeringSearchItem(
+                                id=f"navigator:{iid}",
+                                label=label,
+                                category="Model / Project",
+                                context=context,
+                                callback=lambda target=iid: self._open_navigator_search_item(target),
+                                keywords=(iid, *values),
+                            )
+                        )
+                    visit(iid)
+            visit()
+
+        panel = getattr(self, "problems_panel", None)
+        result = getattr(panel, "last_result", None) if panel is not None else None
+        issues = result.get("issues", []) if isinstance(result, dict) else []
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            sequence = issue.get("sequence", "?")
+            rule = str(issue.get("rule") or "Diagnostic")
+            message = str(issue.get("message") or "")
+            element = panel._element_text(issue) if panel is not None else ""
+            items.append(
+                EngineeringSearchItem(
+                    id=f"diagnostic:{sequence}",
+                    label=f"{rule} — {message}" if message else rule,
+                    category="Diagnostic",
+                    context=element,
+                    callback=lambda selected=issue: self._open_diagnostic_search_item(selected),
+                    keywords=(
+                        str(issue.get("severity") or ""),
+                        str(issue.get("category") or ""),
+                        str(issue.get("suggested_action") or ""),
+                    ),
+                )
+            )
+
+        try:
+            snapshot = project_requirement_traceability_snapshot(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ):
+            snapshot = {"requirements": []}
+        for requirement in snapshot.get("requirements", []):
+            if not isinstance(requirement, dict):
+                continue
+            requirement_id = str(requirement.get("id") or "")
+            items.append(
+                EngineeringSearchItem(
+                    id=f"requirement:{requirement_id}",
+                    label=str(requirement.get("title") or requirement_id or "Requirement"),
+                    category="Requirement",
+                    context=str(requirement.get("discipline") or requirement.get("category") or ""),
+                    callback=self.show_requirements_traceability,
+                    keywords=(
+                        requirement_id,
+                        str(requirement.get("source") or ""),
+                        str(requirement.get("status") or ""),
+                        str(requirement.get("criterion") or ""),
+                    ),
+                )
+            )
+
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is not None:
+            for document in getattr(viewer, "_documents", ()):
+                document_label = viewer._document_label(document)
+                projection = proofgraph_projection(document)
+                for node in projection.get("nodes", []):
+                    node_key = str(node.get("key") or "")
+                    if not node_key:
+                        continue
+                    items.append(
+                        EngineeringSearchItem(
+                            id=f"proofgraph:{document_label}:{node_key}",
+                            label=str(node.get("label") or node.get("id") or node_key),
+                            category=f"Evidence · {str(node.get('type') or 'node').replace('_', ' ').title()}",
+                            context=document_label,
+                            callback=lambda label=document_label, key=node_key: self._open_proofgraph_search_item(label, key),
+                            keywords=(
+                                str(node.get("status") or ""),
+                                " ".join(str(flag) for flag in node.get("flags", ())),
+                                str(node.get("id") or ""),
+                            ),
+                        )
+                    )
+        return items
+
+    def show_global_search(self) -> None:
+        existing = getattr(self, "_global_search_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    existing.search.focus_set()
+                    return
+            except tk.TclError:
+                pass
+
+        def clear_reference() -> None:
+            self._global_search_window = None
+
+        self._global_search_window = GlobalEngineeringSearch(
+            self.root,
+            items=self._engineering_search_items(),
+            on_close=clear_reference,
+        )
 
     def show_command_palette(self) -> None:
         existing = getattr(self, "_command_palette_window", None)

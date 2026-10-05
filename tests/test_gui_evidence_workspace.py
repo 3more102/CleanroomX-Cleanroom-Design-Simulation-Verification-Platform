@@ -81,3 +81,25 @@ def test_navigator_routes_evidence_to_first_class_workspace(app):
 
     assert app.notebook.select() == str(app.evidence_workspace)
     assert app.workspace_status_var.get() == "Workspace: Evidence"
+
+
+def test_evidence_workspace_retained_state_is_not_a_pass_verdict(app):
+    app.evidence_workspace.refresh(
+        {
+            "evidence_records": [
+                {
+                    "sequence": 1,
+                    "analysis_id": "a1",
+                    "analysis_name": "A1",
+                    "analysis_kind": "room",
+                    "verification": {"status": "fail", "verified": True},
+                    "evidence": [{"id": "ev-1"}],
+                    "record_sha256": "a" * 64,
+                }
+            ]
+        }
+    )
+    app.root.update_idletasks()
+
+    assert app.evidence_workspace.status_var.get() == "RETAINED"
+    assert app.evidence_workspace.status_label.cget("style") == "CX.Status.Info.TLabel"

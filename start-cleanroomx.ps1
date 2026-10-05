@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $repoRoot
 
+$pythonPrefix = @()
 $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 if (Test-Path $venvPython) {
     $python = $venvPython
@@ -25,6 +26,16 @@ if (Test-Path $venvPython) {
         $python = $pythonCommand.Source
         $pythonPrefix = @()
     }
+}
+
+& $python @pythonPrefix -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
+if ($LASTEXITCODE -ne 0) {
+    throw "CleanroomX requires Python 3.11 or newer. The selected interpreter does not satisfy this requirement."
+}
+
+& $python @pythonPrefix -c "import tkinter"
+if ($LASTEXITCODE -ne 0) {
+    throw "CleanroomX GUI requires Tkinter. Install a Python 3.11+ distribution with Tcl/Tk support, or recreate .venv with one."
 }
 
 $src = Join-Path $repoRoot "src"

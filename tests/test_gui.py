@@ -230,6 +230,112 @@ def test_gui_requirements_traceability_reports_empty_project(monkeypatch):
     ]
 
 
+
+def test_global_search_surfaces_partial_index_failures_instead_of_hiding_sources(
+    monkeypatch,
+):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Search degradation")
+    app.problems_panel = None
+    app._proofgraph_documents_from_records = lambda records: []
+
+    reports = [
+        GuiErrorReport(
+            reference="CX-SEARCH-REQ",
+            operation="Build requirements search index",
+            exception_type="RuntimeError",
+            summary="requirements unavailable",
+            log_path=None,
+        ),
+        GuiErrorReport(
+            reference="CX-SEARCH-PG",
+            operation="Build ProofGraph search index",
+            exception_type="RuntimeError",
+            summary="proofgraph unavailable",
+            log_path=None,
+        ),
+    ]
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "project_requirement_traceability_snapshot",
+        lambda project: (_ for _ in ()).throw(
+            RuntimeError("requirements unavailable")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "verification_run_history_records",
+        lambda metadata: (_ for _ in ()).throw(
+            RuntimeError("proofgraph unavailable")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or reports.pop(0),
+    )
+
+    entries = app._engineering_search_entries()
+
+    assert any(entry.target_type == "project" for entry in entries)
+    issues = [entry for entry in entries if entry.target_type == "search_issue"]
+    assert app._engineering_search_index_issue_count == 2
+    assert [entry.target_id for entry in issues] == [
+        "CX-SEARCH-REQ",
+        "CX-SEARCH-PG",
+    ]
+    assert issues[0].category == "System"
+    assert "Requirements search index unavailable" == issues[0].label
+    assert "CX-SEARCH-REQ" in issues[0].detail
+    assert "Evidence search index unavailable" == issues[1].label
+    assert "CX-SEARCH-PG" in issues[1].detail
+    assert [operation for operation, _exc in recorded] == [
+        "Build requirements search index",
+        "Build ProofGraph search index",
+    ]
+
+
+def test_global_search_status_discloses_partial_index(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class SearchWindow:
+        def __init__(self, parent, *, entries, on_activate, on_close):
+            self.entries = entries
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+    app._global_search_window = None
+    app._engineering_search_index_issue_count = 1
+    entries = [
+        gui_module.SearchEntry(
+            key="project",
+            category="Project",
+            label="Demo",
+            target_type="project",
+        ),
+        gui_module.SearchEntry(
+            key="search-issue:requirements:CX-1",
+            category="System",
+            label="Requirements search index unavailable",
+            target_type="search_issue",
+            target_id="CX-1",
+        ),
+    ]
+    app._engineering_search_entries = lambda: entries
+    monkeypatch.setattr(gui_module, "GlobalEngineeringSearch", SearchWindow)
+
+    app.show_global_search()
+
+    assert app._global_search_window.entries == entries
+    assert app.status_var.value == (
+        "Global engineering search indexed 1 project entities · "
+        "index incomplete (1 source issue(s))"
+    )
+
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     class Value:
         def __init__(self, value):

@@ -15,7 +15,7 @@ from cleanroomx.gui_table import TreeviewTableBehavior, table_value_sort_key
     (
         ("1,250", (0, 1250.0)),
         ("12.5%", (0, 12.5)),
-        ("Alpha", (1, "alpha")),
+        ("Alpha", (1, ((1, "alpha"),))),
         ("—", (2, "")),
         ("", (2, "")),
     ),
@@ -25,8 +25,13 @@ def test_table_value_sort_key(value, expected) -> None:
 
 
 def test_table_value_sort_key_keeps_nonfinite_textual() -> None:
-    assert table_value_sort_key(math.inf) == (1, "inf")
-    assert table_value_sort_key(math.nan) == (1, "nan")
+    assert table_value_sort_key(math.inf) == (1, ((1, "inf"),))
+    assert table_value_sort_key(math.nan) == (1, ((1, "nan"),))
+
+
+def test_table_value_sort_key_uses_natural_text_order_and_missing_unknown() -> None:
+    assert table_value_sort_key("Zone 2") < table_value_sort_key("Zone 10")
+    assert table_value_sort_key("unknown") == (2, "")
 
 
 @pytest.fixture
@@ -120,3 +125,25 @@ def test_table_behavior_supports_column_visibility_and_order(root) -> None:
 
     behavior.show_all_columns()
     assert behavior.visible_columns() == ("name", "value")
+
+def test_table_behavior_keeps_equal_values_stable_when_descending(root) -> None:
+    tree = ttk.Treeview(
+        root,
+        columns=("name", "state"),
+        show="headings",
+        selectmode="extended",
+    )
+    tree.heading("name", text="Name")
+    tree.heading("state", text="State")
+    tree.insert("", "end", iid="a", values=("A", "Pass"))
+    tree.insert("", "end", iid="b", values=("B", "Pass"))
+    tree.insert("", "end", iid="c", values=("C", "Warning"))
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "state"),
+    )
+
+    behavior.sort_by("state")
+    behavior.sort_by("state")
+    assert tree.get_children("") == ("c", "a", "b")
+

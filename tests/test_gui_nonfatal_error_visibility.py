@@ -112,9 +112,13 @@ def test_durability_recovery_reload_failure_is_recorded(monkeypatch, tmp_path) -
 
     assert app.persist_project_requirements_verification() is False
     assert app.status_var.value == (
-        "Verification bytes committed; save durability not confirmed"
+        "Verification bytes committed; durability unconfirmed; project reload failed"
     )
     assert warnings
+    assert warnings[-1][0] == "Verification save durability not confirmed"
+    assert "reload failed" in warnings[-1][1]
+    assert "may show an older project state" in warnings[-1][1]
+    assert committed.sha256 in warnings[-1][1]
     assert logger.calls == [
         (
             "Failed to reload project after durability warning path=%s",

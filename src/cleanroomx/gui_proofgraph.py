@@ -314,6 +314,38 @@ def proofgraph_projection(document: dict[str, Any] | None) -> dict[str, Any]:
     return {"nodes": ordered_nodes, "edges": normalized_edges}
 
 
+def proofgraph_evidence_completeness(
+    projection: dict[str, Any],
+) -> dict[str, int]:
+    """Summarize explicit finding evidence flags from a validated projection."""
+    total = 0
+    present = 0
+    unresolved = 0
+    unknown = 0
+    for node in projection.get("nodes", []):
+        if not isinstance(node, dict) or node.get("type") != "finding":
+            continue
+        total += 1
+        raw = node.get("raw")
+        evidence_present = (
+            raw.get("evidence_present")
+            if isinstance(raw, dict)
+            else None
+        )
+        if evidence_present is True:
+            present += 1
+        elif evidence_present is False:
+            unresolved += 1
+        else:
+            unknown += 1
+    return {
+        "total": total,
+        "present": present,
+        "unresolved": unresolved,
+        "unknown": unknown,
+    }
+
+
 def _filtered_projection(
     projection: dict[str, Any],
     filter_name: str,
@@ -648,12 +680,30 @@ class ProofGraphViewer(ttk.Frame):
 
         all_nodes = projection.get("nodes", [])
         shown = self._projection.get("nodes", [])
-        self.summary_var.set(
-            f"{len(shown)}/{len(all_nodes)} nodes · "
-            f"{len(self._projection.get('edges', []))} links"
-            if all_nodes
-            else "No persisted ProofGraph evidence"
-        )
+        completeness = proofgraph_evidence_completeness(projection)
+        if all_nodes:
+            evidence_text = (
+                f"evidence {completeness['present']}/{completeness['total']} findings"
+                if completeness["total"]
+                else "no findings"
+            )
+            unresolved_text = (
+                f" · {completeness['unresolved']} unresolved"
+                if completeness["unresolved"]
+                else ""
+            )
+            unknown_text = (
+                f" · {completeness['unknown']} unknown evidence state"
+                if completeness["unknown"]
+                else ""
+            )
+            self.summary_var.set(
+                f"{len(shown)}/{len(all_nodes)} nodes · "
+                f"{len(self._projection.get('edges', []))} links · "
+                f"{evidence_text}{unresolved_text}{unknown_text}"
+            )
+        else:
+            self.summary_var.set("No persisted ProofGraph evidence")
 
     def _populate_tree(self) -> None:
         for iid in self.tree.get_children():

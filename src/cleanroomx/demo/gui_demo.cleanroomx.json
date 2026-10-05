@@ -1,7 +1,7 @@
 {
   "schema": "cleanroomx.project",
   "schema_version": 1,
-  "application_version": "0.102.1",
+  "application_version": "0.103.0.dev0",
   "project": {
     "name": "CleanroomX GUI Demonstration",
     "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
@@ -29,6 +29,7 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 30,
+            "zone": "Critical Process",
             "classification": "Demo process suite"
           },
           {
@@ -42,6 +43,7 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 16,
+            "zone": "Preparation",
             "classification": "Demo preparation suite"
           },
           {
@@ -55,6 +57,7 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 8,
+            "zone": "Transition",
             "classification": "Demo transition suite"
           }
         ],

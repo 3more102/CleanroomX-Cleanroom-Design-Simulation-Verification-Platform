@@ -108,3 +108,24 @@ def test_sort_controller_heading_command_switches_columns_with_natural_order():
     tree.headings["state"]["command"]()
     assert controller.column == "state"
     assert tree.get_children() == ("c", "b", "a")
+
+def test_sort_controller_is_stable_for_equal_values_in_both_directions():
+    tree = FakeTree(
+        [
+            ("a", "A", {"state": "Pass"}),
+            ("b", "B", {"state": "Pass"}),
+            ("c", "C", {"state": "Warning"}),
+        ]
+    )
+    controller = TreeviewSortController(
+        tree,
+        {"#0": "Object", "state": "State"},
+        column="state",
+    )
+
+    controller.reapply()
+    assert tree.get_children()[:2] == ("a", "b")
+
+    controller.sort_by("state")
+    assert tree.get_children()[1:] == ("a", "b")
+

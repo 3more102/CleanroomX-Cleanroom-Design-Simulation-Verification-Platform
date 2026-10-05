@@ -2103,6 +2103,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
         self.redraw()
 
+    def workspace_mode(self) -> str:
+        mode = self._workspace_mode.get()
+        return mode if mode in {"2d", "3d", "split"} else "split"
+
     def set_workspace_mode(self, mode: str) -> None:
         if mode not in {"2d", "3d", "split"}:
             raise ValueError("workspace mode must be '2d', '3d', or 'split'")

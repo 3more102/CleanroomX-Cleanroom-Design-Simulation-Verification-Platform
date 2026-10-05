@@ -114,3 +114,25 @@ def test_canonical_run_updates_reporting_workspace_availability(app):
     }
     assert states["Result JSON"] == "AVAILABLE"
     assert states["Run bundle JSON"] == "AVAILABLE"
+
+def test_reporting_integration_preserves_shell_theme_and_refresh(app):
+    original_theme = app.theme_var.get()
+
+    diagnostics = app._refresh_engineering_panels()
+    app.set_theme("light", persist=False)
+    app.set_theme(original_theme, persist=False)
+    app.root.update_idletasks()
+
+    assert isinstance(diagnostics, dict)
+    assert app.reporting_workspace._snapshot["project"]["name"] == app.project.name
+    assert app.dashboard is not None
+
+
+def test_reporting_open_output_routes_to_report_tab(app):
+    app._open_report_output()
+    app.root.update_idletasks()
+
+    assert app.output_panel_visible_var.get() is True
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert app.status_var.get() == "Output: Report"
+

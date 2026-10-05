@@ -46,26 +46,55 @@ def verification_workspace_projection(
         state = "not configured"
     elif current == configured and stale == 0 and not_verified == 0 and unverifiable == 0:
         state = "current"
-    elif stale or unverifiable:
+    elif stale:
         state = "stale"
+    elif unverifiable:
+        state = "dependency freshness unverifiable"
     else:
         state = "incomplete"
 
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, Any]] = []
     for item in items:
         if not isinstance(item, dict):
             continue
+        mismatch_reasons = item.get("mismatch_reasons")
+        active_mapping_ids = item.get("active_mapping_ids")
+        latest_record = item.get("latest_record")
+        explanation = str(
+            item.get("explanation")
+            or item.get("reason")
+            or item.get("detail")
+            or item.get("message")
+            or ""
+        )
+        reasons = tuple(
+            str(reason)
+            for reason in mismatch_reasons
+            if isinstance(reason, str) and reason
+        ) if isinstance(mismatch_reasons, list) else ()
+        detail = explanation
+        if reasons:
+            reason_text = "; ".join(reasons)
+            detail = f"{explanation} — {reason_text}" if explanation else reason_text
         rows.append(
             {
                 "analysis_id": str(item.get("analysis_id") or ""),
                 "name": str(item.get("analysis_name") or item.get("analysis_id") or "analysis"),
                 "kind": str(item.get("analysis_kind") or "unknown"),
                 "state": str(item.get("state") or "unknown"),
-                "detail": str(
-                    item.get("reason")
-                    or item.get("detail")
-                    or item.get("message")
-                    or ""
+                "detail": detail,
+                "explanation": explanation,
+                "mismatch_reasons": reasons,
+                "mapping_count": (
+                    len(active_mapping_ids)
+                    if isinstance(active_mapping_ids, list)
+                    else 0
+                ),
+                "external_dependency_count": _integer(
+                    item, "external_dependency_count"
+                ),
+                "latest_record": (
+                    latest_record if isinstance(latest_record, dict) else None
                 ),
             }
         )
@@ -185,18 +214,22 @@ class VerificationWorkspace(ttk.Frame):
 
         self.tree = ttk.Treeview(
             table_host,
-            columns=("kind", "state", "detail"),
+            columns=("kind", "state", "mappings", "dependencies", "detail"),
             show="tree headings",
             selectmode="browse",
         )
         self.tree.heading("#0", text="Analysis")
         self.tree.heading("kind", text="Kind")
         self.tree.heading("state", text="Currency")
-        self.tree.heading("detail", text="Detail")
-        self.tree.column("#0", width=220, minwidth=160)
-        self.tree.column("kind", width=170, minwidth=120)
-        self.tree.column("state", width=120, minwidth=90, stretch=False)
-        self.tree.column("detail", width=360, minwidth=220)
+        self.tree.heading("mappings", text="Mappings")
+        self.tree.heading("dependencies", text="External deps")
+        self.tree.heading("detail", text="Canonical explanation")
+        self.tree.column("#0", width=210, minwidth=155)
+        self.tree.column("kind", width=145, minwidth=110)
+        self.tree.column("state", width=150, minwidth=110, stretch=False)
+        self.tree.column("mappings", width=75, minwidth=65, stretch=False)
+        self.tree.column("dependencies", width=90, minwidth=80, stretch=False)
+        self.tree.column("detail", width=400, minwidth=240)
         scroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -252,7 +285,12 @@ class VerificationWorkspace(ttk.Frame):
         state = verification_workspace_projection(self._snapshot)
 
         self.state_var.set(state["state"].upper().replace("_", " "))
-        self.state_label.configure(style=status_style_name(state["state"]))
+        overall_style = (
+            "warning"
+            if state["state"] == "dependency freshness unverifiable"
+            else state["state"]
+        )
+        self.state_label.configure(style=status_style_name(overall_style))
         self.coverage_var.set(f"{state['current']} / {state['configured']} current")
         self.stale_var.set(str(state["stale"]))
         self.not_verified_var.set(str(state["not_verified"]))
@@ -282,6 +320,8 @@ class VerificationWorkspace(ttk.Frame):
                 values=(
                     row["kind"],
                     row["state"].upper().replace("_", " "),
+                    row["mapping_count"],
+                    row["external_dependency_count"],
                     row["detail"] or "—",
                 ),
             )

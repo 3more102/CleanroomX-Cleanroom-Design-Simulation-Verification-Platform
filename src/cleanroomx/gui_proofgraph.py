@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Callable
 
 import tkinter as tk
@@ -39,6 +38,116 @@ _NODE_TITLES = {
 
 def _text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def _detail_label(value: Any) -> str:
+    return str(value).replace("_", " ").strip().title()
+
+
+def _detail_scalar(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, float):
+        return f"{value:.6g}"
+    return str(value)
+
+
+def _append_detail_lines(
+    lines: list[str],
+    label: str,
+    value: Any,
+    *,
+    indent: int = 0,
+) -> None:
+    """Render nested ProofGraph evidence as readable engineering fields."""
+    prefix = "  " * indent
+    if isinstance(value, dict):
+        if not value:
+            lines.append(f"{prefix}{label}: —")
+            return
+        lines.append(f"{prefix}{label}:")
+        for key in sorted(value):
+            _append_detail_lines(
+                lines,
+                _detail_label(key),
+                value[key],
+                indent=indent + 1,
+            )
+        return
+    if isinstance(value, (list, tuple)):
+        if not value:
+            lines.append(f"{prefix}{label}: —")
+            return
+        if all(not isinstance(item, (dict, list, tuple)) for item in value):
+            rendered = ", ".join(_detail_scalar(item) for item in value)
+            lines.append(f"{prefix}{label}: {rendered}")
+            return
+        lines.append(f"{prefix}{label}:")
+        for index, item in enumerate(value, start=1):
+            if isinstance(item, dict):
+                lines.append(f"{prefix}  Item {index}:")
+                for key in sorted(item):
+                    _append_detail_lines(
+                        lines,
+                        _detail_label(key),
+                        item[key],
+                        indent=indent + 2,
+                    )
+            else:
+                _append_detail_lines(
+                    lines,
+                    f"Item {index}",
+                    item,
+                    indent=indent + 1,
+                )
+        return
+    lines.append(f"{prefix}{label}: {_detail_scalar(value)}")
+
+
+def proofgraph_node_detail_text(node: dict[str, Any] | None) -> str:
+    """Build a human-readable node inspector without exposing raw JSON."""
+    if not isinstance(node, dict):
+        return ""
+    lines = [
+        str(node.get("type") or "node").replace("_", " ").upper(),
+        str(node.get("label") or node.get("key") or "Unnamed node"),
+    ]
+    if node.get("status"):
+        lines.append(f"Status: {str(node['status']).upper()}")
+    raw = node.get("raw")
+    if isinstance(raw, dict) and raw:
+        lines.append("")
+        preferred = (
+            "id",
+            "title",
+            "source",
+            "reference",
+            "revision",
+            "property_name",
+            "value",
+            "unit",
+            "subject_ref",
+            "requirement_id",
+            "check_id",
+            "reason",
+            "expected",
+            "actual",
+            "delta",
+            "evidence_ids",
+            "required_evidence_kinds",
+            "provenance",
+        )
+        emitted: set[str] = set()
+        for key in preferred:
+            if key in raw:
+                _append_detail_lines(lines, _detail_label(key), raw[key])
+                emitted.add(key)
+        for key in sorted(raw):
+            if key not in emitted:
+                _append_detail_lines(lines, _detail_label(key), raw[key])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _node_key(node_type: str, node_id: str) -> str:
@@ -747,28 +856,9 @@ class ProofGraphViewer(ttk.Frame):
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         node = self._nodes_by_key.get(self._selected_key or "")
-        if node is not None:
-            header = (
-                f"{node['type'].replace('_', ' ').upper()}\n"
-                f"{node['label']}\n"
-            )
-            if node.get("status"):
-                header += f"Status: {node['status'].upper()}\n"
-            self.detail.insert("1.0", header + "\n")
-            raw = node.get("raw", {})
-            if isinstance(raw, dict):
-                for key, value in sorted(raw.items()):
-                    label = str(key).replace("_", " ").strip().title()
-                    if isinstance(value, (dict, list)):
-                        rendered = json.dumps(
-                            value,
-                            sort_keys=True,
-                            ensure_ascii=False,
-                            allow_nan=False,
-                        )
-                    else:
-                        rendered = str(value)
-                    self.detail.insert("end", f"{label}: {rendered}\n")
+        detail_text = proofgraph_node_detail_text(node)
+        if detail_text:
+            self.detail.insert("1.0", detail_text)
         self.detail.configure(state="disabled")
 
     def selected_node(self) -> dict[str, Any] | None:

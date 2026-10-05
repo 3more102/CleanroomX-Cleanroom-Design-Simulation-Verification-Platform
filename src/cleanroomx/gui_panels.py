@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .project_diagnostics import analyze_project_diagnostics
+from .run_history import run_history_records
 from .gui_theme import theme_palette
 
 
@@ -652,6 +653,477 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         result = self._export_payload()
         if result is not None:
             self._export_callback(result)
+
+
+def _flatten_json_scalar_rows(
+    value: Any,
+    *,
+    limit: int = 800,
+) -> tuple[list[tuple[str, str]], bool]:
+    """Flatten strict-JSON values for view-only run comparison."""
+    rows: list[tuple[str, str]] = []
+    truncated = False
+
+    def visit(current: Any, path: str) -> None:
+        nonlocal truncated
+        if len(rows) >= limit:
+            truncated = True
+            return
+        if isinstance(current, dict):
+            for key in sorted(current):
+                child = f"{path}.{key}" if path != "$" else f"$.{key}"
+                visit(current[key], child)
+                if truncated:
+                    return
+            return
+        if isinstance(current, list):
+            for index, item in enumerate(current):
+                visit(item, f"{path}[{index}]")
+                if truncated:
+                    return
+            return
+        rows.append(
+            (
+                path,
+                json.dumps(
+                    current,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+
+    visit(value, "$")
+    return rows, truncated
+
+
+class RunHistoryPanel(ttk.Frame):
+    """Integrated validated retained-run browser with exact-value comparison."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        project_getter: Callable[[], Any],
+        open_analysis_callback: Callable[[str], None] | None = None,
+        status_setter: Callable[[str], None] | None = None,
+    ) -> None:
+        super().__init__(master)
+        self._project_getter = project_getter
+        self._open_analysis_callback = open_analysis_callback
+        self._status_setter = status_setter or (lambda _message: None)
+        self._records: list[dict[str, Any]] = []
+        self._records_by_iid: dict[str, dict[str, Any]] = {}
+        self._analysis_filter_ids: dict[str, str] = {}
+
+        self.search_var = tk.StringVar()
+        self.analysis_var = tk.StringVar(value="All")
+        self.status_filter_var = tk.StringVar(value="All")
+        self.summary_var = tk.StringVar(value="No retained analysis runs")
+        self.compare_summary_var = tk.StringVar(
+            value="Select exactly two retained runs to compare exact stored result values."
+        )
+
+        self._build()
+        self.apply_palette(theme_palette("light"))
+        self.search_var.trace_add("write", lambda *_: self._populate())
+        self.analysis_var.trace_add("write", lambda *_: self._populate())
+        self.status_filter_var.trace_add("write", lambda *_: self._populate())
+
+    def _build(self) -> None:
+        toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
+        toolbar.pack(fill="x")
+        ttk.Label(
+            toolbar,
+            text="RUN HISTORY",
+            style="CX.ToolbarGroup.TLabel",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Label(toolbar, text="Search").pack(side="left")
+        ttk.Entry(toolbar, textvariable=self.search_var, width=24).pack(
+            side="left", padx=(4, 8)
+        )
+        ttk.Label(toolbar, text="Analysis").pack(side="left")
+        self.analysis_filter = ttk.Combobox(
+            toolbar,
+            textvariable=self.analysis_var,
+            values=("All",),
+            state="readonly",
+            width=24,
+        )
+        self.analysis_filter.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Status").pack(side="left")
+        self.status_filter = ttk.Combobox(
+            toolbar,
+            textvariable=self.status_filter_var,
+            values=("All",),
+            state="readonly",
+            width=12,
+        )
+        self.status_filter.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            toolbar,
+            text="Refresh",
+            style="CX.Compact.TButton",
+            command=self.refresh,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Open Analysis",
+            style="CX.Compact.TButton",
+            command=self.open_selected_analysis,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Copy Record",
+            style="CX.Compact.TButton",
+            command=self.copy_selected_record,
+        ).pack(side="left", padx=2)
+        ttk.Label(toolbar, textvariable=self.summary_var).pack(
+            side="right", padx=(10, 0)
+        )
+
+        panes = ttk.Panedwindow(self, orient="vertical")
+        panes.pack(fill="both", expand=True)
+        list_host = ttk.Frame(panes)
+        detail_host = ttk.Frame(panes)
+        panes.add(list_host, weight=2)
+        panes.add(detail_host, weight=3)
+
+        columns = (
+            "completed",
+            "analysis",
+            "kind",
+            "status",
+            "input",
+            "result",
+        )
+        self.tree = ttk.Treeview(
+            list_host,
+            columns=columns,
+            show="tree headings",
+            selectmode="extended",
+            height=7,
+        )
+        self.tree.heading("#0", text="#")
+        for column, label in (
+            ("completed", "Completed UTC"),
+            ("analysis", "Analysis"),
+            ("kind", "Kind"),
+            ("status", "Status"),
+            ("input", "Input SHA-256"),
+            ("result", "Result SHA-256"),
+        ):
+            self.tree.heading(column, text=label)
+        self.tree.column("#0", width=55, stretch=False)
+        self.tree.column("completed", width=180, stretch=False)
+        self.tree.column("analysis", width=230)
+        self.tree.column("kind", width=160)
+        self.tree.column("status", width=100, stretch=False)
+        self.tree.column("input", width=145, stretch=False)
+        self.tree.column("result", width=145, stretch=False)
+        yscroll = ttk.Scrollbar(list_host, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(list_host, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        list_host.rowconfigure(0, weight=1)
+        list_host.columnconfigure(0, weight=1)
+        self.tree.bind("<<TreeviewSelect>>", self._render_selection)
+        self.tree.bind("<Double-1>", self._open_selected_event)
+        self.tree.bind("<Return>", self._open_selected_event)
+
+        detail_tabs = ttk.Notebook(detail_host)
+        detail_tabs.pack(fill="both", expand=True)
+
+        comparison_tab = ttk.Frame(detail_tabs)
+        record_tab = ttk.Frame(detail_tabs)
+        detail_tabs.add(comparison_tab, text="Compare Stored Results")
+        detail_tabs.add(record_tab, text="Canonical Record")
+
+        ttk.Label(
+            comparison_tab,
+            textvariable=self.compare_summary_var,
+            style="CX.Section.TLabel",
+        ).pack(fill="x", padx=7, pady=(5, 3))
+        compare_host = ttk.Frame(comparison_tab)
+        compare_host.pack(fill="both", expand=True)
+        self.compare_tree = ttk.Treeview(
+            compare_host,
+            columns=("left", "right"),
+            show="tree headings",
+            selectmode="browse",
+        )
+        self.compare_tree.heading("#0", text="JSON result path")
+        self.compare_tree.heading("left", text="Run A")
+        self.compare_tree.heading("right", text="Run B")
+        self.compare_tree.column("#0", width=390, minwidth=220)
+        self.compare_tree.column("left", width=260, minwidth=120)
+        self.compare_tree.column("right", width=260, minwidth=120)
+        compare_y = ttk.Scrollbar(
+            compare_host,
+            orient="vertical",
+            command=self.compare_tree.yview,
+        )
+        compare_x = ttk.Scrollbar(
+            compare_host,
+            orient="horizontal",
+            command=self.compare_tree.xview,
+        )
+        self.compare_tree.configure(
+            yscrollcommand=compare_y.set,
+            xscrollcommand=compare_x.set,
+        )
+        self.compare_tree.grid(row=0, column=0, sticky="nsew")
+        compare_y.grid(row=0, column=1, sticky="ns")
+        compare_x.grid(row=1, column=0, sticky="ew")
+        compare_host.rowconfigure(0, weight=1)
+        compare_host.columnconfigure(0, weight=1)
+
+        self.detail = tk.Text(
+            record_tab,
+            wrap="none",
+            state="disabled",
+            borderwidth=0,
+        )
+        detail_y = ttk.Scrollbar(record_tab, orient="vertical", command=self.detail.yview)
+        detail_x = ttk.Scrollbar(record_tab, orient="horizontal", command=self.detail.xview)
+        self.detail.configure(yscrollcommand=detail_y.set, xscrollcommand=detail_x.set)
+        self.detail.grid(row=0, column=0, sticky="nsew")
+        detail_y.grid(row=0, column=1, sticky="ns")
+        detail_x.grid(row=1, column=0, sticky="ew")
+        record_tab.rowconfigure(0, weight=1)
+        record_tab.columnconfigure(0, weight=1)
+
+    def apply_palette(self, palette: dict[str, str]) -> None:
+        self.compare_tree.tag_configure("different", foreground=palette["warning"])
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+
+    def _refresh_filter_values(self) -> None:
+        analysis_entries: list[tuple[str, str]] = []
+        seen_ids: set[str] = set()
+        for record in self._records:
+            analysis_id = str(record.get("analysis_id") or "")
+            if not analysis_id or analysis_id in seen_ids:
+                continue
+            seen_ids.add(analysis_id)
+            name = str(record.get("analysis_name") or analysis_id)
+            analysis_entries.append((f"{name} · {analysis_id}", analysis_id))
+        analysis_entries.sort(key=lambda item: item[0].casefold())
+        self._analysis_filter_ids = dict(analysis_entries)
+        analysis_values = ("All", *(label for label, _id in analysis_entries))
+        self.analysis_filter.configure(values=analysis_values)
+        if self.analysis_var.get() not in analysis_values:
+            self.analysis_var.set("All")
+
+        statuses = sorted(
+            {
+                str(record.get("status") or "unknown")
+                for record in self._records
+            },
+            key=str.casefold,
+        )
+        status_values = ("All", *statuses)
+        self.status_filter.configure(values=status_values)
+        if self.status_filter_var.get() not in status_values:
+            self.status_filter_var.set("All")
+
+    def _filtered_records(self) -> list[dict[str, Any]]:
+        query = self.search_var.get().strip().casefold()
+        analysis_label = self.analysis_var.get()
+        analysis_id = self._analysis_filter_ids.get(analysis_label)
+        status = self.status_filter_var.get().strip().casefold()
+        visible: list[dict[str, Any]] = []
+        for record in self._records:
+            if analysis_id and str(record.get("analysis_id") or "") != analysis_id:
+                continue
+            record_status = str(record.get("status") or "").casefold()
+            if status and status != "all" and record_status != status:
+                continue
+            if query:
+                haystack = " ".join(
+                    (
+                        str(record.get("sequence") or ""),
+                        str(record.get("completed_at_utc") or ""),
+                        str(record.get("analysis_id") or ""),
+                        str(record.get("analysis_name") or ""),
+                        str(record.get("analysis_kind") or ""),
+                        str(record.get("run_title") or ""),
+                        str(record.get("status") or ""),
+                        str(record.get("input_sha256") or ""),
+                        str(record.get("result_sha256") or ""),
+                    )
+                ).casefold()
+                if query not in haystack:
+                    continue
+            visible.append(record)
+        return list(reversed(visible))
+
+    def _populate(self) -> None:
+        selected_sequences = {
+            self._records_by_iid[iid].get("sequence")
+            for iid in self.tree.selection()
+            if iid in self._records_by_iid
+        }
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._records_by_iid.clear()
+        visible = self._filtered_records()
+        for index, record in enumerate(visible):
+            sequence = record.get("sequence", index + 1)
+            iid = f"run:{sequence}"
+            if self.tree.exists(iid):
+                iid = f"{iid}:{index}"
+            self.tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=str(sequence),
+                values=(
+                    record.get("completed_at_utc", ""),
+                    record.get("analysis_name", ""),
+                    record.get("analysis_kind", ""),
+                    record.get("status", ""),
+                    str(record.get("input_sha256") or "")[:16] + "…",
+                    str(record.get("result_sha256") or "")[:16] + "…",
+                ),
+            )
+            self._records_by_iid[iid] = record
+            if sequence in selected_sequences:
+                self.tree.selection_add(iid)
+        self.summary_var.set(
+            f"{len(visible)} visible / {len(self._records)} validated retained runs"
+        )
+        self._render_selection()
+
+    def refresh(self) -> list[dict[str, Any]]:
+        try:
+            self._records = run_history_records(self._project_getter().metadata)
+        except Exception as exc:
+            self._records = []
+            self._records_by_iid.clear()
+            self.summary_var.set(f"Run history unavailable: {exc}")
+            self._populate()
+            return []
+        self._refresh_filter_values()
+        self._populate()
+        return list(self._records)
+
+    def selected_records(self) -> list[dict[str, Any]]:
+        return [
+            self._records_by_iid[iid]
+            for iid in self.tree.selection()
+            if iid in self._records_by_iid
+        ]
+
+    def _clear_compare(self) -> None:
+        for iid in self.compare_tree.get_children():
+            self.compare_tree.delete(iid)
+
+    def _render_selection(self, _event=None) -> None:
+        selected = self.selected_records()
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        if selected:
+            self.detail.insert(
+                "1.0",
+                json.dumps(
+                    selected[0],
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            )
+        self.detail.configure(state="disabled")
+
+        self._clear_compare()
+        if len(selected) != 2:
+            self.compare_summary_var.set(
+                "Select exactly two retained runs to compare exact stored result values."
+            )
+            return
+        left, right = selected
+        left_result = left.get("result")
+        right_result = right.get("result")
+        if not isinstance(left_result, dict) or not isinstance(right_result, dict):
+            self.compare_summary_var.set(
+                "At least one selected legacy record does not retain reopenable result evidence."
+            )
+            return
+
+        left_rows, left_truncated = _flatten_json_scalar_rows(left_result)
+        right_rows, right_truncated = _flatten_json_scalar_rows(right_result)
+        left_map = dict(left_rows)
+        right_map = dict(right_rows)
+        paths = sorted(set(left_map) | set(right_map))
+        different_count = 0
+        for index, path in enumerate(paths):
+            left_value = left_map.get(path, "— missing —")
+            right_value = right_map.get(path, "— missing —")
+            different = left_value != right_value
+            if different:
+                different_count += 1
+            self.compare_tree.insert(
+                "",
+                "end",
+                iid=f"compare:{index}",
+                text=path,
+                values=(left_value, right_value),
+                tags=("different",) if different else (),
+            )
+        suffix = (
+            " · display limited to first 800 scalar paths per run"
+            if left_truncated or right_truncated
+            else ""
+        )
+        self.compare_summary_var.set(
+            "Run #{left} vs #{right} · {paths} paths · {different} exact-value differences{suffix}".format(
+                left=left.get("sequence", "?"),
+                right=right.get("sequence", "?"),
+                paths=len(paths),
+                different=different_count,
+                suffix=suffix,
+            )
+        )
+
+    def open_selected_analysis(self) -> None:
+        selected = self.selected_records()
+        if not selected:
+            self._status_setter("Select a retained run first")
+            return
+        analysis_id = str(selected[0].get("analysis_id") or "")
+        if not analysis_id or self._open_analysis_callback is None:
+            self._status_setter("Retained run has no navigable current analysis")
+            return
+        self._open_analysis_callback(analysis_id)
+
+    def _open_selected_event(self, _event=None):
+        self.open_selected_analysis()
+        return "break"
+
+    def copy_selected_record(self) -> None:
+        selected = self.selected_records()
+        if not selected:
+            self._status_setter("Select a retained run to copy")
+            return
+        payload = json.dumps(
+            selected[0],
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        self.clipboard_clear()
+        self.clipboard_append(payload)
+        self._status_setter("Retained run record copied to clipboard")
 
 
 class SimulationSummaryPanel(ttk.Frame):

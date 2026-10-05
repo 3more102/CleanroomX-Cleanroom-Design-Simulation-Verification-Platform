@@ -137,3 +137,16 @@ def test_gui_layout_state_limits_recent_projects_to_eight():
 def test_window_size_clamps_to_current_display():
     assert clamp_window_size_to_display(3000, 1800, 1366, 768) == (1366, 768)
     assert clamp_window_size_to_display(1220, 760, 1920, 1080) == (1220, 760)
+
+
+def test_workspace_preset_normalization_accepts_supported_engineering_modes():
+    for preset in (
+        "start",
+        "design",
+        "simulation",
+        "verification",
+        "evidence",
+        "reporting",
+    ):
+        state = normalize_gui_layout_state({"workspace_preset": preset.upper()})
+        assert state["workspace_preset"] == preset

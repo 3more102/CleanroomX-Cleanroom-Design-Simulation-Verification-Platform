@@ -1590,9 +1590,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(commandbar, text="Duplicate", command=self.duplicate_selected).pack(
             side="left", padx=2
         )
-        ttk.Button(commandbar, text="Delete", width=7, command=self.delete_selected).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            commandbar,
+            text="Delete",
+            width=7,
+            style="CX.Danger.TButton",
+            command=self.delete_selected,
+        ).pack(side="left", padx=2)
         ttk.Separator(commandbar, orient="vertical").pack(
             side="left", fill="y", padx=7
         )
@@ -1635,6 +1639,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(
             modebar,
             text="Push to analysis",
+            style="CX.Primary.TButton",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
         ttk.Button(
@@ -1666,9 +1671,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
+        ttk.Button(
+            viewbar,
+            text="Validate",
+            style="CX.Primary.TButton",
+            command=self.report_validation,
+        ).pack(side="left", padx=(10, 2))
         ttk.Label(viewbar, textvariable=self._validation_var).pack(
             side="right", padx=(10, 2)
         )
@@ -1966,9 +1974,24 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
-        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
+        sync_card = ttk.Frame(
+            inspector,
+            style="CX.SubtlePanel.TFrame",
+            padding=(8, 6),
         )
+        sync_card.pack(fill="x", pady=(3, 0))
+        ttk.Label(
+            sync_card,
+            text="ENGINEERING SYNCHRONIZATION",
+            style="CX.Section.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            sync_card,
+            textvariable=self._sync_var,
+            style="CX.Muted.TLabel",
+            wraplength=300,
+            justify="left",
+        ).pack(fill="x", pady=(2, 0))
 
         self._apply_workspace_mode()
 

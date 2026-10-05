@@ -69,7 +69,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
-from .gui_panels import ProjectDiagnosticsPanel
+from .gui_panels import EngineeringDashboard, ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
     clamp_window_size_to_display,
@@ -1255,6 +1255,10 @@ class CleanroomXApp:
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
         self.model_status_var = tk.StringVar(value="Model: ready")
+        self.save_state_var = tk.StringVar(value="UNSAVED PROJECT")
+        self.problems_state_var = tk.StringVar(value="PROBLEMS —")
+        self.verification_state_var = tk.StringVar(value="VERIFY —")
+        self.evidence_state_var = tk.StringVar(value="EVIDENCE —")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -1558,6 +1562,45 @@ class CleanroomXApp:
             style="CX.Danger.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+
+        engineering_strip = ttk.Frame(topbar, style="CX.Topbar.TFrame")
+        engineering_strip.grid(
+            row=1,
+            column=1,
+            columnspan=7,
+            sticky="ew",
+            pady=(5, 0),
+        )
+        ttk.Label(
+            engineering_strip,
+            text="ENGINEERING STATE",
+            style="CX.Topbar.TLabel",
+        ).pack(side="left", padx=(0, 7))
+        self.save_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.save_state_var,
+            style="CX.Badge.Neutral.TLabel",
+        )
+        self.save_state_badge.pack(side="left", padx=(0, 4))
+        self.problems_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.problems_state_var,
+            style="CX.Badge.Neutral.TLabel",
+        )
+        self.problems_state_badge.pack(side="left", padx=4)
+        self.verification_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.verification_state_var,
+            style="CX.Badge.Neutral.TLabel",
+        )
+        self.verification_state_badge.pack(side="left", padx=4)
+        self.evidence_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.evidence_state_var,
+            style="CX.Badge.Neutral.TLabel",
+        )
+        self.evidence_state_badge.pack(side="left", padx=4)
+
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
 
@@ -1853,6 +1896,20 @@ class CleanroomXApp:
             on_open_recent=self._open_recent_project_from_start,
         )
         self.notebook.add(self.start_center, text="Start")
+
+        self.engineering_dashboard = EngineeringDashboard(
+            self.notebook,
+            project_getter=lambda: self.project,
+            base_dir_getter=self._base_dir,
+            spatial_summary_getter=self._dashboard_spatial_summary,
+            navigate_issue_callback=self._navigate_project_diagnostic,
+            open_design_callback=lambda: self._activate_spatial_workspace("split"),
+            open_problems_callback=self.show_problems_panel,
+            open_proofgraph_callback=self._activate_proofgraph_workspace,
+            verify_callback=self._guided_save_and_verify,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.engineering_dashboard, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
             self.notebook,
@@ -2284,6 +2341,10 @@ class CleanroomXApp:
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
 
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(palette)
+
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
             self._apply_menu_theme(menubar)
@@ -2494,6 +2555,27 @@ class CleanroomXApp:
         self._ui_layout_state = normalize_gui_layout_state({})
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
+
+    def _activate_dashboard_workspace(self) -> None:
+        dashboard = getattr(self, "engineering_dashboard", None)
+        if dashboard is None:
+            return
+        dashboard.refresh()
+        self.notebook.select(dashboard)
+        self.workspace_status_var.set("Workspace: Dashboard")
+        self.status_var.set("Engineering dashboard")
+
+    def _dashboard_spatial_summary(self) -> dict[str, int]:
+        workspace = getattr(self, "spatial_workspace", None)
+        layout = getattr(workspace, "layout", {}) if workspace is not None else {}
+        if not isinstance(layout, dict):
+            return {"rooms": 0, "devices": 0}
+        rooms = layout.get("rooms", [])
+        devices = layout.get("devices", [])
+        return {
+            "rooms": len(rooms) if isinstance(rooms, list) else 0,
+            "devices": len(devices) if isinstance(devices, list) else 0,
+        }
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)

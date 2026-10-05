@@ -62,6 +62,52 @@ def test_flatten_json_preserves_paths_and_units():
     assert ("$.room.enabled", "true", "") in rows
 
 
+def test_compare_run_records_uses_retained_results_without_recalculation():
+    left = {
+        "result": {
+            "room": {
+                "pressure_pa": 12.0,
+                "airflow_m3_h": 1200.0,
+                "status": "PASS",
+            },
+            "left_only": 1,
+        }
+    }
+    right = {
+        "result": {
+            "room": {
+                "pressure_pa": 15.0,
+                "airflow_m3_h": 1200.0,
+                "status": "PASS",
+            },
+            "right_only": 2,
+        }
+    }
+
+    rows = {
+        row["path"]: row
+        for row in gui_module.compare_run_records(left, right)
+    }
+
+    assert rows["$.room.pressure_pa"] == {
+        "path": "$.room.pressure_pa",
+        "left": "12.0",
+        "right": "15.0",
+        "unit": "Pa",
+        "state": "Changed",
+    }
+    assert rows["$.room.airflow_m3_h"]["state"] == "Same"
+    assert rows["$.left_only"]["state"] == "Only A"
+    assert rows["$.right_only"]["state"] == "Only B"
+
+
+def test_compare_run_records_rejects_digest_only_legacy_records():
+    assert gui_module.compare_run_records(
+        {"result_sha256": "a" * 64},
+        {"result": {"value": 1}},
+    ) == []
+
+
 def _requirements_traceability_project() -> ProjectDocument:
     requirement = ProjectRequirement(
         id="req-ach",

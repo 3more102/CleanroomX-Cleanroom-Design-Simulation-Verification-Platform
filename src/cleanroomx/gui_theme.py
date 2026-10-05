@@ -342,6 +342,33 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         padding=(11, 5),
         font=("TkDefaultFont", 9, "bold"),
     )
+    style.map(
+        "CX.Mode.TButton",
+        background=[
+            ("active", palette["surface_alt"]),
+            ("pressed", palette["selection"]),
+        ],
+        foreground=[
+            ("active", palette["text"]),
+            ("pressed", palette["text"]),
+        ],
+        bordercolor=[("focus", palette["accent"])],
+    )
+    style.map(
+        "CX.ModeActive.TButton",
+        background=[
+            ("active", palette["selection"]),
+            ("pressed", palette["selection"]),
+        ],
+        foreground=[
+            ("active", palette["accent_hover"]),
+            ("pressed", palette["accent"]),
+        ],
+        bordercolor=[
+            ("focus", palette["accent_hover"]),
+            ("active", palette["accent"]),
+        ],
+    )
     mode_accents = {
         "Design": palette["mode_design"],
         "Analyze": palette["mode_analyze"],

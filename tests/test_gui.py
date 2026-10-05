@@ -1161,19 +1161,23 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     def fail_write(path, content):
         raise OSError("disk full")
 
+    def capture_operation_error(title, operation, exc):
+        captured.update(
+            {
+                "title": title,
+                "operation": operation,
+                "exception": exc,
+            }
+        )
+
     monkeypatch.setattr(gui_module, "atomic_write_text", fail_write)
-    monkeypatch.setattr(
-        gui_module.messagebox,
-        "showerror",
-        lambda title, message, parent=None: captured.update(
-            {"title": title, "message": message, "parent": parent}
-        ),
-    )
+    monkeypatch.setattr(app, "_show_operation_error", capture_operation_error)
     assert app._write_export_file(str(target), "payload", label="Result") is False
     assert app.status_var.value == "Result export failed"
     assert captured["title"] == "Result export failed"
-    assert captured["message"] == "disk full"
-    assert captured["parent"] is app.root
+    assert captured["operation"] == "Export result"
+    assert isinstance(captured["exception"], OSError)
+    assert str(captured["exception"]) == "disk full"
 
 
 def test_remove_analysis_invalidates_matching_result(monkeypatch):

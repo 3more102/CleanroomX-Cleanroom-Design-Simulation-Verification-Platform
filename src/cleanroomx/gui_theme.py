@@ -9,48 +9,48 @@ from tkinter import ttk
 
 _THEME_PALETTES: dict[str, dict[str, str]] = {
     "light": {
-        "background": "#e9edf2",
-        "surface": "#f6f8fa",
-        "surface_alt": "#eef2f6",
-        "panel": "#ffffff",
-        "text": "#18212b",
-        "muted": "#5f6b78",
-        "border": "#c8d1dc",
-        "accent": "#0b6aa8",
-        "accent_hover": "#095786",
-        "accent_text": "#ffffff",
-        "selection": "#cfe8ff",
-        "selection_text": "#102a43",
-        "field": "#ffffff",
-        "field_text": "#18212b",
-        "tree": "#fbfcfd",
-        "disabled": "#9aa5b1",
-        "canvas_2d": "#f7f9fb",
-        "canvas_3d": "#111820",
-        "plot": "#ffffff",
-        "grid": "#d7dee7",
+        "background": "#E7EDF4",
+        "surface": "#F3F7FA",
+        "surface_alt": "#DCE7F2",
+        "panel": "#FFFFFF",
+        "text": "#122033",
+        "muted": "#5C6B7A",
+        "border": "#AFC2D4",
+        "accent": "#007C91",
+        "accent_hover": "#00677A",
+        "accent_text": "#FFFFFF",
+        "selection": "#BFEAF2",
+        "selection_text": "#082C34",
+        "field": "#F8FBFD",
+        "field_text": "#122033",
+        "tree": "#F7FAFC",
+        "disabled": "#8795A3",
+        "canvas_2d": "#EAF0F5",
+        "canvas_3d": "#0D1726",
+        "plot": "#F8FBFD",
+        "grid": "#C5D3E0",
     },
     "dark": {
-        "background": "#14191f",
-        "surface": "#1b2129",
-        "surface_alt": "#232a33",
-        "panel": "#1e252d",
-        "text": "#e6edf3",
-        "muted": "#9aa7b4",
-        "border": "#394451",
-        "accent": "#2f81f7",
-        "accent_hover": "#58a6ff",
-        "accent_text": "#ffffff",
-        "selection": "#264f78",
-        "selection_text": "#ffffff",
-        "field": "#11161c",
-        "field_text": "#e6edf3",
-        "tree": "#171d24",
-        "disabled": "#6f7b87",
-        "canvas_2d": "#1b222a",
-        "canvas_3d": "#0d1117",
-        "plot": "#131920",
-        "grid": "#33404c",
+        "background": "#0B1220",
+        "surface": "#111B2E",
+        "surface_alt": "#17243A",
+        "panel": "#132033",
+        "text": "#F1F5F9",
+        "muted": "#94A3B8",
+        "border": "#263750",
+        "accent": "#22D3EE",
+        "accent_hover": "#38BDF8",
+        "accent_text": "#07131F",
+        "selection": "#164E63",
+        "selection_text": "#ECFEFF",
+        "field": "#0E1828",
+        "field_text": "#EAF2F8",
+        "tree": "#0F1A2B",
+        "disabled": "#64748B",
+        "canvas_2d": "#101B2C",
+        "canvas_3d": "#08111D",
+        "plot": "#0D1726",
+        "grid": "#2B3B52",
     },
 }
 
@@ -339,6 +339,126 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("disabled", palette["surface_alt"]),
         ],
         foreground=[("disabled", palette["disabled"])],
+    )
+
+    is_dark = normalize_theme_name(value) == "dark"
+    success = "#22C55E" if is_dark else "#15803D"
+    warning = "#F59E0B" if is_dark else "#B45309"
+    error = "#EF4444" if is_dark else "#B91C1C"
+    info = "#38BDF8" if is_dark else "#0369A1"
+    topbar_bg = "#0F1A2B" if is_dark else "#D8E3EE"
+    statusbar_bg = "#0A101C" if is_dark else "#D4DFEA"
+
+    style.configure(
+        "CX.Topbar.TFrame",
+        background=topbar_bg,
+        padding=(10, 6),
+    )
+    style.configure(
+        "CX.Topbar.TLabel",
+        background=topbar_bg,
+        foreground=palette["text"],
+    )
+    style.configure(
+        "CX.ToolbarLabel.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.Sidebar.TFrame",
+        background=palette["panel"],
+    )
+    style.configure(
+        "CX.Workspace.TFrame",
+        background=palette["background"],
+    )
+    style.configure(
+        "CX.Statusbar.TFrame",
+        background=statusbar_bg,
+        padding=(8, 4),
+    )
+    style.configure(
+        "CX.Statusbar.TLabel",
+        background=statusbar_bg,
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.StatusStrong.TLabel",
+        background=statusbar_bg,
+        foreground=palette["text"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.Card.TLabelframe",
+        background=palette["panel"],
+        bordercolor=palette["border"],
+        lightcolor=palette["border"],
+        darkcolor=palette["border"],
+        relief="solid",
+    )
+    style.configure(
+        "CX.Card.TLabelframe.Label",
+        background=palette["panel"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "CX.Secondary.TButton",
+        background=palette["surface_alt"],
+        foreground=palette["text"],
+        bordercolor=palette["accent"],
+        padding=(10, 5),
+    )
+    style.map(
+        "CX.Secondary.TButton",
+        background=[
+            ("active", palette["selection"]),
+            ("pressed", palette["selection"]),
+            ("disabled", palette["surface_alt"]),
+        ],
+        foreground=[("disabled", palette["disabled"])],
+    )
+    style.configure(
+        "CX.Danger.TButton",
+        background=error,
+        foreground="#FFFFFF",
+        bordercolor=error,
+        padding=(10, 5),
+    )
+    style.map(
+        "CX.Danger.TButton",
+        background=[("active", "#DC2626"), ("pressed", "#B91C1C")],
+        foreground=[("disabled", palette["disabled"])],
+    )
+    for style_name, color in (
+        ("CX.Success.TLabel", success),
+        ("CX.Warning.TLabel", warning),
+        ("CX.Error.TLabel", error),
+        ("CX.Info.TLabel", info),
+        ("CX.Accent.TLabel", palette["accent"]),
+    ):
+        style.configure(
+            style_name,
+            background=palette["background"],
+            foreground=color,
+            font=("TkDefaultFont", 9, "bold"),
+        )
+
+    style.configure(
+        "CX.Industrial.Treeview",
+        background=palette["tree"],
+        fieldbackground=palette["tree"],
+        foreground=palette["text"],
+        rowheight=26,
+        bordercolor=palette["border"],
+        relief="flat",
+    )
+    style.map(
+        "CX.Industrial.Treeview",
+        background=[("selected", palette["selection"])],
+        foreground=[("selected", palette["selection_text"])],
     )
 
     # Defaults for Tk-native widgets created after this call.

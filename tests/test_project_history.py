@@ -6,6 +6,8 @@ import json
 import pytest
 
 from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui_constraints import create_constraint_set, constraint_sets_snapshot
+from cleanroomx.gui_requirements import add_requirement_set, requirements_snapshot
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.project_history import ProjectEditHistory
 from cleanroomx.spatial import SPATIAL_METADATA_KEY, empty_layout
@@ -382,3 +384,68 @@ def test_project_history_rejects_invalid_configuration():
     for invalid in (0, -1, True, 1.5):
         with pytest.raises(ValueError, match="positive integer"):
             ProjectEditHistory(limit=invalid)
+
+
+def _enable_history_command_surface(app: CleanroomXApp) -> None:
+    app._running = False
+    app._prepare_project_history_action = lambda _action: True
+    app._schedule_project_diagnostics_refresh = lambda: None
+
+
+def test_requirements_editor_transaction_participates_in_project_undo_redo() -> None:
+    app = _history_restore_app(ProjectDocument(name="Requirements history"))
+    _enable_history_command_surface(app)
+
+    app._apply_requirements_editor_edit(
+        "Add approved requirement set",
+        lambda project: add_requirement_set(
+            project,
+            set_id="urs",
+            title="Approved URS",
+            source="URS.pdf",
+            source_revision="Rev A",
+            description="Project-owned acceptance criteria.",
+        ),
+    )
+
+    assert [item["id"] for item in requirements_snapshot(app.project)["sets"]] == ["urs"]
+    assert app.undo_project_edit() is True
+    assert requirements_snapshot(app.project)["sets"] == []
+    assert app.redo_project_edit() is True
+    assert [item["id"] for item in requirements_snapshot(app.project)["sets"]] == ["urs"]
+
+
+def test_constraint_manager_transaction_participates_in_project_undo_redo() -> None:
+    app = _history_restore_app(ProjectDocument(name="Constraint history"))
+    _enable_history_command_surface(app)
+
+    created = {}
+    def create(project):
+        created["analysis_id"] = create_constraint_set(
+            project,
+            analysis_name="Process-room criteria",
+            pack_id="process-room",
+            version="1.0",
+            title="Process room constraints",
+            source="Approved URS",
+            first_rule={
+                "id": "ach",
+                "title": "Minimum air changes",
+                "evidence_path": "/rooms/Process/ach",
+                "operator": "min",
+                "expected": 20,
+                "unit": "1/h",
+                "tolerance": 0.5,
+                "reference": "URS-HVAC-004",
+            },
+        )
+        return created["analysis_id"]
+
+    analysis_id = app._apply_constraint_manager_edit("Add constraint set", create)
+
+    assert analysis_id == created["analysis_id"]
+    assert [item["analysis_id"] for item in constraint_sets_snapshot(app.project)] == [analysis_id]
+    assert app.undo_project_edit() is True
+    assert constraint_sets_snapshot(app.project) == []
+    assert app.redo_project_edit() is True
+    assert [item["analysis_id"] for item in constraint_sets_snapshot(app.project)] == [analysis_id]

@@ -273,6 +273,7 @@ def test_problem_table_supports_columns_and_select_all_without_domain_mutation(a
 
     assert panel.table_behavior.visible_columns() == (
         "severity",
+        "state",
         "code",
         "description",
         "object",
@@ -280,3 +281,66 @@ def test_problem_table_supports_columns_and_select_all_without_domain_mutation(a
         "source",
     )
     assert panel.last_result == snapshot
+
+
+def test_problem_browser_projects_only_explicit_canonical_freshness_states(app):
+    panel = app.problems_panel
+    base = {
+        "severity": "warning",
+        "category": "verification",
+        "message": "Synthetic canonical state projection test",
+        "suggested_action": "Use the canonical workflow.",
+        "element": {"type": "analysis", "id": "a", "name": "A"},
+    }
+    issues = [
+        dict(base, sequence=7001, rule="verification_currency.stale"),
+        dict(base, sequence=7002, rule="verification_currency.not_verified"),
+        dict(
+            base,
+            sequence=7003,
+            rule="verification_currency.dependency_freshness_unverifiable",
+        ),
+        dict(base, sequence=7004, rule="analysis.duplicate_name"),
+    ]
+    panel.last_result = {
+        "issues": issues,
+        "summary": {
+            "status": "warning",
+            "issue_count": 4,
+            "error_count": 0,
+            "warning_count": 4,
+            "info_count": 0,
+        },
+    }
+    panel.clear_filters()
+    panel._refresh_filter_values()
+    panel._populate()
+    app.root.update()
+
+    states = {
+        panel._issues_by_iid[iid]["rule"]: panel.tree.set(iid, "state")
+        for iid in panel.tree.get_children()
+    }
+    assert states["verification_currency.stale"] == "STALE"
+    assert states["verification_currency.not_verified"] == "UNVERIFIED"
+    assert (
+        states["verification_currency.dependency_freshness_unverifiable"]
+        == "UNVERIFIABLE"
+    )
+    assert states["analysis.duplicate_name"] == "OPEN"
+
+    panel.state_var.set("Stale")
+    app.root.update()
+    visible = panel.tree.get_children()
+    assert len(visible) == 1
+    assert panel._issues_by_iid[visible[0]]["rule"] == "verification_currency.stale"
+
+    panel.state_var.set("All")
+    panel._sort_by("state")
+    app.root.update()
+    assert [panel.tree.set(iid, "state") for iid in panel.tree.get_children()] == [
+        "STALE",
+        "UNVERIFIABLE",
+        "UNVERIFIED",
+        "OPEN",
+    ]

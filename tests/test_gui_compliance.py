@@ -89,6 +89,7 @@ def _panel(root, payload):
         input_getter=get_input,
         input_setter=set_input,
         status_setter=messages.append,
+        confirm_delete=lambda _rule_id: True,
     )
     panel.pack(fill="both", expand=True)
     root.update()
@@ -181,3 +182,46 @@ def test_compliance_panel_duplicate_and_delete_preserve_valid_pack(root):
     ids = [item["id"] for item in state["payload"]["rule_pack"]["rules"]]
     assert ids == ["temperature", "ach", "pressure"]
     compliance_check_from_dict(copy.deepcopy(state["payload"]))
+
+
+def test_compliance_panel_sorts_findings_and_preserves_selected_rule(root):
+    panel, _state, _messages = _panel(root, _payload())
+    panel.refresh()
+    root.update()
+
+    panel._select_rule_id("temperature")
+    panel._sort_by("state")
+    root.update()
+
+    children = panel.tree.get_children()
+    assert [panel.tree.set(iid, "state") for iid in children] == [
+        "FAIL",
+        "NOT CHECKED",
+        "PASS",
+    ]
+    selected = panel.selected_finding()
+    assert selected is not None
+    assert selected["id"] == "temperature"
+
+
+def test_compliance_panel_cancelled_delete_does_not_mutate_input(root):
+    payload = _payload()
+    state = {"payload": copy.deepcopy(payload), "edits": []}
+    messages = []
+
+    panel = ComplianceRulePackPanel(
+        root,
+        input_getter=lambda: copy.deepcopy(state["payload"]),
+        input_setter=lambda value, description: state["edits"].append(description) or True,
+        status_setter=messages.append,
+        confirm_delete=lambda _rule_id: False,
+    )
+    panel.pack(fill="both", expand=True)
+    panel.refresh()
+    root.update()
+    panel._select_rule_id("temperature")
+
+    assert panel.delete_selected() is False
+    assert state["payload"] == payload
+    assert state["edits"] == []
+    assert messages[-1] == "Delete cancelled for compliance rule temperature"

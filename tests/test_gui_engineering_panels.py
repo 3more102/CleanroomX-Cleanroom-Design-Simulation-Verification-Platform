@@ -61,6 +61,9 @@ def _force_room_overlap(app: CleanroomXApp) -> tuple[dict, dict]:
 
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):
+    main_tabs = _tab_texts(app.notebook)
+    assert "Reporting" in main_tabs
+
     tabs = _tab_texts(app.output_notebook)
     assert tabs[:6] == [
         "Problems",
@@ -229,6 +232,18 @@ def test_workspace_layout_profiles_coordinate_shell_and_engineering_tabs(app):
     assert app.output_notebook.select() == str(app.evidence_text.master)
     assert app._ui_layout_state["workspace_profile"] == "evidence"
 
+    app._apply_workspace_profile("reporting")
+    app.root.update()
+
+    assert app.workspace_profile_var.get() == "reporting"
+    assert app.navigator_panel_visible_var.get() is False
+    assert app.output_panel_visible_var.get() is True
+    assert app.notebook.select() == str(app.reporting_workspace)
+    assert app.output_notebook.select() == str(app.report_text.master)
+    assert app.reporting_workspace.current_preview is not None
+    assert app.reporting_workspace.current_preview.report_type == "project_dossier"
+    assert app.reporting_workspace.current_preview.available is True
+
     app._apply_workspace_profile("design")
     app.root.update()
 
@@ -254,6 +269,9 @@ def test_density_switch_is_persisted_and_command_palette_exposes_layouts(app):
         "workspace.layout.verification",
         "workspace.layout.evidence",
         "workspace.layout.reporting",
+        "reporting.open",
+        "tasks.open",
+        "search.global",
         "view.density.compact",
         "view.density.comfortable",
     } <= command_ids

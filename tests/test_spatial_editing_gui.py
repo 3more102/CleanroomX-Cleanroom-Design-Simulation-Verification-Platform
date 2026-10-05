@@ -682,6 +682,7 @@ def test_application_command_strip_remains_visible_at_minimum_window(app):
         app.toolbar_redo_button,
         app.toolbar_fit_button,
         app.toolbar_problems_button,
+        app.toolbar_workspace_button,
         app.toolbar_commands_button,
     )
     for button in buttons:

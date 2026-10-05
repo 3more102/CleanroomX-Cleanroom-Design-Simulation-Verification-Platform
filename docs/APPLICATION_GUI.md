@@ -128,7 +128,7 @@ Existing projects remain schema-version-1 compatible because the spatial documen
 
 The main engineering workspace includes a persistent bottom output pane with **Problems**, **Diagnostics**, **Verification**, **Console**, **Evidence**, **Results**, and **Report** views. The **Problems** view is not a second diagnostics engine: it presents the canonical deterministic `analyze_project_diagnostics()` result as an IDE-style table with severity, rule code, description, affected object, level context when available, and source category.
 
-Problems can be searched and filtered by severity. Double-clicking a spatial issue selects the referenced room or device, activates the design workspace, and fits the affected object in the synchronized 2D/3D views. Analysis-level issues navigate to the existing analysis input editor. Export uses the same canonical diagnostics payload and Markdown renderer as the project diagnostics CLI.
+Problems can be searched and filtered by severity, diagnostic category, and affected object type. Columns are sortable, the panel reports visible/total issue counts, and Previous/Next plus F4/Shift+F4 provide keyboard-first triage. A context menu exposes locate/copy/navigation actions without changing diagnostic state. Double-clicking a spatial issue selects the referenced room or device, activates the design workspace, and fits the affected object in the synchronized 2D/3D views. Analysis-level issues navigate to the existing analysis input editor. Export uses the same canonical diagnostics payload and Markdown renderer as the project diagnostics CLI.
 
 The **Verification** view summarizes current verification-currency state from the existing verification authority; the **Evidence** view lists retained project-verification records without recomputing historical verdicts. These views are read-only projections over existing domain services and do not change solver, requirement, ProofGraph, or acceptance semantics.
 
@@ -139,6 +139,14 @@ The **ProofGraph** workspace reads only ProofGraph documents retained in the can
 The explorer provides a tree, an interactive graph, and a node-detail view. It projects requirements, CleanroomX model-object references, IFC identities, evidence sources, originating calculations, evidence/results, checks, findings, verdicts, and verification runs without recomputing any solver result or compliance verdict. Filters cover requirements, evidence, calculations, IFC, verification, failures, and unresolved evidence while retaining immediate graph context. Double-clicking a node that carries a CleanroomX entity or subject reference selects that room/device in the shared spatial workspace and fits it in the synchronized engineering views.
 
 The Project Navigator **ProofGraph** entry activates this workspace. Graph selection is digest-aware and duplicate retained documents are collapsed by canonical `graph_sha256`. Invalid retained evidence is cleared from the viewer and reported through the existing evidence/status surfaces rather than silently accepted.
+
+## Professional inspection and recovery browsers
+
+The analysis picker, retained run history, project verification history, requirements traceability, IFC re-import review, saved revisions, and recovery center use consistent dense inspection patterns: search, domain-specific filters, visible/total counts, keyboard navigation, deliberate no-match states, horizontal scrolling for wide engineering records, and read-only canonical detail views where applicable.
+
+These surfaces do not synthesize engineering values. Run and verification history display retained evidence; verification currency comes from the existing currency assessment; requirements/mappings are read-only projections of canonical registries; IFC re-import review displays the deterministic re-import plan; and recovery/revision browsers operate only on already validated recovery/revision records.
+
+The Start Center recent-project table can be searched by project name, path, or modification text. **Remove from Recent** removes only the remembered entry and never deletes the project file.
 
 ## Results and plots
 
@@ -179,7 +187,7 @@ Stale cached results are rejected when the active analysis input or recorded ext
 
 ## Project requirements traceability review
 
-Use **Analysis → Requirements Traceability...** to inspect the project-owned
+Use **Verify → Requirements Traceability...** to inspect the project-owned
 requirements registry and persisted requirement-to-analysis evidence mappings
 without opening the raw project JSON.
 

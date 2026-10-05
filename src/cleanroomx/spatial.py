@@ -8,7 +8,7 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
@@ -1452,6 +1452,132 @@ def engineering_overlay_state(
     }
 
 
+def validated_floor_settings(
+    *,
+    name: str,
+    elevation_m: str | float,
+    default_ceiling_height_m: str | float,
+    grid_m: str | float,
+    fallback_name: str,
+) -> dict[str, float | str]:
+    """Validate floor-dialog values without mutating the spatial model."""
+    floor_name = str(name).strip() or str(fallback_name)
+    if not floor_name:
+        raise ValueError("Floor name must not be empty.")
+
+    try:
+        elevation = float(elevation_m)
+        ceiling = float(default_ceiling_height_m)
+        grid = float(grid_m)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Elevation, ceiling height, and grid spacing must be numbers.") from exc
+
+    if not math.isfinite(elevation):
+        raise ValueError("Floor elevation must be a finite number.")
+    if not math.isfinite(ceiling) or ceiling <= 0:
+        raise ValueError("Default ceiling height must be greater than 0 m.")
+    if not math.isfinite(grid) or grid <= 0:
+        raise ValueError("Grid spacing must be greater than 0 m.")
+
+    return {
+        "name": floor_name,
+        "elevation_m": elevation,
+        "default_ceiling_height_m": ceiling,
+        "grid_m": grid,
+    }
+
+
+class FloorPropertiesDialog(tk.Toplevel):
+    """Atomic floor/grid editor with inline validation."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        name: str,
+        elevation_m: float,
+        default_ceiling_height_m: float,
+        grid_m: float,
+    ):
+        super().__init__(parent)
+        self.title("Floor Properties")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.result: dict[str, float | str] | None = None
+        self._fallback_name = name
+
+        self.name_var = tk.StringVar(value=name)
+        self.elevation_var = tk.StringVar(value=f"{elevation_m:g}")
+        self.ceiling_var = tk.StringVar(value=f"{default_ceiling_height_m:g}")
+        self.grid_var = tk.StringVar(value=f"{grid_m:g}")
+        self.error_var = tk.StringVar()
+
+        shell = ttk.Frame(self, padding=14)
+        shell.pack(fill="both", expand=True)
+        ttk.Label(
+            shell,
+            text="FLOOR / GRID",
+            style="CX.Section.TLabel",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
+        fields = (
+            ("Floor name", self.name_var, ""),
+            ("Elevation", self.elevation_var, "m"),
+            ("Default ceiling height", self.ceiling_var, "m"),
+            ("Grid spacing", self.grid_var, "m"),
+        )
+        self._entries: list[ttk.Entry] = []
+        for row, (label, variable, unit) in enumerate(fields, start=1):
+            ttk.Label(shell, text=label).grid(
+                row=row, column=0, sticky="w", padx=(0, 10), pady=4
+            )
+            entry = ttk.Entry(shell, textvariable=variable, width=28)
+            entry.grid(row=row, column=1, sticky="ew", pady=4)
+            self._entries.append(entry)
+            ttk.Label(shell, text=unit, width=3).grid(
+                row=row, column=2, sticky="w", padx=(6, 0), pady=4
+            )
+
+        ttk.Label(
+            shell,
+            textvariable=self.error_var,
+            wraplength=410,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 2))
+
+        buttons = ttk.Frame(shell)
+        buttons.grid(row=6, column=0, columnspan=3, sticky="e", pady=(10, 0))
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Apply",
+            style="CX.Primary.TButton",
+            command=self._accept,
+        ).pack(side="right", padx=(0, 6))
+
+        shell.columnconfigure(1, weight=1)
+        self.bind("<Escape>", lambda _event: self.destroy())
+        self.bind("<Return>", lambda _event: self._accept())
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self._entries[0].focus_set()
+        self._entries[0].selection_range(0, "end")
+
+    def _accept(self) -> None:
+        try:
+            result = validated_floor_settings(
+                name=self.name_var.get(),
+                elevation_m=self.elevation_var.get(),
+                default_ceiling_height_m=self.ceiling_var.get(),
+                grid_m=self.grid_var.get(),
+                fallback_name=self._fallback_name,
+            )
+        except ValueError as exc:
+            self.error_var.set(str(exc))
+            return
+        self.result = result
+        self.destroy()
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -2408,46 +2534,25 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def edit_floor(self) -> None:
         floor = self.layout["floor"]
+        dialog = FloorPropertiesDialog(
+            self,
+            name=str(floor["name"]),
+            elevation_m=float(floor["elevation_m"]),
+            default_ceiling_height_m=float(floor["default_ceiling_height_m"]),
+            grid_m=float(self.layout["grid_m"]),
+        )
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        name = simpledialog.askstring(
-            "Floor",
-            "Floor name:",
-            initialvalue=floor["name"],
-            parent=self,
+        floor["name"] = str(dialog.result["name"])
+        floor["elevation_m"] = float(dialog.result["elevation_m"])
+        floor["default_ceiling_height_m"] = float(
+            dialog.result["default_ceiling_height_m"]
         )
-        if name is None:
-            return
-        elevation = simpledialog.askfloat(
-            "Floor",
-            "Elevation (m):",
-            initialvalue=floor["elevation_m"],
-            parent=self,
-        )
-        if elevation is None:
-            return
-        ceiling = simpledialog.askfloat(
-            "Floor",
-            "Default ceiling height (m):",
-            initialvalue=floor["default_ceiling_height_m"],
-            minvalue=0.01,
-            parent=self,
-        )
-        if ceiling is None:
-            return
-        grid = simpledialog.askfloat(
-            "Grid",
-            "Grid spacing (m):",
-            initialvalue=self.layout["grid_m"],
-            minvalue=0.01,
-            parent=self,
-        )
-        if grid is None:
-            return
-        floor["name"] = name.strip() or floor["name"]
-        floor["elevation_m"] = float(elevation)
-        floor["default_ceiling_height_m"] = float(ceiling)
-        self.layout["grid_m"] = float(grid)
+        self.layout["grid_m"] = float(dialog.result["grid_m"])
         self._persist(
             "Floor settings updated",
             history_before=history_before,

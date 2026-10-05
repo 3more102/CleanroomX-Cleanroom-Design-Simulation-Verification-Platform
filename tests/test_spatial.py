@@ -31,6 +31,7 @@ from cleanroomx.spatial import (
     sync_analysis_to_layout,
     sync_layout_to_analysis,
     validate_layout,
+    validated_floor_settings,
 )
 
 
@@ -1670,3 +1671,54 @@ def test_workspace_validation_uses_normalized_hot_path_without_renormalizing(
     assert workspace._validation_issues == []
     assert workspace._last_validation_key is not None
 
+
+
+
+def test_validated_floor_settings_is_atomic_and_rejects_invalid_engineering_values():
+    values = validated_floor_settings(
+        name="  Production Level  ",
+        elevation_m="-1.25",
+        default_ceiling_height_m="3.2",
+        grid_m="0.25",
+        fallback_name="Level 1",
+    )
+    assert values == {
+        "name": "Production Level",
+        "elevation_m": -1.25,
+        "default_ceiling_height_m": 3.2,
+        "grid_m": 0.25,
+    }
+
+    fallback = validated_floor_settings(
+        name="   ",
+        elevation_m="0",
+        default_ceiling_height_m="3",
+        grid_m="0.5",
+        fallback_name="Level 1",
+    )
+    assert fallback["name"] == "Level 1"
+
+    with pytest.raises(ValueError, match="ceiling height"):
+        validated_floor_settings(
+            name="Level 1",
+            elevation_m="0",
+            default_ceiling_height_m="0",
+            grid_m="0.5",
+            fallback_name="Level 1",
+        )
+    with pytest.raises(ValueError, match="Grid spacing"):
+        validated_floor_settings(
+            name="Level 1",
+            elevation_m="0",
+            default_ceiling_height_m="3",
+            grid_m="nan",
+            fallback_name="Level 1",
+        )
+    with pytest.raises(ValueError, match="finite"):
+        validated_floor_settings(
+            name="Level 1",
+            elevation_m="inf",
+            default_ceiling_height_m="3",
+            grid_m="0.5",
+            fallback_name="Level 1",
+        )

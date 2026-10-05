@@ -2077,7 +2077,7 @@ class CleanroomXApp:
         self.run_state_badge = ttk.Label(
             status_bar,
             textvariable=self.run_state_var,
-            style="CX.InfoBadge.TLabel",
+            style="CX.Status.Neutral.TLabel",
         )
         self.run_state_badge.pack(side="right")
         self.run_progress = ttk.Progressbar(

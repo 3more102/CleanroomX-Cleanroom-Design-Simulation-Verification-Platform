@@ -32,6 +32,7 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "docs/STANDARDS.md",
         "docs/GOLDEN_REFERENCE_PROJECTS.md",
         "docs/PRODUCTION_ACCEPTANCE.md",
+        "docs/PROOFGRAPH_CHANGE_IMPACT.md",
         "scripts/benchmark_spatial_validation.py",
         "scripts/benchmark_project_bundle.py",
         "scripts/security_static_gate.py",
@@ -45,6 +46,8 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "tests/test_fault_injection_persistence.py",
         "tests/test_production_acceptance.py",
         "tests/test_production_acceptance_contract.py",
+        "tests/test_proofgraph_change_impact.py",
+        "tests/test_proofgraph_change_impact_cli.py",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     _record(
@@ -108,12 +111,10 @@ def _version_and_demo_contract(checks: list[dict[str, Any]]) -> None:
 
 
 def _workflow_contract(checks: list[dict[str, Any]]) -> None:
-    workflow_paths = (
-        ".github/workflows/ci.yml",
-        ".github/workflows/production-acceptance.yml",
-        ".github/workflows/security.yml",
-        ".github/workflows/windows-standalone.yml",
-        ".github/workflows/windows-installer.yml",
+    workflow_dir = ROOT / ".github" / "workflows"
+    workflow_paths = tuple(
+        path.relative_to(ROOT).as_posix()
+        for path in sorted((*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")))
     )
     unpinned: list[str] = []
     for path in workflow_paths:
@@ -163,6 +164,23 @@ def _workflow_contract(checks: list[dict[str, Any]]) -> None:
         "CI contains Python 3.11/3.12/3.13"
         if matrix_ok
         else "CI supported-version matrix is incomplete",
+    )
+
+    acceptance = _read(".github/workflows/production-acceptance.yml")
+    proofgraph_acceptance_ok = all(
+        token in acceptance
+        for token in (
+            "tests/test_proofgraph_change_impact.py",
+            "tests/test_proofgraph_change_impact_cli.py",
+        )
+    )
+    _record(
+        checks,
+        "proofgraph-change-impact-acceptance",
+        proofgraph_acceptance_ok,
+        "production acceptance explicitly exercises ProofGraph change-impact API and CLI"
+        if proofgraph_acceptance_ok
+        else "production acceptance is missing ProofGraph change-impact regression coverage",
     )
 
 

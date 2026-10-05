@@ -1289,6 +1289,9 @@ class CleanroomXApp:
         self.run_elapsed_var = tk.StringVar(value="—")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.workspace_profile_var = tk.StringVar(
+            value=self._ui_layout_state["workspace_profile"]
+        )
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
@@ -1465,6 +1468,21 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (
+            ("design", "Design"),
+            ("simulation", "Simulation"),
+            ("verification", "Verification"),
+            ("evidence", "Evidence"),
+            ("reporting", "Reporting"),
+        ):
+            workspace_menu.add_radiobutton(
+                label=label,
+                variable=self.workspace_profile_var,
+                value=value,
+                command=lambda mode=value: self.set_workspace_profile(mode),
+            )
+        view_menu.add_cascade(label="Workspace Profile", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -2307,6 +2325,7 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "workspace_profile": self.workspace_profile_var.get(),
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -2342,6 +2361,11 @@ class CleanroomXApp:
             workspace.set_inspector_visible(bool(state["inspector_visible"]))
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
+        self.set_workspace_profile(
+            state["workspace_profile"],
+            persist=False,
+            configure_panels=False,
+        )
         self.status_var.set("Ready")
 
     def _apply_menu_theme(self, menu: tk.Menu) -> None:
@@ -2611,6 +2635,65 @@ class CleanroomXApp:
         workspace.set_inspector_visible(target)
         if workspace.inspector_visible():
             self.root.after_idle(self._apply_saved_panel_sashes)
+
+    def set_workspace_profile(
+        self,
+        value: str,
+        *,
+        persist: bool = True,
+        configure_panels: bool = True,
+    ) -> None:
+        profile = str(value or "").strip().lower()
+        allowed = {"design", "simulation", "verification", "evidence", "reporting"}
+        if profile not in allowed:
+            profile = "design"
+
+        self._restore_focus_workspace_snapshot(status=False)
+        self.workspace_profile_var.set(profile)
+        workspace = getattr(self, "spatial_workspace", None)
+
+        if configure_panels:
+            panel_policy = {
+                "design": (True, False, True),
+                "simulation": (True, True, False),
+                "verification": (True, True, False),
+                "evidence": (False, False, False),
+                "reporting": (True, True, False),
+            }
+            navigator_visible, output_visible, inspector_visible = panel_policy[profile]
+            self.navigator_panel_visible_var.set(navigator_visible)
+            self.output_panel_visible_var.set(output_visible)
+            self._sync_navigator_panel_visibility()
+            self._sync_output_panel_visibility()
+            if workspace is not None:
+                workspace.set_inspector_visible(inspector_visible)
+
+        if profile == "design":
+            self._activate_spatial_workspace("split")
+        elif profile == "simulation":
+            self._activate_simulation_workspace()
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(self.analysis_result_panel)
+        elif profile == "verification":
+            self._activate_spatial_workspace("2d")
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(self.problems_panel)
+        elif profile == "evidence":
+            self._activate_proofgraph_workspace()
+        elif profile == "reporting":
+            self.notebook.select(self.dashboard)
+            if self.output_panel_visible_var.get():
+                self.output_notebook.select(self.report_text.master)
+
+        self.workspace_status_var.set(
+            f"Workspace: {profile.replace('_', ' ').title()}"
+        )
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["workspace_profile"] = profile
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(f"Workspace profile: {profile.title()}")
 
     def _apply_default_panel_sashes(self) -> None:
         if (
@@ -3256,6 +3339,23 @@ class CleanroomXApp:
                 keywords=("autosave", "restore"),
             ),
         ]
+
+        for profile, label in (
+            ("design", "Design"),
+            ("simulation", "Simulation"),
+            ("verification", "Verification"),
+            ("evidence", "Evidence"),
+            ("reporting", "Reporting"),
+        ):
+            commands.append(
+                PaletteCommand(
+                    f"workspace.profile.{profile}",
+                    f"Switch to {label} Workspace Profile",
+                    "Window",
+                    lambda value=profile: self.set_workspace_profile(value),
+                    keywords=("workspace", "profile", label.casefold()),
+                )
+            )
 
         for analysis in self.project.analyses:
             analysis_id = str(analysis.id)

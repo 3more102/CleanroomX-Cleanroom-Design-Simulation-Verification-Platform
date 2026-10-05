@@ -48,6 +48,7 @@ class TreeviewTableBehavior:
         sortable_columns: Iterable[str],
         copy_columns: Iterable[str] | None = None,
         parent: str = "",
+        bind_copy: bool = True,
     ) -> None:
         self.tree = tree
         self.parent = parent
@@ -66,6 +67,8 @@ class TreeviewTableBehavior:
         self.sort_descending = False
         self._heading_text: dict[str, str] = {}
         self._column_vars: dict[str, tk.BooleanVar] = {}
+        self._context_column: str | None = None
+        self._bind_copy = bool(bind_copy)
 
         self._menu = tk.Menu(tree, tearoff=False)
         self._menu.add_command(
@@ -100,6 +103,21 @@ class TreeviewTableBehavior:
             label="Show all columns",
             command=self.show_all_columns,
         )
+        self._menu.add_separator()
+        self._move_left_index = int(self._menu.index("end") or 0) + 1
+        self._menu.add_command(
+            label="Move column left",
+            command=lambda: self._move_context_column(-1),
+        )
+        self._move_right_index = int(self._menu.index("end") or 0) + 1
+        self._menu.add_command(
+            label="Move column right",
+            command=lambda: self._move_context_column(1),
+        )
+        self._menu.add_command(
+            label="Reset column layout",
+            command=self.reset_column_layout,
+        )
 
         for column in self.sortable_columns:
             try:
@@ -113,19 +131,62 @@ class TreeviewTableBehavior:
                 command=lambda selected=column: self.sort_by(selected),
             )
 
-        tree.bind("<Control-c>", self._copy_event, add="+")
-        tree.bind("<Control-C>", self._copy_event, add="+")
+        if self._bind_copy:
+            tree.bind("<Control-c>", self._copy_event, add="+")
+            tree.bind("<Control-C>", self._copy_event, add="+")
+        if str(tree.cget("selectmode")) == "extended":
+            tree.bind("<Control-a>", self._select_all_event, add="+")
+            tree.bind("<Control-A>", self._select_all_event, add="+")
         tree.bind("<Button-3>", self._context_menu, add="+")
 
     def _copy_event(self, _event=None):
         self.copy_selected()
         return "break"
 
+    def _select_all_event(self, _event=None):
+        self.select_all()
+        return "break"
+
+    def _column_at_x(self, x: int) -> str | None:
+        token = str(self.tree.identify_column(x) or "")
+        if not token.startswith("#") or token == "#0":
+            return None
+        try:
+            index = int(token[1:]) - 1
+        except ValueError:
+            return None
+        visible = self.visible_columns()
+        if not 0 <= index < len(visible):
+            return None
+        return visible[index]
+
+    def _configure_column_move_actions(self) -> None:
+        visible = self.visible_columns()
+        column = self._context_column
+        try:
+            index = visible.index(column) if column is not None else -1
+        except ValueError:
+            index = -1
+        self._menu.entryconfigure(
+            self._move_left_index,
+            state="normal" if index > 0 else "disabled",
+        )
+        self._menu.entryconfigure(
+            self._move_right_index,
+            state=(
+                "normal"
+                if 0 <= index < len(visible) - 1
+                else "disabled"
+            ),
+        )
+
     def _context_menu(self, event: tk.Event):
         region = self.tree.identify_region(event.x, event.y)
         if region == "heading":
+            self._context_column = self._column_at_x(event.x)
             self._sync_column_vars()
         else:
+            self._context_column = None
             iid = self.tree.identify_row(event.y)
             if iid:
                 selection = set(self.tree.selection())
@@ -134,6 +195,7 @@ class TreeviewTableBehavior:
                     self.tree.focus(iid)
             if not self.tree.selection():
                 return None
+        self._configure_column_move_actions()
         try:
             self._menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -255,12 +317,35 @@ class TreeviewTableBehavior:
         self._sync_column_vars()
         return True
 
+    def move_column(self, column: str, delta: int) -> bool:
+        current = list(self.visible_columns())
+        if column not in current:
+            return False
+        index = current.index(column)
+        target = index + int(delta)
+        if not 0 <= target < len(current):
+            return False
+        current[index], current[target] = current[target], current[index]
+        return self.set_column_order(current)
+
+    def _move_context_column(self, delta: int) -> bool:
+        column = self._context_column
+        if column is None:
+            return False
+        moved = self.move_column(column, delta)
+        if moved:
+            self._configure_column_move_actions()
+        return moved
+
     def show_all_columns(self) -> None:
         try:
             self.tree.configure(displaycolumns=self._default_display_columns)
         except tk.TclError:
             return
         self._sync_column_vars()
+
+    def reset_column_layout(self) -> None:
+        self.show_all_columns()
 
     def select_all(self) -> bool:
         children = self._ordered_children()

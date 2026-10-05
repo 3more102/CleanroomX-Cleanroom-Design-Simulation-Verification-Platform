@@ -8381,7 +8381,10 @@ class CleanroomXApp:
             try:
                 history_evidence = build_run_history_evidence(payload, result)
             except Exception as exc:  # audit preparation must not hide a valid result
-                history_error = str(exc)
+                history_error = record_gui_exception(
+                    "Prepare run-history evidence",
+                    exc,
+                )
             self._queue.put(
                 (
                     "success",
@@ -8560,11 +8563,16 @@ class CleanroomXApp:
                             f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
+                        history_error_detail = (
+                            history_error.user_message()
+                            if isinstance(history_error, GuiErrorReport)
+                            else str(history_error)
+                        )
                         self._finish_active_run_task(
                             state="completed",
                             stage="Result accepted; audit history not updated",
                             result=str(run.status or "completed").upper(),
-                            detail=str(history_error),
+                            detail=history_error_detail,
                         )
                         self.status_var.set(
                             f"Completed — {run.title}; run history was not updated."
@@ -8577,7 +8585,7 @@ class CleanroomXApp:
                                 "evidence could not be prepared or the existing history failed "
                                 "integrity validation. Existing history was left unchanged. "
                                 "Export the run bundle if this result must be retained.\n\n"
-                                f"{history_error}"
+                                f"{history_error_detail}"
                             ),
                             parent=self.root,
                         )

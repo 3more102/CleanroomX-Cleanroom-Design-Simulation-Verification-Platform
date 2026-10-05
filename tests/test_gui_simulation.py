@@ -135,10 +135,15 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
             analysis_name="Airflow Balance",
             analysis_kind="airflow_balance",
             analysis_input={"rooms": [], "requirements": {}},
+            retained_run_count=3,
+            latest_retained_utc="2026-10-05T09:15:00Z",
         )
         root.update_idletasks()
         assert workspace.state_var.get() == "READY"
         assert workspace.input_var.get() == "2 top-level fields"
+        assert workspace.history_var.get() == (
+            "3 retained run(s) · latest 2026-10-05T09:15:00Z"
+        )
         assert workspace.verification_var.get() == "Separate verification workspace"
 
         run = SimpleNamespace(
@@ -186,6 +191,37 @@ def app(tmp_path):
     try:
         yield application
         assert callback_errors == []
+    finally:
+        root.destroy()
+
+
+
+
+def test_simulation_workspace_marks_run_history_integrity_unavailable():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    configure_ttk_theme(root, "dark")
+    workspace = SimulationWorkspace(
+        root,
+        on_run=lambda: None,
+        on_cancel=lambda: None,
+        on_validate=lambda: None,
+        on_open_inputs=lambda: None,
+        on_open_results=lambda: None,
+    )
+    try:
+        workspace.set_context(
+            analysis_name="Pressure",
+            analysis_kind="pressure_cascade",
+            analysis_input={},
+            history_available=False,
+        )
+        assert workspace.history_var.get() == "UNAVAILABLE — ledger integrity"
     finally:
         root.destroy()
 

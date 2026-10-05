@@ -81,7 +81,7 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import attach_tooltip, configure_ttk_theme, normalize_theme_name
+from .gui_theme import attach_tooltip, configure_ttk_theme, normalize_theme_name, theme_palette
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -6399,17 +6399,7 @@ class CleanroomXApp:
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
         canvas.delete("all")
-        palette = getattr(
-            self,
-            "_theme_palette",
-            {
-                "plot": "#ffffff",
-                "muted": "#5f6b78",
-                "text": "#18212b",
-                "accent": "#0b6aa8",
-                "accent_hover": "#095786",
-            },
-        )
+        palette = getattr(self, "_theme_palette", None) or theme_palette("dark")
         canvas.configure(background=palette["plot"])
         run = self.last_run
         if run is None or run.plot is None:

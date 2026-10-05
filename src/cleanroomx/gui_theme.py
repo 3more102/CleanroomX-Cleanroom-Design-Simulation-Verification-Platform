@@ -112,6 +112,83 @@ def status_style_name(value: Any) -> str:
     return "CX.Status.Neutral.TLabel"
 
 
+class _Tooltip:
+    """Small dependency-free workstation tooltip for compact engineering controls."""
+
+    def __init__(self, widget: tk.Misc, text: str, *, delay_ms: int = 450) -> None:
+        self.widget = widget
+        self.text = str(text).strip()
+        self.delay_ms = max(0, int(delay_ms))
+        self._after_id: str | None = None
+        self._window: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<FocusOut>", self._hide, add="+")
+
+    def _schedule(self, _event=None) -> None:
+        self._cancel()
+        if self.text:
+            self._after_id = self.widget.after(self.delay_ms, self._show)
+
+    def _cancel(self) -> None:
+        if self._after_id is not None:
+            try:
+                self.widget.after_cancel(self._after_id)
+            except tk.TclError:
+                pass
+            self._after_id = None
+
+    def _show(self) -> None:
+        self._after_id = None
+        if self._window is not None or not self.text:
+            return
+        try:
+            x = self.widget.winfo_rootx() + 12
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 7
+        except tk.TclError:
+            return
+        window = tk.Toplevel(self.widget)
+        self._window = window
+        window.wm_overrideredirect(True)
+        try:
+            window.wm_attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        palette = theme_palette(
+            getattr(self.widget, "_cleanroomx_theme_name", "dark")
+        )
+        label = tk.Label(
+            window,
+            text=self.text,
+            justify="left",
+            wraplength=340,
+            background=palette["surface_elevated"],
+            foreground=palette["text"],
+            relief="solid",
+            borderwidth=1,
+            padx=7,
+            pady=4,
+        )
+        label.pack()
+        window.wm_geometry(f"+{x}+{y}")
+
+    def _hide(self, _event=None) -> None:
+        self._cancel()
+        if self._window is not None:
+            try:
+                self._window.destroy()
+            except tk.TclError:
+                pass
+            self._window = None
+
+
+def attach_tooltip(widget: tk.Misc, text: str, *, delay_ms: int = 450) -> None:
+    """Attach a restrained tooltip while keeping widget APIs untouched."""
+    tooltip = _Tooltip(widget, text, delay_ms=delay_ms)
+    setattr(widget, "_cleanroomx_tooltip", tooltip)
+
+
 def _configure_status_style(
     style: ttk.Style,
     name: str,

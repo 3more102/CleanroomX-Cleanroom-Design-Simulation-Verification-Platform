@@ -30,3 +30,8 @@ def test_architecture_release_scope_names_current_package_version() -> None:
     release_scope = architecture.split("## Release 3 design foundation", 1)[0]
 
     assert f"CleanroomX v{version}" in release_scope
+
+
+def test_architecture_has_no_literal_escaped_line_breaks() -> None:
+    architecture = ARCHITECTURE.read_text(encoding="utf-8")
+    assert r"\\n" not in architecture

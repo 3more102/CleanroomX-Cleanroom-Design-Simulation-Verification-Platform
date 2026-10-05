@@ -229,3 +229,31 @@ def test_compliance_panel_cancelled_delete_does_not_mutate_input(root):
     assert state["payload"] == payload
     assert state["edits"] == []
     assert messages[-1] == "Delete cancelled for compliance rule temperature"
+
+
+def test_compliance_panel_apply_does_not_request_delete_confirmation(root):
+    payload = _payload()
+    state = {"payload": copy.deepcopy(payload), "edits": []}
+    confirmations = []
+
+    def set_input(value, description):
+        compliance_check_from_dict(copy.deepcopy(value))
+        state["payload"] = copy.deepcopy(value)
+        state["edits"].append(description)
+        return True
+
+    panel = ComplianceRulePackPanel(
+        root,
+        input_getter=lambda: copy.deepcopy(state["payload"]),
+        input_setter=set_input,
+        confirm_delete=lambda rule_id: confirmations.append(rule_id) or False,
+    )
+    panel.pack(fill="both", expand=True)
+    panel.refresh()
+    root.update()
+
+    panel._select_rule_id("ach")
+    panel.expected_var.set("17")
+    assert panel.apply_selected() is True
+    assert confirmations == []
+    assert state["edits"][-1] == "Edit compliance rule ach"

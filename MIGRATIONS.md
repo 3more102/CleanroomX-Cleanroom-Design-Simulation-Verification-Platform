@@ -2,7 +2,7 @@
 
 ## Current schema
 
-CleanroomX v0.102.1 writes desktop projects using:
+Current CleanroomX builds, including the Release 3 development line, write desktop projects using:
 
 - schema: `cleanroomx.project`
 - schema version: `1`

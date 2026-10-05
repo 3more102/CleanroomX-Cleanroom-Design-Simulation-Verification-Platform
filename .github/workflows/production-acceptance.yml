@@ -46,6 +46,8 @@ jobs:
           tests/test_security_static_gate.py
           tests/test_gui_constraints.py
           tests/test_gui_requirements_editor.py
+          tests/test_proofgraph_change_impact.py
+          tests/test_proofgraph_change_impact_cli.py
           tests/test_spatial_documentation.py
       - name: Re-run performance regression budgets
         run: |

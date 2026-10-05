@@ -143,8 +143,17 @@ jobs:
           tests/test_project_dossier.py
           tests/test_project_verify_cli.py
           tests/test_verification_history_cli.py
+      - name: Install virtual display for GUI release gates
+        if: matrix.python-version == '3.13'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb tk
       - name: Run complete test suite
+        if: matrix.python-version != '3.13'
         run: python -m pytest -q
+      - name: Run complete test suite with real Tk
+        if: matrix.python-version == '3.13'
+        run: xvfb-run -a python -m pytest -q
       - name: Run Release 2 performance evidence
         if: matrix.python-version == '3.13'
         run: |
@@ -209,11 +218,6 @@ jobs:
           ):
               assert (demo_dir / name).is_file(), name
           PY
-      - name: Install virtual display for v0.100 GUI smoke
-        if: matrix.python-version == '3.13'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb tk
       - name: Run v0.100 desktop GUI smoke from installed wheel
         if: matrix.python-version == '3.13'
         run: |

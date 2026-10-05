@@ -190,3 +190,43 @@ def test_requirements_navigator_opens_traceability(app, monkeypatch):
     assert opened == [True]
     assert app.selection_status_var.get() == "Selected: Requirements traceability"
 
+
+
+
+def test_shell_save_badge_tracks_explicit_file_state_and_dirty_edits(app):
+    assert app.shell_save_badge_var.get() == "SAVED"
+    assert app.shell_save_badge.cget("style") == "CX.Status.Pass.TLabel"
+
+    original_name = app.name_var.get()
+    app.name_var.set(original_name + " review")
+    app.root.update()
+    assert app.shell_save_badge_var.get() == "UNSAVED"
+    assert app.shell_save_badge.cget("style") == "CX.Status.Warning.TLabel"
+
+    app.name_var.set(original_name)
+    app.root.update()
+    assert app.shell_save_badge_var.get() == "SAVED"
+    assert app.shell_save_badge.cget("style") == "CX.Status.Pass.TLabel"
+
+
+def test_project_navigator_uses_semantic_engineering_domain_tags(app):
+    expected = {
+        "nav-building": "domain_geometry",
+        "nav-hvac": "domain_hvac",
+        "nav-pressure": "domain_pressure",
+        "nav-simulation": "domain_simulation",
+        "nav-diagnostics": "domain_diagnostics",
+        "nav-requirements": "domain_requirements",
+        "nav-verification": "domain_verification",
+        "nav-evidence": "domain_evidence",
+    }
+    for iid, tag in expected.items():
+        assert app.analysis_tree.exists(iid)
+        assert tag in app.analysis_tree.item(iid, "tags")
+
+    room_iid = next(
+        iid for iid in app.analysis_tree.get_children("nav-floor")
+        if iid.startswith("room:")
+    )
+    assert "domain_geometry" in app.analysis_tree.item(room_iid, "tags")
+    assert "domain_airflow" in app.analysis_tree.item("nav-airflow", "tags")

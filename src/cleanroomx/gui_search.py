@@ -139,6 +139,60 @@ def build_engineering_search_entries(
                 ),
             )
 
+            if kind == "compliance_check":
+                payload = getattr(analysis, "input", {})
+                pack = payload.get("rule_pack") if isinstance(payload, dict) else None
+                rules = pack.get("rules") if isinstance(pack, dict) else None
+                if isinstance(rules, list):
+                    for rule in rules:
+                        if not isinstance(rule, dict):
+                            continue
+                        rule_id = _text(rule.get("id"))
+                        if not rule_id:
+                            continue
+                        title = _text(rule.get("title")) or rule_id
+                        evidence_path = _text(rule.get("evidence_path"))
+                        operator = _text(rule.get("operator"))
+                        reference = _text(rule.get("reference"))
+                        unit = _text(rule.get("unit"))
+                        _append_unique(
+                            entries,
+                            seen,
+                            SearchEntry(
+                                key=f"compliance-rule:{analysis_id}:{rule_id}",
+                                category="Compliance Rule",
+                                label=title,
+                                detail=" · ".join(
+                                    part
+                                    for part in (
+                                        rule_id,
+                                        operator,
+                                        evidence_path,
+                                        unit,
+                                        reference,
+                                    )
+                                    if part
+                                ),
+                                target_type="compliance_rule",
+                                target_id=rule_id,
+                                keywords=(
+                                    analysis_id,
+                                    operator,
+                                    evidence_path,
+                                    unit,
+                                    reference,
+                                    "compliance",
+                                    "rule",
+                                    "constraint",
+                                    "criteria",
+                                ),
+                                payload={
+                                    "analysis_id": analysis_id,
+                                    "rule_id": rule_id,
+                                },
+                            ),
+                        )
+
     layout = spatial_layout if isinstance(spatial_layout, dict) else {}
     for collection_name, category, target_type in (
         ("rooms", "Room", "room"),

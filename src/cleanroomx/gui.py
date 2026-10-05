@@ -5485,13 +5485,39 @@ class CleanroomXApp:
                 workflow,
             )
         except ProjectSaveDurabilityError as exc:
+            reload_report = None
             try:
                 self.load_project_path(project_path)
-            except Exception:
-                pass
-            self.status_var.set(
-                "Verification bytes committed; save durability not confirmed"
-            )
+            except Exception as reload_exc:
+                # Do not advance _project_file_revision when reload failed. Keeping
+                # the previous revision identity makes the guarded Save path reject
+                # any attempt to overwrite the newer committed verification bytes.
+                reload_report = record_gui_exception(
+                    "Reload project after verification durability warning",
+                    reload_exc,
+                )
+            if reload_report is None:
+                self.status_var.set(
+                    "Verification bytes committed; save durability not confirmed"
+                )
+                reload_detail = ""
+            else:
+                self.status_var.set(
+                    "Verification committed; reload failed · "
+                    f"{reload_report.reference}"
+                )
+                reload_detail = (
+                    "\n\nThe desktop could not reload the committed project bytes. "
+                    "This session remains bound to the previous revision and guarded "
+                    "against overwriting the newer on-disk state. Reopen the project "
+                    "before making or saving further engineering edits.\n\n"
+                    f"Reload error reference: {reload_report.reference}\n"
+                    + (
+                        f"Technical log: {reload_report.log_path}"
+                        if reload_report.log_path is not None
+                        else "Technical logging was unavailable."
+                    )
+                )
             messagebox.showwarning(
                 "Verification save durability not confirmed",
                 (
@@ -5499,6 +5525,7 @@ class CleanroomXApp:
                     "verification record, but filesystem directory durability could "
                     "not be confirmed.\n\n"
                     f"Committed project SHA-256: {exc.committed_revision.sha256}"
+                    + reload_detail
                 ),
                 parent=self.root,
             )

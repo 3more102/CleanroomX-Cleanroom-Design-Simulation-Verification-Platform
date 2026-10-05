@@ -20,6 +20,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
         "output_visible": True,
         "inspector_visible": True,
         "theme": "dark",
+        "density": "compact",
         "workspace_profile": "start",
         "recent_projects": [],
         "window_width": 1440,
@@ -41,6 +42,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
             "output_visible": "no",
             "inspector_visible": True,
             "theme": "neon",
+            "density": "huge",
             "workspace_profile": "unsupported",
             "recent_projects": [
                 "alpha.cleanroomx.json",
@@ -64,6 +66,7 @@ def test_gui_layout_state_normalization_rejects_bad_types_and_bounds():
     assert state["output_visible"] is True
     assert state["inspector_visible"] is True
     assert state["theme"] == "dark"
+    assert state["density"] == "compact"
     assert state["workspace_profile"] == "start"
     assert state["recent_projects"] == [
         "alpha.cleanroomx.json",
@@ -86,6 +89,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
             "output_visible": True,
             "inspector_visible": False,
             "theme": "dark",
+            "density": "comfortable",
             "workspace_profile": "verification",
             "recent_projects": [
                 "/projects/clean-a.cleanroomx.json",
@@ -105,6 +109,7 @@ def test_gui_layout_state_round_trip_is_normalized_and_atomic(tmp_path):
     assert payload["navigator_visible"] is False
     assert payload["inspector_visible"] is False
     assert payload["theme"] == "dark"
+    assert payload["density"] == "comfortable"
     assert payload["workspace_profile"] == "verification"
     assert payload["recent_projects"] == [
         "/projects/clean-a.cleanroomx.json",
@@ -150,3 +155,9 @@ def test_workspace_profile_normalization_is_closed_to_supported_profiles():
     assert normalize_gui_layout_state(
         {"workspace_profile": "compliance"}
     )["workspace_profile"] == "start"
+
+
+def test_density_normalization_is_closed_to_supported_modes():
+    assert normalize_gui_layout_state({"density": "COMPACT"})["density"] == "compact"
+    assert normalize_gui_layout_state({"density": "Comfortable"})["density"] == "comfortable"
+    assert normalize_gui_layout_state({"density": "cinematic"})["density"] == "compact"

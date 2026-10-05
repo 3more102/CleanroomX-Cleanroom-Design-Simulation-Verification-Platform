@@ -60,12 +60,24 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Copy", command=self.copy_selected).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            toolbar,
+            text="Refresh",
+            style="CX.Compact.TButton",
+            command=self.refresh,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Locate",
+            style="CX.Primary.TButton",
+            command=self._navigate_selected,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Copy",
+            style="CX.Compact.TButton",
+            command=self.copy_selected,
+        ).pack(side="left", padx=2)
         self.export_button = ttk.Button(
             toolbar,
             text="Export…",
@@ -142,6 +154,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.columnconfigure(0, weight=1)
 
         self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self.tree.tag_configure("warning", font=("TkDefaultFont", 9, "bold"))
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
@@ -161,6 +174,33 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
         detail_scroll.pack(side="right", fill="y", pady=4)
+
+    def apply_theme(self, palette: dict[str, str]) -> None:
+        """Apply semantic severity styling without changing diagnostic data."""
+        self.tree.tag_configure(
+            "error",
+            foreground=palette["error"],
+            background=palette["error_surface"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground=palette["warning"],
+            background=palette["warning_surface"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "info",
+            foreground=palette["info"],
+            background=palette["blue_surface"],
+        )
+        self.detail.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
 
     @staticmethod
     def _element_text(issue: dict[str, Any]) -> str:
@@ -311,20 +351,26 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             ]
             details = issue.get("details")
             if isinstance(details, dict) and details:
-                lines.extend(
-                    (
-                        "",
-                        "Details:",
-                        json.dumps(
-                            details,
-                            indent=2,
+                lines.extend(("", "ENGINEERING DETAILS"))
+                for key, value in sorted(details.items()):
+                    label = str(key).replace("_", " ").strip().title()
+                    if isinstance(value, (str, int, float, bool)) or value is None:
+                        rendered = "—" if value is None else str(value)
+                    else:
+                        rendered = json.dumps(
+                            value,
                             sort_keys=True,
                             ensure_ascii=False,
                             allow_nan=False,
-                        ),
-                    )
-                )
+                        )
+                    lines.append(f"{label}: {rendered}")
             self.detail.insert("1.0", "\n".join(lines))
+        else:
+            self.detail.insert(
+                "1.0",
+                "Select a diagnostic to inspect its engineering context, "
+                "recommended action, and affected object.",
+            )
         self.detail.configure(state="disabled")
 
     def _navigate_selected(self, event=None):

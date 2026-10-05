@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewTableBehavior
 from .project_diagnostics import analyze_project_diagnostics
 
 
@@ -39,6 +40,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.rule_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.object_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
@@ -48,6 +50,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         for variable in (
             self.search_var,
             self.severity_var,
+            self.rule_var,
             self.category_var,
             self.object_var,
         ):
@@ -109,6 +112,15 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=9,
         )
         self.severity_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filter_row, text="Rule").pack(side="left")
+        self.rule_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.rule_var,
+            values=("All",),
+            state="readonly",
+            width=20,
+        )
+        self.rule_combo.pack(side="left", padx=(4, 8))
         ttk.Label(filter_row, text="Category").pack(side="left")
         self.category_combo = ttk.Combobox(
             filter_row,
@@ -151,7 +163,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             table_frame,
             columns=columns,
             show="headings",
-            selectmode="browse",
+            selectmode="extended",
             height=7,
         )
         headings = {
@@ -171,11 +183,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             "source": 150,
         }
         for column in columns:
-            self.tree.heading(
-                column,
-                text=headings[column],
-                command=lambda selected=column: self._sort_by(selected),
-            )
+            self.tree.heading(column, text=headings[column])
             self.tree.column(
                 column,
                 width=widths[column],
@@ -203,12 +211,31 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=columns,
+            copy_columns=columns,
+            bind_copy=False,
+            bind_context_menu=False,
+            sort_key_overrides={
+                "severity": lambda raw: (
+                    0,
+                    _SEVERITY_RANK.get(str(raw).casefold(), 99),
+                )
+            },
+        )
+        self.table_behavior.sort_column = "severity"
+        self.table_behavior.sort_descending = False
+        self.table_behavior.reapply_sort()
+
         self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)
         self.tree.bind("<F4>", lambda _event: self.navigate_relative(1))
         self.tree.bind("<Shift-F4>", lambda _event: self.navigate_relative(-1))
+        self.tree.bind("<Control-c>", lambda _event: self._copy_shortcut())
+        self.tree.bind("<Control-C>", lambda _event: self._copy_shortcut())
         self.tree.bind("<Button-3>", self._show_context_menu)
 
         self.detail = tk.Text(
@@ -267,6 +294,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
     def _refresh_filter_values(self) -> None:
         issues = self._all_issues()
+        rules = sorted(
+            {
+                str(issue.get("rule", "")).strip()
+                for issue in issues
+                if str(issue.get("rule", "")).strip()
+            },
+            key=str.casefold,
+        )
         categories = sorted(
             {
                 str(issue.get("category", "")).strip()
@@ -279,8 +314,11 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             {self._element_type(issue) for issue in issues},
             key=str.casefold,
         )
+        self.rule_combo.configure(values=("All", *rules))
         self.category_combo.configure(values=("All", *categories))
         self.object_combo.configure(values=("All", *objects))
+        if self.rule_var.get() not in {"All", *rules}:
+            self.rule_var.set("All")
         if self.category_var.get() not in {"All", *categories}:
             self.category_var.set("All")
         if self.object_var.get() not in {"All", *objects}:
@@ -289,13 +327,21 @@ class ProjectDiagnosticsPanel(ttk.Frame):
     def _filtered_issues(self) -> list[dict[str, Any]]:
         issues = self._all_issues()
         severity = self.severity_var.get().strip().casefold()
+        rule = self.rule_var.get().strip().casefold()
         category = self.category_var.get().strip().casefold()
         object_type = self.object_var.get().strip().casefold()
-        query = self.search_var.get().strip().casefold()
+        query_tokens = [
+            token
+            for token in self.search_var.get().strip().casefold().split()
+            if token
+        ]
         visible: list[dict[str, Any]] = []
         for issue in issues:
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_rule = str(issue.get("rule", "")).casefold()
+            if rule and rule != "all" and issue_rule != rule:
                 continue
             issue_category = str(issue.get("category", "")).casefold()
             if category and category != "all" and issue_category != category:
@@ -307,7 +353,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 and issue_object_type != object_type
             ):
                 continue
-            if query:
+            if query_tokens:
                 haystack = " ".join(
                     (
                         str(issue.get("rule", "")),
@@ -325,7 +371,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                         ),
                     )
                 ).casefold()
-                if query not in haystack:
+                if not all(token in haystack for token in query_tokens):
                     continue
             visible.append(issue)
         return visible
@@ -350,16 +396,14 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         return str(issue.get("sequence", ""))
 
     def _sort_by(self, column: str) -> None:
-        if column == self._sort_column:
-            self._sort_descending = not self._sort_descending
-        else:
-            self._sort_column = column
-            self._sort_descending = False
-        self._populate()
+        self.table_behavior.sort_by(column)
+        self._sort_column = self.table_behavior.sort_column or "severity"
+        self._sort_descending = self.table_behavior.sort_descending
 
     def clear_filters(self) -> None:
         self.search_var.set("")
         self.severity_var.set("All")
+        self.rule_var.set("All")
         self.category_var.set("All")
         self.object_var.set("All")
         self.search_entry.focus_set()
@@ -377,7 +421,6 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._issues_by_iid.clear()
 
         visible = self._filtered_issues()
-        visible.sort(key=self._sort_value, reverse=self._sort_descending)
         total_count = len(self._all_issues())
         self.visible_var.set(f"{len(visible)} of {total_count} visible")
 
@@ -402,6 +445,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 tags=(severity,),
             )
             self._issues_by_iid[iid] = issue
+
+        self.table_behavior.reapply_sort()
 
         if selected_sequence is not None:
             for iid, issue in self._issues_by_iid.items():
@@ -440,26 +485,35 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._populate()
         return result
 
+    def selected_issues(self) -> list[dict[str, Any]]:
+        return [
+            issue
+            for iid in self.tree.selection()
+            if (issue := self._issues_by_iid.get(iid)) is not None
+        ]
+
     def selected_issue(self) -> dict[str, Any] | None:
-        selection = self.tree.selection()
-        if not selection:
-            return None
-        return self._issues_by_iid.get(selection[0])
+        selected = self.selected_issues()
+        return selected[0] if selected else None
 
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:
+            selected_count = len(self.selected_issues())
             element = issue.get("element")
             element_type = self._element_type(issue)
-            lines = [
+            lines = []
+            if selected_count > 1:
+                lines.extend((f"{selected_count} diagnostics selected", ""))
+            lines.extend([
                 f"{str(issue.get('severity', 'info')).upper()} · {issue.get('rule', '')}",
                 str(issue.get("message", "")),
                 "",
                 f"Category: {issue.get('category', '')}",
                 f"Object: {self._element_text(issue)} ({element_type})",
-            ]
+            ])
             if isinstance(element, dict) and element.get("id") not in (None, ""):
                 lines.append(f"Object ID: {element.get('id')}")
             level = self._level_text(issue)
@@ -535,42 +589,80 @@ class ProjectDiagnosticsPanel(ttk.Frame):
     def _show_context_menu(self, event: tk.Event):
         iid = self.tree.identify_row(event.y)
         if iid:
-            self.tree.selection_set(iid)
+            if iid not in set(self.tree.selection()):
+                self.tree.selection_set(iid)
             self.tree.focus(iid)
             self._show_selected_detail()
+        elif self.tree.identify_region(event.x, event.y) != "heading":
+            return None
+
+        self.table_behavior.prepare_columns_menu()
         menu = tk.Menu(self, tearoff=False)
-        menu.add_command(label="Go to object", command=self._navigate_selected)
-        menu.add_command(label="Copy diagnostic", command=self.copy_selected)
-        menu.add_separator()
+        if iid:
+            menu.add_command(label="Go to object", command=self._navigate_selected)
+            menu.add_command(
+                label="Copy diagnostic record(s)",
+                command=self.copy_selected,
+            )
+            menu.add_command(
+                label="Copy visible row(s)",
+                command=self.table_behavior.copy_selected,
+            )
+            menu.add_command(
+                label="Copy visible row(s) with headers",
+                command=lambda: self.table_behavior.copy_selected(with_headers=True),
+            )
+            menu.add_command(
+                label="Select all visible",
+                command=self.table_behavior.select_all,
+            )
+            menu.add_separator()
+        menu.add_cascade(label="Columns", menu=self.table_behavior.columns_menu)
+        menu.add_command(
+            label="Reset column layout",
+            command=self.table_behavior.reset_column_layout,
+        )
+        if iid:
+            menu.add_separator()
         menu.add_command(
             label="Previous diagnostic",
             command=lambda: self.navigate_relative(-1),
         )
-        menu.add_command(
-            label="Next diagnostic",
-            command=lambda: self.navigate_relative(1),
-        )
+            menu.add_command(
+                label="Next diagnostic",
+                command=lambda: self.navigate_relative(1),
+            )
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
         return "break"
 
+    def _copy_shortcut(self):
+        self.copy_selected()
+        return "break"
+
     def copy_selected(self) -> None:
-        issue = self.selected_issue()
-        if issue is None:
+        issues = self.selected_issues()
+        if not issues:
             self._status_setter("Select a diagnostic to copy")
             return
-        payload = json.dumps(
-            issue,
-            indent=2,
-            sort_keys=True,
-            ensure_ascii=False,
-            allow_nan=False,
-        )
+        payload: Any = issues[0] if len(issues) == 1 else issues
         self.clipboard_clear()
-        self.clipboard_append(payload)
-        self._status_setter("Diagnostic copied to clipboard")
+        self.clipboard_append(
+            json.dumps(
+                payload,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        )
+        self._status_setter(
+            "Diagnostic copied to clipboard"
+            if len(issues) == 1
+            else f"{len(issues)} diagnostics copied to clipboard"
+        )
 
     def _export(self) -> None:
         if self._export_callback is None:

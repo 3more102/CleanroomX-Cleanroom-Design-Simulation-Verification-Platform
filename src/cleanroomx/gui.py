@@ -1266,6 +1266,7 @@ class CleanroomXApp:
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
+        self.shell_save_badge_var = tk.StringVar(value="UNSAVED")
         self.shell_model_badge_var = tk.StringVar(value="MODEL READY")
         self.shell_diagnostics_badge_var = tk.StringVar(value="DIAGNOSTICS —")
         self.shell_verification_badge_var = tk.StringVar(value="VERIFY —")
@@ -1539,29 +1540,39 @@ class CleanroomXApp:
             style="CX.TopbarMuted.TLabel",
         ).grid(row=0, column=1, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.name_var, width=22).grid(
-            row=0, column=2, sticky="ew", padx=(0, 10)
+            row=0, column=2, sticky="ew", padx=(0, 7)
+        )
+        self.shell_save_badge = ttk.Label(
+            topbar,
+            textvariable=self.shell_save_badge_var,
+            style="CX.Status.Warning.TLabel",
+        )
+        self.shell_save_badge.grid(row=0, column=3, padx=(0, 10))
+        attach_tooltip(
+            self.shell_save_badge,
+            "Project persistence state. SAVED means the current in-memory project matches the last explicit save.",
         )
         ttk.Label(
             topbar,
             text="Description",
             style="CX.TopbarMuted.TLabel",
-        ).grid(row=0, column=3, sticky="w", padx=(0, 5))
+        ).grid(row=0, column=4, sticky="w", padx=(0, 5))
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
-            row=0, column=4, sticky="ew", padx=(0, 10)
+            row=0, column=5, sticky="ew", padx=(0, 10)
         )
         ttk.Button(
             topbar,
             text="Validate",
             style="CX.Compact.TButton",
             command=self.validate_current,
-        ).grid(row=0, column=5, padx=2)
+        ).grid(row=0, column=6, padx=2)
         self.run_button = ttk.Button(
             topbar,
             text="▶ Run",
             command=self.run_current,
             style="CX.Primary.TButton",
         )
-        self.run_button.grid(row=0, column=6, padx=2)
+        self.run_button.grid(row=0, column=7, padx=2)
         self.cancel_button = ttk.Button(
             topbar,
             text="Abandon",
@@ -1569,9 +1580,9 @@ class CleanroomXApp:
             command=self.cancel_run,
             state="disabled",
         )
-        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+        self.cancel_button.grid(row=0, column=8, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
-        topbar.columnconfigure(4, weight=2)
+        topbar.columnconfigure(5, weight=2)
 
         statebar = ttk.Frame(
             self.root,
@@ -2365,6 +2376,23 @@ class CleanroomXApp:
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None and hasattr(dashboard, "apply_theme"):
             dashboard.apply_theme(self.theme_var.get())
+
+        navigator = getattr(self, "analysis_tree", None)
+        if isinstance(navigator, ttk.Treeview):
+            navigator.tag_configure(
+                "section",
+                foreground=palette["secondary_text"],
+                font=("TkDefaultFont", 9, "bold"),
+            )
+            navigator.tag_configure("domain_geometry", foreground=palette["accent"])
+            navigator.tag_configure("domain_hvac", foreground=palette["info"])
+            navigator.tag_configure("domain_pressure", foreground=palette["simulation"])
+            navigator.tag_configure("domain_simulation", foreground=palette["simulation"])
+            navigator.tag_configure("domain_attention", foreground=palette["attention"])
+            navigator.tag_configure("domain_requirements", foreground=palette["requirement"])
+            navigator.tag_configure("domain_verification", foreground=palette["success"])
+            navigator.tag_configure("domain_evidence", foreground=palette["evidence"])
+            navigator.tag_configure("domain_info", foreground=palette["secondary_text"])
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -4288,13 +4316,28 @@ class CleanroomXApp:
             ("nav-evidence", "Evidence"),
             ("nav-reports", "Reports"),
         )
+        section_tags = {
+            "nav-dashboard": "domain_info",
+            "nav-building": "domain_geometry",
+            "nav-hvac": "domain_hvac",
+            "nav-devices": "domain_geometry",
+            "nav-pressure": "domain_pressure",
+            "nav-analyses": "domain_simulation",
+            "nav-simulation": "domain_simulation",
+            "nav-diagnostics": "domain_attention",
+            "nav-requirements": "domain_requirements",
+            "nav-verification": "domain_verification",
+            "nav-proofgraph": "domain_simulation",
+            "nav-evidence": "domain_evidence",
+            "nav-reports": "domain_info",
+        }
         for iid, label in sections:
             self.analysis_tree.insert(
                 "",
                 "end",
                 iid=iid,
                 text=label,
-                tags=("section",),
+                tags=("section", section_tags.get(iid, "domain_info")),
                 open=iid in {"nav-building", "nav-hvac", "nav-analyses"},
             )
 
@@ -4303,12 +4346,14 @@ class CleanroomXApp:
             "end",
             iid="nav-airflow",
             text="Airflow overlay",
+            tags=("domain_hvac",),
         )
         self.analysis_tree.insert(
             "nav-hvac",
             "end",
             iid="nav-ach",
             text="ACH overlay",
+            tags=("domain_hvac",),
         )
 
         for analysis in self.project.analyses:
@@ -5726,6 +5771,24 @@ class CleanroomXApp:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        save_badge = getattr(self, "shell_save_badge", None)
+        save_var = getattr(self, "shell_save_badge_var", None)
+        if save_var is not None:
+            if getattr(self, "_migration_source_path", None) is not None:
+                save_state = "MIGRATED"
+                save_style = "CX.Status.Attention.TLabel"
+            elif getattr(self, "_restored_recovery_artifact", None) is not None and self.project_path is None:
+                save_state = "RECOVERED"
+                save_style = "CX.Status.Attention.TLabel"
+            elif has_unsaved_changes:
+                save_state = "UNSAVED"
+                save_style = "CX.Status.Warning.TLabel"
+            else:
+                save_state = "SAVED"
+                save_style = "CX.Status.Pass.TLabel"
+            save_var.set(save_state)
+            if save_badge is not None:
+                save_badge.configure(style=save_style)
 
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(

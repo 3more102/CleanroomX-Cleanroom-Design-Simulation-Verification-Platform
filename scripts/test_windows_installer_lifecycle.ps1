@@ -77,6 +77,10 @@ $baselineCheck = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -Pas
 if ($baselineCheck.ExitCode -ne 0) {
     throw "Installed baseline --check failed with exit code $($baselineCheck.ExitCode)"
 }
+$baselineSmoke = Start-Process -FilePath $exe -ArgumentList @("--demo", "--smoke") -Wait -PassThru
+if ($baselineSmoke.ExitCode -ne 0) {
+    throw "Installed baseline GUI smoke failed with exit code $($baselineSmoke.ExitCode)"
+}
 
 Invoke-Installer $CurrentInstaller
 $currentEntry = Get-CleanroomXUninstallEntry
@@ -86,6 +90,10 @@ if ($currentEntry.DisplayVersion -ne $currentVersion) {
 $currentCheck = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
 if ($currentCheck.ExitCode -ne 0) {
     throw "Installed upgraded CleanroomX --check failed with exit code $($currentCheck.ExitCode)"
+}
+$currentSmoke = Start-Process -FilePath $exe -ArgumentList @("--demo", "--smoke") -Wait -PassThru
+if ($currentSmoke.ExitCode -ne 0) {
+    throw "Installed upgraded GUI smoke failed with exit code $($currentSmoke.ExitCode)"
 }
 
 $uninstaller = Join-Path $installDir "unins000.exe"
@@ -109,4 +117,4 @@ if ($remaining) {
     throw "CleanroomX uninstall registration remains after uninstall"
 }
 
-Write-Host "Windows installer lifecycle: PASS (install -> launch -> upgrade -> launch -> uninstall)"
+Write-Host "Windows installer lifecycle: PASS (install -> check -> GUI smoke -> upgrade -> check -> GUI smoke -> uninstall)"

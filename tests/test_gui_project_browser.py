@@ -8,6 +8,7 @@ from tkinter import ttk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.project import ProjectDocument
 
 
 @pytest.fixture
@@ -122,3 +123,53 @@ def test_section_context_menu_keeps_expand_collapse_local_to_tree(app):
 
     assert labels == ["Expand", "Collapse"]
     assert app.project.to_dict() == project_before
+
+def test_recent_navigator_selection_is_non_destructive_and_restores_filtered_item(app):
+    app.navigator_filter_var.set("")
+    app.root.update()
+    room_id = next(
+        iid for iid in _all_tree_ids(app.analysis_tree) if iid.startswith("room:")
+    )
+    project_before = copy.deepcopy(app.project.to_dict())
+
+    app.analysis_tree.selection_set(room_id)
+    app._on_navigator_selected()
+    app.root.update_idletasks()
+
+    assert app._navigator_recent_ids[0] == room_id
+    recent_values = tuple(app.navigator_recent_picker.cget("values"))
+    assert recent_values
+    assert "Room" in recent_values[0]
+    assert app.project.to_dict() == project_before
+
+    app.navigator_filter_var.set("ProofGraph")
+    app.root.update()
+    assert app.analysis_tree.get_children() == ("nav-proofgraph",)
+
+    app.navigator_recent_var.set(recent_values[0])
+    app._on_recent_navigator_selected()
+    app.root.update()
+
+    assert app.navigator_filter_var.get() == ""
+    assert app.analysis_tree.selection() == (room_id,)
+    assert app.project.to_dict() == project_before
+
+
+def test_recent_navigator_state_is_scoped_to_active_project_object(app):
+    app.navigator_filter_var.set("")
+    app.root.update()
+    room_id = next(
+        iid for iid in _all_tree_ids(app.analysis_tree) if iid.startswith("room:")
+    )
+
+    app.analysis_tree.selection_set(room_id)
+    app._on_navigator_selected()
+    assert app._navigator_recent_ids
+
+    app.project = ProjectDocument(name="Replacement")
+    app._refresh_analysis_list()
+    app.root.update_idletasks()
+
+    assert app._navigator_recent_ids == []
+    assert tuple(app.navigator_recent_picker.cget("values")) == ()
+    assert app.navigator_recent_var.get() == ""

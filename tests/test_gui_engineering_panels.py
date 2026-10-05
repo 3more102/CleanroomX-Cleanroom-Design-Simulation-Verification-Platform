@@ -113,6 +113,61 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     assert app.notebook.select() == str(app.spatial_workspace)
 
 
+def test_problem_browser_supports_domain_filter_sort_and_relative_review(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    assert panel.tree.heading("domain", "text") == "Domain"
+    assert "spatial" in panel.category_combo.cget("values")
+
+    panel.search_var.set("")
+    panel.severity_var.set("All")
+    panel.category_var.set("spatial")
+    app.root.update()
+
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert panel.visible_count_var.get() == f"VISIBLE {len(visible)}"
+    assert all(
+        str(panel._issues_by_iid[iid].get("category", "")).casefold() == "spatial"
+        for iid in visible
+    )
+
+    panel._set_sort("code")
+    app.root.update()
+    sorted_rules = [
+        str(panel._issues_by_iid[iid].get("rule", ""))
+        for iid in panel.tree.get_children()
+    ]
+    assert sorted_rules == sorted(sorted_rules, key=str.casefold)
+    assert panel.tree.heading("code", "text").endswith("▲")
+
+    panel.tree.selection_remove(*panel.tree.selection())
+    panel._select_relative(1)
+    selection = panel.tree.selection()
+    assert selection
+    assert panel.selected_issue() is panel._issues_by_iid[selection[0]]
+    assert "Diagnostic 1 of" in app.status_var.get()
+
+    target_iid = next(
+        iid
+        for iid, candidate in panel._issues_by_iid.items()
+        if candidate["sequence"] == issue["sequence"]
+    )
+    panel.tree.selection_set(target_iid)
+    panel._select_relative(-1)
+    assert panel.tree.selection()
+
+    panel.reset_filters()
+    app.root.update()
+    assert panel.search_var.get() == ""
+    assert panel.severity_var.get() == "All"
+    assert panel.category_var.get() == "All"
+    assert panel._sort_column is None
+    assert panel.tree.heading("code", "text") == "Code"
+    assert app.status_var.get() == "Diagnostic filters cleared"
+
+
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     analysis = app.project.analyses[0]
     issue = {

@@ -620,16 +620,16 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
 
     assert app.theme_var.get() == "dark"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-    assert app.plot_canvas.cget("background") == "#131920"
-    assert app.input_text.cget("background") == "#11161c"
+    assert app.spatial_workspace.canvas_2d.cget("background").lower() == "#0d1726"
+    assert app.spatial_workspace.canvas_3d.cget("background").lower() == "#08101c"
+    assert app.plot_canvas.cget("background").lower() == "#0d1726"
+    assert app.input_text.cget("background").lower() == "#0f192a"
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
     app.root.update()
     assert app.theme_var.get() == "light"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
+    assert app.spatial_workspace.canvas_2d.cget("background").lower() == "#f3f7fb"
     assert app.project.to_dict() == project_before
 
 
@@ -663,9 +663,9 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
-        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-        assert second.plot_canvas.cget("background") == "#131920"
+        assert second.spatial_workspace.canvas_2d.cget("background").lower() == "#0d1726"
+        assert second.spatial_workspace.canvas_3d.cget("background").lower() == "#08101c"
+        assert second.plot_canvas.cget("background").lower() == "#0d1726"
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
@@ -1005,3 +1005,40 @@ def test_window_size_persists_across_application_restart(tmp_path):
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()
 
+
+
+def test_industrial_dashboard_is_grounded_in_live_project_state(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    assert app.dashboard._vars["project"].get() == app.project.name
+    assert app.dashboard._vars["analyses"].get() == (
+        f"{len(app.project.analyses)} configured"
+    )
+    assert app.dashboard._vars["diagnostics"].get()
+    assert app.dashboard._vars["verification"].get()
+    assert app.project.to_dict() == project_before
+
+
+def test_proofgraph_surface_rethemes_with_application(app):
+    app.set_theme("dark", persist=False)
+    app.root.update()
+    assert app.proofgraph_viewer.canvas.cget("background").lower() == "#0d1726"
+
+    app.set_theme("light", persist=False)
+    app.root.update()
+    assert app.proofgraph_viewer.canvas.cget("background").lower() == "#f3f7fb"
+
+
+def test_spatial_validation_uses_engineering_status_badge(app):
+    workspace = app.spatial_workspace
+    workspace._validation_issues = []
+    workspace._update_validation_summary()
+    assert workspace._validation_var.get() == "Spatial checks: PASS"
+    assert workspace._validation_badge.cget("style") == "CX.Badge.Pass.TLabel"
+
+    workspace._validation_issues = [{"code": "test-warning"}]
+    workspace._update_validation_summary()
+    assert "warning" in workspace._validation_var.get().lower()
+    assert workspace._validation_badge.cget("style") == "CX.Badge.Warning.TLabel"

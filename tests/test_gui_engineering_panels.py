@@ -306,3 +306,19 @@ def test_engineering_plot_exposes_grid_and_cursor_inspection(app):
     app.root.update()
 
     assert app.plot_canvas.find_withtag("plot_cursor")
+
+
+def test_status_bar_surfaces_diagnostic_health_and_routes_to_problems(app):
+    result, _issue = _force_room_overlap(app)
+    summary = result["summary"]
+
+    assert summary["error_count"] >= 1
+    assert "E" in app.diagnostic_status_var.get()
+    assert app.diagnostic_status_label.cget("style") == "CX.StatusError.TLabel"
+    assert str(summary["issue_count"]) in app.toolbar_problems_button.cget("text")
+
+    app.diagnostic_status_label.event_generate("<Button-1>")
+    app.root.update()
+
+    assert app.output_panel_visible_var.get() is True
+    assert app.output_notebook.select() == str(app.problems_panel)

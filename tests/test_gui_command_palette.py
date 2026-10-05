@@ -5,7 +5,7 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui import CleanroomXApp, RequirementsTraceabilityDialog, bundled_demo_project_path
 from cleanroomx.gui_command_palette import (
     CommandPalette,
     MAX_RENDERED_RESULTS,
@@ -116,6 +116,49 @@ def test_command_palette_exposes_engineering_empty_state(root):
     assert "No command matches" in palette._empty_hint.cget("text")
     assert palette._summary.cget("text") == "0 COMMANDS"
     palette._close()
+
+
+def test_requirements_traceability_dialog_can_focus_requested_requirement(root):
+    snapshot = {
+        "requirement_set_count": 1,
+        "requirement_count": 2,
+        "mapping_count": 0,
+        "active_mapping_count": 0,
+        "active_mapped_requirement_count": 0,
+        "requirements_sha256": "req-digest",
+        "mappings_sha256": "map-digest",
+        "requirements": [
+            {
+                "id": "REQ-1",
+                "title": "First requirement",
+                "status": "active",
+                "applicability": "applicable",
+                "scope": ["room-a"],
+                "criterion": "min=1",
+                "detail": {"id": "REQ-1"},
+            },
+            {
+                "id": "REQ-2",
+                "title": "Second requirement",
+                "status": "active",
+                "applicability": "applicable",
+                "scope": ["room-b"],
+                "criterion": "max=2",
+                "detail": {"id": "REQ-2"},
+            },
+        ],
+        "mappings": [],
+    }
+    dialog = RequirementsTraceabilityDialog(
+        root,
+        snapshot,
+        focus_requirement_id="REQ-2",
+    )
+    root.update()
+
+    assert dialog.tree.selection() == ("requirement:REQ-2",)
+    assert dialog.tree.focus() == "requirement:REQ-2"
+    dialog.destroy()
 
 
 def test_command_palette_bounds_rendering_for_large_engineering_catalog(root):

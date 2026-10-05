@@ -227,3 +227,31 @@ def test_problem_browser_supports_category_sort_and_traversal(app):
         assert panel.tree.selection() == (children[1],)
         panel.select_previous_issue()
         assert panel.tree.selection() == (children[0],)
+
+
+def test_project_navigator_surfaces_canonical_diagnostic_badges(app):
+    _result, issue = _force_room_overlap(app)
+    element_id = str(issue["element"]["id"])
+    target = next(
+        iid
+        for iid in (f"room:{element_id}", f"device:{element_id}")
+        if app.analysis_tree.exists(iid)
+    )
+
+    target_text = app.analysis_tree.item(target, "text")
+    target_tags = set(app.analysis_tree.item(target, "tags"))
+    building_text = app.analysis_tree.item("nav-building", "text")
+    building_tags = set(app.analysis_tree.item("nav-building", "tags"))
+
+    assert "[1E" in target_text or "E]" in target_text
+    assert "diagnostic_error" in target_tags
+    assert "E" in building_text
+    assert "section" in building_tags
+    assert "diagnostic_error" in building_tags
+
+    app.set_theme("dark", persist=False)
+    app.root.update()
+    assert (
+        app.analysis_tree.tag_cget("diagnostic_error", "foreground")
+        == app._theme_palette["error"]
+    )

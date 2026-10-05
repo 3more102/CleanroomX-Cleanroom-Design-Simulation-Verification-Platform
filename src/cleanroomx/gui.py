@@ -1938,7 +1938,11 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
-        output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
+        output_host = ttk.Frame(
+            self.workspace_panes,
+            style="CX.Panel.TFrame",
+            padding=(0, 5, 0, 0),
+        )
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
         output_header = ttk.Frame(

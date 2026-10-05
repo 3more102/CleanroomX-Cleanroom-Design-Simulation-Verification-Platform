@@ -358,6 +358,45 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     return rows
 
 
+def engineering_value_text(value: Any) -> str:
+    """Format a calculated scalar for dense engineering tables."""
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, int):
+        return f"{value:,d}"
+    if isinstance(value, float):
+        magnitude = abs(value)
+        if value != 0.0 and (magnitude >= 10_000_000 or magnitude < 0.0001):
+            return f"{value:.4g}"
+        return f"{value:,.4f}".rstrip("0").rstrip(".")
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, allow_nan=False)
+
+
+def flatten_engineering_result(
+    value: Any,
+    path: str = "$",
+) -> list[tuple[str, str, str]]:
+    """Flatten solver output for presentation without changing the result payload."""
+    rows: list[tuple[str, str, str]] = []
+    if isinstance(value, dict):
+        if not value:
+            rows.append((path, "{}", ""))
+        for key, item in value.items():
+            rows.extend(flatten_engineering_result(item, f"{path}.{key}"))
+    elif isinstance(value, list):
+        if not value:
+            rows.append((path, "[]", ""))
+        for index, item in enumerate(value):
+            rows.extend(flatten_engineering_result(item, f"{path}[{index}]"))
+    else:
+        rows.append((path, engineering_value_text(value), unit_hint(path)))
+    return rows
+
+
 class AnalysisPicker(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
@@ -2162,8 +2201,68 @@ class CleanroomXApp:
         self.evidence_text = self._add_text_tab(
             "Evidence", notebook=self.output_notebook
         )
+
+        self.result_summary_frame = ttk.Frame(self.output_notebook)
+        self.output_notebook.add(self.result_summary_frame, text="Result Summary")
+        result_header = ttk.Frame(
+            self.result_summary_frame,
+            style="CX.PanelHeader.TFrame",
+        )
+        result_header.pack(fill="x", padx=4, pady=(4, 3))
+        ttk.Label(
+            result_header,
+            text="CALCULATED RESULTS",
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="left")
+        self.result_summary_var = tk.StringVar(value="No simulation result")
+        ttk.Label(
+            result_header,
+            textvariable=self.result_summary_var,
+            style="CX.PanelHeader.TLabel",
+        ).pack(side="right", padx=(8, 0))
+        self.result_summary_badge = ttk.Label(
+            result_header,
+            text="NOT RUN",
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.result_summary_badge.pack(side="right")
+
+        result_table_host = ttk.Frame(self.result_summary_frame)
+        result_table_host.pack(fill="both", expand=True, padx=4, pady=(0, 4))
+        self.result_summary_tree = ttk.Treeview(
+            result_table_host,
+            columns=("value", "unit"),
+            show="tree headings",
+            selectmode="browse",
+        )
+        self.result_summary_tree.heading("#0", text="Result path")
+        self.result_summary_tree.heading("value", text="Calculated value")
+        self.result_summary_tree.heading("unit", text="Unit")
+        self.result_summary_tree.column("#0", width=430, minwidth=180)
+        self.result_summary_tree.column("value", width=260, minwidth=110)
+        self.result_summary_tree.column("unit", width=90, minwidth=55, stretch=False)
+        result_y = ttk.Scrollbar(
+            result_table_host,
+            orient="vertical",
+            command=self.result_summary_tree.yview,
+        )
+        result_x = ttk.Scrollbar(
+            result_table_host,
+            orient="horizontal",
+            command=self.result_summary_tree.xview,
+        )
+        self.result_summary_tree.configure(
+            yscrollcommand=result_y.set,
+            xscrollcommand=result_x.set,
+        )
+        self.result_summary_tree.grid(row=0, column=0, sticky="nsew")
+        result_y.grid(row=0, column=1, sticky="ns")
+        result_x.grid(row=1, column=0, sticky="ew")
+        result_table_host.rowconfigure(0, weight=1)
+        result_table_host.columnconfigure(0, weight=1)
+
         self.result_text = self._add_text_tab(
-            "Results", notebook=self.output_notebook
+            "Results (JSON)", notebook=self.output_notebook
         )
         self.report_text = self._add_text_tab(
             "Report", notebook=self.output_notebook
@@ -3560,6 +3659,19 @@ class CleanroomXApp:
         self._set_text(self.result_text, "")
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
+        tree = getattr(self, "result_summary_tree", None)
+        if tree is not None:
+            for iid in tree.get_children():
+                tree.delete(iid)
+        result_summary_var = getattr(self, "result_summary_var", None)
+        if result_summary_var is not None:
+            result_summary_var.set("No simulation result")
+        badge = getattr(self, "result_summary_badge", None)
+        if badge is not None:
+            badge.configure(
+                text="NOT RUN",
+                style="CX.Badge.Unknown.TLabel",
+            )
         self._draw_plot()
         if hasattr(self, "simulation_result_var"):
             self._update_simulation_workbench()
@@ -6575,6 +6687,36 @@ class CleanroomXApp:
             pass
         self.root.after(100, self._poll_worker)
 
+    def _populate_result_summary(self, run: AnalysisRun) -> None:
+        tree = getattr(self, "result_summary_tree", None)
+        if tree is None:
+            return
+        for iid in tree.get_children():
+            tree.delete(iid)
+
+        rows = flatten_engineering_result(run.result)
+        display_limit = 1000
+        for index, (path, value, unit) in enumerate(rows[:display_limit]):
+            tree.insert(
+                "",
+                "end",
+                iid=f"result:{index}",
+                text=path,
+                values=(value, unit),
+            )
+
+        shown = min(len(rows), display_limit)
+        suffix = (
+            f" · showing {shown}/{len(rows)} values"
+            if len(rows) > display_limit
+            else f" · {len(rows)} value(s)"
+        )
+        self.result_summary_var.set(f"{run.title}{suffix}")
+        self.result_summary_badge.configure(
+            text=str(run.status or "complete").upper(),
+            style=engineering_status_style(run.status),
+        )
+
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         self._set_text(
             self.result_text,
@@ -6585,6 +6727,7 @@ class CleanroomXApp:
             self.diagnostics_text,
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
+        self._populate_result_summary(run)
         self._draw_plot()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.redraw()
@@ -6592,7 +6735,7 @@ class CleanroomXApp:
         self._refresh_engineering_panels()
         self._update_simulation_workbench()
         if select_results:
-            self.output_notebook.select(self.result_text.master)
+            self.output_notebook.select(self.result_summary_frame)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

@@ -108,6 +108,44 @@ The application catalog is built from the shared backend registry and includes r
 
 Consistency and dossier workflows resolve relative file references against project path context. Imported JSON is rebased from its source directory, and **Save Project As** rebases relative references when the destination directory changes. Absolute-only dossier inputs can run before the project is saved; relative references still require an explicit base directory. The installed `--demo` project ships its referenced files beside the project file.
 
+## Workstation presets, density, and global engineering search
+
+The desktop shell provides task-oriented **Workspace Presets** under **View** and
+through the command palette. These presets rearrange the existing workstation
+surfaces without modifying project engineering data:
+
+- **Design** (`Ctrl+Alt+1`) prioritizes the Project Navigator, synchronized 2D/3D
+  design surface, and contextual design inspector while collapsing the bottom
+  output pane.
+- **Simulation** (`Ctrl+Alt+2`) opens the plot workspace with the Results pane
+  available for solver output inspection.
+- **Verification** (`Ctrl+Alt+3`) keeps the model context visible and expands the
+  canonical Problems browser for diagnostic triage.
+- **Evidence** (`Ctrl+Alt+4`) opens ProofGraph beside retained verification
+  evidence.
+- **Reporting** (`Ctrl+Alt+5`) prioritizes report/output inspection and reduces
+  navigator chrome.
+
+The presets reuse the same resizable panel architecture and do not duplicate
+engineering calculations, diagnostics, verification, ProofGraph, or reporting
+logic. Users can still resize or toggle panels after applying a preset.
+
+**View → Density** switches between **Comfortable** and **Compact / Engineering**
+presentation density. Density changes shared ttk metrics such as tree row
+height, notebook tab padding, toolbar padding, and button padding while retaining
+the active light/dark semantic palette. The preference is stored in GUI-only
+layout state and never in project data.
+
+`Ctrl+Shift+P` opens the command palette. In addition to application commands,
+the palette indexes the currently loaded project's analyses, spatial rooms and
+devices/equipment, currently evaluated project diagnostics, persisted project
+requirements, and nodes in the active persisted ProofGraph. Search results
+dispatch through existing navigation controllers: analyses open their input
+workspace, spatial objects are selected and fit in the design view, diagnostics
+open the canonical Problems workflow, requirements open the read-only
+traceability browser, and ProofGraph results reveal the canonical graph node.
+No missing engineering value or relationship is synthesized for search.
+
 ## Spatial design workspace
 
 The main notebook now includes **Design 2D + 3D**, a synchronized cleanroom layout workspace backed by project metadata. It is intentionally separate from the engineering solver implementations: spatial edits do not silently change analysis inputs.

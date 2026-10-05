@@ -221,3 +221,22 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     app.root.update()
     assert app.proofgraph_viewer.search_var.get() == ""
     assert app.proofgraph_viewer.filter_var.get() == "All"
+
+
+def test_spatial_selection_synchronizes_proofgraph_without_switching_workspace(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+
+    app.proofgraph_viewer.set_documents([document])
+    app.notebook.select(workspace)
+    app.root.update()
+
+    assert app.proofgraph_viewer.selected_node() is None
+    workspace.select_item("room", room["id"], notify=True)
+    app.root.update()
+
+    selected = app.proofgraph_viewer.selected_node()
+    assert selected is not None
+    assert selected["key"] == f"model_object:{room['id']}"
+    assert app.notebook.select() == str(workspace)

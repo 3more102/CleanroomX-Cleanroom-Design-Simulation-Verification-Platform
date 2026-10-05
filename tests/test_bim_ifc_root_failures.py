@@ -71,3 +71,23 @@ def test_ifc_extraction_fails_closed_when_space_enumeration_raises(monkeypatch, 
         extract_ifc_semantics(source)
 
     assert isinstance(exc.value.__cause__, RuntimeError)
+
+
+def test_ifc_extraction_fails_closed_when_device_enumeration_raises(monkeypatch, tmp_path):
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcAirTerminal":
+                raise RuntimeError("malformed IFC device index")
+            return []
+
+    _install_ifcopenshell(monkeypatch, Model())
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+
+    with pytest.raises(
+        IfcImportError,
+        match=r"unable to enumerate IFC device entities for 'IfcAirTerminal'",
+    ) as exc:
+        extract_ifc_semantics(source)
+
+    assert isinstance(exc.value.__cause__, RuntimeError)

@@ -156,3 +156,41 @@ def enable_windows_per_monitor_dpi_awareness(
         pass
 
     return "unavailable"
+
+
+def configure_toplevel_geometry(
+    window: Any,
+    width: int,
+    height: int,
+    *,
+    min_width: int | None = None,
+    min_height: int | None = None,
+) -> tuple[int, int]:
+    """Apply DPI-aware logical geometry bounded to the current display.
+
+    Dimensions are expressed in 96-DPI logical pixels so dialogs retain the same
+    usable proportions at 100%, 125%, 150%, and 200% Windows scaling.
+    """
+    screen_width = max(1, int(window.winfo_screenwidth()))
+    screen_height = max(1, int(window.winfo_screenheight()))
+    scale = platform_layout_scale(window)
+    actual_width, actual_height = scale_window_size(
+        width,
+        height,
+        scale,
+        screen_width=screen_width,
+        screen_height=screen_height,
+    )
+    if min_width is not None or min_height is not None:
+        logical_min_width = width if min_width is None else int(min_width)
+        logical_min_height = height if min_height is None else int(min_height)
+        actual_min_width, actual_min_height = scale_window_size(
+            logical_min_width,
+            logical_min_height,
+            scale,
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
+        window.minsize(actual_min_width, actual_min_height)
+    window.geometry(f"{actual_width}x{actual_height}")
+    return actual_width, actual_height

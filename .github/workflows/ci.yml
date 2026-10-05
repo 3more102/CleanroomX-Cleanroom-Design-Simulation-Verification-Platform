@@ -143,8 +143,17 @@ jobs:
           tests/test_project_dossier.py
           tests/test_project_verify_cli.py
           tests/test_verification_history_cli.py
-      - name: Run complete test suite
-        run: python -m pytest -q
+      - name: Install virtual display for GUI release gates
+        if: matrix.python-version == '3.13'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb tk
+      - name: Run complete test suite with skip reasons
+        if: matrix.python-version != '3.13'
+        run: python -m pytest -q -ra
+      - name: Run complete test suite with real Tk and skip reasons
+        if: matrix.python-version == '3.13'
+        run: xvfb-run -a python -m pytest -q -ra
       - name: Run Release 2 performance evidence
         if: matrix.python-version == '3.13'
         run: |
@@ -209,11 +218,6 @@ jobs:
           ):
               assert (demo_dir / name).is_file(), name
           PY
-      - name: Install virtual display for v0.100 GUI smoke
-        if: matrix.python-version == '3.13'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb tk
       - name: Run v0.100 desktop GUI smoke from installed wheel
         if: matrix.python-version == '3.13'
         run: |
@@ -337,6 +341,21 @@ jobs:
       - name: Smoke CMD checkout launcher
         shell: cmd
         run: start-cleanroomx.cmd --check
+      - name: Verify installed GUI-subsystem desktop launcher
+        shell: pwsh
+        run: |
+          $entryPoints = python -c "import importlib.metadata as m; print([ep.value for ep in m.distribution('cleanroomx').entry_points if ep.group == 'gui_scripts' and ep.name == 'cleanroomx-desktop'])"
+          if ($entryPoints -notmatch "cleanroomx.gui:main") {
+            throw "cleanroomx-desktop is not registered as a gui_scripts entry point"
+          }
+          $desktop = (Get-Command cleanroomx-desktop).Source
+          if (-not (Test-Path $desktop)) {
+            throw "cleanroomx-desktop launcher was not installed"
+          }
+          $process = Start-Process -FilePath $desktop -ArgumentList "--check" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "cleanroomx-desktop --check failed with exit code $($process.ExitCode)"
+          }
 
   required-ci:
     name: Required CI Gate

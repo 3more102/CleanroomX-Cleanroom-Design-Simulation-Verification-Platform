@@ -173,6 +173,61 @@ def test_problem_filter_and_navigation_use_canonical_spatial_issue(app):
     assert app.notebook.select() == str(app.spatial_workspace)
 
 
+
+def test_problem_panel_filters_sorts_navigates_and_exports_visible_scope(app):
+    result, _issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    assert "spatial" in panel.category_filter.cget("values")
+    assert "spatial_element" in panel.object_filter.cget("values")
+
+    panel.category_var.set("spatial")
+    panel.object_type_var.set("spatial_element")
+    app.root.update()
+
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        panel._issues_by_iid[iid]["category"] == "spatial"
+        and panel._issues_by_iid[iid]["element"]["type"] == "spatial_element"
+        for iid in visible
+    )
+    assert panel.scope_var.get() == f"{len(visible)} visible / {len(result['issues'])} total"
+
+    panel._set_sort("code")
+    app.root.update()
+    ascending_codes = [panel.tree.set(iid, "code") for iid in panel.tree.get_children()]
+    assert ascending_codes == sorted(ascending_codes, key=str.casefold)
+
+    panel._set_sort("code")
+    app.root.update()
+    descending_codes = [panel.tree.set(iid, "code") for iid in panel.tree.get_children()]
+    assert descending_codes == sorted(descending_codes, key=str.casefold, reverse=True)
+
+    panel.search_var.set("room_overlap")
+    app.root.update()
+    payload = panel._export_payload()
+    assert payload is not None
+    assert payload["view_filter"]["search"] == "room_overlap"
+    assert payload["view_filter"]["source_issue_count"] == len(result["issues"])
+    assert payload["summary"]["issue_count"] == len(payload["issues"])
+    assert payload["issues"]
+    assert all("room_overlap" in item["rule"] for item in payload["issues"])
+
+    panel.search_var.set("")
+    panel.category_var.set("All")
+    panel.object_type_var.set("All")
+    app.root.update()
+    children = list(panel.tree.get_children())
+    assert len(children) >= 2
+    panel.tree.selection_set(children[0])
+    panel.tree.focus(children[0])
+    panel.select_relative(1)
+    assert panel.tree.selection() == (children[1],)
+    panel.select_relative(-1)
+    assert panel.tree.selection() == (children[0],)
+
+
 def test_analysis_diagnostic_navigation_opens_analysis_input(app):
     analysis = app.project.analyses[0]
     issue = {

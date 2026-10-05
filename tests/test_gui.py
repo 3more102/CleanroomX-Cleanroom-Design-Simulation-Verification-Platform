@@ -2531,6 +2531,19 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
             output=output,
         )
 
+    report = GuiErrorReport(
+        reference="CX-DOSSIER-1234",
+        operation="Build and validate project engineering dossier",
+        exception_type="RuntimeError",
+        summary="project source changed before report publication",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
     errors = []
     monkeypatch.setattr(
         gui_module,
@@ -2555,4 +2568,7 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
+    assert "CX-DOSSIER-1234" in errors[-1][1]
+    assert recorded
+    assert recorded[0][0] == "Build and validate project engineering dossier"
 

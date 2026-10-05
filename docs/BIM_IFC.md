@@ -119,11 +119,16 @@ The review window shows each IFC `GlobalId`, the mapped CleanroomX spatial ID,
 the planned action, and whether the local project and IFC source changed relative
 to the prior import baseline. A two-sided divergent edit blocks application.
 
-Initial desktop import always presents a source-bound preview before project
-mutation, including the selected IFC filename, extracted room/device counts, and
-source SHA-256. It requires explicit confirmation both when establishing the first
-IFC baseline and when replacing an existing unlinked spatial layout. After
-confirmation, CleanroomX re-extracts the selected IFC and requires both source and
+Initial desktop import always presents a structured source-bound review before
+project mutation. The review exposes the selected IFC filename, source and semantic
+SHA-256 identities, canonical semantic-record count, importable room/device counts,
+IFC-storey coverage, unassigned devices, room classification/analysis-link counts,
+IFC-class and CleanroomX-device-type breakdowns, IfcSpace dimension-source
+provenance, and whether an existing unlinked spatial layout will be replaced.
+Presentation-only notes call out geometry fallback, unassigned devices, multi-storey
+imports, replacement of an existing layout, or an empty IfcSpace result without
+inventing engineering values. The operator must explicitly accept the reviewed
+baseline. CleanroomX then re-extracts the selected IFC and requires both source and
 semantic SHA-256 values to remain unchanged before applying the import.
 
 Import and re-import modify the in-memory project only;

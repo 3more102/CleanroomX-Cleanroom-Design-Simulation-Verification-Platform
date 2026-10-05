@@ -107,7 +107,8 @@ def _configure_badge(
 
 def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     """Apply the centralized CleanroomX engineering workstation design system."""
-    palette = theme_palette(value)
+    theme_name = normalize_theme_name(value)
+    palette = theme_palette(theme_name)
     style = ttk.Style(root)
     if "clam" in style.theme_names():
         style.theme_use("clam")
@@ -453,7 +454,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     _configure_badge(
         style,
         "CX.Status.Pass.TLabel",
-        foreground="#052E16" if value == "dark" else "#FFFFFF",
+        foreground="#052E16" if theme_name == "dark" else "#FFFFFF",
         background=palette["success"],
     )
     _configure_badge(
@@ -495,7 +496,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     _configure_badge(
         style,
         "CX.Status.Verified.TLabel",
-        foreground="#052E16" if value == "dark" else "#FFFFFF",
+        foreground="#052E16" if theme_name == "dark" else "#FFFFFF",
         background=palette["success"],
     )
 

@@ -438,3 +438,167 @@ def test_operation_error_boundary_surfaces_reference_without_stack_trace(
     assert "synthetic boundary failure" in dialogs[-1][1]
     assert "Traceback" not in dialogs[-1][1]
     assert "CX-TEST-1234" in app.status_var.get()
+
+def test_layout_persistence_failure_is_logged_once_until_recovered(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    reports = [
+        GuiErrorReport(
+            reference="CX-LAYOUT-0001",
+            operation="Save workstation layout",
+            exception_type="OSError",
+            summary="synthetic layout write failure",
+            log_path=tmp_path / "gui.log",
+        ),
+        GuiErrorReport(
+            reference="CX-LAYOUT-0002",
+            operation="Save workstation layout",
+            exception_type="OSError",
+            summary="synthetic layout write failure",
+            log_path=tmp_path / "gui.log",
+        ),
+    ]
+    recorded = []
+
+    def fail_save(*args, **kwargs):
+        raise OSError("synthetic layout write failure")
+
+    def record(operation, exc):
+        index = min(len(recorded), len(reports) - 1)
+        recorded.append((operation, exc))
+        return reports[index]
+
+    monkeypatch.setattr(gui_module, "save_gui_layout_state", fail_save)
+    monkeypatch.setattr(gui_module, "record_gui_exception", record)
+
+    app._save_ui_layout_state()
+    app._save_ui_layout_state()
+
+    assert len(recorded) == 1
+    assert recorded[0][0] == "Save workstation layout"
+    assert isinstance(recorded[0][1], OSError)
+    assert app._ui_layout_save_error_reference == "CX-LAYOUT-0001"
+    assert app.status_var.get() == (
+        "Layout preferences not saved · CX-LAYOUT-0001"
+    )
+
+    monkeypatch.setattr(
+        gui_module,
+        "save_gui_layout_state",
+        lambda *args, **kwargs: app._ui_state_path,
+    )
+    app._save_ui_layout_state()
+    assert app._ui_layout_save_error_reference is None
+
+    monkeypatch.setattr(gui_module, "save_gui_layout_state", fail_save)
+    app._save_ui_layout_state()
+    assert len(recorded) == 2
+    assert app._ui_layout_save_error_reference == "CX-LAYOUT-0002"
+
+
+def test_engineering_search_records_degraded_requirement_indexing(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    report = GuiErrorReport(
+        reference="CX-SEARCH-1234",
+        operation="Index requirement traceability for engineering search",
+        exception_type="RuntimeError",
+        summary="synthetic requirements failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+
+    def fail_requirement_snapshot(_project):
+        raise RuntimeError("synthetic requirements failure")
+
+    monkeypatch.setattr(
+        gui_module,
+        "project_requirement_traceability_snapshot",
+        fail_requirement_snapshot,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    entries = app._engineering_search_entries()
+
+    assert entries
+    assert app._engineering_search_warnings == (
+        ("Requirements", "CX-SEARCH-1234"),
+    )
+    assert recorded
+    assert recorded[0][0] == (
+        "Index requirement traceability for engineering search"
+    )
+    assert isinstance(recorded[0][1], RuntimeError)
+
+
+def test_engineering_panel_refresh_logs_verification_and_evidence_failures(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    reports = {
+        "Refresh verification currency": GuiErrorReport(
+            reference="CX-CURRENCY-1234",
+            operation="Refresh verification currency",
+            exception_type="RuntimeError",
+            summary="synthetic currency failure",
+            log_path=tmp_path / "gui.log",
+        ),
+        "Refresh persisted verification evidence": GuiErrorReport(
+            reference="CX-EVIDENCE-1234",
+            operation="Refresh persisted verification evidence",
+            exception_type="RuntimeError",
+            summary="synthetic evidence failure",
+            log_path=tmp_path / "gui.log",
+        ),
+    }
+    recorded = []
+
+    def fail_currency(*args, **kwargs):
+        raise RuntimeError("synthetic currency failure")
+
+    def fail_evidence(*args, **kwargs):
+        raise RuntimeError("synthetic evidence failure")
+
+    monkeypatch.setattr(
+        gui_module,
+        "assess_project_verification_currency",
+        fail_currency,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "verification_run_history_records",
+        fail_evidence,
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: (
+            recorded.append((operation, exc)) or reports[operation]
+        ),
+    )
+
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    verification = app.verification_text.get("1.0", "end").strip()
+    evidence = app.evidence_text.get("1.0", "end").strip()
+    assert "CX-CURRENCY-1234" in verification
+    assert "synthetic currency failure" in verification
+    assert "Traceback" not in verification
+    assert "CX-EVIDENCE-1234" in evidence
+    assert "synthetic evidence failure" in evidence
+    assert "Traceback" not in evidence
+    assert [operation for operation, _exc in recorded] == [
+        "Refresh verification currency",
+        "Refresh persisted verification evidence",
+    ]
+

@@ -74,6 +74,7 @@ from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
+from .gui_verification import VerificationWorkspace
 from .gui_reporting import ReportingWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
@@ -1449,6 +1450,11 @@ class CleanroomXApp:
 
         verify_menu = tk.Menu(menubar, tearoff=False)
         verify_menu.add_command(
+            label="Verification Workspace",
+            command=self._activate_verification_workspace,
+        )
+        verify_menu.add_separator()
+        verify_menu.add_command(
             label="Verify Project Requirements",
             command=self.run_project_requirements_verification,
         )
@@ -2055,6 +2061,16 @@ class CleanroomXApp:
             on_open_results=self._activate_analysis_results_workspace,
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
+
+        self.verification_workspace = VerificationWorkspace(
+            self.notebook,
+            on_refresh=self._refresh_engineering_panels,
+            on_verify=self.run_project_requirements_verification,
+            on_persist=self.persist_project_requirements_verification,
+            on_traceability=self.show_requirements_traceability,
+            on_history=self.show_verification_history,
+        )
+        self.notebook.add(self.verification_workspace, text="Verification")
 
         self.reporting_workspace = ReportingWorkspace(
             self.notebook,
@@ -2813,8 +2829,7 @@ class CleanroomXApp:
             if hasattr(self, "analysis_result_panel"):
                 self.output_notebook.select(self.analysis_result_panel)
         elif profile == "verification":
-            if hasattr(self, "dashboard"):
-                self.notebook.select(self.dashboard)
+            self._activate_verification_workspace()
             if hasattr(self, "verification_text"):
                 self.output_notebook.select(self.verification_text.master)
         elif profile == "evidence":
@@ -2822,8 +2837,7 @@ class CleanroomXApp:
             if hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
         else:
-            if hasattr(self, "dashboard"):
-                self.notebook.select(self.dashboard)
+            self._activate_reporting_workspace()
             if hasattr(self, "report_text"):
                 self.output_notebook.select(self.report_text.master)
 
@@ -2834,6 +2848,27 @@ class CleanroomXApp:
         self.status_var.set(f"{label} workspace layout applied")
         if persist:
             self._save_ui_layout_state()
+
+    def _activate_verification_workspace(self) -> None:
+        workspace = getattr(self, "verification_workspace", None)
+        if workspace is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(workspace)
+        self.workspace_status_var.set("Workspace: Verification")
+
+    def _open_report_output(self) -> None:
+        if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
+            self.show_output_panel()
+            self.output_notebook.select(self.report_text.master)
+
+    def _activate_reporting_workspace(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(workspace)
+        self.workspace_status_var.set("Workspace: Reporting")
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
@@ -2911,6 +2946,7 @@ class CleanroomXApp:
             return None
         diagnostics = panel.refresh()
         verification_summary: dict = {}
+        verification_items: list[dict] = []
         records: list[dict] = []
 
         try:
@@ -2920,6 +2956,12 @@ class CleanroomXApp:
             )
             summary = currency.get("summary", {})
             verification_summary = summary if isinstance(summary, dict) else {}
+            raw_verification_items = currency.get("analyses", [])
+            verification_items = (
+                [item for item in raw_verification_items if isinstance(item, dict)]
+                if isinstance(raw_verification_items, list)
+                else []
+            )
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -2934,7 +2976,7 @@ class CleanroomXApp:
                 ),
                 "",
             ]
-            for item in currency.get("analyses", []):
+            for item in verification_items:
                 lines.append(
                     "{name} [{kind}] — {state}".format(
                         name=item.get("analysis_name")
@@ -3103,6 +3145,7 @@ class CleanroomXApp:
             },
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
             "verification": verification_summary,
+            "verification_items": verification_items,
             "model": {
                 **metrics,
                 "device_count": device_count,
@@ -3125,6 +3168,10 @@ class CleanroomXApp:
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
             dashboard.refresh(engineering_snapshot)
+
+        verification_workspace = getattr(self, "verification_workspace", None)
+        if verification_workspace is not None:
+            verification_workspace.refresh(engineering_snapshot)
 
         reporting = getattr(self, "reporting_workspace", None)
         if reporting is not None:
@@ -3368,6 +3415,13 @@ class CleanroomXApp:
                 keywords=("solver", "run", "analysis", "results"),
             ),
             PaletteCommand(
+                "workspace.verification",
+                "Open Verification Workspace",
+                "Verification",
+                self._activate_verification_workspace,
+                keywords=("requirements", "currency", "compliance", "evidence"),
+            ),
+            PaletteCommand(
                 "workspace.reporting",
                 "Open Reporting Workspace",
                 "Report",
@@ -3609,18 +3663,6 @@ class CleanroomXApp:
             self._refresh_simulation_workspace()
             self.notebook.select(self.simulation_workspace)
             self.workspace_status_var.set("Workspace: Simulation")
-
-    def _activate_reporting_workspace(self) -> None:
-        if hasattr(self, "notebook") and hasattr(self, "reporting_workspace"):
-            self._refresh_engineering_panels()
-            self.notebook.select(self.reporting_workspace)
-            self.workspace_status_var.set("Workspace: Reporting")
-
-    def _open_report_output(self) -> None:
-        if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
-            self.show_output_panel()
-            self.output_notebook.select(self.report_text.master)
-            self.status_var.set("Output: Report")
 
     def _activate_analysis_results_workspace(self) -> None:
         if hasattr(self, "output_notebook") and hasattr(self, "analysis_result_panel"):
@@ -5019,9 +5061,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: DRC / Diagnostics")
             return
         if item_id == "nav-verification":
-            if hasattr(self, "output_notebook") and hasattr(self, "verification_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.verification_text.master)
+            self._activate_verification_workspace()
             self.selection_status_var.set("Selected: Verification")
             return
         if item_id == "nav-proofgraph":

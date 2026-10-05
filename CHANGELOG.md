@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — full-Tk release gate and desktop launcher — 2026-10-05
+
+- Runs the complete Python 3.13 release suite under Xvfb/Tk so display-driven GUI regressions execute instead of being silently skipped, while Python 3.11/3.12 remain headless compatibility runs with explicit skip reasons.
+- Adds the standard PyPA `cleanroomx-desktop` `gui_scripts` entry point for installed Windows desktop launches without a console window, while retaining `cleanroomx-gui` for terminal automation and smoke checks.
+- Extends the Windows release gate to verify the installed GUI-subsystem launcher and adds source-level regressions that bind the complete-suite/Xvfb ordering and separate console/desktop entry points.
+- Preserves the already-required native IfcOpenShell smoke, Python 3.11/3.12/3.13 matrix, Windows checkout launchers, solver equations, engineering tolerances, project schemas, requirement criteria, and verification verdict semantics.
+
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

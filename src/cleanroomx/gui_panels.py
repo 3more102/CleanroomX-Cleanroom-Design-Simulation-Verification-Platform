@@ -141,7 +141,20 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("error", font=("TkDefaultFont", 9, "bold"))
+        self.tree.tag_configure(
+            "error",
+            foreground="#ef4444",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "warning",
+            foreground="#f59e0b",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.tree.tag_configure(
+            "info",
+            foreground="#38bdf8",
+        )
         self.tree.bind("<<TreeviewSelect>>", self._show_selected_detail)
         self.tree.bind("<Double-1>", self._navigate_selected)
         self.tree.bind("<Return>", self._navigate_selected)

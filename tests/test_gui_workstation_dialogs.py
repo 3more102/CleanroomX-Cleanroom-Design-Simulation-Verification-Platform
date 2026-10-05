@@ -85,30 +85,27 @@ def test_run_history_dialog_filters_retained_canonical_records_and_empty_state(a
     total = len(dialog.records)
 
     dialog.search_var.set(str(latest["analysis_name"]))
-    dialog.status_filter_var.set(str(latest["status"]))
+    dialog.status_var.set(str(latest["status"]))
     app.root.update()
 
     children = dialog.tree.get_children()
     assert children
     for iid in children:
-        record = next(
-            item for item in dialog.records
-            if str(item["sequence"]) == iid
-        )
+        record = dialog._records_by_iid[iid]
         assert record["status"] == latest["status"]
         assert latest["analysis_name"].casefold() in (
             str(record["analysis_name"]).casefold()
         )
-    assert dialog.count_var.get().endswith(f"of {total} records")
+    assert dialog.summary_var.get().startswith(f"{len(children)} / {total} visible")
 
     dialog.search_var.set("retained-record-that-does-not-exist")
     app.root.update()
     assert dialog.tree.get_children() == ()
-    assert "match the active filters" in dialog.detail.get(
+    assert "matches the current filters" in dialog.summary_text.get(
         "1.0", "end"
     ).casefold()
 
-    dialog._clear_filters()
+    dialog._reset_filters()
     app.root.update()
     assert len(dialog.tree.get_children()) == total
     dialog.destroy()

@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from cleanroomx.gui_proofgraph import _filtered_projection, proofgraph_projection
+from cleanroomx.gui_proofgraph import (\n    _filtered_projection,\n    _searched_projection,\n    proofgraph_projection,\n)
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -235,3 +235,22 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "finding:finding-evidence" in unresolved_keys
     assert "check:check-evidence" in unresolved_keys
     assert "verdict:verdict-evidence" not in unresolved_keys
+
+
+
+def test_proofgraph_search_matches_provenance_and_keeps_one_hop_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _searched_projection(projection, "3ifc")
+    keys = {node["key"] for node in searched["nodes"]}
+    assert "ifc:3IFC" in keys
+    assert "evidence:evidence-pressure" in keys
+
+    failure_reason = _searched_projection(projection, "pressure below target")
+    reason_keys = {node["key"] for node in failure_reason["nodes"]}
+    assert "finding:finding-pressure" in reason_keys
+    assert "check:check-pressure" in reason_keys
+    assert "verdict:verdict-pressure" in reason_keys
+
+    missing = _searched_projection(projection, "definitely-not-present")
+    assert missing == {"nodes": [], "edges": []}

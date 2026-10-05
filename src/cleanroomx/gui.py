@@ -2077,7 +2077,7 @@ class CleanroomXApp:
 
         status_bar = ttk.Frame(
             self.root,
-            style="CX.Toolbar.TFrame",
+            style="CX.Statusbar.TFrame",
             padding=(8, 4),
         )
         status_bar.pack(fill="x", side="bottom")
@@ -2085,7 +2085,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.status_var,
             anchor="w",
-            style="CX.Topbar.TLabel",
+            style="CX.Statusbar.TLabel",
         ).pack(side="left", fill="x", expand=True)
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2093,7 +2093,7 @@ class CleanroomXApp:
         ttk.Label(
             status_bar,
             textvariable=self.model_status_var,
-            style="CX.ToolbarMuted.TLabel",
+            style="CX.StatusbarMuted.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2101,7 +2101,7 @@ class CleanroomXApp:
         ttk.Label(
             status_bar,
             textvariable=self.selection_status_var,
-            style="CX.ToolbarMuted.TLabel",
+            style="CX.StatusbarMuted.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2109,7 +2109,7 @@ class CleanroomXApp:
         ttk.Label(
             status_bar,
             textvariable=self.workspace_status_var,
-            style="CX.ToolbarMuted.TLabel",
+            style="CX.StatusbarMuted.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2119,7 +2119,7 @@ class CleanroomXApp:
             textvariable=self.view_status_var,
             anchor="e",
             width=34,
-            style="CX.ToolbarMuted.TLabel",
+            style="CX.StatusbarMuted.TLabel",
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -2128,7 +2128,7 @@ class CleanroomXApp:
             status_bar,
             textvariable=self.autosave_status_var,
             anchor="e",
-            style="CX.ToolbarMuted.TLabel",
+            style="CX.StatusbarMuted.TLabel",
         ).pack(side="right")
 
     @staticmethod

@@ -1650,6 +1650,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_labels: dict[str, str] = {}
+        self._property_units: dict[str, str] = {}
+        self._property_search_var = tk.StringVar()
+        self._property_filter_var = tk.StringVar(value="0 properties")
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1975,7 +1979,32 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 6))
+
+        property_filter = ttk.Frame(inspector)
+        property_filter.pack(fill="x", pady=(0, 8))
+        ttk.Label(property_filter, text="Search").pack(side="left")
+        self._property_search_entry = ttk.Entry(
+            property_filter,
+            textvariable=self._property_search_var,
+            width=16,
+        )
+        self._property_search_entry.pack(side="left", fill="x", expand=True, padx=(5, 4))
+        ttk.Button(
+            property_filter,
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=self.clear_property_filter,
+        ).pack(side="left")
+        ttk.Label(
+            inspector,
+            textvariable=self._property_filter_var,
+            style="CX.Muted.TLabel",
+        ).pack(fill="x", pady=(0, 6))
+        self._property_search_entry.bind(
+            "<Escape>", lambda _event: self.clear_property_filter()
+        )
 
         property_groups = (
             (
@@ -2025,6 +2054,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
+                self._property_labels[key] = label
+                self._property_units[key] = unit
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
@@ -2033,16 +2064,26 @@ class SpatialDesignWorkspace(ttk.Frame):
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
+        inspector_actions = ttk.Frame(inspector)
+        inspector_actions.pack(fill="x", pady=(2, 6))
         ttk.Button(
-            inspector,
+            inspector_actions,
+            text="Reset edits",
+            command=self._load_property_panel,
+        ).pack(side="left")
+        ttk.Button(
+            inspector_actions,
             text="Apply properties",
             command=self.apply_properties,
-        ).pack(anchor="e", pady=(2, 6))
+        ).pack(side="right")
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
             fill="x", pady=(3, 0)
         )
 
+        self._property_search_var.trace_add(
+            "write", lambda *_: self._load_property_panel()
+        )
         self._apply_workspace_mode()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
@@ -2714,10 +2755,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def clear_property_filter(self) -> None:
+        self._property_search_var.set("")
+        self._property_search_entry.focus_set()
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._property_filter_var.set("0 properties · select an object")
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2768,15 +2814,33 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self.selected and self.selected.kind == "room"
             else device_fields
         )
+        tokens = [
+            token
+            for token in self._property_search_var.get().strip().casefold().split()
+            if token
+        ]
+        visible_count = 0
         for key, var in self._property_vars.items():
             row = self._property_rows.get(key)
+            label = self._property_labels.get(key, key)
+            unit = self._property_units.get(key, "")
+            haystack = f"{label} {key} {unit}".casefold()
+            matches_filter = all(token in haystack for token in tokens)
             if row is not None:
-                if key in visible_fields:
+                if key in visible_fields and matches_filter:
                     row.pack(fill="x", pady=2)
+                    visible_count += 1
                 else:
                     row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        total_count = len(visible_fields)
+        if tokens:
+            self._property_filter_var.set(
+                f"{visible_count} of {total_count} properties · filtered"
+            )
+        else:
+            self._property_filter_var.set(f"{total_count} properties")
 
     def apply_properties(self) -> None:
         item = self._selected_object()

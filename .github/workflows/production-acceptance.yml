@@ -50,6 +50,7 @@ jobs:
           tests/test_release_documentation_identity.py
           tests/test_proofgraph_change_impact.py
           tests/test_proofgraph_change_impact_cli.py
+          tests/test_proofgraph_project_requirements.py
       - name: Re-run performance regression budgets
         run: |
           python scripts/benchmark_spatial_validation.py

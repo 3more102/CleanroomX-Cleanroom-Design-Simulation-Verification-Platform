@@ -148,12 +148,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb tk
-      - name: Run complete test suite
+      - name: Run complete test suite with skip reasons
         if: matrix.python-version != '3.13'
-        run: python -m pytest -q
-      - name: Run complete test suite with real Tk
+        run: python -m pytest -q -ra
+      - name: Run complete test suite with real Tk and skip reasons
         if: matrix.python-version == '3.13'
-        run: xvfb-run -a python -m pytest -q
+        run: xvfb-run -a python -m pytest -q -ra
       - name: Run Release 2 performance evidence
         if: matrix.python-version == '3.13'
         run: |

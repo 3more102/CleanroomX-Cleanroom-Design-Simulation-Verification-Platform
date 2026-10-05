@@ -1812,7 +1812,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="Delete",
             width=7,
             style="CX.Danger.TButton",
-            command=self.delete_selected,
+            command=self.request_delete_selected,
         ).pack(side="left", padx=2)
         ttk.Separator(commandbar, orient="vertical").pack(
             side="left", fill="y", padx=7
@@ -2413,6 +2413,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Escape>", self._on_escape)
         self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
@@ -2424,7 +2425,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
             canvas.bind("<Control-d>", self._on_duplicate_shortcut)
-            canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Delete>", lambda event: self.request_delete_selected())
             canvas.bind("<Left>", lambda event: self._nudge_selected(-1, 0))
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
@@ -2655,11 +2656,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_escape(self, event=None):
+        transient_active = (
+            getattr(self, "_box_select_anchor_canvas", None) is not None
+            or getattr(self, "_box_select_current_canvas", None) is not None
+            or bool(getattr(self, "_measurement_points", ()))
+            or self._current_tool_mode() != "select"
+        )
         self._box_select_anchor_canvas = None
         self._box_select_current_canvas = None
         self._box_select_state = 0
         self.canvas_2d.delete("selection_box")
         self.clear_measurement()
+        if not transient_active and self.selected_hits():
+            self._replace_selection(None)
+            self._load_property_panel()
+            self.redraw()
+            self._notify_selection_change()
+            self._status_setter("Selection cleared")
         return "break"
 
     def _handle_measure_click(self, x: float, y: float) -> None:
@@ -3919,6 +3932,59 @@ class SpatialDesignWorkspace(ttk.Frame):
             selection_before=selection_before,
         )
 
+    def request_delete_selected(self) -> bool:
+        """Confirm a user-triggered destructive spatial edit before applying it."""
+        hits = list(self.selected_hits())
+        if not hits and self.selected is not None:
+            hits = [self.selected]
+        if not hits:
+            return False
+
+        room_ids = {hit.item_id for hit in hits if hit.kind == "room"}
+        selected_device_ids = {
+            hit.item_id for hit in hits if hit.kind == "device"
+        }
+        attached_device_ids = {
+            str(item.get("id"))
+            for item in self.layout["devices"]
+            if str(item.get("room_id") or "") in room_ids
+        } - selected_device_ids
+
+        details: list[str] = []
+        if room_ids:
+            details.append(
+                f"{len(room_ids)} room" + ("" if len(room_ids) == 1 else "s")
+            )
+        if selected_device_ids:
+            details.append(
+                f"{len(selected_device_ids)} selected device"
+                + ("" if len(selected_device_ids) == 1 else "s")
+            )
+        if attached_device_ids:
+            details.append(
+                f"{len(attached_device_ids)} attached device"
+                + ("" if len(attached_device_ids) == 1 else "s")
+                + " removed with the selected room"
+                + ("" if len(room_ids) == 1 else "s")
+            )
+        impact = ", ".join(details) if details else f"{len(hits)} spatial object(s)"
+        selected_label = "object" if len(hits) == 1 else "objects"
+        confirmed = messagebox.askyesno(
+            "Confirm spatial deletion",
+            (
+                f"Delete {len(hits)} selected spatial {selected_label}?\n\n"
+                f"This will remove {impact}.\n\n"
+                "This change modifies the project but can be reversed with Undo."
+            ),
+            parent=self,
+            default="no",
+        )
+        if not confirmed:
+            self._status_setter("Spatial deletion cancelled")
+            return False
+        self.delete_selected()
+        return True
+
     def delete_selected(self) -> None:
         hits = list(self.selected_hits())
         if not hits and self.selected is not None:
@@ -4792,7 +4858,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         menu.add_command(label="Show all", command=self.show_all)
         menu.add_separator()
         menu.add_command(label="Duplicate", command=self.duplicate_selected)
-        menu.add_command(label="Delete", command=self.delete_selected)
+        menu.add_command(label="Delete", command=self.request_delete_selected)
         if hit.kind == "room":
             menu.add_separator()
             menu.add_command(label="Add Door", command=lambda: self.add_device("door"))

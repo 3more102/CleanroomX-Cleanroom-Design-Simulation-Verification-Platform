@@ -2666,10 +2666,110 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _update_inspector_snapshot(self, item: dict | None) -> None:
+        label = getattr(self, "_inspector_state_label", None)
+        if item is None or self.selected is None:
+            self._inspector_metrics_var.set(
+                "Select a room, duct opening, device, or equipment item to inspect."
+            )
+            self._inspector_context_var.set(
+                "Geometry, cleanroom attributes, synchronization, and active overlay context appear here."
+            )
+            self._inspector_state_var.set("NOT SELECTED")
+            if label is not None:
+                label.configure(style="CX.Status.unknown.TLabel")
+            return
+
+        selected_id = self.selected.item_id
+        warning_ids = self._warning_item_ids()
+        semantic = "warning" if selected_id in warning_ids else "pass"
+        state_text = "ATTENTION" if semantic == "warning" else "CLEAR"
+
+        if self.selected.kind == "room":
+            length = _finite_number(item.get("length_m"), 0.0)
+            width = _finite_number(item.get("width_m"), 0.0)
+            height = _finite_number(item.get("height_m"), 0.0)
+            area = max(0.0, length * width)
+            volume = max(0.0, area * height)
+            metrics = (
+                f"Area {format_engineering_value(area, 'm²')} · "
+                f"Volume {format_engineering_value(volume, 'm³')} · "
+                f"Height {format_engineering_value(height, 'm')}"
+            )
+
+            context_parts: list[str] = []
+            classification = str(item.get("classification") or "").strip()
+            if classification:
+                context_parts.append(f"Class {classification}")
+            pressure = item.get("pressure_pa")
+            if isinstance(pressure, (int, float)) and math.isfinite(float(pressure)):
+                context_parts.append(
+                    "Design pressure "
+                    + format_engineering_value(
+                        pressure,
+                        "Pa",
+                        precision=1,
+                        signed=True,
+                    )
+                )
+
+            overlay_mode = self._overlay_mode.get().strip().lower()
+            overlay = engineering_overlay_state(
+                self.layout,
+                self._analysis_getter(),
+                getattr(self, "_result_getter", lambda: None)(),
+                mode=overlay_mode,
+            )
+            overlay_record = next(
+                (
+                    record
+                    for record in overlay.get("rooms", [])
+                    if record.get("room_id") == selected_id
+                ),
+                None,
+            )
+            if isinstance(overlay_record, dict):
+                overlay_label = str(overlay_record.get("label") or "").strip()
+                if overlay_label:
+                    context_parts.append(overlay_label)
+                overlay_status = _engineering_status(overlay_record.get("status"))
+                if overlay_status in {"fail", "error"}:
+                    semantic, state_text = "fail", "FAILED"
+                elif overlay_status in {"warning", "warn"} and semantic != "fail":
+                    semantic, state_text = "warning", "ATTENTION"
+                elif overlay_status == "pass" and semantic == "pass":
+                    state_text = "VERIFIED"
+
+            self._inspector_metrics_var.set(metrics)
+            self._inspector_context_var.set(
+                " · ".join(context_parts) if context_parts else "No engineering result overlay is available for this room."
+            )
+        else:
+            device_type = str(item.get("type") or "device").replace("_", " ").title()
+            width = _finite_number(item.get("width_m"), 0.0)
+            height = _finite_number(item.get("height_m"), 0.0)
+            room_id = str(item.get("room_id") or "unassigned")
+            self._inspector_metrics_var.set(
+                f"{device_type} · "
+                f"{format_engineering_value(width, 'm')} × "
+                f"{format_engineering_value(height, 'm')}"
+            )
+            self._inspector_context_var.set(
+                f"Assigned room: {room_id} · "
+                f"Elevation {format_engineering_value(item.get('z_m', 0.0), 'm')}"
+            )
+
+        self._inspector_state_var.set(state_text)
+        if label is not None:
+            label.configure(
+                style=f"CX.Status.{canonical_status(semantic)}.TLabel"
+            )
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._update_inspector_snapshot(None)
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2691,6 +2791,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        self._update_inspector_snapshot(item)
         room_fields = {
             "name",
             "x_m",

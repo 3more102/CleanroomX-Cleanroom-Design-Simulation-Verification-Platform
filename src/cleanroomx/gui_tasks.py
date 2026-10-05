@@ -111,9 +111,11 @@ class TaskCenter(ttk.Frame):
         master: tk.Misc,
         *,
         on_change: Callable[[int, int], None] | None = None,
+        on_abandon: Callable[[str], bool] | None = None,
     ):
         super().__init__(master, padding=(8, 6))
         self._on_change = on_change or (lambda _active, _total: None)
+        self._on_abandon = on_abandon
         self._records: dict[str, TaskRecord] = {}
         self._order: list[str] = []
         self.state_filter_var = tk.StringVar(value="All")
@@ -171,6 +173,14 @@ class TaskCenter(ttk.Frame):
             style="CX.Compact.TButton",
             command=self.clear_finished,
         ).pack(side="right")
+        self.abandon_button = ttk.Button(
+            controls,
+            text="Abandon selected",
+            style="CX.Danger.TButton",
+            command=self.abandon_selected,
+            state="disabled",
+        )
+        self.abandon_button.pack(side="right", padx=(0, 6))
 
         body = ttk.Panedwindow(self, orient="vertical")
         body.pack(fill="both", expand=True)
@@ -320,6 +330,19 @@ class TaskCenter(ttk.Frame):
         self._refresh(select_key=selected_key or key)
         return updated
 
+    def abandon_selected(self) -> bool:
+        selected = self.tree.selection()
+        if not selected or self._on_abandon is None:
+            return False
+        record = self._records.get(selected[0])
+        if record is None or record.terminal:
+            return False
+        if normalize_task_state(record.state) == "abandon requested":
+            return False
+        accepted = bool(self._on_abandon(record.key))
+        self._sync_detail()
+        return accepted
+
     def clear_finished(self) -> None:
         active = [
             key
@@ -406,6 +429,7 @@ class TaskCenter(ttk.Frame):
     def _sync_detail(self, _event=None) -> None:
         selected = self.tree.selection()
         if not selected:
+            self.abandon_button.configure(state="disabled")
             if self._records:
                 self.detail_var.set(
                     "Select a task to inspect execution stage, duration, result, or failure details."
@@ -418,7 +442,14 @@ class TaskCenter(ttk.Frame):
             return
         record = self._records.get(selected[0])
         if record is None:
+            self.abandon_button.configure(state="disabled")
             return
+        can_abandon = (
+            self._on_abandon is not None
+            and not record.terminal
+            and normalize_task_state(record.state) != "abandon requested"
+        )
+        self.abandon_button.configure(state="normal" if can_abandon else "disabled")
         lines = [
             f"{record.name}  ·  {record.category}",
             f"Execution state: {normalize_task_state(record.state).upper()}",

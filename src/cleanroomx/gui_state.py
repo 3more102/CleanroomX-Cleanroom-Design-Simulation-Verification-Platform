@@ -8,7 +8,7 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 6
+GUI_LAYOUT_STATE_VERSION = 7
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
@@ -17,6 +17,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "theme": "light",
     "workspace_profile": "start",
     "density": "comfortable",
+    "saved_layouts": {},
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -109,6 +110,56 @@ def _normalize_density(value: Any) -> str:
     return density if density in {"comfortable", "compact"} else "comfortable"
 
 
+def _normalize_saved_layouts(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    for raw_name, raw_layout in value.items():
+        if not isinstance(raw_name, str) or not isinstance(raw_layout, dict):
+            continue
+        name = raw_name.strip()
+        folded = name.casefold()
+        if not name or len(name) > 48 or folded in seen:
+            continue
+        seen.add(folded)
+        normalized[name] = {
+            "workspace_profile": _normalize_workspace_profile(
+                raw_layout.get("workspace_profile")
+            ),
+            "navigator_visible": (
+                raw_layout.get("navigator_visible")
+                if isinstance(raw_layout.get("navigator_visible"), bool)
+                else True
+            ),
+            "output_visible": (
+                raw_layout.get("output_visible")
+                if isinstance(raw_layout.get("output_visible"), bool)
+                else True
+            ),
+            "inspector_visible": (
+                raw_layout.get("inspector_visible")
+                if isinstance(raw_layout.get("inspector_visible"), bool)
+                else True
+            ),
+            "navigator_fraction": _bounded_fraction(
+                raw_layout.get("navigator_fraction"),
+                _DEFAULT_GUI_LAYOUT_STATE["navigator_fraction"],
+            ),
+            "output_fraction": _bounded_fraction(
+                raw_layout.get("output_fraction"),
+                _DEFAULT_GUI_LAYOUT_STATE["output_fraction"],
+            ),
+            "inspector_fraction": _bounded_fraction(
+                raw_layout.get("inspector_fraction"),
+                _DEFAULT_GUI_LAYOUT_STATE["inspector_fraction"],
+            ),
+        }
+        if len(normalized) >= 8:
+            break
+    return normalized
+
+
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
@@ -134,6 +185,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             source.get("workspace_profile")
         ),
         "density": _normalize_density(source.get("density")),
+        "saved_layouts": _normalize_saved_layouts(source.get("saved_layouts")),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),

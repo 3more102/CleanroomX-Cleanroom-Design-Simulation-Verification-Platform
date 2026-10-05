@@ -1347,10 +1347,6 @@ class CleanroomXApp:
         """Publish non-modal workstation feedback without weakening blocking errors."""
         center = getattr(self, "notification_center", None)
         if center is None:
-            status = getattr(self, "status_var", None)
-            setter = getattr(status, "set", None)
-            if callable(setter):
-                setter(message)
             return
         center.notify(
             message,

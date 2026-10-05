@@ -1650,6 +1650,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_filter_var = tk.StringVar(value="")
+        self._property_field_metadata: dict[str, tuple[str, str]] = {}
+        self._property_group_sections: dict[str, ttk.LabelFrame] = {}
+        self._property_group_fields: dict[str, tuple[str, ...]] = {}
+        self._property_group_order: list[str] = []
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1975,7 +1980,22 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 6))
+        property_filter = ttk.Frame(inspector)
+        property_filter.pack(fill="x", pady=(0, 7))
+        ttk.Label(property_filter, text="Filter").pack(side="left", padx=(0, 5))
+        self._property_filter_entry = ttk.Entry(
+            property_filter,
+            textvariable=self._property_filter_var,
+        )
+        self._property_filter_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            property_filter,
+            text="×",
+            width=3,
+            style="CX.Compact.TButton",
+            command=lambda: self._property_filter_var.set(""),
+        ).pack(side="left", padx=(4, 0))
 
         property_groups = (
             (
@@ -2017,6 +2037,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         for group_name, fields in property_groups:
             section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
+            self._property_group_order.append(group_name)
+            self._property_group_sections[group_name] = section
+            self._property_group_fields[group_name] = tuple(
+                key for key, _label, _unit in fields
+            )
             for key, label, unit in fields:
                 row = ttk.Frame(section)
                 row.pack(fill="x", pady=2)
@@ -2025,6 +2050,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
+                self._property_field_metadata[key] = (label, unit)
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
@@ -2033,14 +2059,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
-        ttk.Button(
+        self._property_apply_button = ttk.Button(
             inspector,
             text="Apply properties",
             command=self.apply_properties,
-        ).pack(anchor="e", pady=(2, 6))
+        )
+        self._property_apply_button.pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
         ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
             fill="x", pady=(3, 0)
+        )
+        self._property_filter_var.trace_add(
+            "write",
+            lambda *_: self._apply_property_filter(),
         )
 
         self._apply_workspace_mode()
@@ -2714,16 +2745,73 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _applicable_property_fields(self) -> set[str]:
+        if self._selected_object() is None or self.selected is None:
+            return set()
+        if self.selected.kind == "room":
+            return {
+                "name",
+                "x_m",
+                "y_m",
+                "length_m",
+                "width_m",
+                "height_m",
+                "floor_elevation_m",
+                "pressure_pa",
+                "classification",
+                "analysis_room_name",
+            }
+        return {
+            "name",
+            "x_m",
+            "y_m",
+            "z_m",
+            "width_m",
+            "height_m",
+            "room_id",
+            "orientation_deg",
+            "wall_side",
+            "swing",
+        }
+
+    def _apply_property_filter(self) -> None:
+        applicable = self._applicable_property_fields()
+        query = self._property_filter_var.get().strip().casefold()
+        for section in self._property_group_sections.values():
+            section.pack_forget()
+
+        for group_name in self._property_group_order:
+            section = self._property_group_sections[group_name]
+            any_visible = False
+            for key in self._property_group_fields[group_name]:
+                row = self._property_rows[key]
+                row.pack_forget()
+                if key not in applicable:
+                    continue
+                label, unit = self._property_field_metadata[key]
+                value = self._property_vars[key].get()
+                haystack = f"{key} {label} {unit} {value}".casefold()
+                if query and query not in haystack:
+                    continue
+                row.pack(fill="x", pady=2)
+                any_visible = True
+            if any_visible:
+                section.pack(
+                    fill="x",
+                    pady=(0, 7),
+                    before=self._property_apply_button,
+                )
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
-            for key, var in self._property_vars.items():
+            self._property_apply_button.configure(state="disabled")
+            for var in self._property_vars.values():
                 var.set("")
-                row = self._property_rows.get(key)
-                if row is not None:
-                    row.pack_forget()
+            self._apply_property_filter()
             return
+        self._property_apply_button.configure(state="normal")
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         selection_text = f"{prefix}: {item.get('name', '')}"
         if self.selected and self.selected.kind == "room":
@@ -2739,44 +2827,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
-        room_fields = {
-            "name",
-            "x_m",
-            "y_m",
-            "length_m",
-            "width_m",
-            "height_m",
-            "floor_elevation_m",
-            "pressure_pa",
-            "classification",
-            "analysis_room_name",
-        }
-        device_fields = {
-            "name",
-            "x_m",
-            "y_m",
-            "z_m",
-            "width_m",
-            "height_m",
-            "room_id",
-            "orientation_deg",
-            "wall_side",
-            "swing",
-        }
-        visible_fields = (
-            room_fields
-            if self.selected and self.selected.kind == "room"
-            else device_fields
-        )
         for key, var in self._property_vars.items():
-            row = self._property_rows.get(key)
-            if row is not None:
-                if key in visible_fields:
-                    row.pack(fill="x", pady=2)
-                else:
-                    row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        self._apply_property_filter()
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -3644,6 +3698,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _focus_property(self, key: str) -> None:
         self.show_inspector()
+        self._property_filter_var.set("")
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
             entry.focus_set()

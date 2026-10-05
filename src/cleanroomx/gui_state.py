@@ -8,13 +8,27 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 4
+GUI_LAYOUT_STATE_VERSION = 5
+_WORKSPACES = {"start", "design", "input", "plot", "proofgraph"}
+_DESIGN_MODES = {"2d", "3d", "split"}
+_OUTPUT_TABS = {
+    "problems",
+    "diagnostics",
+    "verification",
+    "console",
+    "evidence",
+    "results",
+    "report",
+}
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
     "output_visible": True,
     "inspector_visible": True,
     "theme": "light",
+    "active_workspace": "start",
+    "design_mode": "split",
+    "output_tab": "problems",
     "recent_projects": [],
     "window_width": 1440,
     "window_height": 900,
@@ -95,6 +109,13 @@ def _normalize_recent_projects(value: Any) -> list[str]:
     return recent
 
 
+def _choice(value: Any, allowed: set[str], default: str) -> str:
+    if not isinstance(value, str):
+        return default
+    normalized = value.strip().casefold()
+    return normalized if normalized in allowed else default
+
+
 def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
     """Normalize persisted presentation state and discard unsupported fields."""
     source = value if isinstance(value, dict) else {}
@@ -116,6 +137,21 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
         ),
         "theme": normalize_theme_name(source.get("theme")),
+        "active_workspace": _choice(
+            source.get("active_workspace"),
+            _WORKSPACES,
+            _DEFAULT_GUI_LAYOUT_STATE["active_workspace"],
+        ),
+        "design_mode": _choice(
+            source.get("design_mode"),
+            _DESIGN_MODES,
+            _DEFAULT_GUI_LAYOUT_STATE["design_mode"],
+        ),
+        "output_tab": _choice(
+            source.get("output_tab"),
+            _OUTPUT_TABS,
+            _DEFAULT_GUI_LAYOUT_STATE["output_tab"],
+        ),
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),

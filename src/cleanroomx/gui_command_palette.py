@@ -6,6 +6,9 @@ import tkinter as tk
 from tkinter import ttk
 
 
+MAX_RENDERED_RESULTS = 300
+
+
 @dataclass(frozen=True)
 class PaletteCommand:
     id: str
@@ -154,7 +157,8 @@ class CommandPalette(tk.Toplevel):
         self._iid_to_command.clear()
 
         previous_category = None
-        for index, command in enumerate(self._filtered):
+        rendered = self._filtered[:MAX_RENDERED_RESULTS]
+        for index, command in enumerate(rendered):
             iid = f"command-{index}"
             self._iid_to_command[iid] = command
             category = command.category or "General"
@@ -185,9 +189,11 @@ class CommandPalette(tk.Toplevel):
             )
 
         count = len(self._filtered)
-        self._summary.configure(
-            text=f"{count} COMMAND{'S' if count != 1 else ''}"
-        )
+        if count > MAX_RENDERED_RESULTS:
+            summary = f"{count} MATCHES · SHOWING FIRST {MAX_RENDERED_RESULTS}"
+        else:
+            summary = f"{count} COMMAND{'S' if count != 1 else ''}"
+        self._summary.configure(text=summary)
 
     def _focus_first_result(self, _event=None):
         children = self.tree.get_children()

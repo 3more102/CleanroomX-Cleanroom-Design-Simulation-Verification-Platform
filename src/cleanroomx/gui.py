@@ -1448,6 +1448,19 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for profile, label in (
+            ("design", "Design Workspace"),
+            ("simulation", "Simulation Workspace"),
+            ("verification", "Verification Workspace"),
+            ("evidence", "Evidence Workspace"),
+            ("reporting", "Reporting Workspace"),
+        ):
+            workspace_menu.add_command(
+                label=label,
+                command=lambda selected=profile: self.activate_workspace_profile(selected),
+            )
+        view_menu.add_cascade(label="Workspace Preset", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -1900,6 +1913,7 @@ class CleanroomXApp:
         self.input_text.edit_modified(False)
 
         plot_tab = ttk.Frame(self.notebook)
+        self.plot_tab = plot_tab
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
@@ -2418,6 +2432,75 @@ class CleanroomXApp:
             return False
         return bool(panel.previous_issue())
 
+    def _set_workspace_panel_state(
+        self,
+        *,
+        navigator: bool,
+        output: bool,
+        inspector: bool,
+    ) -> None:
+        self._restore_focus_workspace_snapshot(status=False)
+        self.navigator_panel_visible_var.set(navigator)
+        self.output_panel_visible_var.set(output)
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(inspector)
+
+    def activate_workspace_profile(self, profile: str) -> bool:
+        profile_key = str(profile or "").strip().casefold()
+        if profile_key == "design":
+            self._set_workspace_panel_state(
+                navigator=True,
+                output=False,
+                inspector=True,
+            )
+            self._activate_spatial_workspace("split")
+            label = "Design"
+        elif profile_key == "simulation":
+            self._set_workspace_panel_state(
+                navigator=True,
+                output=True,
+                inspector=False,
+            )
+            self.notebook.select(self.plot_tab)
+            self.output_notebook.select(self.result_text.master)
+            label = "Simulation"
+        elif profile_key == "verification":
+            self._set_workspace_panel_state(
+                navigator=True,
+                output=True,
+                inspector=False,
+            )
+            self._activate_spatial_workspace("2d")
+            self.output_notebook.select(self.problems_panel)
+            label = "Verification"
+        elif profile_key == "evidence":
+            self._set_workspace_panel_state(
+                navigator=True,
+                output=True,
+                inspector=False,
+            )
+            self._activate_proofgraph_workspace()
+            self.output_notebook.select(self.evidence_text.master)
+            label = "Evidence"
+        elif profile_key == "reporting":
+            self._set_workspace_panel_state(
+                navigator=False,
+                output=True,
+                inspector=False,
+            )
+            self.notebook.select(self.plot_tab)
+            self.output_notebook.select(self.report_text.master)
+            label = "Reporting"
+        else:
+            return False
+        self.workspace_status_var.set(f"Workspace: {label}")
+        self.status_var.set(f"{label} workspace activated")
+        self.root.after_idle(self._apply_saved_panel_sashes)
+        return True
+
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is None:
@@ -2813,6 +2896,41 @@ class CleanroomXApp:
                 "Design",
                 lambda: self.spatial_workspace.fit_views(),
                 keywords=("zoom", "model"),
+            ),
+            PaletteCommand(
+                "workspace.design_profile",
+                "Activate Design Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("design"),
+                keywords=("layout", "panels", "canvas", "design"),
+            ),
+            PaletteCommand(
+                "workspace.simulation_profile",
+                "Activate Simulation Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("simulation"),
+                keywords=("layout", "plot", "results", "simulation"),
+            ),
+            PaletteCommand(
+                "workspace.verification_profile",
+                "Activate Verification Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("verification"),
+                keywords=("layout", "problems", "diagnostics", "verification"),
+            ),
+            PaletteCommand(
+                "workspace.evidence_profile",
+                "Activate Evidence Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("evidence"),
+                keywords=("layout", "proofgraph", "traceability", "evidence"),
+            ),
+            PaletteCommand(
+                "workspace.reporting_profile",
+                "Activate Reporting Workspace",
+                "Window",
+                lambda: self.activate_workspace_profile("reporting"),
+                keywords=("layout", "report", "export"),
             ),
             PaletteCommand(
                 "workspace.focus",

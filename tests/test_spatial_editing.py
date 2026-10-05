@@ -6,7 +6,11 @@ import pytest
 
 from cleanroomx.project import ProjectDocument, load_project_document, save_project_document
 from cleanroomx.spatial import SpatialDesignWorkspace, _Hit, empty_layout, normalize_layout
-from cleanroomx.spatial_editing import duplicate_spatial_item, update_spatial_properties
+from cleanroomx.spatial_editing import (
+    duplicate_spatial_item,
+    update_spatial_properties,
+    update_spatial_properties_bulk,
+)
 from cleanroomx.spatial_integrity import validate_spatial_layout_document
 
 
@@ -52,6 +56,37 @@ def test_invalid_room_properties_are_rejected_without_partial_changes(layout, fi
     assert layout == before
 
 
+def test_bulk_room_properties_apply_one_validated_patch_without_mutating_source(layout):
+    duplicated, copied_id = duplicate_spatial_item(layout, "room", "process")
+    before = copy.deepcopy(duplicated)
+
+    result = update_spatial_properties_bulk(
+        duplicated,
+        [("room", "process"), ("room", copied_id)],
+        {"height_m": "4.25", "pressure_pa": "18"},
+    )
+
+    assert duplicated == before
+    edited = {room["id"]: room for room in result["rooms"]}
+    assert edited["process"]["height_m"] == pytest.approx(4.25)
+    assert edited[copied_id]["height_m"] == pytest.approx(4.25)
+    assert edited["process"]["pressure_pa"] == pytest.approx(18)
+    assert edited[copied_id]["pressure_pa"] == pytest.approx(18)
+
+
+def test_bulk_properties_reject_mixed_object_kinds_without_partial_changes(layout):
+    before = copy.deepcopy(layout)
+
+    with pytest.raises(ValueError, match="requires rooms or devices"):
+        update_spatial_properties_bulk(
+            layout,
+            [("room", "process"), ("device", "door")],
+            {"height_m": "4.0"},
+        )
+
+    assert layout == before
+
+
 def test_room_property_move_keeps_device_offsets_and_elevations(layout):
     before = copy.deepcopy(layout)
     result = update_spatial_properties(layout, "room", "process", {
@@ -66,6 +101,38 @@ def test_room_property_move_keeps_device_offsets_and_elevations(layout):
         assert moved["z_m"] == old["z_m"]
     assert result["devices"][2] == layout["devices"][2]
     assert result["engineering_sync"] == layout["engineering_sync"]
+
+
+def test_spatial_properties_accept_registered_length_and_pressure_units(layout):
+    result = update_spatial_properties(
+        layout,
+        "room",
+        "process",
+        {
+            "height_m": "3200 mm",
+            "width_m": "350 cm",
+            "pressure_pa": "0.025 kPa",
+        },
+    )
+
+    room = result["rooms"][0]
+    assert room["height_m"] == pytest.approx(3.2)
+    assert room["width_m"] == pytest.approx(3.5)
+    assert room["pressure_pa"] == pytest.approx(25.0)
+
+
+def test_spatial_properties_reject_unregistered_or_incompatible_units_atomically(layout):
+    before = copy.deepcopy(layout)
+
+    with pytest.raises(ValueError, match="supported compatible unit"):
+        update_spatial_properties(
+            layout,
+            "room",
+            "process",
+            {"height_m": "3 seconds"},
+        )
+
+    assert layout == before
 
 
 def test_blank_pressure_and_optional_metadata_clear_without_inventing_zero(layout):

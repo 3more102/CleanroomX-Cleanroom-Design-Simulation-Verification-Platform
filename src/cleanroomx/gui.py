@@ -2198,11 +2198,20 @@ class CleanroomXApp:
             workspace.set_inspector_visible(bool(state["inspector_visible"]))
         self.root.update_idletasks()
         self._apply_saved_panel_sashes()
-        self.apply_workspace_preset(
-            state["workspace_preset"],
-            persist=False,
-            arrange=False,
-        )
+
+        current_workspace = self.workspace_preset_var.get()
+        current_tab = self.notebook.select() if hasattr(self, "notebook") else ""
+        start_tab = str(self.start_center) if hasattr(self, "start_center") else ""
+        if not current_tab or current_tab == start_tab:
+            self.apply_workspace_preset(
+                state["workspace_preset"],
+                persist=False,
+                arrange=False,
+            )
+        else:
+            preserved = dict(self._ui_layout_state)
+            preserved["workspace_preset"] = current_workspace
+            self._ui_layout_state = normalize_gui_layout_state(preserved)
         self.status_var.set("Ready")
 
     def _apply_menu_theme(self, menu: tk.Menu) -> None:

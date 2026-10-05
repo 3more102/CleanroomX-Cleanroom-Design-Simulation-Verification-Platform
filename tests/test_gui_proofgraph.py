@@ -7,6 +7,8 @@ import pytest
 from cleanroomx.gui_proofgraph import (
     _filtered_projection,
     _node_detail_lines,
+    _searched_projection,
+    proofgraph_completeness_summary,
     proofgraph_projection,
 )
 from cleanroomx.proofgraph_models import (
@@ -256,3 +258,52 @@ def test_proofgraph_node_detail_is_engineering_facing_not_raw_json():
     assert "Status: FAIL" in rendered
     assert "TRACEABILITY DETAILS" in rendered
     assert "{\"" not in rendered
+
+
+def test_proofgraph_search_keeps_matching_node_and_immediate_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _searched_projection(projection, "pressure below")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "finding:finding-pressure" in keys
+    assert "check:check-pressure" in keys
+    assert "verdict:verdict-pressure" in keys
+    assert "requirement:REQ-PRESSURE" not in keys
+
+
+def test_proofgraph_search_requires_all_tokens_and_never_derives_status():
+    projection = proofgraph_projection(_sample_graph())
+
+    assert _searched_projection(projection, "pressure impossible") == {
+        "nodes": [],
+        "edges": [],
+    }
+    searched = _searched_projection(projection, "fail")
+    statuses = {
+        node["key"]: node["status"]
+        for node in searched["nodes"]
+        if node.get("status")
+    }
+    assert statuses["finding:finding-pressure"] == "fail"
+    assert statuses["verdict:verdict-pressure"] == "fail"
+
+
+def test_proofgraph_completeness_summary_reports_traceability_not_compliance():
+    complete = proofgraph_completeness_summary(proofgraph_projection(_sample_graph()))
+
+    assert complete["requirements"] == 1
+    assert complete["requirements_with_checks"] == 1
+    assert complete["checks"] == 1
+    assert complete["checks_with_evidence"] == 1
+    assert complete["evidence"] == 1
+    assert complete["unresolved_findings"] == 0
+    assert complete["failing_verdicts"] == 1
+
+    unresolved = proofgraph_completeness_summary(
+        proofgraph_projection(_unresolved_graph())
+    )
+    assert unresolved["requirements_with_checks"] == 1
+    assert unresolved["checks_with_evidence"] == 0
+    assert unresolved["unresolved_findings"] == 1
+    assert unresolved["warning_verdicts"] == 1

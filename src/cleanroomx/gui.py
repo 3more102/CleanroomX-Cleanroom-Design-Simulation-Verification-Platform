@@ -2217,7 +2217,7 @@ class CleanroomXApp:
         )
         design_menu.add_command(
             label="Split 2D + 3D", accelerator="Ctrl+3",
-            command=self._activate_design_workspace,
+            command=lambda: self._activate_spatial_workspace("split"),
         )
         design_menu.add_separator()
         design_menu.add_command(
@@ -2283,7 +2283,7 @@ class CleanroomXApp:
         report_menu = tk.Menu(menubar, tearoff=False)
         report_menu.add_command(
             label="Export Project Engineering Dossier...",
-            command=self._activate_reporting_workspace,
+            command=self.export_project_engineering_dossier,
         )
         report_menu.add_separator()
         report_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
@@ -2589,7 +2589,7 @@ class CleanroomXApp:
             text="2  Inputs",
             width=9,
             style="CX.Compact.TButton",
-            command=self._activate_simulation_workspace,
+            command=self._activate_analysis_input_workspace,
         )
         self.workflow_input_button.pack(side="left", padx=1)
         self.workflow_validate_button = ttk.Button(

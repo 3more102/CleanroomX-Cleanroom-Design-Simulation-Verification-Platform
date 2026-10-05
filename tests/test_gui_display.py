@@ -136,7 +136,10 @@ class _FakeWindow(_FakeRoot):
         self.minsize_value = (width, height)
 
 
-def test_configure_toplevel_geometry_bounds_and_applies_minimum() -> None:
+def test_configure_toplevel_geometry_bounds_and_applies_minimum(monkeypatch) -> None:
+    import cleanroomx.gui_display as display
+
+    monkeypatch.setattr(display.sys, "platform", "win32")
     window = _FakeWindow(
         144.0 / 72.0,
         screen_width=1920,

@@ -24,6 +24,7 @@ def test_gui_layout_state_missing_or_malformed_falls_back_safely(tmp_path):
     assert state["density"] == "compact"
     assert state["recent_projects"] == []
     assert state["navigator_favorites"] == {}
+    assert state["table_layouts"] == {}
     assert state["window_width"] == 1440
     assert state["window_height"] == 900
     assert state["navigator_fraction"] == 0.20
@@ -272,3 +273,70 @@ def test_gui_layout_state_rejects_invalid_navigator_favorite_containers():
     assert state["navigator_favorites"] == {
         "/valid/second.cleanroomx.json": ["device:fan-1"]
     }
+
+def test_gui_layout_state_normalizes_bounded_table_layout_preferences():
+    state = normalize_gui_layout_state(
+        {
+            "table_layouts": {
+                "problems": {
+                    "visible_columns": [
+                        "severity",
+                        "code",
+                        "code",
+                        "",
+                        7,
+                        "description",
+                    ],
+                    "column_widths": {
+                        "severity": 96,
+                        "code": "240",
+                        "too-small": 5,
+                        "too-large": 9000,
+                        "boolean": True,
+                    },
+                    "sort_column": "severity",
+                    "sort_descending": True,
+                },
+                "bad-layout": "not-a-dict",
+                "": {"visible_columns": ["x"]},
+            }
+        }
+    )
+
+    assert state["table_layouts"] == {
+        "problems": {
+            "visible_columns": ["severity", "code", "description"],
+            "column_widths": {
+                "severity": 96,
+                "code": 240,
+            },
+            "sort_column": "severity",
+            "sort_descending": True,
+        }
+    }
+
+
+def test_gui_layout_state_round_trip_preserves_table_layout_preferences(tmp_path):
+    path = tmp_path / "gui-layout.json"
+    saved = save_gui_layout_state(
+        path,
+        {
+            "table_layouts": {
+                "problems": {
+                    "visible_columns": ["severity", "code"],
+                    "column_widths": {"severity": 110, "code": 280},
+                    "sort_column": "code",
+                    "sort_descending": False,
+                }
+            }
+        },
+    )
+
+    restored = load_gui_layout_state(saved)
+    assert restored["table_layouts"]["problems"] == {
+        "visible_columns": ["severity", "code"],
+        "column_widths": {"severity": 110, "code": 280},
+        "sort_column": "code",
+        "sort_descending": False,
+    }
+

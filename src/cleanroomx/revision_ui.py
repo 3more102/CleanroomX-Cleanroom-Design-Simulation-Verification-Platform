@@ -5,6 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewSortController
 from .project_revisions import ProjectRevisionScan
 
 
@@ -114,6 +115,18 @@ class ProjectRevisionCenter(tk.Toplevel):
         self.tree.column("size", width=90, anchor="e", stretch=False)
         self.tree.column("sha", width=170, stretch=False)
         self.tree.column("version", width=100, stretch=False)
+        self.table_sort = TreeviewSortController(
+            self.tree,
+            {
+                "#0": "Project",
+                "time": "Saved revision timestamp (UTC)",
+                "size": "Bytes",
+                "sha": "SHA-256",
+                "version": "CleanroomX",
+            },
+            column="time",
+            descending=True,
+        )
 
         yscroll = ttk.Scrollbar(
             table_frame,
@@ -272,6 +285,7 @@ class ProjectRevisionCenter(tk.Toplevel):
                 ),
             )
 
+        self.table_sort.reapply()
         self.count_var.set(
             f"{len(visible)} of {len(self._revisions)} verified revisions"
         )

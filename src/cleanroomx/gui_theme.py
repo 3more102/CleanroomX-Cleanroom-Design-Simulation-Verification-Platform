@@ -308,6 +308,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 9, "bold"),
     )
     style.configure(
+        "CX.Muted.TLabel",
+        background=palette["background"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
         "CX.ViewTitle.TLabel",
         background=palette["background"],
         foreground=palette["text"],

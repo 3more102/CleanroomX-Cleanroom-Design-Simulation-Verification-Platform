@@ -31,16 +31,21 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "docs/PERFORMANCE_GATES.md",
         "docs/STANDARDS.md",
         "docs/GOLDEN_REFERENCE_PROJECTS.md",
+        "docs/PRODUCTION_ACCEPTANCE.md",
         "scripts/benchmark_spatial_validation.py",
         "scripts/benchmark_project_bundle.py",
         "scripts/security_static_gate.py",
+        "scripts/production_acceptance.py",
         ".github/workflows/ci.yml",
         ".github/workflows/security.yml",
         ".github/workflows/windows-standalone.yml",
         ".github/workflows/windows-installer.yml",
+        ".github/workflows/production-acceptance.yml",
         "tests/test_golden_reference_project.py",
         "tests/test_golden_facility_reference.py",
         "tests/test_fault_injection_persistence.py",
+        "tests/test_production_acceptance.py",
+        "tests/test_production_acceptance_contract.py",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     _record(
@@ -109,6 +114,7 @@ def _workflow_contract(checks: list[dict[str, Any]]) -> None:
         ".github/workflows/security.yml",
         ".github/workflows/windows-standalone.yml",
         ".github/workflows/windows-installer.yml",
+        ".github/workflows/production-acceptance.yml",
     )
     unpinned: list[str] = []
     for path in workflow_paths:
@@ -147,6 +153,29 @@ def _workflow_contract(checks: list[dict[str, Any]]) -> None:
         "security workflow covers PR/scheduled hostile-input gates"
         if security_contract
         else "security workflow is missing a required trigger or hostile-input gate",
+    )
+
+    production = _read(".github/workflows/production-acceptance.yml")
+    production_contract = all(
+        token in production
+        for token in (
+            "pull_request:",
+            "permissions:",
+            "contents: read",
+            "persist-credentials: false",
+            "scripts/production_acceptance.py",
+            "tests/test_production_acceptance.py",
+            "actions/upload-artifact@",
+            "if-no-files-found: error",
+        )
+    )
+    _record(
+        checks,
+        "production-acceptance-workflow",
+        production_contract,
+        "production acceptance is PR-triggered, least privilege, self-evaluating, and publishes required evidence"
+        if production_contract
+        else "production acceptance workflow is missing a required trigger, privilege, self-check, or evidence publication contract",
     )
 
     ci = _read(".github/workflows/ci.yml")

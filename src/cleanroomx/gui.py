@@ -2129,6 +2129,11 @@ class CleanroomXApp:
         self.model_status_var = tk.StringVar(value="Model: ready")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
+        self.verification_status_var = tk.StringVar(value="DRC: —")
+        self.run_status_var = tk.StringVar(value="RUN: idle")
+        self.engineering_status_var = tk.StringVar(
+            value="DRC: — · RUN: idle"
+        )
         self.view_status_var = tk.StringVar(
             value="Split · 2D 100% · 3D 100% · Ortho"
         )
@@ -2881,13 +2886,20 @@ class CleanroomXApp:
         )
         ttk.Label(status_bar, textvariable=self.workspace_status_var).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
-            side="left", fill="y", padx=8
+            side="left", fill="y", padx=6
+        )
+        ttk.Label(
+            status_bar,
+            textvariable=self.engineering_status_var,
+        ).pack(side="left")
+        ttk.Separator(status_bar, orient="vertical").pack(
+            side="left", fill="y", padx=6
         )
         ttk.Label(
             status_bar,
             textvariable=self.view_status_var,
             anchor="e",
-            width=34,
+            width=28,
         ).pack(side="left")
         ttk.Separator(status_bar, orient="vertical").pack(
             side="left", fill="y", padx=8
@@ -3590,6 +3602,17 @@ class CleanroomXApp:
             if isinstance(diagnostics, dict)
             else {}
         )
+        verification_status = getattr(self, "verification_status_var", None)
+        if verification_status is not None:
+            if isinstance(diagnostics, dict):
+                verification_status.set(
+                    "DRC: "
+                    f"{int(summary.get('error_count', 0) or 0)}E/"
+                    f"{int(summary.get('warning_count', 0) or 0)}W"
+                )
+            else:
+                verification_status.set("DRC: unavailable")
+            self._sync_engineering_status()
         location = str(self.project_path) if self.project_path else "Unsaved project"
         console_lines = [
             f"CleanroomX {__version__}",
@@ -7360,15 +7383,36 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
+        self._set_run_status("abandoning")
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
+
+    def _sync_engineering_status(self) -> None:
+        verification = getattr(self, "verification_status_var", None)
+        run_state = getattr(self, "run_status_var", None)
+        target = getattr(self, "engineering_status_var", None)
+        if verification is None or run_state is None or target is None:
+            return
+        target.set(f"{verification.get()} · {run_state.get()}")
+
+    def _set_run_status(self, value: str) -> None:
+        target = getattr(self, "run_status_var", None)
+        if target is None:
+            return
+        target.set(f"RUN: {str(value or 'idle').strip()}")
+        self._sync_engineering_status()
 
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        if running:
+            self._set_run_status("running")
+        elif getattr(self, "run_status_var", None) is not None:
+            if self.run_status_var.get() == "RUN: running":
+                self._set_run_status("idle")
 
     def _poll_worker(self) -> None:
         try:
@@ -7379,10 +7423,12 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self._set_run_status("abandoned")
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._set_run_status("failed")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -7400,6 +7446,7 @@ class CleanroomXApp:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
                         self._invalidate_last_run_for(analysis_id)
+                        self._set_run_status("discarded")
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
                         )
@@ -7408,6 +7455,7 @@ class CleanroomXApp:
             run, analysis.kind, analysis.input, base_dir=self._base_dir()
         ):
                         self._invalidate_last_run_for(analysis_id)
+                        self._set_run_status("stale")
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
@@ -7426,6 +7474,7 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    self._set_run_status(str(run.status).upper())
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"

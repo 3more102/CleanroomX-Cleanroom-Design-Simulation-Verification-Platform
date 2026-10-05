@@ -75,6 +75,7 @@ from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
 from .gui_simulation import SimulationWorkspace
 from .gui_verification import VerificationWorkspace
+from .gui_evidence import EvidenceWorkspace
 from .gui_reporting import ReportingWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
@@ -1493,6 +1494,26 @@ class CleanroomXApp:
         )
         menubar.add_cascade(label="BIM", menu=bim_menu)
 
+        evidence_menu = tk.Menu(menubar, tearoff=False)
+        evidence_menu.add_command(
+            label="Evidence Workspace",
+            command=self._activate_evidence_workspace,
+        )
+        evidence_menu.add_command(
+            label="ProofGraph Explorer",
+            command=self._activate_proofgraph_workspace,
+        )
+        evidence_menu.add_separator()
+        evidence_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
+        evidence_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
+        menubar.add_cascade(label="Evidence", menu=evidence_menu)
+
         report_menu = tk.Menu(menubar, tearoff=False)
         report_menu.add_command(
             label="Reporting Workspace",
@@ -2071,6 +2092,14 @@ class CleanroomXApp:
             on_history=self.show_verification_history,
         )
         self.notebook.add(self.verification_workspace, text="Verification")
+
+        self.evidence_workspace = EvidenceWorkspace(
+            self.notebook,
+            on_open_proofgraph=self._activate_proofgraph_workspace,
+            on_open_history=self.show_verification_history,
+            on_open_traceability=self.show_requirements_traceability,
+        )
+        self.notebook.add(self.evidence_workspace, text="Evidence")
 
         self.reporting_workspace = ReportingWorkspace(
             self.notebook,
@@ -2833,7 +2862,7 @@ class CleanroomXApp:
             if hasattr(self, "verification_text"):
                 self.output_notebook.select(self.verification_text.master)
         elif profile == "evidence":
-            self._activate_proofgraph_workspace()
+            self._activate_evidence_workspace()
             if hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
         else:
@@ -2856,6 +2885,14 @@ class CleanroomXApp:
         self._refresh_engineering_panels()
         self.notebook.select(workspace)
         self.workspace_status_var.set("Workspace: Verification")
+
+    def _activate_evidence_workspace(self) -> None:
+        workspace = getattr(self, "evidence_workspace", None)
+        if workspace is None:
+            return
+        self._refresh_engineering_panels()
+        self.notebook.select(workspace)
+        self.workspace_status_var.set("Workspace: Evidence")
 
     def _open_report_output(self) -> None:
         if hasattr(self, "output_notebook") and hasattr(self, "report_text"):
@@ -3163,6 +3200,7 @@ class CleanroomXApp:
                 "record_count": len(records),
                 "proofgraph_count": len(proofgraphs),
             },
+            "evidence_records": records,
         }
 
         dashboard = getattr(self, "dashboard", None)
@@ -3172,6 +3210,10 @@ class CleanroomXApp:
         verification_workspace = getattr(self, "verification_workspace", None)
         if verification_workspace is not None:
             verification_workspace.refresh(engineering_snapshot)
+
+        evidence_workspace = getattr(self, "evidence_workspace", None)
+        if evidence_workspace is not None:
+            evidence_workspace.refresh(engineering_snapshot)
 
         reporting = getattr(self, "reporting_workspace", None)
         if reporting is not None:
@@ -3464,6 +3506,13 @@ class CleanroomXApp:
                 "Verification",
                 self.persist_project_requirements_verification,
                 keywords=("requirements", "evidence"),
+            ),
+            PaletteCommand(
+                "workspace.evidence",
+                "Open Evidence Workspace",
+                "Evidence",
+                self._activate_evidence_workspace,
+                keywords=("ledger", "provenance", "traceability", "history"),
             ),
             PaletteCommand(
                 "proofgraph.open",
@@ -5069,9 +5118,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
-            if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
-                self.show_output_panel()
-                self.output_notebook.select(self.evidence_text.master)
+            self._activate_evidence_workspace()
             self.selection_status_var.set("Selected: Evidence")
             return
         if item_id == "nav-reports":

@@ -81,6 +81,41 @@ def test_autosave_writes_separate_artifact_and_preserves_source(tmp_path):
         manager.shutdown(wait=True)
 
 
+
+def test_discard_current_recoveries_preserves_selected_artifact(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=5,
+        session_id="session-a",
+    )
+    try:
+        manager.begin_project(source)
+        for marker in (1, 2):
+            assert manager.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            ) is True
+            manager.wait_for_idle()
+
+        selected = manager.status().artifact_path
+        assert selected is not None
+        before = set(recovery_dir.glob("*.recovery.json"))
+        assert len(before) == 2
+
+        status = manager.discard_current_recoveries(
+            preserve_paths=(selected,),
+        )
+
+        assert status.state == "idle"
+        assert "preserved" in status.message.lower()
+        assert selected.exists()
+        assert set(recovery_dir.glob("*.recovery.json")) == {selected}
+    finally:
+        manager.shutdown(wait=True)
+
+
 def test_autosave_skips_identical_snapshot(tmp_path):
     source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
     manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")

@@ -1,6 +1,7 @@
 """Real Tk coverage for high-density workstation dialogs."""
 from __future__ import annotations
 
+import json
 import os
 import tkinter as tk
 
@@ -15,6 +16,9 @@ from cleanroomx.gui import (
     VerificationHistoryDialog,
     bundled_demo_project_path,
 )
+
+from cleanroomx.gui_ifc import IfcImportReviewDialog
+from cleanroomx.gui_errors import GuiErrorReport
 
 
 @pytest.fixture
@@ -241,6 +245,18 @@ def test_requirements_traceability_filters_canonical_requirements_and_mappings(a
     dialog._clear_filters()
     app.root.update()
     assert dialog.count_var.get() == "2 of 2 traceability rows"
+
+    assert dialog.focus_requirement("REQ-ACH") is True
+    app.root.update()
+    assert dialog.tree.selection() == ("requirement:REQ-ACH",)
+    assert "Minimum air changes" in dialog.detail.get("1.0", "end")
+    assert dialog.focus_requirement("REQ-MISSING") is False
+
+    assert dialog.focus_mapping("MAP-ACH") is True
+    app.root.update()
+    assert dialog.tree.selection() == ("mapping:MAP-ACH",)
+    assert "analysis-room-a" in dialog.detail.get("1.0", "end")
+    assert dialog.focus_mapping("MAP-MISSING") is False
     dialog.destroy()
 
 
@@ -297,3 +313,128 @@ def test_ifc_reimport_plan_filters_real_change_records_and_preserves_detail(app)
     app.root.update()
     assert len(dialog.tree.get_children()) == 2
     dialog.destroy()
+
+
+
+def test_ifc_import_review_dialog_exposes_identity_and_model_statistics(app):
+    snapshot = {
+        "source_name": "facility.ifc",
+        "source_sha256": "a" * 64,
+        "semantic_sha256": "b" * 64,
+        "record_count": 4,
+        "room_count": 2,
+        "device_count": 2,
+        "storey_count": 1,
+        "orphan_device_count": 1,
+        "classified_room_count": 1,
+        "analysis_linked_room_count": 1,
+        "existing_room_count": 3,
+        "existing_device_count": 4,
+        "will_replace_existing_layout": True,
+        "floor_name": "Level 1",
+        "floor_elevation_m": 0.0,
+        "ifc_class_counts": {"IfcFlowTerminal": 2, "IfcSpace": 2},
+        "device_type_counts": {"supply": 2},
+        "dimension_source_counts": {"ifc_quantities": 2},
+        "warnings": ["The current unlinked spatial layout will be replaced."],
+    }
+
+    dialog = IfcImportReviewDialog(app.root, snapshot)
+    app.root.update()
+
+    assert dialog.title() == "Review IFC Import"
+    assert len(dialog.summary_tree.get_children()) == 10
+    groups = dialog.breakdown_tree.get_children()
+    assert len(groups) == 3
+    assert dialog.breakdown_tree.item(groups[0], "text") == "IFC classes"
+    assert str(dialog.import_button.cget("state")) != "disabled"
+
+    dialog._accept()
+    assert dialog.accepted is True
+
+
+def test_structured_analysis_input_scalar_edit_is_validated_before_editor_mutation(
+    app,
+    monkeypatch,
+):
+    app.refresh_structure()
+    app.root.update()
+
+    def select_path(path):
+        for iid in app.structure_tree.get_children():
+            if app.structure_tree.item(iid, "text") == path:
+                app.structure_tree.selection_set(iid)
+                app.structure_tree.focus(iid)
+                return iid
+        raise AssertionError(f"structured row not found: {path}")
+
+    path = "$.rooms[0].min_ach"
+    select_path(path)
+    project_before = app.project.to_dict()
+    monkeypatch.setattr(
+        "cleanroomx.gui.simpledialog.askstring",
+        lambda *args, **kwargs: "26",
+    )
+
+    assert app._edit_structured_input_value() is True
+    edited = json.loads(app.input_text.get("1.0", "end-1c"))
+    assert edited["rooms"][0]["min_ach"] == 26
+    assert app.project.to_dict() == project_before
+    assert "Updated $.rooms[0].min_ach" in app.status_var.get()
+
+    app.refresh_structure()
+    select_path(path)
+    editor_before_rejected_change = app.input_text.get("1.0", "end-1c")
+    errors = []
+    monkeypatch.setattr(
+        "cleanroomx.gui.simpledialog.askstring",
+        lambda *args, **kwargs: '"not-a-number"',
+    )
+    monkeypatch.setattr(
+        "cleanroomx.gui.messagebox.showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app._edit_structured_input_value() is False
+    assert app.input_text.get("1.0", "end-1c") == editor_before_rejected_change
+    assert errors
+    assert errors[-1][0] == "Analysis input rejected"
+
+
+
+def test_operation_error_boundary_surfaces_reference_without_stack_trace(
+    app,
+    monkeypatch,
+    tmp_path,
+):
+    report = GuiErrorReport(
+        reference="CX-TEST-1234",
+        operation="Save project",
+        exception_type="RuntimeError",
+        summary="synthetic boundary failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    dialogs = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: dialogs.append((title, message)),
+    )
+
+    exc = RuntimeError("synthetic boundary failure")
+    returned = app._show_operation_error("Save failed", "Save project", exc)
+
+    assert returned is report
+    assert recorded == [("Save project", exc)]
+    assert dialogs
+    assert dialogs[-1][0] == "Save failed"
+    assert "CX-TEST-1234" in dialogs[-1][1]
+    assert "synthetic boundary failure" in dialogs[-1][1]
+    assert "Traceback" not in dialogs[-1][1]
+    assert "CX-TEST-1234" in app.status_var.get()

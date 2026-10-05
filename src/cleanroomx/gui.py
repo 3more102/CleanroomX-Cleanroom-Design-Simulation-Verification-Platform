@@ -3560,6 +3560,10 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to assess project verification currency path=%s",
+                self.project_path,
+            )
             self._set_text(
                 self.verification_text,
                 f"Verification currency unavailable: {exc}\n",
@@ -3597,6 +3601,10 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to load persisted verification evidence path=%s",
+                self.project_path,
+            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])

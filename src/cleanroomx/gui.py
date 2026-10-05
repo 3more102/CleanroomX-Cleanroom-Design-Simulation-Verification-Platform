@@ -91,6 +91,7 @@ from .gui_search import (
     build_engineering_search_entries,
 )
 from .gui_display import (
+    configure_toplevel_geometry,
     enable_windows_per_monitor_dpi_awareness,
     platform_layout_scale,
     scale_window_size,
@@ -456,7 +457,7 @@ class AnalysisPicker(tk.Toplevel):
             self.tree.selection_set(first[0])
             self.tree.focus(first[0])
 
-        self.geometry("1020x470")
+        configure_toplevel_geometry(self, 1020, 470)
 
     def _accept(self) -> None:
         selection = self.tree.selection()
@@ -585,8 +586,13 @@ class RunHistoryDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, metadata: dict):
         super().__init__(parent)
         self.title("Analysis Run History")
-        self.geometry("1360x780")
-        self.minsize(980, 560)
+        configure_toplevel_geometry(
+            self,
+            1360,
+            780,
+            min_width=980,
+            min_height=560,
+        )
         self.transient(parent)
 
         self.history_summary = validate_run_history(metadata)
@@ -957,8 +963,13 @@ class VerificationHistoryDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1460x780")
-        self.minsize(1080, 600)
+        configure_toplevel_geometry(
+            self,
+            1460,
+            780,
+            min_width=1080,
+            min_height=600,
+        )
         self.transient(parent)
 
         metadata = project.metadata
@@ -1280,8 +1291,13 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, snapshot: dict):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
-        self.geometry("1480x760")
-        self.minsize(1080, 580)
+        dialog_width, _dialog_height = configure_toplevel_geometry(
+            self,
+            1480,
+            760,
+            min_width=1080,
+            min_height=580,
+        )
         self.transient(parent)
         self._details: dict[str, dict] = {}
 
@@ -1306,7 +1322,7 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
                 "Mappings SHA-256: "
                 f"{snapshot.get('mappings_sha256') or 'not configured'}"
             ),
-            wraplength=1420,
+            wraplength=max(320, dialog_width - 60),
         ).pack(anchor="w", padx=10, pady=(0, 6))
 
         ttk.Label(
@@ -1495,8 +1511,13 @@ class IfcReimportPlanDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, report: dict):
         super().__init__(parent)
         self.title("IFC Re-import Plan")
-        self.geometry("1040x620")
-        self.minsize(780, 460)
+        dialog_width, _dialog_height = configure_toplevel_geometry(
+            self,
+            1040,
+            620,
+            min_width=780,
+            min_height=460,
+        )
         self.transient(parent)
         self.grab_set()
 
@@ -1523,7 +1544,7 @@ class IfcReimportPlanDialog(tk.Toplevel):
         ttk.Label(
             self,
             text=summary_text,
-            wraplength=980,
+            wraplength=max(320, dialog_width - 60),
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
         frame = ttk.Frame(self)

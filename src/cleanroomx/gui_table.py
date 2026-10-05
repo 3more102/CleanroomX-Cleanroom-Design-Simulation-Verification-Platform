@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 import tkinter as tk
 from tkinter import ttk
@@ -48,6 +48,9 @@ class TreeviewTableBehavior:
         sortable_columns: Iterable[str],
         copy_columns: Iterable[str] | None = None,
         parent: str = "",
+        sort_key_by_column: Mapping[
+            str, Callable[[str], tuple[int, Any]]
+        ] | None = None,
     ) -> None:
         self.tree = tree
         self.parent = parent
@@ -62,6 +65,10 @@ class TreeviewTableBehavior:
             )
         self.data_columns = tuple(str(item) for item in tree["columns"])
         self._default_display_columns = self.data_columns
+        self._default_widths = {
+            column: int(tree.column(column, "width")) for column in self.data_columns
+        }
+        self.sort_key_by_column = dict(sort_key_by_column or {})
         self.sort_column: str | None = None
         self.sort_descending = False
         self._heading_text: dict[str, str] = {}
@@ -77,6 +84,15 @@ class TreeviewTableBehavior:
             command=lambda: self.copy_selected(with_headers=True),
         )
         self._menu.add_command(label="Select all rows", command=self.select_all)
+        self._menu.add_separator()
+        self._menu.add_command(
+            label="Auto-size visible columns",
+            command=self.autosize_visible_columns,
+        )
+        self._menu.add_command(
+            label="Reset column layout",
+            command=self.reset_column_layout,
+        )
         self._menu.add_separator()
 
         self._columns_menu = tk.Menu(self._menu, tearoff=False)
@@ -115,10 +131,16 @@ class TreeviewTableBehavior:
 
         tree.bind("<Control-c>", self._copy_event, add="+")
         tree.bind("<Control-C>", self._copy_event, add="+")
+        tree.bind("<Control-a>", self._select_all_event, add="+")
+        tree.bind("<Control-A>", self._select_all_event, add="+")
         tree.bind("<Button-3>", self._context_menu, add="+")
 
     def _copy_event(self, _event=None):
         self.copy_selected()
+        return "break"
+
+    def _select_all_event(self, _event=None):
+        self.select_all()
         return "break"
 
     def _context_menu(self, event: tk.Event):
@@ -164,7 +186,8 @@ class TreeviewTableBehavior:
         missing: list[tuple[int, str]] = []
         for index, iid in enumerate(children):
             raw = treeview_cell_text(self.tree, iid, column)
-            key = table_value_sort_key(raw)
+            key_fn = self.sort_key_by_column.get(column, table_value_sort_key)
+            key = key_fn(raw)
             if key[0] == 2:
                 missing.append((index, iid))
             else:
@@ -261,6 +284,48 @@ class TreeviewTableBehavior:
         except tk.TclError:
             return
         self._sync_column_vars()
+
+    def reset_column_layout(self) -> None:
+        """Restore original column visibility, order, and widths."""
+        try:
+            self.tree.configure(displaycolumns=self._default_display_columns)
+            for column, width in self._default_widths.items():
+                self.tree.column(column, width=width)
+        except tk.TclError:
+            return
+        self._sync_column_vars()
+
+    def autosize_visible_columns(
+        self,
+        *,
+        min_width: int = 80,
+        max_width: int = 520,
+        padding: int = 28,
+        sample_limit: int = 250,
+    ) -> None:
+        """Fit visible columns to headings and current rows without unbounded growth."""
+        try:
+            import tkinter.font as tkfont
+
+            font = tkfont.nametofont("TkDefaultFont")
+        except (tk.TclError, RuntimeError):
+            return
+
+        children = self._ordered_children()[: max(0, int(sample_limit))]
+        for column in self.visible_columns():
+            try:
+                heading = self._column_label(column)
+                width = font.measure(heading) + padding
+                for iid in children:
+                    width = max(
+                        width,
+                        font.measure(treeview_cell_text(self.tree, iid, column))
+                        + padding,
+                    )
+                width = max(int(min_width), min(int(max_width), int(width)))
+                self.tree.column(column, width=width)
+            except tk.TclError:
+                continue
 
     def select_all(self) -> bool:
         children = self._ordered_children()

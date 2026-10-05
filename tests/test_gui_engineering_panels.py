@@ -86,12 +86,17 @@ def test_ui_layout_save_failure_uses_non_modal_diagnostic_boundary(app, monkeypa
         ),
     )
 
+    app.status_var.set("Ready")
     app._save_ui_layout_state()
 
     assert recorded["operation"] == "Save workstation layout"
     assert isinstance(recorded["exception"], OSError)
     assert str(recorded["exception"]) == "layout storage unavailable"
     assert app.status_var.get() == "Workstation layout not saved · CX-TEST-LAYOUT"
+
+    app.status_var.set("Save Project As required for migrated source")
+    app._save_ui_layout_state()
+    assert app.status_var.get() == "Save Project As required for migrated source"
 
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):

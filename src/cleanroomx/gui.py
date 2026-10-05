@@ -5660,6 +5660,18 @@ class CleanroomXApp:
         if tree is None or not item_id or not tree.exists(item_id):
             return None
         menu = tk.Menu(self.root, tearoff=False)
+        if self._navigator_item_is_actionable(item_id):
+            menu.add_command(
+                label=(
+                    "Remove from Favorites"
+                    if self._is_navigator_favorite(item_id)
+                    else "Add to Favorites"
+                ),
+                command=lambda selected=item_id: self._toggle_navigator_favorite(
+                    selected
+                ),
+            )
+            menu.add_separator()
         if item_id.startswith("room:") or item_id.startswith("device:"):
             kind, spatial_id = item_id.split(":", 1)
 
@@ -5811,6 +5823,8 @@ class CleanroomXApp:
             )
         self._capture_navigator_tree()
         self._apply_navigator_filter()
+        self._refresh_navigator_recent_picker()
+        self._refresh_navigator_favorites_picker()
 
     def _sync_spatial_selection_status(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -5834,7 +5848,9 @@ class CleanroomXApp:
         if not selection:
             return
         item_id = selection[0]
+        self._update_navigator_favorite_button()
         if item_id.startswith("room:") or item_id.startswith("device:"):
+            self._remember_navigator_item(item_id)
             kind, spatial_id = item_id.split(":", 1)
             if hasattr(self, "spatial_workspace"):
                 self.spatial_workspace.select_item(kind, spatial_id)
@@ -5843,10 +5859,12 @@ class CleanroomXApp:
                 self._sync_proofgraph_spatial_selection(kind, spatial_id)
             return
         if item_id == "nav-proofgraph":
+            self._remember_navigator_item(item_id)
             self._activate_proofgraph_workspace()
             self.selection_status_var.set("Selected: ProofGraph")
             return
         if item_id == "nav-evidence":
+            self._remember_navigator_item(item_id)
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
@@ -5857,6 +5875,8 @@ class CleanroomXApp:
         analysis = self._current_analysis()
         if analysis is not None:
             self.selection_status_var.set(f"Selected: {analysis.name}")
+            if analysis.id == item_id:
+                self._remember_navigator_item(item_id)
 
     def _on_workspace_selection_change(self, kind: str, item_id: str) -> None:
         tree = getattr(self, "analysis_tree", None)
@@ -5865,6 +5885,7 @@ class CleanroomXApp:
         navigator_id = f"{kind}:{item_id}"
         self._sync_spatial_selection_status()
         self._sync_proofgraph_spatial_selection(kind, item_id)
+        self._remember_navigator_item(navigator_id)
         if not tree.exists(navigator_id):
             self._refresh_spatial_navigator()
         if not tree.exists(navigator_id):

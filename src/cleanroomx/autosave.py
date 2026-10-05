@@ -109,6 +109,37 @@ class _AutosaveRequest:
     digest: str
 
 
+@dataclass(frozen=True)
+class _RecoveryRetentionCandidate:
+    path: Path
+    saved_at_utc: str
+    recovery_id: str
+    size_bytes: int
+    sha256: str
+    file_identity: tuple[str, int, int]
+
+
+def _recovery_retention_file_identity(
+    metadata: os.stat_result,
+) -> tuple[str, int, int] | None:
+    """Return rename-stable file identity for retention ownership checks."""
+    inode = int(metadata.st_ino)
+    if os.name == "nt":
+        if inode != 0:
+            return ("windows-file-index", int(metadata.st_dev), inode)
+        birthtime_ns = getattr(metadata, "st_birthtime_ns", None)
+        if birthtime_ns is not None:
+            return ("windows-birthtime", 0, int(birthtime_ns))
+        # On Windows st_ctime_ns is creation time on Python versions
+        # without st_birthtime_ns and remains stable across a same-volume rename.
+        return ("windows-creation-time", 0, int(metadata.st_ctime_ns))
+    if inode == 0:
+        # Destructive retention must fail closed when no rename-stable identity
+        # is exposed by the filesystem.
+        return None
+    return ("posix-inode", int(metadata.st_dev), inode)
+
+
 def _utc_now_text() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
@@ -409,23 +440,80 @@ def _resolve_recovery_artifact_path(
     return resolved_artifact, resolved_directory
 
 
-def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bool:
-    """Return whether one quarantine manifest still binds to its exact artifact bytes."""
+def _quarantine_pair_fingerprint(
+    manifest_path: Path,
+    artifact_path: Path,
+) -> tuple[int, int, str, int, int, int, str, int] | None:
+    """Return content plus stable file identity for a complete quarantine pair."""
     try:
+        manifest_before, manifest_sha256_before = stable_file_sha256(
+            manifest_path,
+            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
+        )
         manifest = load_strict_json(
             manifest_path,
             max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
         )
+        manifest_after, manifest_sha256_after = stable_file_sha256(
+            manifest_path,
+            max_bytes=RECOVERY_QUARANTINE_MANIFEST_MAX_BYTES,
+        )
     except (OSError, ValueError):
-        return False
-    if not isinstance(manifest, dict):
-        return False
+        return None
+
+    manifest_identity_before = (manifest_before.st_dev, manifest_before.st_ino)
+    manifest_identity_after = (manifest_after.st_dev, manifest_after.st_ino)
+    if (
+        manifest_before.st_ino == 0
+        or manifest_after.st_ino == 0
+        or manifest_identity_before != manifest_identity_after
+        or manifest_before.st_size != manifest_after.st_size
+        or manifest_sha256_before != manifest_sha256_after
+        or not isinstance(manifest, dict)
+    ):
+        # A filesystem without stable inode identity cannot support safe
+        # revision-bound retention deletion. Fail closed and preserve evidence.
+        return None
+
+    expected_fields = {
+        "schema",
+        "schema_version",
+        "quarantined_at_utc",
+        "original_name",
+        "quarantined_name",
+        "reason",
+        "size_bytes",
+        "sha256",
+    }
+    if set(manifest) != expected_fields:
+        return None
+
+    version = manifest.get("schema_version")
     if (
         manifest.get("schema") != RECOVERY_QUARANTINE_SCHEMA
-        or manifest.get("schema_version") != RECOVERY_QUARANTINE_SCHEMA_VERSION
+        or type(version) is not int
+        or version != RECOVERY_QUARANTINE_SCHEMA_VERSION
         or manifest.get("quarantined_name") != artifact_path.name
     ):
-        return False
+        return None
+
+    original_name = manifest.get("original_name")
+    reason = manifest.get("reason")
+    quarantined_at_utc = manifest.get("quarantined_at_utc")
+    if (
+        not isinstance(original_name, str)
+        or not original_name
+        or Path(original_name).name != original_name
+        or not isinstance(reason, str)
+        or not reason.strip()
+        or not isinstance(quarantined_at_utc, str)
+        or not quarantined_at_utc
+    ):
+        return None
+    try:
+        _parse_utc(quarantined_at_utc)
+    except RecoveryFormatError:
+        return None
 
     size_bytes = manifest.get("size_bytes")
     digest = manifest.get("sha256")
@@ -437,25 +525,133 @@ def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bo
         or len(digest) != 64
         or any(character not in "0123456789abcdef" for character in digest)
     ):
-        return False
+        return None
 
     try:
-        stat_result, actual_sha256 = stable_file_sha256(
+        artifact_stat, artifact_sha256 = stable_file_sha256(
             artifact_path,
             max_bytes=RECOVERY_FILE_MAX_BYTES,
         )
     except OSError:
-        return False
-    return stat_result.st_size == size_bytes and actual_sha256 == digest
+        return None
+    if (
+        artifact_stat.st_ino == 0
+        or artifact_stat.st_size != size_bytes
+        or artifact_sha256 != digest
+    ):
+        return None
+
+    return (
+        manifest_after.st_dev,
+        manifest_after.st_ino,
+        manifest_sha256_after,
+        manifest_after.st_size,
+        artifact_stat.st_dev,
+        artifact_stat.st_ino,
+        artifact_sha256,
+        artifact_stat.st_size,
+    )
+
+
+def _quarantine_pair_is_verified(manifest_path: Path, artifact_path: Path) -> bool:
+    """Return whether one quarantine manifest still binds to its exact artifact bytes."""
+    return _quarantine_pair_fingerprint(manifest_path, artifact_path) is not None
+
+
+def _restore_staged_quarantine_path(staged_path: Path, original_path: Path) -> None:
+    """Restore a staged path without overwriting a concurrent replacement."""
+    try:
+        os.link(staged_path, original_path)
+    except OSError:
+        return
+    try:
+        staged_path.unlink()
+    except OSError:
+        pass
+
+
+def _prune_verified_quarantine_pair(
+    manifest_path: Path,
+    artifact_path: Path,
+    expected_fingerprint: tuple[int, int, str, int, int, int, str, int],
+) -> None:
+    """Stage one verified pair privately, re-verify its revision, then delete it."""
+    staging_dir = manifest_path.parent / f".retention-{uuid.uuid4().hex}"
+    try:
+        staging_dir.mkdir(mode=0o700)
+    except OSError:
+        return
+
+    staged_artifact = staging_dir / artifact_path.name
+    staged_manifest = staging_dir / manifest_path.name
+    artifact_staged = False
+    manifest_staged = False
+    try:
+        os.replace(artifact_path, staged_artifact)
+        artifact_staged = True
+        os.replace(manifest_path, staged_manifest)
+        manifest_staged = True
+    except OSError:
+        if manifest_staged:
+            _restore_staged_quarantine_path(staged_manifest, manifest_path)
+        if artifact_staged:
+            _restore_staged_quarantine_path(staged_artifact, artifact_path)
+        try:
+            staging_dir.rmdir()
+        except OSError:
+            pass
+        return
+
+    staged_fingerprint = _quarantine_pair_fingerprint(
+        staged_manifest,
+        staged_artifact,
+    )
+    if staged_fingerprint != expected_fingerprint:
+        _restore_staged_quarantine_path(staged_manifest, manifest_path)
+        _restore_staged_quarantine_path(staged_artifact, artifact_path)
+        try:
+            staging_dir.rmdir()
+        except OSError:
+            pass
+        return
+
+    try:
+        staged_artifact.unlink()
+    except OSError:
+        _restore_staged_quarantine_path(staged_manifest, manifest_path)
+        _restore_staged_quarantine_path(staged_artifact, artifact_path)
+        try:
+            staging_dir.rmdir()
+        except OSError:
+            pass
+        return
+
+    try:
+        staged_manifest.unlink()
+    except OSError:
+        pass
+    try:
+        staging_dir.rmdir()
+    except OSError:
+        pass
 
 
 def _rotate_quarantine(directory: Path, history_limit: int) -> None:
-    manifests: list[tuple[int, str, Path, Path]] = []
+    manifests: list[
+        tuple[
+            int,
+            str,
+            Path,
+            Path,
+            tuple[int, int, str, int, int, int, str, int],
+        ]
+    ] = []
     for manifest in directory.glob("*.quarantined.manifest.json"):
         artifact = manifest.with_name(
             manifest.name[: -len(".manifest.json")]
         )
-        if not _quarantine_pair_is_verified(manifest, artifact):
+        fingerprint = _quarantine_pair_fingerprint(manifest, artifact)
+        if fingerprint is None:
             # Retention must never destroy forensic evidence whose manifest or
             # suspect bytes are no longer trustworthy. Preserve the pair for
             # explicit operator review instead of counting it as rotatable history.
@@ -464,20 +660,22 @@ def _rotate_quarantine(directory: Path, history_limit: int) -> None:
             modified_ns = manifest.stat().st_mtime_ns
         except OSError:
             continue
-        manifests.append((modified_ns, manifest.name, manifest, artifact))
+        manifests.append(
+            (modified_ns, manifest.name, manifest, artifact, fingerprint)
+        )
 
-    for _modified, _name, stale_manifest, stale_artifact in sorted(
-        manifests, reverse=True
-    )[history_limit:]:
-        # Re-verify immediately before deletion so a pair that changed after
-        # discovery is preserved rather than silently discarded.
-        if not _quarantine_pair_is_verified(stale_manifest, stale_artifact):
-            continue
-        try:
-            stale_artifact.unlink(missing_ok=True)
-            stale_manifest.unlink(missing_ok=True)
-        except OSError:
-            continue
+    for (
+        _modified,
+        _name,
+        stale_manifest,
+        stale_artifact,
+        expected_fingerprint,
+    ) in sorted(manifests, reverse=True)[history_limit:]:
+        _prune_verified_quarantine_pair(
+            stale_manifest,
+            stale_artifact,
+            expected_fingerprint,
+        )
 
 
 def quarantine_recovery_artifact(
@@ -651,6 +849,125 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
     return RecoveryScan(candidates=tuple(candidates), issues=tuple(issues))
 
 
+def _capture_recovery_retention_candidate(
+    path: Path,
+    *,
+    project_identity: str,
+    session_id: str,
+) -> _RecoveryRetentionCandidate | None:
+    """Bind retention eligibility to one stable, validated recovery revision."""
+    try:
+        before_stat, before_sha256 = stable_file_sha256(
+            path,
+            max_bytes=RECOVERY_FILE_MAX_BYTES,
+        )
+        recovery = load_recovery_artifact(path)
+        after_stat, after_sha256 = stable_file_sha256(
+            path,
+            max_bytes=RECOVERY_FILE_MAX_BYTES,
+        )
+    except (OSError, RecoveryFormatError, TypeError, ValueError):
+        return None
+
+    before_identity = _recovery_retention_file_identity(before_stat)
+    after_identity = _recovery_retention_file_identity(after_stat)
+    if (
+        before_identity is None
+        or after_identity is None
+        or before_stat.st_size != after_stat.st_size
+        or before_sha256 != after_sha256
+        or before_identity != after_identity
+        or recovery.get("project_identity") != project_identity
+        or recovery.get("session_id") != session_id
+    ):
+        return None
+    recovery_id = recovery.get("recovery_id")
+    saved_at_utc = recovery.get("saved_at_utc")
+    if not isinstance(recovery_id, str) or not recovery_id:
+        return None
+    if not isinstance(saved_at_utc, str) or not saved_at_utc:
+        return None
+    return _RecoveryRetentionCandidate(
+        path=path,
+        saved_at_utc=saved_at_utc,
+        recovery_id=recovery_id,
+        size_bytes=after_stat.st_size,
+        sha256=after_sha256,
+        file_identity=after_identity,
+    )
+
+
+def _delete_recovery_retention_candidate(
+    candidate: _RecoveryRetentionCandidate,
+    *,
+    project_identity: str,
+    session_id: str,
+) -> bool:
+    """Stage, revalidate, then delete only the exact discovered recovery revision."""
+    staged = candidate.path.with_name(
+        f"retention-{uuid.uuid4().hex}-{candidate.path.name}"
+    )
+    try:
+        os.replace(candidate.path, staged)
+    except OSError:
+        return False
+
+    delete_verified = False
+    try:
+        try:
+            stat_result, digest = stable_file_sha256(
+                staged,
+                max_bytes=RECOVERY_FILE_MAX_BYTES,
+            )
+            staged_identity = _recovery_retention_file_identity(stat_result)
+            if (
+                staged_identity is None
+                or stat_result.st_size != candidate.size_bytes
+                or digest != candidate.sha256
+                or staged_identity != candidate.file_identity
+            ):
+                return False
+
+            recovery = load_recovery_artifact(staged)
+        except (OSError, RecoveryFormatError, TypeError, ValueError):
+            # Retention is best-effort evidence cleanup. If the staged pathname
+            # changes, becomes unreadable, or no longer parses as the exact
+            # validated recovery, preserve it rather than letting cleanup escape
+            # into the autosave completion callback.
+            return False
+
+        if (
+            recovery.get("project_identity") != project_identity
+            or recovery.get("session_id") != session_id
+            or recovery.get("recovery_id") != candidate.recovery_id
+            or recovery.get("saved_at_utc") != candidate.saved_at_utc
+        ):
+            return False
+
+        try:
+            staged.unlink()
+        except OSError:
+            return False
+        delete_verified = True
+        return True
+    finally:
+        if not delete_verified and staged.exists():
+            # A raced or otherwise changed candidate is evidence, not disposable
+            # history. Restore it atomically when the original pathname is vacant;
+            # otherwise preserve the staged bytes under its unique retention name.
+            try:
+                os.link(staged, candidate.path)
+            except FileExistsError:
+                pass
+            except OSError:
+                pass
+            else:
+                try:
+                    staged.unlink()
+                except OSError:
+                    pass
+
+
 class AutosaveManager:
     """Serialize recovery snapshots away from the Tk/UI thread.
 
@@ -820,31 +1137,35 @@ class AutosaveManager:
         return destination
 
     def _rotate_history(self, identity: str) -> None:
-        """Prune only recovery generations owned by this manager's session.
+        """Prune only exact verified recovery revisions owned by this session.
 
-        Project identity alone is not a safe ownership boundary because multiple
-        CleanroomX processes can edit the same project concurrently. The filename
-        token narrows discovery to this session, then the recovery envelope is
-        validated before deletion so malformed or foreign evidence is preserved.
+        Discovery captures one stable byte revision for every eligible recovery.
+        Deletion first atomically stages that pathname to a unique retention name,
+        then revalidates the staged bytes and recovery identity before unlinking.
+        A concurrent replacement is restored or preserved instead of destroyed.
         """
         session_token = _session_filename_token(self.session_id)
-        owned: list[tuple[str, Path]] = []
+        owned: list[_RecoveryRetentionCandidate] = []
         pattern = f"{identity}-session-{session_token}-*.recovery.json"
         for path in self.recovery_dir.glob(pattern):
-            try:
-                recovery = load_recovery_artifact(path)
-            except (OSError, RecoveryFormatError, TypeError, ValueError):
-                continue
-            if (
-                recovery.get("project_identity") != identity
-                or recovery.get("session_id") != self.session_id
-            ):
-                continue
-            owned.append((recovery["saved_at_utc"], path))
+            candidate = _capture_recovery_retention_candidate(
+                path,
+                project_identity=identity,
+                session_id=self.session_id,
+            )
+            if candidate is not None:
+                owned.append(candidate)
 
-        owned.sort(key=lambda item: (item[0], item[1].name), reverse=True)
-        for _saved_at, stale in owned[self.history_limit :]:
-            stale.unlink(missing_ok=True)
+        owned.sort(
+            key=lambda item: (item.saved_at_utc, item.path.name),
+            reverse=True,
+        )
+        for stale in owned[self.history_limit :]:
+            _delete_recovery_retention_candidate(
+                stale,
+                project_identity=identity,
+                session_id=self.session_id,
+            )
 
     def _on_write_done(
         self,

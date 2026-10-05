@@ -6,6 +6,7 @@ import tkinter as tk
 
 import pytest
 
+from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 from cleanroomx.gui_tasks import EngineeringTaskCenter, EngineeringTaskModel
 
 
@@ -119,5 +120,54 @@ def test_task_center_exposes_truthful_abandon_lifecycle():
         assert snapshot.state == "abandoned"
         assert snapshot.finished is True
         assert updates[-1] == (0, 1)
+    finally:
+        root.destroy()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("DISPLAY"),
+    reason="real Tk display required",
+)
+def test_cleanroomx_shell_tracks_analysis_task_without_faking_backend_cancellation(tmp_path):
+    root = tk.Tk()
+    callback_errors = []
+    root.report_callback_exception = lambda *args: callback_errors.append(args)
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    try:
+        app.load_project_path(bundled_demo_project_path())
+        root.update()
+        analysis = app._editor_analysis()
+        assert analysis is not None
+
+        app._start_run_task(42, analysis)
+        root.update()
+        assert app.task_center.active_count() == 1
+        assert app.output_notebook.tab(app.task_center, "text") == "Tasks 1"
+        assert app.task_status_var.get().startswith("Tasks: 1 active")
+        task = app.task_center.model.snapshot("analysis-run:42")
+        assert task.state == "running"
+        assert "backend solver" in task.detail
+
+        app._mark_run_task_abandon_requested()
+        root.update()
+        assert app.task_center.model.snapshot("analysis-run:42").state == "abandon_requested"
+
+        app._finish_run_task(
+            "abandoned",
+            "Backend worker finished; result ignored by operator request.",
+        )
+        root.update()
+        finished = app.task_center.model.snapshot("analysis-run:42")
+        assert finished.state == "abandoned"
+        assert app.task_center.active_count() == 0
+        assert app.output_notebook.tab(app.task_center, "text") == "Tasks"
+
+        commands = {command.id for command in app._command_palette_commands()}
+        assert "workspace.tasks" in commands
+        assert callback_errors == []
     finally:
         root.destroy()

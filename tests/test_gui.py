@@ -8,9 +8,11 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
+from cleanroomx.gui_errors import GuiErrorReport
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectSaveDurabilityError,
     capture_project_file_revision,
     load_project_document,
     save_project_document,
@@ -1961,6 +1963,112 @@ def test_gui_project_requirements_verification_persists_adverse_evidence(
     assert warnings[-1][0] == "Verification evidence persisted"
     assert "Persisted sequence: 7" in warnings[-1][1]
     assert "Adverse/incomplete verification persisted" in app.status_var.value
+
+
+def test_verification_persistence_durability_reload_failure_is_not_silent(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="Durability reload failure",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    workflow = object()
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda path, analysis_id: workflow,
+    )
+
+    def fail_persist(path, value):
+        assert Path(path) == project_path
+        assert value is workflow
+        raise ProjectSaveDurabilityError(project_path, revision)
+
+    monkeypatch.setattr(
+        gui_module,
+        "persist_project_requirements_workflow_run",
+        fail_persist,
+    )
+
+    def fail_reload(path):
+        assert Path(path) == project_path
+        raise RuntimeError("synthetic reload failure")
+
+    app.load_project_path = fail_reload
+
+    report = GuiErrorReport(
+        reference="CX-RELOAD-1234",
+        operation="Reload project after durability-uncertain verification commit",
+        exception_type="RuntimeError",
+        summary="synthetic reload failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app.persist_project_requirements_verification() is False
+
+    assert warnings == []
+    assert errors
+    assert errors[-1][0] == "Verification committed; reload failed"
+    assert revision.sha256 in errors[-1][1]
+    assert "CX-RELOAD-1234" in errors[-1][1]
+    assert "in-memory view may be stale" in errors[-1][1]
+    assert recorded
+    assert recorded[0][0] == (
+        "Reload project after durability-uncertain verification commit"
+    )
+    assert isinstance(recorded[0][1], RuntimeError)
+    assert "CX-RELOAD-1234" in app.status_var.value
 
 
 def test_verification_history_currency_context_applies_only_to_latest_record():

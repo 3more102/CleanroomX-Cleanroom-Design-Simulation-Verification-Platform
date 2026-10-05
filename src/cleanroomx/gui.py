@@ -6284,10 +6284,15 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        activity = getattr(self, "run_activity", None)
         if running:
-            self.run_activity.start(14)
+            start = getattr(activity, "start", None)
+            if callable(start):
+                start(14)
         else:
-            self.run_activity.stop()
+            stop = getattr(activity, "stop", None)
+            if callable(stop):
+                stop()
 
     def _poll_worker(self) -> None:
         try:

@@ -226,7 +226,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("active", palette["panel"]),
         ],
         foreground=[
-            ("selected", palette["text"]),
+            ("selected", palette["accent"]),
             ("active", palette["text"]),
         ],
     )
@@ -278,6 +278,93 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=[("active", palette["surface"])],
         foreground=[("disabled", palette["disabled"])],
     )
+
+    # Restrained industrial semantic colors communicate engineering state
+    # without competing with the design canvas.
+    semantic = {
+        "success": "#22C55E",
+        "warning": "#F59E0B",
+        "danger": "#EF4444",
+        "info": "#38BDF8",
+        "violet": "#8B5CF6",
+    }
+
+    style.configure(
+        "CX.Workbench.TFrame",
+        background=palette["surface"],
+    )
+    style.configure(
+        "CX.Panel.TFrame",
+        background=palette["panel"],
+    )
+    style.configure(
+        "CX.Statusbar.TFrame",
+        background=palette["surface_alt"],
+        padding=(8, 4),
+    )
+    style.configure(
+        "CX.Status.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.Workflow.TFrame",
+        background=palette["surface"],
+        padding=(5, 4),
+    )
+    style.configure(
+        "CX.WorkflowLabel.TLabel",
+        background=palette["surface"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.Muted.TLabel",
+        background=palette["background"],
+        foreground=palette["muted"],
+    )
+    for style_name, color in (
+        ("CX.Success.TLabel", semantic["success"]),
+        ("CX.Warning.TLabel", semantic["warning"]),
+        ("CX.Error.TLabel", semantic["danger"]),
+        ("CX.Info.TLabel", semantic["info"]),
+    ):
+        style.configure(
+            style_name,
+            background=palette["background"],
+            foreground=color,
+            font=("TkDefaultFont", 9, "bold"),
+        )
+
+    for style_name, color in (
+        ("CX.Success.TButton", semantic["success"]),
+        ("CX.Warning.TButton", semantic["warning"]),
+        ("CX.Danger.TButton", semantic["danger"]),
+        ("CX.Info.TButton", semantic["info"]),
+        ("CX.Violet.TButton", semantic["violet"]),
+    ):
+        style.configure(
+            style_name,
+            background=color,
+            foreground="#ffffff",
+            bordercolor=color,
+            lightcolor=color,
+            darkcolor=color,
+            padding=(9, 5),
+        )
+        style.map(
+            style_name,
+            background=[
+                ("active", color),
+                ("pressed", color),
+                ("disabled", palette["surface_alt"]),
+            ],
+            foreground=[
+                ("disabled", palette["disabled"]),
+                ("!disabled", "#ffffff"),
+            ],
+        )
 
     style.configure(
         "CX.Brand.TLabel",
@@ -357,7 +444,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.PanelHeader.TLabel",
         background=palette["surface_alt"],
-        foreground=palette["text"],
+        foreground=palette["accent"],
         font=("TkDefaultFont", 9, "bold"),
     )
     style.configure(

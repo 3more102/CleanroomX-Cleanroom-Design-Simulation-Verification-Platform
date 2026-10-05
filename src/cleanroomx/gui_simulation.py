@@ -368,6 +368,14 @@ class SimulationWorkspace(ttk.Frame):
         self.convergence_var.set(_explicit_convergence(result))
         self.plot_var.set("AVAILABLE" if getattr(run, "plot", None) is not None else "NOT PROVIDED")
 
+    def set_blocked(self, reason: str) -> None:
+        self.state_var.set("BLOCKED")
+        self.state_badge.configure(style="CX.Status.Fail.TLabel")
+        self.stage_var.set(str(reason))
+        self.run_button.configure(state="normal")
+        self.cancel_button.configure(state="disabled")
+        self.progress.stop()
+
     def set_failed(self, message: str) -> None:
         self.state_var.set("FAILED")
         self.state_badge.configure(style="CX.Status.Fail.TLabel")

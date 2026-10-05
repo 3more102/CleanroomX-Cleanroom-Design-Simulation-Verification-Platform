@@ -174,3 +174,59 @@ def test_problem_severity_is_accessible_and_follows_dark_theme(app):
     app.root.update_idletasks()
     palette = theme_palette("dark")
     assert panel.detail.cget("background").lower() == palette["field"].lower()
+
+
+def test_engineering_dashboard_reflects_canonical_project_health(app):
+    result = app.problems_panel.last_result
+    assert result is not None
+
+    app._activate_dashboard_workspace()
+    app.root.update()
+
+    assert "Dashboard" in _tab_texts(app.notebook)
+    assert app.notebook.select() == str(app.dashboard_panel)
+    assert app.workspace_mode_buttons["dashboard"].cget("style") == (
+        "CX.ModeDashboardActive.TButton"
+    )
+
+    summary = result["summary"]
+    expected_health = (
+        "ERRORS PRESENT"
+        if summary["error_count"]
+        else ("ATTENTION" if summary["warning_count"] else "PASS")
+    )
+    assert app.dashboard_panel.health_var.get() == expected_health
+    assert f"{summary['error_count']} errors" in app.dashboard_panel.diagnostics_var.get()
+    assert f"{result['project']['spatial_room_count']} rooms" in (
+        app.dashboard_panel.spatial_var.get()
+    )
+    assert f"{result['project']['verification_run_count']} persisted verification" in (
+        app.dashboard_panel.evidence_var.get()
+    )
+    assert "%" not in app.dashboard_panel.health_var.get()
+
+
+def test_engineering_dashboard_promotes_and_locates_canonical_error(app):
+    _result, issue = _force_room_overlap(app)
+    dashboard = app.dashboard_panel
+
+    assert dashboard.health_var.get() == "ERRORS PRESENT"
+    target_iid = next(
+        iid
+        for iid, candidate in dashboard._issues_by_iid.items()
+        if candidate["sequence"] == issue["sequence"]
+    )
+    assert dashboard.issue_tree.set(target_iid, "severity") == "✕ ERROR"
+
+    dashboard.issue_tree.selection_set(target_iid)
+    dashboard.issue_tree.focus(target_iid)
+    dashboard._show_detail()
+    assert dashboard.locate_button.instate(["!disabled"])
+    dashboard._locate_selected()
+    app.root.update()
+
+    assert app.spatial_workspace.selected == _Hit(
+        "room",
+        issue["element"]["id"],
+    )
+    assert app.notebook.select() == str(app.spatial_workspace)

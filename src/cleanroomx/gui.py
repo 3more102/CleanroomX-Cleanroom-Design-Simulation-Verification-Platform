@@ -73,6 +73,7 @@ from .project_diagnostics_cli import (
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_dashboard import EngineeringDashboard
 from .gui_results import AnalysisResultPanel
+from .gui_diagnostics import DiagnosticsWorkspace
 from .gui_simulation import SimulationWorkspace
 from .gui_tasks import TaskCenter
 from .gui_assurance import EvidenceWorkspace, VerificationWorkspace
@@ -2099,13 +2100,22 @@ class CleanroomXApp:
         )
         self.notebook.add(self.simulation_workspace, text="Simulation")
 
+        self.diagnostics_workspace = DiagnosticsWorkspace(
+            self.notebook,
+            on_refresh=self._refresh_engineering_panels,
+            on_navigate=self._navigate_project_diagnostic,
+            on_export=self.export_project_diagnostics,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.diagnostics_workspace, text="Diagnostics")
+
         self.verification_workspace = VerificationWorkspace(
             self.notebook,
             on_verify=self.run_project_requirements_verification,
             on_persist=self.persist_project_requirements_verification,
             on_traceability=self.show_requirements_traceability,
             on_history=self.show_verification_history,
-            on_problems=self.show_problems_panel,
+            on_problems=self._activate_diagnostics_workspace,
             on_proofgraph=self._activate_proofgraph_workspace,
         )
         self.notebook.add(self.verification_workspace, text="Verification")
@@ -2566,6 +2576,9 @@ class CleanroomXApp:
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
             problems_panel.apply_theme(self.theme_var.get())
+        diagnostics_workspace = getattr(self, "diagnostics_workspace", None)
+        if diagnostics_workspace is not None:
+            diagnostics_workspace.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -3193,6 +3206,12 @@ class CleanroomXApp:
             except tk.TclError:
                 pass
 
+        diagnostics_workspace = getattr(self, "diagnostics_workspace", None)
+        if diagnostics_workspace is not None:
+            diagnostics_workspace.refresh(
+                diagnostics if isinstance(diagnostics, dict) else None
+            )
+
         verification_workspace = getattr(self, "verification_workspace", None)
         if verification_workspace is not None:
             verification_workspace.refresh(currency)
@@ -3645,6 +3664,13 @@ class CleanroomXApp:
                 keywords=("solver", "calculate"),
             ),
             PaletteCommand(
+                "workspace.diagnostics",
+                "Open Diagnostics Workspace",
+                "Verification",
+                self._activate_diagnostics_workspace,
+                keywords=("drc", "problems", "errors", "warnings", "issues"),
+            ),
+            PaletteCommand(
                 "workspace.verification",
                 "Open Verification Workspace",
                 "Verification",
@@ -3890,6 +3916,12 @@ class CleanroomXApp:
         if hasattr(self, "output_notebook") and hasattr(self, "analysis_result_panel"):
             self.show_output_panel()
             self.output_notebook.select(self.analysis_result_panel)
+
+    def _activate_diagnostics_workspace(self) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "diagnostics_workspace"):
+            self._refresh_engineering_panels()
+            self.notebook.select(self.diagnostics_workspace)
+            self.workspace_status_var.set("Workspace: Diagnostics")
 
     def _activate_verification_workspace(self) -> None:
         if hasattr(self, "notebook") and hasattr(self, "verification_workspace"):
@@ -5294,7 +5326,7 @@ class CleanroomXApp:
             self.selection_status_var.set("Selected: Simulation / Results")
             return
         if item_id == "nav-diagnostics":
-            self.show_problems_panel()
+            self._activate_diagnostics_workspace()
             self.selection_status_var.set("Selected: DRC / Diagnostics")
             return
         if item_id == "nav-verification":

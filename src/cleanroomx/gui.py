@@ -96,6 +96,7 @@ from .gui_theme import (
 from .gui_proofgraph import ProofGraphViewer
 from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
 from .gui_errors import GuiErrorReport, record_gui_exception
+from .gui_geometry import configure_toplevel_geometry
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -542,8 +543,13 @@ class AnalysisPicker(tk.Toplevel):
         self.bind("<Escape>", lambda event: self.destroy())
         self._populate()
 
-        self.geometry("1020x500")
-        self.minsize(760, 420)
+        configure_toplevel_geometry(
+            self,
+            width=1020,
+            height=500,
+            min_width=760,
+            min_height=420,
+        )
         self.search_entry.focus_set()
 
     @staticmethod
@@ -634,8 +640,13 @@ class RunHistoryDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, metadata: dict):
         super().__init__(parent)
         self.title("Analysis Run History")
-        self.geometry("1180x700")
-        self.minsize(900, 520)
+        configure_toplevel_geometry(
+            self,
+            width=1180,
+            height=700,
+            min_width=900,
+            min_height=520,
+        )
         self.transient(parent)
 
         summary = validate_run_history(metadata)
@@ -904,8 +915,13 @@ class VerificationHistoryDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Project Verification History")
-        self.geometry("1460x800")
-        self.minsize(1080, 600)
+        configure_toplevel_geometry(
+            self,
+            width=1460,
+            height=800,
+            min_width=1080,
+            min_height=600,
+        )
         self.transient(parent)
 
         metadata = project.metadata
@@ -1434,8 +1450,13 @@ class RequirementsTraceabilityDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, snapshot: dict):
         super().__init__(parent)
         self.title("Project Requirements Traceability")
-        self.geometry("1480x780")
-        self.minsize(1080, 580)
+        configure_toplevel_geometry(
+            self,
+            width=1480,
+            height=780,
+            min_width=1080,
+            min_height=580,
+        )
         self.transient(parent)
         self._details: dict[str, dict] = {}
         self._traceability_rows: dict[str, dict[str, str]] = {}
@@ -1834,8 +1855,13 @@ class IfcReimportPlanDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, report: dict):
         super().__init__(parent)
         self.title("IFC Re-import Plan")
-        self.geometry("1120x700")
-        self.minsize(820, 500)
+        configure_toplevel_geometry(
+            self,
+            width=1120,
+            height=700,
+            min_width=820,
+            min_height=500,
+        )
         self.transient(parent)
         self.grab_set()
 

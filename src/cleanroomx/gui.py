@@ -6034,12 +6034,28 @@ class CleanroomXApp:
             if analysis.id == item_id:
                 self._remember_navigator_item(item_id)
 
-    def _on_workspace_selection_change(self, kind: str, item_id: str) -> None:
+    def _on_workspace_selection_change(
+        self,
+        kind: str | None,
+        item_id: str | None,
+    ) -> None:
+        self._sync_spatial_selection_status()
         tree = getattr(self, "analysis_tree", None)
+        if not kind or not item_id:
+            if tree is None:
+                return
+            previous_guard = self._selection_guard
+            self._selection_guard = True
+            try:
+                selected = tree.selection()
+                if selected:
+                    tree.selection_remove(*selected)
+            finally:
+                self._selection_guard = previous_guard
+            return
         if tree is None:
             return
         navigator_id = f"{kind}:{item_id}"
-        self._sync_spatial_selection_status()
         self._sync_proofgraph_spatial_selection(kind, item_id)
         self._remember_navigator_item(navigator_id)
         if not tree.exists(navigator_id):

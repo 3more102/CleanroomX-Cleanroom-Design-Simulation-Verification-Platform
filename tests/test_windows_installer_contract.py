@@ -42,20 +42,51 @@ def test_windows_resource_builder_emits_multisize_icon_and_version_metadata(tmp_
     assert "filevers=(0, 103, 0, 7)" in text
 
 
-def test_inno_installer_contract_is_per_user_and_uninstallable() -> None:
-    script = (ROOT / "packaging" / "windows" / "CleanroomX.iss").read_text(encoding="utf-8")
+def test_inno_installer_contract_is_per_user_upgradeable_and_uninstallable() -> None:
+    script = (ROOT / "packaging" / "windows" / "CleanroomX.iss").read_text(
+        encoding="utf-8"
+    )
+
+    assert "AppId={{8A609071-4521-4B60-B8D2-ACAD5BF53A72}" in script
     assert "DefaultDirName={localappdata}\\Programs\\CleanroomX" in script
     assert "PrivilegesRequired=lowest" in script
+    assert "SetupArchitecture=x64" in script
+    assert "Source: \"{#SourceDir}\\*\"" in script
+    assert "SetupIconFile={#AppIconPath}" in script
     assert "UninstallDisplayIcon={app}\\{#AppExeName}" in script
-    assert 'Source: "..\\..\\dist\\CleanroomX\\*"' in script
-    assert "SetupIconFile=..\\..\\build\\windows\\cleanroomx.ico" in script
+    assert "VersionInfoVersion={#AppFileVersion}" in script
+    assert "VersionInfoProductVersion={#AppFileVersion}" in script
 
 
-def test_ci_requires_windows_installer_install_run_uninstall_gate() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+def test_windows_build_script_pins_inno7_and_builds_upgrade_fixture() -> None:
+    script = (
+        ROOT / "packaging" / "windows" / "build_installer.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "[switch]$BuildUpgradeFixture" in script
+    assert "Inno Setup 7.1.0 is required" in script
+    assert "CleanroomX-upgrade-baseline-setup" in script
+    assert '"--collect-submodules", "cleanroomx"' in script
+    assert '"--collect-all", "ifcopenshell"' in script
+    assert "import ifcopenshell, importlib.metadata as m" in script
+
+
+def test_ci_requires_windows_installer_upgrade_lifecycle_gate() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
     assert "windows-installer-smoke:" in workflow
-    assert "Build standalone Windows installer" in workflow
-    assert "Install, launch, and uninstall on clean runner path" in workflow
+    assert "--id JRSoftware.InnoSetup.7 --version 7.1.0" in workflow
+    assert "Build standalone Windows installer and upgrade fixture" in workflow
+    assert "Install, upgrade, launch, and uninstall on clean runner path" in workflow
+    assert "In-place installer upgrade failed" in workflow
+    assert "unins000.exe" in workflow
+    assert (
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+        in workflow
+    )
+
     required = workflow.split("required-ci:", 1)[1]
     assert "- windows-installer-smoke" in required
     assert "WINDOWS_INSTALLER_RESULT:" in required

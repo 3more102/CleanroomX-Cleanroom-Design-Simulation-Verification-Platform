@@ -7,6 +7,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_table import TreeviewTableBehavior
 from .gui_theme import status_style_name, theme_palette
 
 
@@ -207,6 +208,19 @@ class TaskCenter(ttk.Frame):
         self.tree.column("started", width=95, stretch=False)
         self.tree.column("duration", width=90, stretch=False)
         self.tree.column("result", width=150, minwidth=100)
+        self.table_behavior = TreeviewTableBehavior(
+            self.tree,
+            sortable_columns=("#0", "category", "state", "started", "result"),
+            copy_columns=(
+                "#0",
+                "category",
+                "state",
+                "progress",
+                "started",
+                "duration",
+                "result",
+            ),
+        )
         yscroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(table_host, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -381,6 +395,7 @@ class TaskCenter(ttk.Frame):
         self.summary_var.set(summary)
         self.summary_label.configure(style=style)
         self._on_change(active, total)
+        self.table_behavior.reapply_sort()
 
         if select_key and self.tree.exists(select_key):
             self.tree.selection_set(select_key)

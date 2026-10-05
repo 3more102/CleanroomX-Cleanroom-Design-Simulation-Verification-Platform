@@ -6,7 +6,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .proofgraph_io import proofgraph_from_dict
+from .gui_theme import theme_palette\nfrom .proofgraph_io import proofgraph_from_dict
 
 
 _TYPE_ORDER = {
@@ -399,7 +399,7 @@ class ProofGraphViewer(ttk.Frame):
         self.filter_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="No persisted ProofGraph evidence")
 
-        toolbar = ttk.Frame(self, padding=(7, 5))
+        toolbar = ttk.Frame(self, padding=(7, 5), style="CX.Toolbar.TFrame")
         toolbar.pack(fill="x")
         ttk.Label(toolbar, text="Graph").pack(side="left")
         self.graph_picker = ttk.Combobox(
@@ -577,27 +577,53 @@ class ProofGraphViewer(ttk.Frame):
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
 
-    @staticmethod
-    def _node_fill(node: dict[str, Any]) -> str:
+    def _node_fill(self, node: dict[str, Any]) -> str:
         status = _text(node.get("status")).casefold()
+        dark = self._theme_palette["background"].upper() == "#0B1220"
         if status in {"fail", "failed", "error"}:
-            return "#fee2e2"
+            return "#3B171C" if dark else "#FEE2E2"
         if status in {"warning", "warn"}:
-            return "#fef3c7"
+            return "#3A2A0E" if dark else "#FEF3C7"
         if status == "pass":
-            return "#dcfce7"
-        return {
-            "requirement": "#dbeafe",
-            "model_object": "#e0f2fe",
-            "ifc": "#e0e7ff",
-            "source": "#f1f5f9",
-            "calculation": "#ede9fe",
-            "evidence": "#f3e8ff",
-            "check": "#fef9c3",
-            "finding": "#ffedd5",
-            "verdict": "#e2e8f0",
-            "verification_run": "#d1fae5",
-        }.get(node.get("type"), "#f8fafc")
+            return "#10351F" if dark else "#DCFCE7"
+        dark_nodes = {
+            "requirement": "#123554",
+            "model_object": "#103A47",
+            "ifc": "#272D52",
+            "source": "#223047",
+            "calculation": "#332857",
+            "evidence": "#193B2B",
+            "check": "#3B3210",
+            "finding": "#442A17",
+            "verdict": "#273449",
+            "verification_run": "#15372E",
+        }
+        light_nodes = {
+            "requirement": "#DBEAFE",
+            "model_object": "#E0F2FE",
+            "ifc": "#E0E7FF",
+            "source": "#F1F5F9",
+            "calculation": "#EDE9FE",
+            "evidence": "#DCFCE7",
+            "check": "#FEF9C3",
+            "finding": "#FFEDD5",
+            "verdict": "#E2E8F0",
+            "verification_run": "#D1FAE5",
+        }
+        return (dark_nodes if dark else light_nodes).get(
+            node.get("type"),
+            self._theme_palette["surface_alt"],
+        )
+
+    def apply_theme(self, value: str, *, redraw: bool = True) -> None:
+        """Retheme graph surfaces without changing ProofGraph evidence state."""
+        self._theme_palette = theme_palette(value)
+        self.canvas.configure(
+            background=self._theme_palette["canvas_2d"],
+            highlightbackground=self._theme_palette["border"],
+        )
+        if redraw:
+            self._draw_graph()
 
     def _draw_graph(self) -> None:
         canvas = self.canvas
@@ -611,7 +637,7 @@ class ProofGraphViewer(ttk.Frame):
                 24,
                 anchor="nw",
                 text="No ProofGraph nodes for the current graph/filter.",
-                fill="#475569",
+                fill=self._theme_palette["muted"],
             )
             canvas.configure(scrollregion=(0, 0, 800, 500))
             return
@@ -646,7 +672,7 @@ class ProofGraphViewer(ttk.Frame):
                 source[1] + 24,
                 target[0],
                 target[1] + 24,
-                fill="#94a3b8",
+                fill=self._theme_palette["strong_border"],
                 width=1,
                 arrow="last",
             )
@@ -654,7 +680,7 @@ class ProofGraphViewer(ttk.Frame):
         for node in nodes:
             x, y = positions[node["key"]]
             selected = node["key"] == self._selected_key
-            outline = "#0f6cbd" if selected else "#64748b"
+            outline = (\n                self._theme_palette["accent"]\n                if selected\n                else self._theme_palette["strong_border"]\n            )
             width = 3 if selected else 1
             rect = canvas.create_rectangle(
                 x,
@@ -675,7 +701,7 @@ class ProofGraphViewer(ttk.Frame):
                 width=148,
                 text=label + status,
                 justify="center",
-                fill="#0f172a",
+                fill=self._theme_palette["text"],
             )
             self._canvas_key_by_item[rect] = node["key"]
             self._canvas_key_by_item[text_item] = node["key"]

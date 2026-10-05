@@ -211,3 +211,49 @@ def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
     assert "domain_hvac" in app.analysis_tree.item("nav-hvac", "tags")
     assert "domain_verification" in app.analysis_tree.item("nav-verification", "tags")
     assert "domain_evidence" in app.analysis_tree.item("nav-evidence", "tags")
+
+
+
+def test_problem_browser_supports_engineering_filters_sorting_and_relative_navigation(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    assert issue["category"] in panel.category_combo.cget("values")
+    assert issue["element"]["type"] in panel.object_combo.cget("values")
+
+    panel.severity_var.set(str(issue["severity"]).title())
+    panel.category_var.set(str(issue["category"]))
+    panel.object_var.set(str(issue["element"]["type"]))
+    app.root.update()
+
+    visible = panel.tree.get_children()
+    assert visible
+    for iid in visible:
+        candidate = panel._issues_by_iid[iid]
+        assert candidate["severity"] == issue["severity"]
+        assert candidate["category"] == issue["category"]
+        assert candidate["element"]["type"] == issue["element"]["type"]
+    assert panel.visible_var.get().endswith(
+        f"of {result['summary']['issue_count']} visible"
+    )
+
+    panel._sort_by("code")
+    app.root.update()
+    codes = [str(panel.tree.set(iid, "code")) for iid in panel.tree.get_children()]
+    assert codes == sorted(codes, key=str.casefold)
+
+    panel.clear_filters()
+    app.root.update()
+    all_items = list(panel.tree.get_children())
+    assert len(all_items) == result["summary"]["issue_count"]
+    assert panel.visible_var.get() == (
+        f"{result['summary']['issue_count']} of "
+        f"{result['summary']['issue_count']} visible"
+    )
+
+    panel.tree.selection_set(all_items[0])
+    panel.tree.focus(all_items[0])
+    selected = panel.select_relative(1)
+    assert selected is not None
+    if len(all_items) > 1:
+        assert selected is not panel._issues_by_iid[all_items[0]]

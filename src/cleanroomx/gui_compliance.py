@@ -66,6 +66,7 @@ class ComplianceRulePackPanel(ttk.Frame):
         self.status_filter_var = tk.StringVar(value="All")
         self.operator_filter_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Select a compliance analysis to inspect its rule pack")
+        self.identity_var = tk.StringVar(value="Rule-pack provenance unavailable")
         self.visible_var = tk.StringVar(value="0 visible")
         self.validation_var = tk.StringVar(value="Not evaluated")
 
@@ -89,6 +90,13 @@ class ComplianceRulePackPanel(ttk.Frame):
             side="left"
         )
         ttk.Label(header, textvariable=self.validation_var).pack(side="right")
+        provenance = ttk.Frame(self, padding=(10, 0, 10, 6))
+        provenance.pack(fill="x")
+        ttk.Label(
+            provenance,
+            textvariable=self.identity_var,
+            anchor="w",
+        ).pack(fill="x")
 
         toolbar = ttk.Frame(self, padding=(10, 0, 10, 7))
         toolbar.pack(fill="x")
@@ -197,7 +205,9 @@ class ComplianceRulePackPanel(ttk.Frame):
         table_frame.columnconfigure(0, weight=1)
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
         self.tree.bind("<Double-1>", lambda _event: self._focus_editor())
+        self.tree.bind("<Button-3>", self._show_context_menu)
         self.tree.bind("<Control-c>", lambda _event: self.copy_selected())
+        self.tree.bind("<Delete>", lambda _event: self.delete_selected())
 
         inspector_frame.columnconfigure(1, weight=1)
         inspector_frame.columnconfigure(3, weight=1)
@@ -310,6 +320,7 @@ class ComplianceRulePackPanel(ttk.Frame):
         self._result = None
         if self._payload is None:
             self.validation_var.set("No active compliance analysis")
+            self.identity_var.set("Rule-pack provenance unavailable")
             self.summary_var.set(
                 "Select a compliance rule-pack analysis to inspect backend-authoritative criteria."
             )
@@ -320,13 +331,20 @@ class ComplianceRulePackPanel(ttk.Frame):
             self._result = analyze_compliance_check(check)
         except Exception as exc:
             self.validation_var.set("INVALID INPUT")
+            self.identity_var.set("Rule-pack provenance unavailable until the input is valid")
             self.summary_var.set(str(exc))
             self._populate()
             self._status_setter(f"Compliance rule pack invalid: {exc}")
             return None
 
         summary = self._result["summary"]
+        pack = self._result["rule_pack"]
         self.validation_var.set(str(self._result["status"]).upper())
+        self.identity_var.set(
+            f"Pack {pack['id']} v{pack['version']} · "
+            f"criteria SHA-256 {pack['sha256']} · "
+            f"evidence SHA-256 {self._result['evidence_sha256']}"
+        )
         self.summary_var.set(
             f"{self._result['rule_pack']['title']} · "
             f"{summary['pass_count']} pass · {summary['fail_count']} fail · "
@@ -564,6 +582,42 @@ class ComplianceRulePackPanel(ttk.Frame):
         if self.selected_finding() is not None:
             self.title_entry.focus_set()
             self.title_entry.selection_range(0, "end")
+        return "break"
+
+    def _show_context_menu(self, event: tk.Event) -> str:
+        iid = self.tree.identify_row(event.y)
+        if iid:
+            self.tree.selection_set(iid)
+            self.tree.focus(iid)
+            self._show_selected()
+        menu = tk.Menu(self, tearoff=False)
+        finding = self.selected_finding()
+        state = "normal" if finding is not None else "disabled"
+        menu.add_command(
+            label="Edit rule",
+            state=state,
+            command=self._focus_editor,
+        )
+        menu.add_command(
+            label="Duplicate rule",
+            state=state,
+            command=self.duplicate_selected,
+        )
+        menu.add_command(
+            label="Delete rule",
+            state=state,
+            command=self.delete_selected,
+        )
+        menu.add_separator()
+        menu.add_command(
+            label="Copy finding",
+            state=state,
+            command=self.copy_selected,
+        )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
         return "break"
 
     def _candidate_from_editor(self) -> tuple[dict[str, Any], str]:

@@ -1537,37 +1537,19 @@ class CleanroomXApp:
         ttk.Entry(topbar, textvariable=self.description_var, width=24).grid(
             row=0, column=4, sticky="ew", padx=(0, 10)
         )
-        self.save_state_label = ttk.Label(
-            topbar,
-            textvariable=self.save_state_var,
-            style="CX.Status.Warning.TLabel",
-        )
-        self.save_state_label.grid(row=0, column=5, padx=2)
-        self.diagnostics_state_label = ttk.Label(
-            topbar,
-            textvariable=self.diagnostics_state_var,
-            style="CX.Status.Unknown.TLabel",
-        )
-        self.diagnostics_state_label.grid(row=0, column=6, padx=2)
-        self.verification_state_label = ttk.Label(
-            topbar,
-            textvariable=self.verification_state_var,
-            style="CX.Status.Unknown.TLabel",
-        )
-        self.verification_state_label.grid(row=0, column=7, padx=2)
         ttk.Button(
             topbar,
             text="Validate",
             command=self.validate_current,
             style="CX.Compact.TButton",
-        ).grid(row=0, column=8, padx=(8, 2))
+        ).grid(row=0, column=5, padx=(8, 2))
         self.run_button = ttk.Button(
             topbar,
             text="▶ Run",
             command=self.run_current,
             style="CX.Primary.TButton",
         )
-        self.run_button.grid(row=0, column=9, padx=2)
+        self.run_button.grid(row=0, column=6, padx=2)
         self.cancel_button = ttk.Button(
             topbar,
             text="Abandon",
@@ -1575,7 +1557,35 @@ class CleanroomXApp:
             state="disabled",
             style="CX.Danger.TButton",
         )
-        self.cancel_button.grid(row=0, column=10, padx=(2, 0))
+        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+
+        ttk.Label(
+            topbar,
+            text="ENGINEERING STATE",
+            style="CX.AppBarMeta.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(5, 0))
+        self.save_state_label = ttk.Label(
+            topbar,
+            textvariable=self.save_state_var,
+            style="CX.Status.Warning.TLabel",
+        )
+        self.save_state_label.grid(row=1, column=1, padx=(0, 4), pady=(5, 0), sticky="w")
+        self.diagnostics_state_label = ttk.Label(
+            topbar,
+            textvariable=self.diagnostics_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.diagnostics_state_label.grid(
+            row=1, column=2, padx=2, pady=(5, 0), sticky="w"
+        )
+        self.verification_state_label = ttk.Label(
+            topbar,
+            textvariable=self.verification_state_var,
+            style="CX.Status.Unknown.TLabel",
+        )
+        self.verification_state_label.grid(
+            row=1, column=3, columnspan=2, padx=2, pady=(5, 0), sticky="w"
+        )
         topbar.columnconfigure(2, weight=2)
         topbar.columnconfigure(4, weight=3)
 

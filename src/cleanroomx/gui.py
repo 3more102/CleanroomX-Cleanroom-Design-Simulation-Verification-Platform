@@ -1278,6 +1278,7 @@ class CleanroomXApp:
             value=bool(self._ui_layout_state["output_visible"])
         )
         self._navigator_tree_snapshot: list[tuple[str, str, int]] = []
+        self._navigator_base_labels: dict[str, str] = {}
         self._focus_workspace_snapshot: dict[str, bool] | None = None
 
         self._configure_styles()
@@ -2277,6 +2278,21 @@ class CleanroomXApp:
         if proofgraph_viewer is not None:
             proofgraph_viewer.apply_theme(self.theme_var.get(), redraw=redraw)
 
+        navigator = getattr(self, "analysis_tree", None)
+        if navigator is not None:
+            navigator.tag_configure(
+                "diagnostic_error",
+                foreground=palette["error"],
+            )
+            navigator.tag_configure(
+                "diagnostic_warning",
+                foreground=palette["warning"],
+            )
+            navigator.tag_configure(
+                "diagnostic_info",
+                foreground=palette["info"],
+            )
+
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
             self._apply_menu_theme(menubar)
@@ -2685,6 +2701,7 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        self._apply_navigator_diagnostic_badges(diagnostics)
 
         try:
             currency = assess_project_verification_currency(
@@ -4240,6 +4257,7 @@ class CleanroomXApp:
         self._restore_navigator_tree()
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
+        self._navigator_base_labels.clear()
 
         sections = (
             ("nav-building", "Building"),
@@ -4261,6 +4279,7 @@ class CleanroomXApp:
                 tags=("section",),
                 open=iid in {"nav-building", "nav-analyses"},
             )
+            self._navigator_base_labels[iid] = label
 
         for analysis in self.project.analyses:
             self.analysis_tree.insert(
@@ -4270,6 +4289,7 @@ class CleanroomXApp:
                 text=analysis.name,
                 values=(analysis.kind,),
             )
+            self._navigator_base_labels[analysis.id] = analysis.name
         self._refresh_spatial_navigator()
 
         target = select_id or self.project.active_analysis_id
@@ -4482,16 +4502,19 @@ class CleanroomXApp:
                     text=floor_name,
                     open=True,
                 )
+                self._navigator_base_labels["nav-floor"] = floor_name
                 for room in rooms:
                     if not isinstance(room, dict) or not room.get("id"):
                         continue
                     room_id = str(room["id"])
+                    room_label = str(room.get("name") or room_id)
                     tree.insert(
                         "nav-floor",
                         "end",
                         iid=f"room:{room_id}",
-                        text=str(room.get("name") or room_id),
+                        text=room_label,
                     )
+                    self._navigator_base_labels[f"room:{room_id}"] = room_label
 
             if tree.exists("nav-devices"):
                 for child in tree.get_children("nav-devices"):
@@ -4502,12 +4525,14 @@ class CleanroomXApp:
                     device_id = str(device["id"])
                     device_type = str(device.get("type") or "device")
                     name = str(device.get("name") or device_id)
+                    device_label = f"{name}  [{device_type}]"
                     tree.insert(
                         "nav-devices",
                         "end",
                         iid=f"device:{device_id}",
-                        text=f"{name}  [{device_type}]",
+                        text=device_label,
                     )
+                    self._navigator_base_labels[f"device:{device_id}"] = device_label
 
             if previous_selection:
                 selected_iid = previous_selection[0]
@@ -4523,7 +4548,107 @@ class CleanroomXApp:
                 f"Spatial: {len(rooms)} rooms · {len(devices)} devices"
             )
         self._capture_navigator_tree()
+        diagnostics = getattr(
+            getattr(self, "problems_panel", None),
+            "last_result",
+            None,
+        )
+        self._apply_navigator_diagnostic_badges(diagnostics)
         self._apply_navigator_filter()
+
+    def _apply_navigator_diagnostic_badges(
+        self,
+        diagnostics: dict | None,
+    ) -> None:
+        tree = getattr(self, "analysis_tree", None)
+        if tree is None:
+            return
+
+        counts: dict[str, dict[str, int]] = {}
+
+        def add_count(iid: str, severity: str) -> None:
+            if not iid or not tree.exists(iid):
+                return
+            bucket = counts.setdefault(
+                iid,
+                {"error": 0, "warning": 0, "info": 0},
+            )
+            key = severity if severity in bucket else "info"
+            bucket[key] += 1
+
+        issues = diagnostics.get("issues", []) if isinstance(diagnostics, dict) else []
+        if isinstance(issues, list):
+            for issue in issues:
+                if not isinstance(issue, dict):
+                    continue
+                severity = str(issue.get("severity", "info")).casefold()
+                element = issue.get("element")
+                if not isinstance(element, dict):
+                    continue
+                element_id = str(element.get("id") or "")
+                element_type = str(element.get("type") or "")
+                candidates: list[str] = []
+                if element_type == "analysis" and element_id:
+                    candidates.append(element_id)
+                elif element_type == "spatial_element" and element_id:
+                    candidates.extend(
+                        (f"room:{element_id}", f"device:{element_id}")
+                    )
+                target = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if tree.exists(candidate)
+                    ),
+                    "",
+                )
+                if not target:
+                    continue
+                current = target
+                while current:
+                    add_count(current, severity)
+                    current = tree.parent(current)
+
+        diagnostic_tags = {
+            "diagnostic_error",
+            "diagnostic_warning",
+            "diagnostic_info",
+        }
+        for iid, base_label in list(self._navigator_base_labels.items()):
+            if not tree.exists(iid):
+                continue
+            current_tags = tuple(
+                tag
+                for tag in tree.item(iid, "tags")
+                if tag not in diagnostic_tags
+            )
+            issue_counts = counts.get(iid)
+            if issue_counts is None:
+                tree.item(iid, text=base_label, tags=current_tags)
+                continue
+
+            errors = issue_counts["error"]
+            warnings = issue_counts["warning"]
+            infos = issue_counts["info"]
+            parts = []
+            if errors:
+                parts.append(f"{errors}E")
+            if warnings:
+                parts.append(f"{warnings}W")
+            if infos:
+                parts.append(f"{infos}I")
+            suffix = " ".join(parts)
+            if errors:
+                diagnostic_tag = "diagnostic_error"
+            elif warnings:
+                diagnostic_tag = "diagnostic_warning"
+            else:
+                diagnostic_tag = "diagnostic_info"
+            tree.item(
+                iid,
+                text=f"{base_label}  [{suffix}]",
+                tags=(*current_tags, diagnostic_tag),
+            )
 
     def _sync_spatial_selection_status(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)

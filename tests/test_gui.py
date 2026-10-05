@@ -431,6 +431,82 @@ def test_run_worker_records_original_background_exception(monkeypatch):
     assert app._queue.get_nowait() == ("error", 1, "a", report)
 
 
+def test_run_worker_records_history_evidence_preparation_failure(monkeypatch):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input=payload,
+    )
+    run = run_analysis("room_verification", payload)
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    report = GuiErrorReport(
+        reference="CX-TEST-HISTORY-PREP",
+        operation="Prepare run-history evidence (room_verification)",
+        exception_type="RuntimeError",
+        summary="synthetic history evidence failure",
+        log_path=None,
+    )
+    recorded = []
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._run_generation = 0
+    app._queue = queue.Queue()
+    app._runs_by_analysis = {}
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    app.status_var = Status()
+
+    monkeypatch.setattr(gui_module, "run_analysis", lambda *args, **kwargs: run)
+    monkeypatch.setattr(
+        gui_module,
+        "build_run_history_evidence",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic history evidence failure")
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: (
+            recorded.append((operation, exc))
+            or report
+        ),
+    )
+    monkeypatch.setattr(gui_module.threading, "Thread", ImmediateThread)
+
+    app.run_current()
+
+    queued = app._queue.get_nowait()
+    assert queued[0:3] == ("success", 1, "a")
+    queued_run, evidence, issue = queued[3]
+    assert queued_run is run
+    assert evidence is None
+    assert issue is report
+    assert len(recorded) == 1
+    assert recorded[0][0] == "Prepare run-history evidence (room_verification)"
+    assert isinstance(recorded[0][1], RuntimeError)
+
+
 def test_background_analysis_failure_surfaces_diagnostic_reference(
     monkeypatch,
     tmp_path,
@@ -625,6 +701,22 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
     rendered = []
     app._render_run = lambda value: rendered.append(value)
     warnings = []
+    history_report = GuiErrorReport(
+        reference="CX-TEST-HISTORY-INTEGRITY",
+        operation="Persist run-history audit record",
+        exception_type="RunHistoryIntegrityError",
+        summary="synthetic corrupt audit history",
+        log_path=None,
+    )
+    recorded_history_failures = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: (
+            recorded_history_failures.append((operation, exc))
+            or history_report
+        ),
+    )
     monkeypatch.setattr(
         gui_module.messagebox,
         "showwarning",
@@ -640,9 +732,13 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
     assert rendered == [current_run]
     assert app.project.metadata == corrupt_snapshot
     assert "run history was not updated" in app.status_var.value.lower()
+    assert "CX-TEST-HISTORY-INTEGRITY" in app.status_var.value
+    assert len(recorded_history_failures) == 1
+    assert recorded_history_failures[0][0] == "Persist run-history audit record"
     assert len(warnings) == 1
     assert warnings[0]["title"] == "Run history not updated"
     assert "left unchanged" in warnings[0]["message"].lower()
+    assert "CX-TEST-HISTORY-INTEGRITY" in warnings[0]["message"]
 
 
 def test_result_export_refuses_stale_cached_run(monkeypatch):

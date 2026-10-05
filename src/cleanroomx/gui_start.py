@@ -152,12 +152,14 @@ class StartCenter(ttk.Frame):
             text="Double-click a project to return to active engineering work.",
             style="CX.PanelMuted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(0, 5))
-        ttk.Button(
+        self.open_recent_button = ttk.Button(
             recent,
             text="Open Selected",
             style="CX.Compact.TButton",
             command=self._open_selected_recent,
-        ).grid(row=1, column=1, sticky="e", pady=(0, 5))
+            state="disabled",
+        )
+        self.open_recent_button.grid(row=1, column=1, sticky="e", pady=(0, 5))
 
         self.recent_tree = ttk.Treeview(
             recent,
@@ -176,6 +178,7 @@ class StartCenter(ttk.Frame):
         self.recent_tree.configure(yscrollcommand=scroll.set)
         self.recent_tree.grid(row=2, column=0, sticky="nsew")
         scroll.grid(row=2, column=1, sticky="ns")
+        self.recent_tree.bind("<<TreeviewSelect>>", self._sync_recent_action_state)
         self.recent_tree.bind("<Double-1>", self._open_selected_recent)
         self.recent_tree.bind("<Return>", self._open_selected_recent)
 
@@ -235,6 +238,12 @@ class StartCenter(ttk.Frame):
                 else f"{count} recent project{'s' if count != 1 else ''}"
             )
         )
+        self._sync_recent_action_state()
+
+    def _sync_recent_action_state(self, _event=None) -> None:
+        selection = self.recent_tree.selection()
+        enabled = bool(selection and selection[0] in self._recent_paths)
+        self.open_recent_button.configure(state="normal" if enabled else "disabled")
 
     def _open_selected_recent(self, _event=None):
         selection = self.recent_tree.selection()

@@ -71,6 +71,7 @@ from .project_diagnostics_cli import (
 )
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_simulation import SimulationWorkspace
+from .gui_reporting import ReportingWorkspace
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_search import (
     GlobalEngineeringSearch,
@@ -2331,6 +2332,15 @@ class CleanroomXApp:
 
         report_menu = tk.Menu(menubar, tearoff=False)
         report_menu.add_command(
+            label="Reporting Workspace",
+            command=self._activate_reporting_workspace,
+        )
+        report_menu.add_command(
+            label="Export Selected Summary...",
+            command=self.export_selected_reporting_summary,
+        )
+        report_menu.add_separator()
+        report_menu.add_command(
             label="Export Project Engineering Dossier...",
             command=self.export_project_engineering_dossier,
         )
@@ -2675,7 +2685,7 @@ class CleanroomXApp:
             text="6  Report",
             width=9,
             style="CX.Compact.TButton",
-            command=self.export_project_engineering_dossier,
+            command=self._activate_reporting_workspace,
         )
         self.workflow_report_button.pack(side="left", padx=1)
 
@@ -2932,6 +2942,18 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
+        self.reporting_workspace = ReportingWorkspace(
+            self.notebook,
+            on_export_dossier=self.export_project_engineering_dossier,
+            on_export_diagnostics=self.export_project_diagnostics,
+            on_export_result_json=self.export_result_json,
+            on_export_run_bundle=self.export_run_bundle_json,
+            on_export_markdown=self.export_report_markdown,
+            on_export_html=self.export_report_html,
+            on_export_selected_summary=self.export_selected_reporting_summary,
+        )
+        self.notebook.add(self.reporting_workspace, text="Reports")
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
@@ -3212,7 +3234,8 @@ class CleanroomXApp:
             self.notebook.select(self.proofgraph_viewer)
             self.output_notebook.select(self.evidence_text.master)
         elif selected == "reporting":
-            self.notebook.select(self.plot_tab)
+            self._refresh_engineering_panels()
+            self.notebook.select(self.reporting_workspace)
             self.output_notebook.select(self.report_text.master)
 
         label = WORKSPACE_LABELS[selected]
@@ -3349,6 +3372,10 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        reporting = getattr(self, "reporting_workspace", None)
+        if reporting is not None:
+            reporting.apply_theme(self.theme_var.get())
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -3670,6 +3697,9 @@ class CleanroomXApp:
         if panel is None:
             return None
         diagnostics = panel.refresh()
+        verification_summary: dict = {}
+        records: list[dict] = []
+        proofgraphs: list[dict] = []
 
         try:
             currency = assess_project_verification_currency(
@@ -3677,6 +3707,9 @@ class CleanroomXApp:
                 base_dir=self._base_dir(),
             )
             summary = currency.get("summary", {})
+            verification_summary = (
+                dict(summary) if isinstance(summary, dict) else {}
+            )
             lines = [
                 "CURRENT VERIFICATION CURRENCY",
                 "",
@@ -3713,11 +3746,10 @@ class CleanroomXApp:
 
         try:
             records = verification_run_history_records(self.project.metadata)
+            proofgraphs = self._proofgraph_documents_from_records(records)
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
-                viewer.set_documents(
-                    self._proofgraph_documents_from_records(records)
-                )
+                viewer.set_documents(proofgraphs)
             lines = [
                 "PERSISTED VERIFICATION EVIDENCE",
                 "",
@@ -3751,14 +3783,14 @@ class CleanroomXApp:
                 f"Verification evidence unavailable: {exc}\n",
             )
 
-        summary = (
+        diagnostic_summary = (
             diagnostics.get("summary", {})
             if isinstance(diagnostics, dict)
             else {}
         )
         if isinstance(diagnostics, dict):
-            error_count = int(summary.get("error_count", 0) or 0)
-            warning_count = int(summary.get("warning_count", 0) or 0)
+            error_count = int(diagnostic_summary.get("error_count", 0) or 0)
+            warning_count = int(diagnostic_summary.get("warning_count", 0) or 0)
             if error_count or warning_count:
                 self.diagnostics_status_var.set(
                     f"Problems: {error_count}E {warning_count}W"
@@ -3774,13 +3806,38 @@ class CleanroomXApp:
             f"Location: {location}",
             f"Analyses: {len(self.project.analyses)}",
             "Project diagnostics: "
-            + str(summary.get("status", "unavailable")).upper(),
+            + str(diagnostic_summary.get("status", "unavailable")).upper(),
         ]
         if self.last_run is not None:
             console_lines.append(
                 f"Last run: {self.last_run.title} — {self.last_run.status}"
             )
         self._set_text(self.console_text, "\n".join(console_lines) + "\n")
+
+        reporting = getattr(self, "reporting_workspace", None)
+        if reporting is not None:
+            reporting.refresh(
+                {
+                    "project_name": self.project.name,
+                    "source": location,
+                    "saved": (
+                        self.project_path is not None
+                        and not self._has_unsaved_changes()
+                    ),
+                    "diagnostics": diagnostic_summary,
+                    "verification": verification_summary,
+                    "last_run": (
+                        {
+                            "title": self.last_run.title,
+                            "status": self.last_run.status,
+                        }
+                        if self.last_run is not None
+                        else None
+                    ),
+                    "evidence_record_count": len(records),
+                    "proofgraph_count": len(proofgraphs),
+                }
+            )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -4201,6 +4258,20 @@ class CleanroomXApp:
                 keywords=("requirements", "evidence", "trace"),
             ),
             PaletteCommand(
+                "workspace.reports",
+                "Open Reporting Workspace",
+                "Report",
+                self._activate_reporting_workspace,
+                keywords=("report", "release", "dossier", "summary"),
+            ),
+            PaletteCommand(
+                "report.summary",
+                "Export Selected Report Summary",
+                "Report",
+                self.export_selected_reporting_summary,
+                keywords=("report", "summary", "sections"),
+            ),
+            PaletteCommand(
                 "report.dossier",
                 "Export Project Engineering Dossier",
                 "Report",
@@ -4297,6 +4368,13 @@ class CleanroomXApp:
             self.notebook.select(self.start_center)
             self.workspace_profile_var.set("start")
             self.workspace_status_var.set("Workspace: Start")
+
+    def _activate_reporting_workspace(self) -> None:
+        if not hasattr(self, "notebook") or not hasattr(
+            self, "reporting_workspace"
+        ):
+            return
+        self.activate_workspace_profile("reporting")
 
     def _recent_project_records(self) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []
@@ -5590,7 +5668,12 @@ class CleanroomXApp:
     def _navigator_item_is_actionable(self, item_id: str) -> bool:
         if item_id.startswith(("room:", "device:")):
             return True
-        if item_id in {"nav-simulation", "nav-proofgraph", "nav-evidence"}:
+        if item_id in {
+            "nav-simulation",
+            "nav-proofgraph",
+            "nav-evidence",
+            "nav-reports",
+        }:
             return True
         return bool(item_id and not item_id.startswith("nav-"))
 
@@ -5954,6 +6037,16 @@ class CleanroomXApp:
                 command=self._activate_proofgraph_workspace,
             )
             return menu
+        if item_id == "nav-reports":
+            menu.add_command(
+                label="Open Reporting Workspace",
+                command=self._activate_reporting_workspace,
+            )
+            menu.add_command(
+                label="Export Project Engineering Dossier...",
+                command=self.export_project_engineering_dossier,
+            )
+            return menu
         if not item_id.startswith("nav-"):
             menu.add_command(
                 label="Open Analysis",
@@ -6114,6 +6207,11 @@ class CleanroomXApp:
             if hasattr(self, "output_notebook") and hasattr(self, "evidence_text"):
                 self.output_notebook.select(self.evidence_text.master)
             self.selection_status_var.set("Selected: Evidence")
+            return
+        if item_id == "nav-reports":
+            self._remember_navigator_item(item_id)
+            self._activate_reporting_workspace()
+            self.selection_status_var.set("Selected: Reports")
             return
         if item_id.startswith("nav-"):
             return
@@ -6967,6 +7065,47 @@ class CleanroomXApp:
             ),
             parent=self.root,
         )
+
+    def export_selected_reporting_summary(self) -> None:
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return
+        self._refresh_engineering_panels()
+        if not workspace.selected_sections():
+            self.status_var.set(
+                "Select at least one report section before exporting."
+            )
+            messagebox.showwarning(
+                "No report sections selected",
+                "Select one or more report-composition sections in the Reporting workspace.",
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX selected report summary",
+            initialfile=(
+                f"{self.project_path.stem}.summary.md"
+                if self.project_path is not None
+                else "cleanroomx-summary.md"
+            ),
+            defaultextension=".md",
+            filetypes=[
+                ("Markdown report", "*.md"),
+                ("Text files", "*.txt"),
+            ],
+        )
+        if not path:
+            return
+        if self._write_export_file(
+            path,
+            workspace.build_selected_summary_markdown(),
+            label="Selected report summary",
+        ):
+            self.status_var.set(
+                f"Selected report summary exported: {Path(path).name}"
+            )
 
     def export_project_engineering_dossier(self) -> None:
         if self._running:

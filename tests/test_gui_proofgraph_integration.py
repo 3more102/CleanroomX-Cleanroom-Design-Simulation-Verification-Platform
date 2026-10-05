@@ -221,3 +221,47 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     app.root.update()
     assert app.proofgraph_viewer.search_var.get() == ""
     assert app.proofgraph_viewer.filter_var.get() == "All"
+
+
+def test_proofgraph_global_search_helpers_reveal_filtered_node(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    viewer = app.proofgraph_viewer
+    viewer.set_documents([document])
+    app.root.update()
+
+    searchable = viewer.searchable_nodes()
+    keys = {node["key"] for node in searchable}
+    target = f"model_object:{room['id']}"
+    assert target in keys
+
+    viewer.filter_var.set("Failures")
+    viewer.search_var.set("does-not-match")
+    app.root.update()
+    assert target not in viewer._nodes_by_key
+
+    assert viewer.focus_node(target)
+    app.root.update()
+    assert viewer.filter_var.get() == "All"
+    assert viewer.search_var.get() == ""
+    assert viewer.selected_node()["key"] == target
+
+
+def test_global_search_opens_proofgraph_node_and_spatial_object(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+    app.proofgraph_viewer.set_documents([document])
+    app.root.update()
+
+    model_key = f"model_object:{room['id']}"
+    app._open_proofgraph_search_result(model_key)
+    app.root.update()
+    assert app.notebook.select() == str(app.proofgraph_viewer)
+    assert app.proofgraph_viewer.selected_node()["key"] == model_key
+
+    app._open_spatial_search_result("room", room["id"])
+    app.root.update()
+    assert app.notebook.select() == str(workspace)
+    assert workspace.selected == _Hit("room", room["id"])
+    assert app.workspace_status_var.get() == "Workspace: Design"

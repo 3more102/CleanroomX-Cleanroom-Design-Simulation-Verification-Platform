@@ -108,12 +108,10 @@ def _version_and_demo_contract(checks: list[dict[str, Any]]) -> None:
 
 
 def _workflow_contract(checks: list[dict[str, Any]]) -> None:
-    workflow_paths = (
-        ".github/workflows/ci.yml",
-        ".github/workflows/production-acceptance.yml",
-        ".github/workflows/security.yml",
-        ".github/workflows/windows-standalone.yml",
-        ".github/workflows/windows-installer.yml",
+    workflow_dir = ROOT / ".github" / "workflows"
+    workflow_paths = tuple(
+        path.relative_to(ROOT).as_posix()
+        for path in sorted((*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")))
     )
     unpinned: list[str] = []
     for path in workflow_paths:

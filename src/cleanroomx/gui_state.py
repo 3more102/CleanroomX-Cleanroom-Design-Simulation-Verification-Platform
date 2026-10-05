@@ -8,7 +8,7 @@ from .gui_theme import normalize_density_name, normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 7
+GUI_LAYOUT_STATE_VERSION = 8
 GUI_WORKSPACE_PROFILES = (
     "start",
     "design",
@@ -78,6 +78,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "density": "compact",
     "recent_projects": [],
     "navigator_favorites": {},
+    "table_layouts": {},
     "window_width": 1440,
     "window_height": 900,
     "navigator_fraction": 0.20,
@@ -197,6 +198,77 @@ def _normalize_navigator_favorites(value: Any) -> dict[str, list[str]]:
     return normalized
 
 
+def _normalize_table_layouts(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for raw_name, raw_layout in value.items():
+        if len(normalized) >= 24:
+            break
+        if not isinstance(raw_name, str) or not isinstance(raw_layout, dict):
+            continue
+        name = raw_name.strip()
+        if not name or len(name) > 128:
+            continue
+
+        visible: list[str] = []
+        seen: set[str] = set()
+        raw_visible = raw_layout.get("visible_columns")
+        if isinstance(raw_visible, (list, tuple)):
+            for raw_column in raw_visible:
+                if not isinstance(raw_column, str):
+                    continue
+                column = raw_column.strip()
+                if (
+                    not column
+                    or len(column) > 128
+                    or column in seen
+                ):
+                    continue
+                seen.add(column)
+                visible.append(column)
+                if len(visible) >= 64:
+                    break
+
+        widths: dict[str, int] = {}
+        raw_widths = raw_layout.get("column_widths")
+        if isinstance(raw_widths, dict):
+            for raw_column, raw_width in raw_widths.items():
+                if len(widths) >= 64:
+                    break
+                if not isinstance(raw_column, str) or isinstance(raw_width, bool):
+                    continue
+                column = raw_column.strip()
+                if not column or len(column) > 128:
+                    continue
+                try:
+                    width = int(raw_width)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if 24 <= width <= 4000:
+                    widths[column] = width
+
+        raw_sort = raw_layout.get("sort_column")
+        sort_column = (
+            raw_sort.strip()
+            if isinstance(raw_sort, str)
+            and raw_sort.strip()
+            and len(raw_sort.strip()) <= 128
+            else None
+        )
+        normalized[name] = {
+            "visible_columns": visible,
+            "column_widths": widths,
+            "sort_column": sort_column,
+            "sort_descending": (
+                raw_layout.get("sort_descending")
+                if isinstance(raw_layout.get("sort_descending"), bool)
+                else False
+            ),
+        }
+    return normalized
+
+
 def _normalize_workspace_name(value: Any) -> str:
     name = str(value or "").strip().casefold()
     return name if name in GUI_WORKSPACE_PROFILES else "start"
@@ -289,6 +361,9 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         ),
         "navigator_favorites": _normalize_navigator_favorites(
             source.get("navigator_favorites")
+        ),
+        "table_layouts": _normalize_table_layouts(
+            source.get("table_layouts")
         ),
         "window_width": _bounded_dimension(
             source.get("window_width"),

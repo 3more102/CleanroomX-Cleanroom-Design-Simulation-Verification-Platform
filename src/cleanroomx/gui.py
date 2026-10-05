@@ -3374,7 +3374,7 @@ class CleanroomXApp:
             self.notebook,
             on_refresh=self._refresh_engineering_panels,
             on_navigate=self._navigate_project_diagnostic,
-            on_export=self.export_project_diagnostics,
+            on_export=self.export_filtered_diagnostics_view,
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.diagnostics_workspace, text="Diagnostics")
@@ -4925,6 +4925,40 @@ class CleanroomXApp:
 
         self.status_var.set(
             f"Diagnostic {issue.get('rule', '')}: no spatial navigation target"
+        )
+
+    def export_filtered_diagnostics_view(self, payload: dict | None) -> None:
+        """Export only the visible diagnostics presentation slice, never canonical data."""
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema")
+            != "cleanroomx.diagnostics.filtered_presentation_view"
+            or payload.get("canonical_diagnostics") is not False
+        ):
+            self.status_var.set("Filtered diagnostics export is unavailable")
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export filtered diagnostics view",
+            defaultextension=".json",
+            filetypes=[("Filtered diagnostics JSON", "*.json")],
+        )
+        if not path:
+            return
+        content = (
+            json.dumps(
+                payload,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+        )
+        self._write_export_file(
+            path,
+            content,
+            label="Filtered diagnostics view",
         )
 
     def export_project_diagnostics(self, _result: dict | None = None) -> None:
@@ -7224,6 +7258,15 @@ class CleanroomXApp:
             return
         self.selection_status_var.set(workspace.selection_status_text())
 
+    def _sync_proofgraph_spatial_selection(self, kind: str, item_id: str) -> bool:
+        """Mirror spatial selection into persisted ProofGraph evidence when available."""
+        if kind not in {"room", "device"} or not item_id:
+            return False
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return False
+        return bool(viewer.focus_node(f"model_object:{item_id}"))
+
     def _on_navigator_selected(self, event=None) -> None:
         if self._selection_guard:
             return
@@ -7238,6 +7281,7 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+                self._sync_proofgraph_spatial_selection(kind, spatial_id)
             return
         if item_id == "nav-dashboard":
             if hasattr(self, "dashboard"):
@@ -7320,6 +7364,7 @@ class CleanroomXApp:
             tree.see(navigator_id)
         finally:
             self._selection_guard = previous_guard
+        self._sync_proofgraph_spatial_selection(kind, item_id)
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:

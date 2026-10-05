@@ -10,6 +10,7 @@ from cleanroomx.gui import (
     AnalysisPicker,
     CleanroomXApp,
     RunHistoryDialog,
+    VerificationHistoryDialog,
     bundled_demo_project_path,
 )
 
@@ -109,3 +110,57 @@ def test_run_history_dialog_filters_retained_canonical_records_and_empty_state(a
     app.root.update()
     assert len(dialog.tree.get_children()) == total
     dialog.destroy()
+
+
+
+def test_verification_history_filters_retained_status_and_currency_without_recomputing():
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    dialog = VerificationHistoryDialog.__new__(VerificationHistoryDialog)
+    dialog.records = [
+        {
+            "sequence": 1,
+            "completed_at_utc": "2026-10-01T10:00:00Z",
+            "analysis_id": "room-a",
+            "analysis_name": "Room A",
+            "analysis_kind": "room_verification",
+            "verification": {"status": "pass", "verified": True},
+            "verification_identity_sha256": "a" * 64,
+        },
+        {
+            "sequence": 2,
+            "completed_at_utc": "2026-10-02T10:00:00Z",
+            "analysis_id": "room-b",
+            "analysis_name": "Room B",
+            "analysis_kind": "room_verification",
+            "verification": {"status": "fail", "verified": False},
+            "verification_identity_sha256": "b" * 64,
+        },
+    ]
+    dialog._context_by_sequence = {
+        1: {"state": "current", "mismatch_reasons": []},
+        2: {
+            "state": "stale",
+            "mismatch_reasons": ["analysis_input_changed"],
+        },
+    }
+    dialog.search_var = Value("room a")
+    dialog.status_filter_var = Value("pass")
+    dialog.currency_filter_var = Value("current")
+
+    visible = dialog._filtered_records()
+
+    assert [item["sequence"] for item in visible] == [1]
+    assert dialog._currency_text(dialog._context_by_sequence[2]) == (
+        "stale (analysis_input_changed)"
+    )
+
+    dialog.search_var = Value("")
+    dialog.status_filter_var = Value("All")
+    dialog.currency_filter_var = Value("stale")
+    assert [item["sequence"] for item in dialog._filtered_records()] == [2]

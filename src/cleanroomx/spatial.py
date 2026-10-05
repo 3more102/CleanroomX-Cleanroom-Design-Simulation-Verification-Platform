@@ -10,7 +10,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
-from .gui_theme import theme_palette
+from .gui_theme import status_style_name, theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1515,6 +1515,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._overlay_summary_var = tk.StringVar(value="Overlay: Pressure")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._inspector_kind_var = tk.StringVar(value="NO SELECTION")
+        self._inspector_summary_var = tk.StringVar(
+            value="Select a room, opening, device, or equipment item to inspect."
+        )
+        self._inspector_state_var = tk.StringVar(value="NOT CHECKED")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1824,7 +1829,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(self._body, padding=(10, 8))
+        inspector = ttk.Frame(
+            self._body,
+            padding=(10, 8),
+            style="CX.Panel.TFrame",
+        )
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
         inspector_header = ttk.Frame(
@@ -1834,7 +1843,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         inspector_header.pack(fill="x", pady=(0, 5))
         ttk.Label(
             inspector_header,
-            text="PROPERTIES",
+            text="ENGINEERING INSPECTOR",
             style="CX.PanelHeader.TLabel",
         ).pack(side="left")
         self._inspector_close_button = ttk.Button(
@@ -1845,11 +1854,37 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_inspector_visible(False),
         )
         self._inspector_close_button.pack(side="right")
-        ttk.Label(
+        identity = ttk.Frame(
             inspector,
+            padding=(9, 8),
+            style="CX.Raised.TFrame",
+        )
+        identity.pack(fill="x", pady=(2, 8))
+        identity_header = ttk.Frame(identity, style="CX.Raised.TFrame")
+        identity_header.pack(fill="x")
+        ttk.Label(
+            identity_header,
+            textvariable=self._inspector_kind_var,
+            style="CX.Section.TLabel",
+        ).pack(side="left")
+        self._inspector_state_badge = ttk.Label(
+            identity_header,
+            textvariable=self._inspector_state_var,
+            style="CX.MutedBadge.TLabel",
+        )
+        self._inspector_state_badge.pack(side="right")
+        ttk.Label(
+            identity,
             textvariable=self._selection_var,
+            style="CX.ViewTitle.TLabel",
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", anchor="w", pady=(5, 2))
+        ttk.Label(
+            identity,
+            textvariable=self._inspector_summary_var,
+            wraplength=310,
+            justify="left",
+        ).pack(fill="x", anchor="w")
 
         property_groups = (
             (
@@ -1909,12 +1944,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._property_rows[key] = row
         ttk.Button(
             inspector,
-            text="Apply properties",
+            text="Apply engineering properties",
+            style="CX.Primary.TButton",
             command=self.apply_properties,
         ).pack(anchor="e", pady=(2, 6))
         ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
+        ttk.Label(
+            inspector,
+            text="MODEL / ANALYSIS LINK",
+            style="CX.Section.TLabel",
+        ).pack(anchor="w", pady=(3, 2))
         ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
+            fill="x", pady=(0, 3)
         )
 
         self._apply_workspace_mode()
@@ -2161,7 +2202,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         for px, py in points:
             canvas.create_line(
                 px - 5, py, px + 5, py,
-                fill="#7c3aed", width=2, tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, tags=("measurement",),
             )
             canvas.create_line(
                 px, py - 5, px, py + 5,
@@ -2173,18 +2214,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._current_tool_mode() == "area":
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                outline="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                outline=self._theme_palette["simulation"], width=2, dash=(5, 3), tags=("measurement",),
             )
         else:
             canvas.create_line(
                 x0, y0, x1, y1,
-                fill="#7c3aed", width=2, dash=(5, 3), tags=("measurement",),
+                fill=self._theme_palette["simulation"], width=2, dash=(5, 3), tags=("measurement",),
             )
         canvas.create_text(
             (x0 + x1) / 2,
             (y0 + y1) / 2 - 10,
             text=self._measurement_result_var.get(),
-            fill="#5b21b6",
+            fill=self._theme_palette["simulation"],
             tags=("measurement",),
         )
 
@@ -2612,16 +2653,42 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
-            self._selection_var.set("No selection")
+            self._selection_var.set("No object selected")
+            self._inspector_kind_var.set("NO SELECTION")
+            self._inspector_summary_var.set(
+                "Select a room, opening, device, or equipment item to inspect."
+            )
+            self._inspector_state_var.set("NOT CHECKED")
+            self._inspector_state_badge.configure(
+                style=status_style_name("NOT CHECKED")
+            )
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
                 if row is not None:
                     row.pack_forget()
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
-        selection_text = f"{prefix}: {item.get('name', '')}"
+        prefix = (
+            "Room"
+            if self.selected and self.selected.kind == "room"
+            else str(item.get("type", "Device")).replace("_", " ").title()
+        )
+        selection_text = str(item.get("name") or self.selected.item_id)
+        self._inspector_kind_var.set(prefix.upper())
         if self.selected and self.selected.kind == "room":
+            length = _finite_number(item.get("length_m"), 0.0)
+            width = _finite_number(item.get("width_m"), 0.0)
+            height = _finite_number(item.get("height_m"), 0.0)
+            area = max(0.0, length * width)
+            volume = max(0.0, area * height)
+            summary_parts = [f"{area:.1f} m²", f"{volume:.1f} m³"]
+            classification = str(item.get("classification") or "").strip()
+            if classification:
+                summary_parts.insert(0, classification)
+            pressure = item.get("pressure_pa")
+            if isinstance(pressure, (int, float)) and math.isfinite(float(pressure)):
+                summary_parts.append(f"{float(pressure):+g} Pa")
+            self._inspector_summary_var.set("  ·  ".join(summary_parts))
             sync = engineering_sync_status(self.layout, self._analysis_getter())
             room_sync = next(
                 (
@@ -2632,7 +2699,42 @@ class SpatialDesignWorkspace(ttk.Frame):
                 None,
             )
             if room_sync is not None:
-                selection_text += " — " + room_sync["state"].replace("_", " ")
+                state = str(room_sync.get("state") or "unmapped")
+                display_state = state.replace("_", " ").upper()
+                self._inspector_state_var.set(display_state)
+                style_state = (
+                    "VERIFIED"
+                    if state == "synchronized"
+                    else ("STALE" if "stale" in state else "UNVERIFIED")
+                )
+                self._inspector_state_badge.configure(
+                    style=status_style_name(style_state)
+                )
+            else:
+                self._inspector_state_var.set("UNMAPPED")
+                self._inspector_state_badge.configure(
+                    style=status_style_name("UNVERIFIED")
+                )
+        else:
+            device_type = str(item.get("type") or "device").replace("_", " ").title()
+            room_id = str(item.get("room_id") or "").strip()
+            elevation = _finite_number(item.get("z_m"), 0.0)
+            summary_parts = [device_type, f"Z {elevation:g} m"]
+            if room_id:
+                room = next(
+                    (
+                        candidate
+                        for candidate in self.layout.get("rooms", [])
+                        if str(candidate.get("id") or "") == room_id
+                    ),
+                    None,
+                )
+                summary_parts.append(
+                    str(room.get("name") or room_id) if room is not None else room_id
+                )
+            self._inspector_summary_var.set("  ·  ".join(summary_parts))
+            self._inspector_state_var.set("PLACED")
+            self._inspector_state_badge.configure(style=status_style_name("INFO"))
         self._selection_var.set(selection_text)
         room_fields = {
             "name",

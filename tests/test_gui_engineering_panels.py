@@ -155,3 +155,39 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+def test_engineering_dashboard_uses_canonical_project_health(app):
+    tabs = _tab_texts(app.notebook)
+    assert "Dashboard" in tabs
+    assert app.analysis_tree.exists("nav-dashboard")
+
+    app._refresh_engineering_panels()
+    app.root.update()
+
+    assert app.dashboard.geometry_var.get()
+    assert app.dashboard.diagnostics_var.get()
+    assert app.dashboard.verification_var.get()
+    assert app.dashboard.evidence_var.get()
+    assert app.dashboard.readiness_var.get().endswith("%")
+    assert "compliance verdict" in app.dashboard.readiness_detail_var.get()
+
+    app.analysis_tree.selection_set("nav-dashboard")
+    app.analysis_tree.focus("nav-dashboard")
+    app.analysis_tree.event_generate("<<TreeviewSelect>>")
+    app.root.update()
+    assert app.notebook.select() == str(app.dashboard)
+    assert app.workspace_status_var.get() == "Workspace: Dashboard"
+
+
+def test_engineering_health_badges_follow_current_project_state(app):
+    app._refresh_engineering_panels()
+    app._update_title()
+    app.root.update()
+
+    assert app.project_state_var.get() in {"SAVED", "UNSAVED"}
+    assert app.diagnostics_status_var.get().startswith("DRC ")
+    assert app.verification_badge_var.get().startswith("VERIFY ")
+    assert app.evidence_badge_var.get().startswith("EVIDENCE ")
+    assert str(app.project_state_badge.cget("style")).startswith("CX.Status.")
+    assert str(app.diagnostics_badge.cget("style")).startswith("CX.Status.")

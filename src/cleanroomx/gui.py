@@ -2053,6 +2053,7 @@ class CleanroomXApp:
 
         self.reporting_workspace = ReportingWorkspace(
             self.notebook,
+            on_preview_dossier=self.preview_project_engineering_dossier,
             on_export_dossier=self.export_project_engineering_dossier,
             on_export_diagnostics=self.export_project_diagnostics,
             on_export_result_json=self.export_result_json,
@@ -6001,6 +6002,98 @@ class CleanroomXApp:
             ),
             parent=self.root,
         )
+
+    def preview_project_engineering_dossier(self) -> bool:
+        """Render a read-only preview from the canonical project-dossier backend."""
+        workspace = getattr(self, "reporting_workspace", None)
+        if workspace is None:
+            return False
+        if self._running:
+            self._activate_reporting_workspace()
+            workspace.show_preview(
+                "Engineering Dossier Preview Unavailable",
+                "An analysis is currently running. Complete or abandon it before "
+                "building a project-bound dossier preview.",
+            )
+            self.status_var.set("Dossier preview blocked while analysis is running")
+            return False
+
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            self._activate_reporting_workspace()
+            workspace.show_preview(
+                "Engineering Dossier Preview Unavailable",
+                f"Current project edits are invalid:\n\n{exc}",
+            )
+            self.status_var.set("Dossier preview blocked by invalid project input")
+            return False
+
+        if self.project_path is None:
+            self._activate_reporting_workspace()
+            workspace.show_preview(
+                "Engineering Dossier Preview Unavailable",
+                "Save the project first. Project-native dossier evidence is bound "
+                "to exact saved project bytes and their SHA-256 identity.",
+            )
+            self.status_var.set("Save the project before previewing its dossier")
+            return False
+
+        if self._has_unsaved_changes():
+            self._activate_reporting_workspace()
+            workspace.show_preview(
+                "Engineering Dossier Preview Unavailable",
+                "Save current project changes first so the preview can be bound to "
+                "the exact source-project revision.",
+            )
+            self.status_var.set("Save changes before previewing the project dossier")
+            return False
+
+        try:
+            revision_before = capture_project_file_revision(self.project_path)
+            expected_revision = getattr(self, "_project_file_revision", None)
+            if (
+                expected_revision is not None
+                and not project_file_revision_matches(
+                    expected_revision,
+                    revision_before,
+                )
+            ):
+                raise RuntimeError(
+                    "project file changed on disk after it was opened or saved"
+                )
+
+            dossier = build_project_engineering_dossier(
+                self.project,
+                source_project_revision=revision_before.sha256,
+                base_dir=self.project_path.parent,
+            )
+            preview = markdown_project_engineering_dossier(dossier)
+
+            revision_after = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(revision_before, revision_after):
+                raise RuntimeError(
+                    "project file changed during dossier preview generation; "
+                    "the preview was discarded"
+                )
+        except Exception as exc:
+            self._activate_reporting_workspace()
+            workspace.show_preview(
+                "Engineering Dossier Preview Failed",
+                str(exc),
+            )
+            self.status_var.set("Project dossier preview failed")
+            return False
+
+        self._activate_reporting_workspace()
+        workspace.show_preview("Engineering Dossier Preview", preview)
+        self.status_var.set(
+            f"Project dossier preview built for revision {revision_before.sha256[:12]}…"
+        )
+        return True
 
     def export_project_engineering_dossier(self) -> None:
         if self._running:

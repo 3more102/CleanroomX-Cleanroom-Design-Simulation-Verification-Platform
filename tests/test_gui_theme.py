@@ -93,6 +93,8 @@ def test_dark_palette_matches_cleanroomx_industrial_foundation():
 def test_status_style_name_is_canonical_across_engineering_states():
     assert status_style_name("PASS") == "CX.Status.Pass.TLabel"
     assert status_style_name("verified") == "CX.Status.Pass.TLabel"
+    assert status_style_name("completed") == "CX.Status.Pass.TLabel"
+    assert status_style_name("success") == "CX.Status.Pass.TLabel"
     assert status_style_name("critical") == "CX.Status.Fail.TLabel"
     assert status_style_name("stale") == "CX.Status.Attention.TLabel"
     assert status_style_name("running") == "CX.Status.Running.TLabel"

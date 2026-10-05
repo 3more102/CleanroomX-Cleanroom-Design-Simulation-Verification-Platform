@@ -90,7 +90,14 @@ from .gui_state import (
     normalize_gui_layout_state,
     save_gui_layout_state,
 )
-from .gui_theme import attach_tooltip, configure_ttk_theme, normalize_theme_name, theme_palette
+from .gui_theme import (
+    attach_tooltip,
+    configure_ttk_theme,
+    normalize_density_name,
+    normalize_theme_name,
+    theme_palette,
+)
+from .gui_workspace import workspace_profile_keys, workspace_profile_spec
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -1286,6 +1293,10 @@ class CleanroomXApp:
         self.run_elapsed_var = tk.StringVar(value="—")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
+        self.density_var = tk.StringVar(value=self._ui_layout_state["density"])
+        self.workspace_profile_var = tk.StringVar(
+            value=self._ui_layout_state["workspace_profile"]
+        )
         self.focus_workspace_var = tk.BooleanVar(value=False)
         self.navigator_panel_visible_var = tk.BooleanVar(
             value=bool(self._ui_layout_state["navigator_visible"])
@@ -1319,6 +1330,7 @@ class CleanroomXApp:
         self._theme_palette = configure_ttk_theme(
             self.root,
             self.theme_var.get(),
+            density=self.density_var.get(),
         )
 
     def _build_menu(self) -> None:
@@ -1548,6 +1560,27 @@ class CleanroomXApp:
                 command=lambda mode=value: self.set_theme(mode),
             )
         view_menu.add_cascade(label="Theme", menu=theme_menu)
+
+        density_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in (("compact", "Compact / Engineering"), ("comfortable", "Comfortable")):
+            density_menu.add_radiobutton(
+                label=label,
+                variable=self.density_var,
+                value=value,
+                command=lambda mode=value: self.set_density(mode),
+            )
+        view_menu.add_cascade(label="Density", menu=density_menu)
+
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        for key in workspace_profile_keys():
+            profile = workspace_profile_spec(key)
+            workspace_menu.add_radiobutton(
+                label=profile.label,
+                variable=self.workspace_profile_var,
+                value=profile.key,
+                command=lambda mode=profile.key: self.apply_workspace_profile(mode),
+            )
+        view_menu.add_cascade(label="Workspace Profile", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_command(
@@ -2395,6 +2428,10 @@ class CleanroomXApp:
             {
                 **visibility,
                 "theme": normalize_theme_name(self.theme_var.get()),
+                "density": normalize_density_name(self.density_var.get()),
+                "workspace_profile": workspace_profile_spec(
+                    self.workspace_profile_var.get()
+                ).key,
                 "recent_projects": [
                     str(path)
                     for path in self._recent_project_paths[:8]
@@ -2419,8 +2456,17 @@ class CleanroomXApp:
         self._focus_workspace_snapshot = None
         self.focus_workspace_var.set(False)
         state = self._ui_layout_state
+        self.density_var.set(normalize_density_name(state["density"]))
         self.theme_var.set(normalize_theme_name(state["theme"]))
         self.set_theme(self.theme_var.get(), persist=False)
+        self.workspace_profile_var.set(
+            workspace_profile_spec(state["workspace_profile"]).key
+        )
+        self.apply_workspace_profile(
+            self.workspace_profile_var.get(),
+            persist=False,
+            configure_panels=False,
+        )
         self.navigator_panel_visible_var.set(bool(state["navigator_visible"]))
         self.output_panel_visible_var.set(bool(state["output_visible"]))
         self._sync_navigator_panel_visibility()
@@ -2555,7 +2601,11 @@ class CleanroomXApp:
     def set_theme(self, value: str, *, persist: bool = True) -> None:
         theme = normalize_theme_name(value)
         self.theme_var.set(theme)
-        self._theme_palette = configure_ttk_theme(self.root, theme)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            theme,
+            density=self.density_var.get(),
+        )
         self._apply_theme_to_native_widgets()
         state = dict(getattr(self, "_ui_layout_state", {}))
         state["theme"] = theme
@@ -2566,6 +2616,80 @@ class CleanroomXApp:
 
     def toggle_theme(self) -> None:
         self.set_theme("dark" if self.theme_var.get() == "light" else "light")
+
+    def set_density(self, value: str, *, persist: bool = True) -> None:
+        density = normalize_density_name(value)
+        self.density_var.set(density)
+        self._theme_palette = configure_ttk_theme(
+            self.root,
+            self.theme_var.get(),
+            density=density,
+        )
+        self._apply_theme_to_native_widgets(redraw=False)
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["density"] = density
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if persist:
+            self._save_ui_layout_state()
+        self.status_var.set(
+            "Density: Compact / Engineering"
+            if density == "compact"
+            else "Density: Comfortable"
+        )
+
+    def apply_workspace_profile(
+        self,
+        value: str,
+        *,
+        persist: bool = True,
+        configure_panels: bool = True,
+    ) -> None:
+        profile = workspace_profile_spec(value)
+        self._restore_focus_workspace_snapshot(status=False)
+        self.workspace_profile_var.set(profile.key)
+
+        if configure_panels:
+            self.navigator_panel_visible_var.set(profile.navigator_visible)
+            self.output_panel_visible_var.set(profile.output_visible)
+            self._sync_navigator_panel_visibility()
+            self._sync_output_panel_visibility()
+            workspace = getattr(self, "spatial_workspace", None)
+            if workspace is not None:
+                workspace.set_inspector_visible(profile.inspector_visible)
+
+        if profile.primary_view == "design":
+            self._activate_spatial_workspace(profile.spatial_mode)
+        elif profile.primary_view == "simulation":
+            self._activate_simulation_workspace()
+        elif profile.primary_view == "verification":
+            self._activate_verification_workspace()
+        elif profile.primary_view == "evidence":
+            self._activate_evidence_workspace()
+        elif profile.primary_view == "reporting":
+            self._activate_reporting_workspace()
+
+        if profile.output_view is not None and hasattr(self, "output_notebook"):
+            output_targets = {
+                "analysis": getattr(self, "analysis_result_panel", None),
+                "problems": getattr(self, "problems_panel", None),
+                "evidence": getattr(getattr(self, "evidence_text", None), "master", None),
+                "report": getattr(getattr(self, "report_text", None), "master", None),
+            }
+            target = output_targets.get(profile.output_view)
+            if target is not None:
+                try:
+                    self.output_notebook.select(target)
+                except tk.TclError:
+                    pass
+
+        state = dict(getattr(self, "_ui_layout_state", {}))
+        state["workspace_profile"] = profile.key
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        if configure_panels:
+            self.root.after_idle(self._apply_saved_panel_sashes)
+        if persist:
+            self._save_ui_layout_state()
+        self.workspace_status_var.set(f"Workspace: {profile.label}")
 
     def _restore_focus_workspace_snapshot(self, *, status: bool = True) -> bool:
         snapshot = getattr(self, "_focus_workspace_snapshot", None)
@@ -3392,6 +3516,41 @@ class CleanroomXApp:
                 "Design",
                 lambda: self.spatial_workspace.fit_views(),
                 keywords=("zoom", "model"),
+            ),
+            PaletteCommand(
+                "workspace.profile.design",
+                "Switch to Design Workspace Profile",
+                "Workspace",
+                lambda: self.apply_workspace_profile("design"),
+                keywords=("layout", "panels", "design"),
+            ),
+            PaletteCommand(
+                "workspace.profile.simulation",
+                "Switch to Simulation Workspace Profile",
+                "Workspace",
+                lambda: self.apply_workspace_profile("simulation"),
+                keywords=("layout", "panels", "solver"),
+            ),
+            PaletteCommand(
+                "workspace.profile.verification",
+                "Switch to Verification Workspace Profile",
+                "Workspace",
+                lambda: self.apply_workspace_profile("verification"),
+                keywords=("layout", "panels", "assurance"),
+            ),
+            PaletteCommand(
+                "workspace.profile.evidence",
+                "Switch to Evidence Workspace Profile",
+                "Workspace",
+                lambda: self.apply_workspace_profile("evidence"),
+                keywords=("layout", "panels", "proofgraph"),
+            ),
+            PaletteCommand(
+                "workspace.profile.reporting",
+                "Switch to Reporting Workspace Profile",
+                "Workspace",
+                lambda: self.apply_workspace_profile("reporting"),
+                keywords=("layout", "panels", "release"),
             ),
             PaletteCommand(
                 "workspace.focus",

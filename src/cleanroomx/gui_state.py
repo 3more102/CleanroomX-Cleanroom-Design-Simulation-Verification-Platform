@@ -8,11 +8,62 @@ from .gui_theme import normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 5
+GUI_LAYOUT_STATE_VERSION = 6
+GUI_WORKSPACE_PROFILES = (
+    "design",
+    "simulation",
+    "verification",
+    "evidence",
+    "reporting",
+)
+
+_DEFAULT_WORKSPACE_LAYOUTS = {
+    "design": {
+        "navigator_visible": True,
+        "output_visible": False,
+        "inspector_visible": True,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.72,
+        "inspector_fraction": 0.78,
+    },
+    "simulation": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.66,
+        "inspector_fraction": 0.78,
+    },
+    "verification": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.58,
+        "inspector_fraction": 0.78,
+    },
+    "evidence": {
+        "navigator_visible": True,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.64,
+        "inspector_fraction": 0.78,
+    },
+    "reporting": {
+        "navigator_visible": False,
+        "output_visible": True,
+        "inspector_visible": False,
+        "navigator_fraction": 0.20,
+        "output_fraction": 0.62,
+        "inspector_fraction": 0.78,
+    },
+}
+
 _DEFAULT_GUI_LAYOUT_STATE = {
     "version": GUI_LAYOUT_STATE_VERSION,
     "navigator_visible": True,
-    "output_visible": True,
+    "output_visible": False,
     "inspector_visible": True,
     "theme": "dark",
     "density": "compact",
@@ -23,6 +74,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "navigator_fraction": 0.20,
     "output_fraction": 0.72,
     "inspector_fraction": 0.78,
+    "workspace_layouts": _DEFAULT_WORKSPACE_LAYOUTS,
 }
 
 
@@ -82,8 +134,11 @@ def _normalize_density(value: Any) -> str:
 
 def _normalize_workspace_profile(value: Any) -> str:
     token = str(value or "").strip().lower()
-    allowed = {"design", "simulation", "verification", "evidence", "reporting"}
-    return token if token in allowed else _DEFAULT_GUI_LAYOUT_STATE["workspace_profile"]
+    return (
+        token
+        if token in GUI_WORKSPACE_PROFILES
+        else _DEFAULT_GUI_LAYOUT_STATE["workspace_profile"]
+    )
 
 
 def _normalize_recent_projects(value: Any) -> list[str]:
@@ -108,35 +163,78 @@ def _normalize_recent_projects(value: Any) -> list[str]:
     return recent
 
 
-def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
-    """Normalize persisted presentation state and discard unsupported fields."""
+def _normalize_workspace_layout(
+    value: Any,
+    defaults: dict[str, Any],
+) -> dict[str, Any]:
     source = value if isinstance(value, dict) else {}
     return {
-        "version": GUI_LAYOUT_STATE_VERSION,
         "navigator_visible": (
             source.get("navigator_visible")
             if isinstance(source.get("navigator_visible"), bool)
-            else _DEFAULT_GUI_LAYOUT_STATE["navigator_visible"]
+            else defaults["navigator_visible"]
         ),
         "output_visible": (
             source.get("output_visible")
             if isinstance(source.get("output_visible"), bool)
-            else _DEFAULT_GUI_LAYOUT_STATE["output_visible"]
+            else defaults["output_visible"]
         ),
         "inspector_visible": (
             source.get("inspector_visible")
             if isinstance(source.get("inspector_visible"), bool)
-            else _DEFAULT_GUI_LAYOUT_STATE["inspector_visible"]
+            else defaults["inspector_visible"]
         ),
+        "navigator_fraction": _bounded_fraction(
+            source.get("navigator_fraction"),
+            defaults["navigator_fraction"],
+        ),
+        "output_fraction": _bounded_fraction(
+            source.get("output_fraction"),
+            defaults["output_fraction"],
+        ),
+        "inspector_fraction": _bounded_fraction(
+            source.get("inspector_fraction"),
+            defaults["inspector_fraction"],
+        ),
+    }
+
+
+def _normalize_workspace_layouts(value: Any) -> dict[str, dict[str, Any]]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        profile: _normalize_workspace_layout(source.get(profile), defaults)
+        for profile, defaults in _DEFAULT_WORKSPACE_LAYOUTS.items()
+    }
+
+
+def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
+    """Normalize persisted presentation state and discard unsupported fields."""
+    source = value if isinstance(value, dict) else {}
+    workspace_profile = _normalize_workspace_profile(source.get("workspace_profile"))
+    workspace_layouts = _normalize_workspace_layouts(source.get("workspace_layouts"))
+
+    # v5 and earlier persisted a single global panel arrangement. Preserve that
+    # exact arrangement as the active profile during migration rather than
+    # discarding the user's workstation choices.
+    if "workspace_layouts" not in source:
+        workspace_layouts[workspace_profile] = _normalize_workspace_layout(
+            source,
+            _DEFAULT_WORKSPACE_LAYOUTS[workspace_profile],
+        )
+
+    active_layout = workspace_layouts[workspace_profile]
+    return {
+        "version": GUI_LAYOUT_STATE_VERSION,
+        "navigator_visible": active_layout["navigator_visible"],
+        "output_visible": active_layout["output_visible"],
+        "inspector_visible": active_layout["inspector_visible"],
         "theme": normalize_theme_name(
             source["theme"]
             if "theme" in source
             else _DEFAULT_GUI_LAYOUT_STATE["theme"]
         ),
         "density": _normalize_density(source.get("density")),
-        "workspace_profile": _normalize_workspace_profile(
-            source.get("workspace_profile")
-        ),
+        "workspace_profile": workspace_profile,
         "recent_projects": _normalize_recent_projects(
             source.get("recent_projects")
         ),
@@ -150,18 +248,10 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
             _DEFAULT_GUI_LAYOUT_STATE["window_height"],
             minimum=680,
         ),
-        "navigator_fraction": _bounded_fraction(
-            source.get("navigator_fraction"),
-            _DEFAULT_GUI_LAYOUT_STATE["navigator_fraction"],
-        ),
-        "output_fraction": _bounded_fraction(
-            source.get("output_fraction"),
-            _DEFAULT_GUI_LAYOUT_STATE["output_fraction"],
-        ),
-        "inspector_fraction": _bounded_fraction(
-            source.get("inspector_fraction"),
-            _DEFAULT_GUI_LAYOUT_STATE["inspector_fraction"],
-        ),
+        "navigator_fraction": active_layout["navigator_fraction"],
+        "output_fraction": active_layout["output_fraction"],
+        "inspector_fraction": active_layout["inspector_fraction"],
+        "workspace_layouts": workspace_layouts,
     }
 
 

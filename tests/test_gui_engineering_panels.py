@@ -238,6 +238,19 @@ def test_requirements_navigator_opens_traceability(app, monkeypatch):
 
 
 
+def test_status_bar_health_summary_uses_canonical_engineering_counts(app):
+    result, _issue = _force_room_overlap(app)
+    summary = result["summary"]
+
+    health = app.health_status_var.get()
+    assert f"Errors {summary['error_count']}" in health
+    assert f"Warnings {summary['warning_count']}" in health
+
+    verify_badge = app.shell_verification_badge_var.get()
+    assert verify_badge.startswith("VERIFY ")
+    assert f"Verify {verify_badge.removeprefix('VERIFY ')}" in health
+
+
 def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
     app._update_title()
     app.root.update_idletasks()

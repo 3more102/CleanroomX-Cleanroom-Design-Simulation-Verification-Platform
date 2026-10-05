@@ -334,6 +334,51 @@ def test_startup_recovery_takes_precedence_over_requested_project(monkeypatch):
 
 
 
+def test_startup_recovery_failure_is_reported_without_blocking_requested_project(
+    monkeypatch,
+):
+    events = []
+
+    class Root:
+        def mainloop(self):
+            events.append("mainloop")
+
+    class App:
+        def __init__(self, root, *, autosave_interval_seconds):
+            self.project = new_project()
+
+        def offer_startup_recovery(self):
+            events.append("recovery")
+            raise RuntimeError("synthetic recovery center failure")
+
+        def _show_operation_error(self, title, operation, exc):
+            events.append(("error", title, operation, str(exc)))
+
+        def load_project_path(self, path):
+            events.append(("load", path))
+
+    monkeypatch.setattr(gui_module.tk, "Tk", Root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
+
+    assert gui_module.main(["requested.cleanroomx.json"]) == 0
+    assert events == [
+        "recovery",
+        (
+            "error",
+            "Startup recovery unavailable",
+            "Scan startup recovery",
+            "synthetic recovery center failure",
+        ),
+        ("load", "requested.cleanroomx.json"),
+        "mainloop",
+    ]
+
+
 def test_recovered_first_save_refuses_original_source_path(tmp_path, monkeypatch):
     source, artifact, recovery_dir = _make_recovery(tmp_path, '{"value": 2}')
     source_before = source.read_bytes()

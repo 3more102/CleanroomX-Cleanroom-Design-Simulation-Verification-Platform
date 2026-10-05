@@ -81,3 +81,22 @@ def test_start_center_recent_workspace_keeps_engineering_table_contract(app):
     assert tree.heading("path", "text") == "Location"
     assert tree.heading("modified", "text") == "Modified"
     assert "No recent projects" in app.start_center.recent_hint.cget("text")
+
+
+
+def test_start_center_recent_action_tracks_selection(app):
+    button = app.start_center.open_recent_button
+    assert str(button.cget("state")) == "disabled"
+
+    app._remember_recent_project(bundled_demo_project_path())
+    app.root.update()
+    item = app.start_center.recent_tree.get_children()[0]
+    assert str(button.cget("state")) == "disabled"
+
+    app.start_center.recent_tree.selection_set(item)
+    app.start_center._sync_recent_action_state()
+    assert str(button.cget("state")) == "normal"
+
+    app.start_center.recent_tree.selection_remove(item)
+    app.start_center._sync_recent_action_state()
+    assert str(button.cget("state")) == "disabled"

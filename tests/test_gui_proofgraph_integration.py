@@ -196,3 +196,22 @@ def test_tampered_persisted_proofgraph_is_not_rendered(app, monkeypatch):
 
     assert app.proofgraph_viewer._documents == []
     assert "unavailable" in app.evidence_text.get("1.0", "end").casefold()
+
+def test_spatial_selection_synchronizes_proofgraph_without_switching_workspace(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    document = _room_graph(room["id"])
+
+    app.proofgraph_viewer.set_documents([document])
+    app.notebook.select(workspace)
+    app.root.update()
+
+    assert app.proofgraph_viewer.selected_node() is None
+    workspace.select_item("room", room["id"], notify=True)
+    app.root.update()
+
+    selected = app.proofgraph_viewer.selected_node()
+    assert selected is not None
+    assert selected["key"] == f"model_object:{room['id']}"
+    assert app.notebook.select() == str(workspace)
+

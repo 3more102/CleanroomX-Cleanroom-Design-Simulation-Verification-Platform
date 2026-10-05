@@ -377,6 +377,118 @@ def _filtered_projection(
 
 
 
+def _searched_projection(
+    projection: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    """Filter presentation nodes by text while retaining immediate graph context."""
+    tokens = [token for token in _text(query).casefold().split() if token]
+    if not tokens:
+        return projection
+
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    matched: set[str] = set()
+    for node in nodes:
+        raw = node.get("raw")
+        raw_text = (
+            json.dumps(raw, sort_keys=True, ensure_ascii=False, allow_nan=False)
+            if isinstance(raw, dict)
+            else ""
+        )
+        haystack = " ".join(
+            (
+                _text(node.get("label")),
+                _text(node.get("id")),
+                _text(node.get("type")),
+                _text(node.get("status")),
+                " ".join(str(flag) for flag in node.get("flags") or ()),
+                raw_text,
+            )
+        ).casefold()
+        if all(token in haystack for token in tokens):
+            matched.add(node["key"])
+
+    expanded = set(matched)
+    for edge in edges:
+        if edge["source"] in matched or edge["target"] in matched:
+            expanded.add(edge["source"])
+            expanded.add(edge["target"])
+
+    return {
+        "nodes": [node for node in nodes if node["key"] in expanded],
+        "edges": [
+            edge
+            for edge in edges
+            if edge["source"] in expanded and edge["target"] in expanded
+        ],
+    }
+
+
+def proofgraph_completeness_summary(
+    projection: dict[str, Any],
+) -> dict[str, int]:
+    """Summarize persisted traceability topology without deriving compliance."""
+    nodes = projection.get("nodes", [])
+    edges = projection.get("edges", [])
+    requirement_keys = {
+        node["key"] for node in nodes if node.get("type") == "requirement"
+    }
+    check_keys = {node["key"] for node in nodes if node.get("type") == "check"}
+    evidence_keys = {
+        node["key"] for node in nodes if node.get("type") == "evidence"
+    }
+    verdict_nodes = [node for node in nodes if node.get("type") == "verdict"]
+    unresolved_findings = [
+        node
+        for node in nodes
+        if node.get("type") == "finding"
+        and "unresolved" in set(node.get("flags") or ())
+    ]
+
+    requirements_with_checks = {
+        edge["source"]
+        for edge in edges
+        if edge.get("relation") == "checked_by"
+        and edge.get("source") in requirement_keys
+        and edge.get("target") in check_keys
+    }
+    checks_with_evidence = {
+        edge["target"]
+        for edge in edges
+        if edge.get("relation") == "supports"
+        and edge.get("source") in evidence_keys
+        and edge.get("target") in check_keys
+    }
+    failing_verdicts = sum(
+        1
+        for node in verdict_nodes
+        if _text(node.get("status")).casefold() in {"fail", "failed", "error"}
+    )
+    warning_verdicts = sum(
+        1
+        for node in verdict_nodes
+        if _text(node.get("status")).casefold() in {"warning", "warn", "not_checked"}
+    )
+    passing_verdicts = sum(
+        1
+        for node in verdict_nodes
+        if _text(node.get("status")).casefold() in {"pass", "passed"}
+    )
+    return {
+        "requirements": len(requirement_keys),
+        "requirements_with_checks": len(requirements_with_checks),
+        "checks": len(check_keys),
+        "checks_with_evidence": len(checks_with_evidence),
+        "evidence": len(evidence_keys),
+        "unresolved_findings": len(unresolved_findings),
+        "verdicts": len(verdict_nodes),
+        "passing_verdicts": passing_verdicts,
+        "warning_verdicts": warning_verdicts,
+        "failing_verdicts": failing_verdicts,
+    }
+
+
 def _node_detail_lines(node: dict[str, Any]) -> list[str]:
     """Format a ProofGraph node for engineering review without raw JSON dumping."""
     node_type = str(node.get("type") or "node").replace("_", " ").upper()

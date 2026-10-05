@@ -9,6 +9,7 @@ import pytest
 from cleanroomx.gui import (
     AnalysisPicker,
     CleanroomXApp,
+    IfcReimportPlanDialog,
     RequirementsTraceabilityDialog,
     RunHistoryDialog,
     VerificationHistoryDialog,
@@ -240,4 +241,59 @@ def test_requirements_traceability_filters_canonical_requirements_and_mappings(a
     dialog._clear_filters()
     app.root.update()
     assert dialog.count_var.get() == "2 of 2 traceability rows"
+    dialog.destroy()
+
+
+
+def test_ifc_reimport_plan_filters_real_change_records_and_preserves_detail(app):
+    report = {
+        "can_apply": False,
+        "conflict_count": 1,
+        "summary": {"update": 1, "conflict": 1},
+        "changes": [
+            {
+                "global_id": "IFC-ROOM-A",
+                "action": "update",
+                "kind": "room",
+                "spatial_id": "room-a",
+                "local_changed": False,
+                "source_changed": True,
+                "source_name": "Room A",
+            },
+            {
+                "global_id": "IFC-ROOM-B",
+                "action": "conflict",
+                "kind": "room",
+                "spatial_id": "room-b",
+                "local_changed": True,
+                "source_changed": True,
+                "reason": "local_and_source_changed",
+            },
+        ],
+        "candidate_validation_error": "conflict must be resolved",
+    }
+
+    dialog = IfcReimportPlanDialog(app.root, report)
+    app.root.update()
+
+    assert dialog.count_var.get() == "2 of 2 changes"
+
+    dialog.action_filter_var.set("conflict")
+    app.root.update()
+    children = dialog.tree.get_children()
+    assert len(children) == 1
+    selected = dialog._change_by_iid[children[0]]
+    assert selected["global_id"] == "IFC-ROOM-B"
+    assert "local_and_source_changed" in dialog.detail.get("1.0", "end")
+
+    dialog.search_var.set("ROOM-A")
+    app.root.update()
+    assert dialog.tree.get_children() == ()
+    assert "match the active filters" in dialog.detail.get(
+        "1.0", "end"
+    ).casefold()
+
+    dialog._clear_filters()
+    app.root.update()
+    assert len(dialog.tree.get_children()) == 2
     dialog.destroy()

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+import csv
 from datetime import datetime
+import io
 import json
 from pathlib import Path
 import queue
@@ -1435,6 +1437,9 @@ class CleanroomXApp:
             label="Export Report Markdown...", command=self.export_report_markdown
         )
         report_menu.add_command(
+            label="Export Plot CSV...", command=self.export_plot_csv
+        )
+        report_menu.add_command(
             label="Export Portable HTML Report...", command=self.export_report_html
         )
         menubar.add_cascade(label="Report", menu=report_menu)
@@ -1932,9 +1937,30 @@ class CleanroomXApp:
         plot_tab = ttk.Frame(self.notebook)
         self.plot_tab = plot_tab
         self.notebook.add(plot_tab, text="Plot")
+        plot_toolbar = ttk.Frame(plot_tab, padding=(7, 5))
+        plot_toolbar.pack(fill="x")
+        ttk.Label(
+            plot_toolbar,
+            text="SIMULATION / ANALYSIS PLOT",
+            style="CX.Section.TLabel",
+        ).pack(side="left")
+        self.plot_cursor_var = tk.StringVar(value="Cursor: —")
+        ttk.Label(
+            plot_toolbar,
+            textvariable=self.plot_cursor_var,
+            anchor="e",
+        ).pack(side="right", fill="x", expand=True, padx=(10, 0))
+        ttk.Button(
+            plot_toolbar,
+            text="Export CSV…",
+            style="CX.Compact.TButton",
+            command=self.export_plot_csv,
+        ).pack(side="right", padx=(6, 0))
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
+        self.plot_canvas.bind("<Motion>", self._on_plot_motion)
+        self.plot_canvas.bind("<Leave>", self._clear_plot_hover)
 
         self.proofgraph_viewer = ProofGraphViewer(
             self.notebook,
@@ -6510,9 +6536,144 @@ class CleanroomXApp:
         if select_results:
             self.output_notebook.select(self.result_text.master)
 
+    @staticmethod
+    def _plot_csv_content(plot: dict) -> str:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(("kind", "name", "index", "x", "y"))
+        for series in plot.get("series", []):
+            name = str(series.get("name") or "Series")
+            for index, (x_value, y_value) in enumerate(
+                zip(series.get("x", []), series.get("y", [])),
+                start=1,
+            ):
+                writer.writerow(("series", name, index, x_value, y_value))
+        for index, marker in enumerate(plot.get("markers", []), start=1):
+            writer.writerow(
+                (
+                    "marker",
+                    str(marker.get("name") or "Marker"),
+                    index,
+                    marker.get("x", ""),
+                    marker.get("y", ""),
+                )
+            )
+        return output.getvalue()
+
+    def export_plot_csv(self) -> None:
+        run = self._current_fresh_run()
+        if run is None or run.plot is None:
+            messagebox.showinfo(
+                "No current plot",
+                "Run an analysis that produces plot data before exporting.",
+                parent=self.root,
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+        )
+        if path:
+            self._write_export_file(
+                path,
+                self._plot_csv_content(run.plot),
+                label="Plot CSV",
+            )
+
+    def _clear_plot_hover(self, _event=None) -> None:
+        canvas = getattr(self, "plot_canvas", None)
+        if canvas is not None:
+            canvas.delete("plot_hover")
+        cursor_var = getattr(self, "plot_cursor_var", None)
+        if cursor_var is not None:
+            cursor_var.set("Cursor: —")
+
+    def _on_plot_motion(self, event: tk.Event) -> None:
+        points = getattr(self, "_plot_hit_points", ())
+        if not points:
+            self._clear_plot_hover()
+            return
+        nearest = min(
+            points,
+            key=lambda point: (
+                (point["px"] - event.x) ** 2
+                + (point["py"] - event.y) ** 2
+            ),
+        )
+        distance_sq = (
+            (nearest["px"] - event.x) ** 2
+            + (nearest["py"] - event.y) ** 2
+        )
+        if distance_sq > 14 ** 2:
+            self._clear_plot_hover()
+            return
+
+        canvas = self.plot_canvas
+        canvas.delete("plot_hover")
+        palette = self._theme_palette
+        bounds = getattr(self, "_plot_bounds", None)
+        if bounds is not None:
+            left, top, right, bottom = bounds
+            canvas.create_line(
+                nearest["px"],
+                top,
+                nearest["px"],
+                bottom,
+                fill=palette["muted"],
+                dash=(3, 4),
+                tags=("plot_hover",),
+            )
+            canvas.create_line(
+                left,
+                nearest["py"],
+                right,
+                nearest["py"],
+                fill=palette["muted"],
+                dash=(3, 4),
+                tags=("plot_hover",),
+            )
+        canvas.create_oval(
+            nearest["px"] - 5,
+            nearest["py"] - 5,
+            nearest["px"] + 5,
+            nearest["py"] + 5,
+            outline=palette["accent_hover"],
+            width=2,
+            tags=("plot_hover",),
+        )
+        label = (
+            f"{nearest['series']} · "
+            f"x={nearest['x']:.6g} · y={nearest['y']:.6g}"
+        )
+        self.plot_cursor_var.set("Cursor: " + label)
+
+        text_item = canvas.create_text(
+            nearest["px"] + 10,
+            nearest["py"] - 10,
+            text=label,
+            anchor="sw",
+            fill=palette["field_text"],
+            tags=("plot_hover",),
+        )
+        bbox = canvas.bbox(text_item)
+        if bbox is not None:
+            rect = canvas.create_rectangle(
+                bbox[0] - 5,
+                bbox[1] - 3,
+                bbox[2] + 5,
+                bbox[3] + 3,
+                fill=palette["field"],
+                outline=palette["border"],
+                tags=("plot_hover",),
+            )
+            canvas.tag_lower(rect, text_item)
+
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
         canvas.delete("all")
+        self._plot_hit_points = []
+        self._plot_bounds = None
         palette = getattr(
             self,
             "_theme_palette",
@@ -6561,18 +6722,55 @@ class CleanroomXApp:
             return px, py
 
         axis = palette["muted"]
+        grid_color = palette.get("border", axis)
         text_color = palette["text"]
         series_color = palette["accent"]
-        canvas.create_line(left, height - bottom, width - right, height - bottom, fill=axis)
-        canvas.create_line(left, top, left, height - bottom, fill=axis)
+        plot_right = width - right
+        plot_bottom = height - bottom
+        self._plot_bounds = (left, top, plot_right, plot_bottom)
+
+        for tick in range(6):
+            fraction = tick / 5
+            x_value = xmin + (xmax - xmin) * fraction
+            px = left + (plot_right - left) * fraction
+            canvas.create_line(
+                px,
+                top,
+                px,
+                plot_bottom,
+                fill=grid_color,
+                dash=(2, 4),
+            )
+            canvas.create_text(
+                px,
+                plot_bottom + 18,
+                text=f"{x_value:.3g}",
+                anchor="n",
+                fill=axis,
+            )
+            y_value = ymin + (ymax - ymin) * fraction
+            py = plot_bottom - (plot_bottom - top) * fraction
+            canvas.create_line(
+                left,
+                py,
+                plot_right,
+                py,
+                fill=grid_color,
+                dash=(2, 4),
+            )
+            canvas.create_text(
+                left - 8,
+                py,
+                text=f"{y_value:.3g}",
+                anchor="e",
+                fill=axis,
+            )
+
+        canvas.create_line(left, plot_bottom, plot_right, plot_bottom, fill=axis)
+        canvas.create_line(left, top, left, plot_bottom, fill=axis)
         canvas.create_text(width / 2, 18, text=plot["title"], font=("TkDefaultFont", 11, "bold"), fill=text_color)
         canvas.create_text(width / 2, height - 20, text=plot["x_label"], fill=text_color)
         canvas.create_text(18, height / 2, text=plot["y_label"], angle=90, fill=text_color)
-        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n", fill=axis)
-        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n", fill=axis)
-        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e", fill=axis)
-        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e", fill=axis)
-
         for index, series in enumerate(plot["series"]):
             coords = []
             for x, y in zip(series["x"], series["y"]):
@@ -6588,6 +6786,17 @@ class CleanroomXApp:
                     px - 2, py - 2, px + 2, py + 2,
                     fill=series_color,
                     outline=series_color,
+                )
+                self._plot_hit_points.append(
+                    {
+                        "px": px,
+                        "py": py,
+                        "x": float(x),
+                        "y": float(y),
+                        "series": str(
+                            series.get("name", f"Series {index + 1}")
+                        ),
+                    }
                 )
 
             legend_x = max(left + 20, width - right - 170)
@@ -6609,6 +6818,15 @@ class CleanroomXApp:
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])
+            self._plot_hit_points.append(
+                {
+                    "px": px,
+                    "py": py,
+                    "x": float(marker["x"]),
+                    "y": float(marker["y"]),
+                    "series": str(marker.get("name") or "Marker"),
+                }
+            )
             canvas.create_oval(
                 px - 6, py - 6, px + 6, py + 6,
                 width=2,

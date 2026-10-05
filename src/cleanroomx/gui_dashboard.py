@@ -22,6 +22,73 @@ def _count(summary: dict[str, Any], *keys: str) -> int:
     return 0
 
 
+def system_status_projection(
+    snapshot: dict[str, Any] | None,
+) -> tuple[tuple[str, str, str], ...]:
+    """Project explicit project state into compact workstation status modules."""
+    data = snapshot if isinstance(snapshot, dict) else {}
+    diagnostics = data.get("diagnostics", {})
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    summary = diagnostics.get("summary", {})
+    summary = summary if isinstance(summary, dict) else {}
+    verification = data.get("verification", {})
+    verification = verification if isinstance(verification, dict) else {}
+    model = data.get("model", {})
+    model = model if isinstance(model, dict) else {}
+    evidence = data.get("evidence", {})
+    evidence = evidence if isinstance(evidence, dict) else {}
+
+    rooms = int(model.get("room_count") or 0)
+    configured = _count(verification, "configured_analysis_count")
+    current = _count(verification, "current_count")
+    stale = _count(verification, "stale_count")
+    not_verified = _count(verification, "not_verified_count")
+    records = int(evidence.get("record_count") or 0)
+    graphs = int(evidence.get("proofgraph_count") or 0)
+    analyses = int(data.get("analysis_count") or 0)
+    last_run = data.get("last_run")
+
+    if configured <= 0:
+        verification_state, verification_detail = "not checked", "No configured analyses"
+    elif current == configured and stale == 0 and not_verified == 0:
+        verification_state, verification_detail = "current", f"{current}/{configured} current"
+    elif stale > 0:
+        verification_state, verification_detail = (
+            "stale",
+            f"{stale} stale · {current}/{configured} current",
+        )
+    else:
+        verification_state, verification_detail = (
+            "unverified",
+            f"{not_verified} not verified · {current}/{configured} current",
+        )
+
+    diagnostic_state = str(summary.get("status") or "not checked")
+    issue_count = _count(summary, "issue_count", "total_count")
+    if isinstance(last_run, dict):
+        analysis_state = str(last_run.get("status") or "unknown")
+        analysis_detail = str(last_run.get("title") or "Latest analysis")
+    else:
+        analysis_state = "available" if analyses else "not checked"
+        analysis_detail = (
+            f"{analyses} configured · not run"
+            if analyses
+            else "No analysis configured"
+        )
+
+    return (
+        ("MODEL", "available" if rooms else "not checked", f"{rooms} room{'s' if rooms != 1 else ''}"),
+        ("DIAGNOSTICS", diagnostic_state, f"{issue_count} issue{'s' if issue_count != 1 else ''}"),
+        ("VERIFICATION", verification_state, verification_detail),
+        ("ANALYSIS", analysis_state, analysis_detail),
+        (
+            "EVIDENCE",
+            "available" if records or graphs else "not checked",
+            f"{records} record{'s' if records != 1 else ''} · {graphs} graph{'s' if graphs != 1 else ''}",
+        ),
+    )
+
+
 class EngineeringDashboard(ttk.Frame):
     """Dense, display-only engineering project health surface."""
 
@@ -35,6 +102,10 @@ class EngineeringDashboard(ttk.Frame):
         self._snapshot: dict[str, Any] = {}
         self._on_issue = on_issue
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
+        self._theme_name = "dark"
+        self._palette = theme_palette(self._theme_name)
+        self.system_status_vars: dict[str, tuple[tk.StringVar, tk.StringVar]] = {}
+        self.system_status_labels: dict[str, ttk.Label] = {}
 
         self.project_var = tk.StringVar(value="Untitled project")
         self.location_var = tk.StringVar(value="Unsaved project")
@@ -51,12 +122,14 @@ class EngineeringDashboard(ttk.Frame):
         self.issue_summary_var = tk.StringVar(value="No project diagnostics evaluated")
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(4, weight=1)
+        self.rowconfigure(5, weight=1)
 
         self._build_header()
         self._build_instruments()
         self._build_progress()
+        self._build_system_status()
         self._build_issue_table()
+        self.apply_theme("dark")
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame")
@@ -170,9 +243,36 @@ class EngineeringDashboard(ttk.Frame):
             anchor="e",
         ).grid(row=0, column=2, sticky="e", padx=(8, 0))
 
+    def _build_system_status(self) -> None:
+        host = ttk.Frame(self, style="CX.SubtlePanel.TFrame", padding=(10, 7))
+        host.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        ttk.Label(
+            host,
+            text="SYSTEM STATUS",
+            style="CX.SurfaceSection.TLabel",
+        ).pack(side="left", padx=(0, 10))
+        for key in ("MODEL", "DIAGNOSTICS", "VERIFICATION", "ANALYSIS", "EVIDENCE"):
+            state_var = tk.StringVar(value="NOT CHECKED")
+            detail_var = tk.StringVar(value="")
+            self.system_status_vars[key] = (state_var, detail_var)
+            module = ttk.Frame(host, style="CX.Card.TFrame", padding=(6, 3))
+            module.pack(side="left", padx=3)
+            ttk.Label(
+                module,
+                text=key,
+                style="CX.PanelSection.TLabel",
+            ).pack(side="left", padx=(0, 5))
+            label = ttk.Label(
+                module,
+                textvariable=state_var,
+                style="CX.Status.Neutral.TLabel",
+            )
+            label.pack(side="left")
+            self.system_status_labels[key] = label
+
     def _build_issue_table(self) -> None:
         host = ttk.Frame(self)
-        host.grid(row=4, column=0, sticky="nsew")
+        host.grid(row=5, column=0, sticky="nsew")
         host.rowconfigure(1, weight=1)
         host.columnconfigure(0, weight=1)
 
@@ -188,7 +288,15 @@ class EngineeringDashboard(ttk.Frame):
             heading,
             textvariable=self.issue_summary_var,
             style="CX.PanelHeader.TLabel",
-        ).grid(row=0, column=1, sticky="e")
+        ).grid(row=0, column=1, sticky="e", padx=(0, 8))
+        self.locate_issue_button = ttk.Button(
+            heading,
+            text="Locate selected",
+            style="CX.Compact.TButton",
+            command=self._open_selected_issue,
+            state="disabled",
+        )
+        self.locate_issue_button.grid(row=0, column=2, sticky="e")
 
         columns = ("severity", "code", "object", "domain", "description")
         self.issue_tree = ttk.Treeview(
@@ -213,16 +321,33 @@ class EngineeringDashboard(ttk.Frame):
         self.issue_tree.configure(yscrollcommand=scroll.set)
         self.issue_tree.grid(row=1, column=0, sticky="nsew")
         scroll.grid(row=1, column=1, sticky="ns")
+        self.issue_tree.bind("<<TreeviewSelect>>", self._on_issue_selection)
         self.issue_tree.bind("<Double-1>", self._open_selected_issue)
         self.issue_tree.bind("<Return>", self._open_selected_issue)
 
     def apply_theme(self, value: Any) -> None:
         """Keep dashboard severity cues legible in both workstation themes."""
-        palette = theme_palette(value)
-        self.issue_tree.tag_configure("critical", foreground=palette["error"])
-        self.issue_tree.tag_configure("error", foreground=palette["error"])
-        self.issue_tree.tag_configure("warning", foreground=palette["warning"])
-        self.issue_tree.tag_configure("info", foreground=palette["info"])
+        self._theme_name = str(value or "dark")
+        self._palette = theme_palette(self._theme_name)
+        self.issue_tree.tag_configure("row_even", background=self._palette["tree"])
+        self.issue_tree.tag_configure("row_odd", background=self._palette["surface_alt"])
+        self.issue_tree.tag_configure(
+            "critical",
+            foreground=self._palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.issue_tree.tag_configure(
+            "error",
+            foreground=self._palette["error"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self.issue_tree.tag_configure("warning", foreground=self._palette["warning"])
+        self.issue_tree.tag_configure("info", foreground=self._palette["info"])
+
+    def _on_issue_selection(self, _event=None) -> None:
+        self.locate_issue_button.configure(
+            state="normal" if self.selected_issue() is not None and self._on_issue is not None else "disabled"
+        )
 
     def selected_issue(self) -> dict[str, Any] | None:
         selection = self.issue_tree.selection()
@@ -320,6 +445,12 @@ class EngineeringDashboard(ttk.Frame):
         self.evidence_var.set(f"{records} records")
         self.evidence_detail_var.set(f"{graphs} ProofGraph artifact{'s' if graphs != 1 else ''} retained")
 
+        for key, state, detail in system_status_projection(self._snapshot):
+            state_var, detail_var = self.system_status_vars[key]
+            state_var.set(state.upper().replace("_", " "))
+            detail_var.set(detail)
+            self.system_status_labels[key].configure(style=_status_style(state))
+
         issues = diagnostics.get("issues", [])
         issues = issues if isinstance(issues, list) else []
         severity_rank = {"critical": 0, "error": 1, "warning": 2, "info": 3}
@@ -333,9 +464,11 @@ class EngineeringDashboard(ttk.Frame):
         for iid in self.issue_tree.get_children():
             self.issue_tree.delete(iid)
         self._issues_by_iid.clear()
+        self.locate_issue_button.configure(state="disabled")
         for index, issue in enumerate(ordered[:12], start=1):
             severity_token = str(issue.get("severity") or "info").strip().lower()
             severity = severity_token.upper()
+            row_tag = "row_even" if index % 2 == 0 else "row_odd"
             iid = f"issue-{index}"
             self.issue_tree.insert(
                 "",
@@ -348,7 +481,7 @@ class EngineeringDashboard(ttk.Frame):
                     str(issue.get("category") or ""),
                     str(issue.get("message") or ""),
                 ),
-                tags=(severity_token,),
+                tags=(row_tag, severity_token),
             )
             self._issues_by_iid[iid] = issue
         self.issue_summary_var.set(

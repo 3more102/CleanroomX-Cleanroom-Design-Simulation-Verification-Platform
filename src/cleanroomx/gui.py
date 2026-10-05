@@ -95,7 +95,11 @@ from .gui_theme import (
 )
 from .gui_proofgraph import ProofGraphViewer
 from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
-from .gui_errors import GuiErrorReport, record_gui_exception
+from .gui_errors import (
+    GuiErrorReport,
+    make_gui_callback_exception_handler,
+    record_gui_exception,
+)
 from .gui_geometry import configure_toplevel_geometry
 from .gui_start import StartCenter
 from .project_dossier import (
@@ -4203,32 +4207,100 @@ class CleanroomXApp:
         if not isinstance(diagnostics, dict):
             diagnostics = {}
 
+        index_issues: list[SearchEntry] = []
         requirement_snapshot: dict = {}
         try:
             requirement_snapshot = project_requirement_traceability_snapshot(
                 self.project
             )
-        except Exception:
-            requirement_snapshot = {}
+        except Exception as exc:
+            report = record_gui_exception(
+                "Build requirements search index",
+                exc,
+            )
+            index_issues.append(
+                SearchEntry(
+                    key=f"search-issue:requirements:{report.reference}",
+                    category="System",
+                    label="Requirements search index unavailable",
+                    detail=f"{report.summary} · Error reference: {report.reference}",
+                    target_type="search_issue",
+                    target_id=report.reference,
+                    keywords=(
+                        "search",
+                        "requirements",
+                        "traceability",
+                        "incomplete",
+                        "error",
+                    ),
+                    payload={
+                        "operation": report.operation,
+                        "reference": report.reference,
+                        "log_path": (
+                            str(report.log_path)
+                            if report.log_path is not None
+                            else ""
+                        ),
+                    },
+                )
+            )
 
         proofgraph_documents: list[dict] = []
         try:
             records = verification_run_history_records(self.project.metadata)
             proofgraph_documents = self._proofgraph_documents_from_records(records)
-        except Exception:
-            proofgraph_documents = []
+        except Exception as exc:
+            report = record_gui_exception(
+                "Build ProofGraph search index",
+                exc,
+            )
+            index_issues.append(
+                SearchEntry(
+                    key=f"search-issue:proofgraph:{report.reference}",
+                    category="System",
+                    label="Evidence search index unavailable",
+                    detail=f"{report.summary} · Error reference: {report.reference}",
+                    target_type="search_issue",
+                    target_id=report.reference,
+                    keywords=(
+                        "search",
+                        "proofgraph",
+                        "evidence",
+                        "verification",
+                        "incomplete",
+                        "error",
+                    ),
+                    payload={
+                        "operation": report.operation,
+                        "reference": report.reference,
+                        "log_path": (
+                            str(report.log_path)
+                            if report.log_path is not None
+                            else ""
+                        ),
+                    },
+                )
+            )
 
-        return build_engineering_search_entries(
+        entries = build_engineering_search_entries(
             project=self.project,
             spatial_layout=layout,
             diagnostics=diagnostics,
             requirement_snapshot=requirement_snapshot,
             proofgraph_documents=proofgraph_documents,
         )
+        self._engineering_search_index_issue_count = len(index_issues)
+        return entries + index_issues
 
     def _navigate_engineering_search_result(self, entry: SearchEntry) -> None:
         target_type = entry.target_type
         target_id = entry.target_id
+
+        if target_type == "search_issue":
+            self.status_var.set(
+                f"Global search index incomplete · {entry.detail}"
+            )
+            return
 
         if target_type == "project":
             self._activate_start_workspace()
@@ -4328,9 +4400,20 @@ class CleanroomXApp:
             on_activate=self._navigate_engineering_search_result,
             on_close=clear_reference,
         )
-        self.status_var.set(
-            f"Global engineering search indexed {len(entries)} project entities"
+        issue_count = int(
+            getattr(self, "_engineering_search_index_issue_count", 0) or 0
         )
+        entity_count = max(0, len(entries) - issue_count)
+        if issue_count:
+            self.status_var.set(
+                "Global engineering search indexed "
+                f"{entity_count} project entities · index incomplete "
+                f"({issue_count} source issue(s))"
+            )
+        else:
+            self.status_var.set(
+                f"Global engineering search indexed {entity_count} project entities"
+            )
 
     def _command_palette_commands(self) -> list[PaletteCommand]:
         return [
@@ -5507,13 +5590,39 @@ class CleanroomXApp:
                 workflow,
             )
         except ProjectSaveDurabilityError as exc:
+            reload_report = None
             try:
                 self.load_project_path(project_path)
-            except Exception:
-                pass
-            self.status_var.set(
-                "Verification bytes committed; save durability not confirmed"
-            )
+            except Exception as reload_exc:
+                # Do not advance _project_file_revision when reload failed. Keeping
+                # the previous revision identity makes the guarded Save path reject
+                # any attempt to overwrite the newer committed verification bytes.
+                reload_report = record_gui_exception(
+                    "Reload project after verification durability warning",
+                    reload_exc,
+                )
+            if reload_report is None:
+                self.status_var.set(
+                    "Verification bytes committed; save durability not confirmed"
+                )
+                reload_detail = ""
+            else:
+                self.status_var.set(
+                    "Verification committed; reload failed · "
+                    f"{reload_report.reference}"
+                )
+                reload_detail = (
+                    "\n\nThe desktop could not reload the committed project bytes. "
+                    "This session remains bound to the previous revision and guarded "
+                    "against overwriting the newer on-disk state. Reopen the project "
+                    "before making or saving further engineering edits.\n\n"
+                    f"Reload error reference: {reload_report.reference}\n"
+                    + (
+                        f"Technical log: {reload_report.log_path}"
+                        if reload_report.log_path is not None
+                        else "Technical logging was unavailable."
+                    )
+                )
             messagebox.showwarning(
                 "Verification save durability not confirmed",
                 (
@@ -5521,6 +5630,7 @@ class CleanroomXApp:
                     "verification record, but filesystem directory durability could "
                     "not be confirmed.\n\n"
                     f"Committed project SHA-256: {exc.committed_revision.sha256}"
+                    + reload_detail
                 ),
                 parent=self.root,
             )
@@ -8959,6 +9069,21 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke:
+        status_setter = getattr(
+            getattr(app, "status_var", None),
+            "set",
+            None,
+        )
+        root.report_callback_exception = make_gui_callback_exception_handler(
+            operation="Unhandled GUI callback",
+            status_setter=status_setter if callable(status_setter) else None,
+            notifier=lambda report: messagebox.showerror(
+                "Unexpected application error",
+                report.user_message(),
+                parent=root,
+            ),
+        )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]
         lines = [
@@ -8976,7 +9101,17 @@ def main(argv: list[str] | None = None) -> int:
         )
     recovered_at_startup = False
     if not args.smoke:
-        recovered_at_startup = app.offer_startup_recovery()
+        try:
+            recovered_at_startup = app.offer_startup_recovery()
+        except Exception as exc:
+            # Recovery artifacts are independent from explicit project files.
+            # An unexpected Recovery Center failure must remain diagnosable but
+            # must not make an otherwise healthy workstation unlaunchable.
+            app._show_operation_error(
+                "Startup recovery unavailable",
+                "Scan startup recovery",
+                exc,
+            )
 
     if project_path and not recovered_at_startup:
         try:

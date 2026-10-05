@@ -1401,6 +1401,21 @@ class CleanroomXApp:
         )
         menubar.add_cascade(label="Verify", menu=verify_menu)
 
+        evidence_menu = tk.Menu(menubar, tearoff=False)
+        evidence_menu.add_command(
+            label="ProofGraph Explorer",
+            command=self._activate_evidence_workspace,
+        )
+        evidence_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
+        evidence_menu.add_command(
+            label="Verification History...",
+            command=self.show_verification_history,
+        )
+        menubar.add_cascade(label="Evidence", menu=evidence_menu)
+
         bim_menu = tk.Menu(menubar, tearoff=False)
         bim_menu.add_command(
             label="Import IFC Spatial Layout...",
@@ -1444,6 +1459,28 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Start Center", command=self._activate_start_workspace)
+        workspace_menu = tk.Menu(view_menu, tearoff=False)
+        workspace_menu.add_command(
+            label="Design Workspace",
+            command=lambda: self._activate_spatial_workspace("split"),
+        )
+        workspace_menu.add_command(
+            label="Analysis Inputs Workspace",
+            command=self._activate_analysis_input_workspace,
+        )
+        workspace_menu.add_command(
+            label="Verification Workspace",
+            command=self._activate_verification_workspace,
+        )
+        workspace_menu.add_command(
+            label="Evidence Workspace",
+            command=self._activate_evidence_workspace,
+        )
+        workspace_menu.add_command(
+            label="Results Workspace",
+            command=self._activate_results_workspace,
+        )
+        view_menu.add_cascade(label="Workspace Preset", menu=workspace_menu)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Project Navigator",
@@ -1904,6 +1941,7 @@ class CleanroomXApp:
         self.input_text.edit_modified(False)
 
         plot_tab = ttk.Frame(self.notebook)
+        self.plot_tab = plot_tab
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
@@ -2886,6 +2924,27 @@ class CleanroomXApp:
                 keywords=("requirements", "evidence"),
             ),
             PaletteCommand(
+                "workspace.verification",
+                "Open Verification Workspace",
+                "Window",
+                self._activate_verification_workspace,
+                keywords=("problems", "diagnostics", "compliance"),
+            ),
+            PaletteCommand(
+                "workspace.evidence",
+                "Open Evidence Workspace",
+                "Window",
+                self._activate_evidence_workspace,
+                keywords=("proofgraph", "provenance", "traceability"),
+            ),
+            PaletteCommand(
+                "workspace.results",
+                "Open Results Workspace",
+                "Window",
+                self._activate_results_workspace,
+                keywords=("simulation", "plot", "results"),
+            ),
+            PaletteCommand(
                 "proofgraph.open",
                 "Open ProofGraph Explorer",
                 "Evidence",
@@ -3056,6 +3115,30 @@ class CleanroomXApp:
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
             self.notebook.select(self.input_tab)
             self.workspace_status_var.set("Workspace: Analysis Inputs")
+
+    def _show_output_workspace(self) -> None:
+        self.output_panel_visible_var.set(True)
+        self._sync_output_panel_visibility()
+        self.root.after_idle(self._apply_saved_panel_sashes)
+
+    def _activate_verification_workspace(self) -> None:
+        self._show_output_workspace()
+        self._activate_spatial_workspace("split")
+        self.output_notebook.select(self.problems_panel)
+        self.workspace_status_var.set("Workspace: Verification")
+
+    def _activate_evidence_workspace(self) -> None:
+        self._show_output_workspace()
+        self._activate_proofgraph_workspace()
+        self.output_notebook.select(self.evidence_text.master)
+        self.workspace_status_var.set("Workspace: Evidence")
+
+    def _activate_results_workspace(self) -> None:
+        self._show_output_workspace()
+        if hasattr(self, "plot_tab"):
+            self.notebook.select(self.plot_tab)
+        self.output_notebook.select(self.result_text.master)
+        self.workspace_status_var.set("Workspace: Results")
 
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""

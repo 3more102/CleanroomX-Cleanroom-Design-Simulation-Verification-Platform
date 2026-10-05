@@ -4295,8 +4295,21 @@ class CleanroomXApp:
                 iid=iid,
                 text=label,
                 tags=("section",),
-                open=iid in {"nav-building", "nav-analyses"},
+                open=iid in {"nav-building", "nav-hvac", "nav-analyses"},
             )
+
+        self.analysis_tree.insert(
+            "nav-hvac",
+            "end",
+            iid="nav-airflow",
+            text="Airflow overlay",
+        )
+        self.analysis_tree.insert(
+            "nav-hvac",
+            "end",
+            iid="nav-ach",
+            text="ACH overlay",
+        )
 
         for analysis in self.project.analyses:
             self.analysis_tree.insert(
@@ -4643,12 +4656,21 @@ class CleanroomXApp:
                 self.output_notebook.select(self.report_text.master)
             self.selection_status_var.set("Selected: Reports")
             return
-        if item_id == "nav-pressure":
+        if item_id in {"nav-pressure", "nav-airflow", "nav-ach"}:
             if hasattr(self, "spatial_workspace"):
+                overlay = {
+                    "nav-pressure": "Pressure",
+                    "nav-airflow": "Airflow",
+                    "nav-ach": "ACH",
+                }[item_id]
                 self._activate_spatial_workspace("2d")
-                self.spatial_workspace._overlay_mode.set("Pressure")
-                self.spatial_workspace._set_overlay_mode("Pressure")
-            self.selection_status_var.set("Selected: Pressure Network")
+                self.spatial_workspace._overlay_mode.set(overlay)
+                self.spatial_workspace._set_overlay_mode(overlay)
+                self.selection_status_var.set(f"Selected: {overlay} engineering overlay")
+            return
+        if item_id == "nav-requirements":
+            self.show_requirements_traceability()
+            self.selection_status_var.set("Selected: Requirements traceability")
             return
         if item_id.startswith("nav-"):
             return

@@ -6,7 +6,14 @@ from tkinter import ttk
 
 import pytest
 
-from cleanroomx.gui_theme import configure_ttk_theme, normalize_theme_name, status_style_name, theme_palette
+from cleanroomx.gui_theme import (
+    apply_ttk_density,
+    configure_ttk_theme,
+    normalize_density_name,
+    normalize_theme_name,
+    status_style_name,
+    theme_palette,
+)
 
 
 def test_theme_name_normalization_is_strict_and_deterministic():
@@ -15,6 +22,13 @@ def test_theme_name_normalization_is_strict_and_deterministic():
     assert normalize_theme_name("") == "light"
     assert normalize_theme_name("system") == "light"
     assert normalize_theme_name(None) == "light"
+
+
+def test_density_name_normalization_is_strict_and_deterministic():
+    assert normalize_density_name("compact") == "compact"
+    assert normalize_density_name("Engineering Compact") == "compact"
+    assert normalize_density_name("comfortable") == "comfortable"
+    assert normalize_density_name("giant") == "compact"
 
 
 def test_light_and_dark_palettes_are_complete_and_distinct():
@@ -107,6 +121,13 @@ def test_status_style_name_is_canonical_across_engineering_states():
     assert status_style_name("unverified") == "CX.Status.Unverified.TLabel"
     assert status_style_name("available") == "CX.Status.Info.TLabel"
     assert status_style_name("not checked") == "CX.Status.Neutral.TLabel"
+    assert status_style_name("saved") == "CX.Status.Pass.TLabel"
+    assert status_style_name("unsaved") == "CX.Status.Warning.TLabel"
+    assert status_style_name("not verified") == "CX.Status.Unverified.TLabel"
+    assert (
+        status_style_name("dependency freshness unverifiable")
+        == "CX.Status.Warning.TLabel"
+    )
 
 
 def test_surface_aware_label_styles_match_parent_surfaces():
@@ -163,5 +184,32 @@ def test_surface_aware_label_styles_match_parent_surfaces():
             style.lookup("CX.Simulation.Horizontal.TProgressbar", "background")
             == palette["simulation"]
         )
+    finally:
+        root.destroy()
+
+
+
+def test_density_modes_change_ttk_metrics_without_changing_theme():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    try:
+        palette = configure_ttk_theme(root, "dark")
+        style = ttk.Style(root)
+        assert apply_ttk_density(root, "compact") == "compact"
+        compact_row = int(style.lookup("Treeview", "rowheight"))
+        compact_tab = style.lookup("TNotebook.Tab", "padding")
+
+        assert apply_ttk_density(root, "comfortable") == "comfortable"
+        comfortable_row = int(style.lookup("Treeview", "rowheight"))
+        comfortable_tab = style.lookup("TNotebook.Tab", "padding")
+
+        assert comfortable_row > compact_row
+        assert comfortable_tab != compact_tab
+        assert root.cget("background") == palette["background"]
     finally:
         root.destroy()

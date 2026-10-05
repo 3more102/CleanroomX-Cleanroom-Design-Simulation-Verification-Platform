@@ -5,7 +5,7 @@ import json
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from .compliance_rulepack import (
     analyze_compliance_check,
@@ -49,14 +49,18 @@ class ComplianceRulePackPanel(ttk.Frame):
         input_getter: Callable[[], dict[str, Any] | None],
         input_setter: Callable[[dict[str, Any], str], bool],
         status_setter: Callable[[str], None] | None = None,
+        confirm_delete: Callable[[str], bool] | None = None,
     ) -> None:
         super().__init__(master)
         self._input_getter = input_getter
         self._input_setter = input_setter
         self._status_setter = status_setter or (lambda _message: None)
+        self._confirm_delete = confirm_delete or self._confirm_delete_rule
         self._payload: dict[str, Any] | None = None
         self._result: dict[str, Any] | None = None
         self._finding_by_iid: dict[str, dict[str, Any]] = {}
+        self._sort_column: str | None = None
+        self._sort_descending = False
 
         self.search_var = tk.StringVar()
         self.status_filter_var = tk.StringVar(value="All")
@@ -170,8 +174,13 @@ class ComplianceRulePackPanel(ttk.Frame):
             "tolerance": 90,
             "reference": 140,
         }
+        self._headings = headings
         for column in columns:
-            self.tree.heading(column, text=headings[column])
+            self.tree.heading(
+                column,
+                text=headings[column],
+                command=lambda selected=column: self._sort_by(selected),
+            )
             self.tree.column(
                 column,
                 width=widths[column],
@@ -326,6 +335,54 @@ class ComplianceRulePackPanel(ttk.Frame):
         self._populate()
         return self._result
 
+    @staticmethod
+    def _state_rank(value: Any) -> int:
+        return {"fail": 0, "not_checked": 1, "pass": 2}.get(
+            str(value or "").casefold(),
+            99,
+        )
+
+    def _sort_value(self, finding: dict[str, Any]):
+        column = self._sort_column
+        if column == "state":
+            return (
+                self._state_rank(finding.get("status")),
+                str(finding.get("id", "")).casefold(),
+            )
+        if column == "id":
+            return str(finding.get("id", "")).casefold()
+        if column == "title":
+            return str(finding.get("title", "")).casefold()
+        if column == "operator":
+            return str(finding.get("operator", "")).casefold()
+        if column == "path":
+            return str(finding.get("evidence_path", "")).casefold()
+        if column == "expected":
+            return _json_text(finding.get("expected")).casefold()
+        if column == "actual":
+            return _json_text(finding.get("actual")).casefold()
+        if column == "unit":
+            return str(finding.get("unit") or "").casefold()
+        if column == "tolerance":
+            value = finding.get("tolerance", 0.0)
+            return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+        if column == "reference":
+            return str(finding.get("reference") or "").casefold()
+        return 0
+
+    def _sort_by(self, column: str) -> None:
+        if column == self._sort_column:
+            self._sort_descending = not self._sort_descending
+        else:
+            self._sort_column = column
+            self._sort_descending = False
+        for key, label in self._headings.items():
+            suffix = ""
+            if key == self._sort_column:
+                suffix = " ▼" if self._sort_descending else " ▲"
+            self.tree.heading(key, text=label + suffix)
+        self._populate()
+
     def _filtered_findings(self) -> list[dict[str, Any]]:
         if not isinstance(self._result, dict):
             return []
@@ -375,6 +432,11 @@ class ComplianceRulePackPanel(ttk.Frame):
         self._finding_by_iid.clear()
 
         visible = self._filtered_findings()
+        if self._sort_column is not None:
+            visible.sort(
+                key=self._sort_value,
+                reverse=self._sort_descending,
+            )
         for index, finding in enumerate(visible):
             iid = f"rule:{index}:{finding.get('id', '')}"
             self.tree.insert(
@@ -509,6 +571,9 @@ class ComplianceRulePackPanel(ttk.Frame):
         if finding is None or not isinstance(self._payload, dict):
             raise ValueError("select a compliance rule first")
         rule_id = str(finding.get("id", ""))
+        if not self._confirm_delete(rule_id):
+            self._status_setter(f"Delete cancelled for compliance rule {rule_id}")
+            return False
         candidate = copy.deepcopy(self._payload)
         pack = candidate.get("rule_pack")
         rules = pack.get("rules") if isinstance(pack, dict) else None
@@ -616,6 +681,19 @@ class ComplianceRulePackPanel(ttk.Frame):
         self._select_rule_id(new_id)
         self._status_setter(f"Duplicated compliance rule as {new_id}")
         return True
+
+    def _confirm_delete_rule(self, rule_id: str) -> bool:
+        return bool(
+            messagebox.askyesno(
+                "Delete compliance rule",
+                (
+                    f"Delete compliance rule {rule_id!r}?\n\n"
+                    "This changes the analysis input and can invalidate retained "
+                    "current-run results. The edit can be restored with Undo."
+                ),
+                parent=self.winfo_toplevel(),
+            )
+        )
 
     def delete_selected(self) -> bool:
         finding = self.selected_finding()

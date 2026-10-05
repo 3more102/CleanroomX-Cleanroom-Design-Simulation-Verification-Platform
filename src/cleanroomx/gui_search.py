@@ -6,6 +6,7 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
+from .compliance_rulepack import compliance_check_from_dict
 from .gui_display import configure_toplevel_geometry
 from .gui_proofgraph import proofgraph_projection
 
@@ -146,6 +147,68 @@ def build_engineering_search_entries(
                     keywords=(kind, "simulation", "solver", "input", "result"),
                 ),
             )
+
+            if kind == "compliance_check":
+                try:
+                    compliance = compliance_check_from_dict(
+                        getattr(analysis, "input", None)
+                    )
+                except Exception:
+                    # Invalid/incomplete compliance inputs remain discoverable as an
+                    # analysis but are not projected as valid criteria.
+                    continue
+                pack = compliance.rule_pack
+                for rule in pack.rules:
+                    rule_id = _text(rule.id)
+                    if not rule_id:
+                        continue
+                    title = _text(rule.title) or rule_id
+                    reference = _text(rule.reference)
+                    source = _text(rule.source or pack.source)
+                    unit = _text(rule.unit)
+                    expected = _text(rule.expected)
+                    detail = " · ".join(
+                        part
+                        for part in (
+                            name,
+                            rule_id,
+                            f"{rule.operator} {expected}".strip(),
+                            unit,
+                            reference,
+                        )
+                        if part
+                    )
+                    _append_unique(
+                        entries,
+                        seen,
+                        SearchEntry(
+                            key=f"compliance:{analysis_id}:{rule_id}",
+                            category="Compliance",
+                            label=title,
+                            detail=detail,
+                            target_type="compliance_rule",
+                            target_id=rule_id,
+                            keywords=(
+                                analysis_id,
+                                name,
+                                pack.id,
+                                pack.title,
+                                source,
+                                reference,
+                                rule.evidence_path,
+                                rule.operator,
+                                expected,
+                                unit,
+                                "criteria",
+                                "rule pack",
+                                "compliance",
+                            ),
+                            payload={
+                                "analysis_id": analysis_id,
+                                "rule_id": rule_id,
+                            },
+                        ),
+                    )
 
     layout = spatial_layout if isinstance(spatial_layout, dict) else {}
     for collection_name, category, target_type in (

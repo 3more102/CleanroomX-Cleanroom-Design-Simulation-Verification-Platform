@@ -7078,6 +7078,15 @@ class CleanroomXApp:
             return
         self.selection_status_var.set(workspace.selection_status_text())
 
+    def _sync_proofgraph_spatial_selection(self, kind: str, item_id: str) -> bool:
+        """Mirror real spatial selection into persisted ProofGraph evidence when present."""
+        if kind not in {"room", "device"} or not item_id:
+            return False
+        viewer = getattr(self, "proofgraph_viewer", None)
+        if viewer is None:
+            return False
+        return bool(viewer.focus_node(f"model_object:{item_id}"))
+
     def _on_navigator_selected(self, event=None) -> None:
         if self._selection_guard:
             return
@@ -7092,6 +7101,7 @@ class CleanroomXApp:
                 self.spatial_workspace.select_item(kind, spatial_id)
                 self._activate_spatial_workspace()
                 self._sync_spatial_selection_status()
+                self._sync_proofgraph_spatial_selection(kind, spatial_id)
             return
         if item_id == "nav-dashboard":
             if hasattr(self, "dashboard"):
@@ -7174,6 +7184,7 @@ class CleanroomXApp:
             tree.see(navigator_id)
         finally:
             self._selection_guard = previous_guard
+        self._sync_proofgraph_spatial_selection(kind, item_id)
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:

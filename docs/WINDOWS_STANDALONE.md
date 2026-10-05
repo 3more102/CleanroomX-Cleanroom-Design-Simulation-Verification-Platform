@@ -8,6 +8,15 @@ The artifact contains a PyInstaller one-directory build of the production
 The build gate launches the frozen `CleanroomX.exe --check` process on a clean
 GitHub-hosted Windows runner before the artifact is published.
 
+## Windows identity
+
+The frozen executable uses a deterministic multi-resolution icon generated from
+`scripts/write_windows_icon.py`. Its Windows VERSIONINFO resource is generated
+from `project.version` in `pyproject.toml` and embeds the CleanroomX product
+name, `CleanroomX Engineering Workstation` description, and current project
+version. The Windows build fails if the produced executable reports inconsistent
+ProductName, ProductVersion, or FileDescription metadata.
+
 ## Release artifact
 
 The workflow publishes:

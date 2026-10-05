@@ -275,6 +275,24 @@ class TreeviewTableBehavior:
             variable.set(column in current)
         return True
 
+    def set_column_order(self, columns: Iterable[str]) -> bool:
+        """Reorder the currently visible data columns without changing visibility."""
+        requested = tuple(dict.fromkeys(str(item) for item in columns))
+        current = self.visible_columns
+        if (
+            not requested
+            or set(requested) != set(current)
+            or any(column not in self.columns for column in requested)
+        ):
+            return False
+        try:
+            self.tree.configure(displaycolumns=requested)
+        except tk.TclError:
+            return False
+        for column, variable in self._column_vars.items():
+            variable.set(column in requested)
+        return True
+
     def show_all_columns(self) -> None:
         self.tree.configure(displaycolumns="#all")
         for variable in self._column_vars.values():

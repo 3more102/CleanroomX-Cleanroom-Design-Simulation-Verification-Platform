@@ -18,6 +18,17 @@ CASES = (
     ("large", 1_000, 2_500),
 )
 
+# CI regression budgets are deliberately much looser than the validated
+# 2026-10-05 Python 3.13 baseline (large public validation ~0.023 s and
+# overlap sweep ~30x faster than the naive reference). They are release
+# regression guards, not end-user hardware performance claims.
+MAX_PUBLIC_VALIDATE_SECONDS = {
+    "small": 0.10,
+    "medium": 0.15,
+    "large": 0.25,
+}
+MIN_LARGE_OVERLAP_SPEEDUP = 2.0
+
 
 def _grid(count: int) -> list[dict]:
     room_size_m = 4.0
@@ -113,6 +124,17 @@ def main() -> int:
                 f"{issues[:3]!r}"
             )
         speedup = naive_seconds / max(sweep_seconds, 1e-12)
+        max_public_seconds = MAX_PUBLIC_VALIDATE_SECONDS[label]
+        if full_seconds > max_public_seconds:
+            raise RuntimeError(
+                f"{label} public spatial validation exceeded CI regression budget: "
+                f"{full_seconds:.6f}s > {max_public_seconds:.6f}s"
+            )
+        if label == "large" and speedup < MIN_LARGE_OVERLAP_SPEEDUP:
+            raise RuntimeError(
+                "large overlap sweep lost its required regression margin over the "
+                f"naive reference: {speedup:.2f}x < {MIN_LARGE_OVERLAP_SPEEDUP:.2f}x"
+            )
         print(
             f"{label},{len(rooms)},{len(devices)},{sweep_seconds:.6f},"
             f"{naive_seconds:.6f},{normalized_seconds:.6f},"

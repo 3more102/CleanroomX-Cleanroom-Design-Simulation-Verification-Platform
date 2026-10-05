@@ -1987,6 +1987,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="CX.Status.Neutral.TLabel",
         )
         self._inspector_sync_state_label.pack(side="right")
+        attach_tooltip(
+            self._inspector_result_source_label,
+            "Shows whether the visible calculated metrics come from a fresh active-analysis result or only from configured design input.",
+        )
+        attach_tooltip(
+            self._inspector_sync_state_label,
+            "Engineering synchronization state between this spatial room and its linked analysis input.",
+        )
 
         ttk.Label(
             engineering,

@@ -2022,6 +2022,15 @@ class CleanroomXApp:
             variable=self.fullscreen_var,
             command=self._sync_fullscreen_workspace,
         )
+        self.saved_layout_menu = tk.Menu(
+            view_menu,
+            tearoff=False,
+            postcommand=self._rebuild_saved_layout_menu,
+        )
+        view_menu.add_cascade(
+            label="Saved Layouts",
+            menu=self.saved_layout_menu,
+        )
         view_menu.add_command(
             label="Reset Panel Layout",
             command=self.reset_panel_layout,
@@ -3465,6 +3474,188 @@ class CleanroomXApp:
             if width > 1:
                 workspace._body.sashpos(0, max(520, int(width * 0.78)))
 
+    @staticmethod
+    def _named_layout_snapshot(state: dict) -> dict:
+        return {
+            key: state[key]
+            for key in (
+                "navigator_visible",
+                "output_visible",
+                "inspector_visible",
+                "workspace_profile",
+                "navigator_fraction",
+                "output_fraction",
+                "inspector_fraction",
+            )
+        }
+
+    def _rebuild_saved_layout_menu(self) -> None:
+        menu = getattr(self, "saved_layout_menu", None)
+        if menu is None:
+            return
+        menu.delete(0, "end")
+        menu.add_command(
+            label="Save Current Layout…",
+            command=self.prompt_save_current_layout,
+        )
+        saved = self._ui_layout_state.get("saved_layouts", {})
+        saved = saved if isinstance(saved, dict) else {}
+        if not saved:
+            menu.add_separator()
+            menu.add_command(label="(No saved layouts)", state="disabled")
+            return
+
+        menu.add_separator()
+        for name in sorted(saved, key=str.casefold):
+            menu.add_command(
+                label=name,
+                command=lambda selected=name: self.apply_saved_layout(selected),
+            )
+        remove_menu = tk.Menu(menu, tearoff=False)
+        for name in sorted(saved, key=str.casefold):
+            remove_menu.add_command(
+                label=name,
+                command=lambda selected=name: self.prompt_delete_saved_layout(
+                    selected
+                ),
+            )
+        menu.add_separator()
+        menu.add_cascade(label="Remove Saved Layout", menu=remove_menu)
+
+    def save_named_layout(self, name: str, *, replace: bool = False) -> bool:
+        normalized_name = " ".join(str(name or "").strip().split())
+        if not normalized_name or len(normalized_name) > 40 or chr(0) in normalized_name:
+            return False
+        state = self._capture_ui_layout_state()
+        saved = dict(state.get("saved_layouts", {}))
+        existing = next(
+            (
+                item
+                for item in saved
+                if str(item).casefold() == normalized_name.casefold()
+            ),
+            None,
+        )
+        if existing is not None and not replace:
+            return False
+        if existing is None and len(saved) >= 8:
+            return False
+        if existing is not None and existing != normalized_name:
+            saved.pop(existing, None)
+        saved[normalized_name] = self._named_layout_snapshot(state)
+        state["saved_layouts"] = saved
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        self._save_ui_layout_state()
+        self.status_var.set(f"Saved workspace layout: {normalized_name}")
+        self._notify(
+            "Workspace layout saved",
+            level="success",
+            detail=f"Saved panel arrangement as {normalized_name}.",
+        )
+        return True
+
+    def prompt_save_current_layout(self) -> None:
+        name = simpledialog.askstring(
+            "Save workspace layout",
+            "Layout name:",
+            parent=self.root,
+        )
+        if name is None:
+            return
+        normalized_name = " ".join(name.strip().split())
+        if not normalized_name or len(normalized_name) > 40 or chr(0) in normalized_name:
+            messagebox.showerror(
+                "Invalid layout name",
+                "Use a non-empty layout name up to 40 characters.",
+                parent=self.root,
+            )
+            return
+        saved = self._ui_layout_state.get("saved_layouts", {})
+        existing = next(
+            (
+                item
+                for item in saved
+                if str(item).casefold() == normalized_name.casefold()
+            ),
+            None,
+        ) if isinstance(saved, dict) else None
+        replace = False
+        if existing is not None:
+            replace = messagebox.askyesno(
+                "Replace saved layout?",
+                f"Replace the saved layout {existing!r}?",
+                parent=self.root,
+            )
+            if not replace:
+                return
+        if not self.save_named_layout(normalized_name, replace=replace):
+            messagebox.showwarning(
+                "Layout not saved",
+                "CleanroomX stores up to 8 named layouts. Remove an existing layout or use another valid name.",
+                parent=self.root,
+            )
+
+    def apply_saved_layout(self, name: str) -> bool:
+        saved = self._ui_layout_state.get("saved_layouts", {})
+        layout = saved.get(name) if isinstance(saved, dict) else None
+        if not isinstance(layout, dict):
+            return False
+
+        self._focus_workspace_snapshot = None
+        self.focus_workspace_var.set(False)
+        state = dict(self._ui_layout_state)
+        state.update(layout)
+        self._ui_layout_state = normalize_gui_layout_state(state)
+
+        profile = workspace_profile_spec(
+            self._ui_layout_state["workspace_profile"]
+        ).key
+        self.workspace_profile_var.set(profile)
+        self.apply_workspace_profile(
+            profile,
+            persist=False,
+            configure_panels=False,
+        )
+        self.navigator_panel_visible_var.set(
+            bool(self._ui_layout_state["navigator_visible"])
+        )
+        self.output_panel_visible_var.set(
+            bool(self._ui_layout_state["output_visible"])
+        )
+        self._sync_navigator_panel_visibility()
+        self._sync_output_panel_visibility()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.set_inspector_visible(
+                bool(self._ui_layout_state["inspector_visible"])
+            )
+        self.root.update_idletasks()
+        self._apply_saved_panel_sashes()
+        self._save_ui_layout_state()
+        self.status_var.set(f"Applied workspace layout: {name}")
+        return True
+
+    def delete_saved_layout(self, name: str) -> bool:
+        state = dict(self._ui_layout_state)
+        saved = dict(state.get("saved_layouts", {}))
+        if name not in saved:
+            return False
+        del saved[name]
+        state["saved_layouts"] = saved
+        self._ui_layout_state = normalize_gui_layout_state(state)
+        self._save_ui_layout_state()
+        self.status_var.set(f"Removed workspace layout: {name}")
+        return True
+
+    def prompt_delete_saved_layout(self, name: str) -> None:
+        if not messagebox.askyesno(
+            "Remove saved layout?",
+            f"Remove the saved workspace layout {name!r}?",
+            parent=self.root,
+        ):
+            return
+        self.delete_saved_layout(name)
+
     def reset_panel_layout(self) -> None:
         self._focus_workspace_snapshot = None
         self.focus_workspace_var.set(False)
@@ -3475,8 +3666,19 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.show_inspector()
-        self._ui_layout_state = normalize_gui_layout_state({})
+        self._ui_layout_state = normalize_gui_layout_state(
+            {
+                "theme": self.theme_var.get(),
+                "density": self.density_var.get(),
+                "recent_projects": [
+                    str(path) for path in self._recent_project_paths[:8]
+                ],
+                "saved_layouts": self._ui_layout_state.get("saved_layouts", {}),
+            }
+        )
+        self.workspace_profile_var.set("design")
         self.root.after_idle(self._apply_default_panel_sashes)
+        self._save_ui_layout_state()
         self.status_var.set("Panel layout reset")
 
     def _activate_proofgraph_workspace(self) -> None:

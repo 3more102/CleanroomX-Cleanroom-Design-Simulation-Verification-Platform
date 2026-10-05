@@ -155,3 +155,92 @@ def test_fit_selected_preserves_engineering_geometry(app):
     assert workspace.layout["devices"] == geometry_before["devices"]
     assert 0.2 <= workspace.layout["view"]["zoom_2d"] <= 8.0
     assert 0.2 <= workspace.layout["view"]["zoom_3d"] <= 8.0
+
+
+
+def test_problem_browser_supports_category_rule_filters_and_filtered_export(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    assert "spatial" in panel.category_picker.cget("values")
+    assert "spatial.room_overlap" in panel.rule_picker.cget("values")
+
+    panel.category_var.set("spatial")
+    panel.rule_var.set("spatial.room_overlap")
+    app.root.update()
+
+    visible = panel.tree.get_children()
+    assert visible
+    assert all(
+        panel._issues_by_iid[iid]["category"] == "spatial"
+        and panel._issues_by_iid[iid]["rule"] == "spatial.room_overlap"
+        for iid in visible
+    )
+    assert f"{len(visible)}/{result['summary']['issue_count']} shown" in panel.summary_var.get()
+
+    filtered = panel.filtered_result()
+    assert filtered is not None
+    assert filtered is not result
+    assert filtered["summary"]["issue_count"] == len(visible)
+    assert filtered["issues"]
+    assert all(item["rule"] == "spatial.room_overlap" for item in filtered["issues"])
+    assert result["summary"]["issue_count"] >= filtered["summary"]["issue_count"]
+    assert any(
+        item["sequence"] == issue["sequence"]
+        for item in filtered["issues"]
+    )
+
+    exported = []
+    panel._export_callback = lambda payload: exported.append(payload)
+    panel._export()
+    assert len(exported) == 1
+    assert exported[0]["issues"] == filtered["issues"]
+    assert exported[0]["summary"] == filtered["summary"]
+
+
+def test_problem_browser_previous_next_cycles_visible_diagnostics(app):
+    _force_room_overlap(app)
+    panel = app.problems_panel
+    panel.clear_filters()
+
+    issues = list(panel._issues_from_result(panel.last_result))
+    assert issues
+    if len(issues) == 1:
+        duplicate = copy.deepcopy(issues[0])
+        duplicate["sequence"] = int(issues[0]["sequence"]) + 1000
+        duplicate["rule"] = "test.second_diagnostic"
+        panel.last_result["issues"].append(duplicate)
+        panel.last_result["summary"]["issue_count"] += 1
+        panel._refresh_filter_choices()
+        panel._populate()
+
+    children = list(panel.tree.get_children())
+    assert len(children) >= 2
+
+    panel.tree.selection_set(children[0])
+    panel.tree.focus(children[0])
+    panel._step_selection(1)
+    assert panel.tree.selection() == (children[1],)
+
+    panel._step_selection(-1)
+    assert panel.tree.selection() == (children[0],)
+
+
+def test_problem_browser_clear_filters_restores_all_findings(app):
+    result, _issue = _force_room_overlap(app)
+    panel = app.problems_panel
+
+    panel.search_var.set("room_overlap")
+    panel.severity_var.set("Warning")
+    panel.category_var.set("spatial")
+    panel.rule_var.set("spatial.room_overlap")
+    app.root.update()
+    assert len(panel.tree.get_children()) <= result["summary"]["issue_count"]
+
+    panel.clear_filters()
+    app.root.update()
+    assert panel.search_var.get() == ""
+    assert panel.severity_var.get() == "All"
+    assert panel.category_var.get() == "All"
+    assert panel.rule_var.get() == "All"
+    assert len(panel.tree.get_children()) == result["summary"]["issue_count"]

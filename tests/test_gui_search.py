@@ -93,6 +93,76 @@ def test_build_engineering_search_entries_uses_only_present_canonical_data():
     assert ("evidence", "ev-1") in targets
 
 
+def test_build_engineering_search_entries_indexes_valid_compliance_criteria():
+    project = SimpleNamespace(
+        name="P",
+        description="",
+        analyses=[
+            SimpleNamespace(
+                id="compliance-1",
+                name="Project criteria",
+                kind="compliance_check",
+                input={
+                    "name": "Project criteria",
+                    "rule_pack": {
+                        "schema": "cleanroomx-compliance-rule-pack",
+                        "schema_version": 1,
+                        "id": "owner-urs",
+                        "version": "1",
+                        "title": "Owner URS",
+                        "source": "Approved URS",
+                        "rules": [
+                            {
+                                "id": "ach-min",
+                                "title": "Minimum ACH",
+                                "evidence_path": "/rooms/Process/ach",
+                                "operator": "min",
+                                "expected": 20,
+                                "unit": "1/h",
+                                "reference": "URS-HVAC-004",
+                            }
+                        ],
+                    },
+                    "evidence": {"rooms": {"Process": {"ach": 21}}},
+                },
+            )
+        ],
+    )
+
+    entries = build_engineering_search_entries(project=project)
+
+    criterion = next(entry for entry in entries if entry.target_type == "compliance_rule")
+    assert criterion.target_id == "ach-min"
+    assert criterion.category == "Compliance"
+    assert criterion.label == "Minimum ACH"
+    assert criterion.payload == {
+        "analysis_id": "compliance-1",
+        "rule_id": "ach-min",
+    }
+    assert "URS-HVAC-004" in criterion.detail
+    assert "Approved URS" in criterion.keywords
+
+
+def test_build_engineering_search_entries_skips_invalid_compliance_criteria():
+    project = SimpleNamespace(
+        name="P",
+        description="",
+        analyses=[
+            SimpleNamespace(
+                id="broken",
+                name="Broken criteria",
+                kind="compliance_check",
+                input={"name": "Broken criteria", "rule_pack": {}},
+            )
+        ],
+    )
+
+    entries = build_engineering_search_entries(project=project)
+
+    assert any(entry.target_type == "analysis" and entry.target_id == "broken" for entry in entries)
+    assert not any(entry.target_type == "compliance_rule" for entry in entries)
+
+
 def test_build_engineering_search_entries_does_not_turn_missing_values_into_zero():
     project = SimpleNamespace(name="P", description="", analyses=[])
     entries = build_engineering_search_entries(

@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
+from .engineering_units import (
+    EngineeringUnitConversionError,
+    convert_engineering_value,
+)
 from .spatial_integrity import validate_spatial_layout_document
 
 
@@ -24,6 +29,20 @@ _FIELD_LABELS = {
     "pressure_pa": "Pressure (Pa)",
     "orientation_deg": "Orientation (degrees)",
 }
+
+_FIELD_TARGET_UNITS = {
+    "x_m": "m",
+    "y_m": "m",
+    "z_m": "m",
+    "length_m": "m",
+    "width_m": "m",
+    "height_m": "m",
+    "floor_elevation_m": "m",
+    "pressure_pa": "Pa",
+}
+_QUANTITY_INPUT_RE = re.compile(
+    r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(\S(?:.*\S)?)\s*$"
+)
 
 
 def _selected_item(layout: dict, kind: str, item_id: str) -> dict:
@@ -41,7 +60,22 @@ def _number(text: str, field: str, *, positive: bool = False) -> float:
     try:
         number = float(text)
     except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError(f"{label} must be a finite number") from exc
+        target_unit = _FIELD_TARGET_UNITS.get(field)
+        match = _QUANTITY_INPUT_RE.match(str(text or ""))
+        if target_unit is None or match is None:
+            raise ValueError(f"{label} must be a finite number") from exc
+        try:
+            numeric = float(match.group(1))
+            conversion = convert_engineering_value(
+                numeric,
+                source_unit=match.group(2).strip(),
+                target_unit=target_unit,
+            )
+            number = conversion.output_value
+        except (ValueError, OverflowError, EngineeringUnitConversionError) as unit_exc:
+            raise ValueError(
+                f"{label} must be a finite number in {target_unit} or a supported compatible unit"
+            ) from unit_exc
     if not math.isfinite(number):
         raise ValueError(f"{label} must be a finite number")
     if positive and number <= 0:
@@ -162,6 +196,37 @@ def _offset_device(device: dict, layout: dict) -> None:
                 device[axis] += step
             elif current - step >= room[axis]:
                 device[axis] -= step
+
+
+def update_spatial_properties_bulk(
+    layout: dict,
+    selections: Sequence[tuple[str, str]],
+    values: Mapping[str, str],
+) -> dict:
+    """Apply one explicit property patch to a same-kind selection atomically.
+
+    The caller's layout is never mutated. Each intermediate replacement passes
+    the canonical spatial-layout validator, and no partially edited layout is
+    returned when any selected object rejects the patch.
+    """
+    ordered: list[tuple[str, str]] = []
+    for kind, item_id in selections:
+        key = (str(kind), str(item_id))
+        if key not in ordered:
+            ordered.append(key)
+    if not ordered:
+        raise ValueError("Select one or more rooms or devices first")
+    kinds = {kind for kind, _item_id in ordered}
+    if len(kinds) != 1:
+        raise ValueError("Bulk property editing requires rooms or devices, not a mixed selection")
+    if not values:
+        return copy.deepcopy(layout)
+
+    candidate = layout
+    for kind, item_id in ordered:
+        candidate = update_spatial_properties(candidate, kind, item_id, values)
+    return candidate
+
 
 
 def duplicate_spatial_item(layout: dict, kind: str, item_id: str) -> tuple[dict, str]:

@@ -5,6 +5,13 @@ from cleanroomx.gui_search import (
     build_engineering_search_entries,
     filter_search_entries,
 )
+from cleanroomx.proofgraph_models import (
+    CalculationEvidence,
+    EvidenceSource,
+    ProofGraph,
+    Requirement,
+    RequirementSet,
+)
 
 
 def test_filter_search_entries_requires_all_tokens_and_ranks_stronger_label_hits_first():
@@ -58,7 +65,19 @@ def test_build_engineering_search_entries_uses_only_present_canonical_data():
                 "status": "active",
                 "source": "URS",
             }
-        ]
+        ],
+        "mappings": [
+            {
+                "id": "MAP-1",
+                "requirement_id": "REQ-1",
+                "requirement_title": "Maintain positive pressure",
+                "property_name": "pressure_pa",
+                "analysis_id": "pressure-1",
+                "subject_ref": "R-101",
+                "status": "active",
+                "reference_state": "resolved",
+            }
+        ],
     }
     proofgraphs = [
         {
@@ -91,7 +110,8 @@ def test_build_engineering_search_entries_uses_only_present_canonical_data():
     assert ("device", "D-1") in targets
     assert ("diagnostic", "AIRFLOW_BALANCE") in targets
     assert ("requirement", "REQ-1") in targets
-    assert ("evidence", "evidence:ev-1") in targets
+    assert ("mapping", "MAP-1") in targets
+    assert ("evidence", "ev-1") in targets
 
 
 def test_build_engineering_search_entries_does_not_turn_missing_values_into_zero():
@@ -105,3 +125,54 @@ def test_build_engineering_search_entries_does_not_turn_missing_values_into_zero
     room = next(entry for entry in entries if entry.target_type == "room")
     assert "0" not in room.detail
     assert room.detail.endswith("R1")
+
+
+
+def test_build_engineering_search_entries_indexes_canonical_proofgraph_documents():
+    requirement = Requirement(
+        id="REQ-SEARCH",
+        title="Searchable pressure requirement",
+        source="project",
+    )
+    requirement_set = RequirementSet(
+        id="REQSET-SEARCH",
+        version="1",
+        title="Search requirements",
+        source="project",
+        requirements=(requirement,),
+    )
+    source = EvidenceSource(
+        id="SRC-SEARCH",
+        kind="calculation",
+        reference="solver",
+    )
+    evidence = CalculationEvidence(
+        id="EVID-SEARCH",
+        property_name="pressure_pa",
+        value=15.0,
+        unit="Pa",
+        source_id=source.id,
+        subject_ref="room-search",
+    )
+    graph = ProofGraph(
+        id="GRAPH-SEARCH",
+        requirement_set=requirement_set,
+        evidence_sources=(source,),
+        evidence=(evidence,),
+    ).to_dict()
+    project = SimpleNamespace(name="P", description="", analyses=[])
+
+    entries = build_engineering_search_entries(
+        project=project,
+        proofgraph_documents=[graph],
+    )
+
+    evidence_entry = next(
+        entry
+        for entry in entries
+        if entry.target_type == "evidence" and entry.target_id == "EVID-SEARCH"
+    )
+    assert evidence_entry.label == "pressure_pa"
+    assert evidence_entry.payload["_proofgraph_id"] == "GRAPH-SEARCH"
+    assert evidence_entry.payload["_proofgraph_key"] == "evidence:EVID-SEARCH"
+    assert evidence_entry.payload["type"] == "evidence"

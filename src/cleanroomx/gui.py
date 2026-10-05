@@ -1764,7 +1764,7 @@ class CleanroomXApp:
                 modebar,
                 text=label,
                 width=8,
-                style="CX.Mode.TButton",
+                style=f"CX.Mode{key.title()}.TButton",
                 command=lambda selected=key: self._activate_primary_workspace(selected),
             )
             button.grid(row=row, column=column, sticky="ew", padx=1, pady=1)
@@ -3051,7 +3051,7 @@ class CleanroomXApp:
                 style=(
                     f"CX.Mode{name.title()}Active.TButton"
                     if name == key
-                    else "CX.Mode.TButton"
+                    else f"CX.Mode{name.title()}.TButton"
                 )
             )
 

@@ -1698,6 +1698,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._orbit_anchor: tuple[int, int] | None = None
         self._orbit_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._show_rulers = tk.BooleanVar(value=True)
         self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
         self._show_labels = tk.BooleanVar(value=True)

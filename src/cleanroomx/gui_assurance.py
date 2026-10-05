@@ -97,6 +97,46 @@ def evidence_record_projection(
     }
 
 
+def evidence_record_matches_filters(
+    row: dict[str, Any],
+    *,
+    verdict: str = "All",
+    currency: str = "All",
+    query: str = "",
+) -> bool:
+    """Filter retained evidence rows without reinterpreting verification state."""
+    verdict_token = str(verdict or "").strip().casefold()
+    currency_token = str(currency or "").strip().casefold()
+    if verdict_token not in {"", "all"}:
+        if str(row.get("verification_status") or "").strip().casefold() != verdict_token:
+            return False
+    if currency_token not in {"", "all"}:
+        if str(row.get("currency_state") or "").strip().casefold() != currency_token:
+            return False
+
+    tokens = [
+        token
+        for token in str(query or "").strip().casefold().split()
+        if token
+    ]
+    if not tokens:
+        return True
+    haystack = " ".join(
+        (
+            str(row.get("sequence") or ""),
+            str(row.get("completed_at_utc") or ""),
+            str(row.get("analysis_id") or ""),
+            str(row.get("analysis_name") or ""),
+            str(row.get("analysis_kind") or ""),
+            str(row.get("verification_status") or ""),
+            str(row.get("currency_state") or ""),
+            str(row.get("record_sha256") or ""),
+            str(row.get("source_revision") or ""),
+        )
+    ).casefold()
+    return all(token in haystack for token in tokens)
+
+
 class VerificationWorkspace(ttk.Frame):
     """First-class operator workspace for canonical verification currency."""
 
@@ -157,7 +197,7 @@ class VerificationWorkspace(ttk.Frame):
         for label, callback in (
             ("Traceability", on_traceability),
             ("History", on_history),
-            ("Problems", on_problems),
+            ("Diagnostics", on_problems),
             ("ProofGraph", on_proofgraph),
         ):
             ttk.Button(
@@ -384,10 +424,15 @@ class EvidenceWorkspace(ttk.Frame):
     ) -> None:
         super().__init__(master, padding=(14, 12))
         self._records_by_iid: dict[str, dict[str, Any]] = {}
+        self._projected_records: list[dict[str, Any]] = []
         self.record_count_var = tk.StringVar(value="0")
         self.proofgraph_count_var = tk.StringVar(value="0")
         self.latest_var = tk.StringVar(value="—")
         self.currency_var = tk.StringVar(value="NOT ASSESSED")
+        self.search_var = tk.StringVar()
+        self.verdict_filter_var = tk.StringVar(value="All")
+        self.currency_filter_var = tk.StringVar(value="All")
+        self.visible_var = tk.StringVar(value="0 visible")
 
         header = ttk.Frame(self, style="CX.PanelHeader.TFrame", padding=(10, 7))
         header.pack(fill="x", pady=(0, 8))
@@ -417,6 +462,42 @@ class EvidenceWorkspace(ttk.Frame):
                 style="CX.Compact.TButton",
                 command=callback,
             ).pack(side="left", padx=2)
+
+        filters = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(8, 5))
+        filters.pack(fill="x", pady=(0, 8))
+        ttk.Label(filters, text="Search").pack(side="left")
+        ttk.Entry(filters, textvariable=self.search_var, width=24).pack(
+            side="left", padx=(4, 10)
+        )
+        ttk.Label(filters, text="Verdict").pack(side="left")
+        self.verdict_filter = ttk.Combobox(
+            filters,
+            textvariable=self.verdict_filter_var,
+            values=("All",),
+            state="readonly",
+            width=14,
+        )
+        self.verdict_filter.pack(side="left", padx=(4, 10))
+        ttk.Label(filters, text="Currency").pack(side="left")
+        self.currency_filter = ttk.Combobox(
+            filters,
+            textvariable=self.currency_filter_var,
+            values=("All",),
+            state="readonly",
+            width=26,
+        )
+        self.currency_filter.pack(side="left", padx=(4, 8))
+        ttk.Button(
+            filters,
+            text="Clear",
+            style="CX.Compact.TButton",
+            command=self.clear_filters,
+        ).pack(side="left")
+        ttk.Label(
+            filters,
+            textvariable=self.visible_var,
+            style="CX.PanelMuted.TLabel",
+        ).pack(side="right")
 
         metrics = ttk.Frame(self)
         metrics.pack(fill="x", pady=(0, 8))
@@ -481,6 +562,76 @@ class EvidenceWorkspace(ttk.Frame):
         self.detail.pack(side="left", fill="both", expand=True)
         detail_scroll.pack(side="right", fill="y")
 
+        for variable in (
+            self.search_var,
+            self.verdict_filter_var,
+            self.currency_filter_var,
+        ):
+            variable.trace_add("write", lambda *_: self._populate_records())
+
+    def clear_filters(self) -> None:
+        self.search_var.set("")
+        self.verdict_filter_var.set("All")
+        self.currency_filter_var.set("All")
+
+    def _filtered_records(self) -> list[dict[str, Any]]:
+        return [
+            row
+            for row in self._projected_records
+            if evidence_record_matches_filters(
+                row,
+                verdict=self.verdict_filter_var.get(),
+                currency=self.currency_filter_var.get(),
+                query=self.search_var.get(),
+            )
+        ]
+
+    def _populate_records(self) -> None:
+        selected = self.selected_record()
+        selected_sequence = selected.get("sequence") if selected is not None else None
+        self.tree.delete(*self.tree.get_children())
+        self._records_by_iid.clear()
+
+        visible = self._filtered_records()
+        self.visible_var.set(
+            f"{len(visible)} / {len(self._projected_records)} visible"
+        )
+        for index, item in enumerate(reversed(visible)):
+            sequence = item["sequence"]
+            iid = f"record:{sequence if sequence is not None else index}:{index}"
+            self.tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=str(sequence if sequence is not None else "—"),
+                values=(
+                    item["completed_at_utc"],
+                    item["analysis_name"],
+                    item["verification_status"].upper(),
+                    item["currency_state"].upper().replace("_", " "),
+                    str(item["evidence_count"]),
+                ),
+                tags=(item["currency_state"], item["verification_status"]),
+            )
+            self._records_by_iid[iid] = item
+
+        if selected_sequence is not None and self.select_sequence(selected_sequence):
+            return
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children[0])
+            self.tree.focus(children[0])
+            self._show_selected()
+        elif self._projected_records:
+            self._set_detail(
+                "No retained verification records match the current evidence filters."
+            )
+        else:
+            self._set_detail(
+                "No retained canonical verification evidence is present.\n\n"
+                "Missing evidence is displayed as missing; CleanroomX does not turn it into zero or PASS."
+            )
+
     def refresh(
         self,
         records: list[dict[str, Any]] | None,
@@ -502,6 +653,7 @@ class EvidenceWorkspace(ttk.Frame):
             for record in raw_records
             if isinstance(record, dict)
         ]
+        self._projected_records = projected
         self.record_count_var.set(str(len(projected)))
         self.proofgraph_count_var.set(str(max(0, int(proofgraph_count))))
         self.latest_var.set(
@@ -513,37 +665,33 @@ class EvidenceWorkspace(ttk.Frame):
             else "NO RECORDS"
         )
 
-        self.tree.delete(*self.tree.get_children())
-        self._records_by_iid.clear()
-        for index, item in enumerate(reversed(projected)):
-            sequence = item["sequence"]
-            iid = f"record:{sequence if sequence is not None else index}:{index}"
-            self.tree.insert(
-                "",
-                "end",
-                iid=iid,
-                text=str(sequence if sequence is not None else "—"),
-                values=(
-                    item["completed_at_utc"],
-                    item["analysis_name"],
-                    item["verification_status"].upper(),
-                    item["currency_state"].upper().replace("_", " "),
-                    str(item["evidence_count"]),
-                ),
-                tags=(item["currency_state"], item["verification_status"]),
-            )
-            self._records_by_iid[iid] = item
-
-        children = self.tree.get_children()
-        if children:
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
-            self._show_selected()
-        else:
-            self._set_detail(
-                "No retained canonical verification evidence is present.\n\n"
-                "Missing evidence is displayed as missing; CleanroomX does not turn it into zero or PASS."
-            )
+        verdicts = (
+            "All",
+            *sorted(
+                {
+                    str(item.get("verification_status") or "unknown")
+                    for item in projected
+                },
+                key=str.casefold,
+            ),
+        )
+        currencies = (
+            "All",
+            *sorted(
+                {
+                    str(item.get("currency_state") or "unknown")
+                    for item in projected
+                },
+                key=str.casefold,
+            ),
+        )
+        self.verdict_filter.configure(values=verdicts)
+        self.currency_filter.configure(values=currencies)
+        if self.verdict_filter_var.get() not in verdicts:
+            self.verdict_filter_var.set("All")
+        if self.currency_filter_var.get() not in currencies:
+            self.currency_filter_var.set("All")
+        self._populate_records()
 
     def selected_record(self) -> dict[str, Any] | None:
         selection = self.tree.selection()

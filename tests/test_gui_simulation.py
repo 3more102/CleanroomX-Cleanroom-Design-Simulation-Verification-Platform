@@ -121,6 +121,7 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
     root.withdraw()
     configure_ttk_theme(root, "dark")
     history_calls = []
+    duplicate_calls = []
     workspace = SimulationWorkspace(
         root,
         on_run=lambda: None,
@@ -129,6 +130,7 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
         on_open_inputs=lambda: None,
         on_open_results=lambda: None,
         on_open_history=lambda: history_calls.append(True),
+        on_duplicate_analysis=lambda: duplicate_calls.append(True),
     )
     try:
         workspace.set_context(
@@ -166,7 +168,9 @@ def test_simulation_workspace_distinguishes_calculation_from_verification():
         assert workspace.plot_var.get() == "AVAILABLE"
         assert workspace.verification_var.get() == "Separate verification workspace"
         workspace.history_button.invoke()
+        workspace.duplicate_button.invoke()
         assert history_calls == [True]
+        assert duplicate_calls == [True]
     finally:
         root.destroy()
 
@@ -235,6 +239,32 @@ def test_navigator_routes_simulation_to_first_class_workspace(app):
     assert app.notebook.select() == str(app.simulation_workspace)
     assert app.workspace_status_var.get() == "Workspace: Simulation"
     assert app.simulation_workspace.analysis_var.get() != "No active analysis"
+
+
+
+
+def test_duplicate_current_analysis_creates_independent_scenario_without_run_cache(app):
+    source = app._editor_analysis()
+    assert source is not None
+    original_id = source.id
+    original_name = source.name
+    original_kind = source.kind
+    original_input = copy.deepcopy(source.input)
+    original_count = len(app.project.analyses)
+
+    assert app.duplicate_current_analysis() is True
+    app.root.update_idletasks()
+
+    duplicate = app._editor_analysis()
+    assert duplicate is not None
+    assert len(app.project.analyses) == original_count + 1
+    assert duplicate.id != original_id
+    assert duplicate.name.startswith(original_name + " Copy")
+    assert duplicate.kind == original_kind
+    assert duplicate.input == original_input
+    assert duplicate.input is not source.input
+    assert duplicate.id not in app._runs_by_analysis
+    assert app.project.active_analysis_id == duplicate.id
 
 
 def test_canonical_demo_run_populates_simulation_summary(app):

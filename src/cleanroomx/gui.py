@@ -8065,14 +8065,14 @@ class CleanroomXApp:
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
 
     def _current_run_elapsed_seconds(self) -> float | None:
-        started = self._run_started_monotonic
+        started = getattr(self, "_run_started_monotonic", None)
         if started is None:
             return None
         return max(0.0, time.monotonic() - started)
 
     def _update_active_run_task(self, **changes) -> None:
         center = getattr(self, "task_center", None)
-        task_id = self._active_run_task_id
+        task_id = getattr(self, "_active_run_task_id", None)
         if center is not None and task_id:
             center.update_task(task_id, **changes)
 

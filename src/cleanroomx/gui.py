@@ -6159,8 +6159,12 @@ class CleanroomXApp:
             text, style = "RUN WARN", "CX.Status.Warning.TLabel"
         else:
             text, style = "IDLE", "CX.Status.Unknown.TLabel"
-        self.analysis_run_state_var.set(text)
-        self.analysis_run_state_label.configure(style=style)
+        state_var = getattr(self, "analysis_run_state_var", None)
+        if state_var is not None:
+            state_var.set(text)
+        state_label = getattr(self, "analysis_run_state_label", None)
+        if state_label is not None:
+            state_label.configure(style=style)
 
     def _set_running(self, running: bool) -> None:
         self._running = running
@@ -6170,12 +6174,16 @@ class CleanroomXApp:
         workflow_run_button = getattr(self, "workflow_run_button", None)
         if workflow_run_button is not None:
             workflow_run_button.configure(state="disabled" if running else "normal")
+        progress = getattr(self, "analysis_run_progress", None)
+        state_var = getattr(self, "analysis_run_state_var", None)
         if running:
             self._set_analysis_run_state("running")
-            self.analysis_run_progress.start(70)
+            if progress is not None:
+                progress.start(70)
         else:
-            self.analysis_run_progress.stop()
-            if self.analysis_run_state_var.get() == "RUNNING":
+            if progress is not None:
+                progress.stop()
+            if state_var is not None and state_var.get() == "RUNNING":
                 self._set_analysis_run_state("idle")
 
     def _poll_worker(self) -> None:

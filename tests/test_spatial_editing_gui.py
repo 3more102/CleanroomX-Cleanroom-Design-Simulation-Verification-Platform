@@ -40,6 +40,20 @@ def app(tmp_path):
         root.destroy()
 
 
+
+def test_status_bar_reports_saved_revision_and_dirty_project_state(app):
+    revision = app._project_file_revision
+    assert revision is not None
+    assert revision.sha256
+    assert app.model_status_var.get() == f"Project: saved · rev {revision.sha256[:10]}"
+
+    app.description_var.set(app.description_var.get() + " edited")
+    app.root.update()
+
+    assert app._has_unsaved_changes()
+    assert app.model_status_var.get() == f"Project: modified · rev {revision.sha256[:10]}"
+
+
 def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

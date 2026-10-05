@@ -84,3 +84,61 @@ def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
     )
     tree.selection_set(("a", "b"))
     assert behavior.selected_tsv() == "Alpha\t2\nBeta\t10"
+
+
+def test_table_behavior_copies_headers_and_selects_all(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+        copy_columns=("name", "value"),
+    )
+
+    assert behavior.select_all() is True
+    assert set(tree.selection()) == {"a", "b", "missing"}
+    payload = behavior.selected_tsv(include_headers=True)
+    assert payload.splitlines()[0] == "Name\tValue"
+    assert "Alpha\t2" in payload
+    assert "Beta\t10" in payload
+
+
+def test_table_behavior_controls_column_visibility_without_hiding_everything(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    assert behavior.visible_columns == ("name", "value")
+    assert behavior.set_column_visible("value", False) is True
+    assert behavior.visible_columns == ("name",)
+    assert behavior.set_column_visible("name", False) is False
+    assert behavior.visible_columns == ("name",)
+
+    behavior.show_all_columns()
+    assert behavior.visible_columns == ("name", "value")
+
+
+def test_table_behavior_autosizes_visible_columns_with_bounds(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+    tree.insert("", "end", iid="long", values=("Very long engineering row label", "123456789"))
+
+    behavior.autosize_columns(min_width=80, max_width=180, padding=20)
+
+    assert 80 <= int(tree.column("name", "width")) <= 180
+    assert 80 <= int(tree.column("value", "width")) <= 180
+
+
+def test_table_behavior_rejects_invalid_autosize_bounds(root) -> None:
+    tree = _tree(root)
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+    )
+
+    with pytest.raises(ValueError, match="invalid autosize bounds"):
+        behavior.autosize_columns(min_width=100, max_width=90)

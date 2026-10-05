@@ -3443,6 +3443,11 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+        self.notebook.bind(
+            "<<NotebookTabChanged>>",
+            self._on_workspace_tab_changed,
+            add="+",
+        )
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
@@ -4470,6 +4475,25 @@ class CleanroomXApp:
     def _finish_panel_layout_reset(self) -> None:
         self._apply_default_panel_sashes()
         self._save_ui_layout_state()
+
+    def _on_workspace_tab_changed(self, _event=None) -> None:
+        """Keep shell workspace identity synchronized with direct tab navigation."""
+        notebook = getattr(self, "notebook", None)
+        if notebook is None:
+            return
+        try:
+            selected = notebook.select()
+            label = str(notebook.tab(selected, "text") or "").strip()
+        except tk.TclError:
+            return
+        if not label:
+            return
+        display = {
+            "Reports": "Reporting",
+            "Plot": "Analysis Plot",
+            "Input": "Analysis Input",
+        }.get(label, label)
+        self.workspace_status_var.set(f"Workspace: {display}")
 
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)

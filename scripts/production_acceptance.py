@@ -36,6 +36,9 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "scripts/benchmark_spatial_validation.py",
         "scripts/benchmark_project_bundle.py",
         "scripts/security_static_gate.py",
+        "src/cleanroomx/proofgraph_change_impact_cli.py",
+        "src/cleanroomx/proofgraph_change_impact.py",
+        "scripts/production_acceptance.py",
         ".github/workflows/ci.yml",
         ".github/workflows/production-acceptance.yml",
         ".github/workflows/security.yml",
@@ -109,6 +112,15 @@ def _version_and_demo_contract(checks: list[dict[str, Any]]) -> None:
         "release dependencies: " + ", ".join(map(str, release_dependencies)),
     )
 
+    scripts = metadata["project"].get("scripts", {})
+    cli_target = scripts.get("cleanroomx-proofgraph-diff")
+    _record(
+        checks,
+        "proofgraph-diff-cli-installed",
+        cli_target == "cleanroomx.proofgraph_change_impact_cli:main",
+        f"cleanroomx-proofgraph-diff={cli_target!r}",
+    )
+
 
 def _workflow_contract(checks: list[dict[str, Any]]) -> None:
     workflow_dir = ROOT / ".github" / "workflows"
@@ -166,6 +178,20 @@ def _workflow_contract(checks: list[dict[str, Any]]) -> None:
         else "CI supported-version matrix is incomplete",
     )
 
+    proofgraph_gate = (
+        "tests/test_proofgraph_change_impact.py" in ci
+        and "tests/test_proofgraph_change_impact_cli.py" in ci
+        and "cleanroomx-proofgraph-diff --help" in ci
+    )
+    _record(
+        checks,
+        "proofgraph-change-control-gate",
+        proofgraph_gate,
+        "CI retains ProofGraph API/CLI change-control gates"
+        if proofgraph_gate
+        else "CI is missing a ProofGraph change-control gate",
+    )
+
     acceptance = _read(".github/workflows/production-acceptance.yml")
     proofgraph_acceptance_ok = all(
         token in acceptance
@@ -181,6 +207,29 @@ def _workflow_contract(checks: list[dict[str, Any]]) -> None:
         "production acceptance explicitly exercises ProofGraph change-impact API and CLI"
         if proofgraph_acceptance_ok
         else "production acceptance is missing ProofGraph change-impact regression coverage",
+    )
+
+    acceptance_contract = all(
+        token in acceptance
+        for token in (
+            "pull_request:",
+            "runs-on: ubuntu-24.04",
+            'python -m pip install "pip==26.2.1"',
+            "scripts/production_acceptance.py",
+            "tests/test_production_acceptance_contract.py",
+            "tests/test_proofgraph_change_impact.py",
+            "tests/test_proofgraph_change_impact_cli.py",
+            "tests/test_proofgraph_project_requirements.py",
+            "Upload production acceptance evidence",
+        )
+    )
+    _record(
+        checks,
+        "named-production-acceptance-workflow",
+        acceptance_contract,
+        "named Production Acceptance workflow is present and self-validating"
+        if acceptance_contract
+        else "Production Acceptance workflow contract is incomplete",
     )
 
 
@@ -237,7 +286,8 @@ def build_report() -> dict[str, Any]:
         "boundary": (
             "This gate establishes repository release-readiness evidence only; it does "
             "not establish regulatory certification, commissioning/TAB acceptance, "
-            "manufacturer approval, or independent CFD validation."
+            "manufacturer approval, independent penetration-test certification, "
+            "or independent CFD validation."
         ),
     }
 

@@ -144,6 +144,45 @@ _STATUS_KEYS = {
     "incomplete": "stale",
 }
 
+_DENSITY_PROFILES: dict[str, dict[str, Any]] = {
+    "comfortable": {
+        "tree_rowheight": 25,
+        "navigator_rowheight": 26,
+        "button_padding": (8, 5),
+        "entry_padding": (5, 4),
+        "tab_padding": (11, 6),
+        "heading_padding": (5, 4),
+        "primary_button_padding": (12, 6),
+        "compact_button_padding": (6, 3),
+        "toolbar_padding": (4, 3),
+        "panel_header_padding": (7, 4),
+        "status_padding": (5, 2),
+    },
+    "compact": {
+        "tree_rowheight": 22,
+        "navigator_rowheight": 23,
+        "button_padding": (7, 3),
+        "entry_padding": (4, 2),
+        "tab_padding": (9, 4),
+        "heading_padding": (4, 3),
+        "primary_button_padding": (10, 4),
+        "compact_button_padding": (5, 2),
+        "toolbar_padding": (3, 2),
+        "panel_header_padding": (6, 3),
+        "status_padding": (4, 1),
+    },
+}
+
+
+def normalize_density_name(value: Any) -> str:
+    name = str(value or "").strip().lower()
+    return name if name in _DENSITY_PROFILES else "comfortable"
+
+
+def density_metrics(value: Any) -> dict[str, Any]:
+    return deepcopy(_DENSITY_PROFILES[normalize_density_name(value)])
+
+
 _DOMAIN_KEYS = {
     "geometry": "geometry",
     "layout": "geometry",
@@ -217,9 +256,14 @@ def _configure_status_styles(style: ttk.Style, palette: dict[str, str]) -> None:
         )
 
 
-def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
+def configure_ttk_theme(
+    root: tk.Misc,
+    value: Any,
+    density: Any = "comfortable",
+) -> dict[str, str]:
     """Apply the centralized CleanroomX engineering workstation design system."""
     palette = theme_palette(value)
+    metrics = density_metrics(density)
     style = ttk.Style(root)
     if "clam" in style.theme_names():
         style.theme_use("clam")
@@ -289,7 +333,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(8, 5),
+        padding=metrics["button_padding"],
         relief="flat",
     )
     style.map(
@@ -323,7 +367,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         insertcolor=palette["text"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(5, 4),
+        padding=metrics["entry_padding"],
     )
     style.map(
         "TEntry",
@@ -344,7 +388,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(4, 3),
+        padding=metrics["toolbar_padding"],
     )
     style.map(
         "TCombobox",
@@ -377,7 +421,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TNotebook.Tab",
         background=palette["surface_alt"],
         foreground=palette["muted"],
-        padding=(11, 6),
+        padding=metrics["tab_padding"],
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9, "bold"),
     )
@@ -399,7 +443,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         fieldbackground=palette["tree"],
         foreground=palette["secondary_text"],
         bordercolor=palette["border"],
-        rowheight=25,
+        rowheight=metrics["tree_rowheight"],
         relief="flat",
     )
     style.map(
@@ -413,7 +457,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         relief="flat",
-        padding=(5, 4),
+        padding=metrics["entry_padding"],
         font=("TkDefaultFont", 9, "bold"),
     )
     style.map(
@@ -429,7 +473,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         arrowcolor=palette["secondary_text"],
-        padding=(7, 4),
+        padding=metrics["panel_header_padding"],
     )
     style.map(
         "TMenubutton",
@@ -481,7 +525,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["tree"],
         fieldbackground=palette["tree"],
         foreground=palette["secondary_text"],
-        rowheight=26,
+        rowheight=metrics["navigator_rowheight"],
         bordercolor=palette["border"],
     )
     style.map(
@@ -494,7 +538,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["accent"],
         foreground=palette["accent_text"],
         bordercolor=palette["accent"],
-        padding=(12, 6),
+        padding=metrics["primary_button_padding"],
         font=("TkDefaultFont", 9, "bold"),
     )
     style.map(
@@ -526,7 +570,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         relief="solid",
         borderwidth=1,
-        padding=(4, 3),
+        padding=metrics["toolbar_padding"],
     )
     style.configure(
         "CX.Toolbar.TLabel",
@@ -540,7 +584,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         relief="solid",
         borderwidth=1,
-        padding=(7, 4),
+        padding=metrics["panel_header_padding"],
     )
     style.configure(
         "CX.PanelHeader.TLabel",
@@ -553,7 +597,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["secondary_text"],
         bordercolor=palette["border"],
-        padding=(6, 3),
+        padding=metrics["compact_button_padding"],
     )
     style.map(
         "CX.Compact.TButton",
@@ -574,7 +618,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         relief="solid",
         borderwidth=1,
-        padding=(5, 2),
+        padding=metrics["status_padding"],
     )
     style.configure(
         "CX.StatusBar.TLabel",

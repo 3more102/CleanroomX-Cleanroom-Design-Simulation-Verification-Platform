@@ -7,17 +7,29 @@ Set-Location $repoRoot
 $buildRoot = Join-Path $repoRoot "build\pyinstaller"
 $distRoot = Join-Path $repoRoot "dist\windows-standalone"
 $entryPoint = Join-Path $repoRoot "packaging\cleanroomx_desktop_entry.py"
-$iconPath = Join-Path $repoRoot "packaging\windows\CleanroomX.ico"
+$iconPayloadPath = Join-Path $repoRoot "packaging\windows\CleanroomX.ico.b64"
+$iconPath = Join-Path $buildRoot "CleanroomX.ico"
 $versionFile = Join-Path $buildRoot "CleanroomX.version.txt"
 
-if (-not (Test-Path $iconPath -PathType Leaf)) {
-    throw "Windows application icon is missing: $iconPath"
+if (-not (Test-Path $iconPayloadPath -PathType Leaf)) {
+    throw "Windows application icon payload is missing: $iconPayloadPath"
 }
 
 Remove-Item -Recurse -Force $buildRoot -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $distRoot -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
+
+try {
+    $iconBytes = [Convert]::FromBase64String((Get-Content -Raw $iconPayloadPath).Trim())
+    [IO.File]::WriteAllBytes($iconPath, $iconBytes)
+}
+catch {
+    throw "Windows application icon payload is invalid: $($_.Exception.Message)"
+}
+if (-not (Test-Path $iconPath -PathType Leaf)) {
+    throw "Decoded Windows application icon was not produced: $iconPath"
+}
 
 python (Join-Path $repoRoot "scripts\write_windows_version_info.py") --output $versionFile
 if ($LASTEXITCODE -ne 0) {

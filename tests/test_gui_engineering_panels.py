@@ -210,3 +210,36 @@ def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
     assert "domain_hvac" in app.analysis_tree.item("nav-hvac", "tags")
     assert "domain_verification" in app.analysis_tree.item("nav-verification", "tags")
     assert "domain_evidence" in app.analysis_tree.item("nav-evidence", "tags")
+
+
+
+def test_diagnostics_support_domain_filter_sort_and_issue_traversal(app):
+    result, issue = _force_room_overlap(app)
+    panel = app.problems_panel
+    categories = tuple(panel.category_combo.cget("values"))
+    assert issue["category"] in categories
+
+    panel.category_var.set(issue["category"])
+    app.root.update()
+    visible = list(panel.tree.get_children())
+    assert visible
+    assert all(
+        str(panel._issues_by_iid[iid].get("category")) == issue["category"]
+        for iid in visible
+    )
+    assert panel.visible_count_var.get().startswith(f"{len(visible)} / ")
+
+    panel._toggle_sort("code")
+    app.root.update()
+    sorted_rules = [
+        str(panel._issues_by_iid[iid].get("rule") or "")
+        for iid in panel.tree.get_children()
+    ]
+    assert sorted_rules == sorted(sorted_rules, key=str.casefold)
+
+    first = panel.tree.get_children()[0]
+    panel.tree.selection_set(first)
+    panel.tree.focus(first)
+    panel._select_relative(1)
+    app.root.update()
+    assert panel.tree.selection()

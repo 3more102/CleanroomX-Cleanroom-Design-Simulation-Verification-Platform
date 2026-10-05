@@ -230,6 +230,102 @@ def test_gui_requirements_traceability_reports_empty_project(monkeypatch):
     ]
 
 
+
+def test_global_search_surfaces_partial_index_failures_instead_of_hiding_sources(
+    monkeypatch,
+):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Search degradation")
+    app.problems_panel = None
+    app._proofgraph_documents_from_records = lambda records: []
+
+    reports = [
+        GuiErrorReport(
+            reference="CX-SEARCH-REQ",
+            operation="Build requirements search index",
+            exception_type="RuntimeError",
+            summary="requirements unavailable",
+            log_path=None,
+        ),
+        GuiErrorReport(
+            reference="CX-SEARCH-PG",
+            operation="Build ProofGraph search index",
+            exception_type="RuntimeError",
+            summary="proofgraph unavailable",
+            log_path=None,
+        ),
+    ]
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "project_requirement_traceability_snapshot",
+        lambda project: (_ for _ in ()).throw(RuntimeError("requirements unavailable")),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "verification_run_history_records",
+        lambda metadata: (_ for _ in ()).throw(RuntimeError("proofgraph unavailable")),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or reports.pop(0),
+    )
+
+    entries = app._engineering_search_entries()
+
+    assert any(entry.target_type == "project" for entry in entries)
+    issues = [entry for entry in entries if entry.target_type == "search_issue"]
+    assert app._engineering_search_index_issue_count == 2
+    assert [entry.target_id for entry in issues] == [
+        "CX-SEARCH-REQ",
+        "CX-SEARCH-PG",
+    ]
+    assert [operation for operation, _exc in recorded] == [
+        "Build requirements search index",
+        "Build ProofGraph search index",
+    ]
+
+
+def test_global_search_status_discloses_partial_index(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class SearchWindow:
+        def __init__(self, parent, *, entries, on_activate, on_close):
+            self.entries = entries
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+    app._global_search_window = None
+    app._engineering_search_index_issue_count = 1
+    entries = [
+        gui_module.SearchEntry(
+            key="project",
+            category="Project",
+            label="Demo",
+            target_type="project",
+        ),
+        gui_module.SearchEntry(
+            key="search-issue:requirements:CX-1",
+            category="System",
+            label="Requirements search index unavailable",
+            target_type="search_issue",
+            target_id="CX-1",
+        ),
+    ]
+    app._engineering_search_entries = lambda: entries
+    monkeypatch.setattr(gui_module, "GlobalEngineeringSearch", SearchWindow)
+
+    app.show_global_search()
+
+    assert app.status_var.value == (
+        "Global engineering search indexed 1 project entities · "
+        "index incomplete (1 source issue(s))"
+    )
+
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     class Value:
         def __init__(self, value):
@@ -1369,6 +1465,91 @@ def test_gui_startup_project_open_failure_uses_diagnostic_boundary(monkeypatch):
     assert root.mainloop_called is True
 
 
+
+def test_gui_launch_installs_callback_error_boundary(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def __init__(self):
+            self.report_callback_exception = None
+            self.mainloop_called = False
+
+        def mainloop(self):
+            self.mainloop_called = True
+
+    class App:
+        def __init__(self, root, *, autosave_interval_seconds):
+            self.root = root
+            self.status_var = Status()
+
+        def offer_startup_recovery(self):
+            return False
+
+    root = Root()
+    sentinel = object()
+    installs = []
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module,
+        "make_gui_callback_exception_handler",
+        lambda **kwargs: installs.append(kwargs) or sentinel,
+    )
+
+    assert main([]) == 0
+    assert root.report_callback_exception is sentinel
+    assert root.mainloop_called is True
+    assert installs[0]["operation"] == "Unhandled GUI callback"
+    assert callable(installs[0]["status_setter"])
+    assert callable(installs[0]["notifier"])
+
+
+def test_gui_smoke_keeps_unhandled_callbacks_visible_to_smoke_runner(
+    monkeypatch,
+    capsys,
+):
+    class Root:
+        def update_idletasks(self):
+            pass
+
+        def update(self):
+            pass
+
+        def destroy(self):
+            self.destroyed = True
+
+    class App:
+        def __init__(self, root, *, autosave_interval_seconds):
+            self.root = root
+
+    root = Root()
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root)
+    monkeypatch.setattr(gui_module, "CleanroomXApp", App)
+    monkeypatch.setattr(
+        gui_module,
+        "make_gui_callback_exception_handler",
+        lambda **kwargs: pytest.fail(
+            "smoke mode must not install the production callback boundary"
+        ),
+    )
+
+    assert main(["--smoke"]) == 0
+    assert root.destroyed is True
+    assert "CleanroomX GUI smoke: PASS" in capsys.readouterr().out
+
+
 def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -2246,6 +2427,106 @@ def test_gui_project_requirements_verification_persists_adverse_evidence(
     assert "Persisted sequence: 7" in warnings[-1][1]
     assert "Adverse/incomplete verification persisted" in app.status_var.value
 
+
+
+def test_verification_durability_reload_failure_keeps_old_revision_guard_and_reports_reference(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="GUI verification durability",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    original_revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = original_revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    class Workflow:
+        analysis_name = "Room A verification"
+        source_revision = original_revision.sha256
+        workflow_sha256 = "c" * 64
+        verification = {
+            "status": "pass",
+            "complete": True,
+            "verified": True,
+            "verification_sha256": "d" * 64,
+            "summary": {
+                "pass_count": 1,
+                "fail_count": 0,
+                "not_checked_count": 0,
+            },
+        }
+
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda path, analysis_id: Workflow(),
+    )
+    committed_revision = capture_project_file_revision(project_path)
+    monkeypatch.setattr(
+        gui_module,
+        "persist_project_requirements_workflow_run",
+        lambda path, workflow: (_ for _ in ()).throw(
+            gui_module.ProjectSaveDurabilityError(path, committed_revision)
+        ),
+    )
+    app.load_project_path = lambda path: (_ for _ in ()).throw(
+        RuntimeError("synthetic reload failure")
+    )
+
+    report = GuiErrorReport(
+        reference="CX-TEST-RELOAD",
+        operation="Reload project after verification durability warning",
+        exception_type="RuntimeError",
+        summary="synthetic reload failure",
+        log_path=tmp_path / "gui.log",
+    )
+    recorded = []
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+
+    assert app.persist_project_requirements_verification() is False
+    assert app._project_file_revision is original_revision
+    assert recorded[0][0] == "Reload project after verification durability warning"
+    assert app.status_var.value == "Verification committed; reload failed · CX-TEST-RELOAD"
+    assert "CX-TEST-RELOAD" in warnings[-1][1]
+    assert "Reopen the project before making or saving further engineering edits" in warnings[-1][1]
 
 def test_verification_history_currency_context_applies_only_to_latest_record():
     latest_record = {

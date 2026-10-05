@@ -138,3 +138,18 @@ def test_reset_panel_layout_preserves_named_layouts(app):
     assert app.navigator_panel_visible_var.get() is True
     assert app.output_panel_visible_var.get() is True
     assert app.spatial_workspace.inspector_visible() is True
+
+
+def test_fullscreen_workspace_is_explicit_reversible_window_state(app):
+    app.set_fullscreen_workspace(True)
+    app.root.update_idletasks()
+
+    assert app.fullscreen_var.get() is True
+    assert bool(app.root.attributes("-fullscreen")) is True
+    assert "Full-screen workspace enabled" in app.status_var.get()
+
+    app.exit_fullscreen_workspace()
+    app.root.update_idletasks()
+
+    assert app.fullscreen_var.get() is False
+    assert bool(app.root.attributes("-fullscreen")) is False

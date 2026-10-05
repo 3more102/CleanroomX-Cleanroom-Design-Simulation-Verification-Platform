@@ -261,7 +261,7 @@ class TaskCenter(ttk.Frame):
         self.tree.tag_configure("task_pass", foreground=palette["success"])
         self.tree.tag_configure("task_fail", foreground=palette["error"])
         self.tree.tag_configure("task_warn", foreground=palette["warning"])
-        self.tree.tag_configure("task_running", foreground=palette["simulation"])
+        self.tree.tag_configure("task_running", foreground=palette["info"])
         self.tree.tag_configure("task_neutral", foreground=palette["muted"])
 
     def start_task(

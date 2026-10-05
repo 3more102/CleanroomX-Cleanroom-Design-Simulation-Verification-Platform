@@ -625,9 +625,6 @@ class ComplianceRulePackPanel(ttk.Frame):
         if finding is None or not isinstance(self._payload, dict):
             raise ValueError("select a compliance rule first")
         rule_id = str(finding.get("id", ""))
-        if not self._confirm_delete(rule_id):
-            self._status_setter(f"Delete cancelled for compliance rule {rule_id}")
-            return False
         candidate = copy.deepcopy(self._payload)
         pack = candidate.get("rule_pack")
         rules = pack.get("rules") if isinstance(pack, dict) else None

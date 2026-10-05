@@ -22,12 +22,17 @@ OutputBaseFilename={#MyOutputBaseFilename}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=CleanroomX.ico
 UninstallDisplayIcon={app}\CleanroomX.exe
 CloseApplications=yes
 RestartApplications=no
 UsePreviousAppDir=yes
 UsePreviousGroup=yes
 SetupLogging=yes
+VersionInfoCompany=CleanroomX contributors
+VersionInfoDescription=CleanroomX Engineering Workstation Installer
+VersionInfoProductName=CleanroomX
+VersionInfoProductVersion={#MyAppVersion}
 
 [Files]
 Source: "..\..\dist\windows-standalone\CleanroomX\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

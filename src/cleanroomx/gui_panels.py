@@ -102,6 +102,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var = tk.StringVar()
         self.severity_var = tk.StringVar(value="All")
+        self.domain_var = tk.StringVar(value="All domains")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.error_count_var = tk.StringVar(value="ERROR 0")
         self.warning_count_var = tk.StringVar(value="WARNING 0")
@@ -110,6 +111,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
         self.search_var.trace_add("write", lambda *_: self._populate())
         self.severity_var.trace_add("write", lambda *_: self._populate())
+        self.domain_var.trace_add("write", lambda *_: self._populate())
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, style="CX.Toolbar.TFrame", padding=(7, 5))
@@ -119,18 +121,27 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             side="left", padx=(0, 8)
         )
         ttk.Label(toolbar, text="Search").pack(side="left")
-        ttk.Entry(toolbar, textvariable=self.search_var, width=28).pack(
+        ttk.Entry(toolbar, textvariable=self.search_var, width=24).pack(
             side="left", padx=(4, 8)
         )
         ttk.Label(toolbar, text="Severity").pack(side="left")
         severity = ttk.Combobox(
             toolbar,
             textvariable=self.severity_var,
-            values=("All", "Error", "Warning", "Info"),
+            values=("All", "Critical", "Error", "Warning", "Info"),
             state="readonly",
             width=10,
         )
         severity.pack(side="left", padx=(4, 8))
+        ttk.Label(toolbar, text="Domain").pack(side="left")
+        self.domain_picker = ttk.Combobox(
+            toolbar,
+            textvariable=self.domain_var,
+            values=("All domains",),
+            state="readonly",
+            width=13,
+        )
+        self.domain_picker.pack(side="left", padx=(4, 8))
         ttk.Button(
             toolbar,
             text="Refresh",
@@ -142,6 +153,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             text="Locate",
             style="CX.Primary.TButton",
             command=self._navigate_selected,
+            state="disabled",
         )
         self.locate_button.pack(side="left", padx=2)
         ttk.Button(
@@ -376,6 +388,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return []
 
         severity = self.severity_var.get().strip().casefold()
+        domain = self.domain_var.get().strip().casefold()
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
@@ -383,6 +396,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
+                continue
+            issue_domain = str(issue.get("category", "")).strip().casefold()
+            if domain and domain != "all domains" and issue_domain != domain:
                 continue
             if query:
                 haystack = " ".join(
@@ -449,6 +465,26 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                     break
         self._show_selected_detail()
 
+    def _refresh_domain_values(self) -> None:
+        issues = (
+            self.last_result.get("issues", [])
+            if isinstance(self.last_result, dict)
+            else []
+        )
+        domains = sorted(
+            {
+                str(issue.get("category") or "").strip()
+                for issue in issues
+                if isinstance(issue, dict)
+                and str(issue.get("category") or "").strip()
+            },
+            key=str.casefold,
+        )
+        values = ("All domains", *domains)
+        self.domain_picker.configure(values=values)
+        if self.domain_var.get() not in values:
+            self.domain_var.set("All domains")
+
     def refresh(self) -> dict[str, Any] | None:
         try:
             result = analyze_project_diagnostics(
@@ -464,6 +500,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
+        self._refresh_domain_values()
         summary = result.get("summary", {})
         self.error_count_var.set(f"ERROR {int(summary.get('error_count', 0) or 0)}")
         self.warning_count_var.set(f"WARNING {int(summary.get('warning_count', 0) or 0)}")
@@ -488,6 +525,9 @@ class ProjectDiagnosticsPanel(ttk.Frame):
 
     def _show_selected_detail(self, event=None) -> None:
         issue = self.selected_issue()
+        self.locate_button.configure(
+            state="normal" if issue is not None else "disabled"
+        )
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
         if issue is not None:

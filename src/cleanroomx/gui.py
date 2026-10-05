@@ -1384,6 +1384,16 @@ class CleanroomXApp:
             accelerator="F8",
             command=self._refresh_engineering_panels,
         )
+        verify_menu.add_command(
+            label="Previous Diagnostic",
+            accelerator="Shift+F4",
+            command=self.previous_project_diagnostic,
+        )
+        verify_menu.add_command(
+            label="Next Diagnostic",
+            accelerator="F4",
+            command=self.next_project_diagnostic,
+        )
         verify_menu.add_separator()
         verify_menu.add_command(
             label="Requirements Traceability...",
@@ -1506,6 +1516,8 @@ class CleanroomXApp:
         self.root.bind("<Control-Shift-F>", lambda event: self.toggle_focus_workspace())
         self.root.bind("<Control-Alt-t>", lambda event: self.toggle_theme())
         self.root.bind("<Control-Shift-P>", lambda event: self.show_command_palette())
+        self.root.bind("<F4>", lambda event: self.next_project_diagnostic())
+        self.root.bind("<Shift-F4>", lambda event: self.previous_project_diagnostic())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<F8>", lambda event: self._refresh_engineering_panels())
 
@@ -2385,6 +2397,20 @@ class CleanroomXApp:
             notebook.select(panel)
         self.status_var.set("Output: Problems")
 
+    def next_project_diagnostic(self) -> bool:
+        self.show_problems_panel()
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return False
+        return bool(panel.next_issue())
+
+    def previous_project_diagnostic(self) -> bool:
+        self.show_problems_panel()
+        panel = getattr(self, "problems_panel", None)
+        if panel is None:
+            return False
+        return bool(panel.previous_issue())
+
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is None:
@@ -2818,6 +2844,22 @@ class CleanroomXApp:
                 self._refresh_engineering_panels,
                 shortcut="F8",
                 keywords=("problems", "errors", "warnings"),
+            ),
+            PaletteCommand(
+                "verification.previous_problem",
+                "Previous Project Diagnostic",
+                "Verification",
+                self.previous_project_diagnostic,
+                shortcut="Shift+F4",
+                keywords=("problem", "error", "warning", "previous"),
+            ),
+            PaletteCommand(
+                "verification.next_problem",
+                "Next Project Diagnostic",
+                "Verification",
+                self.next_project_diagnostic,
+                shortcut="F4",
+                keywords=("problem", "error", "warning", "next"),
             ),
             PaletteCommand(
                 "verification.run",

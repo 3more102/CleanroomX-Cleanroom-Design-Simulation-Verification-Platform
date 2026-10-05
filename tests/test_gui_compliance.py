@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.compliance_rulepack import compliance_check_from_dict
+from cleanroomx.gui import CleanroomXApp
 from cleanroomx.gui_compliance import ComplianceRulePackPanel
 
 
@@ -257,3 +258,65 @@ def test_compliance_panel_apply_does_not_request_delete_confirmation(root):
     assert panel.apply_selected() is True
     assert confirmations == []
     assert state["edits"][-1] == "Edit compliance rule ach"
+
+
+def test_opening_compliance_workspace_commits_current_editor_before_switch(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    source = app.project.create_analysis(
+        kind="room_verification",
+        name="Source analysis",
+        payload={},
+    )
+    target = app.project.create_analysis(
+        kind="compliance_check",
+        name="Project criteria",
+        payload=_payload(),
+    )
+    app.project.active_analysis_id = source.id
+    app._refresh_analysis_list(select_id=source.id)
+    app.input_text.delete("1.0", "end")
+    app.input_text.insert("1.0", '{"preserved": true}')
+
+    app._activate_compliance_workspace()
+    root.update()
+
+    assert source.input == {"preserved": True}
+    assert app.project.active_analysis_id == target.id
+    assert app._editor_analysis_id == target.id
+    assert app.notebook.select() == str(app.compliance_panel)
+
+
+def test_opening_compliance_workspace_blocks_switch_on_invalid_current_json(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    source = app.project.create_analysis(
+        kind="room_verification",
+        name="Source analysis",
+        payload={},
+    )
+    app.project.create_analysis(
+        kind="compliance_check",
+        name="Project criteria",
+        payload=_payload(),
+    )
+    app.project.active_analysis_id = source.id
+    app._refresh_analysis_list(select_id=source.id)
+    app.input_text.delete("1.0", "end")
+    app.input_text.insert("1.0", "{broken")
+
+    app._activate_compliance_workspace()
+    root.update()
+
+    assert app.project.active_analysis_id == source.id
+    assert app._editor_analysis_id == source.id
+    assert app.input_text.get("1.0", "end-1c") == "{broken"
+    assert app.status_var.get().startswith(
+        "Cannot open compliance manager until current input is valid:"
+    )

@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import sys
+import time
 from types import TracebackType
 from typing import Callable, Mapping
 import uuid
@@ -78,12 +79,12 @@ def configure_gui_runtime_logging(
         encoding="utf-8",
     )
     setattr(handler, _RUNTIME_HANDLER_MARKER, True)
-    handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)sZ %(levelname)s %(name)s %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S",
-        )
+    formatter = logging.Formatter(
+        "%(asctime)sZ %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
     )
+    formatter.converter = time.gmtime
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.info("CleanroomX GUI runtime diagnostics initialized")
     return logger, log_path

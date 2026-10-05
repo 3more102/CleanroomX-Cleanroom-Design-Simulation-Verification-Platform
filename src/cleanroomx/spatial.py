@@ -1622,7 +1622,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_view_status_change = on_view_status_change
 
         self.layout = empty_layout()
-        self.selected: _Hit | None = None
+        self._selected_primary: _Hit | None = None
+        self._additional_selected: list[_Hit] = []
+        self._box_select_anchor_world: tuple[float, float] | None = None
+        self._box_select_current_world: tuple[float, float] | None = None
+        self._box_select_anchor_canvas: tuple[int, int] | None = None
+        self._box_select_mode = "replace"
         self._hovered: _Hit | None = None
         self._snap_indicator_world: tuple[float, float] | None = None
         self._drag_anchor: tuple[float, float] | None = None
@@ -2354,13 +2359,160 @@ class SpatialDesignWorkspace(ttk.Frame):
             tags=("measurement",),
         )
 
+    @property
+    def selected(self) -> _Hit | None:
+        return self._selected_primary
+
+    @selected.setter
+    def selected(self, value: _Hit | None) -> None:
+        self._selected_primary = value
+        self._additional_selected = []
+
+    def _hit_exists(self, hit: _Hit) -> bool:
+        if hit.kind not in {"room", "device"}:
+            return False
+        collection = self.layout["rooms"] if hit.kind == "room" else self.layout["devices"]
+        return any(str(item.get("id")) == hit.item_id for item in collection)
+
+    def selected_hits(self) -> tuple[_Hit, ...]:
+        hits: list[_Hit] = []
+        for hit in (self._selected_primary, *self._additional_selected):
+            if hit is None or hit in hits or not self._hit_exists(hit):
+                continue
+            hits.append(hit)
+        return tuple(hits)
+
+    def _set_selected_hits(self, hits: list[_Hit] | tuple[_Hit, ...]) -> None:
+        unique: list[_Hit] = []
+        for hit in hits:
+            if (
+                hit.kind in {"room", "device"}
+                and hit not in unique
+                and self._hit_exists(hit)
+            ):
+                unique.append(hit)
+        self._selected_primary = unique[0] if unique else None
+        self._additional_selected = unique[1:]
+
+    def _is_selected_hit(self, hit: _Hit) -> bool:
+        return hit in self.selected_hits()
+
+    def _select_hit(self, hit: _Hit | None, *, mode: str = "replace") -> None:
+        if mode not in {"replace", "add", "toggle"}:
+            raise ValueError("selection mode must be replace, add, or toggle")
+        if hit is not None and not self._hit_exists(hit):
+            return
+        current = list(self.selected_hits())
+        if mode == "replace":
+            self._set_selected_hits([] if hit is None else [hit])
+            return
+        if hit is None:
+            return
+        if mode == "add":
+            if hit not in current:
+                current.append(hit)
+            self._set_selected_hits(current)
+            return
+        if hit in current:
+            current.remove(hit)
+        else:
+            current.append(hit)
+        self._set_selected_hits(current)
+
+    @staticmethod
+    def _selection_mode_from_event(event: tk.Event) -> str:
+        state = int(getattr(event, "state", 0) or 0)
+        if state & 0x0004:
+            return "toggle"
+        if state & 0x0001:
+            return "add"
+        return "replace"
+
+    def _hits_in_world_box(
+        self,
+        start: tuple[float, float],
+        end: tuple[float, float],
+    ) -> list[_Hit]:
+        min_x, max_x = sorted((start[0], end[0]))
+        min_y, max_y = sorted((start[1], end[1]))
+        hits: list[_Hit] = []
+        for room in self.layout["rooms"]:
+            if not self._is_item_visible("room", room["id"]):
+                continue
+            room_min_x = float(room["x_m"])
+            room_min_y = float(room["y_m"])
+            room_max_x = room_min_x + float(room["length_m"])
+            room_max_y = room_min_y + float(room["width_m"])
+            if (
+                room_min_x >= min_x
+                and room_max_x <= max_x
+                and room_min_y >= min_y
+                and room_max_y <= max_y
+            ):
+                hits.append(_Hit("room", str(room["id"])))
+        if self._show_devices.get():
+            for device in self.layout["devices"]:
+                if not self._is_item_visible("device", device["id"]):
+                    continue
+                x = float(device["x_m"])
+                y = float(device["y_m"])
+                if min_x <= x <= max_x and min_y <= y <= max_y:
+                    hits.append(_Hit("device", str(device["id"])))
+        return hits
+
+    def _apply_box_selection(
+        self,
+        start: tuple[float, float],
+        end: tuple[float, float],
+        *,
+        mode: str,
+    ) -> None:
+        hits = self._hits_in_world_box(start, end)
+        if mode == "replace":
+            self._set_selected_hits(hits)
+        elif mode == "add":
+            current = list(self.selected_hits())
+            for hit in hits:
+                if hit not in current:
+                    current.append(hit)
+            self._set_selected_hits(current)
+        elif mode == "toggle":
+            current = list(self.selected_hits())
+            for hit in hits:
+                if hit in current:
+                    current.remove(hit)
+                else:
+                    current.append(hit)
+            self._set_selected_hits(current)
+        else:
+            raise ValueError("selection mode must be replace, add, or toggle")
+
+    def _draw_box_selection_overlay(self) -> None:
+        if (
+            self._box_select_anchor_world is None
+            or self._box_select_current_world is None
+        ):
+            return
+        x0, y0 = self._world_to_canvas(*self._box_select_anchor_world)
+        x1, y1 = self._world_to_canvas(*self._box_select_current_world)
+        self.canvas_2d.create_rectangle(
+            x0,
+            y0,
+            x1,
+            y1,
+            outline=self._theme_palette["accent"],
+            width=1,
+            dash=(4, 3),
+            tags=("selection_box",),
+        )
+
     def select_item(self, kind: str, item_id: str, *, notify: bool = False) -> bool:
         if kind not in {"room", "device"}:
             return False
         collection = self.layout["rooms"] if kind == "room" else self.layout["devices"]
         if not any(str(item.get("id")) == item_id for item in collection):
             return False
-        self.selected = _Hit(kind, item_id)
+        self._select_hit(_Hit(kind, item_id), mode="replace")
         self._load_property_panel()
         self.redraw()
         if notify:
@@ -2368,6 +2520,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         return True
 
     def selection_status_text(self) -> str:
+        hits = self.selected_hits()
+        if len(hits) > 1:
+            room_count = sum(1 for hit in hits if hit.kind == "room")
+            device_count = len(hits) - room_count
+            parts = [f"Selected: {len(hits)} objects"]
+            if room_count:
+                parts.append(f"{room_count} room" + ("" if room_count == 1 else "s"))
+            if device_count:
+                parts.append(
+                    f"{device_count} device" + ("" if device_count == 1 else "s")
+                )
+            return " · ".join(parts)
+
         item = self._selected_object()
         if item is None or self.selected is None:
             return "Selected: —"

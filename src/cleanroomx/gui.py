@@ -8930,9 +8930,14 @@ def main(argv: list[str] | None = None) -> int:
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
     if not args.smoke:
+        status_setter = getattr(
+            getattr(app, "status_var", None),
+            "set",
+            None,
+        )
         root.report_callback_exception = make_gui_callback_exception_handler(
             operation="Unhandled GUI callback",
-            status_setter=app.status_var.set,
+            status_setter=status_setter if callable(status_setter) else None,
             notifier=lambda report: messagebox.showerror(
                 "Unexpected application error",
                 report.user_message(),
@@ -8956,7 +8961,17 @@ def main(argv: list[str] | None = None) -> int:
         )
     recovered_at_startup = False
     if not args.smoke:
-        recovered_at_startup = app.offer_startup_recovery()
+        try:
+            recovered_at_startup = app.offer_startup_recovery()
+        except Exception as exc:
+            # Recovery artifacts are independent from explicit project files.
+            # An unexpected Recovery Center failure must remain diagnosable but
+            # must not make an otherwise healthy workstation unlaunchable.
+            app._show_operation_error(
+                "Startup recovery unavailable",
+                "Scan startup recovery",
+                exc,
+            )
 
     if project_path and not recovered_at_startup:
         try:
@@ -8966,7 +8981,11 @@ def main(argv: list[str] | None = None) -> int:
                 root.destroy()
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
-            messagebox.showerror("Open failed", str(exc), parent=root)
+            app._show_operation_error(
+                "Open failed",
+                "Open startup project",
+                exc,
+            )
 
     if args.smoke:
         try:

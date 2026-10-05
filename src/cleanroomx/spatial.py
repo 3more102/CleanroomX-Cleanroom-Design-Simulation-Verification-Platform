@@ -1519,6 +1519,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             value="Select a room, device, opening, or diagnostic-linked object."
         )
         self._selection_health_var = tk.StringVar(value="NO SELECTION")
+        self._engineering_pressure_var = tk.StringVar(value="Pressure: unavailable")
+        self._engineering_airflow_var = tk.StringVar(value="Airflow: unavailable")
+        self._engineering_ach_var = tk.StringVar(value="ACH: unavailable")
+        self._engineering_status_var = tk.StringVar(value="Status: NOT VERIFIED")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1876,6 +1880,44 @@ class SpatialDesignWorkspace(ttk.Frame):
             justify="left",
             wraplength=300,
         ).pack(fill="x", pady=(4, 0))
+
+        engineering_card = ttk.LabelFrame(
+            inspector,
+            text="ENGINEERING STATE",
+            padding=(8, 6),
+            style="CX.Card.TLabelframe",
+        )
+        engineering_card.pack(fill="x", pady=(0, 7))
+        for label, variable, style_name in (
+            ("PRESSURE", self._engineering_pressure_var, "CX.DomainPressure.TLabel"),
+            ("AIRFLOW", self._engineering_airflow_var, "CX.DomainAirflow.TLabel"),
+            ("ACH", self._engineering_ach_var, "CX.DomainHVAC.TLabel"),
+        ):
+            row = ttk.Frame(engineering_card, style="CX.Card.TFrame")
+            row.pack(fill="x", pady=1)
+            ttk.Label(row, text=label, style=style_name, width=10).pack(side="left")
+            ttk.Label(
+                row,
+                textvariable=variable,
+                style="CX.CardValue.TLabel",
+                anchor="e",
+                justify="right",
+                wraplength=190,
+            ).pack(side="right", fill="x", expand=True)
+        status_row = ttk.Frame(engineering_card, style="CX.Card.TFrame")
+        status_row.pack(fill="x", pady=(3, 0))
+        ttk.Label(
+            status_row,
+            text="VERIFY",
+            style="CX.DomainVerification.TLabel",
+            width=10,
+        ).pack(side="left")
+        self._engineering_status_badge = ttk.Label(
+            status_row,
+            textvariable=self._engineering_status_var,
+            style="CX.InfoBadge.TLabel",
+        )
+        self._engineering_status_badge.pack(side="right")
 
         property_groups = (
             (
@@ -2636,9 +2678,69 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    def _load_engineering_selection_state(self, item: dict | None) -> None:
+        """Project existing room analysis evidence into the read-only inspector."""
+        room_id = ""
+        if item is not None and self.selected is not None:
+            if self.selected.kind == "room":
+                room_id = self.selected.item_id
+            else:
+                room_id = str(item.get("room_id") or "")
+
+        defaults = {
+            "pressure": "Pressure: unavailable",
+            "airflow": "Airflow: unavailable",
+            "ach": "ACH: unavailable",
+            "status": "Status: NOT VERIFIED",
+        }
+        values = dict(defaults)
+        status_token = "unavailable"
+        if room_id:
+            analysis = self._analysis_getter()
+            result = self._result_getter()
+            for mode in ("pressure", "airflow", "ach", "status"):
+                overlay = engineering_overlay_state(
+                    self.layout,
+                    analysis,
+                    result if isinstance(result, dict) else None,
+                    mode=mode,
+                )
+                room_state = next(
+                    (
+                        record
+                        for record in overlay.get("rooms", [])
+                        if str(record.get("room_id") or "") == room_id
+                    ),
+                    None,
+                )
+                if isinstance(room_state, dict):
+                    label = str(room_state.get("label") or "").strip()
+                    if label:
+                        values[mode] = label
+                    if mode == "status":
+                        status_token = _engineering_status(room_state.get("status"))
+
+        self._engineering_pressure_var.set(values["pressure"])
+        self._engineering_airflow_var.set(values["airflow"])
+        self._engineering_ach_var.set(values["ach"])
+        self._engineering_status_var.set(values["status"])
+
+        badge = getattr(self, "_engineering_status_badge", None)
+        if badge is not None:
+            if status_token == "pass":
+                style = "CX.SuccessBadge.TLabel"
+            elif status_token == "fail":
+                style = "CX.ErrorBadge.TLabel"
+            elif status_token == "warning":
+                style = "CX.WarningBadge.TLabel"
+            else:
+                style = "CX.InfoBadge.TLabel"
+            badge.configure(style=style)
+
     def _load_property_panel(self) -> None:
         item = self._selected_object()
         if item is None:
+            self._load_engineering_selection_state(None)
             self._selection_var.set("No selection")
             self._selection_summary_var.set(
                 "Select a room, device, opening, or diagnostic-linked object."
@@ -2666,6 +2768,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        self._load_engineering_selection_state(item)
 
         selected_id = self.selected.item_id if self.selected is not None else ""
         selected_issues = [

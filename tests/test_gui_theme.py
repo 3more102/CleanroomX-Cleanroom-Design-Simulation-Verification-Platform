@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from cleanroomx.gui_theme import (
+    density_metrics,
     domain_color,
+    normalize_density_name,
     normalize_theme_name,
     status_background,
     status_color,
@@ -78,3 +80,19 @@ def test_status_and_domain_colors_are_semantic_and_deterministic():
     assert domain_color("pressure", "dark") == dark["pressure"]
     assert domain_color("evidence", "dark") == dark["evidence"]
     assert domain_color("unknown-domain", "dark") == dark["accent"]
+
+
+def test_density_profiles_are_strict_and_reduce_engineering_chrome():
+    assert normalize_density_name(" COMPACT ") == "compact"
+    assert normalize_density_name("comfortable") == "comfortable"
+    assert normalize_density_name("ultra") == "comfortable"
+    assert normalize_density_name(None) == "comfortable"
+
+    comfortable = density_metrics("comfortable")
+    compact = density_metrics("compact")
+    assert compact["tree_rowheight"] < comfortable["tree_rowheight"]
+    assert compact["navigator_rowheight"] < comfortable["navigator_rowheight"]
+    assert compact["tab_padding"][1] < comfortable["tab_padding"][1]
+
+    compact["tree_rowheight"] = 99
+    assert density_metrics("compact")["tree_rowheight"] != 99

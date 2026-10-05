@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import queue
 import threading
+import time
 import uuid
 
 import tkinter as tk
@@ -1244,6 +1245,7 @@ class CleanroomXApp:
         self._run_generation = 0
         self._running = False
         self._abandon_requested = False
+        self._run_started_monotonic: float | None = None
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -1266,6 +1268,8 @@ class CleanroomXApp:
         self.shell_diagnostics_badge_var = tk.StringVar(value="DIAGNOSTICS —")
         self.shell_verification_badge_var = tk.StringVar(value="VERIFY —")
         self.shell_evidence_badge_var = tk.StringVar(value="EVIDENCE —")
+        self.run_state_var = tk.StringVar(value="ANALYSIS IDLE")
+        self.run_elapsed_var = tk.StringVar(value="—")
         self.navigator_filter_var = tk.StringVar(value="")
         self.theme_var = tk.StringVar(value=self._ui_layout_state["theme"])
         self.focus_workspace_var = tk.BooleanVar(value=False)
@@ -1603,11 +1607,25 @@ class CleanroomXApp:
             style="CX.Status.Neutral.TLabel",
         )
         self.shell_evidence_badge.pack(side="left", padx=2)
+        self.run_state_label = ttk.Label(
+            statebar,
+            textvariable=self.run_state_var,
+            style="CX.Status.Neutral.TLabel",
+        )
+        self.run_state_label.pack(side="right", padx=(4, 0))
         ttk.Label(
             statebar,
-            text="Ctrl+Shift+P Commands · F5 Run · F8 Refresh",
+            textvariable=self.run_elapsed_var,
             style="CX.ToolbarMuted.TLabel",
-        ).pack(side="right")
+            width=8,
+            anchor="e",
+        ).pack(side="right", padx=(4, 0))
+        self.run_activity = ttk.Progressbar(
+            statebar,
+            mode="indeterminate",
+            length=100,
+        )
+        self.run_activity.pack(side="right", padx=(10, 0))
 
         commandbar = ttk.Frame(
             self.root,
@@ -6104,8 +6122,13 @@ class CleanroomXApp:
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
         self._abandon_requested = False
+        self._run_started_monotonic = time.monotonic()
+        self.run_state_var.set(f"RUNNING · {analysis.name}")
+        self.run_elapsed_var.set("0.0 s")
+        self.run_state_label.configure(style="CX.Status.Simulation.TLabel")
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
+        self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
 
         def worker() -> None:
             try:
@@ -6136,15 +6159,32 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
+        self.run_state_var.set("ABANDON REQUESTED")
+        self.run_state_label.configure(style="CX.Status.Warning.TLabel")
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
+
+    def _update_run_elapsed(self, generation: int) -> None:
+        if (
+            not self._running
+            or generation != self._run_generation
+            or self._run_started_monotonic is None
+        ):
+            return
+        elapsed = max(0.0, time.monotonic() - self._run_started_monotonic)
+        self.run_elapsed_var.set(f"{elapsed:.1f} s")
+        self.root.after(250, lambda g=generation: self._update_run_elapsed(g))
 
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        if running:
+            self.run_activity.start(14)
+        else:
+            self.run_activity.stop()
 
     def _poll_worker(self) -> None:
         try:
@@ -6155,10 +6195,14 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self.run_state_var.set("ABANDONED")
+                    self.run_state_label.configure(style="CX.Status.Warning.TLabel")
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self.run_state_var.set("FAILED")
+                    self.run_state_label.configure(style="CX.Status.Fail.TLabel")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6202,6 +6246,19 @@ class CleanroomXApp:
                     self.last_run = run
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
+                    run_status = str(run.status or "completed").strip().lower()
+                    self.run_state_var.set(
+                        "COMPLETED" if run_status in {"pass", "passed", "ok", "completed", "success"} else run_status.upper()
+                    )
+                    self.run_state_label.configure(
+                        style=(
+                            "CX.Status.Fail.TLabel"
+                            if run_status in {"fail", "failed", "error"}
+                            else "CX.Status.Warning.TLabel"
+                            if run_status in {"warning", "warn"}
+                            else "CX.Status.Pass.TLabel"
+                        )
+                    )
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"

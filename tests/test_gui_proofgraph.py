@@ -6,6 +6,7 @@ import pytest
 
 from cleanroomx.gui_proofgraph import (
     _filtered_projection,
+    _searched_projection,
     proofgraph_node_detail_text,
     proofgraph_projection,
 )
@@ -228,6 +229,29 @@ def test_proofgraph_filters_keep_immediate_context_without_deriving_new_verdicts
     calculation_keys = {node["key"] for node in calculations["nodes"]}
     assert "calculation:pressure_solver" in calculation_keys
     assert "evidence:evidence-pressure" in calculation_keys
+
+
+
+def test_proofgraph_search_keeps_matching_node_and_immediate_trace_context():
+    projection = proofgraph_projection(_sample_graph())
+
+    searched = _searched_projection(projection, "pressure_solver")
+    keys = {node["key"] for node in searched["nodes"]}
+
+    assert "calculation:pressure_solver" in keys
+    assert "evidence:evidence-pressure" in keys
+    assert all(
+        edge["source"] in keys and edge["target"] in keys
+        for edge in searched["edges"]
+    )
+
+    numeric_search = _searched_projection(projection, "12 pa")
+    numeric_keys = {node["key"] for node in numeric_search["nodes"]}
+    assert "evidence:evidence-pressure" in numeric_keys
+    assert "check:check-pressure" in numeric_keys
+
+    empty = _searched_projection(projection, "definitely-not-present")
+    assert empty == {"nodes": [], "edges": []}
 
 
 def test_unresolved_evidence_filter_uses_canonical_not_checked_state():

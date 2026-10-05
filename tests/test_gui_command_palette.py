@@ -109,6 +109,9 @@ def test_application_command_catalog_uses_existing_workflows_without_duplicates(
     assert "Open 2D Workspace" in labels
     assert "Open 3D Workspace" in labels
     assert "Open ProofGraph Explorer" in labels
+    assert "Open Verification Workspace" in labels
+    assert "Open Evidence Workspace" in labels
+    assert "Open Results Workspace" in labels
     assert "Toggle Compact Engineering Density" in labels
     assert "Verify Project Requirements" in labels
     assert "Import IFC Spatial Layout" in labels

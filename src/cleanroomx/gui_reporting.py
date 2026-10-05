@@ -8,7 +8,7 @@ from tkinter import ttk
 from .gui_theme import status_style_name, theme_palette
 
 
-def reporting_status_projection(snapshot: dict[str, Any] | None) -> dict[str, str]:
+def reporting_status_projection(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     """Project explicit project/report state without inventing report readiness."""
     data = snapshot if isinstance(snapshot, dict) else {}
     saved = data.get("saved") is True
@@ -48,6 +48,11 @@ def reporting_status_projection(snapshot: dict[str, Any] | None) -> dict[str, st
 
     records = int(data.get("evidence_record_count") or 0)
     graphs = int(data.get("proofgraph_count") or 0)
+    current_result_available = (
+        data.get("current_result_available") is True
+        if "current_result_available" in data
+        else isinstance(last_run, dict)
+    )
 
     return {
         "project_name": project_name,
@@ -59,6 +64,8 @@ def reporting_status_projection(snapshot: dict[str, Any] | None) -> dict[str, st
         "analysis_state": analysis_state,
         "analysis_detail": analysis_detail,
         "evidence_detail": f"{records} verification records · {graphs} ProofGraphs",
+        "dossier_available": saved,
+        "analysis_export_available": current_result_available,
     }
 
 
@@ -133,35 +140,40 @@ class ReportingWorkspace(ttk.Frame):
         ttk.Label(exports_frame, text="PROJECT-NATIVE OUTPUTS", style="CX.PanelSection.TLabel").pack(
             anchor="w", pady=(0, 8)
         )
-        ttk.Button(
+        self.dossier_button = ttk.Button(
             exports_frame,
             text="Export Engineering Dossier…",
             style="CX.Primary.TButton",
             command=on_export_dossier,
-        ).pack(fill="x", pady=3)
-        ttk.Button(
+        )
+        self.dossier_button.pack(fill="x", pady=3)
+        self.diagnostics_button = ttk.Button(
             exports_frame,
             text="Export Project Diagnostics…",
             style="CX.Compact.TButton",
             command=on_export_diagnostics,
-        ).pack(fill="x", pady=3)
+        )
+        self.diagnostics_button.pack(fill="x", pady=3)
 
         ttk.Separator(exports_frame, orient="horizontal").pack(fill="x", pady=10)
         ttk.Label(exports_frame, text="ACTIVE-ANALYSIS OUTPUTS", style="CX.PanelSection.TLabel").pack(
             anchor="w", pady=(0, 8)
         )
+        self.analysis_export_buttons: list[ttk.Button] = []
         for label, callback in (
             ("Result JSON…", on_export_result_json),
             ("Run Bundle JSON…", on_export_run_bundle),
             ("Report Markdown…", on_export_markdown),
             ("Portable HTML Report…", on_export_html),
         ):
-            ttk.Button(
+            button = ttk.Button(
                 exports_frame,
                 text=label,
                 style="CX.Compact.TButton",
                 command=callback,
-            ).pack(fill="x", pady=3)
+            )
+            button.pack(fill="x", pady=3)
+            self.analysis_export_buttons.append(button)
 
         ttk.Label(preview_frame, text="REPORT PIPELINE", style="CX.PanelSection.TLabel").pack(
             anchor="w", pady=(0, 8)
@@ -196,6 +208,14 @@ class ReportingWorkspace(ttk.Frame):
         self.verification_var.set(projected["verification_state"].upper().replace("_", " "))
         self.analysis_var.set(projected["analysis_state"].upper().replace("_", " "))
         self.evidence_var.set(projected["evidence_detail"])
+        self.dossier_button.configure(
+            state="normal" if projected["dossier_available"] else "disabled"
+        )
+        analysis_export_state = (
+            "normal" if projected["analysis_export_available"] else "disabled"
+        )
+        for button in self.analysis_export_buttons:
+            button.configure(state=analysis_export_state)
 
         lines = [
             projected["project_name"],
@@ -222,7 +242,14 @@ class ReportingWorkspace(ttk.Frame):
             lines.extend(
                 [
                     "",
-                    "Project dossier export is expected to require an explicit save before publication.",
+                    "Project dossier export is unavailable until the project is saved.",
+                ]
+            )
+        if not projected["analysis_export_available"]:
+            lines.extend(
+                [
+                    "",
+                    "Active-analysis exports are unavailable until a current result exists.",
                 ]
             )
         self._set_preview("\n".join(lines))

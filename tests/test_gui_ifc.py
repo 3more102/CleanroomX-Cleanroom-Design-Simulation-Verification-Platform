@@ -11,6 +11,7 @@ from cleanroomx.bim_ifc import (
     normalize_ifc_semantic_records,
 )
 from cleanroomx.gui import CleanroomXApp
+from cleanroomx.gui_ifc import ifc_import_review_snapshot
 from cleanroomx.project import new_project
 
 
@@ -91,6 +92,11 @@ def _silence_messages(monkeypatch, *, confirm=True):
         "askyesno",
         lambda *a, **k: confirm,
     )
+    monkeypatch.setattr(
+        gui_module,
+        "show_ifc_import_review",
+        lambda *_args, **_kwargs: confirm,
+    )
 
 
 def test_gui_ifc_initial_import_establishes_identity_without_touching_analyses(
@@ -117,31 +123,93 @@ def test_gui_ifc_initial_import_previews_provenance_before_mutation(monkeypatch)
     app = _app(project)
     _install_source(monkeypatch, _records(), "a" * 64)
 
-    confirmations = []
+    reviews = []
     monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: None)
     monkeypatch.setattr(gui_module.messagebox, "showwarning", lambda *a, **k: None)
     monkeypatch.setattr(gui_module.messagebox, "showerror", lambda *a, **k: None)
     monkeypatch.setattr(
-        gui_module.messagebox,
-        "askyesno",
-        lambda title, message, **kwargs: confirmations.append((title, message)) or True,
+        gui_module,
+        "show_ifc_import_review",
+        lambda _parent, snapshot: reviews.append(copy.deepcopy(snapshot)) or True,
     )
 
     def perform(_description, mutation):
-        assert confirmations, "IFC provenance preview must precede project mutation"
+        assert reviews, "IFC structured review must precede project mutation"
         return mutation()
 
     app._perform_project_edit = perform
 
     assert app.import_ifc_spatial_layout() is True
 
-    assert len(confirmations) == 1
-    title, message = confirmations[0]
-    assert title == "Import IFC spatial layout?"
-    assert "Source: facility.ifc" in message
-    assert "Rooms: 1" in message
-    assert "Devices: 1" in message
-    assert f"Source SHA-256: {'a' * 64}" in message
+    assert len(reviews) == 1
+    review = reviews[0]
+    assert review["source_name"] == "facility.ifc"
+    assert review["source_sha256"] == "a" * 64
+    assert review["room_count"] == 1
+    assert review["device_count"] == 1
+    assert review["record_count"] == 2
+    assert review["ifc_class_counts"] == {"IfcAirTerminal": 1, "IfcSpace": 1}
+
+
+def test_ifc_import_review_snapshot_surfaces_existing_layout_and_geometry_risks():
+    semantics = {
+        "semantic_sha256": "b" * 64,
+        "records": [
+            {
+                "global_id": "SPACE-001",
+                "ifc_class": "IfcSpace",
+                "name": "Room A",
+                "dimension_source": "ifcopenshell_geometry",
+                "storey_global_id": "STOREY-1",
+            },
+            {
+                "global_id": "SPACE-002",
+                "ifc_class": "IfcSpace",
+                "name": "Room B",
+                "dimension_source": "ifc_quantities",
+                "storey_global_id": "STOREY-2",
+            },
+            {
+                "global_id": "DOOR-001",
+                "ifc_class": "IfcDoor",
+                "name": "Door",
+            },
+        ],
+    }
+    snapshot = ifc_import_review_snapshot(
+        semantics,
+        {"source_name": "facility.ifc", "source_sha256": "a" * 64},
+        {
+            "floor": {"name": "IFC import", "elevation_m": 0.0},
+            "rooms": [
+                {"id": "room-a", "name": "Room A", "classification": "ISO 7"},
+                {"id": "room-b", "name": "Room B"},
+            ],
+            "devices": [
+                {"id": "door-a", "type": "door", "room_id": None},
+            ],
+        },
+        existing_layout={
+            "rooms": [{"id": "legacy-room"}],
+            "devices": [{"id": "legacy-device"}],
+        },
+    )
+
+    assert snapshot["will_replace_existing_layout"] is True
+    assert snapshot["existing_room_count"] == 1
+    assert snapshot["existing_device_count"] == 1
+    assert snapshot["storey_count"] == 2
+    assert snapshot["orphan_device_count"] == 1
+    assert snapshot["classified_room_count"] == 1
+    assert snapshot["dimension_source_counts"] == {
+        "ifc_quantities": 1,
+        "ifcopenshell_geometry": 1,
+    }
+    warnings = "\n".join(snapshot["warnings"])
+    assert "will be replaced" in warnings
+    assert "geometry fallback" in warnings
+    assert "not associated" in warnings
+    assert "2 IFC storeys" in warnings
 
 
 def test_gui_ifc_initial_import_rejects_review_to_apply_source_drift(monkeypatch):
@@ -170,6 +238,11 @@ def test_gui_ifc_initial_import_rejects_review_to_apply_source_drift(monkeypatch
     monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: None)
     monkeypatch.setattr(gui_module.messagebox, "showwarning", lambda *a, **k: None)
     monkeypatch.setattr(gui_module.messagebox, "askyesno", lambda *a, **k: True)
+    monkeypatch.setattr(
+        gui_module,
+        "show_ifc_import_review",
+        lambda *_args, **_kwargs: True,
+    )
     errors = []
     monkeypatch.setattr(
         gui_module.messagebox,

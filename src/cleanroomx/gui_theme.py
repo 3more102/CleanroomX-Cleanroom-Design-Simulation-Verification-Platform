@@ -364,6 +364,23 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["panel"],
     )
     style.configure(
+        "CX.Panel.TLabel",
+        background=palette["panel"],
+        foreground=palette["text_secondary"],
+    )
+    style.configure(
+        "CX.PanelTitle.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.Metric.TLabel",
+        background=palette["panel"],
+        foreground=palette["accent"],
+        font=("TkDefaultFont", 13, "bold"),
+    )
+    style.configure(
         "CX.Raised.TFrame",
         background=palette["raised"],
     )

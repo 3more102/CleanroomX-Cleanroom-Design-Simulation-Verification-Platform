@@ -9,6 +9,7 @@ import pytest
 from cleanroomx.compliance_rulepack import compliance_check_from_dict
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.gui_compliance import ComplianceRulePackPanel
+from cleanroomx.gui_search import SearchEntry
 
 
 def _payload() -> dict:
@@ -338,3 +339,37 @@ def test_opening_compliance_workspace_blocks_switch_on_invalid_current_json(root
     assert app.status_var.get().startswith(
         "Cannot open compliance manager until current input is valid:"
     )
+
+
+def test_global_search_navigates_to_specific_compliance_rule(root, tmp_path):
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=0,
+        ui_state_path=tmp_path / "gui-layout.json",
+    )
+    target = app.project.create_analysis(
+        kind="compliance_check",
+        name="Project criteria",
+        payload=_payload(),
+    )
+    app.project.active_analysis_id = target.id
+    app._refresh_analysis_list(select_id=target.id)
+    root.update()
+
+    app._navigate_engineering_search_result(
+        SearchEntry(
+            key=f"compliance-rule:{target.id}:ach",
+            category="Compliance Rule",
+            label="Minimum air changes",
+            target_type="compliance_rule",
+            target_id="ach",
+            payload={"analysis_id": target.id, "rule_id": "ach"},
+        )
+    )
+    root.update()
+
+    assert app.project.active_analysis_id == target.id
+    assert app._editor_analysis_id == target.id
+    assert app.notebook.select() == str(app.compliance_panel)
+    assert app.compliance_panel.selected_finding()["id"] == "ach"
+    assert app.selection_status_var.get() == "Selected compliance rule: ach"

@@ -30,7 +30,11 @@ def app(tmp_path):
         autosave_interval_seconds=0,
         ui_state_path=tmp_path / "gui-layout.json",
     )
+    # Complete deferred workspace/layout restoration before the fixture performs
+    # explicit project navigation, matching the application's real startup order.
+    root.update()
     application.load_project_path(bundled_demo_project_path())
+    root.update()
     application.notebook.select(application.spatial_workspace)
     root.update()
     try:

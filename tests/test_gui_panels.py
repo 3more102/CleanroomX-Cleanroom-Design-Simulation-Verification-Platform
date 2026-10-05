@@ -41,7 +41,7 @@ def test_diagnostic_detail_lines_are_engineer_facing_and_actionable():
     text = "\n".join(lines)
     assert "WARNING  |  CRX-AIR-017" in text
     assert "Affected object: CR-104" in text
-    assert "Engineering domain: Airflow Balance" in text
+    assert "Engineering domain: airflow balance" in text
     assert "RECOMMENDED RECOVERY" in text
     assert "Required Ach: 20" in text
     assert "Calculated Ach: 17.6" in text

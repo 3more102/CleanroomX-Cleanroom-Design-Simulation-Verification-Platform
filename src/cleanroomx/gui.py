@@ -4584,7 +4584,8 @@ class CleanroomXApp:
             self._activate_spatial_workspace("split")
 
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
-        if mode is not None and hasattr(self, "notebook"):
+        """Enter the canonical Design workspace before focusing spatial geometry."""
+        if hasattr(self, "notebook"):
             self.activate_workspace_profile("design")
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
@@ -7398,7 +7399,9 @@ class CleanroomXApp:
             self.status_var.set(f"Opened {project_path.name}")
             self._update_title()
         self._remember_recent_project(project_path)
+        opening_status = self.status_var.get()
         self._activate_spatial_workspace()
+        self.status_var.set(opening_status)
 
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()

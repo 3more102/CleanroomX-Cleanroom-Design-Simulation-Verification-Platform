@@ -8,7 +8,8 @@ from .gui_theme import normalize_density_name, normalize_theme_name
 from .persistence import atomic_write_text
 
 
-GUI_LAYOUT_STATE_VERSION = 7
+GUI_LAYOUT_STATE_VERSION = 8
+GUI_TABLE_LAYOUT_IDS = ("project_diagnostics", "task_center")
 GUI_WORKSPACE_PROFILES = (
     "start",
     "design",
@@ -78,6 +79,7 @@ _DEFAULT_GUI_LAYOUT_STATE = {
     "density": "compact",
     "recent_projects": [],
     "navigator_favorites": {},
+    "table_layouts": {},
     "window_width": 1440,
     "window_height": 900,
     "navigator_fraction": 0.20,
@@ -157,6 +159,70 @@ def _normalize_recent_projects(value: Any) -> list[str]:
         if len(recent) >= 8:
             break
     return recent
+
+
+def _normalize_table_layout(value: Any) -> dict[str, Any]:
+    """Normalize one presentation-only engineering table layout."""
+    if not isinstance(value, dict):
+        return {}
+
+    visible_columns: list[str] = []
+    seen: set[str] = set()
+    raw_visible = value.get("visible_columns")
+    if isinstance(raw_visible, (list, tuple)):
+        for raw_column in raw_visible:
+            if not isinstance(raw_column, str):
+                continue
+            column = raw_column.strip()
+            if (
+                not column
+                or chr(0) in column
+                or len(column) > 64
+                or column in seen
+            ):
+                continue
+            seen.add(column)
+            visible_columns.append(column)
+            if len(visible_columns) >= 32:
+                break
+
+    widths: dict[str, int] = {}
+    raw_widths = value.get("widths")
+    if isinstance(raw_widths, dict):
+        for raw_column, raw_width in raw_widths.items():
+            if len(widths) >= 64:
+                break
+            if not isinstance(raw_column, str):
+                continue
+            column = raw_column.strip()
+            if not column or chr(0) in column or len(column) > 64:
+                continue
+            if isinstance(raw_width, bool):
+                continue
+            try:
+                width = int(raw_width)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if 40 <= width <= 2400:
+                widths[column] = width
+
+    normalized: dict[str, Any] = {}
+    if visible_columns:
+        normalized["visible_columns"] = visible_columns
+    if widths:
+        normalized["widths"] = widths
+    return normalized
+
+
+def _normalize_table_layouts(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for key in GUI_TABLE_LAYOUT_IDS:
+        layout = _normalize_table_layout(value.get(key))
+        if layout:
+            normalized[key] = layout
+    return normalized
 
 
 def _normalize_navigator_favorites(value: Any) -> dict[str, list[str]]:
@@ -290,6 +356,7 @@ def normalize_gui_layout_state(value: Any) -> dict[str, Any]:
         "navigator_favorites": _normalize_navigator_favorites(
             source.get("navigator_favorites")
         ),
+        "table_layouts": _normalize_table_layouts(source.get("table_layouts")),
         "window_width": _bounded_dimension(
             source.get("window_width"),
             _DEFAULT_GUI_LAYOUT_STATE["window_width"],

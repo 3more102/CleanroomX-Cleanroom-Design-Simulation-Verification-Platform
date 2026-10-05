@@ -99,6 +99,56 @@ def test_table_behavior_copies_headers_selects_all_and_supports_columns(root) ->
     assert behavior.visible_columns() == ("name", "value")
 
 
+def test_table_behavior_layout_state_round_trips_visibility_order_and_widths(root) -> None:
+    tree = _tree(root)
+    tree.column("name", width=180)
+    tree.column("value", width=120)
+    changes = []
+    behavior = TreeviewTableBehavior(
+        tree,
+        sortable_columns=("name", "value"),
+        on_layout_change=lambda state: changes.append(state),
+    )
+
+    assert behavior.set_column_order(("value", "name"))
+    assert changes[-1]["visible_columns"] == ["value", "name"]
+    tree.column("value", width=345)
+    saved = behavior.layout_state()
+    assert saved["widths"]["value"] == 345
+
+    restored_tree = _tree(root)
+    restored_tree.column("name", width=210)
+    restored_tree.column("value", width=160)
+    restored = TreeviewTableBehavior(
+        restored_tree,
+        sortable_columns=("name", "value"),
+        layout_state=saved,
+    )
+    assert restored.visible_columns() == ("value", "name")
+    assert int(restored_tree.column("value", "width")) == 345
+
+    restored.reset_column_layout()
+    assert restored.visible_columns() == ("name", "value")
+    assert int(restored_tree.column("name", "width")) == 210
+    assert int(restored_tree.column("value", "width")) == 160
+
+
+def test_table_behavior_layout_state_includes_tree_column_width(root) -> None:
+    tree = ttk.Treeview(
+        root,
+        columns=("state",),
+        show="tree headings",
+    )
+    tree.heading("#0", text="Task")
+    tree.heading("state", text="State")
+    tree.column("#0", width=275)
+    tree.column("state", width=115)
+
+    behavior = TreeviewTableBehavior(tree, sortable_columns=("#0", "state"))
+
+    assert behavior.layout_state()["widths"] == {"#0": 275, "state": 115}
+
+
 def test_table_behavior_keeps_equal_values_stable_when_descending(root) -> None:
     tree = ttk.Treeview(
         root,

@@ -18,6 +18,7 @@ def test_required_production_workflows_are_least_privilege_and_credentialless() 
         ".github/workflows/security.yml",
         ".github/workflows/windows-installer.yml",
         ".github/workflows/windows-standalone.yml",
+        ".github/workflows/production-acceptance.yml",
     ):
         workflow = _text(relative)
         assert "pull_request:" in workflow
@@ -49,6 +50,17 @@ def test_security_contract_retains_static_hostile_input_and_fault_injection_gate
     assert "tests/test_bim_ifc_root_failures.py" in workflow
     assert "tests/test_fault_injection_persistence.py" in workflow
     assert "tests/test_security_static_gate.py" in workflow
+
+
+def test_production_acceptance_workflow_is_self_guarding_and_publishes_evidence() -> None:
+    workflow = _text(".github/workflows/production-acceptance.yml")
+
+    assert "scripts/production_acceptance.py" in workflow
+    assert "tests/test_production_acceptance.py" in workflow
+    assert "tests/test_production_acceptance_contract.py" in workflow
+    assert "actions/upload-artifact@" in workflow
+    assert "production-acceptance.json" in workflow
+    assert "if-no-files-found: error" in workflow
 
 
 def test_windows_release_contract_retains_standalone_hash_and_installer_lifecycle() -> None:

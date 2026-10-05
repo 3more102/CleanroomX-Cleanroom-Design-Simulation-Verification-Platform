@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import os
 import tkinter as tk
+from tkinter import ttk
 
 import pytest
 
@@ -118,6 +119,28 @@ def test_dense_workstation_controls_have_discoverable_tooltips(app):
     assert "verification" in app.verification_state_label._cleanroomx_tooltip.text.casefold()
     assert "Industry Foundation Classes" in app.navigator_import_ifc_button._cleanroomx_tooltip.text
     assert "Ctrl+J" in app.output_close_button._cleanroomx_tooltip.text
+
+
+
+def test_density_mode_is_presentation_only_and_persists_in_layout_state(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    style = ttk.Style(app.root)
+    comfortable_rowheight = int(style.lookup("Treeview", "rowheight"))
+
+    app.set_density("compact", persist=False)
+    app.root.update_idletasks()
+
+    compact_rowheight = int(style.lookup("Treeview", "rowheight"))
+    assert app.density_var.get() == "compact"
+    assert compact_rowheight < comfortable_rowheight
+    assert app._capture_ui_layout_state()["density"] == "compact"
+    assert app.project.to_dict() == project_before
+
+    app.toggle_density()
+    app.root.update_idletasks()
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == comfortable_rowheight
+    assert app.project.to_dict() == project_before
 
 
 def test_engineering_output_workspace_exposes_first_class_panels(app):

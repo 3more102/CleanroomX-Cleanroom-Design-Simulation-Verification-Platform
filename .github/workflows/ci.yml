@@ -226,6 +226,7 @@ jobs:
           tests/test_gui_theme.py
           tests/test_gui_dashboard.py
           tests/test_gui_results.py
+          tests/test_gui_notifications.py
           tests/test_gui_simulation.py
           tests/test_gui_search.py
           tests/test_gui_tasks.py

@@ -95,7 +95,11 @@ from .gui_theme import (
 )
 from .gui_proofgraph import ProofGraphViewer
 from .gui_ifc import ifc_import_review_snapshot, show_ifc_import_review
-from .gui_errors import GuiErrorReport, record_gui_exception
+from .gui_errors import (
+    GuiErrorReport,
+    make_gui_callback_exception_handler,
+    record_gui_exception,
+)
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -8925,6 +8929,16 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke:
+        root.report_callback_exception = make_gui_callback_exception_handler(
+            operation="Unhandled GUI callback",
+            status_setter=app.status_var.set,
+            notifier=lambda report: messagebox.showerror(
+                "Unexpected application error",
+                report.user_message(),
+                parent=root,
+            ),
+        )
     if not args.smoke and registry["plugin_issue_count"]:
         issues = registry["plugin_issues"]
         lines = [

@@ -9,6 +9,7 @@ from tkinter import ttk
 
 from .project_diagnostics import analyze_project_diagnostics
 from .gui_theme import theme_palette
+from .gui_widgets import TreeviewColumnSorter
 
 
 def diagnostic_domain(issue: dict[str, Any]) -> str:
@@ -241,6 +242,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 minwidth=70,
                 stretch=column == "description",
             )
+        self._column_sorter = TreeviewColumnSorter(self.tree, columns)
 
         yscroll = ttk.Scrollbar(
             table_frame,
@@ -592,6 +594,10 @@ class SimulationSummaryPanel(ttk.Frame):
         self.tree.column("#0", width=460, minwidth=220)
         self.tree.column("value", width=220, minwidth=120)
         self.tree.column("unit", width=90, minwidth=70, stretch=False)
+        self._column_sorter = TreeviewColumnSorter(
+            self.tree,
+            ("#0", "value", "unit"),
+        )
         yscroll = ttk.Scrollbar(table_host, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(table_host, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)

@@ -307,6 +307,49 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         font=("TkDefaultFont", 8),
     )
 
+    # Surface-aware text styles prevent background seams inside dense
+    # engineering cards/panels while keeping typography semantic and centralized.
+    style.configure(
+        "CX.PanelSection.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.PanelTitle.TLabel",
+        background=palette["panel"],
+        foreground=palette["text"],
+        font=("TkDefaultFont", 11, "bold"),
+    )
+    style.configure(
+        "CX.PanelSecondary.TLabel",
+        background=palette["panel"],
+        foreground=palette["secondary_text"],
+    )
+    style.configure(
+        "CX.PanelMuted.TLabel",
+        background=palette["panel"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+    style.configure(
+        "CX.SurfaceSection.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
+        "CX.SurfaceSecondary.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["secondary_text"],
+    )
+    style.configure(
+        "CX.SurfaceMuted.TLabel",
+        background=palette["surface_alt"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", 8),
+    )
+
     style.configure(
         "TLabelframe",
         background=palette["background"],

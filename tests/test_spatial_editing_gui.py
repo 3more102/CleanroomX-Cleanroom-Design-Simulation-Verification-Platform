@@ -208,6 +208,32 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
 
 
 
+def test_property_inspector_filter_preserves_contextual_field_validity(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    workspace.select_item("room", room["id"])
+    workspace._property_filter_var.set("pressure")
+    app.root.update()
+
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["analysis_room_name"].winfo_manager() == ""
+    assert workspace._property_rows["room_id"].winfo_manager() == ""
+    assert workspace._property_filter_summary_var.get().startswith("1/")
+
+    workspace._property_filter_var.set("")
+    app.root.update()
+    assert workspace._property_rows["analysis_room_name"].winfo_manager() == "pack"
+
+    device = workspace.layout["devices"][0]
+    workspace.select_item("device", device["id"])
+    workspace._property_filter_var.set("room")
+    app.root.update()
+
+    assert workspace._property_rows["room_id"].winfo_manager() == "pack"
+    assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
+    assert workspace._property_rows["classification"].winfo_manager() == ""
+
+
 def test_selected_room_shows_engineering_dimensions(app):
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]

@@ -1107,15 +1107,40 @@ def validate_layout(value: Any) -> list[dict]:
     return _validate_normalized_layout(normalize_layout(value))
 
 
-def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
+def _interpolate_hex(low: str, high: str, ratio: float) -> str:
+    ratio = max(0.0, min(1.0, ratio))
+    low_rgb = tuple(int(low[index:index + 2], 16) for index in (1, 3, 5))
+    high_rgb = tuple(int(high[index:index + 2], 16) for index in (1, 3, 5))
+    rgb = tuple(
+        int(round(start + (end - start) * ratio))
+        for start, end in zip(low_rgb, high_rgb)
+    )
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def _pressure_fill(
+    pressure: Any,
+    min_pressure: float | None,
+    max_pressure: float | None,
+    *,
+    palette: dict[str, str] | None = None,
+) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
-        return "#dfe7ef"
+        return palette["surface_alt"] if palette is not None else "#dfe7ef"
     if max_pressure <= min_pressure:
         ratio = 0.5
     else:
-        ratio = (_finite_number(pressure, min_pressure) - min_pressure) / (max_pressure - min_pressure)
+        ratio = (_finite_number(pressure, min_pressure) - min_pressure) / (
+            max_pressure - min_pressure
+        )
     ratio = max(0.0, min(1.0, ratio))
-    # Low pressure: cool blue. High pressure: warm amber.
+    if palette is not None:
+        return _interpolate_hex(
+            palette["simulation"],
+            palette["accent"],
+            ratio,
+        )
+    # Legacy/default projection remains stable for non-GUI callers and tests.
     r = int(90 + 145 * ratio)
     g = int(150 + 55 * (1.0 - abs(ratio - 0.5) * 2.0))
     b = int(225 - 135 * ratio)
@@ -1135,6 +1160,8 @@ def pressure_overlay_state(
     layout: dict,
     analysis: Any = None,
     result: dict | None = None,
+    *,
+    palette: dict[str, str] | None = None,
 ) -> dict:
     """Describe pressure rendering from explicit fresh-result or spatial evidence."""
     normalized = normalize_layout(layout)
@@ -1203,7 +1230,7 @@ def pressure_overlay_state(
     minimum = min(pressures) if pressures else None
     maximum = max(pressures) if pressures else None
     for item in evidence:
-        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+        item["fill"] = _pressure_fill(\n            item["pressure_pa"], minimum, maximum, palette=palette\n        )
 
     return {
         "minimum_pressure_pa": minimum,
@@ -1230,8 +1257,20 @@ def _engineering_status(value: Any) -> str:
     return aliases.get(token, token or "unavailable")
 
 
-def _status_fill(status: str) -> str:
+def _status_fill(
+    status: str,
+    *,
+    palette: dict[str, str] | None = None,
+) -> str:
     normalized = _engineering_status(status)
+    if palette is not None:
+        if normalized == "pass":
+            return palette["success_surface"]
+        if normalized == "fail":
+            return palette["error_surface"]
+        if normalized == "warning":
+            return palette["warning_surface"]
+        return palette["surface_alt"]
     if normalized == "pass":
         return "#dcfce7"
     if normalized == "fail":
@@ -1250,11 +1289,18 @@ def _scalar_fill(
     *,
     low_rgb: tuple[int, int, int] = (224, 242, 254),
     high_rgb: tuple[int, int, int] = (14, 116, 144),
+    palette: dict[str, str] | None = None,
 ) -> str:
     if value is None or minimum is None or maximum is None:
-        return "#dfe7ef"
+        return palette["surface_alt"] if palette is not None else "#dfe7ef"
     ratio = 0.5 if maximum <= minimum else (value - minimum) / (maximum - minimum)
     ratio = max(0.0, min(1.0, ratio))
+    if palette is not None:
+        return _interpolate_hex(
+            palette["surface_alt"],
+            palette["accent"],
+            ratio,
+        )
     rgb = tuple(
         int(round(low + (high - low) * ratio))
         for low, high in zip(low_rgb, high_rgb)
@@ -1268,6 +1314,7 @@ def engineering_overlay_state(
     result: dict | None = None,
     *,
     mode: str = "pressure",
+    palette: dict[str, str] | None = None,
 ) -> dict:
     """Project canonical run/spatial results into display-only room overlays.
 
@@ -1282,7 +1329,7 @@ def engineering_overlay_state(
     result_dict = result if isinstance(result, dict) else {}
 
     if normalized_mode == "pressure":
-        pressure = pressure_overlay_state(normalized, analysis, result_dict)
+        pressure = pressure_overlay_state(\n            normalized, analysis, result_dict, palette=palette\n        )
         rooms = []
         for item in pressure["rooms"]:
             value = item.get("pressure_pa")
@@ -1424,7 +1471,7 @@ def engineering_overlay_state(
                 "value": value,
                 "status": status,
                 "label": label,
-                "fill": "#dfe7ef",
+                "fill": palette["surface_alt"] if palette is not None else "#dfe7ef",
                 "details": details,
             }
         )
@@ -1433,9 +1480,9 @@ def engineering_overlay_state(
     maximum = max(scalar_values) if scalar_values else None
     for item in rooms:
         if normalized_mode == "status":
-            item["fill"] = _status_fill(item["status"])
+            item["fill"] = _status_fill(item["status"], palette=palette)
         elif normalized_mode in {"ach", "airflow"}:
-            item["fill"] = _scalar_fill(item["value"], minimum, maximum)
+            item["fill"] = _scalar_fill(\n                item["value"], minimum, maximum, palette=palette\n            )
 
     return {
         "mode": normalized_mode,
@@ -3453,6 +3500,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._analysis_getter(),
             getattr(self, "_result_getter", lambda: None)(),
             mode=overlay_mode,
+            palette=self._theme_palette,
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
@@ -3855,6 +3903,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._analysis_getter(),
             getattr(self, "_result_getter", lambda: None)(),
             mode=overlay_mode,
+            palette=self._theme_palette,
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)

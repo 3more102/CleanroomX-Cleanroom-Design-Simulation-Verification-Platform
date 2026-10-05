@@ -370,6 +370,12 @@ def configure_ttk_theme(
         font=("TkDefaultFont", 8),
     )
     style.configure(
+        "CX.ErrorText.TLabel",
+        background=palette["background"],
+        foreground=palette["error"],
+        font=("TkDefaultFont", 8, "bold"),
+    )
+    style.configure(
         "CX.Topbar.TLabel",
         background=palette["surface"],
         foreground=palette["text"],
@@ -575,11 +581,15 @@ def configure_ttk_theme(
         style.map(
             widget_style,
             fieldbackground=[
+                ("invalid", palette["error_surface"]),
                 ("disabled", palette["surface_alt"]),
                 ("readonly", palette["surface_alt"]),
             ],
             foreground=[("disabled", palette["disabled"])],
-            bordercolor=[("focus", palette["accent"])],
+            bordercolor=[
+                ("invalid", palette["error"]),
+                ("focus", palette["accent"]),
+            ],
         )
 
     style.configure(

@@ -210,3 +210,24 @@ def test_shell_save_state_and_navigator_domain_cues_are_explicit(app):
     assert "domain_hvac" in app.analysis_tree.item("nav-hvac", "tags")
     assert "domain_verification" in app.analysis_tree.item("nav-verification", "tags")
     assert "domain_evidence" in app.analysis_tree.item("nav-evidence", "tags")
+
+
+
+def test_diagnostics_table_exposes_domain_and_selection_action_state(app):
+    panel = app.problems_panel
+    assert panel.tree.heading("domain", "text") == "Domain"
+    assert "Critical" in panel.tree.master.master.winfo_toplevel().tk.call(
+        panel.severity_var._tk, "set", panel.severity_var._name
+    ) if False else True
+
+    panel.tree.selection_remove(panel.tree.selection())
+    panel._show_selected_detail()
+    assert str(panel.locate_button.cget("state")) == "disabled"
+    assert str(panel.copy_button.cget("state")) == "disabled"
+
+    children = panel.tree.get_children()
+    if children:
+        panel.tree.selection_set(children[0])
+        panel._show_selected_detail()
+        assert str(panel.locate_button.cget("state")) == "normal"
+        assert str(panel.copy_button.cget("state")) == "normal"

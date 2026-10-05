@@ -102,9 +102,11 @@ def test_fullscreen_workspace_is_explicit_reversible_window_state(app):
     assert bool(app.root.attributes("-fullscreen")) is False
 
 
-def test_command_palette_exposes_fullscreen_workspace(app):
+def test_command_palette_exposes_workspace_window_controls(app):
     commands = {command.command_id: command for command in app._command_palette_commands()}
 
     assert "workspace.fullscreen" in commands
     assert commands["workspace.fullscreen"].shortcut == "F11"
+    assert "workspace.reset" in commands
+    assert commands["workspace.reset"].label == "Reset Panel Layout"
 

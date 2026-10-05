@@ -6188,14 +6188,23 @@ class CleanroomXApp:
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
 
+    def _set_run_state(self, text: str, status: str) -> None:
+        """Update optional workstation run-state chrome without coupling worker tests to Tk."""
+        variable = getattr(self, "run_state_var", None)
+        if variable is not None:
+            variable.set(text)
+        badge = getattr(self, "run_state_badge", None)
+        if badge is not None:
+            badge.configure(style=status_style_name(status))
+
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
-        self.run_state_var.set("RUNNING" if running else "IDLE")
-        self.run_state_badge.configure(
-            style=status_style_name("RUNNING" if running else "UNKNOWN")
+        self._set_run_state(
+            "RUNNING" if running else "IDLE",
+            "RUNNING" if running else "UNKNOWN",
         )
 
     def _poll_worker(self) -> None:
@@ -6211,8 +6220,7 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    self.run_state_var.set("FAILED")
-                    self.run_state_badge.configure(style=status_style_name("FAIL"))
+                    self._set_run_state("FAILED", "FAIL")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -6257,7 +6265,6 @@ class CleanroomXApp:
                     self.last_run_analysis_id = analysis_id
                     self._render_run(run)
                     run_status = str(run.status or "complete").strip().upper()
-                    self.run_state_var.set(run_status)
                     if run_status in {"FAIL", "FAILED", "ERROR"}:
                         run_badge_state = "FAIL"
                     elif run_status in {"WARNING", "INCOMPLETE", "INDETERMINATE"}:
@@ -6266,9 +6273,7 @@ class CleanroomXApp:
                         run_badge_state = "VERIFIED"
                     else:
                         run_badge_state = "INFO"
-                    self.run_state_badge.configure(
-                        style=status_style_name(run_badge_state)
-                    )
+                    self._set_run_state(run_status, run_badge_state)
                     if history_error is None:
                         self.status_var.set(
                             f"Completed — {run.title} — status: {run.status}"

@@ -41,6 +41,10 @@ def test_light_and_dark_palettes_are_complete_and_distinct():
         "warning",
         "error",
         "info",
+        "healthy",
+        "attention",
+        "simulation",
+        "evidence",
     }
     assert set(light) == required
     assert set(dark) == required
@@ -60,6 +64,10 @@ def test_dark_palette_matches_industrial_cleanroomx_identity():
     assert dark["success"] == "#22c55e"
     assert dark["warning"] == "#f59e0b"
     assert dark["error"] == "#ef4444"
+    assert dark["healthy"] == "#84cc16"
+    assert dark["attention"] == "#f97316"
+    assert dark["simulation"] == "#a78bfa"
+    assert dark["evidence"] == "#22c55e"
     assert "#000000" not in dark.values()
 
 

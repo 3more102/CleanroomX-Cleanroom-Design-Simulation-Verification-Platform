@@ -69,6 +69,7 @@ from .project_diagnostics_cli import (
     _assert_project_publication_safe,
     _paths_alias,
 )
+from .gui_dashboard import ProjectDashboard
 from .gui_panels import ProjectDiagnosticsPanel
 from .gui_command_palette import CommandPalette, PaletteCommand
 from .gui_state import (
@@ -1255,6 +1256,11 @@ class CleanroomXApp:
         )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
         self.model_status_var = tk.StringVar(value="Model: ready")
+        self.save_state_var = tk.StringVar(value="UNSAVED PROJECT")
+        self.problems_state_var = tk.StringVar(value="PROBLEMS —")
+        self.verification_state_var = tk.StringVar(value="VERIFY —")
+        self.evidence_state_var = tk.StringVar(value="EVIDENCE —")
+        self.run_state_var = tk.StringVar(value="IDLE")
         self.selection_status_var = tk.StringVar(value="Selected: —")
         self.workspace_status_var = tk.StringVar(value="Workspace: Split")
         self.view_status_var = tk.StringVar(
@@ -1556,6 +1562,62 @@ class CleanroomXApp:
             style="CX.Danger.TButton",
         )
         self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+
+        engineering_strip = ttk.Frame(
+            topbar,
+            style="CX.AppBar.TFrame",
+        )
+        self.engineering_strip = engineering_strip
+        engineering_strip.grid(
+            row=1,
+            column=1,
+            columnspan=7,
+            sticky="ew",
+            pady=(5, 0),
+        )
+        ttk.Label(
+            engineering_strip,
+            text="ENGINEERING STATE",
+            style="CX.ProductMeta.TLabel",
+        ).pack(side="left", padx=(0, 7))
+        self.save_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.save_state_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.save_state_badge.pack(side="left", padx=(0, 3))
+        self.problems_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.problems_state_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.problems_state_badge.pack(side="left", padx=3)
+        self.verification_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.verification_state_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.verification_state_badge.pack(side="left", padx=3)
+        self.evidence_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.evidence_state_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.evidence_state_badge.pack(side="left", padx=3)
+        self.run_state_badge = ttk.Label(
+            engineering_strip,
+            textvariable=self.run_state_var,
+            style="CX.Badge.Unknown.TLabel",
+        )
+        self.run_state_badge.pack(side="left", padx=3)
+        self.run_progress = ttk.Progressbar(
+            engineering_strip,
+            mode="indeterminate",
+            length=76,
+            style="CX.Engineering.Horizontal.TProgressbar",
+        )
+        self.run_progress.pack(side="left", padx=(4, 0))
+
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
 
@@ -1748,38 +1810,77 @@ class CleanroomXApp:
         self.navigator_close_button.pack(side="right")
         workspace_nav = ttk.Frame(
             navigator,
-            style="CX.Toolbar.TFrame",
-            padding=(4, 4),
+            style="CX.AppBar.TFrame",
+            padding=(5, 5),
         )
-        workspace_nav.pack(fill="x", pady=(0, 6))
-        for index, (label, command) in enumerate(
-            (
-                ("Dashboard", self._activate_dashboard_workspace),
-                ("Design", lambda: self._activate_spatial_workspace("split")),
-                ("ProofGraph", self._activate_proofgraph_workspace),
-                ("Problems", self.show_problems_panel),
-            )
-        ):
+        workspace_nav.pack(fill="x", pady=(0, 7))
+
+        def add_navigation_button(
+            key: str,
+            label: str,
+            command,
+        ) -> None:
             button = ttk.Button(
                 workspace_nav,
                 text=label,
-                style="CX.Compact.TButton",
+                style="CX.Nav.TButton",
                 command=command,
             )
-            button.grid(
-                row=index // 2,
-                column=index % 2,
-                sticky="ew",
-                padx=1,
-                pady=1,
-            )
-            setattr(
-                self,
-                "navigator_" + label.casefold() + "_button",
-                button,
-            )
-        workspace_nav.columnconfigure(0, weight=1)
-        workspace_nav.columnconfigure(1, weight=1)
+            button.pack(fill="x", pady=1)
+            setattr(self, f"navigator_{key}_button", button)
+
+        ttk.Label(
+            workspace_nav,
+            text="WORKSPACES",
+            style="CX.ProductMeta.TLabel",
+        ).pack(anchor="w", padx=6, pady=(1, 3))
+        add_navigation_button(
+            "dashboard",
+            "▦  Dashboard",
+            self._activate_dashboard_workspace,
+        )
+        add_navigation_button(
+            "design",
+            "◇  Design / Layout",
+            lambda: self._activate_spatial_workspace("split"),
+        )
+        add_navigation_button(
+            "simulation",
+            "▶  Simulation / Inputs",
+            self._activate_analysis_input_workspace,
+        )
+        add_navigation_button(
+            "proofgraph",
+            "⌁  ProofGraph",
+            self._activate_proofgraph_workspace,
+        )
+
+        ttk.Separator(workspace_nav, orient="horizontal").pack(fill="x", pady=5)
+        ttk.Label(
+            workspace_nav,
+            text="ASSURANCE",
+            style="CX.ProductMeta.TLabel",
+        ).pack(anchor="w", padx=6, pady=(1, 3))
+        add_navigation_button(
+            "problems",
+            "⚠  Problems / DRC",
+            self.show_problems_panel,
+        )
+        add_navigation_button(
+            "verification",
+            "✓  Verification",
+            self.show_verification_panel,
+        )
+        add_navigation_button(
+            "evidence",
+            "◆  Evidence",
+            self.show_evidence_panel,
+        )
+        add_navigation_button(
+            "report",
+            "▤  Reports",
+            self.show_report_panel,
+        )
 
         filter_row = ttk.Frame(navigator)
         filter_row.pack(fill="x", pady=(0, 6))
@@ -1868,7 +1969,14 @@ class CleanroomXApp:
         )
         self.notebook.add(self.start_center, text="Start")
 
-        self.dashboard = ProjectDashboard(self.notebook)
+        self.dashboard = ProjectDashboard(
+            self.notebook,
+            on_issue=self._navigate_project_diagnostic,
+            on_open_design=lambda: self._activate_spatial_workspace("split"),
+            on_open_problems=self.show_problems_panel,
+            on_open_proofgraph=self._activate_proofgraph_workspace,
+            on_verify=self._guided_save_and_verify,
+        )
         self.notebook.add(self.dashboard, text="Dashboard")
 
         self.spatial_workspace = SpatialDesignWorkspace(
@@ -2441,15 +2549,135 @@ class CleanroomXApp:
         self.output_panel_visible_var.set(target)
         self._sync_output_panel_visibility()
 
-    def show_problems_panel(self) -> None:
+    def _set_navigator_active(self, key: str | None) -> None:
+        for name in (
+            "dashboard",
+            "design",
+            "simulation",
+            "proofgraph",
+            "problems",
+            "verification",
+            "evidence",
+            "report",
+        ):
+            button = getattr(self, f"navigator_{name}_button", None)
+            if button is not None:
+                button.configure(
+                    style=(
+                        "CX.NavActive.TButton"
+                        if name == key
+                        else "CX.Nav.TButton"
+                    )
+                )
+
+    def _show_output_surface(self, widget, *, label: str, nav_key: str) -> None:
         self._restore_focus_workspace_snapshot(status=False)
         self.output_panel_visible_var.set(True)
         self._sync_output_panel_visibility()
-        panel = getattr(self, "problems_panel", None)
         notebook = getattr(self, "output_notebook", None)
-        if panel is not None and notebook is not None:
-            notebook.select(panel)
-        self.status_var.set("Output: Problems")
+        if widget is not None and notebook is not None:
+            notebook.select(widget)
+        self._set_navigator_active(nav_key)
+        self.status_var.set(f"Output: {label}")
+
+    def show_problems_panel(self) -> None:
+        panel = getattr(self, "problems_panel", None)
+        self._show_output_surface(panel, label="Problems", nav_key="problems")
+
+    def show_verification_panel(self) -> None:
+        text = getattr(self, "verification_text", None)
+        self._show_output_surface(
+            getattr(text, "master", None),
+            label="Verification",
+            nav_key="verification",
+        )
+
+    def show_evidence_panel(self) -> None:
+        text = getattr(self, "evidence_text", None)
+        self._show_output_surface(
+            getattr(text, "master", None),
+            label="Evidence",
+            nav_key="evidence",
+        )
+
+    def show_report_panel(self) -> None:
+        text = getattr(self, "report_text", None)
+        self._show_output_surface(
+            getattr(text, "master", None),
+            label="Report",
+            nav_key="report",
+        )
+
+    def _update_engineering_state_strip(
+        self,
+        diagnostics_summary: dict,
+        currency_summary: dict,
+        evidence_count: int,
+    ) -> None:
+        unsaved = self._has_unsaved_changes()
+        if self.project_path is None:
+            save_text = "UNSAVED PROJECT"
+        else:
+            save_text = "UNSAVED" if unsaved else "SAVED"
+        self.save_state_var.set(save_text)
+        self.save_state_badge.configure(
+            style=(
+                "CX.Badge.Warning.TLabel"
+                if unsaved or self.project_path is None
+                else "CX.Badge.Verified.TLabel"
+            )
+        )
+
+        errors = int(diagnostics_summary.get("error_count", 0) or 0)
+        warnings = int(diagnostics_summary.get("warning_count", 0) or 0)
+        problem_count = errors + warnings
+        self.problems_state_var.set(f"PROBLEMS {problem_count}")
+        if errors:
+            problems_style = "CX.Badge.Fail.TLabel"
+        elif warnings:
+            problems_style = "CX.Badge.Warning.TLabel"
+        elif str(diagnostics_summary.get("status", "")).casefold() in {
+            "pass",
+            "passed",
+            "ok",
+            "complete",
+        }:
+            problems_style = "CX.Badge.Pass.TLabel"
+        else:
+            problems_style = "CX.Badge.Unknown.TLabel"
+        self.problems_state_badge.configure(style=problems_style)
+
+        configured = int(currency_summary.get("configured_analysis_count", 0) or 0)
+        current = int(currency_summary.get("current_count", 0) or 0)
+        stale = int(currency_summary.get("stale_count", 0) or 0)
+        not_verified = int(currency_summary.get("not_verified_count", 0) or 0)
+        self.verification_state_var.set(f"VERIFY {current}/{configured}")
+        if configured and current == configured and not stale and not not_verified:
+            verify_style = "CX.Badge.Verified.TLabel"
+        elif stale:
+            verify_style = "CX.Badge.Stale.TLabel"
+        elif configured:
+            verify_style = "CX.Badge.Unverified.TLabel"
+        else:
+            verify_style = "CX.Badge.Unknown.TLabel"
+        self.verification_state_badge.configure(style=verify_style)
+
+        self.evidence_state_var.set(f"EVIDENCE {int(evidence_count)}")
+        self.evidence_state_badge.configure(
+            style=(
+                "CX.Badge.Verified.TLabel"
+                if evidence_count
+                else "CX.Badge.Unknown.TLabel"
+            )
+        )
+        self.run_state_var.set("RUNNING" if self._running else "IDLE")
+        self.run_state_badge.configure(
+            style=(
+                "CX.Badge.Running.TLabel"
+                if self._running
+                else "CX.Badge.Unknown.TLabel"
+            )
+        )
 
     def toggle_design_inspector(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -2510,6 +2738,7 @@ class CleanroomXApp:
         if dashboard is None:
             return
         self.notebook.select(dashboard)
+        self._set_navigator_active("dashboard")
         self.workspace_status_var.set("Workspace: Dashboard")
 
     def _activate_proofgraph_workspace(self) -> None:
@@ -2517,6 +2746,7 @@ class CleanroomXApp:
         if viewer is None:
             return
         self.notebook.select(viewer)
+        self._set_navigator_active("proofgraph")
         self.workspace_status_var.set("Workspace: ProofGraph")
 
     def _navigate_proofgraph_node(self, node: dict) -> bool:
@@ -2736,8 +2966,17 @@ class CleanroomXApp:
                     ),
                     "evidence_count": evidence_record_count,
                     "model_state": "ready",
+                    "run_state": "running" if self._running else "idle",
+                    "issues": diagnostics.get("issues", [])
+                    if isinstance(diagnostics, dict)
+                    else [],
                 }
             )
+        self._update_engineering_state_strip(
+            summary,
+            currency_summary,
+            evidence_record_count,
+        )
         return diagnostics
 
     def _schedule_project_diagnostics_refresh(self, delay_ms: int = 300) -> None:
@@ -3118,6 +3357,7 @@ class CleanroomXApp:
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
+            self._set_navigator_active("design")
         if mode is not None and hasattr(self, "spatial_workspace"):
             self.spatial_workspace.set_workspace_mode(mode)
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
@@ -3127,7 +3367,8 @@ class CleanroomXApp:
         """Open the current analysis input editor without changing engineering data."""
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
             self.notebook.select(self.input_tab)
-            self.workspace_status_var.set("Workspace: Analysis Inputs")
+            self._set_navigator_active("simulation")
+            self.workspace_status_var.set("Workspace: Simulation / Inputs")
 
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
@@ -6102,6 +6343,23 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        if hasattr(self, "run_state_var"):
+            self.run_state_var.set("RUNNING" if running else "IDLE")
+        badge = getattr(self, "run_state_badge", None)
+        if badge is not None:
+            badge.configure(
+                style=(
+                    "CX.Badge.Running.TLabel"
+                    if running
+                    else "CX.Badge.Unknown.TLabel"
+                )
+            )
+        progress = getattr(self, "run_progress", None)
+        if progress is not None:
+            if running:
+                progress.start(12)
+            else:
+                progress.stop()
 
     def _poll_worker(self) -> None:
         try:

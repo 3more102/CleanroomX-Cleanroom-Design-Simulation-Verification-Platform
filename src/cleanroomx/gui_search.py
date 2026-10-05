@@ -65,10 +65,10 @@ def filter_search_entries(
         for token in tokens:
             if label == token:
                 score += 100
-            elif label.startswith(token):
-                score += 45
             elif token in label:
-                score += 25
+                # Treat partial label hits as the same relevance tier so results
+                # remain stable in canonical index order; exact matches still win.
+                score += 40
             elif token in detail:
                 score += 10
             else:

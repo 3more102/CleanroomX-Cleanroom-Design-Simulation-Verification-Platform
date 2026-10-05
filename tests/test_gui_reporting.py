@@ -26,6 +26,8 @@ def test_reporting_projection_is_explicit_about_unsaved_and_unverified_state():
     assert projected["diagnostic_state"] == "not checked"
     assert projected["verification_state"] == "not configured"
     assert projected["analysis_state"] == "not run"
+    assert projected["dossier_available"] is False
+    assert projected["analysis_export_available"] is False
 
 
 def _root():
@@ -75,12 +77,58 @@ def test_reporting_workspace_surfaces_existing_export_pipeline_without_recalcula
         assert workspace.diagnostics_var.get() == "WARNING"
         assert workspace.verification_var.get() == "STALE"
         assert workspace.analysis_var.get() == "PASS"
+        assert str(workspace.dossier_button.cget("state")) == "normal"
+        assert all(
+            str(button.cget("state")) == "normal"
+            for button in workspace.analysis_export_buttons
+        )
         preview = workspace.preview.get("1.0", "end")
         assert "existing canonical dossier" not in preview
         assert "Project engineering dossier" in preview
         assert "1 stale" in preview
     finally:
         root.destroy()
+
+
+def test_reporting_workspace_disables_unavailable_exports_without_guessing():
+    root = _root()
+    workspace = ReportingWorkspace(
+        root,
+        on_export_dossier=lambda: None,
+        on_export_diagnostics=lambda: None,
+        on_export_result_json=lambda: None,
+        on_export_run_bundle=lambda: None,
+        on_export_markdown=lambda: None,
+        on_export_html=lambda: None,
+    )
+    try:
+        workspace.refresh(
+            {
+                "project_name": "Unsaved Fab",
+                "source": "Unsaved project",
+                "saved": False,
+                "diagnostics": {"status": "pass"},
+                "verification": {},
+                "last_run": {"title": "Old airflow", "status": "pass"},
+                "current_result_available": False,
+                "evidence_record_count": 0,
+                "proofgraph_count": 0,
+            }
+        )
+        root.update_idletasks()
+
+        assert str(workspace.dossier_button.cget("state")) == "disabled"
+        assert str(workspace.diagnostics_button.cget("state")) == "normal"
+        assert all(
+            str(button.cget("state")) == "disabled"
+            for button in workspace.analysis_export_buttons
+        )
+        preview = workspace.preview.get("1.0", "end")
+        assert "unavailable until the project is saved" in preview
+        assert "unavailable until a current result exists" in preview
+    finally:
+        root.destroy()
+
 
 
 @pytest.fixture

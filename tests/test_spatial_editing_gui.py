@@ -1191,3 +1191,22 @@ def test_global_engineering_search_window_is_singleton_and_view_only(app):
     app.root.update()
     assert app._engineering_search_window is None
     assert app.project.to_dict() == project_before
+
+
+def test_density_modes_change_engineering_density_without_mutating_project(app):
+    project_before = copy.deepcopy(app.project.to_dict())
+    style = ttk.Style(app.root)
+
+    app.set_density("compact", persist=False)
+    app.root.update_idletasks()
+    app.root.update()
+    assert app.density_var.get() == "compact"
+    assert int(style.lookup("Treeview", "rowheight")) == 20
+    assert int(style.lookup("CX.Navigator.Treeview", "rowheight")) == 20
+
+    app.set_density("comfortable", persist=False)
+    app.root.update_idletasks()
+    app.root.update()
+    assert app.density_var.get() == "comfortable"
+    assert int(style.lookup("Treeview", "rowheight")) == 24
+    assert app.project.to_dict() == project_before

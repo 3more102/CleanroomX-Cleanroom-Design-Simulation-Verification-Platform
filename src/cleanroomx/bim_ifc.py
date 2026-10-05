@@ -1520,6 +1520,42 @@ def _file_sha256(path: Path) -> str:
     return digest
 
 
+def _query_ifc_entities(
+    model: Any,
+    ifc_class: str,
+    *,
+    include_subtypes: bool | None = None,
+    allow_missing_schema_class: bool = False,
+) -> Iterable[Any]:
+    """Query one IFC class without hiding parser/query failures.
+
+    Older IFC schemas legitimately omit some device classes. IfcOpenShell reports
+    that condition as a RuntimeError naming the absent entity and schema. Only
+    that explicit compatibility case may be treated as an empty result; all other
+    query failures abort extraction so partial IFC imports cannot look complete.
+    """
+    try:
+        if include_subtypes is None:
+            return model.by_type(ifc_class)
+        return model.by_type(ifc_class, include_subtypes=include_subtypes)
+    except RuntimeError as exc:
+        message = str(exc)
+        lowered = message.lower()
+        if (
+            allow_missing_schema_class
+            and "not found in schema" in lowered
+            and ifc_class.lower() in lowered
+        ):
+            return ()
+        raise IfcImportError(
+            f"unable to query IFC class {ifc_class!r}"
+        ) from exc
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to query IFC class {ifc_class!r}"
+        ) from exc
+
+
 def extract_ifc_semantics(
     path: str | Path,
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -1571,7 +1607,7 @@ def extract_ifc_semantics(
         )
         records: list[dict[str, Any]] = []
 
-        for entity in model.by_type("IfcSpace"):
+        for entity in _query_ifc_entities(model, "IfcSpace"):
             try:
                 length, width, height = _space_dimensions_m(
                     entity, unit_scale, element_util
@@ -1626,14 +1662,14 @@ def extract_ifc_semantics(
 
         seen = {item["global_id"] for item in records}
         for ifc_class in _IFC_DEVICE_TYPES:
-            try:
-                if ifc_class == "IfcFlowTerminal":
-                    # IfcOpenShell includes subtypes by default; keep this generic query exact.
-                    entities = model.by_type(ifc_class, include_subtypes=False)
-                else:
-                    entities = model.by_type(ifc_class)
-            except Exception:
-                continue
+            entities = _query_ifc_entities(
+                model,
+                ifc_class,
+                include_subtypes=(
+                    False if ifc_class == "IfcFlowTerminal" else None
+                ),
+                allow_missing_schema_class=True,
+            )
             for entity in entities:
                 global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
                 if not global_id or global_id in seen:

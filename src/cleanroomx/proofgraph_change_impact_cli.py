@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Sequence
 
 from .cli_output import (
-    atomic_write_cli_output,
     cli_error_boundary,
     dumps_strict_json,
+    publish_cli_output,
     resolve_cli_path,
 )
 from .proofgraph_change_impact import compare_proofgraphs
@@ -73,11 +73,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     text = dumps_strict_json(report, indent=2, sort_keys=True) + "\n"
 
     if args.output:
-        atomic_write_cli_output(
+        if not publish_cli_output(
+            _COMMAND,
             args.output,
             text,
             protected_inputs=(baseline_path, candidate_path),
-        )
+        ):
+            return 1
     else:
         sys.stdout.write(text)
 

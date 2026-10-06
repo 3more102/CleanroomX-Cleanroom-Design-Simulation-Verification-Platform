@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — background analysis lifecycle recovery — 2026-10-06
+
+- Delivers worker-local exits such as SystemExit, KeyboardInterrupt, and GeneratorExit to the existing GUI completion boundary, preserving their traceback and releasing the run lock without accepting failed results.
+- Contains thread construction/start failures through the same error-reporting boundary so Run and the input editor become available again.
+- Keeps successfully computed results available if background audit preparation terminates, reports the audit failure, and preserves existing history without appending incomplete evidence.
+- Adds deterministic and real-thread lifecycle regressions covering retry, abandonment, generation isolation, control states, and retained audit evidence.
+
 ## Unreleased Release 3 — strict editor inputs and evidence references — 2026-10-06
 
 - Shares canonical strict JSON parsing across compliance, constraint, and requirement editors, rejecting duplicate keys, non-finite constants/exponent overflow, invalid Unicode, and excessive nesting with field-specific diagnostics.

@@ -100,6 +100,8 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
+Worker-local termination (including `SystemExit`, `KeyboardInterrupt`, and `GeneratorExit`) and thread construction/start failure return through the normal completion boundary: the run controls unlock and a failed analysis produces an error reference without accepting a result or appending history. If only audit preparation terminates after a successful calculation, the result remains available, existing history remains unchanged, and a warning reports that history was not updated. Abandoned results remain suppressed until completion; events from an older run generation cannot release the current run lock.
+
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
 ## Project requirements editor

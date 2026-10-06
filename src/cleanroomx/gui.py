@@ -7251,9 +7251,10 @@ class CleanroomXApp:
         def worker() -> None:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
-            except Exception as exc:
+            except BaseException as exc:
                 # Preserve the exception object until the GUI boundary so the
                 # durable incident logger can retain its worker traceback.
+                # Thread-local exits must also release the GUI's run lock.
                 self._queue.put(("error", generation, analysis_id, exc))
                 return
 
@@ -7261,7 +7262,7 @@ class CleanroomXApp:
             history_error = None
             try:
                 history_evidence = build_run_history_evidence(payload, result)
-            except Exception as exc:  # audit preparation must not hide a valid result
+            except BaseException as exc:  # audit preparation must not hide a valid result
                 # Keep traceback-bearing evidence until the GUI boundary logs it.
                 history_error = exc
             self._queue.put(
@@ -7273,7 +7274,12 @@ class CleanroomXApp:
                 )
             )
 
-        threading.Thread(target=worker, daemon=True).start()
+        try:
+            threading.Thread(target=worker, daemon=True).start()
+        except Exception as exc:
+            # Construction/start failures use the same traceback-preserving
+            # completion boundary as worker failures, restoring the run controls.
+            self._queue.put(("error", generation, analysis_id, exc))
 
     def cancel_run(self) -> None:
         if not self._running or self._abandon_requested:

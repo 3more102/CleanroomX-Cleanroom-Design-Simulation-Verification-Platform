@@ -3051,15 +3051,18 @@ class CleanroomXApp:
         return dict(self._ui_layout_state)
 
     def _save_ui_layout_state(self) -> None:
+        state_path = getattr(self, "_ui_state_path", None)
         try:
+            if state_path is None:
+                raise AttributeError("GUI layout state path is unavailable")
             save_gui_layout_state(
-                self._ui_state_path,
+                state_path,
                 self._capture_ui_layout_state(),
             )
         except Exception:
             GUI_RUNTIME_LOGGER.exception(
                 "Failed to persist GUI layout state path=%s",
-                self._ui_state_path,
+                state_path,
             )
             return
 
@@ -5564,6 +5567,10 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        compliance_panel = getattr(self, "compliance_panel", None)
+        refresh_compliance = getattr(compliance_panel, "refresh", None)
+        if callable(refresh_compliance):
+            refresh_compliance()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()

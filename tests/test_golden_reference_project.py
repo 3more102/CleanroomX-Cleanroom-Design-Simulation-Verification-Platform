@@ -26,7 +26,9 @@ def _assert_golden_result(result) -> None:
     finding = result.verification["findings"][0]
     assert finding["requirement_id"] == "REQ-ACH"
     assert finding["actual"] == pytest.approx(25.0)
-    assert finding["expected"] == pytest.approx(20.0)
+    assert finding["criterion"]["operator"] == "minimum"
+    assert finding["criterion"]["expected"] == pytest.approx(20.0)
+    assert finding["criterion"]["tolerance"] == pytest.approx(0.0)
     assert finding["status"] == "pass"
 
     assert len(result.proofgraphs) == 1

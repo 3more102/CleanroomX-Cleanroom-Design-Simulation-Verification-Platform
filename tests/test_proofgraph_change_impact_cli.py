@@ -206,8 +206,9 @@ def test_cli_rejects_malformed_evidence_without_touching_files(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err.startswith(
-        "cleanroomx-proofgraph-diff: error: invalid input structure:"
+    expected = "must be a string" if field == "kind" else "must be an array"
+    assert captured.err == (
+        f"cleanroomx-proofgraph-diff: error: proofgraph.evidence[0].{field} {expected}\n"
     )
     assert "Traceback" not in captured.err
     assert all(path.read_bytes() == payload for path, payload in before.items())

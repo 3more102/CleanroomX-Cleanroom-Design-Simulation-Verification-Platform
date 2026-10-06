@@ -15,6 +15,11 @@ The first serialized schema is:
 A parsed document with a supplied graph digest is rejected if the digest does not
 match the normalized graph content.
 
+Evidence `kind` must be a string and `provenance` must be an array. Wrong shapes
+raise `ValueError` with the evidence index and field path before lookup or
+iteration, in both canonical backend ingestion and the GUI projection. Rejected
+documents are not modified.
+
 ## Core objects
 
 The foundation defines typed records for:
@@ -495,4 +500,3 @@ This adapter does not introduce cleanroom class limits, pressure targets, partic
 limits, certification rules, or statistical uncertainty models. Requirements
 remain the explicit project-configured limits already consumed by the canonical
 qualification workflow.
-

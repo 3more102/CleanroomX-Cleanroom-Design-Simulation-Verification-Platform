@@ -164,6 +164,16 @@ Existing projects remain schema-version-1 compatible because the spatial documen
 
 ## Engineering problems and verification workspace
 
+Shared engineering tables preserve the displayed precision when sorting numeric
+cells, keep equal-valued rows in stable order during refresh, and leave missing
+values last. Ctrl+A selects all rows. Copy follows the visible row order and keeps
+embedded tabs or line breaks inside their original cells.
+
+The Command Palette places exact and leading command-name matches before matches
+found only in categories, shortcuts, or keywords. Search does not execute a command.
+Use Down to enter the result list and Up from its first result to return to search;
+Enter runs the selected command and Escape closes the palette.
+
 The main engineering workspace includes a persistent bottom output pane with **Problems**, **Diagnostics**, **Verification**, **Console**, **Evidence**, **Results**, and **Report** views. The **Problems** view is not a second diagnostics engine: it presents the canonical deterministic `analyze_project_diagnostics()` result as an IDE-style table with severity, rule code, description, affected object, level context when available, and source category.
 
 Problems can be searched and filtered by severity, diagnostic category, and affected object type. Columns are sortable, the panel reports visible/total issue counts, and Previous/Next plus F4/Shift+F4 provide keyboard-first triage. A context menu exposes locate/copy/navigation actions without changing diagnostic state. Double-clicking a spatial issue selects the referenced room or device, activates the design workspace, and fits the affected object in the synchronized 2D/3D views. Analysis-level issues navigate to the existing analysis input editor. Export uses the same canonical diagnostics payload and Markdown renderer as the project diagnostics CLI.

@@ -91,6 +91,11 @@ def _evidence_from_dict(data: Any, field_name: str) -> Evidence:
     }
     _reject_unknown(data, allowed, field_name)
     kind = data.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"{field_name}.kind must be a string")
+    raw_provenance = data.get("provenance", [])
+    if not isinstance(raw_provenance, list):
+        raise ValueError(f"{field_name}.provenance must be an array")
     classes = {
         "design": DesignEvidence,
         "calculation": CalculationEvidence,
@@ -111,7 +116,7 @@ def _evidence_from_dict(data: Any, field_name: str) -> Evidence:
         "subject_ref": data.get("subject_ref"),
         "provenance": tuple(
             _provenance_from_dict(item, f"{field_name}.provenance[{index}]")
-            for index, item in enumerate(data.get("provenance", []))
+            for index, item in enumerate(raw_provenance)
         ),
         "confidence": _confidence_from_dict(
             data.get("confidence"), f"{field_name}.confidence"

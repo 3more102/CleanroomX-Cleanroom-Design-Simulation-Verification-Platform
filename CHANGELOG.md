@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — GUI interaction and backend validation quality — 2026-10-06
+
+- Keeps equal-valued table rows stable across descending refreshes, preserves displayed numeric precision, and adds Ctrl+A selection in engineering tables.
+- Copies selected rows in their visible order and contains carriage returns, newlines, and tabs inside one TSV cell.
+- Ranks command-label matches ahead of metadata-only palette matches, preserves order among equally relevant commands, and returns Up from the first result to the search field.
+- Validates ProofGraph evidence kind and provenance shapes with contextual ValueError diagnostics before lookup/iteration; both backend ingestion and GUI projection reject malformed evidence without mutating it.
+- Adds headless interaction regressions and paired backend/GUI input-boundary cases while preserving canonical valid evidence and verdict semantics.
 ## Unreleased Release 3 — scalable ProofGraph change propagation — 2026-10-06
 
 - Replaces repeated full-graph scans with an iterative downstream dependency queue while preserving change-impact and stale-record semantics.

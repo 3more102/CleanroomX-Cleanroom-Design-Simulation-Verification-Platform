@@ -30,6 +30,29 @@ from cleanroomx.proofgraph import (
 )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [("kind", [], "must be a string"),
+     ("kind", {}, "must be a string"),
+     ("kind", None, "must be a string"),
+     ("kind", 1, "must be a string"),
+     ("provenance", None, "must be an array"),
+     ("provenance", {}, "must be an array"),
+     ("provenance", "wrong", "must be an array")],
+)
+def test_malformed_evidence_has_contextual_backend_validation(
+    field, value, reason
+) -> None:
+    document = _graph().to_dict()
+    document.pop("graph_sha256")
+    document["evidence"][0][field] = value
+    before = copy.deepcopy(document)
+    with pytest.raises(ValueError) as caught:
+        proofgraph_from_dict(document)
+    assert str(caught.value) == f"proofgraph.evidence[0].{field} {reason}"
+    assert document == before
+
+
 def _graph() -> ProofGraph:
     source = EvidenceSource(
         id="src-design",

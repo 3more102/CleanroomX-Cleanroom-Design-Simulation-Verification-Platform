@@ -55,6 +55,7 @@ jobs:
         run: |
           python scripts/benchmark_spatial_validation.py
           python scripts/benchmark_project_bundle.py
+          python scripts/benchmark_proofgraph_change_impact.py
       - name: Upload production acceptance evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

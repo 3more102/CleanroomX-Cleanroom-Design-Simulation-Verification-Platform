@@ -55,6 +55,10 @@ def test_ci_contract_retains_supported_matrix_golden_validation_and_performance(
     assert "tests/test_golden_reference_project.py" in workflow
     assert "scripts/benchmark_spatial_validation.py" in workflow
     assert "scripts/benchmark_project_bundle.py" in workflow
+    assert "scripts/benchmark_proofgraph_change_impact.py" in workflow
+    assert "scripts/benchmark_proofgraph_change_impact.py" in _text(
+        ".github/workflows/production-acceptance.yml"
+    )
     assert "Build wheel and verify installed application" in workflow
     assert "Run desktop GUI smoke from installed wheel" in workflow
     assert "cleanroomx-proofgraph-diff --help" in workflow

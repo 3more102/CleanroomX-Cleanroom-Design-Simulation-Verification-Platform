@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — scalable ProofGraph change propagation — 2026-10-06
+
+- Replaces repeated full-graph scans with an iterative downstream dependency queue while preserving change-impact and stale-record semantics.
+- Covers deep reverse-ordered evidence chains, branched dependencies, independently unchanged evidence, refreshed intermediate records, and downstream verification outcomes.
+- Adds a reverse-ordered 1,000/5,000-record benchmark to CI and Production Acceptance with a 3-second comparison budget; local 5,000-record comparison improved from 8.370 seconds to 0.083 seconds with identical complete-report SHA-256 identity.
+
 ## Unreleased Release 3 — ProofGraph diff structural input boundary — 2026-10-06
 
 - Routes both ProofGraph diff inputs through the shared structural parser boundary, so malformed evidence containers return a concise diagnostic and exit code 1 instead of escaping as Python tracebacks.

@@ -35,6 +35,7 @@ def _required_files(checks: list[dict[str, Any]]) -> None:
         "docs/PROOFGRAPH_CHANGE_IMPACT.md",
         "scripts/benchmark_spatial_validation.py",
         "scripts/benchmark_project_bundle.py",
+        "scripts/benchmark_proofgraph_change_impact.py",
         "scripts/security_static_gate.py",
         "src/cleanroomx/proofgraph_change_impact_cli.py",
         "src/cleanroomx/proofgraph_change_impact.py",

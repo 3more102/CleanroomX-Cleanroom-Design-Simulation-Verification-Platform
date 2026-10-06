@@ -16,6 +16,12 @@ Direct requirement, evidence-source, and evidence changes are propagated through
 
 The report includes a canonical `impact_sha256`.
 
+Derived-evidence propagation uses an iterative downstream dependency queue. It
+handles deep chains and branching dependencies without recursion or repeated
+full-graph scans; serialized evidence order does not change the impacted or stale
+record sets. The reverse-ordered chain benchmark runs in both CI and Production
+Acceptance under the budgets in `docs/PERFORMANCE_GATES.md`.
+
 ## Potentially stale candidate records
 
 A candidate record is marked **potentially stale** only when its own serialized record is unchanged but an upstream source/evidence/check dependency changed. This is deliberately conservative. It means the record requires review or recomputation evidence; it does not prove that the engineering result is wrong.

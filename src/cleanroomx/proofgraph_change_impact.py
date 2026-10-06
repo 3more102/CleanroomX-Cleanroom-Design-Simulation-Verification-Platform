@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 import hashlib
 import json
 from typing import Any, Iterable
@@ -177,27 +178,30 @@ def compare_proofgraphs(
     evidence_impact_ids = set(directly_changed_evidence_ids)
     evidence_impact_ids.update(stale_candidate_evidence_ids)
 
-    # Propagate upstream evidence changes through unchanged derived evidence.
-    changed = True
-    while changed:
-        changed = False
-        for evidence in candidate.evidence:
-            if (
-                evidence.id in evidence_impact_ids
-                or not _candidate_unchanged(
-                    evidence.id, baseline_evidence, candidate_evidence
-                )
-            ):
+    # Index downstream dependencies once; visiting each affected record once
+    # avoids repeated full scans for reverse-ordered or deep evidence chains.
+    downstream: dict[str, list[str]] = {}
+    for evidence in candidate.evidence:
+        if evidence.id in evidence_impact_ids or not _candidate_unchanged(
+            evidence.id, baseline_evidence, candidate_evidence
+        ):
+            continue
+        upstream_ids = {
+            upstream_id
+            for provenance in evidence.provenance
+            for upstream_id in provenance.upstream_evidence_ids
+        }
+        for upstream_id in upstream_ids:
+            downstream.setdefault(upstream_id, []).append(evidence.id)
+
+    pending = deque(sorted(evidence_impact_ids))
+    while pending:
+        for evidence_id in downstream.get(pending.popleft(), ()):
+            if evidence_id in evidence_impact_ids:
                 continue
-            upstream_ids = {
-                upstream_id
-                for provenance in evidence.provenance
-                for upstream_id in provenance.upstream_evidence_ids
-            }
-            if upstream_ids & evidence_impact_ids:
-                stale_candidate_evidence_ids.add(evidence.id)
-                evidence_impact_ids.add(evidence.id)
-                changed = True
+            stale_candidate_evidence_ids.add(evidence_id)
+            evidence_impact_ids.add(evidence_id)
+            pending.append(evidence_id)
 
     directly_changed_check_ids = _changed_ids(changes["checks"])
     impacted_check_ids = set(directly_changed_check_ids)

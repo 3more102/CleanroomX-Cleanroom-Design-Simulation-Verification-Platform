@@ -255,3 +255,98 @@ def test_comparison_rejects_unrelated_graph_identity() -> None:
 
     with pytest.raises(ValueError, match="matching graph ids"):
         compare_proofgraphs(baseline, candidate)
+
+
+def _derived(graph: ProofGraph, evidence_id: str, upstream: tuple[str, ...]):
+    return replace(
+        graph.evidence[0],
+        id=evidence_id,
+        property_name=f"derived-{evidence_id}",
+        provenance=(
+            ProvenanceRecord(
+                id=f"provenance-{evidence_id}",
+                source_id=graph.evidence_sources[0].id,
+                origin="derived calculation",
+                upstream_evidence_ids=upstream,
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+@pytest.mark.parametrize("refresh_intermediate", [False, True])
+def test_branched_change_impact_preserves_unrelated_evidence_and_refreshed_records(
+    reverse_order: bool, refresh_intermediate: bool
+) -> None:
+    graph = _graph()
+    root = graph.evidence[0]
+    left = _derived(graph, "LEFT", (root.id,))
+    right = _derived(graph, "RIGHT", (root.id,))
+    join = _derived(graph, "JOIN", (left.id, right.id))
+    unrelated = _derived(graph, "UNRELATED", ())
+    evidence = [root, left, right, join, unrelated]
+    if reverse_order:
+        evidence.reverse()
+    baseline = replace(
+        graph,
+        evidence=tuple(evidence),
+        checks=(replace(graph.checks[0], evidence_ids=(join.id,)),),
+        findings=(replace(graph.findings[0], evidence_ids=(join.id,)),),
+        corrective_actions=(
+            CorrectiveAction(
+                id="ACTION", requirement_id="REQ-1", title="Review derived result",
+                description="Review changed upstream evidence.", evidence_ids=(join.id,),
+            ),
+        ),
+    )
+    candidate = replace(
+        baseline,
+        evidence=tuple(
+            replace(item, value=14.0)
+            if item.id == root.id or (refresh_intermediate and item.id == right.id)
+            else item
+            for item in baseline.evidence
+        ),
+    )
+
+    report = compare_proofgraphs(baseline, candidate)
+
+    assert report["impact"]["impacted_evidence_ids"] == ["EV-1", "JOIN", "LEFT", "RIGHT"]
+    assert report["potentially_stale_candidate"] == {
+        "evidence_ids": ["JOIN", "LEFT"] if refresh_intermediate else ["JOIN", "LEFT", "RIGHT"],
+        "finding_ids": ["FINDING-1"],
+        "verdict_ids": ["VERDICT-1"],
+        "corrective_action_ids": ["ACTION"],
+        "verification_run_ids": ["RUN-1"],
+    }
+    assert report == compare_proofgraphs(baseline, candidate)
+
+
+def test_deep_reverse_ordered_dependency_chain_reaches_verification_outcomes() -> None:
+    graph = _graph()
+    evidence = [graph.evidence[0]]
+    for index in range(1_500):
+        evidence.append(_derived(graph, f"CHAIN-{index:04d}", (evidence[-1].id,)))
+    final_id = evidence[-1].id
+    baseline = replace(
+        graph,
+        evidence=tuple(reversed(evidence)),
+        checks=(replace(graph.checks[0], evidence_ids=(final_id,)),),
+        findings=(replace(graph.findings[0], evidence_ids=(final_id,)),),
+    )
+    candidate = replace(
+        baseline,
+        evidence=tuple(
+            replace(item, value=14.0) if item.id == "EV-1" else item
+            for item in baseline.evidence
+        ),
+    )
+
+    report = compare_proofgraphs(baseline, candidate)
+
+    assert report["potentially_stale_candidate"]["evidence_ids"] == sorted(
+        item.id for item in evidence[1:]
+    )
+    assert report["potentially_stale_candidate"]["finding_ids"] == ["FINDING-1"]
+    assert report["potentially_stale_candidate"]["verdict_ids"] == ["VERDICT-1"]
+    assert report["potentially_stale_candidate"]["verification_run_ids"] == ["RUN-1"]

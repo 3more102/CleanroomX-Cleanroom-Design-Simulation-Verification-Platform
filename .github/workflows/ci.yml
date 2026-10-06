@@ -167,6 +167,7 @@ jobs:
         run: |
           python scripts/benchmark_spatial_validation.py
           python scripts/benchmark_project_bundle.py
+          python scripts/benchmark_proofgraph_change_impact.py
       - name: Build wheel and verify installed application
         run: |
           rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env

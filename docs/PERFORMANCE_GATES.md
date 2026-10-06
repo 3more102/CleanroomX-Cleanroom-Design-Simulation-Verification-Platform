@@ -40,3 +40,20 @@ The validated 2026-10-05 Python 3.13 baseline was approximately:
 If a budget fails, investigate the regression instead of simply increasing the
 limit. Change a budget only when the workload or accepted release envelope has
 intentionally changed and new evidence justifies the new limit.
+
+## ProofGraph change impact
+
+`scripts/benchmark_proofgraph_change_impact.py` compares two revisions of
+1,000-record and 5,000-record evidence chains serialized in reverse dependency
+order. Only the root value changes; every unchanged downstream evidence record
+must be flagged as potentially stale, with no extra direct evidence changes.
+
+Each complete comparison must finish within 3.0 seconds. CI and Production
+Acceptance both run this guard. Propagation indexes downstream dependencies once
+and visits each impacted record once rather than repeatedly scanning the graph.
+
+On Python 3.12.14 in the 2026-10-06 local validation environment, the 5,000-record
+case fell from 8.370 seconds to 0.083 seconds. The complete comparison reports
+retained identical SHA-256 identities before and after the optimization for both
+workloads. These are synthetic regression measurements, not a comparison with
+other engineering products or a workstation performance guarantee.

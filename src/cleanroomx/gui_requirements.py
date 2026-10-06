@@ -9,6 +9,7 @@ from tkinter import messagebox, ttk
 
 from .project import ProjectDocument, project_from_dict
 from .runtime_diagnostics import record_gui_exception
+from .gui_input_validation import parse_finite_number, parse_json_field
 from .project_requirements import (
     PROJECT_REQUIREMENTS_METADATA_KEY,
     PROJECT_REQUIREMENTS_SCHEMA,
@@ -173,10 +174,7 @@ def _optional_float(text: str, field_name: str) -> float | None:
     text = text.strip()
     if not text:
         return None
-    try:
-        return float(text)
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must be numeric") from exc
+    return parse_finite_number(text, field_name)
 
 
 class _RequirementSetDialog(tk.Toplevel):
@@ -389,7 +387,7 @@ class _RequirementDialog(tk.Toplevel):
                 text = self.target_var.get().strip()
                 if not text:
                     raise ValueError("Target JSON is required in target mode")
-                target = json.loads(text)
+                target = parse_json_field(text, "Target")
             elif mode == "bounds":
                 minimum = _optional_float(self.minimum_var.get(), "Minimum")
                 maximum = _optional_float(self.maximum_var.get(), "Maximum")
@@ -418,7 +416,7 @@ class _RequirementDialog(tk.Toplevel):
                 "assumptions": _csv_values(values["assumptions"]),
                 "notes": values["notes"] or None,
             }
-        except (ValueError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             messagebox.showerror("Invalid requirement", str(exc), parent=self)
             return
         self.result = requirement

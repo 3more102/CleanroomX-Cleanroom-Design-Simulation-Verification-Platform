@@ -64,3 +64,5 @@ The repository intentionally does not ship copyrighted standards clauses or univ
 
 The built-in application workflow key is \`compliance_check\`. It uses the same parser/runner/reporter boundary as other direct CleanroomX analyses, so desktop projects, deterministic project batch execution, immutable run snapshots, input SHA-256 provenance, report export, and application-registry validation reuse the existing execution path rather than a separate compliance engine.
 
+
+Array evidence paths follow [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901): index tokens contain ASCII digits with no leading zeroes except `0`. Noncanonical, out-of-range, and arbitrarily large indices resolve as missing evidence and remain `not_checked`, including after ProofGraph conversion. Object keys are matched exactly, so keys such as `01` or non-ASCII digits remain valid object members.

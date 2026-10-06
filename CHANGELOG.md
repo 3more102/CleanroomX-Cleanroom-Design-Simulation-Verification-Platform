@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — strict editor inputs and evidence references — 2026-10-06
+
+- Shares canonical strict JSON parsing across compliance, constraint, and requirement editors, rejecting duplicate keys, non-finite constants/exponent overflow, invalid Unicode, and excessive nesting with field-specific diagnostics.
+- Rejects non-finite tolerance and requirement bounds before accepting a dialog; rejected compliance edits preserve the original input and never call the publication callback.
+- Resolves array evidence references using RFC 6901 ASCII index syntax without leading zeroes, containing arbitrarily large indices before integer conversion. Exact object keys remain supported.
+- Keeps invalid or unresolved array evidence references unchecked through compliance analysis and ProofGraph conversion, with headless editor and end-to-end backend regressions.
+
 ## Unreleased Release 3 — GUI interaction and backend validation quality — 2026-10-06
 
 - Keeps equal-valued table rows stable across descending refreshes, preserves displayed numeric precision, and adds Ctrl+A selection in engineering tables.

@@ -682,6 +682,19 @@ def test_missing_compliance_evidence_preserves_not_checked_without_fabrication()
     assert proofgraph_from_dict(copy.deepcopy(document)).to_dict() == document
 
 
+@pytest.mark.parametrize("token", ["01", "١", "²", "9" * 5000])
+def test_invalid_compliance_array_reference_stays_unchecked_in_proofgraph(token: str) -> None:
+    payload = _compliance_payload()
+    payload["rule_pack"]["rules"][0]["evidence_path"] = f"/room/{token}"
+    payload["evidence"] = {"room": [13.6, 13.6]}
+    document = proofgraph_from_compliance_check(compliance_check_from_dict(payload)).to_dict()
+    assert document["evidence"] == []
+    assert document["checks"][0]["evidence_ids"] == []
+    assert document["findings"][0]["status"] == "not_checked"
+    assert document["verdicts"][0]["status"] == "not_checked"
+    assert proofgraph_from_dict(copy.deepcopy(document)).to_dict() == document
+
+
 def test_evidence_revision_changes_proofgraph_identity() -> None:
     baseline = proofgraph_from_compliance_check(
         compliance_check_from_dict(_compliance_payload())

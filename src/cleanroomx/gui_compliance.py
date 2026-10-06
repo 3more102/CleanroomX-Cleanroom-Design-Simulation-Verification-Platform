@@ -11,6 +11,7 @@ from .compliance_rulepack import (
     analyze_compliance_check,
     compliance_check_from_dict,
 )
+from .gui_input_validation import parse_finite_number, parse_json_field
 
 
 def _json_text(value: Any) -> str:
@@ -26,17 +27,7 @@ def _json_text(value: Any) -> str:
 
 
 def _strict_json_value(text: str, field_name: str) -> Any:
-    try:
-        return json.loads(
-            text,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ValueError(f"{field_name} must be strict JSON; {value} is not allowed")
-            ),
-        )
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"{field_name} is invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}"
-        ) from exc
+    return parse_json_field(text, field_name)
 
 
 class ComplianceRulePackPanel(ttk.Frame):
@@ -646,10 +637,7 @@ class ComplianceRulePackPanel(ttk.Frame):
         operator = self.operator_var.get().strip()
         rule["operator"] = operator
         tolerance_text = self.tolerance_var.get().strip() or "0"
-        try:
-            tolerance = float(tolerance_text)
-        except ValueError as exc:
-            raise ValueError("tolerance must be a finite number") from exc
+        tolerance = parse_finite_number(tolerance_text, "tolerance")
         rule["tolerance"] = tolerance
 
         if operator == "exists":

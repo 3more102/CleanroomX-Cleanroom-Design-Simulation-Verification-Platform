@@ -9,9 +9,14 @@ $distRoot = Join-Path $repoRoot "dist\windows-standalone"
 $entryPoint = Join-Path $repoRoot "packaging\cleanroomx_desktop_entry.py"
 $iconPath = Join-Path $repoRoot "packaging\windows\CleanroomX.ico"
 $versionFile = Join-Path $buildRoot "CleanroomX.version.txt"
+$hookDir = Join-Path $repoRoot "packaging\\pyinstaller_hooks"
+$ifcHook = Join-Path $hookDir "hook-ifcopenshell.py"
 
 if (-not (Test-Path $iconPath -PathType Leaf)) {
     throw "Windows application icon is missing: $iconPath"
+}
+if (-not (Test-Path $ifcHook -PathType Leaf)) {
+    throw "IfcOpenShell PyInstaller hook is missing: $ifcHook"
 }
 
 Remove-Item -Recurse -Force $buildRoot -ErrorAction SilentlyContinue
@@ -37,7 +42,7 @@ python -m PyInstaller `
     --version-file $versionFile `
     --paths (Join-Path $repoRoot "src") `
     --collect-data cleanroomx `
-    --collect-all ifcopenshell `
+    --additional-hooks-dir $hookDir `
     --distpath $distRoot `
     --workpath $buildRoot `
     --specpath $buildRoot `

@@ -657,6 +657,53 @@ def test_running_analysis_prevents_switching_to_another_analysis():
     assert "abandon" in app.status_var.value.lower()
 
 
+def test_load_analysis_refreshes_compliance_panel() -> None:
+    analysis = AnalysisDocument(
+        id="compliance",
+        name="Compliance A",
+        kind="compliance_check",
+        input={"name": "Compliance A"},
+    )
+
+    class Text:
+        def __init__(self):
+            self.value = ""
+
+        def delete(self, *_args):
+            self.value = ""
+
+        def insert(self, _index, value):
+            self.value = value
+
+        def edit_modified(self, _value):
+            return None
+
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    calls = []
+
+    class Panel:
+        def refresh(self):
+            calls.append("refresh")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.input_text = Text()
+    app.status_var = Status()
+    app.compliance_panel = Panel()
+    app.refresh_structure = lambda silent=False: None
+    app._restore_run_for = lambda _analysis_id: None
+
+    app._load_analysis_into_editor(analysis)
+
+    assert app._editor_analysis_id == "compliance"
+    assert calls == ["refresh"]
+
+
 def test_unsaved_state_detects_uncommitted_editor_changes():
     class Value:
         def __init__(self, value):

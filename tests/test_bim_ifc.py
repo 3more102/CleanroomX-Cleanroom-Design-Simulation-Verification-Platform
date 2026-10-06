@@ -61,7 +61,7 @@ def _records():
 
 def _install_empty_ifcopenshell(monkeypatch):
     class Model:
-        def by_type(self, _ifc_class):
+        def by_type(self, _ifc_class, include_subtypes=True):
             return []
 
     ifcopenshell = types.ModuleType("ifcopenshell")
@@ -332,7 +332,7 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcAirTerminal":
                 return [entity]
             return []
@@ -879,7 +879,7 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     )
 
     class Model:
-        def by_type(self, ifc_class):
+        def by_type(self, ifc_class, include_subtypes=True):
             if ifc_class == "IfcSpace":
                 return [space]
             return []

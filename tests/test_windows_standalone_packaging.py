@@ -10,12 +10,14 @@ BUILD_SCRIPT = ROOT / "scripts" / "build_windows_standalone.ps1"
 ENTRY_POINT = ROOT / "packaging" / "cleanroomx_desktop_entry.py"
 ICON = ROOT / "packaging" / "windows" / "CleanroomX.ico"
 VERSION_SCRIPT = ROOT / "scripts" / "write_windows_version_info.py"
+IFC_HOOK = ROOT / "packaging" / "pyinstaller_hooks" / "hook-ifcopenshell.py"
 
 
 def test_windows_standalone_workflow_uses_pinned_release_dependencies() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "runs-on: windows-2025" in workflow
+    assert "timeout-minutes: 60" in workflow
     assert 'python-version: "3.12"' in workflow
     assert 'python -m pip install "pip==26.2.1"' in workflow
     assert 'pip install -e ".[release]"' in workflow
@@ -39,13 +41,35 @@ def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked()
     assert "--windowed" in script
     assert "--onedir" in script
     assert "--collect-data cleanroomx" in script
-    assert "--collect-all ifcopenshell" in script
+    assert "--collect-all ifcopenshell" not in script
+    assert "--additional-hooks-dir $hookDir" in script
     assert "--icon $iconPath" in script
     assert "--version-file $versionFile" in script
     assert "CleanroomX Engineering Workstation" in script
     assert "ProductVersion" in script
     assert "CleanroomX.exe" in script
     assert '-ArgumentList "--check"' in script
+
+
+def test_ifcopenshell_hook_is_native_complete_and_bounded() -> None:
+    hook = IFC_HOOK.read_text(encoding="utf-8")
+
+    assert 'collect_data_files("ifcopenshell")' in hook
+    assert "collect_dynamic_libs(" in hook
+    assert '"*.pyd"' in hook
+    assert '"*.dll"' in hook
+    assert "collect_all" not in hook
+    assert "collect_submodules" not in hook
+    for module in (
+        "ifcopenshell.ifcopenshell_wrapper",
+        "ifcopenshell.geom",
+        "ifcopenshell.geom.main",
+        "ifcopenshell.util.element",
+        "ifcopenshell.util.placement",
+        "ifcopenshell.util.shape",
+        "ifcopenshell.util.unit",
+    ):
+        assert f'"{module}"' in hook
 
 
 def test_windows_icon_is_a_real_multi_image_ico() -> None:

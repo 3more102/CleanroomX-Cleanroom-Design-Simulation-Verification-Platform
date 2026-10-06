@@ -112,7 +112,7 @@ def test_durability_recovery_reload_failure_is_recorded(monkeypatch, tmp_path) -
 
     assert app.persist_project_requirements_verification() is False
     assert app.status_var.value == (
-        "Verification bytes committed; save durability not confirmed"
+        "Verification bytes committed; durability unconfirmed; project reload failed"
     )
     assert warnings
     assert logger.calls == [
@@ -121,6 +121,23 @@ def test_durability_recovery_reload_failure_is_recorded(monkeypatch, tmp_path) -
             (project_path,),
         )
     ]
+
+def test_layout_state_missing_path_is_logged_without_secondary_failure(monkeypatch) -> None:
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._capture_ui_layout_state = lambda: {}
+
+    logger = _RecordingLogger()
+    monkeypatch.setattr(gui_module, "GUI_RUNTIME_LOGGER", logger)
+
+    app._save_ui_layout_state()
+
+    assert logger.calls == [
+        (
+            "Failed to persist GUI layout state path=%s",
+            (None,),
+        )
+    ]
+
 
 def test_engineering_panel_failures_are_recorded_without_hiding_operator_state(
     monkeypatch,

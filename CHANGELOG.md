@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — ProofGraph diff structural input boundary — 2026-10-06
+
+- Routes both ProofGraph diff inputs through the shared structural parser boundary, so malformed evidence containers return a concise diagnostic and exit code 1 instead of escaping as Python tracebacks.
+- Adds baseline/candidate regressions that preserve both input files and any previous output on rejection, and verifies that unexpected loader runtime defects still propagate.
+- Makes the standalone CLI error-boundary completeness gate inspect imports and the main function decorator through the Python AST, accepting multiline imports without relaxing the required boundary.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

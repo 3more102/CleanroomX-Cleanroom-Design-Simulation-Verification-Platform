@@ -4,6 +4,9 @@ from dataclasses import replace
 import json
 from pathlib import Path
 
+import pytest
+
+import cleanroomx.proofgraph_change_impact_cli as cli
 from cleanroomx.proofgraph import (
     ComplianceCheck,
     ComplianceFinding,
@@ -179,3 +182,44 @@ def test_cli_rejects_invalid_strict_json_without_traceback(
     assert captured.out == ""
     assert "duplicate JSON object key" in captured.err
     assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("invalid_side", ["baseline", "candidate"])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("kind", []), ("kind", {}), ("provenance", None)],
+)
+def test_cli_rejects_malformed_evidence_without_touching_files(
+    tmp_path: Path, capsys, invalid_side: str, field: str, value
+) -> None:
+    baseline = _write(tmp_path / "baseline.json", _graph())
+    candidate = _write(tmp_path / "candidate.json", _graph())
+    invalid = baseline if invalid_side == "baseline" else candidate
+    document = json.loads(invalid.read_text(encoding="utf-8"))
+    document["evidence"][0][field] = value
+    invalid.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "report.json"
+    output.write_text("previous report\n", encoding="utf-8")
+    before = {path: path.read_bytes() for path in (baseline, candidate, output)}
+
+    assert main([str(baseline), str(candidate), "--output", str(output)]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith(
+        "cleanroomx-proofgraph-diff: error: invalid input structure:"
+    )
+    assert "Traceback" not in captured.err
+    assert all(path.read_bytes() == payload for path, payload in before.items())
+
+
+def test_cli_does_not_hide_unexpected_loader_runtime_error(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    def fail(_path):
+        raise RuntimeError("programming defect")
+
+    monkeypatch.setattr(cli, "_load_graph", fail)
+    with pytest.raises(RuntimeError, match="programming defect"):
+        main([str(tmp_path / "baseline.json"), str(tmp_path / "candidate.json")])
+    assert capsys.readouterr().err == ""

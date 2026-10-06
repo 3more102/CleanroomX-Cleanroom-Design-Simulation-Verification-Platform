@@ -8,6 +8,7 @@ from typing import Sequence
 from .cli_output import (
     cli_error_boundary,
     dumps_strict_json,
+    load_cli_input,
     publish_cli_output,
     resolve_cli_path,
 )
@@ -67,8 +68,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline_path = resolve_cli_path(args.baseline, label="baseline ProofGraph")
     candidate_path = resolve_cli_path(args.candidate, label="candidate ProofGraph")
 
-    baseline = _load_graph(baseline_path)
-    candidate = _load_graph(candidate_path)
+    baseline = load_cli_input(_load_graph, baseline_path)
+    candidate = load_cli_input(_load_graph, candidate_path)
     report = compare_proofgraphs(baseline, candidate)
     text = dumps_strict_json(report, indent=2, sort_keys=True) + "\n"
 

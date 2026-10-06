@@ -72,6 +72,7 @@ def test_installer_lifecycle_gate_covers_install_upgrade_launch_and_uninstall():
     assert "install -> launch -> upgrade -> launch -> uninstall" in text
 
     assert "runs-on: windows-2025" in workflow
+    assert "timeout-minutes: 60" in workflow
     assert 'python -m pip install "pip==26.2.1"' in workflow
     assert 'pip install -e ".[release]"' in workflow
     assert 'pip install -e ".[bim]"' not in workflow

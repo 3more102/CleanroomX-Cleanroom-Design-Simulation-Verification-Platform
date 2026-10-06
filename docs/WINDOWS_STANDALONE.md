@@ -55,6 +55,13 @@ pins the GitHub-hosted runner label to `windows-2025` instead of the moving
 `windows-latest` alias. The repository source revision and workflow run identify
 the remaining hosted-image/toolchain inputs.
 
+IfcOpenShell is frozen through the repository-owned
+`packaging/pyinstaller_hooks/hook-ifcopenshell.py` hook. The hook collects the
+package data and native `.pyd`/DLL runtime plus only the parser, geometry, and
+utility modules used by CleanroomX; it intentionally avoids recursively
+collecting every optional IfcOpenShell submodule. Both Windows release jobs are
+bounded to 60 minutes and fail closed if packaging does not terminate.
+
 ## Distribution modes
 
 The standalone ZIP is intentionally a portable, unregistered distribution:

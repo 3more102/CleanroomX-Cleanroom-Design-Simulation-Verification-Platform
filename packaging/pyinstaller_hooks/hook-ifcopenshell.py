@@ -4,9 +4,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 
 # CleanroomX only uses the native IFC parser, geometry bridge, and four utility
-# modules below. Do not use collect_all()/collect_submodules() here: importing
-# the whole IfcOpenShell ecosystem makes the Windows freeze unnecessarily broad
-# and can pull unrelated optional integrations into PyInstaller analysis.
+# modules below. Keep collection bounded to that runtime surface so unrelated
+# optional IfcOpenShell integrations are not imported during PyInstaller analysis.
 datas = collect_data_files("ifcopenshell")
 binaries = collect_dynamic_libs(
     "ifcopenshell",

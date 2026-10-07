@@ -142,7 +142,7 @@ Run the full installation/runtime health check:
 cleanroomx-doctor
 ```
 
-Use `cleanroomx-doctor --format text` for a concise operator summary, `cleanroomx-doctor --require-bim` when native IFC/BIM support is mandatory, `cleanroomx-doctor --require-desktop` to prove a real hidden Tk desktop root can initialize and close cleanly, or `cleanroomx-doctor --deep` to execute the packaged demo's active analysis through the real application runner. Warning and failure checks now carry actionable remediation guidance in both JSON and text output. JSON remains the deterministic default for support tickets and CI evidence.
+Use `cleanroomx-doctor --format text` for a concise operator summary, `cleanroomx-doctor --require-bim` when native IFC/BIM support is mandatory, `cleanroomx-doctor --require-desktop` to prove a real hidden Tk desktop root can initialize and close cleanly, or `cleanroomx-doctor --deep` to execute the packaged demo's active analysis through the real application runner. Warning and failure checks now carry actionable remediation guidance in both JSON and text output. JSON remains the deterministic default for support tickets and CI evidence. Capture a known-good JSON report once, then use `cleanroomx-doctor --baseline <report.json>` to detect runtime/configuration drift; add `--fail-on-regression` when CI should return exit code 3 for degraded health that has not yet become a required-readiness failure.
 
 ## Main command-line tools
 

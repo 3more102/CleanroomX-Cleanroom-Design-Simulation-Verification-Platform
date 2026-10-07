@@ -543,6 +543,30 @@ def _health_profile(report: dict[str, Any], *, label: str) -> dict[str, bool]:
     return profile
 
 
+def _health_application_identity(
+    report: dict[str, Any],
+    *,
+    label: str,
+) -> dict[str, str]:
+    application = report.get("application")
+    if type(application) is not dict:
+        raise ValueError(f"{label} report application must be an object")
+
+    name = application.get("name")
+    if name != "CleanroomX":
+        raise ValueError(
+            f"{label} report application.name must be 'CleanroomX'"
+        )
+
+    version = application.get("version")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError(
+            f"{label} report application.version must be a non-empty string"
+        )
+
+    return {"name": name, "version": version}
+
+
 def _health_check_map(
     report: dict[str, Any],
     *,
@@ -640,6 +664,8 @@ def compare_system_health_reports(
     """Compare compatible system-health reports and identify deterministic drift."""
     baseline_checks = _health_check_map(baseline, label="baseline")
     current_checks = _health_check_map(current, label="current")
+    baseline_application = _health_application_identity(baseline, label="baseline")
+    current_application = _health_application_identity(current, label="current")
 
     baseline_profile = _health_profile(baseline, label="baseline")
     current_profile = _health_profile(current, label="current")
@@ -722,13 +748,6 @@ def compare_system_health_reports(
     improved = bool(improvements) or readiness_improved or coverage_expanded
     state = "regressed" if regressed else "improved" if improved else "stable"
 
-    def application_version(report: dict[str, Any]) -> str | None:
-        application = report.get("application")
-        if not isinstance(application, dict):
-            return None
-        version = application.get("version")
-        return version if isinstance(version, str) else None
-
     return {
         "schema": "cleanroomx.system-health-comparison",
         "schema_version": 1,
@@ -736,8 +755,8 @@ def compare_system_health_reports(
         "regressed": regressed,
         "improved": improved,
         "profile": current_profile,
-        "baseline_application_version": application_version(baseline),
-        "current_application_version": application_version(current),
+        "baseline_application_version": baseline_application["version"],
+        "current_application_version": current_application["version"],
         "required_readiness": {
             "baseline": bool(baseline["required_ready"]),
             "current": bool(current["required_ready"]),

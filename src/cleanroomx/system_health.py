@@ -305,6 +305,14 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     "module_hash_matches_distribution": None,
                     "package_initializer_hash_algorithm": None,
                     "package_initializer_hash_matches_distribution": None,
+                    "package_file_count": None,
+                    "package_hash_verified_count": None,
+                    "package_hash_mismatch_count": None,
+                    "package_hash_unverifiable_count": None,
+                    "package_hash_algorithms": None,
+                    "package_hash_mismatch_paths": None,
+                    "package_hash_unverifiable_paths": None,
+                    "package_hashes_match_distribution": None,
                 },
                 remediation=(
                     "Repair or reinstall CleanroomX in the active Python environment, then rerun "
@@ -490,6 +498,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         },
         remediation=remediation,
     )
+
 
 def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
     try:

@@ -61,4 +61,5 @@ def recovery_time_minutes(
         return 0.0
 
     decay_rate_per_min = (ach / 60.0) * removal_efficiency
-    return math.log(initial_concentration_per_m3 / target_concentration_per_m3) / decay_rate_per_min
+    log_reduction = math.log(initial_concentration_per_m3) - math.log(target_concentration_per_m3)
+    return log_reduction / decay_rate_per_min

@@ -25,3 +25,13 @@ def test_recovery_time_round_trip():
 def test_decay_rejects_invalid_efficiency():
     with pytest.raises(ValueError):
         decay_concentration(1000, ach=20, time_minutes=5, removal_efficiency=0)
+
+
+def test_recovery_time_avoids_overflow_for_extreme_finite_concentrations():
+    initial = 1e308
+    target = 1e-308
+
+    minutes = recovery_time_minutes(initial, target, ach=60)
+
+    assert math.isfinite(minutes)
+    assert minutes == pytest.approx(math.log(initial) - math.log(target))

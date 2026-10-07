@@ -234,3 +234,44 @@ def test_agent_plan_from_dict_preserves_explicit_routing_and_dependencies():
     assert plan.tasks[1].depends_on == ("diagnostics",)
     assert plan.tasks[1].required_capabilities == ("verification", "proofgraph")
     assert len(plan.sha256) == 64
+
+
+def test_multi_agent_rejects_empty_plan():
+    with pytest.raises(MultiAgentError, match="must be non-empty"):
+        AgentPlan(id="empty", tasks=())
+
+
+def test_multi_agent_verifier_rejects_resealed_success_after_failed_dependency():
+    plan = AgentPlan(
+        id="dependency-semantics",
+        tasks=(
+            AgentTask(id="bad", agent="worker"),
+            AgentTask(id="after", agent="worker", depends_on=("bad",)),
+        ),
+    )
+
+    def worker(task, _context):
+        if task.id == "bad":
+            raise ValueError("boom")
+        return {"ok": True}
+
+    run = MultiAgentOrchestrator(
+        (_agent("worker", worker, "work"),)
+    ).execute(plan)
+    tampered = copy.deepcopy(run)
+    tampered["results"][1]["status"] = "success"
+    tampered["results"][1]["output"] = {"forged": True}
+
+    # Re-seal only the hashes to prove the verifier checks dependency semantics,
+    # not merely digest consistency.
+    from cleanroomx import multi_agent as multi_agent_module
+
+    tampered["results"][1]["result_sha256"] = multi_agent_module._sha256(
+        multi_agent_module._task_result_identity(tampered["results"][1])
+    )
+    tampered["run_sha256"] = multi_agent_module._sha256(
+        multi_agent_module._run_identity(tampered)
+    )
+
+    with pytest.raises(MultiAgentError, match="must be blocked"):
+        verify_multi_agent_run(tampered)

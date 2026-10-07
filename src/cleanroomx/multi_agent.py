@@ -611,7 +611,6 @@ class AgentExecution:
             ),
         }
 
-
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "AgentExecution":
         if type(raw) is not dict:
@@ -768,12 +767,18 @@ class AgentBatchResult:
             )
         for agent_id in self.specialist_agent_ids:
             _validate_id(agent_id, label="agent id")
-        if tuple(result.agent_id for result in self.results) != self.specialist_agent_ids:
+        if (
+            tuple(result.agent_id for result in self.results)
+            != self.specialist_agent_ids
+        ):
             raise ValueError(
                 "agent batch specialist results must match requested agent order"
             )
         if self.synthesizer_agent_id is not None:
-            _validate_id(self.synthesizer_agent_id, label="synthesizer agent id")
+            _validate_id(
+                self.synthesizer_agent_id,
+                label="synthesizer agent id",
+            )
         if self.synthesis is not None:
             if self.synthesizer_agent_id is None:
                 raise ValueError(
@@ -872,6 +877,11 @@ class AgentBatchResult:
             "schema": MULTI_AGENT_BATCH_SCHEMA,
             "schema_version": MULTI_AGENT_BATCH_SCHEMA_VERSION,
             "canonicalization": MULTI_AGENT_BATCH_CANONICALIZATION,
+            "task_id": self.task_id,
+            "session_id": self.session_id,
+            "commit_state": self.commit_state,
+            "input_revision": self.input_revision,
+            "output_revision": self.output_revision,
             "algorithm": "sha256",
             "sha256": self.integrity_sha256,
         }
@@ -933,13 +943,17 @@ class AgentBatchResult:
             )
 
         integrity = document["integrity"]
-        if type(integrity) is not dict or set(integrity) != {"algorithm", "sha256"}:
+        if (
+            type(integrity) is not dict
+            or set(integrity) != {"algorithm", "sha256"}
+        ):
             raise ValueError(
                 "agent batch integrity must contain algorithm and sha256"
             )
         if integrity["algorithm"] != "sha256":
             raise ValueError(
-                f"unsupported agent batch integrity algorithm: {integrity['algorithm']!r}"
+                "unsupported agent batch integrity algorithm: "
+                f"{integrity['algorithm']!r}"
             )
         expected_digest = integrity["sha256"]
         if not isinstance(expected_digest, str) or len(expected_digest) != 64:

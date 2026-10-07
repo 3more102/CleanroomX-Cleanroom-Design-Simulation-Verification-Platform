@@ -122,4 +122,6 @@ def test_frozen_entry_point_delegates_to_production_gui_main() -> None:
     entry = ENTRY_POINT.read_text(encoding="utf-8")
 
     assert "from cleanroomx.gui import main" in entry
-    assert "raise SystemExit(main())" in entry
+    assert 'if "--check" in sys.argv[1:]' in entry
+    assert "except BaseException:" in entry
+    assert "raise SystemExit(_run())" in entry

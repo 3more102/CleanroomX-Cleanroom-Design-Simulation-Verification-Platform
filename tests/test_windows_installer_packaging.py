@@ -65,7 +65,11 @@ def test_installer_lifecycle_gate_covers_install_upgrade_launch_and_uninstall():
         ROOT / ".github" / "workflows" / "windows-installer.yml"
     ).read_text(encoding="utf-8")
 
-    assert 'Start-Process -FilePath $exe -ArgumentList "--check"' in text
+    assert 'Start-Process -FilePath $ExePath -ArgumentList "--check"' in text
+    assert ".WaitForExit(30000)" in text
+    assert "did not exit within 30 seconds" in text
+    assert 'Invoke-CleanroomXCheck $exe "Installed baseline"' in text
+    assert 'Invoke-CleanroomXCheck $exe "Installed upgraded CleanroomX"' in text
     assert '$baselineVersion = "0.102.999"' in text
     assert "DisplayVersion" in text
     assert "unins000.exe" in text

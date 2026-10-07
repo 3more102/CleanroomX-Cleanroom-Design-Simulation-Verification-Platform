@@ -46,6 +46,19 @@ def test_unqualified_python_is_advisory_unless_release_qualification_is_required
     assert strict["remediation"]
 
 
+def test_require_qualified_python_promotes_unqualified_runtime_to_required_failure(monkeypatch) -> None:
+    monkeypatch.setattr(system_health.sys, "version_info", (3, 14, 0))
+
+    report = system_health.build_system_health_report(require_qualified_python=True)
+    qualification = _check_by_id(report, "python-release-qualification")
+
+    assert report["require_qualified_python"] is True
+    assert qualification["required"] is True
+    assert qualification["status"] == "fail"
+    assert report["required_ready"] is False
+    assert report["status"] == "not_ready"
+
+
 def test_missing_optional_bim_is_warning_but_strict_bim_is_failure(monkeypatch) -> None:
     real_import = system_health.import_module
 

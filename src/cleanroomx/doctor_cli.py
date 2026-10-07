@@ -29,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Treat a Python minor outside the current release qualification matrix as a required failure",
     )
     parser.add_argument(
+        "--require-installed-distribution",
+        action="store_true",
+        help="Require installed CleanroomX distribution metadata to exist and match the imported package version",
+    )
+    parser.add_argument(
         "--require-bim",
         action="store_true",
         help="Treat missing or unloadable native IfcOpenShell support as a required failure",
@@ -132,6 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     report = build_system_health_report(
         require_qualified_python=args.require_qualified_python,
+        require_installed_distribution=args.require_installed_distribution,
         require_bim=args.require_bim,
         require_desktop=args.require_desktop,
         deep=args.deep,

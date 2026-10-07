@@ -65,14 +65,41 @@ def _mock_distribution_origin(
     root,
     *,
     files=("cleanroomx/system_health.py", "cleanroomx/__init__.py"),
+    hashes: bool = True,
+    tampered_files: tuple[str, ...] = (),
 ) -> None:
+    class FakeHash:
+        def __init__(self, value: str) -> None:
+            self.mode = "sha256"
+            self.value = value
+
+    class FakePackagePath(str):
+        hash = None
+
+        def __new__(cls, value: str):
+            item = str.__new__(cls, value)
+            target = system_health.Path(root) / value
+            if hashes and target.is_file():
+                hasher = system_health.hashlib.sha256(target.read_bytes())
+                digest = system_health.base64.urlsafe_b64encode(
+                    hasher.digest()
+                ).decode("ascii").rstrip("=")
+                if value in tampered_files:
+                    digest = "recorded-hash-does-not-match"
+                item.hash = FakeHash(digest)
+            return item
+
     class FakeDistribution:
         def __init__(self) -> None:
-            self.files = None if files is None else list(files)
+            self.files = (
+                None
+                if files is None
+                else [FakePackagePath(value) for value in files]
+            )
 
         @staticmethod
         def locate_file(name):
-            return system_health.Path(root) / name
+            return system_health.Path(root) / str(name)
 
     monkeypatch.setattr(
         system_health.metadata,
@@ -101,6 +128,10 @@ def test_distribution_identity_matches_installed_metadata_and_origin(monkeypatch
     assert check["details"]["ownership_manifest_available"] is True
     assert check["details"]["module_owned_by_distribution"] is True
     assert check["details"]["package_initializer_owned_by_distribution"] is True
+    assert check["details"]["module_hash_algorithm"] == "sha256"
+    assert check["details"]["module_hash_matches_distribution"] is True
+    assert check["details"]["package_initializer_hash_algorithm"] == "sha256"
+    assert check["details"]["package_initializer_hash_matches_distribution"] is True
     assert check["details"]["package_initializer_path"] == str(
         system_health.Path(system_health.__file__).resolve().with_name("__init__.py")
     )
@@ -189,6 +220,60 @@ def test_distribution_identity_detects_unowned_package_initializer(
     assert strict["status"] == "fail"
     assert strict["details"]["module_owned_by_distribution"] is True
     assert strict["details"]["package_initializer_owned_by_distribution"] is False
+
+
+def test_distribution_identity_detects_modified_owned_module(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    distribution_root = system_health.Path(system_health.__file__).resolve().parents[1]
+    _mock_distribution_origin(
+        monkeypatch,
+        distribution_root,
+        tampered_files=("cleanroomx/system_health.py",),
+    )
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["module_owned_by_distribution"] is True
+    assert advisory["details"]["module_hash_algorithm"] == "sha256"
+    assert advisory["details"]["module_hash_matches_distribution"] is False
+    assert advisory["details"]["package_initializer_hash_matches_distribution"] is True
+    assert advisory["remediation"]
+    assert "modified or corrupted" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["status"] == "fail"
+    assert strict["details"]["module_hash_matches_distribution"] is False
+
+
+def test_distribution_identity_requires_verifiable_record_hashes(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    distribution_root = system_health.Path(system_health.__file__).resolve().parents[1]
+    _mock_distribution_origin(
+        monkeypatch,
+        distribution_root,
+        hashes=False,
+    )
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["module_owned_by_distribution"] is True
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is True
+    assert advisory["details"]["module_hash_matches_distribution"] is None
+    assert advisory["details"]["package_initializer_hash_matches_distribution"] is None
+    assert advisory["remediation"]
+    assert "record hashes" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["status"] == "fail"
+    assert strict["details"]["module_hash_matches_distribution"] is None
 
 
 def test_distribution_identity_requires_file_manifest_for_provenance(

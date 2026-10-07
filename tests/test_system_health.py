@@ -249,6 +249,35 @@ def test_distribution_identity_detects_modified_owned_module(monkeypatch) -> Non
     assert strict["details"]["module_hash_matches_distribution"] is False
 
 
+def test_distribution_identity_detects_modified_owned_package_initializer(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    distribution_root = system_health.Path(system_health.__file__).resolve().parents[1]
+    _mock_distribution_origin(
+        monkeypatch,
+        distribution_root,
+        tampered_files=("cleanroomx/__init__.py",),
+    )
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["module_hash_matches_distribution"] is True
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is True
+    assert advisory["details"]["package_initializer_hash_algorithm"] == "sha256"
+    assert advisory["details"]["package_initializer_hash_matches_distribution"] is False
+    assert advisory["remediation"]
+    assert "modified or corrupted" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["status"] == "fail"
+    assert strict["details"]["package_initializer_hash_matches_distribution"] is False
+
+
 def test_distribution_identity_requires_verifiable_record_hashes(monkeypatch) -> None:
     monkeypatch.setattr(
         system_health.metadata,

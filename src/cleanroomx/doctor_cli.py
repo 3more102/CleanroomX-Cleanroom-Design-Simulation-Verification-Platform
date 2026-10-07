@@ -8,7 +8,11 @@ from typing import Sequence
 from .cli_output import cli_error_boundary, dumps_strict_json
 from .persistence import atomic_write_text
 from .strict_json import load_strict_json
-from .system_health import build_system_health_report, compare_system_health_reports
+from .system_health import (
+    build_system_health_report,
+    compare_system_health_reports,
+    redact_system_health_paths,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         help="Write the selected report format atomically to this path instead of stdout",
+    )
+    parser.add_argument(
+        "--redact-paths",
+        action="store_true",
+        help="Redact explicit local path fields before emitting or publishing the report",
     )
     return parser
 
@@ -126,6 +135,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         baseline = load_strict_json(args.baseline, max_bytes=2 * 1024 * 1024)
         comparison = compare_system_health_reports(baseline, report)
         report = {**report, "comparison": comparison}
+
+    if args.redact_paths:
+        report = redact_system_health_paths(report)
 
     text = (
         _render_text(report)

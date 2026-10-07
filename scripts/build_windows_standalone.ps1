@@ -73,7 +73,12 @@ if ($versionInfo.FileDescription -ne "CleanroomX Engineering Workstation") {
     throw "Frozen executable FileDescription mismatch: $($versionInfo.FileDescription)"
 }
 
-$process = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
+$process = Start-Process -FilePath $exe -ArgumentList "--check" -PassThru
+if (-not $process.WaitForExit(30000)) {
+    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    throw "Frozen CleanroomX --check did not exit within 30 seconds"
+}
+$process.Refresh()
 if ($process.ExitCode -ne 0) {
     throw "Frozen CleanroomX --check failed with exit code $($process.ExitCode)"
 }

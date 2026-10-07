@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Return exit code 3 when baseline comparison detects health regression",
     )
     parser.add_argument(
+        "--fail-on-warning",
+        action="store_true",
+        help="Return exit code 4 when any health check reports a warning",
+    )
+    parser.add_argument(
         "--format",
         choices=("json", "text"),
         default="json",
@@ -156,6 +161,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if args.fail_on_regression and comparison is not None and comparison["regressed"]:
         return 3
+    if args.fail_on_warning and report["summary"]["warn"]:
+        return 4
     return 0
 
 

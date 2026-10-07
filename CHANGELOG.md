@@ -4,6 +4,7 @@
 
 - Adds `cleanroomx-doctor`, a machine-readable workstation/runtime readiness check covering Python support and release qualification, application/plugin registry health, Tk availability, packaged-demo integrity, atomic persistence, and optional native IfcOpenShell availability.
 - Adds `--require-bim` so installations that depend on IFC/BIM can make missing or unloadable native support a required failure instead of an optional warning.
+- Adds `--require-desktop` to require a real hidden Tk root lifecycle, catching missing display/native Tk workstation failures that a headless Tcl probe cannot detect.
 - Adds `--deep` to execute the packaged demo's active analysis through the real application registry/runner, proving a bounded end-to-end analysis path without mutating the project.
 - Uses deterministic JSON and exit code 2 for failed required checks while preserving exit code 0 for ready installations, including optional warnings.
 - Adds installed-wheel CI smoke coverage plus focused CLI/backend regressions.

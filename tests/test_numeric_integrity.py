@@ -17,10 +17,45 @@ from cleanroomx.hvac_models import (
     ThermalDesign,
     ThermalLoads,
 )
-from cleanroomx.models import ParticleRequirement, PressureCascadeRequirement, RoomSpec\nfrom cleanroomx.numeric import (\n    efficiency_float,\n    finite_float,\n    nonnegative_float,\n    positive_float,\n)\nfrom cleanroomx.psychrometrics import dry_air_mass_flow_kg_s, saturation_vapor_pressure_kpa\nfrom cleanroomx.thermal import analyze_thermal_design
+from cleanroomx.models import ParticleRequirement, PressureCascadeRequirement, RoomSpec
+from cleanroomx.numeric import (
+    efficiency_float,
+    finite_float,
+    nonnegative_float,
+    positive_float,
+)
+from cleanroomx.psychrometrics import dry_air_mass_flow_kg_s, saturation_vapor_pressure_kpa
+from cleanroomx.thermal import analyze_thermal_design
 
 
-_NONFINITE = (math.nan, math.inf, -math.inf)\n\n\n@pytest.mark.parametrize("value", (True, False))\n@pytest.mark.parametrize(\n    "validator",\n    (finite_float, positive_float, nonnegative_float, efficiency_float),\n)\ndef test_numeric_validators_reject_boolean_measurements(validator, value: bool) -> None:\n    with pytest.raises(ValueError, match="boolean"):\n        validator(value, "engineering_value")\n\n\n@pytest.mark.parametrize("value", (True, False))\ndef test_foundational_engineering_apis_reject_boolean_measurements(\n    value: bool,\n) -> None:\n    with pytest.raises(ValueError, match="boolean"):\n        RoomSpec("R1", value, 4.0, 3.0, 1200.0)\n    with pytest.raises(ValueError, match="boolean"):\n        AirState(value, 45.0)\n    with pytest.raises(ValueError, match="boolean"):\n        decay_concentration(1000.0, ach=value, time_minutes=5.0)\n    with pytest.raises(ValueError, match="boolean"):\n        analyze_supply_fan(value, FanSystem("Supply"))\n\n\n@pytest.mark.parametrize("value", _NONFINITE)
+_NONFINITE = (math.nan, math.inf, -math.inf)
+
+
+@pytest.mark.parametrize("value", (True, False))
+@pytest.mark.parametrize(
+    "validator",
+    (finite_float, positive_float, nonnegative_float, efficiency_float),
+)
+def test_numeric_validators_reject_boolean_measurements(validator, value: bool) -> None:
+    with pytest.raises(ValueError, match="boolean"):
+        validator(value, "engineering_value")
+
+
+@pytest.mark.parametrize("value", (True, False))
+def test_foundational_engineering_apis_reject_boolean_measurements(
+    value: bool,
+) -> None:
+    with pytest.raises(ValueError, match="boolean"):
+        RoomSpec("R1", value, 4.0, 3.0, 1200.0)
+    with pytest.raises(ValueError, match="boolean"):
+        AirState(value, 45.0)
+    with pytest.raises(ValueError, match="boolean"):
+        decay_concentration(1000.0, ach=value, time_minutes=5.0)
+    with pytest.raises(ValueError, match="boolean"):
+        analyze_supply_fan(value, FanSystem("Supply"))
+
+
+@pytest.mark.parametrize("value", _NONFINITE)
 @pytest.mark.parametrize(
     "field",
     ("length_m", "width_m", "height_m", "supply_airflow_m3_h"),

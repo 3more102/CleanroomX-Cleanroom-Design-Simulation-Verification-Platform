@@ -475,11 +475,14 @@ _HEALTH_STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
 _HEALTH_PROFILE_KEYS = ("require_bim", "require_desktop", "deep")
 
 
-def _health_profile(report: dict[str, Any]) -> dict[str, bool]:
-    return {
-        key: bool(report.get(key, False))
-        for key in _HEALTH_PROFILE_KEYS
-    }
+def _health_profile(report: dict[str, Any], *, label: str) -> dict[str, bool]:
+    profile: dict[str, bool] = {}
+    for key in _HEALTH_PROFILE_KEYS:
+        value = report.get(key, False)
+        if type(value) is not bool:
+            raise ValueError(f"{label} report {key} must be boolean")
+        profile[key] = value
+    return profile
 
 
 def _health_check_map(
@@ -533,8 +536,8 @@ def compare_system_health_reports(
     baseline_checks = _health_check_map(baseline, label="baseline")
     current_checks = _health_check_map(current, label="current")
 
-    baseline_profile = _health_profile(baseline)
-    current_profile = _health_profile(current)
+    baseline_profile = _health_profile(baseline, label="baseline")
+    current_profile = _health_profile(current, label="current")
     if baseline_profile != current_profile:
         raise ValueError(
             "system-health baseline profile does not match the current probe "

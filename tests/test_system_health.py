@@ -384,3 +384,25 @@ def test_system_health_comparison_rejects_duplicate_check_ids() -> None:
         assert "duplicate check id" in str(exc)
     else:
         raise AssertionError("duplicate baseline check ids must be rejected")
+
+
+def test_system_health_comparison_rejects_malformed_schema_fields() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+
+    baseline["schema_version"] = True
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "unsupported system-health schema version" in str(exc)
+    else:
+        raise AssertionError("boolean schema version must be rejected")
+
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["checks"][0]["status"] = []
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "unsupported status" in str(exc)
+    else:
+        raise AssertionError("non-string check status must be rejected")

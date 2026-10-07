@@ -193,10 +193,13 @@ def test_proofgraph_canvas_tracks_light_and_dark_workstation_theme(app):
 
     viewer.set_documents([document])
     viewer._select_key(f"model_object:{room['id']}")
-    app.root.update()
+    # ProofGraph rendering and theme application are synchronous. Only settle
+    # geometry/idle work here: a full Tcl event drain can continuously consume
+    # the application's recurring worker-poll timer under Python 3.13/Xvfb.
+    app.root.update_idletasks()
 
     app.set_theme("dark", persist=False)
-    app.root.update()
+    app.root.update_idletasks()
 
     dark = theme_palette("dark")
     assert viewer.canvas.cget("background") == dark["plot"]
@@ -226,7 +229,7 @@ def test_proofgraph_canvas_tracks_light_and_dark_workstation_theme(app):
     }
 
     app.set_theme("light", persist=False)
-    app.root.update()
+    app.root.update_idletasks()
 
     light = theme_palette("light")
     assert viewer.canvas.cget("background") == light["plot"]

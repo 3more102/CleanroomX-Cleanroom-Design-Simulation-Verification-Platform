@@ -2,6 +2,8 @@
 
 ## Unreleased — system-health baseline drift gate — 2026-10-07
 
+- Adds deterministic system-health policy identity (policy version plus qualified Python-minor matrix) and rejects baselines whose policy semantics cannot be proven equivalent.
+- Requires legacy policy-less doctor baselines to be regenerated instead of silently comparing them under newer release-qualification semantics.
 - Adds `--require-qualified-python` so release/production gates can promote an out-of-matrix Python minor from advisory warning to required readiness failure while preserving the permissive default for package-compatible runtimes.
 - Includes the qualified-Python policy in the baseline probe profile so strict and advisory reports cannot be compared as equivalent evidence.
 - Reconciles the doctor hardening stack so the latest baseline-drift branch retains the actionable remediation invariant and share-safe path redaction.

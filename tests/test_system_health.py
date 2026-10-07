@@ -60,12 +60,27 @@ def test_require_qualified_python_promotes_unqualified_runtime_to_required_failu
     assert report["status"] == "not_ready"
 
 
-def test_distribution_identity_matches_installed_metadata(monkeypatch) -> None:
+def _mock_distribution_origin(monkeypatch, root) -> None:
+    class FakeDistribution:
+        @staticmethod
+        def locate_file(_name: str):
+            return root
+
+    monkeypatch.setattr(
+        system_health.metadata,
+        "distribution",
+        lambda name: FakeDistribution() if name == "cleanroomx" else None,
+    )
+
+
+def test_distribution_identity_matches_installed_metadata_and_origin(monkeypatch) -> None:
     monkeypatch.setattr(
         system_health.metadata,
         "version",
         lambda name: system_health.__version__ if name == "cleanroomx" else "unexpected",
     )
+    distribution_root = system_health.Path(system_health.__file__).resolve().parents[1]
+    _mock_distribution_origin(monkeypatch, distribution_root)
 
     check = system_health._distribution_identity_check()
 
@@ -74,7 +89,34 @@ def test_distribution_identity_matches_installed_metadata(monkeypatch) -> None:
     assert check["details"]["metadata_available"] is True
     assert check["details"]["module_version"] == system_health.__version__
     assert check["details"]["distribution_version"] == system_health.__version__
+    assert check["details"]["origin_matches_distribution"] is True
+    assert check["details"]["distribution_path"] == str(distribution_root)
     assert check["remediation"] is None
+
+
+def test_distribution_identity_detects_shadowed_same_version_import(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    _mock_distribution_origin(monkeypatch, tmp_path)
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["required"] is False
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["origin_matches_distribution"] is False
+    assert advisory["details"]["distribution_path"] == str(tmp_path.resolve())
+    assert advisory["remediation"]
+    assert "shadowing" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["required"] is True
+    assert strict["status"] == "fail"
+    assert strict["details"]["origin_matches_distribution"] is False
+    assert strict["remediation"]
 
 
 def test_missing_distribution_metadata_is_advisory_unless_required(monkeypatch) -> None:
@@ -87,6 +129,7 @@ def test_missing_distribution_metadata_is_advisory_unless_required(monkeypatch) 
     assert advisory["required"] is False
     assert advisory["status"] == "warn"
     assert advisory["details"]["metadata_available"] is False
+    assert advisory["details"]["origin_matches_distribution"] is None
     assert advisory["remediation"]
 
     strict = system_health.build_system_health_report(
@@ -107,12 +150,33 @@ def test_distribution_version_mismatch_warns_and_can_fail_strict(monkeypatch) ->
     assert advisory["required"] is False
     assert advisory["status"] == "warn"
     assert advisory["details"]["distribution_version"] == "0.0.0"
+    assert advisory["details"]["origin_matches_distribution"] is None
     assert advisory["remediation"]
 
     strict = system_health._distribution_identity_check(required=True)
     assert strict["required"] is True
     assert strict["status"] == "fail"
     assert strict["remediation"]
+
+
+def test_distribution_identity_handles_metadata_origin_disappearing(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+
+    def missing_distribution(_name: str):
+        raise system_health.metadata.PackageNotFoundError("cleanroomx")
+
+    monkeypatch.setattr(system_health.metadata, "distribution", missing_distribution)
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["metadata_available"] is False
+    assert advisory["details"]["distribution_version"] == system_health.__version__
+    assert advisory["details"]["origin_matches_distribution"] is None
+    assert advisory["remediation"]
 
 
 def test_distribution_identity_does_not_mask_metadata_runtime_defects(monkeypatch) -> None:
@@ -658,6 +722,8 @@ def test_system_health_path_redaction_is_recursive_cross_platform_and_non_mutati
             {
                 "details": {
                     "path": posix_path,
+                    "module_path": posix_path,
+                    "distribution_path": windows_path,
                     "nested": [
                         {
                             "source_path": windows_path,
@@ -675,6 +741,8 @@ def test_system_health_path_redaction_is_recursive_cross_platform_and_non_mutati
     assert report["checks"][0]["details"]["path"] == posix_path
     assert redacted["runtime"]["executable"] == "<redacted>/python.exe"
     assert redacted["checks"][0]["details"]["path"] == "<redacted>/facility.cleanroomx.json"
+    assert redacted["checks"][0]["details"]["module_path"] == "<redacted>/facility.cleanroomx.json"
+    assert redacted["checks"][0]["details"]["distribution_path"] == "<redacted>/python.exe"
     assert redacted["checks"][0]["details"]["nested"][0]["source_path"] == "<redacted>/python.exe"
     assert redacted["checks"][0]["details"]["nested"][0]["message"] == windows_path
     assert redacted["privacy"] == {"local_paths_redacted": True}

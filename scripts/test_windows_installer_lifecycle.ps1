@@ -32,7 +32,7 @@ if (-not (Test-Path $CurrentInstaller -PathType Leaf)) {
 }
 
 $installDir = Join-Path $env:LOCALAPPDATA "Programs\CleanroomX"
-$uninstallRoot = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+$uninstallSubkey = "Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
 function Invoke-Installer([string]$Path) {
     $arguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$installDir")
@@ -42,13 +42,56 @@ function Invoke-Installer([string]$Path) {
     }
 }
 
+function Find-CleanroomXUninstallEntry {
+    foreach ($hive in @(
+        [Microsoft.Win32.RegistryHive]::CurrentUser,
+        [Microsoft.Win32.RegistryHive]::LocalMachine
+    )) {
+        foreach ($view in @(
+            [Microsoft.Win32.RegistryView]::Registry64,
+            [Microsoft.Win32.RegistryView]::Registry32
+        )) {
+            $baseKey = $null
+            $uninstallKey = $null
+            try {
+                $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $view)
+                $uninstallKey = $baseKey.OpenSubKey($uninstallSubkey)
+                if ($null -eq $uninstallKey) {
+                    continue
+                }
+                foreach ($name in $uninstallKey.GetSubKeyNames()) {
+                    $entryKey = $null
+                    try {
+                        $entryKey = $uninstallKey.OpenSubKey($name)
+                        if ($null -eq $entryKey -or $entryKey.GetValue("DisplayName") -ne "CleanroomX") {
+                            continue
+                        }
+                        return [pscustomobject]@{
+                            DisplayVersion = [string]$entryKey.GetValue("DisplayVersion")
+                            UninstallString = [string]$entryKey.GetValue("UninstallString")
+                            RegistryHive = $hive.ToString()
+                            RegistryView = $view.ToString()
+                            RegistryKey = $name
+                        }
+                    }
+                    finally {
+                        if ($null -ne $entryKey) { $entryKey.Dispose() }
+                    }
+                }
+            }
+            finally {
+                if ($null -ne $uninstallKey) { $uninstallKey.Dispose() }
+                if ($null -ne $baseKey) { $baseKey.Dispose() }
+            }
+        }
+    }
+    return $null
+}
+
 function Get-CleanroomXUninstallEntry {
-    $entry = Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue |
-        Get-ItemProperty |
-        Where-Object { $_.DisplayName -eq "CleanroomX" } |
-        Select-Object -First 1
+    $entry = Find-CleanroomXUninstallEntry
     if (-not $entry) {
-        throw "CleanroomX uninstall registration was not found"
+        throw "CleanroomX uninstall registration was not found in either 32-bit or 64-bit registry view"
     }
     return $entry
 }
@@ -65,10 +108,7 @@ function Invoke-CleanroomXCheck([string]$ExePath, [string]$Label) {
     }
 }
 
-$existing = Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue |
-    Get-ItemProperty |
-    Where-Object { $_.DisplayName -eq "CleanroomX" } |
-    Select-Object -First 1
+$existing = Find-CleanroomXUninstallEntry
 if ($existing -and (Test-Path (Join-Path $installDir "unins000.exe"))) {
     $cleanup = Start-Process -FilePath (Join-Path $installDir "unins000.exe") -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru
     if ($cleanup.ExitCode -ne 0) {
@@ -107,10 +147,7 @@ Start-Sleep -Milliseconds 500
 if (Test-Path $exe -PathType Leaf) {
     throw "CleanroomX executable remains after uninstall: $exe"
 }
-$remaining = Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue |
-    Get-ItemProperty |
-    Where-Object { $_.DisplayName -eq "CleanroomX" } |
-    Select-Object -First 1
+$remaining = Find-CleanroomXUninstallEntry
 if ($remaining) {
     throw "CleanroomX uninstall registration remains after uninstall"
 }

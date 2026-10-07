@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — system-health baseline drift gate — 2026-10-07
+
+- Adds deterministic comparison of current `cleanroomx-doctor` results against a prior known-good JSON baseline, including per-check regressions/improvements, required-readiness transitions, and diagnostic-coverage changes.
+- Adds `--baseline` and optional `--fail-on-regression`; compatible profile flags are enforced so shallow, desktop, BIM, and deep probes cannot be compared accidentally.
+- Preserves required-readiness exit code 2 while using exit code 3 for baseline-only regression gates, allowing CI/support to distinguish current failure from operational drift.
+- Prevents `--output` from overwriting the supplied baseline and documents the baseline workflow for operator evidence.
+
 ## Unreleased — operator system health doctor — 2026-10-07
 
 - Adds `cleanroomx-doctor`, a machine-readable workstation/runtime readiness check covering Python support and release qualification, application/plugin registry health, Tk availability, packaged-demo integrity, atomic persistence, and optional native IfcOpenShell availability.

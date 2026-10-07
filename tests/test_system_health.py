@@ -249,3 +249,62 @@ def test_require_desktop_adds_required_display_probe(monkeypatch) -> None:
     assert desktop["required"] is True
     assert desktop["status"] == "pass"
 
+
+
+def test_health_check_contract_rejects_missing_remediation_for_non_pass() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="require remediation"):
+        system_health._check(
+            "synthetic-failure",
+            "Synthetic failure",
+            required=True,
+            status="fail",
+            summary="Synthetic failure.",
+        )
+
+    with pytest.raises(ValueError, match="require remediation"):
+        system_health._check(
+            "synthetic-warning",
+            "Synthetic warning",
+            required=False,
+            status="warn",
+            summary="Synthetic warning.",
+            remediation="   ",
+        )
+
+
+def test_health_check_contract_rejects_remediation_for_pass() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="must not include remediation"):
+        system_health._check(
+            "synthetic-pass",
+            "Synthetic pass",
+            required=True,
+            status="pass",
+            summary="Synthetic pass.",
+            remediation="No action should be present.",
+        )
+
+
+def test_registry_non_ready_result_includes_remediation(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health,
+        "validate_application_registry",
+        lambda: {
+            "status": "not_ready",
+            "analysis_count": 0,
+            "builtin_analysis_count": 0,
+            "plugin_analysis_count": 0,
+            "callable_target_count": 0,
+            "plugin_issue_count": 0,
+            "plugin_issues": [],
+        },
+    )
+
+    report = system_health.build_system_health_report()
+    registry = _check_by_id(report, "application-registry")
+    assert registry["status"] == "fail"
+    assert registry["remediation"]
+    assert report["required_ready"] is False

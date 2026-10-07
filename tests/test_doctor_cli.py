@@ -9,6 +9,7 @@ def _report(
     *,
     ready: bool = True,
     require_qualified_python: bool = False,
+    require_installed_distribution: bool = False,
     require_bim: bool = False,
     require_desktop: bool = False,
     deep: bool = False,
@@ -21,6 +22,7 @@ def _report(
         "status": "ready" if ready else "not_ready",
         "required_ready": ready,
         "require_qualified_python": require_qualified_python,
+        "require_installed_distribution": require_installed_distribution,
         "require_bim": require_bim,
         "require_desktop": require_desktop,
         "deep": deep,
@@ -43,7 +45,7 @@ def test_doctor_cli_emits_strict_json_and_success_exit(monkeypatch, capsys) -> N
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: _report(
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: _report(
             ready=True,
             require_qualified_python=require_qualified_python,
             require_bim=require_bim,
@@ -64,7 +66,7 @@ def test_doctor_cli_returns_two_when_required_check_fails(monkeypatch, capsys) -
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: _report(
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: _report(
             ready=False,
             require_qualified_python=require_qualified_python,
             require_bim=require_bim,
@@ -80,19 +82,29 @@ def test_doctor_cli_returns_two_when_required_check_fails(monkeypatch, capsys) -
 
 
 def test_doctor_cli_writes_atomic_output_and_forwards_require_bim(monkeypatch, tmp_path, capsys) -> None:
-    calls: list[tuple[bool, bool, bool, bool]] = []
+    calls: list[tuple[bool, bool, bool, bool, bool]] = []
 
     def build(
         *,
         require_qualified_python: bool = False,
+        require_installed_distribution: bool = False,
         require_bim: bool = False,
         require_desktop: bool = False,
         deep: bool = False,
     ) -> dict:
-        calls.append((require_qualified_python, require_bim, require_desktop, deep))
+        calls.append(
+            (
+                require_qualified_python,
+                require_installed_distribution,
+                require_bim,
+                require_desktop,
+                deep,
+            )
+        )
         return _report(
             ready=True,
             require_qualified_python=require_qualified_python,
+            require_installed_distribution=require_installed_distribution,
             require_bim=require_bim,
             require_desktop=require_desktop,
             deep=deep,
@@ -104,6 +116,7 @@ def test_doctor_cli_writes_atomic_output_and_forwards_require_bim(monkeypatch, t
     assert doctor_cli.main(
         [
             "--require-qualified-python",
+            "--require-installed-distribution",
             "--require-bim",
             "--require-desktop",
             "--deep",
@@ -111,9 +124,10 @@ def test_doctor_cli_writes_atomic_output_and_forwards_require_bim(monkeypatch, t
             str(output),
         ]
     ) == 0
-    assert calls == [(True, True, True, True)]
+    assert calls == [(True, True, True, True, True)]
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["require_qualified_python"] is True
+    assert payload["require_installed_distribution"] is True
     assert payload["require_bim"] is True
     assert payload["require_desktop"] is True
     assert payload["deep"] is True
@@ -126,7 +140,7 @@ def test_doctor_cli_text_format_is_operator_readable(monkeypatch, capsys) -> Non
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: _report(
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: _report(
             ready=True,
             require_qualified_python=require_qualified_python,
             require_bim=require_bim,
@@ -148,7 +162,7 @@ def test_doctor_cli_text_format_surfaces_remediation_for_failure(monkeypatch, ca
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: _report(
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: _report(
             ready=False,
             require_qualified_python=require_qualified_python,
             require_bim=require_bim,
@@ -182,7 +196,7 @@ def test_doctor_cli_baseline_comparison_is_emitted_and_can_fail_on_regression(
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: {
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: {
             **current,
             "require_qualified_python": require_qualified_python,
             "require_bim": require_bim,
@@ -222,7 +236,7 @@ def test_doctor_cli_text_format_reports_baseline_drift(
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: {
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: {
             **current,
             "require_qualified_python": require_qualified_python,
             "require_bim": require_bim,
@@ -259,7 +273,7 @@ def test_doctor_cli_redacts_explicit_local_paths(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_qualified_python=False, require_bim=False, require_desktop=False, deep=False: report,
+        lambda *, require_qualified_python=False, require_installed_distribution=False, require_bim=False, require_desktop=False, deep=False: report,
     )
 
     assert doctor_cli.main(["--redact-paths"]) == 0

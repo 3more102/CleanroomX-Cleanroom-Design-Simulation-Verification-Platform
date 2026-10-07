@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from importlib import import_module
+from importlib import metadata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import platform
 import sys
@@ -136,6 +137,60 @@ def _python_qualification_check(*, required: bool = False) -> dict[str, Any]:
             None
             if qualified
             else "For release-qualified operation, run CleanroomX on Python 3.11, 3.12, or 3.13."
+        ),
+    )
+
+
+def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
+    """Verify that imported CleanroomX code agrees with installed distribution metadata."""
+    try:
+        distribution_version = metadata.version("cleanroomx")
+    except metadata.PackageNotFoundError:
+        return _check(
+            "distribution-identity",
+            "Installed CleanroomX distribution",
+            required=required,
+            status="fail" if required else "warn",
+            summary=(
+                "CleanroomX distribution metadata is not available in the active Python environment."
+            ),
+            details={
+                "metadata_available": False,
+                "module_version": __version__,
+                "distribution_version": None,
+            },
+            remediation=(
+                "Install CleanroomX into the active Python environment before release or deployment "
+                "qualification, then rerun cleanroomx-doctor."
+            ),
+        )
+
+    consistent = distribution_version == __version__
+    return _check(
+        "distribution-identity",
+        "Installed CleanroomX distribution",
+        required=required,
+        status="pass" if consistent else ("fail" if required else "warn"),
+        summary=(
+            f"Imported CleanroomX {__version__} matches installed distribution metadata."
+            if consistent
+            else (
+                f"Imported CleanroomX {__version__} does not match installed distribution "
+                f"metadata {distribution_version}."
+            )
+        ),
+        details={
+            "metadata_available": True,
+            "module_version": __version__,
+            "distribution_version": distribution_version,
+        },
+        remediation=(
+            None
+            if consistent
+            else (
+                "Reinstall CleanroomX into the active Python environment and remove stale or "
+                "duplicate installations so imported code and distribution metadata agree."
+            )
         ),
     )
 
@@ -527,6 +582,7 @@ def _bim_check(*, required: bool) -> dict[str, Any]:
 _HEALTH_STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
 _HEALTH_PROFILE_KEYS = (
     "require_qualified_python",
+    "require_installed_distribution",
     "require_bim",
     "require_desktop",
     "deep",
@@ -764,6 +820,7 @@ def compare_system_health_reports(
 def build_system_health_report(
     *,
     require_qualified_python: bool = False,
+    require_installed_distribution: bool = False,
     require_bim: bool = False,
     require_desktop: bool = False,
     deep: bool = False,
@@ -773,6 +830,7 @@ def build_system_health_report(
     checks = [
         _python_runtime_check(),
         _python_qualification_check(required=require_qualified_python),
+        _distribution_identity_check(required=require_installed_distribution),
         registry_check,
         plugin_check,
         _tk_check(),
@@ -819,6 +877,7 @@ def build_system_health_report(
         "status": status,
         "required_ready": required_ready,
         "require_qualified_python": bool(require_qualified_python),
+        "require_installed_distribution": bool(require_installed_distribution),
         "require_bim": bool(require_bim),
         "require_desktop": bool(require_desktop),
         "deep": bool(deep),

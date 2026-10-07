@@ -49,6 +49,9 @@ def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked()
     assert "ProductVersion" in script
     assert "CleanroomX.exe" in script
     assert '-ArgumentList "--check"' in script
+    assert ".WaitForExit(30000)" in script
+    assert "did not exit within 30 seconds" in script
+    assert "-Wait -PassThru" not in script
 
 
 def test_ifcopenshell_hook_is_native_complete_and_bounded() -> None:

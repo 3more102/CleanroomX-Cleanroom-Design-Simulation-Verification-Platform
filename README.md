@@ -142,7 +142,7 @@ Run the full installation/runtime health check:
 cleanroomx-doctor
 ```
 
-Use `cleanroomx-doctor --format text` for a concise operator summary, `cleanroomx-doctor --require-bim` when native IFC/BIM support is mandatory, or `cleanroomx-doctor --deep` to execute the packaged demo's active analysis through the real application runner. JSON remains the deterministic default for support tickets and CI evidence.
+Use `cleanroomx-doctor --format text` for a concise operator summary, `cleanroomx-doctor --require-bim` when native IFC/BIM support is mandatory, `cleanroomx-doctor --require-desktop` to prove a real hidden Tk desktop root can initialize and close cleanly, or `cleanroomx-doctor --deep` to execute the packaged demo's active analysis through the real application runner. JSON remains the deterministic default for support tickets and CI evidence.
 
 ## Main command-line tools
 

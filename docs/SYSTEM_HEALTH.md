@@ -14,6 +14,7 @@ cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
 cleanroomx-doctor --baseline known-good-health.json
 cleanroomx-doctor --baseline known-good-health.json --fail-on-regression
+cleanroomx-doctor --fail-on-warning
 ```
 
 The command emits strict JSON with schema `cleanroomx.system-health` by default. Each check includes a `remediation` field. The backend enforces the contract: every warning/failure must carry a non-empty concrete next action, while passing checks must leave `remediation` null. Use `--format text` for a concise operator-readable summary; remediation appears as an indented `Action:` line and exit-code semantics are identical in both formats.
@@ -53,6 +54,8 @@ The baseline must use the same probe profile as the current run: `--require-bim`
 
 Use `--fail-on-regression` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
 
+Use `--fail-on-warning` when a release, deployment, or qualification job requires a completely warning-free doctor result. The flag is intentionally stricter than normal readiness: `ready_with_warnings` remains operationally ready by default, but returns exit code 4 when this gate is requested. Required failures still take precedence with exit code 2, and an enabled baseline regression gate takes precedence with exit code 3.
+
 For evidence safety, `--output` cannot point to the same path as the supplied baseline.
 
 ## Exit codes
@@ -60,6 +63,7 @@ For evidence safety, `--output` cannot point to the same path as the supplied ba
 - `0`: all required checks passed. The JSON status is `ready` or `ready_with_warnings`.
 - `2`: at least one required readiness check failed. The JSON status is `not_ready`.
 - `3`: `--fail-on-regression` was requested and the compatible baseline comparison detected health regression while required readiness still passed.
+- `4`: `--fail-on-warning` was requested and one or more warnings remain after required-readiness and baseline-regression gates passed.
 - `1`: the command itself could not complete an expected OS/value operation, such as invalid baseline input, incompatible probe profiles, or publishing the requested output file.
 
 The doctor does not certify a cleanroom, validate project engineering, or replace the release qualification workflows. It reports software/runtime readiness only.

@@ -10,6 +10,7 @@
 - Rejects internally contradictory health evidence before comparison when `required_ready`, aggregate status, or summary counts do not match the actual checks.
 - Adds `--baseline` and optional `--fail-on-regression`; compatible profile flags are enforced so shallow, desktop, BIM, and deep probes cannot be compared accidentally.
 - Preserves required-readiness exit code 2 while using exit code 3 for baseline-only regression gates, allowing CI/support to distinguish current failure from operational drift.
+- Adds optional `--fail-on-warning` strict qualification gating with exit code 4, while preserving exit-code precedence for required failures and baseline regressions.
 - Prevents `--output` from overwriting the supplied baseline and documents the baseline workflow for operator evidence.
 - Fixes desktop teardown so the scheduled worker-result poll is cancelled when the Tk root is destroyed, preventing orphaned `after` callbacks and Tcl `invalid command name` errors during repeated application lifecycles.
 

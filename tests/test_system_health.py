@@ -430,6 +430,19 @@ def test_system_health_comparison_rejects_incompatible_policy_identity() -> None
         raise AssertionError("policy mismatch must be rejected")
 
 
+def test_system_health_comparison_rejects_policy_version_mismatch() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["policy"]["version"] += 1
+
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "baseline policy does not match the current policy" in str(exc)
+    else:
+        raise AssertionError("policy-version mismatch must be rejected")
+
+
 def test_system_health_comparison_rejects_missing_policy_identity() -> None:
     baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
     current = _synthetic_health_report([_synthetic_check("runtime", "pass")])

@@ -526,6 +526,42 @@ def _health_check_map(
                 f"{label} report check {check_id!r} required must be boolean"
             )
         indexed[check_id] = item
+
+    expected_required_ready = not any(
+        item["required"] and item["status"] == "fail"
+        for item in indexed.values()
+    )
+    if report["required_ready"] is not expected_required_ready:
+        raise ValueError(
+            f"{label} report required_ready is inconsistent with its required checks"
+        )
+
+    expected_counts = {
+        status: sum(item["status"] == status for item in indexed.values())
+        for status in ("pass", "warn", "fail")
+    }
+    summary = report.get("summary")
+    if type(summary) is not dict:
+        raise ValueError(f"{label} report summary must be an object")
+    expected_summary = {**expected_counts, "check_count": len(indexed)}
+    for key, expected in expected_summary.items():
+        observed = summary.get(key)
+        if type(observed) is not int or observed != expected:
+            raise ValueError(
+                f"{label} report summary.{key} must equal {expected}"
+            )
+
+    expected_status = (
+        "not_ready"
+        if not expected_required_ready
+        else "ready_with_warnings"
+        if expected_counts["warn"]
+        else "ready"
+    )
+    if report.get("status") != expected_status:
+        raise ValueError(
+            f"{label} report status must be {expected_status!r} for its checks"
+        )
     return indexed
 
 
@@ -568,6 +604,23 @@ def compare_system_health_reports(
         else:
             improvements.append(change)
 
+    requirement_changes = []
+    for check_id in sorted(set(baseline_checks) & set(current_checks)):
+        before = baseline_checks[check_id]
+        after = current_checks[check_id]
+        if before["required"] == after["required"]:
+            continue
+        requirement_changes.append(
+            {
+                "id": check_id,
+                "label": after.get("label") or before.get("label") or check_id,
+                "from_required": bool(before["required"]),
+                "to_required": bool(after["required"]),
+                "direction": "promoted" if after["required"] else "downgraded",
+                "status": after["status"],
+            }
+        )
+
     added_checks = [
         {
             "id": check_id,
@@ -591,9 +644,14 @@ def compare_system_health_reports(
     readiness_improved = bool(
         not baseline["required_ready"] and current["required_ready"]
     )
-    coverage_regressed = any(item["required"] for item in removed_checks)
+    coverage_regressed = any(item["required"] for item in removed_checks) or any(
+        item["direction"] == "downgraded" for item in requirement_changes
+    )
+    coverage_expanded = any(item["required"] for item in added_checks) or any(
+        item["direction"] == "promoted" for item in requirement_changes
+    )
     regressed = bool(regressions) or readiness_regressed or coverage_regressed
-    improved = bool(improvements) or readiness_improved
+    improved = bool(improvements) or readiness_improved or coverage_expanded
     state = "regressed" if regressed else "improved" if improved else "stable"
 
     def application_version(report: dict[str, Any]) -> str | None:
@@ -623,12 +681,15 @@ def compare_system_health_reports(
             "improvement_count": len(improvements),
             "added_check_count": len(added_checks),
             "removed_check_count": len(removed_checks),
+            "requirement_change_count": len(requirement_changes),
             "required_check_coverage_regressed": coverage_regressed,
+            "required_check_coverage_expanded": coverage_expanded,
         },
         "regressions": regressions,
         "improvements": improvements,
         "added_checks": added_checks,
         "removed_checks": removed_checks,
+        "requirement_changes": requirement_changes,
     }
 
 

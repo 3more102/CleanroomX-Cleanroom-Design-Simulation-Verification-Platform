@@ -42,7 +42,9 @@ cleanroomx-doctor --output known-good-health.json
 cleanroomx-doctor --baseline known-good-health.json
 ```
 
-When a baseline is supplied, the current report gains a deterministic `comparison` object with schema `cleanroomx.system-health-comparison`. It reports per-check status regressions and improvements, added/removed checks, required-readiness transitions, and whether required diagnostic coverage disappeared.
+When a baseline is supplied, the current report gains a deterministic `comparison` object with schema `cleanroomx.system-health-comparison`. It reports per-check status regressions and improvements, added/removed checks, required-readiness transitions, and required/advisory policy changes. A check that was required in the baseline but becomes advisory is a coverage regression even if its status still passes; promoting an advisory check to required is reported as coverage expansion.
+
+Before comparison, both reports are checked for internal consistency. Their `required_ready`, aggregate `status`, and summary counts must agree with the actual check array. This rejects malformed or manually altered baselines instead of using contradictory readiness evidence.
 
 The baseline must use the same probe profile as the current run: `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents a shallow workstation report from being compared as though it were a deep or BIM-qualified probe.
 

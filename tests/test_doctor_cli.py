@@ -219,6 +219,7 @@ def test_doctor_cli_text_format_reports_baseline_drift(
     captured = capsys.readouterr()
     assert "Baseline drift: REGRESSED" in captured.out
     assert "1 regression(s)" in captured.out
+    assert "0 requirement change(s)" in captured.out
     assert captured.err == ""
 
 

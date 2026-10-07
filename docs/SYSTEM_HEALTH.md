@@ -9,6 +9,7 @@ cleanroomx-doctor
 cleanroomx-doctor --format text
 cleanroomx-doctor --output cleanroomx-health.json
 cleanroomx-doctor --redact-paths --output cleanroomx-health.json
+cleanroomx-doctor --require-qualified-python
 cleanroomx-doctor --require-bim
 cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
@@ -30,7 +31,7 @@ Required checks cover:
 - the packaged demonstration project's ability to load;
 - an atomic local persistence create/read probe.
 
-Advisory checks cover the current Python release-qualification matrix, isolated plugin discovery issues, and native IfcOpenShell availability. By default, missing IFC/BIM support is a warning because it is an optional dependency. `--require-bim` promotes that check to required.
+Advisory checks cover the current Python release-qualification matrix, isolated plugin discovery issues, and native IfcOpenShell availability. By default, a Python minor outside the qualified 3.11/3.12/3.13 matrix remains a warning as long as it satisfies package metadata. Use `--require-qualified-python` to promote that qualification check to required, making an unqualified Python minor fail readiness. By default, missing IFC/BIM support is also a warning because it is an optional dependency; `--require-bim` promotes that check to required.
 
 `--require-desktop` adds a required real-Tk display lifecycle probe. It creates a hidden Tk root, withdraws it, settles idle layout work, and destroys it. Use this on operator workstations or packaged desktop qualification when headless Tcl availability alone is not sufficient. A missing display server, broken native Tk library, or failed root lifecycle makes required readiness fail.
 
@@ -49,7 +50,7 @@ When a baseline is supplied, the current report gains a deterministic `compariso
 
 Before comparison, both reports are checked for internal consistency. Their `required_ready`, aggregate `status`, summary counts, and remediation fields must agree with the actual check array and remediation contract. This rejects malformed or manually altered baselines instead of using contradictory readiness evidence.
 
-The baseline must use the same probe profile as the current run: `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents a shallow workstation report from being compared as though it were a deep or BIM-qualified probe.
+The baseline must use the same probe profile as the current run: `--require-qualified-python`, `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents reports with different release-qualification or execution requirements from being compared as equivalent evidence.
 
 Use `--fail-on-regression` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
 

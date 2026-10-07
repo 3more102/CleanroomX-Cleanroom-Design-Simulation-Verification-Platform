@@ -114,15 +114,15 @@ def _python_runtime_check() -> dict[str, Any]:
     )
 
 
-def _python_qualification_check() -> dict[str, Any]:
+def _python_qualification_check(*, required: bool = False) -> dict[str, Any]:
     minor = tuple(sys.version_info[:2])
     qualified = minor in QUALIFIED_PYTHON_MINORS
     matrix = [f"{major}.{minor_version}" for major, minor_version in QUALIFIED_PYTHON_MINORS]
     return _check(
         "python-release-qualification",
         "Python release qualification",
-        required=False,
-        status="pass" if qualified else "warn",
+        required=required,
+        status="pass" if qualified else ("fail" if required else "warn"),
         summary=(
             f"Python {minor[0]}.{minor[1]} is in the current release qualification matrix."
             if qualified
@@ -525,7 +525,12 @@ def _bim_check(*, required: bool) -> dict[str, Any]:
 
 
 _HEALTH_STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
-_HEALTH_PROFILE_KEYS = ("require_bim", "require_desktop", "deep")
+_HEALTH_PROFILE_KEYS = (
+    "require_qualified_python",
+    "require_bim",
+    "require_desktop",
+    "deep",
+)
 
 
 def _health_profile(report: dict[str, Any], *, label: str) -> dict[str, bool]:
@@ -756,12 +761,18 @@ def compare_system_health_reports(
     }
 
 
-def build_system_health_report(*, require_bim: bool = False, require_desktop: bool = False, deep: bool = False) -> dict[str, Any]:
+def build_system_health_report(
+    *,
+    require_qualified_python: bool = False,
+    require_bim: bool = False,
+    require_desktop: bool = False,
+    deep: bool = False,
+) -> dict[str, Any]:
     """Build a deterministic, non-mutating CleanroomX workstation health report."""
     registry_check, plugin_check = _registry_checks()
     checks = [
         _python_runtime_check(),
-        _python_qualification_check(),
+        _python_qualification_check(required=require_qualified_python),
         registry_check,
         plugin_check,
         _tk_check(),
@@ -807,6 +818,7 @@ def build_system_health_report(*, require_bim: bool = False, require_desktop: bo
         },
         "status": status,
         "required_ready": required_ready,
+        "require_qualified_python": bool(require_qualified_python),
         "require_bim": bool(require_bim),
         "require_desktop": bool(require_desktop),
         "deep": bool(deep),

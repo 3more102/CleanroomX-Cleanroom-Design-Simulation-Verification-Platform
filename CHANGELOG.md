@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — deterministic multi-agent orchestration foundation — 2026-10-07
+
+- Adds an explicit multi-agent task DAG with named agents, declared capabilities, dependency-aware parallel execution, stable retained result order, and fail-closed blocking of downstream work after an unsuccessful dependency.
+- Adds strict-JSON task/output boundaries plus SHA-256 identity for plans, dependency handoffs, individual task results, and the complete multi-agent run, together with an integrity verifier that checks routing, dependency semantics, result order, status, and hashes without re-running engineering services.
+- Adds canonical-service adapters for the existing application analysis runner, project diagnostics, and project requirements/evidence/ProofGraph workflow; the multi-agent layer does not duplicate solver equations, diagnostics rules, requirement comparison logic, ProofGraph semantics, or compliance authority.
+- Documents the intended specialist topology for supervisor, BIM/IFC, HVAC/airflow, pressure, contamination/recovery, requirements, verification critic, evidence/ProofGraph, and reporting agents, while keeping future AI/LLM-backed agents advisory or orchestration-only.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

@@ -79,6 +79,20 @@ A handler exception becomes an `AgentExecution(state="error")` with the exceptio
 
 The coordinator does not catch `BaseException`; process-level termination signals remain outside the agent error boundary.
 
+## Deterministic batch receipts
+
+Every returned `AgentBatchResult` is now a versioned strict-JSON document:
+
+```text
+cleanroomx.multi-agent-batch / version 1
+```
+
+The batch contains a canonical SHA-256 integrity record over the task id, chat id, requested specialist order, normalized specialist results, optional synthesis result, commit state, input revision, output revision, and derived error count. `verify_agent_batch_result()` validates the schema, canonicalization, digest, result ordering, synthesis identity, revision semantics, and derived error count without re-running any agent.
+
+For a successfully committed batch, the coordinator predicts the exact atomic output revision before writing the assistant messages. The same compact `batch_receipt` is embedded in every committed specialist/synthesis transcript message, and the post-commit revision is checked against the receipt-bound revision. If the chat becomes stale before the atomic append, the batch is returned with `commit_state="conflict"` and no stale assistant message or receipt is written to the chat.
+
+The receipt is a deterministic content-integrity mechanism, not a digital signature or identity proof. An actor able to rewrite both content and digest can recompute an unkeyed SHA-256 value; stronger authenticity requires an external trusted signature or append-only anchor.
+
 ## Persistence
 
 `ChatSessionStore.save()` writes a versioned strict-JSON workspace with the existing durable atomic writer.

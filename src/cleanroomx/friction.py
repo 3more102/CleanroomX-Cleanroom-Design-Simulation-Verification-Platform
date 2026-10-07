@@ -24,6 +24,27 @@ def _nonnegative(value: float, field_name: str) -> float:
     return value
 
 
+def _positive_product_ratio(
+    numerator_a: float,
+    numerator_b: float,
+    denominator: float,
+    field_name: str,
+) -> float:
+    """Evaluate a*b/c without avoidable intermediate overflow/underflow."""
+    a_mantissa, a_exponent = math.frexp(numerator_a)
+    b_mantissa, b_exponent = math.frexp(numerator_b)
+    denominator_mantissa, denominator_exponent = math.frexp(denominator)
+    mantissa = a_mantissa * b_mantissa / denominator_mantissa
+    exponent = a_exponent + b_exponent - denominator_exponent
+    try:
+        result = math.ldexp(mantissa, exponent)
+    except OverflowError as exc:
+        raise ValueError(f"{field_name} must be finite and > 0") from exc
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError(f"{field_name} must be finite and > 0")
+    return result
+
+
 def reynolds_number(
     velocity_m_s: float,
     hydraulic_diameter_m: float,
@@ -36,7 +57,12 @@ def reynolds_number(
     kinematic_viscosity = _positive(
         kinematic_viscosity_m2_s, "kinematic_viscosity_m2_s"
     )
-    return velocity * hydraulic_diameter / kinematic_viscosity
+    return _positive_product_ratio(
+        velocity,
+        hydraulic_diameter,
+        kinematic_viscosity,
+        "reynolds_number",
+    )
 
 
 def colebrook_darcy_friction_factor(
@@ -104,14 +130,28 @@ def resolve_darcy_friction_factor(
     if roughness >= hydraulic_diameter:
         raise ValueError("absolute_roughness_m must be smaller than hydraulic diameter")
 
-    relative_roughness = roughness / hydraulic_diameter
+    relative_roughness = (
+        0.0
+        if roughness == 0.0
+        else _positive_product_ratio(
+            roughness,
+            1.0,
+            hydraulic_diameter,
+            "relative_roughness",
+        )
+    )
     if reynolds < LAMINAR_REYNOLDS_LIMIT:
         if not circular_geometry:
             raise ValueError(
                 "automatic laminar friction is supported only for circular ducts; "
                 "provide an explicit friction_factor for noncircular laminar flow"
             )
-        friction_factor = 64.0 / reynolds
+        friction_factor = _positive_product_ratio(
+            64.0,
+            1.0,
+            reynolds,
+            "friction_factor",
+        )
         method = "laminar_64_over_re"
     elif reynolds <= TURBULENT_REYNOLDS_LIMIT:
         raise ValueError(

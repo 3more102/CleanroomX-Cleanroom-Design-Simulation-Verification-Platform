@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--require-installed-distribution",
         action="store_true",
-        help="Require installed CleanroomX distribution metadata to exist and match the imported package version",
+        help="Require installed CleanroomX metadata, origin, ownership, and recorded file hashes to match the active package",
     )
     parser.add_argument(
         "--require-bim",

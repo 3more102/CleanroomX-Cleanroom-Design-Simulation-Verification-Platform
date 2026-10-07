@@ -77,6 +77,10 @@ def test_installer_lifecycle_gate_covers_install_upgrade_launch_and_uninstall():
     assert 'Invoke-CleanroomXCheck $exe "Installed upgraded CleanroomX"' in text
     assert '$baselineVersion = "0.102.999"' in text
     assert "DisplayVersion" in text
+    assert "[Microsoft.Win32.RegistryView]::Registry64" in text
+    assert "[Microsoft.Win32.RegistryView]::Registry32" in text
+    assert "[Microsoft.Win32.RegistryHive]::CurrentUser" in text
+    assert "Find-CleanroomXUninstallEntry" in text
     assert "unins000.exe" in text
     assert "install -> launch -> upgrade -> launch -> uninstall" in text
 

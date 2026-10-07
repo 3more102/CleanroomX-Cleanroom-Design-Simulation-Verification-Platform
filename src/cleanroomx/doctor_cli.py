@@ -88,7 +88,8 @@ def _render_text(report: dict) -> str:
                     f"{comparison_summary['regression_count']} regression(s), "
                     f"{comparison_summary['improvement_count']} improvement(s), "
                     f"{comparison_summary['added_check_count']} added check(s), "
-                    f"{comparison_summary['removed_check_count']} removed check(s)"
+                    f"{comparison_summary['removed_check_count']} removed check(s), "
+                    f"{comparison_summary['requirement_change_count']} requirement change(s)"
                 ),
                 "",
             ]

@@ -14,6 +14,7 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
     assert report["schema_version"] == 1
     assert report["deep"] is False
     assert report["require_desktop"] is False
+    assert report["require_qualified_python"] is False
     assert report["application"]["version"] == system_health.__version__
     assert report["status"] in {"ready", "ready_with_warnings", "not_ready"}
     assert report["summary"]["check_count"] == len(report["checks"])
@@ -29,6 +30,20 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
     )
     assert report["required_ready"] is expected_required_ready
     assert sum(report["summary"][state] for state in ("pass", "warn", "fail")) == len(report["checks"])
+
+
+def test_unqualified_python_is_advisory_unless_release_qualification_is_required(monkeypatch) -> None:
+    monkeypatch.setattr(system_health.sys, "version_info", (3, 14, 0))
+
+    advisory = system_health._python_qualification_check(required=False)
+    assert advisory["required"] is False
+    assert advisory["status"] == "warn"
+    assert advisory["remediation"]
+
+    strict = system_health._python_qualification_check(required=True)
+    assert strict["required"] is True
+    assert strict["status"] == "fail"
+    assert strict["remediation"]
 
 
 def test_missing_optional_bim_is_warning_but_strict_bim_is_failure(monkeypatch) -> None:
@@ -254,6 +269,7 @@ def _synthetic_health_report(
     checks: list[dict],
     *,
     required_ready: bool = True,
+    require_qualified_python: bool = False,
     require_bim: bool = False,
     require_desktop: bool = False,
     deep: bool = False,
@@ -272,6 +288,7 @@ def _synthetic_health_report(
             else "ready"
         ),
         "required_ready": required_ready,
+        "require_qualified_python": require_qualified_python,
         "require_bim": require_bim,
         "require_desktop": require_desktop,
         "deep": deep,

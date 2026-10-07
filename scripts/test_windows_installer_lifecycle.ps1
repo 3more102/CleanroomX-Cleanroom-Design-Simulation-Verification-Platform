@@ -53,6 +53,18 @@ function Get-CleanroomXUninstallEntry {
     return $entry
 }
 
+function Invoke-CleanroomXCheck([string]$ExePath, [string]$Label) {
+    $process = Start-Process -FilePath $ExePath -ArgumentList "--check" -PassThru
+    if (-not $process.WaitForExit(30000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "$Label --check did not exit within 30 seconds"
+    }
+    $process.Refresh()
+    if ($process.ExitCode -ne 0) {
+        throw "$Label --check failed with exit code $($process.ExitCode)"
+    }
+}
+
 $existing = Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue |
     Get-ItemProperty |
     Where-Object { $_.DisplayName -eq "CleanroomX" } |
@@ -73,20 +85,14 @@ $exe = Join-Path $installDir "CleanroomX.exe"
 if (-not (Test-Path $exe -PathType Leaf)) {
     throw "Installed baseline executable missing: $exe"
 }
-$baselineCheck = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
-if ($baselineCheck.ExitCode -ne 0) {
-    throw "Installed baseline --check failed with exit code $($baselineCheck.ExitCode)"
-}
+Invoke-CleanroomXCheck $exe "Installed baseline"
 
 Invoke-Installer $CurrentInstaller
 $currentEntry = Get-CleanroomXUninstallEntry
 if ($currentEntry.DisplayVersion -ne $currentVersion) {
     throw "Upgrade did not publish current DisplayVersion: $($currentEntry.DisplayVersion)"
 }
-$currentCheck = Start-Process -FilePath $exe -ArgumentList "--check" -Wait -PassThru
-if ($currentCheck.ExitCode -ne 0) {
-    throw "Installed upgraded CleanroomX --check failed with exit code $($currentCheck.ExitCode)"
-}
+Invoke-CleanroomXCheck $exe "Installed upgraded CleanroomX"
 
 $uninstaller = Join-Path $installDir "unins000.exe"
 if (-not (Test-Path $uninstaller -PathType Leaf)) {

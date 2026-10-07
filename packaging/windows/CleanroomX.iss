@@ -10,6 +10,14 @@
   #define MyOutputBaseFilename "CleanroomX-Setup-x64"
 #endif
 
+#ifndef MySourceDir
+  #define MySourceDir "..\\..\\dist\\windows-standalone\\CleanroomX"
+#endif
+
+#ifndef MyOutputDir
+  #define MyOutputDir "..\\..\\dist\\windows-installer"
+#endif
+
 [Setup]
 AppId={{8F32C7AA-9A76-4C56-82EE-CE29DA3587E1}
 AppName=CleanroomX
@@ -21,7 +29,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-OutputDir=..\..\dist\windows-installer
+OutputDir={#MyOutputDir}
 OutputBaseFilename={#MyOutputBaseFilename}
 Compression=lzma2
 SolidCompression=yes
@@ -42,7 +50,7 @@ VersionInfoTextVersion={#MyAppVersion}
 VersionInfoProductTextVersion={#MyAppVersion}
 
 [Files]
-Source: "..\..\dist\windows-standalone\CleanroomX\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\CleanroomX"; Filename: "{app}\CleanroomX.exe"; WorkingDir: "{app}"

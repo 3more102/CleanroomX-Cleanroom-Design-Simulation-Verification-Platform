@@ -1144,6 +1144,15 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
 
 
+def test_gui_check_mode_tolerates_windowed_runtime_without_stdout(monkeypatch):
+    root_created = []
+    monkeypatch.setattr(gui_module.sys, "stdout", None)
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root_created.append(True))
+
+    assert main(["--check"]) == 0
+    assert root_created == []
+
+
 def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()

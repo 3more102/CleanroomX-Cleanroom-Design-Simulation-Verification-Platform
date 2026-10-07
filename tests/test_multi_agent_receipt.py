@@ -110,6 +110,11 @@ def test_committed_transcript_carries_one_batch_receipt():
     assert batch.output_revision == session.revision
 
     receipt = batch.receipt()
+    assert receipt["task_id"] == "task-transcript-receipt"
+    assert receipt["session_id"] == "chat"
+    assert receipt["commit_state"] == "committed"
+    assert receipt["input_revision"] == 1
+    assert receipt["output_revision"] == session.revision
     assert receipt["sha256"] == batch.to_dict()["integrity"]["sha256"]
     for message in assistants:
         assert message.metadata["batch_receipt"] == receipt

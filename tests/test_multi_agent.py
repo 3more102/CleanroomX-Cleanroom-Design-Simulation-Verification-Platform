@@ -9,6 +9,7 @@ from cleanroomx.multi_agent import (
     AgentReply,
     ChatSessionStore,
     MultiAgentCoordinator,
+    SessionIncarnationConflict,
     SessionRevisionConflict,
 )
 
@@ -306,3 +307,134 @@ def test_unknown_and_duplicate_agents_fail_before_chat_mutation():
         )
 
     assert store.get_session("chat").revision == 0
+
+
+def test_session_incarnation_guard_rejects_delete_recreate_aba():
+    store = ChatSessionStore()
+    original = store.create_session("chat", "Original")
+    store.append_message(
+        "chat",
+        role="user",
+        content="original",
+        expected_revision=original.revision,
+        expected_instance_id=original.instance_id,
+    )
+
+    store.delete_session("chat")
+    replacement = store.create_session("chat", "Replacement")
+    replacement = store.append_message(
+        "chat",
+        role="user",
+        content="replacement",
+        expected_revision=replacement.revision,
+        expected_instance_id=replacement.instance_id,
+    )
+
+    with pytest.raises(SessionIncarnationConflict):
+        store.append_message(
+            "chat",
+            role="assistant",
+            content="stale",
+            expected_revision=replacement.revision,
+            expected_instance_id=original.instance_id,
+        )
+
+    assert [
+        message.content
+        for message in store.get_session("chat").messages
+    ] == ["replacement"]
+
+
+def test_stale_batch_after_delete_recreate_never_commits_to_replacement_chat():
+    store = ChatSessionStore()
+    store.create_session("chat", "Original")
+    coordinator = MultiAgentCoordinator(store)
+
+    started = Event()
+    release = Event()
+
+    def worker(_request):
+        started.set()
+        release.wait(timeout=2)
+        return "stale output"
+
+    coordinator.register_agent("worker", worker)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            coordinator.run,
+            "chat",
+            "long task",
+            agent_ids=["worker"],
+            task_id="task-aba",
+        )
+        assert started.wait(timeout=2)
+
+        store.delete_session("chat")
+        replacement = store.create_session(
+            "chat",
+            "Replacement",
+        )
+        store.append_message(
+            "chat",
+            role="user",
+            content="replacement",
+            expected_revision=replacement.revision,
+            expected_instance_id=replacement.instance_id,
+        )
+        release.set()
+        batch = future.result(timeout=2)
+
+    assert batch.commit_state == "conflict"
+    assert batch.output_revision is None
+    assert [
+        message.content
+        for message in store.get_session("chat").messages
+    ] == ["replacement"]
+
+
+def test_stale_session_skips_synthesis_before_expensive_follow_up():
+    store = ChatSessionStore()
+    store.create_session("chat", "Stale synthesis")
+    coordinator = MultiAgentCoordinator(store)
+
+    started = Event()
+    release = Event()
+    synthesis_called = Event()
+
+    def specialist(_request):
+        started.set()
+        release.wait(timeout=2)
+        return "specialist"
+
+    def synth(_request):
+        synthesis_called.set()
+        return "summary"
+
+    coordinator.register_agent("worker", specialist)
+    coordinator.register_agent("coordinator", synth)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            coordinator.run,
+            "chat",
+            "long task",
+            agent_ids=["worker"],
+            synthesizer_agent_id="coordinator",
+            task_id="task-stale-synth",
+        )
+        assert started.wait(timeout=2)
+        current = store.get_session("chat")
+        store.append_message(
+            "chat",
+            role="user",
+            content="newer message",
+            expected_revision=current.revision,
+            expected_instance_id=current.instance_id,
+        )
+        release.set()
+        batch = future.result(timeout=2)
+
+    assert batch.commit_state == "conflict"
+    assert batch.synthesis is None
+    assert not synthesis_called.is_set()

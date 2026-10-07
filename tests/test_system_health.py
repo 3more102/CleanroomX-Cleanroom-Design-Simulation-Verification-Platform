@@ -22,6 +22,12 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
     assert len(ids) == len(set(ids))
     assert set(item["status"] for item in report["checks"]) <= {"pass", "warn", "fail"}
     assert all("remediation" in item for item in report["checks"])
+    assert all(item["remediation"] is None for item in report["checks"] if item["status"] == "pass")
+    assert all(
+        isinstance(item["remediation"], str) and item["remediation"].strip()
+        for item in report["checks"]
+        if item["status"] != "pass"
+    )
 
     expected_required_ready = not any(
         item["required"] and item["status"] == "fail"

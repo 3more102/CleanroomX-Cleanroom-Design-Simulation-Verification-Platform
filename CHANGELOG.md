@@ -6,6 +6,7 @@
 - Adds `--require-bim` so installations that depend on IFC/BIM can make missing or unloadable native support a required failure instead of an optional warning.
 - Adds `--require-desktop` to require a real hidden Tk root lifecycle, catching missing display/native Tk workstation failures that a headless Tcl probe cannot detect.
 - Adds structured remediation guidance to system-health warnings/failures and surfaces the same next-action guidance in CLI text output and the desktop health summary.
+- Enforces the system-health remediation contract in the backend so every non-passing check has actionable guidance and passing checks cannot accidentally publish stale actions.
 - Adds `--deep` to execute the packaged demo's active analysis through the real application registry/runner, proving a bounded end-to-end analysis path without mutating the project.
 - Uses deterministic JSON and exit code 2 for failed required checks while preserving exit code 0 for ready installations, including optional warnings.
 - Adds installed-wheel CI smoke coverage plus focused CLI/backend regressions.

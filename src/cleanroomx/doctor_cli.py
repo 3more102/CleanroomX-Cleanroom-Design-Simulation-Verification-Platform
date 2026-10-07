@@ -40,6 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format; JSON is the deterministic default for CI and support evidence",
     )
     parser.add_argument(
+        "--fail-on-warnings",
+        action="store_true",
+        help="Return exit code 3 when advisory warnings remain after all required checks pass",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         help="Write the selected report format atomically to this path instead of stdout",
@@ -98,7 +103,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             text,
             before_replace=_doctor_output_guard,
         )
-    return 0 if report["required_ready"] else 2
+    if not report["required_ready"]:
+        return 2
+    if args.fail_on_warnings and int(report["summary"].get("warn", 0)) > 0:
+        return 3
+    return 0
 
 
 if __name__ == "__main__":

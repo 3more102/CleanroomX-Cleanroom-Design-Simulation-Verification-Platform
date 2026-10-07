@@ -192,6 +192,7 @@ def test_distribution_identity_does_not_mask_metadata_runtime_defects(monkeypatc
     else:
         raise AssertionError("unexpected metadata runtime defects must propagate")
 
+
 def test_missing_optional_bim_is_warning_but_strict_bim_is_failure(monkeypatch) -> None:
     real_import = system_health.import_module
 
@@ -721,6 +722,8 @@ def test_system_health_path_redaction_is_recursive_cross_platform_and_non_mutati
             {
                 "details": {
                     "path": posix_path,
+                    "module_path": posix_path,
+                    "distribution_path": windows_path,
                     "nested": [
                         {
                             "source_path": windows_path,
@@ -738,6 +741,8 @@ def test_system_health_path_redaction_is_recursive_cross_platform_and_non_mutati
     assert report["checks"][0]["details"]["path"] == posix_path
     assert redacted["runtime"]["executable"] == "<redacted>/python.exe"
     assert redacted["checks"][0]["details"]["path"] == "<redacted>/facility.cleanroomx.json"
+    assert redacted["checks"][0]["details"]["module_path"] == "<redacted>/facility.cleanroomx.json"
+    assert redacted["checks"][0]["details"]["distribution_path"] == "<redacted>/python.exe"
     assert redacted["checks"][0]["details"]["nested"][0]["source_path"] == "<redacted>/python.exe"
     assert redacted["checks"][0]["details"]["nested"][0]["message"] == windows_path
     assert redacted["privacy"] == {"local_paths_redacted": True}

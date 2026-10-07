@@ -237,3 +237,47 @@ def test_pressure_cascade_requires_pa_inputs() -> None:
             lower_pressure=uv(10, "Pa"),
             min_delta_pa=5,
         )
+
+def test_duplicate_measurement_names_are_rejected() -> None:
+    with pytest.raises(ValueError, match="duplicate qualification check name"):
+        QualificationUncertaintySpec(
+            "Duplicate measurement identity",
+            measurements=(
+                MeasurementCheck(
+                    "Room differential pressure",
+                    uv(14, "Pa"),
+                    QualificationRequirement("minimum", 10, "Pa"),
+                ),
+                MeasurementCheck(
+                    "Room differential pressure",
+                    uv(15, "Pa"),
+                    QualificationRequirement("minimum", 10, "Pa"),
+                ),
+            ),
+        )
+
+
+def test_check_names_must_be_unique_across_measurements_and_cascades() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"duplicate qualification check name: 'Process to ante'",
+    ):
+        QualificationUncertaintySpec(
+            "Cross-kind duplicate identity",
+            measurements=(
+                MeasurementCheck(
+                    "Process to ante",
+                    uv(14, "Pa"),
+                    QualificationRequirement("minimum", 10, "Pa"),
+                ),
+            ),
+            pressure_cascades=(
+                PressureCascadeCheck(
+                    " Process to ante ",
+                    higher_pressure=uv(20, "Pa"),
+                    lower_pressure=uv(5, "Pa"),
+                    min_delta_pa=10,
+                ),
+            ),
+        )
+

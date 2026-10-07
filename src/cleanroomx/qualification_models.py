@@ -77,3 +77,12 @@ class QualificationUncertaintySpec:
             raise ValueError("qualification analysis name cannot be empty")
         if not self.measurements and not self.pressure_cascades:
             raise ValueError("qualification analysis requires at least one check")
+
+        seen_check_names: set[str] = set()
+        for check in (*self.measurements, *self.pressure_cascades):
+            check_name = check.name.strip()
+            if check_name in seen_check_names:
+                raise ValueError(
+                    f"duplicate qualification check name: {check_name!r}"
+                )
+            seen_check_names.add(check_name)

@@ -338,6 +338,20 @@ def test_python_tree_fingerprint_does_not_retry_unrelated_runtime_error_with_rac
     assert calls == 1
 
 
+def test_frozen_runtime_fingerprint_uses_executable_artifact(tmp_path, monkeypatch):
+    executable = tmp_path / "CleanroomX.exe"
+    executable.write_bytes(b"cleanroomx-frozen-runtime")
+    monkeypatch.setattr(application_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(application_module.sys, "executable", str(executable))
+
+    revision = application_module._capture_runtime_code_fingerprint()
+
+    assert revision["algorithm"] == "sha256-frozen-executable-v1"
+    assert len(revision["sha256"]) == 64
+    assert revision["source_file_count"] == 1
+    assert revision["artifact_size_bytes"] == executable.stat().st_size
+
+
 def test_application_info_exposes_current_implementation_revision():
     info = application_info()
     revision = info["implementation_revision"]

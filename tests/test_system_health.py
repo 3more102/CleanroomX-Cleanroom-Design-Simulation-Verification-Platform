@@ -13,6 +13,7 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
     assert report["schema"] == "cleanroomx.system-health"
     assert report["schema_version"] == 1
     assert report["deep"] is False
+    assert report["require_desktop"] is False
     assert report["application"]["version"] == system_health.__version__
     assert report["status"] in {"ready", "ready_with_warnings", "not_ready"}
     assert report["summary"]["check_count"] == len(report["checks"])
@@ -160,3 +161,85 @@ def test_deep_health_failure_is_required_and_fail_closed(monkeypatch) -> None:
     assert deep["details"]["error_type"] == "RuntimeError"
     assert report["required_ready"] is False
     assert report["status"] == "not_ready"
+
+def test_desktop_display_check_initializes_hidden_root(monkeypatch) -> None:
+    events: list[str] = []
+
+    class FakeRoot:
+        def withdraw(self) -> None:
+            events.append("withdraw")
+
+        def update_idletasks(self) -> None:
+            events.append("update_idletasks")
+
+        def destroy(self) -> None:
+            events.append("destroy")
+
+    class FakeTkinter:
+        TclError = RuntimeError
+
+        @staticmethod
+        def Tk():
+            events.append("Tk")
+            return FakeRoot()
+
+    real_import = system_health.import_module
+
+    def fake_import(name: str, package: str | None = None):
+        if name == "tkinter":
+            return FakeTkinter
+        return real_import(name, package)
+
+    monkeypatch.setattr(system_health, "import_module", fake_import)
+    check = system_health._desktop_display_check()
+
+    assert check["status"] == "pass"
+    assert check["required"] is True
+    assert check["details"]["display_probe_performed"] is True
+    assert events == ["Tk", "withdraw", "update_idletasks", "destroy"]
+
+
+def test_desktop_display_check_fails_closed_when_tk_root_cannot_initialize(monkeypatch) -> None:
+    class FakeTkinter:
+        TclError = RuntimeError
+
+        @staticmethod
+        def Tk():
+            raise RuntimeError("synthetic desktop display failure")
+
+    real_import = system_health.import_module
+
+    def fake_import(name: str, package: str | None = None):
+        if name == "tkinter":
+            return FakeTkinter
+        return real_import(name, package)
+
+    monkeypatch.setattr(system_health, "import_module", fake_import)
+    check = system_health._desktop_display_check()
+
+    assert check["status"] == "fail"
+    assert check["required"] is True
+    assert check["details"]["display_probe_performed"] is True
+    assert check["details"]["error_type"] == "RuntimeError"
+
+
+def test_require_desktop_adds_required_display_probe(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health,
+        "_desktop_display_check",
+        lambda: system_health._check(
+            "desktop-display",
+            "Tk desktop display",
+            required=True,
+            status="pass",
+            summary="synthetic desktop display readiness",
+        ),
+    )
+
+    report = system_health.build_system_health_report(require_desktop=True)
+
+    desktop = _check_by_id(report, "desktop-display")
+    assert report["require_desktop"] is True
+    assert desktop["required"] is True
+    assert desktop["status"] == "pass"
+

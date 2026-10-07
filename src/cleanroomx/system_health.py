@@ -192,6 +192,61 @@ def _tk_check() -> dict[str, Any]:
     )
 
 
+def _desktop_display_check() -> dict[str, Any]:
+    """Create and destroy a hidden Tk root to prove the desktop display path."""
+    try:
+        tkinter = import_module("tkinter")
+    except (ImportError, OSError) as exc:
+        return _check(
+            "desktop-display",
+            "Tk desktop display",
+            required=True,
+            status="fail",
+            summary="Tkinter could not be imported; the desktop display cannot initialize.",
+            details={
+                "display_probe_performed": True,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+
+    tcl_error = getattr(tkinter, "TclError", RuntimeError)
+    root = None
+    try:
+        root = tkinter.Tk()
+        root.withdraw()
+        root.update_idletasks()
+        root.destroy()
+        root = None
+    except (AttributeError, OSError, RuntimeError, tcl_error) as exc:
+        if root is not None:
+            try:
+                root.destroy()
+            except (AttributeError, OSError, RuntimeError, tcl_error):
+                pass
+        return _check(
+            "desktop-display",
+            "Tk desktop display",
+            required=True,
+            status="fail",
+            summary="A hidden Tk desktop root could not complete its initialization lifecycle.",
+            details={
+                "display_probe_performed": True,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+
+    return _check(
+        "desktop-display",
+        "Tk desktop display",
+        required=True,
+        status="pass",
+        summary="A hidden Tk desktop root initialized, settled idle layout work, and closed cleanly.",
+        details={"display_probe_performed": True},
+    )
+
+
 def _packaged_demo_check() -> dict[str, Any]:
     path = Path(__file__).resolve().parent / "demo" / "gui_demo.cleanroomx.json"
     try:
@@ -383,7 +438,7 @@ def _bim_check(*, required: bool) -> dict[str, Any]:
     )
 
 
-def build_system_health_report(*, require_bim: bool = False, deep: bool = False) -> dict[str, Any]:
+def build_system_health_report(*, require_bim: bool = False, require_desktop: bool = False, deep: bool = False) -> dict[str, Any]:
     """Build a deterministic, non-mutating CleanroomX workstation health report."""
     registry_check, plugin_check = _registry_checks()
     checks = [
@@ -392,8 +447,10 @@ def build_system_health_report(*, require_bim: bool = False, deep: bool = False)
         registry_check,
         plugin_check,
         _tk_check(),
-        _packaged_demo_check(),
     ]
+    if require_desktop:
+        checks.append(_desktop_display_check())
+    checks.append(_packaged_demo_check())
     if deep:
         checks.append(_demo_analysis_check())
     checks.extend(
@@ -433,6 +490,7 @@ def build_system_health_report(*, require_bim: bool = False, deep: bool = False)
         "status": status,
         "required_ready": required_ready,
         "require_bim": bool(require_bim),
+        "require_desktop": bool(require_desktop),
         "deep": bool(deep),
         "summary": {
             **counts,

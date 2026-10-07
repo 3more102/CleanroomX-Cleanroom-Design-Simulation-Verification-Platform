@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--require-qualified-python",
+        action="store_true",
+        help="Treat a Python minor outside the current release qualification matrix as a required failure",
+    )
+    parser.add_argument(
         "--require-bim",
         action="store_true",
         help="Treat missing or unloadable native IfcOpenShell support as a required failure",
@@ -126,6 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError("--output must not overwrite the health baseline")
 
     report = build_system_health_report(
+        require_qualified_python=args.require_qualified_python,
         require_bim=args.require_bim,
         require_desktop=args.require_desktop,
         deep=args.deep,

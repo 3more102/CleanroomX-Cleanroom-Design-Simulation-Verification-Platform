@@ -175,7 +175,8 @@ def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
         copy_columns=("name", "value"),
     )
     tree.selection_set(("a", "b"))
-    assert behavior.selected_tsv() == "Alpha\t2\nBeta\t10"
+    # Clipboard rows follow the visible Treeview order, not selection tuple order.
+    assert behavior.selected_tsv() == "Beta\t10\nAlpha\t2"
 
 
 

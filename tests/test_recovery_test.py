@@ -186,6 +186,11 @@ def test_negative_uncertainty_is_rejected() -> None:
     with pytest.raises(ValueError, match="concentration_uncertainty_abs"):
         RecoverySample(0, 100, -1)
 
+
+def test_recovery_sample_rejects_overflowing_uncertainty_interval() -> None:
+    with pytest.raises(ValueError, match="interval upper bound must be finite"):
+        RecoverySample(0, 1e308, 1e308)
+
 def test_recovery_report_escapes_user_supplied_traceability_metadata() -> None:
     spec = RecoveryTestSpec(
         name="Traceability safety",

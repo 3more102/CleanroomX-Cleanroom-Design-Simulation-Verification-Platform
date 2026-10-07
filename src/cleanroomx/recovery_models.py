@@ -22,6 +22,10 @@ class RecoverySample:
             raise ValueError(
                 "concentration_uncertainty_abs must be finite and >= 0"
             )
+        if not math.isfinite(concentration + uncertainty):
+            raise ValueError(
+                "concentration interval upper bound must be finite"
+            )
         object.__setattr__(self, "time_minutes", time)
         object.__setattr__(self, "concentration_per_m3", concentration)
         object.__setattr__(self, "concentration_uncertainty_abs", uncertainty)

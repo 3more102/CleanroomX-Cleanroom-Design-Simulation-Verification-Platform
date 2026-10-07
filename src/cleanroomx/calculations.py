@@ -3,17 +3,23 @@ from __future__ import annotations
 import math
 
 from .models import RoomSpec
-from .numeric import efficiency_float, nonnegative_float, positive_float
+from .numeric import efficiency_float, finite_float, nonnegative_float, positive_float
 
 
 def room_volume_m3(room: RoomSpec) -> float:
     """Return geometric room volume in cubic metres."""
-    return room.length_m * room.width_m * room.height_m
+    return positive_float(
+        room.length_m * room.width_m * room.height_m,
+        "room_volume_m3",
+    )
 
 
 def air_changes_per_hour(room: RoomSpec) -> float:
     """Calculate nominal supply-air changes per hour (ACH)."""
-    return room.supply_airflow_m3_h / room_volume_m3(room)
+    return positive_float(
+        room.supply_airflow_m3_h / room_volume_m3(room),
+        "air_changes_per_hour",
+    )
 
 
 def decay_concentration(
@@ -36,7 +42,10 @@ def decay_concentration(
         removal_efficiency, "removal_efficiency"
     )
 
-    decay_rate_per_min = (ach / 60.0) * removal_efficiency
+    decay_rate_per_min = positive_float(
+        (ach / 60.0) * removal_efficiency,
+        "decay_rate_per_min",
+    )
     return initial_concentration_per_m3 * math.exp(-decay_rate_per_min * time_minutes)
 
 
@@ -60,5 +69,23 @@ def recovery_time_minutes(
     if target_concentration_per_m3 >= initial_concentration_per_m3:
         return 0.0
 
-    decay_rate_per_min = (ach / 60.0) * removal_efficiency
-    return math.log(initial_concentration_per_m3 / target_concentration_per_m3) / decay_rate_per_min
+    decay_rate_per_min = positive_float(
+        (ach / 60.0) * removal_efficiency,
+        "decay_rate_per_min",
+    )
+    relative_reduction = (
+        initial_concentration_per_m3 - target_concentration_per_m3
+    ) / target_concentration_per_m3
+    if math.isfinite(relative_reduction):
+        log_reduction = math.log1p(relative_reduction)
+    else:
+        log_reduction = math.log(initial_concentration_per_m3) - math.log(
+            target_concentration_per_m3
+        )
+    recovery_minutes = finite_float(
+        log_reduction / decay_rate_per_min,
+        "recovery_time_minutes",
+    )
+    if recovery_minutes <= 0.0:
+        raise ValueError("recovery_time_minutes must be > 0")
+    return recovery_minutes

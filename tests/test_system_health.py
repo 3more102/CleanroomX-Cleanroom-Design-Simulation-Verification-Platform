@@ -15,6 +15,7 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
     assert report["deep"] is False
     assert report["require_desktop"] is False
     assert report["require_qualified_python"] is False
+    assert report["require_installed_distribution"] is False
     assert report["application"]["version"] == system_health.__version__
     assert report["status"] in {"ready", "ready_with_warnings", "not_ready"}
     assert report["summary"]["check_count"] == len(report["checks"])
@@ -58,6 +59,60 @@ def test_require_qualified_python_promotes_unqualified_runtime_to_required_failu
     assert report["required_ready"] is False
     assert report["status"] == "not_ready"
 
+
+def test_distribution_identity_matches_installed_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda name: system_health.__version__ if name == "cleanroomx" else "unexpected",
+    )
+
+    check = system_health._distribution_identity_check()
+
+    assert check["required"] is False
+    assert check["status"] == "pass"
+    assert check["details"]["metadata_available"] is True
+    assert check["details"]["module_version"] == system_health.__version__
+    assert check["details"]["distribution_version"] == system_health.__version__
+    assert check["remediation"] is None
+
+
+def test_missing_distribution_metadata_is_advisory_unless_required(monkeypatch) -> None:
+    def missing_distribution(_name: str) -> str:
+        raise system_health.metadata.PackageNotFoundError("cleanroomx")
+
+    monkeypatch.setattr(system_health.metadata, "version", missing_distribution)
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["required"] is False
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["metadata_available"] is False
+    assert advisory["remediation"]
+
+    strict = system_health.build_system_health_report(
+        require_installed_distribution=True
+    )
+    strict_identity = _check_by_id(strict, "distribution-identity")
+    assert strict["require_installed_distribution"] is True
+    assert strict_identity["required"] is True
+    assert strict_identity["status"] == "fail"
+    assert strict["required_ready"] is False
+    assert strict["status"] == "not_ready"
+
+
+def test_distribution_version_mismatch_warns_and_can_fail_strict(monkeypatch) -> None:
+    monkeypatch.setattr(system_health.metadata, "version", lambda _name: "0.0.0")
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["required"] is False
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["distribution_version"] == "0.0.0"
+    assert advisory["remediation"]
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["required"] is True
+    assert strict["status"] == "fail"
+    assert strict["remediation"]
 
 def test_missing_optional_bim_is_warning_but_strict_bim_is_failure(monkeypatch) -> None:
     real_import = system_health.import_module
@@ -283,6 +338,7 @@ def _synthetic_health_report(
     *,
     required_ready: bool = True,
     require_qualified_python: bool = False,
+    require_installed_distribution: bool = False,
     require_bim: bool = False,
     require_desktop: bool = False,
     deep: bool = False,
@@ -302,6 +358,7 @@ def _synthetic_health_report(
         ),
         "required_ready": required_ready,
         "require_qualified_python": require_qualified_python,
+        "require_installed_distribution": require_installed_distribution,
         "require_bim": require_bim,
         "require_desktop": require_desktop,
         "deep": deep,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from importlib import import_module
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import platform
 import sys
 import tempfile
@@ -15,6 +15,49 @@ from .project import load_project_document
 
 
 QUALIFIED_PYTHON_MINORS = ((3, 11), (3, 12), (3, 13))
+_LOCAL_PATH_DETAIL_KEYS = frozenset({"path", "executable"})
+
+
+def _redacted_path_text(value: str) -> str:
+    """Reduce Windows or POSIX path text to a basename-only support-safe form."""
+    candidates = [
+        PureWindowsPath(value).name,
+        PurePosixPath(value).name,
+    ]
+    names = [name for name in candidates if name and name != value]
+    name = min(names, key=len) if names else next(
+        (candidate for candidate in candidates if candidate),
+        "",
+    )
+    return f"<redacted>/{name}" if name else "<redacted>"
+
+
+def _redact_path_fields(value: Any, *, key: str | None = None) -> Any:
+    if isinstance(value, dict):
+        return {
+            item_key: _redact_path_fields(item_value, key=str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_path_fields(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_path_fields(item) for item in value)
+    if (
+        isinstance(value, str)
+        and key is not None
+        and (key in _LOCAL_PATH_DETAIL_KEYS or key.endswith("_path"))
+    ):
+        return _redacted_path_text(value)
+    return value
+
+
+def redact_system_health_paths(report: dict[str, Any]) -> dict[str, Any]:
+    """Return a non-mutating copy with explicit local path fields redacted."""
+    if not isinstance(report, dict):
+        raise TypeError("system health report must be a dictionary")
+    redacted = _redact_path_fields(report)
+    redacted["privacy"] = {"local_paths_redacted": True}
+    return redacted
 
 
 def _check(
@@ -29,6 +72,11 @@ def _check(
 ) -> dict[str, Any]:
     if status not in {"pass", "warn", "fail"}:
         raise ValueError(f"unsupported system-health status: {status}")
+    if status == "pass":
+        if remediation is not None:
+            raise ValueError("passing system-health checks must not include remediation")
+    elif not isinstance(remediation, str) or not remediation.strip():
+        raise ValueError("non-passing system-health checks require remediation")
     return {
         "id": check_id,
         "label": label,
@@ -133,6 +181,11 @@ def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
             "plugin_analysis_count": registry.get("plugin_analysis_count"),
             "callable_target_count": registry.get("callable_target_count"),
         },
+        remediation=(
+            None
+            if registry_ok
+            else "Inspect the registry validation result, repair or reinstall the affected CleanroomX package/plugin components, then rerun cleanroomx-doctor."
+        ),
     )
 
     issue_count = int(registry.get("plugin_issue_count", 0))
@@ -524,6 +577,16 @@ def _health_check_map(
         if type(item.get("required")) is not bool:
             raise ValueError(
                 f"{label} report check {check_id!r} required must be boolean"
+            )
+        remediation = item.get("remediation")
+        if status == "pass":
+            if remediation is not None:
+                raise ValueError(
+                    f"{label} report check {check_id!r} passing remediation must be null"
+                )
+        elif not isinstance(remediation, str) or not remediation.strip():
+            raise ValueError(
+                f"{label} report check {check_id!r} non-passing remediation must be non-empty"
             )
         indexed[check_id] = item
 

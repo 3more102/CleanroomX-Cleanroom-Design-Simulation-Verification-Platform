@@ -8,6 +8,7 @@
 cleanroomx-doctor
 cleanroomx-doctor --format text
 cleanroomx-doctor --output cleanroomx-health.json
+cleanroomx-doctor --redact-paths --output cleanroomx-health.json
 cleanroomx-doctor --require-bim
 cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
@@ -15,7 +16,9 @@ cleanroomx-doctor --baseline known-good-health.json
 cleanroomx-doctor --baseline known-good-health.json --fail-on-regression
 ```
 
-The command emits strict JSON with schema `cleanroomx.system-health` by default. Each check includes a `remediation` field; warnings and failures use it for a concrete next action while passing checks leave it null. Use `--format text` for a concise operator-readable summary; remediation appears as an indented `Action:` line and exit-code semantics are identical in both formats.
+The command emits strict JSON with schema `cleanroomx.system-health` by default. Each check includes a `remediation` field. The backend enforces the contract: every warning/failure must carry a non-empty concrete next action, while passing checks must leave `remediation` null. Use `--format text` for a concise operator-readable summary; remediation appears as an indented `Action:` line and exit-code semantics are identical in both formats.
+
+Use `--redact-paths` before attaching a JSON health report to a support ticket or sharing it outside the workstation. Explicit path-valued fields such as `path`, `executable`, and nested `*_path` values are reduced to a basename-only `<redacted>/...` form. Windows and POSIX path syntax are both recognized. The transform is non-mutating and leaves free-form diagnostic messages unchanged so technical error context is not silently rewritten.
 
 From the desktop application, use **Help → System Health…** or the command palette action **Run System Health Check** to run the standard non-destructive readiness checks. Warning and failure entries include the same actionable remediation guidance as the CLI report. The desktop surface intentionally runs the bounded shallow check; use `cleanroomx-doctor --deep` when an end-to-end analysis execution probe is required.
 
@@ -44,7 +47,7 @@ cleanroomx-doctor --baseline known-good-health.json
 
 When a baseline is supplied, the current report gains a deterministic `comparison` object with schema `cleanroomx.system-health-comparison`. It reports per-check status regressions and improvements, added/removed checks, required-readiness transitions, and required/advisory policy changes. A check that was required in the baseline but becomes advisory is a coverage regression even if its status still passes; promoting an advisory check to required is reported as coverage expansion.
 
-Before comparison, both reports are checked for internal consistency. Their `required_ready`, aggregate `status`, and summary counts must agree with the actual check array. This rejects malformed or manually altered baselines instead of using contradictory readiness evidence.
+Before comparison, both reports are checked for internal consistency. Their `required_ready`, aggregate `status`, summary counts, and remediation fields must agree with the actual check array and remediation contract. This rejects malformed or manually altered baselines instead of using contradictory readiness evidence.
 
 The baseline must use the same probe profile as the current run: `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents a shallow workstation report from being compared as though it were a deep or BIM-qualified probe.
 

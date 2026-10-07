@@ -488,3 +488,119 @@ def test_system_health_comparison_rejects_internally_inconsistent_reports() -> N
         assert "status must be 'ready_with_warnings'" in str(exc)
     else:
         raise AssertionError("inconsistent aggregate status must be rejected")
+
+
+
+def test_health_check_contract_enforces_actionable_remediation() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="require remediation"):
+        system_health._check(
+            "synthetic-failure",
+            "Synthetic failure",
+            required=True,
+            status="fail",
+            summary="Synthetic failure.",
+        )
+
+    with pytest.raises(ValueError, match="require remediation"):
+        system_health._check(
+            "synthetic-warning",
+            "Synthetic warning",
+            required=False,
+            status="warn",
+            summary="Synthetic warning.",
+            remediation="   ",
+        )
+
+    with pytest.raises(ValueError, match="must not include remediation"):
+        system_health._check(
+            "synthetic-pass",
+            "Synthetic pass",
+            required=True,
+            status="pass",
+            summary="Synthetic pass.",
+            remediation="No action should be present.",
+        )
+
+
+def test_registry_non_ready_result_includes_remediation(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health,
+        "validate_application_registry",
+        lambda: {
+            "status": "not_ready",
+            "analysis_count": 0,
+            "builtin_analysis_count": 0,
+            "plugin_analysis_count": 0,
+            "callable_target_count": 0,
+            "plugin_issue_count": 0,
+            "plugin_issues": [],
+        },
+    )
+
+    report = system_health.build_system_health_report()
+    registry = _check_by_id(report, "application-registry")
+
+    assert registry["status"] == "fail"
+    assert registry["remediation"]
+    assert report["required_ready"] is False
+
+
+def test_system_health_path_redaction_is_recursive_cross_platform_and_non_mutating(tmp_path) -> None:
+    posix_path = str(tmp_path / "private" / "facility.cleanroomx.json")
+    windows_path = r"C:\Users\operator\Projects\CleanroomX\python.exe"
+    report = {
+        "runtime": {"executable": windows_path},
+        "checks": [
+            {
+                "details": {
+                    "path": posix_path,
+                    "nested": [
+                        {
+                            "source_path": windows_path,
+                            "message": windows_path,
+                        }
+                    ],
+                }
+            }
+        ],
+    }
+
+    redacted = system_health.redact_system_health_paths(report)
+
+    assert report["runtime"]["executable"] == windows_path
+    assert report["checks"][0]["details"]["path"] == posix_path
+    assert redacted["runtime"]["executable"] == "<redacted>/python.exe"
+    assert redacted["checks"][0]["details"]["path"] == "<redacted>/facility.cleanroomx.json"
+    assert redacted["checks"][0]["details"]["nested"][0]["source_path"] == "<redacted>/python.exe"
+    assert redacted["checks"][0]["details"]["nested"][0]["message"] == windows_path
+    assert redacted["privacy"] == {"local_paths_redacted": True}
+
+
+def test_system_health_comparison_rejects_invalid_remediation_contract() -> None:
+    baseline = _synthetic_health_report(
+        [_synthetic_check("runtime", "warn", required=False)]
+    )
+    current = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass", required=False)]
+    )
+
+    baseline["checks"][0]["remediation"] = None
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "non-passing remediation must be non-empty" in str(exc)
+    else:
+        raise AssertionError("non-passing baseline checks must carry remediation")
+
+    baseline = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass", required=False)]
+    )
+    baseline["checks"][0]["remediation"] = "stale action"
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "passing remediation must be null" in str(exc)
+    else:
+        raise AssertionError("passing baseline checks must not carry remediation")

@@ -29,19 +29,19 @@ def _project(metadata):
             AnalysisDocument(
                 id="requirements",
                 name="Requirements",
-                kind="requirements-kind",
+                kind="design_requirements",
                 input={"seed": 1},
             ),
             AnalysisDocument(
                 id="design",
                 name="Design",
-                kind="design-kind",
+                kind="air_system_design",
                 input={"design": {"flow": 0}},
             ),
             AnalysisDocument(
                 id="review",
                 name="Review",
-                kind="review-kind",
+                kind="compliance_check",
                 input={"review": True},
             ),
         ],
@@ -139,7 +139,7 @@ def test_project_agents_apply_explicit_handoff_and_record_hashes(tmp_path, monke
 
     def fake_run(kind, payload, *, base_dir=None, project_source_revision=None):
         calls.append((kind, copy.deepcopy(payload), project_source_revision))
-        if kind == "requirements-kind":
+        if kind == "design_requirements":
             return _FakeRun(
                 {
                     "result": {"flow": 1250.0},
@@ -160,7 +160,7 @@ def test_project_agents_apply_explicit_handoff_and_record_hashes(tmp_path, monke
 
     assert run.status == "completed"
     assert run.completed_count == 2
-    assert [call[0] for call in calls] == ["requirements-kind", "design-kind"]
+    assert [call[0] for call in calls] == ["design_requirements", "air_system_design"]
     assert all(call[2] == run.source_sha256 for call in calls)
     handoff = run.outcomes[1].applied_handoffs[0]
     assert handoff.source_run_sha256 == "a" * 64
@@ -192,7 +192,7 @@ def test_continue_on_error_blocks_dependents_but_runs_independent_agents(
 
     def fake_run(kind, payload, *, base_dir=None, project_source_revision=None):
         calls.append(kind)
-        if kind == "requirements-kind":
+        if kind == "design_requirements":
             raise RuntimeError("requirements failed")
         return _FakeRun(
             {
@@ -211,7 +211,7 @@ def test_continue_on_error_blocks_dependents_but_runs_independent_agents(
         "design-agent": "blocked",
         "review-agent": "completed",
     }
-    assert calls == ["requirements-kind", "review-kind"]
+    assert calls == ["design_requirements", "compliance_check"]
     assert run.error_count == 1
     assert run.blocked_count == 1
 

@@ -29,6 +29,11 @@ def _check(
 ) -> dict[str, Any]:
     if status not in {"pass", "warn", "fail"}:
         raise ValueError(f"unsupported system-health status: {status}")
+    if status == "pass":
+        if remediation is not None:
+            raise ValueError("passing system-health checks must not include remediation")
+    elif not isinstance(remediation, str) or not remediation.strip():
+        raise ValueError("non-passing system-health checks require remediation")
     return {
         "id": check_id,
         "label": label,
@@ -133,6 +138,11 @@ def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
             "plugin_analysis_count": registry.get("plugin_analysis_count"),
             "callable_target_count": registry.get("callable_target_count"),
         },
+        remediation=(
+            None
+            if registry_ok
+            else "Inspect the registry validation result, repair or reinstall the affected CleanroomX package/plugin components, then rerun cleanroomx-doctor."
+        ),
     )
 
     issue_count = int(registry.get("plugin_issue_count", 0))

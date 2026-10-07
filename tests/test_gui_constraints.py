@@ -9,6 +9,7 @@ from cleanroomx.gui_constraints import (
     add_constraint_rule,
     constraint_sets_snapshot,
     create_constraint_set,
+    parse_constraint_expected_json,
     remove_constraint_rule,
     update_constraint_rule,
     update_constraint_set,
@@ -179,3 +180,18 @@ def test_constraint_snapshot_surfaces_invalid_existing_input_without_crashing() 
     assert snapshot[0]["valid"] is False
     assert snapshot[0]["rules"] == []
     assert "non-empty array" in snapshot[0]["error"]
+
+
+def test_constraint_expected_editor_uses_strict_json_semantics() -> None:
+    assert parse_constraint_expected_json('{"min":20,"max":22}') == {
+        "min": 20,
+        "max": 22,
+    }
+
+    for invalid in (
+        "NaN",
+        "Infinity",
+        '{"min":20,"min":21,"max":22}',
+    ):
+        with pytest.raises(ValueError):
+            parse_constraint_expected_json(invalid)

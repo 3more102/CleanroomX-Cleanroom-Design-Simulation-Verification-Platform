@@ -88,6 +88,21 @@ def test_invalid_pressure_power_inputs_are_rejected(
     with pytest.raises(ValueError):
         analyze_fan_pressure_power(airflow, pressure)
 
+
+def test_positive_airflow_conversion_underflow_fails_closed() -> None:
+    minimum_positive = math.nextafter(0.0, 1.0)
+
+    with pytest.raises(ValueError, match="airflow_m3_s underflowed to zero"):
+        analyze_fan_pressure_power(minimum_positive, 100.0)
+
+
+def test_positive_fluid_power_underflow_fails_closed() -> None:
+    minimum_positive = math.nextafter(0.0, 1.0)
+
+    with pytest.raises(ValueError, match="fluid_air_power_w underflowed to zero"):
+        analyze_fan_pressure_power(1.0e-300, minimum_positive)
+
+
 def test_extreme_finite_inputs_fail_closed_on_fluid_power_overflow() -> None:
     with pytest.raises(ValueError, match="fluid_air_power_w must be finite"):
         analyze_fan_pressure_power(1.0e308, 1.0e308)

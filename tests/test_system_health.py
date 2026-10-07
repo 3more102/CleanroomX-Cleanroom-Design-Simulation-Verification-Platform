@@ -80,6 +80,7 @@ def _mock_distribution_origin(
         lambda name: FakeDistribution() if name == "cleanroomx" else None,
     )
 
+
 def test_distribution_identity_matches_installed_metadata_and_origin(monkeypatch) -> None:
     monkeypatch.setattr(
         system_health.metadata,

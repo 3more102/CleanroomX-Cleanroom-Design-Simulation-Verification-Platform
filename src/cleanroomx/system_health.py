@@ -167,6 +167,43 @@ def _distribution_file_hash_status(
     return observed == expected, algorithm
 
 
+def _distribution_hash_sweep(
+    distribution: Any,
+    distribution_files: Any,
+) -> dict[str, Any]:
+    """Verify every hash-bearing file recorded by the installed distribution."""
+    hashed_file_count = 0
+    verified_file_count = 0
+    mismatched_files: list[str] = []
+    unverifiable_files: list[str] = []
+
+    for package_path in distribution_files:
+        if getattr(package_path, "hash", None) is None:
+            continue
+        hashed_file_count += 1
+        relative_path = str(package_path).replace("\\", "/")
+        absolute_path = Path(distribution.locate_file(package_path)).resolve()
+        matches, _algorithm = _distribution_file_hash_status(
+            absolute_path,
+            package_path,
+        )
+        if matches is True:
+            verified_file_count += 1
+        elif matches is False:
+            mismatched_files.append(relative_path)
+        else:
+            unverifiable_files.append(relative_path)
+
+    return {
+        "hashed_file_count": hashed_file_count,
+        "verified_file_count": verified_file_count,
+        "mismatched_file_count": len(mismatched_files),
+        "unverifiable_hashed_file_count": len(unverifiable_files),
+        "mismatched_files": mismatched_files,
+        "unverifiable_hashed_files": unverifiable_files,
+    }
+
+
 def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
     """Verify installed metadata, code origin, ownership, and file integrity."""
     module_path = Path(__file__).resolve()
@@ -197,6 +234,12 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 "module_hash_matches_distribution": None,
                 "package_initializer_hash_algorithm": None,
                 "package_initializer_hash_matches_distribution": None,
+                "distribution_hashed_file_count": None,
+                "distribution_verified_file_count": None,
+                "distribution_mismatched_file_count": None,
+                "distribution_unverifiable_hashed_file_count": None,
+                "distribution_mismatched_files": [],
+                "distribution_unverifiable_hashed_files": [],
             },
             remediation=(
                 "Install CleanroomX into the active Python environment before release or deployment "
@@ -214,6 +257,12 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
     module_hash_matches_distribution: bool | None = None
     package_initializer_hash_algorithm: str | None = None
     package_initializer_hash_matches_distribution: bool | None = None
+    distribution_hashed_file_count: int | None = None
+    distribution_verified_file_count: int | None = None
+    distribution_mismatched_file_count: int | None = None
+    distribution_unverifiable_hashed_file_count: int | None = None
+    distribution_mismatched_files: list[str] = []
+    distribution_unverifiable_hashed_files: list[str] = []
 
     if version_matches:
         try:
@@ -244,6 +293,12 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     "module_hash_matches_distribution": None,
                     "package_initializer_hash_algorithm": None,
                     "package_initializer_hash_matches_distribution": None,
+                    "distribution_hashed_file_count": None,
+                    "distribution_verified_file_count": None,
+                    "distribution_mismatched_file_count": None,
+                    "distribution_unverifiable_hashed_file_count": None,
+                    "distribution_mismatched_files": [],
+                    "distribution_unverifiable_hashed_files": [],
                 },
                 remediation=(
                     "Repair or reinstall CleanroomX in the active Python environment, then rerun "
@@ -276,6 +331,21 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     package_initializer_path,
                     initializer_entry,
                 )
+            if origin_matches_distribution is True:
+                integrity_sweep = _distribution_hash_sweep(
+                    distribution,
+                    distribution_files,
+                )
+                distribution_hashed_file_count = integrity_sweep["hashed_file_count"]
+                distribution_verified_file_count = integrity_sweep["verified_file_count"]
+                distribution_mismatched_file_count = integrity_sweep["mismatched_file_count"]
+                distribution_unverifiable_hashed_file_count = integrity_sweep[
+                    "unverifiable_hashed_file_count"
+                ]
+                distribution_mismatched_files = integrity_sweep["mismatched_files"]
+                distribution_unverifiable_hashed_files = integrity_sweep[
+                    "unverifiable_hashed_files"
+                ]
 
     consistent = (
         version_matches
@@ -284,12 +354,14 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         and package_initializer_owned_by_distribution is True
         and module_hash_matches_distribution is True
         and package_initializer_hash_matches_distribution is True
+        and distribution_mismatched_file_count == 0
+        and distribution_unverifiable_hashed_file_count == 0
     )
     if consistent:
         summary = (
             f"Imported CleanroomX {__version__} matches installed distribution metadata, "
             "originates from the installed distribution, is owned by its file manifest, "
-            "and matches the recorded hashes for the active module and package initializer."
+            "and matches the recorded hashes across the installed distribution."
         )
         remediation = None
     elif not version_matches:
@@ -364,7 +436,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             "Reinstall CleanroomX from a wheel or installation that preserves RECORD hashes, "
             "then rerun cleanroomx-doctor before release or deployment qualification."
         )
-    else:
+    elif package_initializer_hash_matches_distribution is False:
         summary = (
             "The CleanroomX package initializer is distribution-owned, but its bytes do not match "
             "the content hash recorded by the installed distribution."
@@ -372,6 +444,24 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         remediation = (
             "Treat the installation as modified or corrupted: reinstall the intended CleanroomX "
             "artifact so package identity comes from verified installed bytes."
+        )
+    elif distribution_mismatched_file_count:
+        summary = (
+            f"{distribution_mismatched_file_count} hash-bearing CleanroomX distribution file(s) "
+            "do not match their installed RECORD digests."
+        )
+        remediation = (
+            "Treat the installation as modified or corrupted: reinstall the intended CleanroomX "
+            "artifact, then rerun cleanroomx-doctor before release or deployment qualification."
+        )
+    else:
+        summary = (
+            f"{distribution_unverifiable_hashed_file_count or 0} hash-bearing CleanroomX "
+            "distribution file(s) could not be verified against their installed RECORD digests."
+        )
+        remediation = (
+            "Repair or reinstall CleanroomX so all hash-bearing distribution files are readable "
+            "and use supported RECORD digest algorithms, then rerun cleanroomx-doctor."
         )
 
     return _check(
@@ -401,9 +491,20 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             "package_initializer_hash_matches_distribution": (
                 package_initializer_hash_matches_distribution
             ),
+            "distribution_hashed_file_count": distribution_hashed_file_count,
+            "distribution_verified_file_count": distribution_verified_file_count,
+            "distribution_mismatched_file_count": distribution_mismatched_file_count,
+            "distribution_unverifiable_hashed_file_count": (
+                distribution_unverifiable_hashed_file_count
+            ),
+            "distribution_mismatched_files": distribution_mismatched_files,
+            "distribution_unverifiable_hashed_files": (
+                distribution_unverifiable_hashed_files
+            ),
         },
         remediation=remediation,
     )
+
 
 def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
     try:

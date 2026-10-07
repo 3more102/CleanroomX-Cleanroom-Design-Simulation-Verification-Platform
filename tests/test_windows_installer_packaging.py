@@ -14,6 +14,7 @@ def test_inno_installer_is_per_user_registered_branded_and_self_contained():
     assert "DefaultDirName={localappdata}\\Programs\\CleanroomX" in text
     assert "SetupIconFile=CleanroomX.ico" in text
     assert "UninstallDisplayIcon={app}\\CleanroomX.exe" in text
+    assert "UninstallDisplayName=CleanroomX" in text
     assert "VersionInfoCompany=CleanroomX contributors" in text
     assert "VersionInfoDescription=CleanroomX Engineering Workstation Installer" in text
     assert "VersionInfoProductName=CleanroomX" in text

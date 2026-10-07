@@ -142,7 +142,7 @@ def _python_qualification_check(*, required: bool = False) -> dict[str, Any]:
 
 
 def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
-    """Verify installed metadata and imported-code origin for CleanroomX."""
+    """Verify installed metadata, code origin, and distribution ownership."""
     module_path = Path(__file__).resolve()
     try:
         distribution_version = metadata.version("cleanroomx")
@@ -162,6 +162,8 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 "module_path": str(module_path),
                 "distribution_path": None,
                 "origin_matches_distribution": None,
+                "ownership_manifest_available": None,
+                "module_owned_by_distribution": None,
             },
             remediation=(
                 "Install CleanroomX into the active Python environment before release or deployment "
@@ -172,12 +174,13 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
     version_matches = distribution_version == __version__
     distribution_path: Path | None = None
     origin_matches_distribution: bool | None = None
+    ownership_manifest_available: bool | None = None
+    module_owned_by_distribution: bool | None = None
 
     if version_matches:
         try:
-            distribution_path = Path(
-                metadata.distribution("cleanroomx").locate_file("")
-            ).resolve()
+            distribution = metadata.distribution("cleanroomx")
+            distribution_path = Path(distribution.locate_file("")).resolve()
         except metadata.PackageNotFoundError:
             return _check(
                 "distribution-identity",
@@ -195,19 +198,33 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     "module_path": str(module_path),
                     "distribution_path": None,
                     "origin_matches_distribution": None,
+                    "ownership_manifest_available": None,
+                    "module_owned_by_distribution": None,
                 },
                 remediation=(
                     "Repair or reinstall CleanroomX in the active Python environment, then rerun "
                     "cleanroomx-doctor before release or deployment qualification."
                 ),
             )
-        origin_matches_distribution = module_path.is_relative_to(distribution_path)
 
-    consistent = version_matches and origin_matches_distribution is True
+        origin_matches_distribution = module_path.is_relative_to(distribution_path)
+        distribution_files = distribution.files
+        ownership_manifest_available = distribution_files is not None
+        if distribution_files is not None:
+            module_owned_by_distribution = any(
+                Path(distribution.locate_file(file)).resolve() == module_path
+                for file in distribution_files
+            )
+
+    consistent = (
+        version_matches
+        and origin_matches_distribution is True
+        and module_owned_by_distribution is True
+    )
     if consistent:
         summary = (
-            f"Imported CleanroomX {__version__} matches installed distribution metadata "
-            "and originates from the installed distribution."
+            f"Imported CleanroomX {__version__} matches installed distribution metadata, "
+            "originates from the installed distribution, and is owned by its file manifest."
         )
         remediation = None
     elif not version_matches:
@@ -219,7 +236,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             "Reinstall CleanroomX into the active Python environment and remove stale or "
             "duplicate installations so imported code and distribution metadata agree."
         )
-    else:
+    elif origin_matches_distribution is not True:
         summary = (
             "Imported CleanroomX reports the installed distribution version, but its code "
             "origin is outside the installed distribution location."
@@ -227,6 +244,24 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         remediation = (
             "Run CleanroomX from the intended installed environment and remove source-checkout, "
             "PYTHONPATH, or stale-package shadowing before release or deployment qualification."
+        )
+    elif ownership_manifest_available is False:
+        summary = (
+            "Imported CleanroomX is under the installed distribution location, but installed "
+            "metadata does not expose a file ownership manifest."
+        )
+        remediation = (
+            "Reinstall CleanroomX from a standard wheel or other installation that preserves "
+            "distribution file metadata, then rerun cleanroomx-doctor before release qualification."
+        )
+    else:
+        summary = (
+            "Imported CleanroomX is under the installed distribution location, but the imported "
+            "module is not owned by the installed distribution file manifest."
+        )
+        remediation = (
+            "Remove stray or shadowing CleanroomX files and reinstall the intended distribution "
+            "so the imported module is recorded as part of that installed artifact."
         )
 
     return _check(
@@ -244,6 +279,8 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 None if distribution_path is None else str(distribution_path)
             ),
             "origin_matches_distribution": origin_matches_distribution,
+            "ownership_manifest_available": ownership_manifest_available,
+            "module_owned_by_distribution": module_owned_by_distribution,
         },
         remediation=remediation,
     )

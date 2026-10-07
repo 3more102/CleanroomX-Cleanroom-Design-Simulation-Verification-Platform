@@ -2,6 +2,7 @@
 
 ## Unreleased — system-health baseline drift gate — 2026-10-07
 
+- Tightens installed-distribution provenance by requiring the imported CleanroomX module to be owned by the installed distribution file manifest, preventing same-version stray modules inside a shared `site-packages` root from passing origin checks.
 - Hardens installed-distribution identity by verifying that same-version imported CleanroomX code actually originates from the installed distribution location, detecting source-checkout, stale-copy, and `PYTHONPATH` shadowing that version comparison alone cannot catch.
 - Adds installed-distribution identity diagnostics that compare imported CleanroomX code with `importlib.metadata`, warning on missing/mismatched metadata by default and providing `--require-installed-distribution` for release/deployment gates that must fail closed on package identity drift.
 - Includes the installed-distribution policy in baseline probe compatibility so strict installed-artifact evidence cannot be compared as equivalent to source-checkout diagnostics.

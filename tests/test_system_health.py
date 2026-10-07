@@ -249,3 +249,160 @@ def test_require_desktop_adds_required_display_probe(monkeypatch) -> None:
     assert desktop["required"] is True
     assert desktop["status"] == "pass"
 
+
+def _synthetic_health_report(
+    checks: list[dict],
+    *,
+    required_ready: bool = True,
+    require_bim: bool = False,
+    require_desktop: bool = False,
+    deep: bool = False,
+    version: str = "test",
+) -> dict:
+    return {
+        "schema": "cleanroomx.system-health",
+        "schema_version": 1,
+        "application": {"name": "CleanroomX", "version": version},
+        "runtime": {"platform": "test", "machine": "test", "python": "test"},
+        "status": "ready" if required_ready else "not_ready",
+        "required_ready": required_ready,
+        "require_bim": require_bim,
+        "require_desktop": require_desktop,
+        "deep": deep,
+        "summary": {
+            "pass": sum(item["status"] == "pass" for item in checks),
+            "warn": sum(item["status"] == "warn" for item in checks),
+            "fail": sum(item["status"] == "fail" for item in checks),
+            "check_count": len(checks),
+        },
+        "checks": checks,
+    }
+
+
+def _synthetic_check(
+    check_id: str,
+    status: str,
+    *,
+    required: bool = True,
+) -> dict:
+    return {
+        "id": check_id,
+        "label": check_id,
+        "required": required,
+        "status": status,
+        "summary": f"{check_id} is {status}",
+        "details": {},
+        "remediation": None if status == "pass" else f"Repair {check_id}.",
+    }
+
+
+def test_system_health_comparison_detects_regressions_and_improvements() -> None:
+    baseline = _synthetic_health_report(
+        [
+            _synthetic_check("runtime", "pass"),
+            _synthetic_check("plugin", "warn", required=False),
+        ],
+        version="1.0",
+    )
+    current = _synthetic_health_report(
+        [
+            _synthetic_check("runtime", "warn"),
+            _synthetic_check("plugin", "pass", required=False),
+        ],
+        version="1.1",
+    )
+
+    comparison = system_health.compare_system_health_reports(baseline, current)
+
+    assert comparison["schema"] == "cleanroomx.system-health-comparison"
+    assert comparison["schema_version"] == 1
+    assert comparison["state"] == "regressed"
+    assert comparison["regressed"] is True
+    assert comparison["improved"] is True
+    assert comparison["baseline_application_version"] == "1.0"
+    assert comparison["current_application_version"] == "1.1"
+    assert comparison["regressions"] == [
+        {
+            "id": "runtime",
+            "label": "runtime",
+            "from": "pass",
+            "to": "warn",
+            "required": True,
+            "summary": "runtime is warn",
+            "remediation": "Repair runtime.",
+        }
+    ]
+    assert comparison["improvements"][0]["id"] == "plugin"
+
+
+def test_system_health_comparison_treats_removed_required_check_as_coverage_regression() -> None:
+    baseline = _synthetic_health_report(
+        [_synthetic_check("required-probe", "pass")]
+    )
+    current = _synthetic_health_report([])
+
+    comparison = system_health.compare_system_health_reports(baseline, current)
+
+    assert comparison["regressed"] is True
+    assert comparison["state"] == "regressed"
+    assert comparison["summary"]["required_check_coverage_regressed"] is True
+    assert comparison["removed_checks"] == [
+        {"id": "required-probe", "status": "pass", "required": True}
+    ]
+
+
+def test_system_health_comparison_rejects_incompatible_probe_profiles() -> None:
+    baseline = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass")],
+        require_desktop=False,
+    )
+    current = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass")],
+        require_desktop=True,
+    )
+
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "baseline profile does not match" in str(exc)
+    else:
+        raise AssertionError("profile mismatch must be rejected")
+
+
+def test_system_health_comparison_rejects_duplicate_check_ids() -> None:
+    duplicate = _synthetic_health_report(
+        [
+            _synthetic_check("runtime", "pass"),
+            _synthetic_check("runtime", "warn"),
+        ]
+    )
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+
+    try:
+        system_health.compare_system_health_reports(duplicate, current)
+    except ValueError as exc:
+        assert "duplicate check id" in str(exc)
+    else:
+        raise AssertionError("duplicate baseline check ids must be rejected")
+
+
+def test_system_health_comparison_rejects_malformed_schema_fields() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+
+    baseline["schema_version"] = True
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "unsupported system-health schema version" in str(exc)
+    else:
+        raise AssertionError("boolean schema version must be rejected")
+
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["checks"][0]["status"] = []
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "unsupported status" in str(exc)
+    else:
+        raise AssertionError("non-string check status must be rejected")

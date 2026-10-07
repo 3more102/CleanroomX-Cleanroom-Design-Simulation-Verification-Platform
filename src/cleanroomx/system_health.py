@@ -470,6 +470,168 @@ def _bim_check(*, required: bool) -> dict[str, Any]:
     )
 
 
+
+_HEALTH_STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
+_HEALTH_PROFILE_KEYS = ("require_bim", "require_desktop", "deep")
+
+
+def _health_profile(report: dict[str, Any], *, label: str) -> dict[str, bool]:
+    profile: dict[str, bool] = {}
+    for key in _HEALTH_PROFILE_KEYS:
+        value = report.get(key, False)
+        if type(value) is not bool:
+            raise ValueError(f"{label} report {key} must be boolean")
+        profile[key] = value
+    return profile
+
+
+def _health_check_map(
+    report: dict[str, Any],
+    *,
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(report, dict):
+        raise ValueError(f"{label} system-health report must be a JSON object")
+    if report.get("schema") != "cleanroomx.system-health":
+        raise ValueError(f"{label} report is not a cleanroomx.system-health document")
+    schema_version = report.get("schema_version")
+    if type(schema_version) is not int or schema_version != 1:
+        raise ValueError(
+            f"{label} report uses unsupported system-health schema version "
+            f"{schema_version!r}"
+        )
+    if type(report.get("required_ready")) is not bool:
+        raise ValueError(f"{label} report required_ready must be boolean")
+
+    checks = report.get("checks")
+    if type(checks) is not list:
+        raise ValueError(f"{label} report checks must be an array")
+
+    indexed: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(checks):
+        if type(item) is not dict:
+            raise ValueError(f"{label} report checks[{index}] must be an object")
+        check_id = item.get("id")
+        if not isinstance(check_id, str) or not check_id.strip():
+            raise ValueError(f"{label} report checks[{index}].id must be a non-empty string")
+        if check_id in indexed:
+            raise ValueError(f"{label} report contains duplicate check id {check_id!r}")
+        status = item.get("status")
+        if not isinstance(status, str) or status not in _HEALTH_STATUS_RANK:
+            raise ValueError(
+                f"{label} report check {check_id!r} has unsupported status {status!r}"
+            )
+        if type(item.get("required")) is not bool:
+            raise ValueError(
+                f"{label} report check {check_id!r} required must be boolean"
+            )
+        indexed[check_id] = item
+    return indexed
+
+
+def compare_system_health_reports(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare compatible system-health reports and identify deterministic drift."""
+    baseline_checks = _health_check_map(baseline, label="baseline")
+    current_checks = _health_check_map(current, label="current")
+
+    baseline_profile = _health_profile(baseline, label="baseline")
+    current_profile = _health_profile(current, label="current")
+    if baseline_profile != current_profile:
+        raise ValueError(
+            "system-health baseline profile does not match the current probe "
+            f"(baseline={baseline_profile}, current={current_profile})"
+        )
+
+    regressions: list[dict[str, Any]] = []
+    improvements: list[dict[str, Any]] = []
+    for check_id in sorted(set(baseline_checks) & set(current_checks)):
+        before = baseline_checks[check_id]
+        after = current_checks[check_id]
+        before_rank = _HEALTH_STATUS_RANK[before["status"]]
+        after_rank = _HEALTH_STATUS_RANK[after["status"]]
+        if before_rank == after_rank:
+            continue
+        change = {
+            "id": check_id,
+            "label": after.get("label") or before.get("label") or check_id,
+            "from": before["status"],
+            "to": after["status"],
+            "required": bool(after["required"]),
+            "summary": after.get("summary"),
+            "remediation": after.get("remediation"),
+        }
+        if after_rank > before_rank:
+            regressions.append(change)
+        else:
+            improvements.append(change)
+
+    added_checks = [
+        {
+            "id": check_id,
+            "status": current_checks[check_id]["status"],
+            "required": bool(current_checks[check_id]["required"]),
+        }
+        for check_id in sorted(set(current_checks) - set(baseline_checks))
+    ]
+    removed_checks = [
+        {
+            "id": check_id,
+            "status": baseline_checks[check_id]["status"],
+            "required": bool(baseline_checks[check_id]["required"]),
+        }
+        for check_id in sorted(set(baseline_checks) - set(current_checks))
+    ]
+
+    readiness_regressed = bool(
+        baseline["required_ready"] and not current["required_ready"]
+    )
+    readiness_improved = bool(
+        not baseline["required_ready"] and current["required_ready"]
+    )
+    coverage_regressed = any(item["required"] for item in removed_checks)
+    regressed = bool(regressions) or readiness_regressed or coverage_regressed
+    improved = bool(improvements) or readiness_improved
+    state = "regressed" if regressed else "improved" if improved else "stable"
+
+    def application_version(report: dict[str, Any]) -> str | None:
+        application = report.get("application")
+        if not isinstance(application, dict):
+            return None
+        version = application.get("version")
+        return version if isinstance(version, str) else None
+
+    return {
+        "schema": "cleanroomx.system-health-comparison",
+        "schema_version": 1,
+        "state": state,
+        "regressed": regressed,
+        "improved": improved,
+        "profile": current_profile,
+        "baseline_application_version": application_version(baseline),
+        "current_application_version": application_version(current),
+        "required_readiness": {
+            "baseline": bool(baseline["required_ready"]),
+            "current": bool(current["required_ready"]),
+            "regressed": readiness_regressed,
+            "improved": readiness_improved,
+        },
+        "summary": {
+            "regression_count": len(regressions),
+            "improvement_count": len(improvements),
+            "added_check_count": len(added_checks),
+            "removed_check_count": len(removed_checks),
+            "required_check_coverage_regressed": coverage_regressed,
+        },
+        "regressions": regressions,
+        "improvements": improvements,
+        "added_checks": added_checks,
+        "removed_checks": removed_checks,
+    }
+
+
 def build_system_health_report(*, require_bim: bool = False, require_desktop: bool = False, deep: bool = False) -> dict[str, Any]:
     """Build a deterministic, non-mutating CleanroomX workstation health report."""
     registry_check, plugin_check = _registry_checks()

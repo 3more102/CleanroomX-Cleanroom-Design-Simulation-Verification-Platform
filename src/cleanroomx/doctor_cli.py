@@ -7,7 +7,8 @@ from typing import Sequence
 
 from .cli_output import cli_error_boundary, dumps_strict_json
 from .persistence import atomic_write_text
-from .system_health import build_system_health_report
+from .strict_json import load_strict_json
+from .system_health import build_system_health_report, compare_system_health_reports
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,6 +33,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--deep",
         action="store_true",
         help="Execute the packaged demo active analysis through the real application runner",
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="Compare the current health report with a prior cleanroomx-doctor JSON report",
+    )
+    parser.add_argument(
+        "--fail-on-regression",
+        action="store_true",
+        help="Return exit code 3 when baseline comparison detects health regression",
     )
     parser.add_argument(
         "--format",
@@ -66,6 +77,22 @@ def _render_text(report: dict) -> str:
         ),
         "",
     ]
+    comparison = report.get("comparison")
+    if comparison:
+        comparison_summary = comparison["summary"]
+        lines.extend(
+            [
+                f"Baseline drift: {comparison['state'].upper()}",
+                (
+                    "Drift changes: "
+                    f"{comparison_summary['regression_count']} regression(s), "
+                    f"{comparison_summary['improvement_count']} improvement(s), "
+                    f"{comparison_summary['added_check_count']} added check(s), "
+                    f"{comparison_summary['removed_check_count']} removed check(s)"
+                ),
+                "",
+            ]
+        )
     for item in report["checks"]:
         requirement = "required" if item["required"] else "advisory"
         lines.append(
@@ -80,11 +107,25 @@ def _render_text(report: dict) -> str:
 @cli_error_boundary("cleanroomx-doctor")
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.fail_on_regression and args.baseline is None:
+        raise ValueError("--fail-on-regression requires --baseline")
+    if args.output is not None and args.baseline is not None:
+        output_path = args.output.expanduser().resolve(strict=False)
+        baseline_path = args.baseline.expanduser().resolve(strict=False)
+        if output_path == baseline_path:
+            raise ValueError("--output must not overwrite the health baseline")
+
     report = build_system_health_report(
         require_bim=args.require_bim,
         require_desktop=args.require_desktop,
         deep=args.deep,
     )
+    comparison = None
+    if args.baseline is not None:
+        baseline = load_strict_json(args.baseline, max_bytes=2 * 1024 * 1024)
+        comparison = compare_system_health_reports(baseline, report)
+        report = {**report, "comparison": comparison}
+
     text = (
         _render_text(report)
         if args.format == "text"
@@ -98,7 +139,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             text,
             before_replace=_doctor_output_guard,
         )
-    return 0 if report["required_ready"] else 2
+    if not report["required_ready"]:
+        return 2
+    if args.fail_on_regression and comparison is not None and comparison["regressed"]:
+        return 3
+    return 0
 
 
 if __name__ == "__main__":

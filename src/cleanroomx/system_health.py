@@ -142,7 +142,8 @@ def _python_qualification_check(*, required: bool = False) -> dict[str, Any]:
 
 
 def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
-    """Verify that imported CleanroomX code agrees with installed distribution metadata."""
+    """Verify installed metadata and imported-code origin for CleanroomX."""
+    module_path = Path(__file__).resolve()
     try:
         distribution_version = metadata.version("cleanroomx")
     except metadata.PackageNotFoundError:
@@ -158,6 +159,9 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 "metadata_available": False,
                 "module_version": __version__,
                 "distribution_version": None,
+                "module_path": str(module_path),
+                "distribution_path": None,
+                "origin_matches_distribution": None,
             },
             remediation=(
                 "Install CleanroomX into the active Python environment before release or deployment "
@@ -165,35 +169,84 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             ),
         )
 
-    consistent = distribution_version == __version__
+    version_matches = distribution_version == __version__
+    distribution_path: Path | None = None
+    origin_matches_distribution: bool | None = None
+
+    if version_matches:
+        try:
+            distribution_path = Path(
+                metadata.distribution("cleanroomx").locate_file("")
+            ).resolve()
+        except metadata.PackageNotFoundError:
+            return _check(
+                "distribution-identity",
+                "Installed CleanroomX distribution",
+                required=required,
+                status="fail" if required else "warn",
+                summary=(
+                    "CleanroomX distribution metadata disappeared while its install origin "
+                    "was being resolved."
+                ),
+                details={
+                    "metadata_available": False,
+                    "module_version": __version__,
+                    "distribution_version": distribution_version,
+                    "module_path": str(module_path),
+                    "distribution_path": None,
+                    "origin_matches_distribution": None,
+                },
+                remediation=(
+                    "Repair or reinstall CleanroomX in the active Python environment, then rerun "
+                    "cleanroomx-doctor before release or deployment qualification."
+                ),
+            )
+        origin_matches_distribution = module_path.is_relative_to(distribution_path)
+
+    consistent = version_matches and origin_matches_distribution is True
+    if consistent:
+        summary = (
+            f"Imported CleanroomX {__version__} matches installed distribution metadata "
+            "and originates from the installed distribution."
+        )
+        remediation = None
+    elif not version_matches:
+        summary = (
+            f"Imported CleanroomX {__version__} does not match installed distribution "
+            f"metadata {distribution_version}."
+        )
+        remediation = (
+            "Reinstall CleanroomX into the active Python environment and remove stale or "
+            "duplicate installations so imported code and distribution metadata agree."
+        )
+    else:
+        summary = (
+            "Imported CleanroomX reports the installed distribution version, but its code "
+            "origin is outside the installed distribution location."
+        )
+        remediation = (
+            "Run CleanroomX from the intended installed environment and remove source-checkout, "
+            "PYTHONPATH, or stale-package shadowing before release or deployment qualification."
+        )
+
     return _check(
         "distribution-identity",
         "Installed CleanroomX distribution",
         required=required,
         status="pass" if consistent else ("fail" if required else "warn"),
-        summary=(
-            f"Imported CleanroomX {__version__} matches installed distribution metadata."
-            if consistent
-            else (
-                f"Imported CleanroomX {__version__} does not match installed distribution "
-                f"metadata {distribution_version}."
-            )
-        ),
+        summary=summary,
         details={
             "metadata_available": True,
             "module_version": __version__,
             "distribution_version": distribution_version,
+            "module_path": str(module_path),
+            "distribution_path": (
+                None if distribution_path is None else str(distribution_path)
+            ),
+            "origin_matches_distribution": origin_matches_distribution,
         },
-        remediation=(
-            None
-            if consistent
-            else (
-                "Reinstall CleanroomX into the active Python environment and remove stale or "
-                "duplicate installations so imported code and distribution metadata agree."
-            )
-        ),
+        remediation=remediation,
     )
-
 
 def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
     try:

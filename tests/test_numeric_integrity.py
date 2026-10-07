@@ -8,6 +8,7 @@ import pytest
 from cleanroomx.airflow import analyze_air_balance
 from cleanroomx.calculations import decay_concentration, recovery_time_minutes
 from cleanroomx.fan import analyze_supply_fan
+from cleanroomx.hvac_io import load_hvac_project
 from cleanroomx.hvac_models import (
     AirBalanceDesign,
     AirState,
@@ -18,6 +19,7 @@ from cleanroomx.hvac_models import (
     ThermalLoads,
 )
 from cleanroomx.models import ParticleRequirement, PressureCascadeRequirement, RoomSpec
+from cleanroomx.numeric import efficiency_float, finite_float, nonnegative_float, positive_float
 from cleanroomx.psychrometrics import dry_air_mass_flow_kg_s, saturation_vapor_pressure_kpa
 from cleanroomx.thermal import analyze_thermal_design
 
@@ -183,3 +185,38 @@ def test_finite_foundational_inputs_preserve_existing_results() -> None:
     )
     assert fan["total_static_pressure_pa"] == 600
     assert fan["estimated_electrical_input_kw"] == 1.5
+
+
+
+@pytest.mark.parametrize(
+    ("validator", "value"),
+    (
+        (finite_float, True),
+        (finite_float, False),
+        (positive_float, True),
+        (nonnegative_float, True),
+        (nonnegative_float, False),
+        (efficiency_float, True),
+    ),
+)
+def test_engineering_numeric_validators_reject_booleans(validator, value) -> None:
+    with pytest.raises(ValueError, match="finite number"):
+        validator(value, "field")
+
+
+def test_hvac_strict_json_boolean_is_not_coerced_to_airflow(tmp_path) -> None:
+    path = tmp_path / "hvac.json"
+    path.write_text(
+        (
+            '{"name":"Boolean airflow","rooms":[{"name":"Room",'
+            '"cleanroom_airflow_m3_h":true,"thermal_design":{"room_air":'
+            '{"dry_bulb_c":22.0,"relative_humidity_percent":45.0}}}]}'
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="cleanroom_airflow_m3_h must be a finite number",
+    ):
+        load_hvac_project(path)

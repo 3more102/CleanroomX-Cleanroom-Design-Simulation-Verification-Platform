@@ -248,6 +248,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         remediation=remediation,
     )
 
+
 def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         registry = validate_application_registry()

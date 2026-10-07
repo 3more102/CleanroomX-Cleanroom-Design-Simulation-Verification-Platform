@@ -7,6 +7,7 @@ import json
 import logging
 from pathlib import Path
 import queue
+import sys
 import threading
 import uuid
 
@@ -7733,7 +7734,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.autosave_interval_seconds < 0:
         parser.error("--autosave-interval-seconds must be zero or greater")
     if args.check:
-        print(json.dumps(application_info(), indent=2, ensure_ascii=False))
+        payload = json.dumps(application_info(), indent=2, ensure_ascii=False)
+        stream = getattr(sys, "stdout", None)
+        if stream is not None:
+            try:
+                stream.write(payload + "\n")
+                stream.flush()
+            except (AttributeError, OSError, ValueError):
+                # PyInstaller --windowed executables may not have a usable stdout.
+                # Keep the non-interactive health check capable of exiting cleanly.
+                pass
         return 0
 
     registry = validate_application_registry()

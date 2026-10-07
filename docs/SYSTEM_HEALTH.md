@@ -13,7 +13,7 @@ cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
 ```
 
-The command emits strict JSON with schema `cleanroomx.system-health` by default. Each check includes a `remediation` field; warnings and failures use it for a concrete next action while passing checks leave it null. Use `--format text` for a concise operator-readable summary; remediation appears as an indented `Action:` line and exit-code semantics are identical in both formats.
+The command emits strict JSON with schema `cleanroomx.system-health` by default. Each check includes a `remediation` field. The backend enforces this contract: every warning/failure must carry a non-empty concrete next action, while passing checks must leave `remediation` null. Use `--format text` for a concise operator-readable summary; remediation appears as an indented `Action:` line and exit-code semantics are identical in both formats.
 
 From the desktop application, use **Help → System Health…** or the command palette action **Run System Health Check** to run the standard non-destructive readiness checks. Warning and failure entries include the same actionable remediation guidance as the CLI report. The desktop surface intentionally runs the bounded shallow check; use `cleanroomx-doctor --deep` when an end-to-end analysis execution probe is required.
 

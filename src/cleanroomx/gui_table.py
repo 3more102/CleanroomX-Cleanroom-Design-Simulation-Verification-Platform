@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable
 
 import tkinter as tk
@@ -19,10 +19,10 @@ def table_value_sort_key(value: Any) -> tuple[int, Any]:
     if numeric.endswith("%"):
         numeric = numeric[:-1].strip()
     try:
-        number = float(numeric)
-    except (TypeError, ValueError, OverflowError):
+        number = Decimal(numeric)
+    except (InvalidOperation, ValueError):
         return (1, text.casefold())
-    if not math.isfinite(number):
+    if not number.is_finite():
         return (1, text.casefold())
     return (0, number)
 
@@ -115,10 +115,16 @@ class TreeviewTableBehavior:
 
         tree.bind("<Control-c>", self._copy_event, add="+")
         tree.bind("<Control-C>", self._copy_event, add="+")
+        tree.bind("<Control-a>", self._select_all_event, add="+")
+        tree.bind("<Control-A>", self._select_all_event, add="+")
         tree.bind("<Button-3>", self._context_menu, add="+")
 
     def _copy_event(self, _event=None):
         self.copy_selected()
+        return "break"
+
+    def _select_all_event(self, _event=None):
+        self.select_all()
         return "break"
 
     def _context_menu(self, event: tk.Event):
@@ -171,7 +177,7 @@ class TreeviewTableBehavior:
                 populated.append((key, index, iid))
 
         populated.sort(
-            key=lambda item: (item[0], item[1]),
+            key=lambda item: item[0],
             reverse=self.sort_descending,
         )
         ordered = [iid for _key, _index, iid in populated]
@@ -279,12 +285,16 @@ class TreeviewTableBehavior:
                 "\t".join(
                     self._column_label(column)
                     .replace("\t", " ")
+                    .replace("\r", " ")
                     .replace("\n", " ")
                     for column in self.copy_columns
                 )
             )
         selected_rows = []
-        for iid in self.tree.selection():
+        selected = set(self.tree.selection())
+        for iid in self._ordered_children():
+            if iid not in selected:
+                continue
             if not self.tree.exists(iid):
                 continue
             values = [
@@ -293,7 +303,7 @@ class TreeviewTableBehavior:
             ]
             selected_rows.append(
                 "\t".join(
-                    value.replace("\t", " ").replace("\n", " ")
+                    value.replace("\t", " ").replace("\r", " ").replace("\n", " ")
                     for value in values
                 )
             )

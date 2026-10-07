@@ -25,6 +25,7 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "field_text": "#18212b",
         "tree": "#fbfcfd",
         "disabled": "#9aa5b1",
+        "error": "#b42318",
         "canvas_2d": "#f7f9fb",
         "canvas_3d": "#111820",
         "plot": "#ffffff",
@@ -47,6 +48,7 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "field_text": "#e6edf3",
         "tree": "#171d24",
         "disabled": "#6f7b87",
+        "error": "#ff7b72",
         "canvas_2d": "#1b222a",
         "canvas_3d": "#0d1117",
         "plot": "#131920",
@@ -158,6 +160,9 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             ("readonly", palette["surface_alt"]),
         ],
         foreground=[("disabled", palette["disabled"])],
+        bordercolor=[("invalid", palette["error"])],
+        lightcolor=[("invalid", palette["error"])],
+        darkcolor=[("invalid", palette["error"])],
     )
     style.configure(
         "TCombobox",
@@ -275,6 +280,12 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["background"],
         foreground=palette["text"],
         font=("TkDefaultFont", 10, "bold"),
+    )
+    style.configure(
+        "CX.ErrorText.TLabel",
+        background=palette["background"],
+        foreground=palette["error"],
+        font=("TkDefaultFont", 9, "bold"),
     )
     style.configure(
         "CX.Navigator.Treeview",

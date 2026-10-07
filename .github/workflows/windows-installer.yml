@@ -1,0 +1,49 @@
+name: Windows Installer Lifecycle
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer-lifecycle:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install frozen-build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install "pip==26.2.1"
+          pip install -e ".[release]"
+      - name: Build self-contained workstation
+        shell: pwsh
+        run: .\scripts\build_windows_standalone.ps1
+      - name: Build registered Windows installer
+        shell: pwsh
+        run: .\scripts\build_windows_installer.ps1 -SkipStandaloneBuild
+      - name: Validate install, launch, upgrade, and uninstall lifecycle
+        shell: pwsh
+        run: .\scripts\test_windows_installer_lifecycle.ps1
+      - name: Upload installer release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: CleanroomX-windows-installer-x64
+          path: |
+            dist/windows-installer/CleanroomX-Setup-*.exe
+            dist/windows-installer/CleanroomX-Setup-*.exe.sha256
+          if-no-files-found: error
+          retention-days: 14

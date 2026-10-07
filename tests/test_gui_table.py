@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 import os
 import tkinter as tk
@@ -27,6 +28,97 @@ def test_table_value_sort_key(value, expected) -> None:
 def test_table_value_sort_key_keeps_nonfinite_textual() -> None:
     assert table_value_sort_key(math.inf) == (1, "inf")
     assert table_value_sort_key(math.nan) == (1, "nan")
+
+
+@pytest.mark.parametrize(
+    ("lower", "higher"),
+    [("9007199254740992", "9007199254740993"),
+     ("1.00000000000000001", "1.00000000000000002"),
+     ("1e400", "2e400")],
+)
+def test_numeric_sort_preserves_displayed_precision(lower, higher) -> None:
+    assert table_value_sort_key(lower) < table_value_sort_key(higher)
+
+
+class _HeadlessTree:
+    def __init__(self, rows, selected=()):
+        self.rows = rows
+        self.order = list(rows)
+        self.selected = tuple(selected)
+        self.labels = {"name": "Name", "value": "Value"}
+
+    def get_children(self, _parent=""):
+        return tuple(self.order)
+
+    def set(self, iid, column):
+        return self.rows[iid][column]
+
+    def move(self, iid, _parent, index):
+        self.order.remove(iid)
+        self.order.insert(index, iid)
+
+    def heading(self, column, option=None, **kwargs):
+        if "text" in kwargs:
+            self.labels[column] = kwargs["text"]
+        return self.labels[column]
+
+    def selection(self):
+        return self.selected
+
+    def selection_set(self, selected):
+        self.selected = tuple(selected)
+
+    def exists(self, iid):
+        return iid in self.rows
+
+
+def _headless_behavior(tree):
+    behavior = object.__new__(TreeviewTableBehavior)
+    behavior.tree = tree
+    behavior.parent = ""
+    behavior.sortable_columns = ("name", "value")
+    behavior.copy_columns = ("name", "value")
+    behavior.sort_column = None
+    behavior.sort_descending = False
+    behavior._heading_text = {"name": "Name", "value": "Value"}
+    return behavior
+
+
+def test_descending_refresh_is_stable_for_equal_rows_without_changing_data() -> None:
+    rows = {
+        "first": {"name": "First", "value": "10"},
+        "second": {"name": "Second", "value": "10.0"},
+        "lower": {"name": "Lower", "value": "2"},
+        "missing": {"name": "Missing", "value": "—"},
+    }
+    tree = _HeadlessTree(rows)
+    before = copy.deepcopy(rows)
+    behavior = _headless_behavior(tree)
+    behavior.sort_by("value")
+    behavior.sort_by("value")
+    expected = ("first", "second", "lower", "missing")
+    assert tree.get_children() == expected
+    behavior.reapply_sort()
+    behavior.reapply_sort()
+    assert tree.get_children() == expected
+    assert tree.rows == before
+
+
+def test_copy_follows_visible_row_order_and_contains_line_breaks() -> None:
+    tree = _HeadlessTree(
+        {"a": {"name": "A\r\nline", "value": "2"},
+         "b": {"name": "B\tline", "value": "10"}},
+        selected=("a", "missing-row", "b"),
+    )
+    behavior = _headless_behavior(tree)
+    behavior.sort_by("value")
+    behavior.sort_by("value")
+    behavior._heading_text["name"] = "Na\rme"
+    assert behavior.selected_tsv(include_headers=True) == (
+        "Na me\tValue\nB line\t10\nA  line\t2"
+    )
+    assert behavior._select_all_event() == "break"
+    assert tree.selection() == ("b", "a")
 
 
 @pytest.fixture

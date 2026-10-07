@@ -1,0 +1,65 @@
+name: Production Acceptance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-acceptance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install production acceptance environment
+        run: |
+          python -m pip install "pip==26.2.1"
+          python -m pip install -e ".[dev]"
+          python -m pip check
+      - name: Evaluate machine-readable production contracts
+        run: python scripts/production_acceptance.py --output production-acceptance.json
+      - name: Enforce unsafe-API policy
+        run: python scripts/security_static_gate.py
+      - name: Run production acceptance regressions
+        run: >-
+          python -m pytest -q
+          tests/test_production_acceptance.py
+          tests/test_production_acceptance_contract.py
+          tests/test_golden_reference_project.py
+          tests/test_golden_facility_reference.py
+          tests/test_fault_injection_persistence.py
+          tests/test_packaging_contract.py
+          tests/test_windows_installer_packaging.py
+          tests/test_windows_standalone_packaging.py
+          tests/test_security_static_gate.py
+          tests/test_gui_constraints.py
+          tests/test_gui_requirements_editor.py
+          tests/test_spatial_documentation.py
+          tests/test_release_documentation_identity.py
+          tests/test_proofgraph_change_impact.py
+          tests/test_proofgraph_change_impact_cli.py
+          tests/test_proofgraph_project_requirements.py
+      - name: Re-run performance regression budgets
+        run: |
+          python scripts/benchmark_spatial_validation.py
+          python scripts/benchmark_project_bundle.py
+          python scripts/benchmark_proofgraph_change_impact.py
+      - name: Upload production acceptance evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: CleanroomX-production-acceptance
+          path: production-acceptance.json
+          if-no-files-found: error
+          retention-days: 30

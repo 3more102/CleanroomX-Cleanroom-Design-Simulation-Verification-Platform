@@ -4,13 +4,17 @@ import argparse
 import copy
 from datetime import datetime
 import json
+import logging
 from pathlib import Path
 import queue
+import sys
 import threading
 import uuid
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
+
+GUI_RUNTIME_LOGGER = logging.getLogger("cleanroomx.gui.runtime")
 
 from . import __version__
 from .autosave import (
@@ -70,6 +74,7 @@ from .project_diagnostics_cli import (
     _paths_alias,
 )
 from .gui_panels import ProjectDiagnosticsPanel
+from .gui_compliance import ComplianceRulePackPanel
 from .gui_constraints import ConstraintManagerDialog
 from .gui_requirements import RequirementsEditorDialog
 from .gui_command_palette import CommandPalette, PaletteCommand
@@ -81,7 +86,7 @@ from .gui_state import (
     save_gui_layout_state,
 )
 from .gui_theme import configure_ttk_theme, normalize_theme_name
-from .runtime_diagnostics import install_tk_exception_handler
+from .runtime_diagnostics import install_tk_exception_handler, record_gui_exception
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
@@ -2272,6 +2277,10 @@ class CleanroomXApp:
             command=self._refresh_engineering_panels,
         )
         verify_menu.add_command(
+            label="Compliance Rule Pack Manager",
+            command=self._activate_compliance_workspace,
+        )
+        verify_menu.add_command(
             label="Requirements Editor...",
             accelerator="Ctrl+Alt+R",
             command=self.show_requirements_editor,
@@ -2800,6 +2809,14 @@ class CleanroomXApp:
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
 
+        self.compliance_panel = ComplianceRulePackPanel(
+            self.notebook,
+            input_getter=self._active_compliance_input,
+            input_setter=self._apply_compliance_input,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.compliance_panel, text="Compliance")
+
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host
         self.workspace_panes.add(output_host, weight=1)
@@ -3035,12 +3052,19 @@ class CleanroomXApp:
         return dict(self._ui_layout_state)
 
     def _save_ui_layout_state(self) -> None:
+        state_path = getattr(self, "_ui_state_path", None)
         try:
+            if state_path is None:
+                raise AttributeError("GUI layout state path is unavailable")
             save_gui_layout_state(
-                self._ui_state_path,
+                state_path,
                 self._capture_ui_layout_state(),
             )
         except Exception:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to persist GUI layout state path=%s",
+                state_path,
+            )
             return
 
     def _restore_ui_layout_state(self) -> None:
@@ -3107,6 +3131,9 @@ class CleanroomXApp:
         problems_panel = getattr(self, "problems_panel", None)
         if problems_panel is not None:
             text_widgets.append(getattr(problems_panel, "detail", None))
+        compliance_panel = getattr(self, "compliance_panel", None)
+        if compliance_panel is not None:
+            compliance_panel.apply_theme(palette)
         for widget in text_widgets:
             if isinstance(widget, tk.Text):
                 widget.configure(
@@ -3127,6 +3154,10 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(self.theme_var.get(), redraw=redraw)
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -3339,6 +3370,93 @@ class CleanroomXApp:
         self.root.after_idle(self._apply_default_panel_sashes)
         self.status_var.set("Panel layout reset")
 
+    def _active_compliance_input(self) -> dict | None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            return None
+        if self._editor_analysis_id == analysis.id and hasattr(self, "input_text"):
+            text = self.input_text.get("1.0", "end-1c").strip()
+            if text:
+                try:
+                    payload = _strict_json_loads(text)
+                except (json.JSONDecodeError, ValueError):
+                    return None
+                return payload if isinstance(payload, dict) else None
+        return copy.deepcopy(analysis.input)
+
+    def _apply_compliance_input(self, payload: dict, description: str) -> bool:
+        if self._running:
+            self.status_var.set(
+                "Compliance rule editing is disabled while an analysis is running"
+            )
+            return False
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            self.status_var.set(
+                "Select a compliance rule-pack analysis before editing rules"
+            )
+            return False
+        try:
+            validate_analysis_input(
+                "compliance_check",
+                payload,
+                base_dir=self._base_dir(),
+            )
+            candidate = copy.deepcopy(payload)
+            self._perform_project_edit(
+                description,
+                lambda: setattr(analysis, "input", candidate),
+            )
+        except Exception as exc:
+            self.status_var.set(f"Compliance rule edit rejected: {exc}")
+            return False
+        self._invalidate_last_run_for(analysis.id)
+        self._load_analysis_into_editor(analysis)
+        self._update_title()
+        self._schedule_project_diagnostics_refresh()
+        return True
+
+    def _activate_compliance_workspace(self) -> None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None or analysis.kind != "compliance_check":
+            if analysis is not None:
+                try:
+                    self._commit_editor(analysis)
+                except Exception as exc:
+                    self.status_var.set(
+                        f"Cannot open compliance manager until current input is valid: {exc}"
+                    )
+                    return
+            analysis = next(
+                (
+                    item
+                    for item in self.project.analyses
+                    if item.kind == "compliance_check"
+                ),
+                None,
+            )
+            if analysis is None:
+                self.status_var.set(
+                    "No compliance rule-pack analysis is configured in this project"
+                )
+                return
+            self.project.active_analysis_id = analysis.id
+            if self.analysis_tree.exists(analysis.id):
+                self.analysis_tree.selection_set(analysis.id)
+                self.analysis_tree.focus(analysis.id)
+                self.analysis_tree.see(analysis.id)
+            self._load_analysis_into_editor(analysis)
+        else:
+            try:
+                self._commit_editor(analysis)
+            except Exception as exc:
+                self.status_var.set(f"Cannot open compliance manager: {exc}")
+                return
+        self.compliance_panel.refresh()
+        self.notebook.select(self.compliance_panel)
+        self.workspace_status_var.set("Workspace: Compliance")
+        self.status_var.set(f"Compliance rules: {analysis.name}")
+
     def _activate_proofgraph_workspace(self) -> None:
         viewer = getattr(self, "proofgraph_viewer", None)
         if viewer is None:
@@ -3450,6 +3568,10 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to assess project verification currency path=%s",
+                self.project_path,
+            )
             self._set_text(
                 self.verification_text,
                 f"Verification currency unavailable: {exc}\n",
@@ -3487,6 +3609,10 @@ class CleanroomXApp:
                 "\n".join(lines).rstrip() + "\n",
             )
         except Exception as exc:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to load persisted verification evidence path=%s",
+                self.project_path,
+            )
             viewer = getattr(self, "proofgraph_viewer", None)
             if viewer is not None:
                 viewer.set_documents([])
@@ -4633,19 +4759,42 @@ class CleanroomXApp:
                 workflow,
             )
         except ProjectSaveDurabilityError as exc:
+            reload_error = None
             try:
                 self.load_project_path(project_path)
-            except Exception:
-                pass
-            self.status_var.set(
-                "Verification bytes committed; save durability not confirmed"
-            )
+            except Exception as candidate_reload_error:
+                reload_error = candidate_reload_error
+                GUI_RUNTIME_LOGGER.exception(
+                    "Failed to reload project after durability warning path=%s",
+                    project_path,
+                )
+
+            if reload_error is None:
+                self.status_var.set(
+                    "Verification bytes committed; save durability not confirmed"
+                )
+                reload_note = ""
+            else:
+                self.status_var.set(
+                    "Verification bytes committed; durability unconfirmed; "
+                    "project reload failed"
+                )
+                reload_note = (
+                    "\n\nThe desktop could not reload the committed project revision:\n"
+                    f"{reload_error}\n\n"
+                    "The on-disk project bytes were committed and verified, but this "
+                    "desktop session may show an older project state. Reopen the "
+                    "project from disk and confirm the verification record before "
+                    "further edits."
+                )
+
             messagebox.showwarning(
                 "Verification save durability not confirmed",
                 (
                     "CleanroomX wrote and verified the project bytes containing the "
                     "verification record, but filesystem directory durability could "
-                    "not be confirmed.\n\n"
+                    "not be confirmed."
+                    f"{reload_note}\n\n"
                     f"Committed project SHA-256: {exc.committed_revision.sha256}"
                 ),
                 parent=self.root,
@@ -4840,6 +4989,9 @@ class CleanroomXApp:
         try:
             return self._project_state_signature() != baseline
         except Exception:
+            GUI_RUNTIME_LOGGER.exception(
+                "Failed to compute project dirty-state signature; treating project as modified"
+            )
             return True
 
     def _capture_saved_state(self) -> None:
@@ -4897,11 +5049,18 @@ class CleanroomXApp:
         if autosave_var is not None:
             autosave_var.set("Autosave: clean")
 
-    def _discard_current_autosave(self) -> None:
+    def _discard_current_autosave(
+        self,
+        *,
+        preserve_paths: tuple[str | Path, ...] = (),
+    ) -> None:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.discard_current_recoveries()
+            if preserve_paths:
+                manager.discard_current_recoveries(preserve_paths=preserve_paths)
+            else:
+                manager.discard_current_recoveries()
 
     def _discard_restored_recovery(self) -> None:
         artifact = getattr(self, "_restored_recovery_artifact", None)
@@ -5006,8 +5165,9 @@ class CleanroomXApp:
         if choice:
             self.save_project()
             return not self._has_unsaved_changes()
-        self._discard_current_autosave()
-        self._discard_restored_recovery()
+        # Choosing "Discard" authorizes replacement, but recovery evidence is
+        # retained until the replacement operation has actually validated and
+        # committed. Callers perform cleanup only after a successful transition.
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
@@ -5408,6 +5568,10 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        compliance_panel = getattr(self, "compliance_panel", None)
+        refresh_compliance = getattr(compliance_panel, "refresh", None)
+        if callable(refresh_compliance):
+            refresh_compliance()
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
             self._sync_spatial_selection_status()
@@ -5430,6 +5594,104 @@ class CleanroomXApp:
         wait_window = getattr(self.root, "wait_window", None)
         if callable(wait_window):
             wait_window(dialog)
+
+    def _run_ifc_background_task(self, label: str, operation):
+        """Run read-only IFC work off the Tk thread while keeping the UI responsive."""
+        root = self.root
+        if not all(
+            callable(getattr(root, name, None))
+            for name in ("after", "after_cancel", "wait_variable")
+        ):
+            return operation()
+
+        outcome: queue.Queue = queue.Queue(maxsize=1)
+        done = tk.BooleanVar(master=root, value=False)
+        state = {"cancelled": False, "after_id": None, "outcome": None}
+
+        dialog = tk.Toplevel(root)
+        dialog.title(label)
+        dialog.transient(root)
+        dialog.resizable(False, False)
+        frame = ttk.Frame(dialog, padding=16)
+        frame.grid(row=0, column=0, sticky="nsew")
+        ttk.Label(frame, text=label, wraplength=420, justify="left").grid(
+            row=0, column=0, sticky="w"
+        )
+        progress = ttk.Progressbar(frame, mode="indeterminate", length=360)
+        progress.grid(row=1, column=0, sticky="ew", pady=(12, 12))
+        ttk.Label(
+            frame,
+            text=(
+                "The IFC source is read in a background worker. Abandoning closes "
+                "this wait without applying any background result."
+            ),
+            wraplength=420,
+            justify="left",
+        ).grid(row=2, column=0, sticky="w")
+
+        def abandon() -> None:
+            if state["cancelled"]:
+                return
+            state["cancelled"] = True
+            self.status_var.set(
+                "IFC operation abandoned; no background result will be applied."
+            )
+            done.set(True)
+
+        ttk.Button(frame, text="Abandon", command=abandon).grid(
+            row=3, column=0, sticky="e", pady=(12, 0)
+        )
+        dialog.protocol("WM_DELETE_WINDOW", abandon)
+        dialog.grab_set()
+        progress.start(12)
+
+        def worker() -> None:
+            try:
+                result = operation()
+            except BaseException as exc:
+                outcome.put(("error", exc))
+            else:
+                outcome.put(("success", result))
+
+        def poll() -> None:
+            if state["cancelled"]:
+                return
+            try:
+                state["outcome"] = outcome.get_nowait()
+            except queue.Empty:
+                state["after_id"] = root.after(50, poll)
+                return
+            done.set(True)
+
+        threading.Thread(target=worker, daemon=True).start()
+        state["after_id"] = root.after(50, poll)
+        try:
+            root.wait_variable(done)
+        finally:
+            after_id = state.get("after_id")
+            if after_id is not None:
+                try:
+                    root.after_cancel(after_id)
+                except tk.TclError:
+                    pass
+            progress.stop()
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            try:
+                dialog.destroy()
+            except tk.TclError:
+                pass
+
+        if state["cancelled"]:
+            return None
+        kind, payload = state["outcome"]
+        if kind == "error":
+            if isinstance(payload, Exception):
+                raise payload
+            raise RuntimeError(f"IFC background worker terminated: {payload}")
+        return payload
 
     def _extract_ifc_candidate(
         self,
@@ -5463,6 +5725,21 @@ class CleanroomXApp:
                 "Review the current IFC file again before applying it."
             )
         return semantics, provenance
+
+    def _plan_ifc_candidate(
+        self,
+        project_snapshot: ProjectDocument,
+        source: Path,
+    ) -> tuple[dict, dict[str, str], dict]:
+        """Extract and plan an IFC revision against an immutable project snapshot."""
+        semantics, provenance = self._extract_ifc_candidate(source)
+        report = plan_ifc_semantic_reimport(
+            project_snapshot,
+            semantics,
+            source_name=provenance["source_name"],
+            source_sha256=provenance["source_sha256"],
+        )
+        return semantics, provenance, report
 
     def _refresh_after_ifc_edit(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
@@ -5498,7 +5775,13 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = self._extract_ifc_candidate(source)
+            candidate = self._run_ifc_background_task(
+                "Reading IFC spatial model…",
+                lambda: self._extract_ifc_candidate(source),
+            )
+            if candidate is None:
+                return False
+            semantics, provenance = candidate
             preview = layout_from_ifc_semantics(semantics)
         except Exception as exc:
             self.status_var.set("IFC import failed")
@@ -5536,11 +5819,17 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = self._revalidate_reviewed_ifc_source(
-                source,
-                expected_semantics=semantics,
-                expected_provenance=provenance,
+            candidate = self._run_ifc_background_task(
+                "Revalidating IFC source…",
+                lambda: self._revalidate_reviewed_ifc_source(
+                    source,
+                    expected_semantics=semantics,
+                    expected_provenance=provenance,
+                ),
             )
+            if candidate is None:
+                return False
+            semantics, provenance = candidate
             layout = self._perform_project_edit(
                 "Import IFC spatial layout",
                 lambda: apply_ifc_semantics_to_project(
@@ -5586,13 +5875,14 @@ class CleanroomXApp:
         if source is None:
             return None
         try:
-            semantics, provenance = extract_ifc_semantics(source)
-            report = plan_ifc_semantic_reimport(
-                self.project,
-                semantics,
-                source_name=provenance["source_name"],
-                source_sha256=provenance["source_sha256"],
+            project_snapshot = project_from_dict(copy.deepcopy(self.project.to_dict()))
+            planned = self._run_ifc_background_task(
+                "Reviewing IFC revision…",
+                lambda: self._plan_ifc_candidate(project_snapshot, source),
             )
+            if planned is None:
+                return None
+            semantics, provenance, report = planned
         except Exception as exc:
             self.status_var.set("IFC re-import review failed")
             messagebox.showerror(
@@ -5635,13 +5925,14 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = extract_ifc_semantics(source)
-            report = plan_ifc_semantic_reimport(
-                self.project,
-                semantics,
-                source_name=provenance["source_name"],
-                source_sha256=provenance["source_sha256"],
+            project_snapshot = project_from_dict(copy.deepcopy(self.project.to_dict()))
+            planned = self._run_ifc_background_task(
+                "Planning IFC re-import…",
+                lambda: self._plan_ifc_candidate(project_snapshot, source),
             )
+            if planned is None:
+                return False
+            semantics, provenance, report = planned
         except Exception as exc:
             self.status_var.set("IFC re-import planning failed")
             messagebox.showerror(
@@ -5679,11 +5970,17 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = self._revalidate_reviewed_ifc_source(
-                source,
-                expected_semantics=semantics,
-                expected_provenance=provenance,
+            candidate = self._run_ifc_background_task(
+                "Revalidating IFC source…",
+                lambda: self._revalidate_reviewed_ifc_source(
+                    source,
+                    expected_semantics=semantics,
+                    expected_provenance=provenance,
+                ),
             )
+            if candidate is None:
+                return False
+            semantics, provenance = candidate
             self._perform_project_edit(
                 "Apply IFC re-import",
                 lambda: reimport_ifc_semantics_to_project(
@@ -5850,7 +6147,17 @@ class CleanroomXApp:
 
     def restore_recovery_path(self, path: str | Path) -> None:
         recovered = restore_recovery_artifact(path)
-        self._discard_current_autosave()
+        previous_artifact = getattr(self, "_restored_recovery_artifact", None)
+        same_artifact = (
+            previous_artifact is not None
+            and previous_artifact.resolve(strict=False)
+            == recovered.artifact_path.resolve(strict=False)
+        )
+        self._discard_current_autosave(
+            preserve_paths=(recovered.artifact_path,),
+        )
+        if previous_artifact is not None and not same_artifact:
+            self._discard_restored_recovery()
         self.project = recovered.project
         self.project_path = None
         self._project_file_revision = None
@@ -6030,8 +6337,10 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        replacement = new_project()
         self._discard_current_autosave()
-        self.project = new_project()
+        self._discard_restored_recovery()
+        self.project = replacement
         self.project_path = None
         self._project_file_revision = None
         self._recovery_source_path = None
@@ -6333,7 +6642,10 @@ class CleanroomXApp:
             project_revision,
             migration_info,
         ) = load_project_document_with_revision_info(project_path)
+        # The replacement is validated before current recovery evidence is
+        # discarded, so a failed open cannot destroy the only recoverable copy.
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         self.project = project
         self.project_path = project_path
         self._project_file_revision = project_revision
@@ -6940,16 +7252,20 @@ class CleanroomXApp:
         def worker() -> None:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
-            except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
+            except BaseException as exc:
+                # Preserve the exception object until the GUI boundary so the
+                # durable incident logger can retain its worker traceback.
+                # Thread-local exits must also release the GUI's run lock.
+                self._queue.put(("error", generation, analysis_id, exc))
                 return
 
             history_evidence = None
             history_error = None
             try:
                 history_evidence = build_run_history_evidence(payload, result)
-            except Exception as exc:  # audit preparation must not hide a valid result
-                history_error = str(exc)
+            except BaseException as exc:  # audit preparation must not hide a valid result
+                # Keep traceback-bearing evidence until the GUI boundary logs it.
+                history_error = exc
             self._queue.put(
                 (
                     "success",
@@ -6959,7 +7275,12 @@ class CleanroomXApp:
                 )
             )
 
-        threading.Thread(target=worker, daemon=True).start()
+        try:
+            threading.Thread(target=worker, daemon=True).start()
+        except Exception as exc:
+            # Construction/start failures use the same traceback-preserving
+            # completion boundary as worker failures, restoring the run controls.
+            self._queue.put(("error", generation, analysis_id, exc))
 
     def cancel_run(self) -> None:
         if not self._running or self._abandon_requested:
@@ -6989,8 +7310,22 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
+                    if isinstance(payload, BaseException):
+                        report = record_gui_exception(
+                            f"Run engineering analysis {analysis_id}",
+                            payload,
+                        )
+                        self.status_var.set(f"Analysis failed · {report.reference}")
+                        detail = (
+                            report.user_message()
+                            + "\n\nNo completed result from this failed run was accepted "
+                            "or added to run history. Correct the reported cause and retry."
+                        )
+                    else:
+                        # Compatibility for a queued legacy/string failure.
+                        self.status_var.set("Analysis failed")
+                        detail = str(payload)
+                    messagebox.showerror("Analysis failed", detail, parent=self.root)
                 else:
                     history_evidence = None
                     history_error = None
@@ -7026,7 +7361,7 @@ class CleanroomXApp:
                                 analysis, run, history_evidence
                             )
                         except RunHistoryIntegrityError as exc:
-                            history_error = str(exc)
+                            history_error = exc
 
                     self._runs_by_analysis[analysis_id] = run
                     self.last_run = run
@@ -7037,8 +7372,19 @@ class CleanroomXApp:
                             f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
+                        if isinstance(history_error, BaseException):
+                            history_report = record_gui_exception(
+                                f"Record run history for analysis {analysis_id}",
+                                history_error,
+                            )
+                            history_detail = history_report.user_message()
+                            history_reference = f" · {history_report.reference}"
+                        else:
+                            history_detail = str(history_error)
+                            history_reference = ""
                         self.status_var.set(
-                            f"Completed — {run.title}; run history was not updated."
+                            f"Completed — {run.title}; run history was not updated"
+                            f"{history_reference}."
                         )
                         messagebox.showwarning(
                             "Run history not updated",
@@ -7048,13 +7394,17 @@ class CleanroomXApp:
                                 "evidence could not be prepared or the existing history failed "
                                 "integrity validation. Existing history was left unchanged. "
                                 "Export the run bundle if this result must be retained.\n\n"
-                                f"{history_error}"
+                                f"{history_detail}"
                             ),
                             parent=self.root,
                         )
         except queue.Empty:
             pass
-        self.root.after(100, self._poll_worker)
+        finally:
+            # A single unexpected result-rendering/history callback failure must
+            # not permanently stop worker completion polling. The exception is
+            # still allowed to propagate to the Tk runtime exception boundary.
+            self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         self._set_text(
@@ -7328,9 +7678,10 @@ class CleanroomXApp:
             return
         self._save_ui_layout_state()
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            manager.shutdown(wait=False)
+            manager.shutdown(wait=True)
         self.root.destroy()
 
 
@@ -7383,7 +7734,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.autosave_interval_seconds < 0:
         parser.error("--autosave-interval-seconds must be zero or greater")
     if args.check:
-        print(json.dumps(application_info(), indent=2, ensure_ascii=False))
+        payload = json.dumps(application_info(), indent=2, ensure_ascii=False)
+        stream = getattr(sys, "stdout", None)
+        if stream is not None:
+            try:
+                stream.write(payload + "\n")
+                stream.flush()
+            except (AttributeError, OSError, ValueError):
+                # PyInstaller --windowed executables may not have a usable stdout.
+                # Keep the non-interactive health check capable of exiting cleanly.
+                pass
         return 0
 
     registry = validate_application_registry()

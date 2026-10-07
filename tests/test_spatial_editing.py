@@ -4,6 +4,8 @@ import copy
 
 import pytest
 
+import cleanroomx.spatial as spatial_module
+
 from cleanroomx.project import ProjectDocument, load_project_document, save_project_document
 from cleanroomx.spatial import SpatialDesignWorkspace, _Hit, empty_layout, normalize_layout
 from cleanroomx.spatial_editing import duplicate_spatial_item, update_spatial_properties
@@ -210,17 +212,44 @@ def test_workspace_duplicate_is_one_history_transaction_with_selection(layout):
     assert project.metadata["spatial_layout"] is workspace.layout
 
 
-def test_workspace_rejected_properties_keep_model_history_and_editor_text(layout, monkeypatch):
+def test_workspace_delete_requires_confirmation_and_preserves_cancelled_edit(layout, monkeypatch):
+    workspace, project, events = _workspace(layout)
+    before = copy.deepcopy(workspace.layout)
+
+    monkeypatch.setattr(spatial_module.messagebox, "askyesno", lambda *args, **kwargs: False)
+    assert workspace.request_delete_selected() is False
+    assert workspace.layout == before
+    assert project.metadata["spatial_layout"] == before
+    assert events["changes"] == []
+    assert events["history"] == []
+    assert events["statuses"][-1] == "Spatial deletion cancelled"
+
+    monkeypatch.setattr(spatial_module.messagebox, "askyesno", lambda *args, **kwargs: True)
+    assert workspace.request_delete_selected() is True
+    assert workspace.selected is None
+    assert not workspace.layout["rooms"]
+    assert len(events["changes"]) == 1
+    assert len(events["history"]) == 1
+
+
+def test_workspace_rejected_properties_keep_model_history_and_editor_text(layout):
     workspace, project, events = _workspace(layout)
     before = project.metadata["spatial_layout"]
+
     class Value:
+        def __init__(self, value=""):
+            self.value = value
+
         def get(self):
-            return "not a number"
-    workspace._property_vars = {"height_m": Value()}
-    errors = []
-    monkeypatch.setattr("cleanroomx.spatial.messagebox.showerror", lambda *args, **kwargs: errors.append(args))
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    workspace._property_vars = {"height_m": Value("not a number")}
+    workspace._property_error_var = Value()
     workspace.apply_properties()
-    assert errors and "Height" in errors[0][1]
+    assert "Height" in workspace._property_error_var.get()
     assert events["changes"] == events["history"] == []
     assert project.metadata["spatial_layout"] is before
     assert workspace.layout is before

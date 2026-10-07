@@ -107,7 +107,15 @@ def _resolve_pointer(document: Any, pointer: str) -> Any:
             current = current[token]
             continue
         if isinstance(current, list):
-            if not token.isdigit():
+            # RFC 6901 array indices are ASCII, with no leading zeroes.
+            # Bound the token before int() to contain arbitrary-size references.
+            if (
+                not current
+                or not token
+                or any(character < "0" or character > "9" for character in token)
+                or (len(token) > 1 and token[0] == "0")
+                or len(token) > len(str(len(current) - 1))
+            ):
                 return _MISSING
             index = int(token)
             if index >= len(current):

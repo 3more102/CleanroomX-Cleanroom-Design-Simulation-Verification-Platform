@@ -657,6 +657,53 @@ def test_running_analysis_prevents_switching_to_another_analysis():
     assert "abandon" in app.status_var.value.lower()
 
 
+def test_load_analysis_refreshes_compliance_panel() -> None:
+    analysis = AnalysisDocument(
+        id="compliance",
+        name="Compliance A",
+        kind="compliance_check",
+        input={"name": "Compliance A"},
+    )
+
+    class Text:
+        def __init__(self):
+            self.value = ""
+
+        def delete(self, *_args):
+            self.value = ""
+
+        def insert(self, _index, value):
+            self.value = value
+
+        def edit_modified(self, _value):
+            return None
+
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    calls = []
+
+    class Panel:
+        def refresh(self):
+            calls.append("refresh")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.input_text = Text()
+    app.status_var = Status()
+    app.compliance_panel = Panel()
+    app.refresh_structure = lambda silent=False: None
+    app._restore_run_for = lambda _analysis_id: None
+
+    app._load_analysis_into_editor(analysis)
+
+    assert app._editor_analysis_id == "compliance"
+    assert calls == ["refresh"]
+
+
 def test_unsaved_state_detects_uncommitted_editor_changes():
     class Value:
         def __init__(self, value):
@@ -1095,6 +1142,15 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert payload["registry_validation"]["status"] == "ok"
     assert payload["registry_validation"]["analysis_count"] == payload["analysis_count"]
     assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
+
+
+def test_gui_check_mode_tolerates_windowed_runtime_without_stdout(monkeypatch):
+    root_created = []
+    monkeypatch.setattr(gui_module.sys, "stdout", None)
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root_created.append(True))
+
+    assert main(["--check"]) == 0
+    assert root_created == []
 
 
 def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeypatch):
@@ -1953,6 +2009,103 @@ def test_gui_project_requirements_verification_persists_adverse_evidence(
     assert "Adverse/incomplete verification persisted" in app.status_var.value
 
 
+def test_gui_project_requirements_verification_surfaces_reload_failure_after_durability_error(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Room A verification",
+        kind="room_verification",
+        input={},
+    )
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="GUI verification durability failure",
+            analyses=[analysis],
+            active_analysis_id="room-a",
+        ),
+    )
+    revision = capture_project_file_revision(project_path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.project = load_project_document(project_path)
+    app.status_var = Status()
+    selected = app.project.analysis_by_id("room-a")
+    app._current_analysis = lambda: selected
+    app._editor_analysis = lambda: None
+    app._has_unsaved_changes = lambda: False
+
+    class Workflow:
+        analysis_name = "Room A verification"
+        source_revision = revision.sha256
+        workflow_sha256 = "c" * 64
+        verification = {
+            "status": "pass",
+            "complete": True,
+            "verified": True,
+            "verification_sha256": "d" * 64,
+            "summary": {
+                "pass_count": 1,
+                "fail_count": 0,
+                "not_checked_count": 0,
+            },
+        }
+
+    monkeypatch.setattr(
+        gui_module,
+        "run_project_requirements_workflow",
+        lambda path, analysis_id: Workflow(),
+    )
+
+    def fail_after_commit(path, workflow):
+        raise gui_module.ProjectSaveDurabilityError(path, revision)
+
+    monkeypatch.setattr(
+        gui_module,
+        "persist_project_requirements_workflow_run",
+        fail_after_commit,
+    )
+
+    def fail_reload(_path):
+        raise RuntimeError("synthetic reload failure")
+
+    app.load_project_path = fail_reload
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app.persist_project_requirements_verification() is False
+
+    assert errors == []
+    assert warnings[-1][0] == "Verification save durability not confirmed"
+    assert "synthetic reload failure" in warnings[-1][1]
+    assert "may show an older project state" in warnings[-1][1]
+    assert revision.sha256 in warnings[-1][1]
+    assert "project reload failed" in app.status_var.value
+
+
 def test_verification_history_currency_context_applies_only_to_latest_record():
     latest_record = {
         "sequence": 9,
@@ -2227,4 +2380,95 @@ def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_b
     assert errors
     assert errors[-1][0] == "Project dossier export failed"
     assert "project source changed before report publication" in errors[-1][1]
+
+def test_worker_failure_keeps_traceback_for_runtime_incident_and_stays_operator_safe(
+    monkeypatch,
+):
+    import queue
+    from types import SimpleNamespace
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    failure = RuntimeError("synthetic solver failure")
+    app._queue = queue.Queue()
+    app._queue.put(("error", 11, "analysis-a", failure))
+    app._run_generation = 11
+    app._abandon_requested = False
+    app._running = True
+    app.status_var = Status()
+    app.root = Root()
+    app._set_running = lambda running: setattr(app, "_running", running)
+
+    recorded = []
+    report = SimpleNamespace(
+        reference="CX-RUN-1234",
+        user_message=lambda: (
+            "Run engineering analysis analysis-a did not complete.\n\n"
+            "synthetic solver failure\n\nError reference: CX-RUN-1234"
+        ),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "record_gui_exception",
+        lambda operation, exc: recorded.append((operation, exc)) or report,
+    )
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert recorded == [("Run engineering analysis analysis-a", failure)]
+    assert app.status_var.value == "Analysis failed · CX-RUN-1234"
+    assert errors and errors[0][0] == "Analysis failed"
+    assert "synthetic solver failure" in errors[0][1]
+    assert "CX-RUN-1234" in errors[0][1]
+    assert "Traceback" not in errors[0][1]
+    assert "No completed result" in errors[0][1]
+    assert app.root.delay == 100
+
+
+def test_worker_poll_reschedules_after_unexpected_result_processing_failure():
+    import queue
+
+    class Root:
+        def __init__(self):
+            self.calls = []
+
+        def after(self, delay, callback):
+            self.calls.append((delay, callback))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._queue = queue.Queue()
+    app._queue.put(("success", 12, "analysis-a", object()))
+    app._run_generation = 12
+    app._abandon_requested = False
+    app._running = True
+    app.root = Root()
+
+    def fail_set_running(_running):
+        raise RuntimeError("synthetic result-processing failure")
+
+    app._set_running = fail_set_running
+
+    with pytest.raises(RuntimeError, match="synthetic result-processing failure"):
+        app._poll_worker()
+
+    assert len(app.root.calls) == 1
+    delay, callback = app.root.calls[0]
+    assert delay == 100
+    assert callback.__self__ is app
+    assert callback.__func__ is CleanroomXApp._poll_worker
 

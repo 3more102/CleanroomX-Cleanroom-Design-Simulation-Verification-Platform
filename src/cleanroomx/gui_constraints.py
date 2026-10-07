@@ -13,6 +13,8 @@ from .compliance_rulepack import (
     compliance_check_from_dict,
 )
 from .project import ProjectDocument
+from .runtime_diagnostics import record_gui_exception
+from .gui_input_validation import parse_finite_number, parse_json_field
 
 
 _OPERATORS = ("exists", "equals", "min", "max", "range", "one_of")
@@ -286,7 +288,7 @@ class _RuleDialog(tk.Toplevel):
     def _accept(self) -> None:
         operator = self.operator_var.get()
         try:
-            tolerance = float(self.vars["tolerance"].get().strip() or "0")
+            tolerance = parse_finite_number(self.vars["tolerance"].get().strip() or "0", "Tolerance")
         except ValueError:
             messagebox.showerror(
                 "Invalid tolerance",
@@ -304,11 +306,11 @@ class _RuleDialog(tk.Toplevel):
         if operator != "exists":
             expected_text = self.vars["expected"].get().strip()
             try:
-                rule["expected"] = json.loads(expected_text)
-            except json.JSONDecodeError as exc:
+                rule["expected"] = parse_json_field(expected_text, "Expected")
+            except ValueError as exc:
                 messagebox.showerror(
                     "Invalid expected value",
-                    f"Expected must be valid JSON.\n\n{exc}",
+                    str(exc),
                     parent=self,
                 )
                 return
@@ -530,8 +532,19 @@ class ConstraintManagerDialog(tk.Toplevel):
     def _apply(self, description: str, mutation: Callable[[ProjectDocument], Any], *, select: str | None = None) -> bool:
         try:
             result = self._apply_project_edit(description, mutation)
-        except Exception as exc:
+        except ValueError as exc:
             messagebox.showerror("Constraint update failed", str(exc), parent=self)
+            return False
+        except Exception as exc:
+            report = record_gui_exception(
+                f"Constraint editor: {description}",
+                exc,
+            )
+            messagebox.showerror(
+                "Constraint update failed",
+                report.user_message(),
+                parent=self,
+            )
             return False
         selected = result if isinstance(result, str) else select
         self.refresh(select_analysis_id=selected)

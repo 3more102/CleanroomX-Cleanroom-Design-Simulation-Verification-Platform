@@ -81,6 +81,41 @@ def test_autosave_writes_separate_artifact_and_preserves_source(tmp_path):
         manager.shutdown(wait=True)
 
 
+
+def test_discard_current_recoveries_preserves_selected_artifact(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=5,
+        session_id="session-a",
+    )
+    try:
+        manager.begin_project(source)
+        for marker in (1, 2):
+            assert manager.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            ) is True
+            manager.wait_for_idle()
+
+        selected = manager.status().artifact_path
+        assert selected is not None
+        before = set(recovery_dir.glob("*.recovery.json"))
+        assert len(before) == 2
+
+        status = manager.discard_current_recoveries(
+            preserve_paths=(selected,),
+        )
+
+        assert status.state == "idle"
+        assert "preserved" in status.message.lower()
+        assert selected.exists()
+        assert set(recovery_dir.glob("*.recovery.json")) == {selected}
+    finally:
+        manager.shutdown(wait=True)
+
+
 def test_autosave_skips_identical_snapshot(tmp_path):
     source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
     manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
@@ -990,3 +1025,38 @@ def test_failed_post_write_integrity_verification_preserves_previous_history(
         assert list(recovery_dir.glob("*.recovery.json")) == [previous]
     finally:
         manager.shutdown(wait=True)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery-directory permission semantics")
+def test_recovery_directory_permission_failure_is_not_silenced(tmp_path, monkeypatch):
+    recovery_dir = tmp_path / "recovery"
+
+    def fail_chmod(_self, _mode):
+        raise OSError("permission hardening unavailable")
+
+    monkeypatch.setattr(Path, "chmod", fail_chmod)
+
+    with pytest.raises(
+        PermissionError,
+        match="unable to secure recovery directory permissions",
+    ) as exc:
+        autosave_module._ensure_recovery_dir(recovery_dir)
+
+    assert isinstance(exc.value.__cause__, OSError)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery-directory permission semantics")
+def test_recovery_directory_rejects_permissions_broader_than_owner_only(
+    tmp_path, monkeypatch
+):
+    recovery_dir = tmp_path / "recovery"
+    recovery_dir.mkdir(mode=0o755)
+    recovery_dir.chmod(0o755)
+
+    monkeypatch.setattr(Path, "chmod", lambda _self, _mode: None)
+
+    with pytest.raises(
+        PermissionError,
+        match="permissions are too broad",
+    ):
+        autosave_module._ensure_recovery_dir(recovery_dir)

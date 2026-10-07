@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tempfile
 import time
 import tracemalloc
@@ -20,6 +20,14 @@ CASES = (
     ("large", 8 * 1024 * 1024),
     ("stress", 32 * 1024 * 1024),
 )
+
+# These are intentionally conservative CI regression ceilings. The validated
+# 2026-10-05 Python 3.13 stress baseline was ~0.18 s export, ~0.10 s verify,
+# ~0.18 s extract, and ~68 MiB peak traced Python memory. The ceilings below
+# retain broad hosted-runner margin while still detecting catastrophic
+# recomputation or memory-growth regressions.
+STRESS_MAX_PHASE_SECONDS = 3.0
+STRESS_MAX_PEAK_PYTHON_BYTES = 256 * 1024 * 1024
 
 
 def _write_json_payload(path: Path, target_bytes: int) -> None:
@@ -55,6 +63,61 @@ def _project(dependency_name: str) -> ProjectDocument:
     )
 
 
+def _validate_extracted_dependency(
+    label: str,
+    extracted_root: Path,
+    verify_report: dict,
+    *,
+    source_size: int,
+) -> Path:
+    """Verify the extracted dependency at its manifest-defined portable path."""
+    dependencies = verify_report.get("dependencies")
+    if verify_report.get("dependency_count") != 1 or not isinstance(dependencies, list):
+        raise RuntimeError(
+            f"{label} bundle verification expected exactly one dependency"
+        )
+    if len(dependencies) != 1 or not isinstance(dependencies[0], dict):
+        raise RuntimeError(
+            f"{label} bundle verification returned inconsistent dependency metadata"
+        )
+
+    record = dependencies[0]
+    archive_path = record.get("path")
+    expected_size = record.get("size_bytes")
+    if not isinstance(archive_path, str) or not archive_path:
+        raise RuntimeError(
+            f"{label} bundle verification returned an invalid dependency path"
+        )
+    if (
+        isinstance(expected_size, bool)
+        or not isinstance(expected_size, int)
+        or expected_size < 0
+    ):
+        raise RuntimeError(
+            f"{label} bundle verification returned an invalid dependency size"
+        )
+    if expected_size != source_size:
+        raise RuntimeError(
+            f"{label} bundle dependency size changed across export/verification: "
+            f"{expected_size} != {source_size}"
+        )
+
+    portable_path = PurePosixPath(archive_path)
+    if portable_path.is_absolute() or ".." in portable_path.parts:
+        raise RuntimeError(
+            f"{label} bundle verification returned an unsafe dependency path"
+        )
+    extracted_dependency = extracted_root.joinpath(*portable_path.parts)
+    if (
+        not extracted_dependency.is_file()
+        or extracted_dependency.stat().st_size != expected_size
+    ):
+        raise RuntimeError(
+            f"{label} bundle extraction did not reproduce the verified dependency"
+        )
+    return extracted_dependency
+
+
 def main() -> int:
     results = []
     with tempfile.TemporaryDirectory(prefix="cleanroomx-bundle-benchmark-") as raw:
@@ -85,6 +148,30 @@ def main() -> int:
             extract_seconds = time.perf_counter() - start
             _, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
+
+            _validate_extracted_dependency(
+                label,
+                extracted,
+                verify_report,
+                source_size=dependency.stat().st_size,
+            )
+            if label == "stress":
+                phase_times = {
+                    "export": export_seconds,
+                    "verify": verify_seconds,
+                    "extract": extract_seconds,
+                }
+                for phase, seconds in phase_times.items():
+                    if seconds > STRESS_MAX_PHASE_SECONDS:
+                        raise RuntimeError(
+                            f"stress bundle {phase} exceeded CI regression budget: "
+                            f"{seconds:.6f}s > {STRESS_MAX_PHASE_SECONDS:.6f}s"
+                        )
+                if peak > STRESS_MAX_PEAK_PYTHON_BYTES:
+                    raise RuntimeError(
+                        "stress bundle exceeded CI traced-memory regression budget: "
+                        f"{peak} > {STRESS_MAX_PEAK_PYTHON_BYTES} bytes"
+                    )
 
             results.append(
                 {

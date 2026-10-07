@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import stat
 import threading
 import time
 import uuid
@@ -147,8 +148,16 @@ def _ensure_recovery_dir(path: Path) -> Path:
     if os.name != "nt":
         try:
             path.chmod(0o700)
-        except OSError:
-            pass
+            permissions = stat.S_IMODE(path.stat().st_mode)
+        except OSError as exc:
+            raise PermissionError(
+                f"unable to secure recovery directory permissions: {path}"
+            ) from exc
+        if permissions & 0o077:
+            raise PermissionError(
+                f"recovery directory permissions are too broad: {path} "
+                f"has mode {permissions:#05o}; expected owner-only access"
+            )
     return path
 
 
@@ -941,9 +950,15 @@ class AutosaveManager:
     def _clear_identity_locked(
         self,
         identity: str,
+        *,
+        preserve_paths: tuple[str | Path, ...] = (),
     ) -> tuple[tuple[Path, OSError], ...]:
         self._epochs[identity] = self._epochs.get(identity, 0) + 1
         self._last_saved_digest.pop(identity, None)
+        preserved = {
+            Path(path).resolve(strict=False)
+            for path in preserve_paths
+        }
         if (
             self._pending_request is not None
             and self._pending_request.project_identity == identity
@@ -953,6 +968,9 @@ class AutosaveManager:
         failures: list[tuple[Path, OSError]] = []
         remaining: set[Path] = set()
         for artifact in self._artifacts_by_identity.get(identity, set()):
+            if artifact.resolve(strict=False) in preserved:
+                remaining.add(artifact)
+                continue
             try:
                 artifact.unlink(missing_ok=True)
             except OSError as exc:
@@ -981,13 +999,26 @@ class AutosaveManager:
             artifact_path=artifact,
         )
 
-    def discard_current_recoveries(self) -> AutosaveStatus:
+    def discard_current_recoveries(
+        self,
+        *,
+        preserve_paths: tuple[str | Path, ...] = (),
+    ) -> AutosaveStatus:
+        """Invalidate the current recovery epoch without deleting selected evidence."""
         with self._lock:
-            failures = self._clear_identity_locked(self._current_identity)
+            failures = self._clear_identity_locked(
+                self._current_identity,
+                preserve_paths=preserve_paths,
+            )
             if failures:
                 self._set_cleanup_failure_locked(
                     "Autosave recovery discard incomplete",
                     failures,
+                )
+            elif preserve_paths:
+                self._set_status_locked(
+                    "idle",
+                    "Autosave recovery state cleared; selected recovery preserved",
                 )
             else:
                 self._set_status_locked("idle", "Autosave recovery discarded")

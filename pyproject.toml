@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -14,6 +14,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 bim = ["ifcopenshell"]
+release = ["pyinstaller==6.22.3", "ifcopenshell==0.9.0"]
 
 [project.scripts]
 cleanroomx = "cleanroomx.cli:main"
@@ -25,6 +26,7 @@ cleanroomx-project-dossier = "cleanroomx.project_dossier_cli:main"
 cleanroomx-project-verify = "cleanroomx.project_verify_cli:main"
 cleanroomx-project-traceability = "cleanroomx.project_requirements_traceability_cli:main"
 cleanroomx-verification-history = "cleanroomx.verification_history_cli:main"
+cleanroomx-proofgraph-diff = "cleanroomx.proofgraph_change_impact_cli:main"
 cleanroomx-ifc = "cleanroomx.bim_ifc_cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
 cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
@@ -52,6 +54,9 @@ cleanroomx-damper-study = "cleanroomx.damper_study_cli:main"
 cleanroomx-dossier = "cleanroomx.dossier_cli:main"
 cleanroomx-consistency = "cleanroomx.consistency_cli:main"
 cleanroomx-assurance-snapshot = "cleanroomx.assurance_snapshot_cli:main"
+
+[project.gui-scripts]
+cleanroomx-desktop = "cleanroomx.gui:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

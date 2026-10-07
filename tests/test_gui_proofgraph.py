@@ -24,6 +24,29 @@ from cleanroomx.proofgraph_models import (
 )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [("kind", [], "must be a string"),
+     ("kind", {}, "must be a string"),
+     ("kind", None, "must be a string"),
+     ("kind", 1, "must be a string"),
+     ("provenance", None, "must be an array"),
+     ("provenance", {}, "must be an array"),
+     ("provenance", "wrong", "must be an array")],
+)
+def test_gui_projection_rejects_malformed_evidence_with_field_context(
+    field, value, reason
+) -> None:
+    document = _sample_graph()
+    document.pop("graph_sha256")
+    document["evidence"][0][field] = value
+    before = copy.deepcopy(document)
+    with pytest.raises(ValueError) as caught:
+        proofgraph_projection(document)
+    assert str(caught.value) == f"proofgraph.evidence[0].{field} {reason}"
+    assert document == before
+
+
 def _sample_graph() -> dict:
     requirement = Requirement(
         id="REQ-PRESSURE",

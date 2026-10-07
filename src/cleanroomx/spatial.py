@@ -165,7 +165,7 @@ def normalize_layout(value: Any) -> dict:
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            for field in ("classification", "analysis_room_name"):
+            for field in ("zone", "classification", "analysis_room_name"):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
                     if text:
@@ -1650,6 +1650,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_rows: dict[str, ttk.Frame] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._property_error_var = tk.StringVar(value="")
         self._workspace_mode = tk.StringVar(value="split")
         self._inspector_visible = tk.BooleanVar(value=True)
         self._history_can_undo = False
@@ -1706,7 +1707,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(commandbar, text="Duplicate", command=self.duplicate_selected).pack(
             side="left", padx=2
         )
-        ttk.Button(commandbar, text="Delete", width=7, command=self.delete_selected).pack(
+        ttk.Button(commandbar, text="Delete", width=7, command=self.request_delete_selected).pack(
             side="left", padx=2
         )
         ttk.Separator(commandbar, orient="vertical").pack(
@@ -1976,6 +1977,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._selection_var,
             wraplength=310,
         ).pack(fill="x", pady=(3, 8))
+        self._property_error_label = ttk.Label(
+            inspector,
+            textvariable=self._property_error_var,
+            style="CX.ErrorText.TLabel",
+            wraplength=300,
+            justify="left",
+        )
+        self._property_error_label.pack(fill="x", pady=(0, 6))
+        self._property_error_label.pack_forget()
 
         property_groups = (
             (
@@ -1993,6 +2003,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             (
                 "Cleanroom",
                 (
+                    ("zone", "Zone", ""),
                     ("classification", "Classification", ""),
                     ("pressure_pa", "Design pressure", "Pa"),
                     ("analysis_room_name", "Analysis link", ""),
@@ -2027,6 +2038,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._property_vars[key] = var
                 entry = ttk.Entry(value_frame, textvariable=var, width=16)
                 entry.pack(side="left")
+                entry.bind("<KeyRelease>", lambda _event: self._clear_property_error())
                 self._property_entries[key] = entry
                 if unit:
                     ttk.Label(value_frame, text=unit, width=4).pack(
@@ -2081,7 +2093,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
             canvas.bind("<Control-d>", self._on_duplicate_shortcut)
-            canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Delete>", lambda event: self.request_delete_selected())
             canvas.bind("<Left>", lambda event: self._nudge_selected(-1, 0))
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
@@ -2092,11 +2104,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         if mode not in {"2d", "3d", "split"}:
             mode = "split"
             self._workspace_mode.set(mode)
+        attached_panes = {str(pane) for pane in self._view_panes.panes()}
         for frame in (self._two_d_frame, self._three_d_frame):
-            try:
+            if str(frame) in attached_panes:
                 self._view_panes.forget(frame)
-            except tk.TclError:
-                pass
         if mode in {"2d", "split"}:
             self._view_panes.add(self._two_d_frame, weight=5 if mode == "split" else 1)
         if mode in {"3d", "split"}:
@@ -2335,6 +2346,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         name = str(item.get("name") or self.selected.item_id)
         if self.selected.kind == "room":
             parts = [f"Room: {name}"]
+            zone = str(item.get("zone") or "").strip()
+            if zone:
+                parts.append(f"Zone: {zone}")
             classification = str(item.get("classification") or "").strip()
             if classification:
                 parts.append(classification)
@@ -2714,7 +2728,77 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
+    @staticmethod
+    def _property_error_field(message: str) -> str | None:
+        """Resolve backend validation text to the inspector field needing attention."""
+        text = str(message or "").strip().casefold()
+        labels = (
+            ("floor elevation", "floor_elevation_m"),
+            ("orientation", "orientation_deg"),
+            ("pressure", "pressure_pa"),
+            ("length", "length_m"),
+            ("width", "width_m"),
+            ("height", "height_m"),
+            ("room id", "room_id"),
+            ("wall side", "wall_side"),
+            ("name", "name"),
+            ("x (m)", "x_m"),
+            ("y (m)", "y_m"),
+            ("z (m)", "z_m"),
+        )
+        for label, key in labels:
+            if label in text:
+                return key
+        return None
+
+    def _clear_property_error(self) -> None:
+        error_var = getattr(self, "_property_error_var", None)
+        if error_var is not None:
+            error_var.set("")
+        label = getattr(self, "_property_error_label", None)
+        if label is not None:
+            try:
+                label.pack_forget()
+            except tk.TclError:
+                pass
+        for entry in getattr(self, "_property_entries", {}).values():
+            try:
+                entry.state(["!invalid"])
+            except tk.TclError:
+                pass
+
+    def _show_property_error(self, message: str) -> None:
+        # Keep validation feedback attached to the field and ensure a restored
+        # workspace cannot hide it behind a closed Design Inspector pane.
+        try:
+            self.set_inspector_visible(True)
+        except tk.TclError:
+            pass
+        error_var = getattr(self, "_property_error_var", None)
+        if error_var is not None:
+            error_var.set(message)
+        label = getattr(self, "_property_error_label", None)
+        if label is not None:
+            try:
+                label.pack(fill="x", pady=(0, 6))
+            except tk.TclError:
+                pass
+        field = self._property_error_field(message)
+        for key, entry in getattr(self, "_property_entries", {}).items():
+            try:
+                entry.state(["invalid"] if key == field else ["!invalid"])
+            except tk.TclError:
+                pass
+        entry = getattr(self, "_property_entries", {}).get(field or "")
+        if entry is not None:
+            try:
+                entry.focus_set()
+                entry.selection_range(0, "end")
+            except tk.TclError:
+                pass
+
     def _load_property_panel(self) -> None:
+        self._clear_property_error()
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
@@ -2748,6 +2832,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "height_m",
             "floor_elevation_m",
             "pressure_pa",
+            "zone",
             "classification",
             "analysis_room_name",
         }
@@ -2782,6 +2867,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             return
+        self._clear_property_error()
         try:
             candidate = update_spatial_properties(
                 self.layout,
@@ -2790,8 +2876,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 {key: variable.get() for key, variable in self._property_vars.items()},
             )
         except ValueError as exc:
-            messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
-            self._status_setter("Properties not applied: " + str(exc))
+            message = str(exc)
+            self._show_property_error(message)
+            self._status_setter("Properties not applied: " + message)
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
@@ -2917,6 +3004,42 @@ class SpatialDesignWorkspace(ttk.Frame):
             selection_before=selection_before,
         )
 
+    def request_delete_selected(self) -> bool:
+        """Confirm a user-triggered destructive spatial edit before applying it."""
+        item = self._selected_object()
+        if self.selected is None or item is None:
+            return False
+
+        kind_label = "room" if self.selected.kind == "room" else "device"
+        name = str(item.get("name") or self.selected.item_id)
+        attached_count = 0
+        if self.selected.kind == "room":
+            attached_count = sum(
+                1
+                for device in self.layout["devices"]
+                if str(device.get("room_id") or "") == self.selected.item_id
+            )
+
+        impact = f'Delete {kind_label} "{name}"?'
+        if attached_count:
+            suffix = "" if attached_count == 1 else "s"
+            impact += (
+                f"\n\nThis also removes {attached_count} attached device{suffix}."
+            )
+        impact += "\n\nThe change can be reversed with Undo."
+
+        if not messagebox.askyesno(
+            "Confirm spatial deletion",
+            impact,
+            parent=self,
+            default="no",
+        ):
+            self._status_setter("Spatial deletion cancelled")
+            return False
+
+        self.delete_selected()
+        return True
+
     def delete_selected(self) -> None:
         if self.selected is None:
             return
@@ -2972,11 +3095,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             pan_y_px=self.layout["view"]["pan_y"],
         )
 
-    def fit_selected(self) -> None:
+    def fit_selected(self) -> bool:
         item = self._selected_object()
         if item is None or self.selected is None:
             self._status_setter("Select a room or device to fit")
-            return
+            return False
 
         if self.selected.kind == "room":
             min_x = item["x_m"]
@@ -3056,6 +3179,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self._status_setter("View fitted to selected object")
         self.redraw()
+        return True
 
     def _visible_3d_points(self) -> list[tuple[float, float, float]]:
         min_x, min_y, max_x, max_y = self._bounds()
@@ -3659,7 +3783,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         menu.add_command(label="Show all", command=self.show_all)
         menu.add_separator()
         menu.add_command(label="Duplicate", command=self.duplicate_selected)
-        menu.add_command(label="Delete", command=self.delete_selected)
+        menu.add_command(label="Delete", command=self.request_delete_selected)
         if hit.kind == "room":
             menu.add_separator()
             menu.add_command(label="Add Door", command=lambda: self.add_device("door"))

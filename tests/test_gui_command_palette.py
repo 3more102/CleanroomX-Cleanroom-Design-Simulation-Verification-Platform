@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from types import SimpleNamespace
 
 import pytest
 
@@ -40,6 +41,49 @@ def test_filter_commands_matches_label_category_shortcut_and_keywords():
     assert [item.id for item in filter_commands(commands, "F5 solver")] == ["run"]
     assert filter_commands(commands, "missing") == []
     assert filter_commands(commands, "") == commands
+
+
+def test_palette_prioritizes_label_matches_and_keeps_equal_rank_order():
+    invoked = []
+    callback = lambda: invoked.append("executed")
+    commands = [
+        PaletteCommand("keyword", "Save Project", "Project", callback, keywords=("open",)),
+        PaletteCommand("partial", "Reopen Project", "Project", callback),
+        PaletteCommand("prefix-a", "Open Project", "Project", callback),
+        PaletteCommand("exact", "Open", "Project", callback),
+        PaletteCommand("prefix-b", "Open IFC", "BIM", callback),
+    ]
+    assert [command.id for command in filter_commands(commands, " OPEN ")] == [
+        "exact", "prefix-a", "prefix-b", "partial", "keyword",
+    ]
+    assert filter_commands(commands, "") == commands
+    assert invoked == []
+
+
+def test_palette_ranking_retains_multi_token_metadata_search():
+    commands = [
+        PaletteCommand("keyword", "Load Layout", "BIM", lambda: None,
+                       keywords=("open", "ifc")),
+        PaletteCommand("label", "Open IFC", "BIM", lambda: None),
+    ]
+    assert [command.id for command in filter_commands(commands, "open ifc")] == [
+        "label", "keyword",
+    ]
+    assert [command.id for command in filter_commands(commands, "bim ifc")] == [
+        "keyword", "label",
+    ]
+
+
+@pytest.mark.parametrize("focused", ["first", "second"])
+def test_up_from_first_command_returns_to_search_without_executing(focused):
+    focused_search = []
+    palette = SimpleNamespace(
+        tree=SimpleNamespace(get_children=lambda: ("first", "second"), focus=lambda: focused),
+        search=SimpleNamespace(focus_set=lambda: focused_search.append(True)),
+    )
+    result = CommandPalette._return_to_search(palette)
+    assert result == ("break" if focused == "first" else None)
+    assert focused_search == ([True] if focused == "first" else [])
 
 
 @pytest.fixture

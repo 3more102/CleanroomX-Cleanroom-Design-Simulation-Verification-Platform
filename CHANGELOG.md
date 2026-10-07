@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased Release 3 — Windows artifact qualification and bounded GUI gates — 2026-10-07
+
+- Makes frozen `--check` execution non-interactive and fail-closed: windowed builds tolerate missing stdout, health checks have a 30-second process ceiling, and CI receives a traceback file instead of a hidden GUI exception dialog.
+- Makes runtime implementation provenance packaging-aware: source checkouts retain the deterministic Python-source-tree SHA-256, while PyInstaller builds fingerprint the frozen executable artifact rather than assuming unpacked `.py` files exist.
+- Includes all first-party `cleanroomx` submodules in the standalone image so dynamically resolved analysis bindings such as design requirements are present without reverting to an unbounded third-party IfcOpenShell collection policy.
+- Stages installer inputs and outputs under a short temporary path before Inno Setup compilation, removing checkout-path-length dependence for deeply nested native BIM/Tk payloads.
+- Publishes a stable `CleanroomX` Add/Remove Programs name, validates per-user uninstall registration across both 32-bit and 64-bit Windows registry views, then exercises install, health check, upgrade, health check, and uninstall through the registered artifact lifecycle.
+- Bounds each CI matrix job to 30 minutes and the Python 3.13 real-Tk suite to 20 minutes with verbose fail-fast output so a failing or hanging GUI test is identified instead of consuming the runner's default multi-hour timeout.
+- Solver equations, project schemas, engineering tolerances, canonical evidence semantics, and numerical acceptance rules are unchanged.
+
+## Unreleased Release 3 — background analysis lifecycle recovery — 2026-10-06
+
+- Delivers worker-local exits such as SystemExit, KeyboardInterrupt, and GeneratorExit to the existing GUI completion boundary, preserving their traceback and releasing the run lock without accepting failed results.
+- Contains thread construction/start failures through the same error-reporting boundary so Run and the input editor become available again.
+- Keeps successfully computed results available if background audit preparation terminates, reports the audit failure, and preserves existing history without appending incomplete evidence.
+- Adds deterministic and real-thread lifecycle regressions covering retry, abandonment, generation isolation, control states, and retained audit evidence.
+
+## Unreleased Release 3 — strict editor inputs and evidence references — 2026-10-06
+
+- Shares canonical strict JSON parsing across compliance, constraint, and requirement editors, rejecting duplicate keys, non-finite constants/exponent overflow, invalid Unicode, and excessive nesting with field-specific diagnostics.
+- Rejects non-finite tolerance and requirement bounds before accepting a dialog; rejected compliance edits preserve the original input and never call the publication callback.
+- Resolves array evidence references using RFC 6901 ASCII index syntax without leading zeroes, containing arbitrarily large indices before integer conversion. Exact object keys remain supported.
+- Keeps invalid or unresolved array evidence references unchecked through compliance analysis and ProofGraph conversion, with headless editor and end-to-end backend regressions.
+
+## Unreleased Release 3 — GUI interaction and backend validation quality — 2026-10-06
+
+- Keeps equal-valued table rows stable across descending refreshes, preserves displayed numeric precision, and adds Ctrl+A selection in engineering tables.
+- Copies selected rows in their visible order and contains carriage returns, newlines, and tabs inside one TSV cell.
+- Ranks command-label matches ahead of metadata-only palette matches, preserves order among equally relevant commands, and returns Up from the first result to the search field.
+- Validates ProofGraph evidence kind and provenance shapes with contextual ValueError diagnostics before lookup/iteration; both backend ingestion and GUI projection reject malformed evidence without mutating it.
+- Adds headless interaction regressions and paired backend/GUI input-boundary cases while preserving canonical valid evidence and verdict semantics.
+## Unreleased Release 3 — scalable ProofGraph change propagation — 2026-10-06
+
+- Replaces repeated full-graph scans with an iterative downstream dependency queue while preserving change-impact and stale-record semantics.
+- Covers deep reverse-ordered evidence chains, branched dependencies, independently unchanged evidence, refreshed intermediate records, and downstream verification outcomes.
+- Adds a reverse-ordered 1,000/5,000-record benchmark to CI and Production Acceptance with a 3-second comparison budget; local 5,000-record comparison improved from 8.370 seconds to 0.083 seconds with identical complete-report SHA-256 identity.
+
+## Unreleased Release 3 — ProofGraph diff structural input boundary — 2026-10-06
+
+- Routes both ProofGraph diff inputs through the shared structural parser boundary, so malformed evidence containers return a concise diagnostic and exit code 1 instead of escaping as Python tracebacks.
+- Adds baseline/candidate regressions that preserve both input files and any previous output on rejection, and verifies that unexpected loader runtime defects still propagate.
+- Makes the standalone CLI error-boundary completeness gate inspect imports and the main function decorator through the Python AST, accepting multiline imports without relaxing the required boundary.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

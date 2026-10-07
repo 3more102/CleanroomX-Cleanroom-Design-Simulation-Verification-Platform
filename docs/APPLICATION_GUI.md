@@ -92,13 +92,15 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 1. Create a new project or open an existing `.cleanroomx.json` project.
 2. Add an analysis from the application catalog, or select an existing analysis.
-3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
+3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected. Compliance expected values, constraint expected values, and requirement targets also use the canonical strict parser: duplicate object keys, exponent overflow, invalid Unicode, and excessive nesting produce field-specific diagnostics. Rejected edits keep the dialog open or mark the compliance edit invalid without publishing it. Numeric tolerance and requirement bounds must be finite.
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI. Generic exports refuse destinations that alias the saved project source, a retained recovery source, or declared file-backed engineering dependencies; those identities are checked again immediately before atomic replacement.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
+
+Worker-local termination (including `SystemExit`, `KeyboardInterrupt`, and `GeneratorExit`) and thread construction/start failure return through the normal completion boundary: the run controls unlock and a failed analysis produces an error reference without accepting a result or appending history. If only audit preparation terminates after a successful calculation, the result remains available, existing history remains unchanged, and a warning reports that history was not updated. Abandoned results remain suppressed until completion; events from an older run generation cannot release the current run lock.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
@@ -163,6 +165,16 @@ For room-verification and multi-room project-verification analyses, **Sync dimen
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
 
 ## Engineering problems and verification workspace
+
+Shared engineering tables preserve the displayed precision when sorting numeric
+cells, keep equal-valued rows in stable order during refresh, and leave missing
+values last. Ctrl+A selects all rows. Copy follows the visible row order and keeps
+embedded tabs or line breaks inside their original cells.
+
+The Command Palette places exact and leading command-name matches before matches
+found only in categories, shortcuts, or keywords. Search does not execute a command.
+Use Down to enter the result list and Up from its first result to return to search;
+Enter runs the selected command and Escape closes the palette.
 
 The main engineering workspace includes a persistent bottom output pane with **Problems**, **Diagnostics**, **Verification**, **Console**, **Evidence**, **Results**, and **Report** views. The **Problems** view is not a second diagnostics engine: it presents the canonical deterministic `analyze_project_diagnostics()` result as an IDE-style table with severity, rule code, description, affected object, level context when available, and source category.
 

@@ -95,19 +95,22 @@ def test_duplicate_edit_undo_redo_save_reopen_and_analysis(app, tmp_path):
     assert app.report_text.get("1.0", "end").strip()
 
 
-def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app, monkeypatch):
+def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app):
     workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
     room = workspace.layout["rooms"][0]
     workspace.selected = _Hit("room", room["id"])
     workspace._load_property_panel()
     before = copy.deepcopy(workspace.layout)
     can_undo = app._project_history.can_undo
-    errors = []
-    monkeypatch.setattr("cleanroomx.spatial.messagebox.showerror", lambda *args, **kwargs: errors.append(args))
     workspace._property_vars["name"].set("Should not apply")
     workspace._property_vars["height_m"].set("NaN")
     workspace.apply_properties()
-    assert errors and "Height" in errors[0][1]
+    app.root.update()
+    assert "Height" in workspace._property_error_var.get()
+    assert workspace._property_error_label.winfo_ismapped()
+    assert "invalid" in workspace._property_entries["height_m"].state()
     assert workspace.layout == before
     assert app.project.metadata["spatial_layout"] == before
     assert app._project_history.can_undo == can_undo
@@ -117,8 +120,9 @@ def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app, monkeypatch
 @pytest.mark.parametrize("size", ["1050x680", "1440x900"])
 def test_editing_toolbar_controls_remain_visible(app, size):
     app.root.geometry(size)
-    app.root.update()
     workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
     for row in workspace.winfo_children():
         if not isinstance(row, ttk.Frame):
             continue
@@ -131,6 +135,8 @@ def test_editing_toolbar_controls_remain_visible(app, size):
 
 def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     workspace = app.spatial_workspace
+    app.notebook.select(workspace)
+    app.root.update()
 
     workspace.set_workspace_mode("2d")
     app.root.update()
@@ -151,6 +157,18 @@ def test_workspace_modes_make_2d_and_3d_first_class_views(app):
     panes = tuple(str(item) for item in workspace._view_panes.panes())
     assert str(workspace._two_d_frame) in panes
     assert str(workspace._three_d_frame) in panes
+
+
+def test_workspace_mode_surfaces_unexpected_pane_failures(app, monkeypatch):
+    workspace = app.spatial_workspace
+
+    def fail_forget(_frame):
+        raise tk.TclError("synthetic pane failure")
+
+    monkeypatch.setattr(workspace._view_panes, "forget", fail_forget)
+
+    with pytest.raises(tk.TclError, match="synthetic pane failure"):
+        workspace.set_workspace_mode("2d")
 
 
 def test_project_navigator_and_workspace_selection_stay_synchronized(app):
@@ -181,6 +199,7 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
     app.root.update()
 
     assert workspace._property_rows["pressure_pa"].winfo_manager() == "pack"
+    assert workspace._property_rows["zone"].winfo_manager() == "pack"
     assert workspace._property_rows["analysis_room_name"].winfo_manager() == "pack"
     assert workspace._property_rows["room_id"].winfo_manager() == ""
 
@@ -190,6 +209,7 @@ def test_contextual_inspector_hides_irrelevant_fields(app):
 
     assert workspace._property_rows["room_id"].winfo_manager() == "pack"
     assert workspace._property_rows["pressure_pa"].winfo_manager() == ""
+    assert workspace._property_rows["zone"].winfo_manager() == ""
     assert workspace._property_rows["classification"].winfo_manager() == ""
 
 

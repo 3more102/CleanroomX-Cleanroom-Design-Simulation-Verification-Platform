@@ -1,0 +1,92 @@
+{
+  "schema": "cleanroomx.project",
+  "schema_version": 1,
+  "application_version": "0.103.0.dev0",
+  "project": {
+    "name": "Golden Reference — ROOM-A ACH",
+    "description": "Validated end-to-end reference project for requirement-to-calculation-to-ProofGraph regression.",
+    "metadata": {
+      "requirements": {
+        "schema": "cleanroomx.project-requirements",
+        "schema_version": 1,
+        "sets": [
+          {
+            "id": "urs-main",
+            "title": "Golden reference URS",
+            "description": "Explicit regression criterion; not a regulatory default.",
+            "source": "CleanroomX golden reference",
+            "source_revision": "1",
+            "requirements": [
+              {
+                "id": "REQ-ACH",
+                "title": "ROOM-A minimum ACH",
+                "description": "ROOM-A shall achieve at least 20 air changes per hour.",
+                "discipline": "HVAC",
+                "category": "air_change_rate",
+                "source": "CleanroomX golden reference",
+                "source_revision": "1",
+                "reference": "GR-ACH-001",
+                "unit": "1/h",
+                "target": null,
+                "minimum": 20.0,
+                "maximum": null,
+                "tolerance": 0.0,
+                "applicability": "applicable",
+                "scope": ["ROOM-A"],
+                "verification_method": "calculation",
+                "required_evidence": ["calculation"],
+                "status": "approved",
+                "assumptions": [],
+                "notes": "Reference arithmetic: 6 m × 4 m × 3 m = 72 m³; 1800 m³/h ÷ 72 m³ = 25 1/h."
+              }
+            ]
+          }
+        ]
+      },
+      "requirement_evidence_mappings": {
+        "schema": "cleanroomx.project-requirement-evidence-mappings",
+        "schema_version": 1,
+        "mappings": [
+          {
+            "id": "MAP-ACH",
+            "requirement_id": "REQ-ACH",
+            "analysis_id": "room-a",
+            "expected_analysis_kind": "room_verification",
+            "subject_ref": "ROOM-A",
+            "property_name": "air_change_rate",
+            "result_path": ["ach"],
+            "unit": "1/h",
+            "evidence_kinds": ["calculation"],
+            "status": "active",
+            "notes": "Canonical ROOM-A ACH result."
+          }
+        ]
+      }
+    }
+  },
+  "analyses": [
+    {
+      "id": "room-a",
+      "name": "ROOM-A verification",
+      "kind": "room_verification",
+      "input": {
+        "name": "ROOM-A",
+        "length_m": 6.0,
+        "width_m": 4.0,
+        "height_m": 3.0,
+        "supply_airflow_m3_h": 1800.0,
+        "min_ach": 20.0,
+        "min_pressure_pa": 10.0,
+        "observed_pressure_pa": 14.0,
+        "particle_requirements": [
+          {
+            "size_um": 0.5,
+            "max_concentration_per_m3": 400000.0,
+            "observed_concentration_per_m3": 120000.0
+          }
+        ]
+      }
+    }
+  ],
+  "active_analysis_id": "room-a"
+}

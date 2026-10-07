@@ -184,6 +184,31 @@ def test_rule_pack_rejects_unknown_fields() -> None:
         compliance_check_from_dict(payload)
 
 
+@pytest.mark.parametrize("token", ["00", "01", "١", "１", "²", "+1", "-1", " 1", "-", "9" * 5000, "2"])
+def test_invalid_or_out_of_range_array_reference_cannot_verify_evidence(token: str) -> None:
+    payload = _payload()
+    payload["rule_pack"]["rules"] = [{"id": "array", "title": "Array value", "operator": "equals",
+                                    "expected": 7, "evidence_path": f"/values/{token}"}]
+    payload["evidence"] = {"values": [7, 7]}
+    result = analyze_compliance_check(compliance_check_from_dict(payload))
+    assert result["status"] == "not_checked"
+    assert result["verified"] is False
+    assert result["findings"][0]["evidence_present"] is False
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize("token", ["0", "1", "01", "١", "²"])
+def test_pointer_object_keys_are_exact_and_canonical_array_indices_work(token: str) -> None:
+    payload = _payload()
+    payload["rule_pack"]["rules"] = [{"id": "value", "title": "Value", "operator": "equals",
+                                    "expected": 7, "evidence_path": f"/values/{token}"}]
+    payload["evidence"] = {"values": {token: 7}}
+    assert analyze_compliance_check(compliance_check_from_dict(payload))["verified"] is True
+    if token in ("0", "1"):
+        payload["evidence"] = {"values": [7, 7]}
+        assert analyze_compliance_check(compliance_check_from_dict(payload))["verified"] is True
+
+
 def test_duplicate_rule_ids_fail_closed() -> None:
     payload = _payload()
     payload["rule_pack"]["rules"][1]["id"] = "temperature"

@@ -32,7 +32,8 @@ def filter_commands(
     if not tokens:
         return items
 
-    matches: list[PaletteCommand] = []
+    matches: list[tuple[int, PaletteCommand]] = []
+    phrase = " ".join(tokens)
     for command in items:
         haystack = " ".join(
             (
@@ -43,8 +44,19 @@ def filter_commands(
             )
         ).casefold()
         if all(token in haystack for token in tokens):
-            matches.append(command)
-    return matches
+            label = " ".join(command.label.casefold().split())
+            if label == phrase:
+                rank = 0
+            elif label.startswith(phrase):
+                rank = 1
+            elif all(token in label for token in tokens):
+                rank = 2
+            else:
+                rank = 3
+            matches.append((rank, command))
+    # Stable sorting keeps configured command order within the same rank.
+    matches.sort(key=lambda item: item[0])
+    return [command for _rank, command in matches]
 
 
 class CommandPalette(tk.Toplevel):
@@ -115,6 +127,7 @@ class CommandPalette(tk.Toplevel):
         self.search.bind("<Down>", self._focus_first_result)
         self.search.bind("<Return>", self._invoke_first)
         self.tree.bind("<Return>", self._invoke_selected)
+        self.tree.bind("<Up>", self._return_to_search)
         self.tree.bind("<Double-1>", self._invoke_selected)
         self.bind("<Escape>", self._close)
         self.protocol("WM_DELETE_WINDOW", self._close)
@@ -143,7 +156,10 @@ class CommandPalette(tk.Toplevel):
             self.tree.selection_set(first)
             self.tree.focus(first)
         self._summary.configure(
-            text=f"{len(self._filtered)} command{'s' if len(self._filtered) != 1 else ''}"
+            text=(
+                f"{len(self._filtered)} command{'s' if len(self._filtered) != 1 else ''}"
+                if self._filtered else "No matching commands. Try a workflow name."
+            )
         )
 
     def _focus_first_result(self, _event=None):
@@ -162,6 +178,13 @@ class CommandPalette(tk.Toplevel):
         self.tree.selection_set(children[0])
         self.tree.focus(children[0])
         return self._invoke_selected()
+
+    def _return_to_search(self, _event=None):
+        children = self.tree.get_children()
+        if not children or self.tree.focus() == children[0]:
+            self.search.focus_set()
+            return "break"
+        return None
 
     def _invoke_selected(self, _event=None):
         selection = self.tree.selection()

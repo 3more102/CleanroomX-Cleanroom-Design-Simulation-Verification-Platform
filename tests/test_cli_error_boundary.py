@@ -149,8 +149,24 @@ def test_all_standalone_file_output_clis_use_shared_error_boundary() -> None:
     assert candidates
     for path in candidates:
         source = path.read_text(encoding="utf-8")
-        assert "from .cli_output import cli_error_boundary" in source, path.name
-        assert "@cli_error_boundary(" in source, path.name
+        tree = ast.parse(source)
+        assert any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "cli_output"
+            and node.level == 1
+            and any(alias.name == "cli_error_boundary" for alias in node.names)
+            for node in tree.body
+        ), path.name
+        main = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "main"
+        )
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "cli_error_boundary"
+            for node in main.decorator_list
+        ), path.name
 
 
 def test_all_file_loader_clis_use_structural_input_boundary() -> None:

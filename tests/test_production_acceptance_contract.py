@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PINNED_ACTION_RE = re.compile(r"^\s*-?\s*uses:\s*[^@\s]+@([0-9a-f]{40})(?:\s|#|$)")
+
+
+def _text(relative: str) -> str:
+    path = ROOT / relative
+    assert path.is_file(), f"required production artifact is missing: {relative}"
+    return path.read_text(encoding="utf-8")
+
+
+def test_required_production_workflows_are_least_privilege_and_credentialless() -> None:
+    for relative in (
+        ".github/workflows/ci.yml",
+        ".github/workflows/production-acceptance.yml",
+        ".github/workflows/security.yml",
+        ".github/workflows/windows-installer.yml",
+        ".github/workflows/windows-standalone.yml",
+    ):
+        workflow = _text(relative)
+        assert "pull_request:" in workflow
+        assert "permissions:\n  contents: read" in workflow
+        assert "persist-credentials: false" in workflow
+
+
+def test_required_release_runner_and_pip_toolchains_are_pinned() -> None:
+    expected_runners = {
+        ".github/workflows/ci.yml": ("ubuntu-24.04", "windows-2025"),
+        ".github/workflows/security.yml": ("ubuntu-24.04",),
+        ".github/workflows/production-acceptance.yml": ("ubuntu-24.04",),
+        ".github/workflows/windows-installer.yml": ("windows-2025",),
+        ".github/workflows/windows-standalone.yml": ("windows-2025",),
+    }
+
+    for relative, runners in expected_runners.items():
+        workflow = _text(relative)
+        assert "ubuntu-latest" not in workflow
+        assert "windows-latest" not in workflow
+        assert 'python -m pip install "pip==26.2.1"' in workflow
+        for runner in runners:
+            assert f"runs-on: {runner}" in workflow
+
+
+def test_ci_contract_retains_supported_matrix_golden_validation_and_performance() -> None:
+    workflow = _text(".github/workflows/ci.yml")
+
+    assert 'python-version: ["3.11", "3.12", "3.13"]' in workflow
+    assert "Run complete test suite with skip reasons" in workflow
+    assert "Run complete test suite with real Tk and skip reasons" in workflow
+    assert "tests/test_golden_reference_project.py" in workflow
+    assert "scripts/benchmark_spatial_validation.py" in workflow
+    assert "scripts/benchmark_project_bundle.py" in workflow
+    assert "scripts/benchmark_proofgraph_change_impact.py" in workflow
+    assert "scripts/benchmark_proofgraph_change_impact.py" in _text(
+        ".github/workflows/production-acceptance.yml"
+    )
+    assert "Build wheel and verify installed application" in workflow
+    assert "Run desktop GUI smoke from installed wheel" in workflow
+    assert "cleanroomx-proofgraph-diff --help" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
+
+
+def test_security_contract_retains_static_hostile_input_and_fault_injection_gates() -> None:
+    workflow = _text(".github/workflows/security.yml")
+
+    assert "schedule:" in workflow
+    assert "scripts/security_static_gate.py" in workflow
+    assert "tests/test_project_bundle.py" in workflow
+    assert "tests/test_plugins.py" in workflow
+    assert "tests/test_recovery_artifact_ingestion.py" in workflow
+    assert "tests/test_bim_ifc_root_failures.py" in workflow
+    assert "tests/test_fault_injection_persistence.py" in workflow
+    assert "tests/test_security_static_gate.py" in workflow
+
+
+def test_windows_release_contract_retains_standalone_hash_and_installer_lifecycle() -> None:
+    standalone = _text(".github/workflows/windows-standalone.yml")
+    installer = _text(".github/workflows/windows-installer.yml")
+
+    assert "runs-on: windows-2025" in standalone
+    assert "build_windows_standalone.ps1" in standalone
+    assert "Get-FileHash -Algorithm SHA256" in standalone
+    assert "if-no-files-found: error" in standalone
+
+    assert "runs-on: windows-2025" in installer
+    assert "build_windows_installer.ps1" in installer
+    assert "test_windows_installer_lifecycle.ps1" in installer
+    assert "if-no-files-found: error" in installer
+
+
+def test_engineering_acceptance_contract_retains_independent_golden_references() -> None:
+    single_room = _text("tests/test_golden_reference_project.py")
+    facility = _text("tests/test_golden_facility_reference.py")
+
+    assert "test_golden_reference_project_has_known_ach_and_full_traceability" in single_room
+    assert "test_golden_reference_project_save_reopen_is_reproducible" in single_room
+    assert "test_golden_facility_known_ach_and_pressure_cascade" in facility
+    assert "test_golden_facility_airflow_consistency_and_report_are_repeatable" in facility
+
+
+def test_production_acceptance_document_preserves_external_validation_boundary() -> None:
+    document = _text("docs/PRODUCTION_ACCEPTANCE.md")
+
+    for phrase in (
+        "exact tested commit SHA",
+        "Python 3.11, 3.12, and 3.13",
+        "Windows Installer Lifecycle",
+        "Security",
+        "golden",
+        "commissioning/TAB",
+        "regulatory certification",
+    ):
+        assert phrase in document
+
+
+def test_production_acceptance_workflow_executes_and_publishes_its_own_evidence() -> None:
+    workflow = _text(".github/workflows/production-acceptance.yml")
+
+    assert "python scripts/production_acceptance.py --output production-acceptance.json" in workflow
+    assert "tests/test_production_acceptance.py" in workflow
+    assert "tests/test_production_acceptance_contract.py" in workflow
+    assert "tests/test_proofgraph_change_impact.py" in workflow
+    assert "tests/test_proofgraph_change_impact_cli.py" in workflow
+    assert "scripts/security_static_gate.py" in workflow
+    assert "Upload production acceptance evidence" in workflow
+    assert "name: CleanroomX-production-acceptance" in workflow
+    assert "path: production-acceptance.json" in workflow
+    assert "if-no-files-found: error" in workflow
+
+
+def test_all_workflow_action_references_are_immutable() -> None:
+    workflow_dir = ROOT / ".github" / "workflows"
+    workflows = sorted((*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")))
+    assert workflows
+
+    for workflow_path in workflows:
+        for line_number, line in enumerate(
+            workflow_path.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if "uses:" not in line.strip():
+                continue
+            assert PINNED_ACTION_RE.match(line), (
+                f"unpinned GitHub Action in {workflow_path.relative_to(ROOT)}:"
+                f"{line_number}: {line.strip()}"
+            )

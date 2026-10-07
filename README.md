@@ -1,6 +1,7 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
+[![Security](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/security.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/security.yml)
 [![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
@@ -166,6 +167,12 @@ cleanroomx-project-check project.cleanroomx.json
 
 See [Project Diagnostics](docs/PROJECT_DIAGNOSTICS.md) for rule scope, severity, freshness behavior, and exit codes.
 
+Compare two ProofGraph evidence revisions and surface downstream impact/staleness:
+
+```bash
+cleanroomx-proofgraph-diff baseline.proofgraph.json candidate.proofgraph.json --require-no-stale
+```
+
 Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/network studies, uncertainty, consistency checks, and engineering dossiers.
 
 ## Validation
@@ -208,6 +215,8 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [Deployment](DEPLOYMENT.md)
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)
+- [Production acceptance contract](docs/PRODUCTION_ACCEPTANCE.md)
+- [ProofGraph revision diff and change impact](docs/PROOFGRAPH_CHANGE_IMPACT.md)
 - [Rollback](ROLLBACK.md)
 - [Changelog](CHANGELOG.md)
 

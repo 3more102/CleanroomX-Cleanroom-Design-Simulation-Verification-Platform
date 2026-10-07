@@ -64,7 +64,11 @@ def _mock_distribution_origin(
     monkeypatch,
     root,
     *,
-    files=("cleanroomx/system_health.py", "cleanroomx/__init__.py"),
+    files=(
+        "cleanroomx/system_health.py",
+        "cleanroomx/__init__.py",
+        "cleanroomx/application.py",
+    ),
     hashes: bool = True,
     tampered_files: tuple[str, ...] = (),
 ) -> None:
@@ -132,6 +136,11 @@ def test_distribution_identity_matches_installed_metadata_and_origin(monkeypatch
     assert check["details"]["module_hash_matches_distribution"] is True
     assert check["details"]["package_initializer_hash_algorithm"] == "sha256"
     assert check["details"]["package_initializer_hash_matches_distribution"] is True
+    assert check["details"]["package_file_count"] == 3
+    assert check["details"]["package_hash_verified_count"] == 3
+    assert check["details"]["package_hash_mismatch_count"] == 0
+    assert check["details"]["package_hash_unverifiable_count"] == 0
+    assert check["details"]["package_hashes_match_distribution"] is True
     assert check["details"]["package_initializer_path"] == str(
         system_health.Path(system_health.__file__).resolve().with_name("__init__.py")
     )
@@ -249,6 +258,36 @@ def test_distribution_identity_detects_modified_owned_module(monkeypatch) -> Non
     assert strict["details"]["module_hash_matches_distribution"] is False
 
 
+def test_distribution_identity_detects_modified_non_active_package_file(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    distribution_root = system_health.Path(system_health.__file__).resolve().parents[1]
+    _mock_distribution_origin(
+        monkeypatch,
+        distribution_root,
+        tampered_files=("cleanroomx/application.py",),
+    )
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["module_hash_matches_distribution"] is True
+    assert advisory["details"]["package_initializer_hash_matches_distribution"] is True
+    assert advisory["details"]["package_hashes_match_distribution"] is False
+    assert advisory["details"]["package_hash_mismatch_count"] == 1
+    assert advisory["details"]["package_hash_mismatch_paths"] == [
+        "cleanroomx/application.py"
+    ]
+    assert advisory["remediation"]
+    assert "all packaged code and data" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["status"] == "fail"
+    assert strict["details"]["package_hashes_match_distribution"] is False
+
+
 def test_distribution_identity_requires_verifiable_record_hashes(monkeypatch) -> None:
     monkeypatch.setattr(
         system_health.metadata,
@@ -268,6 +307,8 @@ def test_distribution_identity_requires_verifiable_record_hashes(monkeypatch) ->
     assert advisory["details"]["package_initializer_owned_by_distribution"] is True
     assert advisory["details"]["module_hash_matches_distribution"] is None
     assert advisory["details"]["package_initializer_hash_matches_distribution"] is None
+    assert advisory["details"]["package_hashes_match_distribution"] is None
+    assert advisory["details"]["package_hash_unverifiable_count"] == 3
     assert advisory["remediation"]
     assert "record hashes" in advisory["remediation"].lower()
 

@@ -18,11 +18,41 @@ from cleanroomx.hvac_models import (
     ThermalLoads,
 )
 from cleanroomx.models import ParticleRequirement, PressureCascadeRequirement, RoomSpec
+from cleanroomx.numeric import (
+    efficiency_float,
+    finite_float,
+    nonnegative_float,
+    positive_float,
+)
 from cleanroomx.psychrometrics import dry_air_mass_flow_kg_s, saturation_vapor_pressure_kpa
 from cleanroomx.thermal import analyze_thermal_design
 
 
 _NONFINITE = (math.nan, math.inf, -math.inf)
+
+
+@pytest.mark.parametrize("value", (True, False))
+@pytest.mark.parametrize(
+    "validator",
+    (finite_float, positive_float, nonnegative_float, efficiency_float),
+)
+def test_numeric_validators_reject_boolean_measurements(validator, value: bool) -> None:
+    with pytest.raises(ValueError, match="boolean"):
+        validator(value, "engineering_value")
+
+
+@pytest.mark.parametrize("value", (True, False))
+def test_foundational_engineering_apis_reject_boolean_measurements(
+    value: bool,
+) -> None:
+    with pytest.raises(ValueError, match="boolean"):
+        RoomSpec("R1", value, 4.0, 3.0, 1200.0)
+    with pytest.raises(ValueError, match="boolean"):
+        AirState(value, 45.0)
+    with pytest.raises(ValueError, match="boolean"):
+        decay_concentration(1000.0, ach=value, time_minutes=5.0)
+    with pytest.raises(ValueError, match="boolean"):
+        analyze_supply_fan(value, FanSystem("Supply"))
 
 
 @pytest.mark.parametrize("value", _NONFINITE)

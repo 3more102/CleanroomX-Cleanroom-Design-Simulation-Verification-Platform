@@ -73,14 +73,31 @@ if ($versionInfo.FileDescription -ne "CleanroomX Engineering Workstation") {
     throw "Frozen executable FileDescription mismatch: $($versionInfo.FileDescription)"
 }
 
-$process = Start-Process -FilePath $exe -ArgumentList "--check" -PassThru
-if (-not $process.WaitForExit(30000)) {
-    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-    throw "Frozen CleanroomX --check did not exit within 30 seconds"
+$checkErrorLog = Join-Path $buildRoot "frozen-check-error.log"
+Remove-Item -Force $checkErrorLog -ErrorAction SilentlyContinue
+$previousCheckErrorFile = $env:CLEANROOMX_CHECK_ERROR_FILE
+$env:CLEANROOMX_CHECK_ERROR_FILE = $checkErrorLog
+try {
+    $process = Start-Process -FilePath $exe -ArgumentList "--check" -PassThru
+    if (-not $process.WaitForExit(30000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "Frozen CleanroomX --check did not exit within 30 seconds"
+    }
+    $process.Refresh()
+    if ($process.ExitCode -ne 0) {
+        if (Test-Path $checkErrorLog -PathType Leaf) {
+            Write-Host "Frozen CleanroomX --check traceback:"
+            Get-Content $checkErrorLog | Write-Host
+        }
+        throw "Frozen CleanroomX --check failed with exit code $($process.ExitCode)"
+    }
 }
-$process.Refresh()
-if ($process.ExitCode -ne 0) {
-    throw "Frozen CleanroomX --check failed with exit code $($process.ExitCode)"
+finally {
+    if ($null -eq $previousCheckErrorFile) {
+        Remove-Item Env:CLEANROOMX_CHECK_ERROR_FILE -ErrorAction SilentlyContinue
+    } else {
+        $env:CLEANROOMX_CHECK_ERROR_FILE = $previousCheckErrorFile
+    }
 }
 
 Write-Host "Standalone CleanroomX executable validated: $exe"

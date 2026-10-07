@@ -2,6 +2,9 @@
 
 ## Unreleased — system-health baseline drift gate — 2026-10-07
 
+- Reconciles the doctor hardening stack so the latest baseline-drift branch retains the actionable remediation invariant and share-safe path redaction.
+- Adds `--redact-paths` with cross-platform Windows/POSIX basename-only redaction for explicit path fields while preserving diagnostic message text.
+- Enforces non-empty remediation for warnings/failures and null remediation for passing checks in both generated reports and baseline comparison validation.
 - Adds deterministic comparison of current `cleanroomx-doctor` results against a prior known-good JSON baseline, including per-check regressions/improvements, required-readiness transitions, and diagnostic-coverage changes.
 - Detects required/advisory policy drift explicitly: required-to-advisory changes are coverage regressions, while advisory-to-required changes are coverage expansion.
 - Rejects internally contradictory health evidence before comparison when `required_ready`, aggregate status, or summary counts do not match the actual checks.

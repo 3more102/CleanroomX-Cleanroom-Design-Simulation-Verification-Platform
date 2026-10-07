@@ -31,6 +31,7 @@ def _report(
                 "status": "pass" if ready else "fail",
                 "summary": "synthetic",
                 "details": {},
+                "remediation": None if ready else "Repair the synthetic runtime.",
             }
         ],
     }
@@ -124,4 +125,23 @@ def test_doctor_cli_text_format_is_operator_readable(monkeypatch, capsys) -> Non
     assert "CleanroomX test system health: ready" in captured.out
     assert "Required readiness: PASS" in captured.out
     assert "[PASS] Synthetic (required) - synthetic" in captured.out
+    assert "Action:" not in captured.out
+    assert captured.err == ""
+
+
+def test_doctor_cli_text_format_surfaces_remediation_for_failure(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=False,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+        ),
+    )
+
+    assert doctor_cli.main(["--format", "text"]) == 2
+    captured = capsys.readouterr()
+    assert "Action: Repair the synthetic runtime." in captured.out
     assert captured.err == ""

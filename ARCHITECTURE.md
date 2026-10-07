@@ -1,5 +1,9 @@
 # CleanroomX Architecture
 
+## Unreleased multi-agent orchestration foundation
+
+CleanroomX now has a deterministic multi-agent coordination layer in `src/cleanroomx/multi_agent.py`. Agent routing is an explicit task DAG with declared capabilities, dependency-aware parallel execution, fail-closed downstream blocking, strict-JSON handoffs, and SHA-256 identities for plans, dependency results, task results, and complete runs. The layer is orchestration only: built-in agents delegate to the existing application, project-diagnostics, and project-requirements/ProofGraph services, so agent coordination does not become a second solver, diagnostics engine, requirements comparator, or compliance authority. Provider-backed AI agents can implement the same protocol later, but AI planning/proposals remain advisory until canonical deterministic CleanroomX services produce the engineering and verification evidence. See `docs/MULTI_AGENT.md`.
+
 ## Release scope
 
 CleanroomX v0.102.1 (Release 2 + final synchronized spatial production closure) is a Python 3.11+ engineering screening, simulation, verification, uncertainty/provenance, HVAC, fan/network, qualification, and reporting platform. The desktop application is an operator shell over the same backend modules used by the command-line tools. Release 2 consolidates durable project lifecycle, verified persistence/recovery/history, bounded undo-redo, plugin execution, immutable analysis evidence, dependency freshness, portable bundles/reports, deterministic project batch automation, strict engineering JSON ingestion, and final precision/numerical-integrity hardening without duplicating or changing validated solver equations in the GUI.

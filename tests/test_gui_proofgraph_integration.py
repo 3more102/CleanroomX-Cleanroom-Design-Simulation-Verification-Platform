@@ -174,7 +174,10 @@ def test_proofgraph_model_object_navigation_syncs_viewport_and_project_browser(a
 
     app.proofgraph_viewer._select_key(model_key)
     app.proofgraph_viewer._navigate_selected()
-    app.root.update()
+    # Navigation is synchronous. Settle geometry-only work without entering a
+    # full Tcl event drain, which can continuously consume the application's
+    # recurring worker-poll timer under a real Tk/Xvfb session.
+    app.root.update_idletasks()
 
     assert workspace.selected == _Hit("room", room["id"])
     assert app.analysis_tree.selection() == (f"room:{room['id']}",)

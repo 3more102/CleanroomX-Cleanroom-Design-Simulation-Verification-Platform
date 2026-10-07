@@ -148,6 +148,49 @@ def test_direct_calculation_apis_reject_nonfinite_values(value: float) -> None:
         dry_air_mass_flow_kg_s(value, AirState(22.0, 45.0))
 
 
+@pytest.mark.parametrize(
+    ("supply_airflow_m3_h", "design", "derived_field"),
+    (
+        (
+            1e308,
+            AirBalanceDesign(transfer_in_airflow_m3_h=1e308),
+            "incoming_airflow_m3_h",
+        ),
+        (
+            1.0,
+            AirBalanceDesign(
+                return_airflow_m3_h=1e308,
+                exhaust_airflow_m3_h=1e308,
+            ),
+            "mechanically_removed_airflow_m3_h",
+        ),
+        (
+            1.0,
+            AirBalanceDesign(
+                return_airflow_m3_h=1e308,
+                transfer_out_airflow_m3_h=1e308,
+            ),
+            "known_outgoing_airflow_m3_h",
+        ),
+        (
+            1.0,
+            AirBalanceDesign(
+                return_airflow_m3_h=1e308,
+                minimum_surplus_m3_h=1e308,
+            ),
+            "surplus_margin_m3_h",
+        ),
+    ),
+)
+def test_air_balance_rejects_nonfinite_derived_arithmetic(
+    supply_airflow_m3_h: float,
+    design: AirBalanceDesign,
+    derived_field: str,
+) -> None:
+    with pytest.raises(ValueError, match=derived_field):
+        analyze_air_balance(supply_airflow_m3_h, design)
+
+
 def test_finite_foundational_inputs_preserve_existing_results() -> None:
     room = RoomSpec(
         "R1",

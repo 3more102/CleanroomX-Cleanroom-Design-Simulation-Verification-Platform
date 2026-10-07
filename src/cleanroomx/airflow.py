@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .hvac_models import AirBalanceDesign
-from .numeric import positive_float
+from .numeric import finite_float, positive_float
 
 
 def calculate_air_balance(
@@ -13,13 +13,26 @@ def calculate_air_balance(
         supply_airflow_m3_h, "supply_airflow_m3_h"
     )
 
-    incoming = supply_airflow_m3_h + design.transfer_in_airflow_m3_h
-    mechanically_removed = (
-        design.return_airflow_m3_h + design.exhaust_airflow_m3_h
+    incoming = finite_float(
+        supply_airflow_m3_h + design.transfer_in_airflow_m3_h,
+        "incoming_airflow_m3_h",
     )
-    outgoing_known = mechanically_removed + design.transfer_out_airflow_m3_h
-    net_surplus = incoming - outgoing_known
-    margin = net_surplus - design.minimum_surplus_m3_h
+    mechanically_removed = finite_float(
+        design.return_airflow_m3_h + design.exhaust_airflow_m3_h,
+        "mechanically_removed_airflow_m3_h",
+    )
+    outgoing_known = finite_float(
+        mechanically_removed + design.transfer_out_airflow_m3_h,
+        "known_outgoing_airflow_m3_h",
+    )
+    net_surplus = finite_float(
+        incoming - outgoing_known,
+        "net_surplus_m3_h",
+    )
+    margin = finite_float(
+        net_surplus - design.minimum_surplus_m3_h,
+        "surplus_margin_m3_h",
+    )
 
     return {
         "supply_airflow_m3_h": supply_airflow_m3_h,

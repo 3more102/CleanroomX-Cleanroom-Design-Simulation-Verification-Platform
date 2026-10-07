@@ -69,6 +69,15 @@ def test_air_balance_adapter_does_not_claim_pressure() -> None:
     )
 
 
+def test_air_balance_adapter_rejects_nonfinite_derived_calculation() -> None:
+    with pytest.raises(ValueError, match="incoming_airflow_m3_h"):
+        proofgraph_from_air_balance(
+            room_name="Process",
+            supply_airflow_m3_h=1e308,
+            design=AirBalanceDesign(transfer_in_airflow_m3_h=1e308),
+        )
+
+
 def test_air_balance_graph_round_trips_through_strict_parser() -> None:
     document = proofgraph_from_air_balance(
         room_name="Process",

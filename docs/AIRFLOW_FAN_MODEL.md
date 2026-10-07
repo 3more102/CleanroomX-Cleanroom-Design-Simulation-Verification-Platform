@@ -22,6 +22,8 @@ The reported margin is:
 
 Balance pass/fail is evaluated from the unrounded airflow state. Room and project totals are rounded only for presentation; project aggregation uses the full-precision room values.
 
+All derived airflow-balance arithmetic is finite-validated before a result is emitted. If individually finite extreme inputs overflow an intermediate sum or margin, CleanroomX raises a descriptive `ValueError` instead of emitting `Infinity`, serializing invalid evidence, or producing a pass/fail verdict from non-finite state. The same fail-closed boundary applies to ProofGraph airflow evidence because it reuses the canonical calculation.
+
 A positive net surplus represents airflow available for exfiltration or another unmodeled outflow path at steady state. A negative value means infiltration or another unmodeled inflow would be required to close the mass balance.
 
 This is an airflow calculation only. CleanroomX does not convert airflow surplus into room differential pressure because that requires a leakage-path/door/transfer model or measured flow-pressure relationship.

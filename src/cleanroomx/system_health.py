@@ -4,7 +4,7 @@ import base64
 import copy
 import hashlib
 from importlib import import_module
-from importlib import metadata
+from importlib import machinery, metadata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import platform
 import sys
@@ -19,6 +19,9 @@ from .project import load_project_document
 
 QUALIFIED_PYTHON_MINORS = ((3, 11), (3, 12), (3, 13))
 _LOCAL_PATH_DETAIL_KEYS = frozenset({"path", "executable"})
+_IMPORTABLE_PACKAGE_SUFFIXES = tuple(
+    sorted(set(machinery.SOURCE_SUFFIXES + machinery.EXTENSION_SUFFIXES))
+)
 
 
 def _redacted_path_text(value: str) -> str:
@@ -210,6 +213,57 @@ def _distribution_package_hash_status(
     }
 
 
+def _distribution_package_manifest_closure(
+    package_root: Path,
+    distribution_files: Any,
+) -> dict[str, Any]:
+    """Detect importable package payload that is absent from the distribution manifest."""
+    manifested_paths: set[str] = set()
+    for package_path in distribution_files:
+        relative = PurePosixPath(str(package_path).replace("\\", "/"))
+        if not relative.parts or relative.parts[0] != "cleanroomx":
+            continue
+        package_relative = PurePosixPath(*relative.parts[1:]).as_posix()
+        if package_relative:
+            manifested_paths.add(package_relative)
+
+    unexpected: list[str] = []
+    try:
+        for candidate in package_root.rglob("*"):
+            relative = candidate.relative_to(package_root)
+            if "__pycache__" in relative.parts:
+                continue
+            relative_text = relative.as_posix()
+
+            if candidate.is_symlink() and candidate.is_dir():
+                unexpected.append(f"cleanroomx/{relative_text}/")
+                continue
+            if not candidate.is_file():
+                continue
+            if not any(
+                candidate.name.endswith(suffix)
+                for suffix in _IMPORTABLE_PACKAGE_SUFFIXES
+            ):
+                continue
+            if relative_text not in manifested_paths:
+                unexpected.append(f"cleanroomx/{relative_text}")
+    except OSError as exc:
+        return {
+            "package_manifest_closure": None,
+            "package_unmanifested_importable_count": None,
+            "package_unmanifested_importable_paths": None,
+            "package_manifest_scan_error": type(exc).__name__,
+        }
+
+    unexpected = sorted(set(unexpected))
+    return {
+        "package_manifest_closure": not unexpected,
+        "package_unmanifested_importable_count": len(unexpected),
+        "package_unmanifested_importable_paths": unexpected,
+        "package_manifest_scan_error": None,
+    }
+
+
 def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
     """Verify installed metadata, code origin, ownership, and file integrity."""
     module_path = Path(__file__).resolve()
@@ -248,6 +302,10 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 "package_hash_mismatch_paths": None,
                 "package_hash_unverifiable_paths": None,
                 "package_hashes_match_distribution": None,
+                "package_manifest_closure": None,
+                "package_unmanifested_importable_count": None,
+                "package_unmanifested_importable_paths": None,
+                "package_manifest_scan_error": None,
             },
             remediation=(
                 "Install CleanroomX into the active Python environment before release or deployment "
@@ -274,6 +332,12 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         "package_hash_mismatch_paths": None,
         "package_hash_unverifiable_paths": None,
         "package_hashes_match_distribution": None,
+    }
+    manifest_closure_details: dict[str, Any] = {
+        "package_manifest_closure": None,
+        "package_unmanifested_importable_count": None,
+        "package_unmanifested_importable_paths": None,
+        "package_manifest_scan_error": None,
     }
 
     if version_matches:
@@ -313,6 +377,10 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     "package_hash_mismatch_paths": None,
                     "package_hash_unverifiable_paths": None,
                     "package_hashes_match_distribution": None,
+                    "package_manifest_closure": None,
+                    "package_unmanifested_importable_count": None,
+                    "package_unmanifested_importable_paths": None,
+                    "package_manifest_scan_error": None,
                 },
                 remediation=(
                     "Repair or reinstall CleanroomX in the active Python environment, then rerun "
@@ -350,6 +418,10 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     distribution,
                     distribution_files,
                 )
+                manifest_closure_details = _distribution_package_manifest_closure(
+                    module_path.parent,
+                    distribution_files,
+                )
 
     consistent = (
         version_matches
@@ -359,12 +431,14 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         and module_hash_matches_distribution is True
         and package_initializer_hash_matches_distribution is True
         and package_hash_details["package_hashes_match_distribution"] is True
+        and manifest_closure_details["package_manifest_closure"] is True
     )
     if consistent:
         summary = (
             f"Imported CleanroomX {__version__} matches installed distribution metadata, "
             "originates from the installed distribution, is owned by its file manifest, "
-            "and every manifested CleanroomX package file matches its recorded content hash."
+            "every manifested CleanroomX package file matches its recorded content hash, "
+            "and no unmanifested importable package payload is present."
         )
         remediation = None
     elif not version_matches:
@@ -457,7 +531,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             "Reinstall CleanroomX from a wheel or installation that preserves RECORD hashes for "
             "every packaged CleanroomX file, then rerun cleanroomx-doctor before qualification."
         )
-    else:
+    elif package_hash_details["package_hashes_match_distribution"] is False:
         summary = (
             "One or more installed CleanroomX package files do not match the content hashes "
             "recorded by the installed distribution."
@@ -465,6 +539,24 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         remediation = (
             "Treat the installation as modified or corrupted: reinstall the intended CleanroomX "
             "artifact so all packaged code and data match the recorded distribution contents."
+        )
+    elif manifest_closure_details["package_manifest_closure"] is None:
+        summary = (
+            "CleanroomX package integrity hashes match, but the installed package could not be "
+            "fully scanned for unmanifested importable payload."
+        )
+        remediation = (
+            "Repair permissions or reinstall CleanroomX, then rerun cleanroomx-doctor so release "
+            "qualification can verify that the installed package contains only manifested code."
+        )
+    else:
+        summary = (
+            "The installed CleanroomX package contains importable code or a linked package "
+            "directory that is absent from the distribution file manifest."
+        )
+        remediation = (
+            "Treat the installation as modified: remove unmanifested package payload or reinstall "
+            "the intended CleanroomX artifact before release or deployment qualification."
         )
 
     return _check(
@@ -495,6 +587,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 package_initializer_hash_matches_distribution
             ),
             **package_hash_details,
+            **manifest_closure_details,
         },
         remediation=remediation,
     )

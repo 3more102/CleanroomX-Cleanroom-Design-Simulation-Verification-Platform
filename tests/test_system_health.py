@@ -3,6 +3,9 @@ from __future__ import annotations
 import cleanroomx.system_health as system_health
 
 
+_AUTO_DISTRIBUTION_FILES = object()
+
+
 def _check_by_id(report: dict, check_id: str) -> dict:
     return next(item for item in report["checks"] if item["id"] == check_id)
 
@@ -64,14 +67,20 @@ def _mock_distribution_origin(
     monkeypatch,
     root,
     *,
-    files=(
-        "cleanroomx/system_health.py",
-        "cleanroomx/__init__.py",
-        "cleanroomx/application.py",
-    ),
+    files=_AUTO_DISTRIBUTION_FILES,
     hashes: bool = True,
     tampered_files: tuple[str, ...] = (),
 ) -> None:
+    resolved_files = files
+    if files is _AUTO_DISTRIBUTION_FILES:
+        package_root = system_health.Path(root) / "cleanroomx"
+        resolved_files = tuple(
+            f"cleanroomx/{candidate.relative_to(package_root).as_posix()}"
+            for candidate in sorted(package_root.rglob("*"))
+            if candidate.is_file()
+            and "__pycache__" not in candidate.relative_to(package_root).parts
+        )
+
     class FakeHash:
         def __init__(self, value: str) -> None:
             self.mode = "sha256"
@@ -97,8 +106,8 @@ def _mock_distribution_origin(
         def __init__(self) -> None:
             self.files = (
                 None
-                if files is None
-                else [FakePackagePath(value) for value in files]
+                if resolved_files is None
+                else [FakePackagePath(value) for value in resolved_files]
             )
 
         @staticmethod
@@ -136,11 +145,17 @@ def test_distribution_identity_matches_installed_metadata_and_origin(monkeypatch
     assert check["details"]["module_hash_matches_distribution"] is True
     assert check["details"]["package_initializer_hash_algorithm"] == "sha256"
     assert check["details"]["package_initializer_hash_matches_distribution"] is True
-    assert check["details"]["package_file_count"] == 3
-    assert check["details"]["package_hash_verified_count"] == 3
+    assert check["details"]["package_file_count"] >= 3
+    assert (
+        check["details"]["package_hash_verified_count"]
+        == check["details"]["package_file_count"]
+    )
     assert check["details"]["package_hash_mismatch_count"] == 0
     assert check["details"]["package_hash_unverifiable_count"] == 0
     assert check["details"]["package_hashes_match_distribution"] is True
+    assert check["details"]["package_manifest_closure"] is True
+    assert check["details"]["package_unmanifested_importable_count"] == 0
+    assert check["details"]["package_unmanifested_importable_paths"] == []
     assert check["details"]["package_initializer_path"] == str(
         system_health.Path(system_health.__file__).resolve().with_name("__init__.py")
     )
@@ -288,6 +303,55 @@ def test_distribution_identity_detects_modified_non_active_package_file(monkeypa
     assert strict["details"]["package_hashes_match_distribution"] is False
 
 
+def test_distribution_identity_detects_unmanifested_importable_code(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    package_root = tmp_path / "cleanroomx"
+    package_root.mkdir()
+    for name in ("system_health.py", "__init__.py", "application.py"):
+        (package_root / name).write_text(f"# synthetic {name}\n", encoding="utf-8")
+    (package_root / "injected_probe.py").write_text(
+        "SENTINEL = 'unexpected'\n",
+        encoding="utf-8",
+    )
+    bytecode_cache = package_root / "__pycache__"
+    bytecode_cache.mkdir()
+    (bytecode_cache / "system_health.cpython-test.pyc").write_bytes(b"cache")
+
+    monkeypatch.setattr(system_health, "__file__", str(package_root / "system_health.py"))
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    _mock_distribution_origin(
+        monkeypatch,
+        tmp_path,
+        files=(
+            "cleanroomx/system_health.py",
+            "cleanroomx/__init__.py",
+            "cleanroomx/application.py",
+        ),
+    )
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["package_hashes_match_distribution"] is True
+    assert advisory["details"]["package_manifest_closure"] is False
+    assert advisory["details"]["package_unmanifested_importable_count"] == 1
+    assert advisory["details"]["package_unmanifested_importable_paths"] == [
+        "cleanroomx/injected_probe.py"
+    ]
+    assert advisory["details"]["package_manifest_scan_error"] is None
+    assert advisory["remediation"]
+    assert "unmanifested" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["status"] == "fail"
+    assert strict["details"]["package_manifest_closure"] is False
+
+
 def test_distribution_identity_requires_verifiable_record_hashes(monkeypatch) -> None:
     monkeypatch.setattr(
         system_health.metadata,
@@ -308,7 +372,10 @@ def test_distribution_identity_requires_verifiable_record_hashes(monkeypatch) ->
     assert advisory["details"]["module_hash_matches_distribution"] is None
     assert advisory["details"]["package_initializer_hash_matches_distribution"] is None
     assert advisory["details"]["package_hashes_match_distribution"] is None
-    assert advisory["details"]["package_hash_unverifiable_count"] == 3
+    assert (
+        advisory["details"]["package_hash_unverifiable_count"]
+        == advisory["details"]["package_file_count"]
+    )
     assert advisory["remediation"]
     assert "record hashes" in advisory["remediation"].lower()
 

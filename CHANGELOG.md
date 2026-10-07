@@ -2,6 +2,7 @@
 
 ## Unreleased — system-health baseline drift gate — 2026-10-07
 
+- Adds package-manifest closure verification to `cleanroomx-doctor`, detecting unmanifested importable Python/native modules and linked package directories under the active installed `cleanroomx/` tree while ignoring generated `__pycache__` bytecode; strict installed-distribution qualification now fails on injected package payload even when all original RECORD hashes still match.
 - Extends installed-distribution integrity from the active doctor files to every manifested file under the installed `cleanroomx/` package, surfacing verified, mismatched, and unverifiable RECORD-hash coverage so modified solver/UI/data files cannot pass release qualification unnoticed.
 - Extends installed-distribution ownership verification to `cleanroomx/__init__.py`, binding the package initializer that supplies `__version__` to the same installed artifact as the active system-health module.
 - Tightens installed-distribution provenance by requiring the imported CleanroomX module to be owned by the installed distribution file manifest, preventing same-version stray modules inside a shared `site-packages` root from passing origin checks.

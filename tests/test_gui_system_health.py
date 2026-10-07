@@ -53,6 +53,7 @@ def _report(*, ready: bool = True) -> dict:
                 "status": "pass" if ready else "fail",
                 "summary": "Synthetic runtime readiness result.",
                 "details": {},
+                "remediation": None if ready else "Repair the synthetic desktop runtime.",
             }
         ],
     }
@@ -98,6 +99,7 @@ def test_gui_system_health_surfaces_required_failure_as_warning(app, monkeypatch
     assert shown
     assert "Required readiness: FAIL" in shown[0][1]
     assert "[FAIL] Python runtime (required)" in shown[0][1]
+    assert "Action: Repair the synthetic desktop runtime." in shown[0][1]
     assert app.status_var.get() == "System health: required check failed"
 
 

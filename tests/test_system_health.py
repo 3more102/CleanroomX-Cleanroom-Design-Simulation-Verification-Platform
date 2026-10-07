@@ -21,6 +21,7 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
     ids = [item["id"] for item in report["checks"]]
     assert len(ids) == len(set(ids))
     assert set(item["status"] for item in report["checks"]) <= {"pass", "warn", "fail"}
+    assert all("remediation" in item for item in report["checks"])
 
     expected_required_ready = not any(
         item["required"] and item["status"] == "fail"
@@ -44,6 +45,7 @@ def test_missing_optional_bim_is_warning_but_strict_bim_is_failure(monkeypatch) 
     optional_bim = _check_by_id(optional, "native-bim")
     assert optional_bim["required"] is False
     assert optional_bim["status"] == "warn"
+    assert "cleanroomx[bim]" in optional_bim["remediation"]
 
     strict = system_health.build_system_health_report(require_bim=True)
     strict_bim = _check_by_id(strict, "native-bim")
@@ -65,7 +67,9 @@ def test_registry_failure_is_reported_as_required_health_failure(monkeypatch) ->
     assert registry["required"] is True
     assert registry["status"] == "fail"
     assert registry["details"]["error_type"] == "RuntimeError"
+    assert registry["remediation"]
     assert plugins["status"] == "warn"
+    assert plugins["remediation"]
     assert report["required_ready"] is False
 
 
@@ -124,6 +128,7 @@ def test_tk_check_reports_interpreter_initialization_failure(monkeypatch) -> Non
     assert check["required"] is True
     assert check["details"]["error_type"] == "RuntimeError"
     assert check["details"]["display_probe_performed"] is False
+    assert check["remediation"]
 
 
 def test_deep_health_executes_packaged_active_analysis(monkeypatch) -> None:
@@ -221,6 +226,7 @@ def test_desktop_display_check_fails_closed_when_tk_root_cannot_initialize(monke
     assert check["required"] is True
     assert check["details"]["display_probe_performed"] is True
     assert check["details"]["error_type"] == "RuntimeError"
+    assert check["remediation"]
 
 
 def test_require_desktop_adds_required_display_probe(monkeypatch) -> None:

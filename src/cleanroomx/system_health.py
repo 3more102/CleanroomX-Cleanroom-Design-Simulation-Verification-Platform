@@ -25,6 +25,7 @@ def _check(
     status: str,
     summary: str,
     details: dict[str, Any] | None = None,
+    remediation: str | None = None,
 ) -> dict[str, Any]:
     if status not in {"pass", "warn", "fail"}:
         raise ValueError(f"unsupported system-health status: {status}")
@@ -35,6 +36,7 @@ def _check(
         "status": status,
         "summary": summary,
         "details": {} if details is None else details,
+        "remediation": remediation,
     }
 
 
@@ -56,6 +58,11 @@ def _python_runtime_check() -> dict[str, Any]:
             "implementation": platform.python_implementation(),
             "executable": sys.executable,
         },
+        remediation=(
+            None
+            if ready
+            else "Install a supported Python runtime (3.11 or newer) and reinstall CleanroomX into that environment."
+        ),
     )
 
 
@@ -77,6 +84,11 @@ def _python_qualification_check() -> dict[str, Any]:
             )
         ),
         details={"qualified_minors": matrix},
+        remediation=(
+            None
+            if qualified
+            else "For release-qualified operation, run CleanroomX on Python 3.11, 3.12, or 3.13."
+        ),
     )
 
 
@@ -91,6 +103,7 @@ def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
             status="fail",
             summary="The analysis registry could not be validated.",
             details={"error_type": type(exc).__name__, "error": str(exc)},
+            remediation="Reinstall the CleanroomX package/artifact, then rerun cleanroomx-doctor to verify the built-in analysis registry.",
         )
         plugin_check = _check(
             "plugin-discovery",
@@ -99,6 +112,7 @@ def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
             status="warn",
             summary="Plugin discovery could not be evaluated because registry validation failed.",
             details={},
+            remediation="Resolve the application-registry failure first; plugin readiness cannot be assessed until the registry loads.",
         )
         return registry_check, plugin_check
 
@@ -137,6 +151,11 @@ def _registry_checks() -> tuple[dict[str, Any], dict[str, Any]]:
             "plugin_issue_count": issue_count,
             "plugin_issues": registry.get("plugin_issues", []),
         },
+        remediation=(
+            "Review the reported plugin issues and update, repair, or remove the affected plugin packages."
+            if issue_count
+            else None
+        ),
     )
     return registry_check, plugin_check
 
@@ -152,6 +171,7 @@ def _tk_check() -> dict[str, Any]:
             status="fail",
             summary="Tkinter could not be imported; the desktop application cannot start.",
             details={"error_type": type(exc).__name__, "error": str(exc)},
+            remediation="Install or repair the Python Tk/Tcl runtime required by the CleanroomX desktop application.",
         )
 
     tcl_error = getattr(tkinter, "TclError", RuntimeError)
@@ -175,6 +195,7 @@ def _tk_check() -> dict[str, Any]:
                 "error": str(exc),
                 "display_probe_performed": False,
             },
+            remediation="Repair the Python Tk/Tcl installation, then rerun the health check before launching the desktop application.",
         )
 
     return _check(
@@ -208,6 +229,7 @@ def _desktop_display_check() -> dict[str, Any]:
                 "error_type": type(exc).__name__,
                 "error": str(exc),
             },
+            remediation="Install or repair the Python Tk/Tcl runtime before requiring desktop-display readiness.",
         )
 
     tcl_error = getattr(tkinter, "TclError", RuntimeError)
@@ -235,6 +257,7 @@ def _desktop_display_check() -> dict[str, Any]:
                 "error_type": type(exc).__name__,
                 "error": str(exc),
             },
+            remediation="Verify that a graphical display session is available and that the native Tk libraries can create a window, then rerun with --require-desktop.",
         )
 
     return _check(
@@ -263,6 +286,7 @@ def _packaged_demo_check() -> dict[str, Any]:
                 "error_type": type(exc).__name__,
                 "error": str(exc),
             },
+            remediation="Reinstall the CleanroomX package/artifact so the packaged demonstration project and companion data are restored.",
         )
 
     analysis_count = len(project.analyses)
@@ -274,6 +298,7 @@ def _packaged_demo_check() -> dict[str, Any]:
             status="fail",
             summary="The packaged demonstration project contains no analyses.",
             details={"path": str(path), "analysis_count": analysis_count},
+            remediation="Reinstall the CleanroomX package/artifact; the packaged demonstration project is incomplete.",
         )
 
     return _check(
@@ -305,6 +330,7 @@ def _demo_analysis_check() -> dict[str, Any]:
                 status="fail",
                 summary="The packaged demonstration project has no active analysis.",
                 details={"path": str(path)},
+                remediation="Reinstall the CleanroomX package/artifact so the packaged demo metadata is restored.",
             )
         analysis = project.analysis_by_id(analysis_id)
         original_input = copy.deepcopy(analysis.input)
@@ -325,6 +351,7 @@ def _demo_analysis_check() -> dict[str, Any]:
                     "analysis_id": analysis.id,
                     "analysis_kind": analysis.kind,
                 },
+                remediation="Treat this as a runtime-integrity failure; capture the doctor report and avoid relying on the affected analysis path until investigated.",
             )
     except (ImportError, OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError) as exc:
         return _check(
@@ -338,6 +365,7 @@ def _demo_analysis_check() -> dict[str, Any]:
                 "error_type": type(exc).__name__,
                 "error": str(exc),
             },
+            remediation="Run the shallow doctor first, then inspect the reported exception and repair or reinstall the affected analysis/runtime dependency.",
         )
 
     if not isinstance(run.result, dict) or not run.result:
@@ -352,6 +380,7 @@ def _demo_analysis_check() -> dict[str, Any]:
                 "analysis_id": analysis.id,
                 "analysis_kind": analysis.kind,
             },
+            remediation="Capture the report and investigate the packaged demo analysis runner; a successful execution must return a non-empty result payload.",
         )
 
     return _check(
@@ -387,6 +416,7 @@ def _persistence_check() -> dict[str, Any]:
                     status="fail",
                     summary="Atomic persistence probe completed with unexpected content.",
                     details={"bytes_expected": len(expected), "bytes_observed": len(observed)},
+                    remediation="Verify local temporary-storage integrity and filesystem behavior before relying on project persistence.",
                 )
     except OSError as exc:
         return _check(
@@ -396,6 +426,7 @@ def _persistence_check() -> dict[str, Any]:
             status="fail",
             summary="Atomic persistence probe failed.",
             details={"error_type": type(exc).__name__, "error": str(exc)},
+            remediation="Verify write permissions, available disk space, antivirus/file-locking behavior, and temporary-directory access.",
         )
 
     return _check(
@@ -423,6 +454,7 @@ def _bim_check(*, required: bool) -> dict[str, Any]:
                 else "IfcOpenShell is not available; IFC/BIM workflows are optional for this check."
             ),
             details={"available": False, "error_type": type(exc).__name__, "error": str(exc)},
+            remediation='Install or repair the qualified BIM dependency, for example: python -m pip install "cleanroomx[bim]".',
         )
 
     version = getattr(module, "__version__", None)

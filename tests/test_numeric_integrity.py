@@ -55,6 +55,23 @@ def test_foundational_engineering_apis_reject_boolean_measurements(
         analyze_supply_fan(value, FanSystem("Supply"))
 
 
+@pytest.mark.parametrize("value", (True, False))
+def test_thermal_loads_reject_boolean_occupant_counts(value: bool) -> None:
+    with pytest.raises(ValueError, match="non-negative integer"):
+        ThermalLoads(occupants=value)
+
+
+@pytest.mark.parametrize("value", (None, math.nan, math.inf, -math.inf))
+def test_thermal_loads_normalize_invalid_occupant_errors(value) -> None:
+    with pytest.raises(ValueError, match="non-negative integer"):
+        ThermalLoads(occupants=value)
+
+
+def test_thermal_loads_preserve_integral_numeric_occupant_counts() -> None:
+    assert ThermalLoads(occupants=2).occupants == 2
+    assert ThermalLoads(occupants=2.0).occupants == 2
+
+
 @pytest.mark.parametrize("value", _NONFINITE)
 @pytest.mark.parametrize(
     "field",

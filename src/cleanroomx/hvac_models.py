@@ -62,7 +62,12 @@ class ThermalLoads:
     other_latent_w: float = 0.0
 
     def __post_init__(self) -> None:
-        occupants = int(self.occupants)
+        if isinstance(self.occupants, bool):
+            raise ValueError("occupants must be a non-negative integer")
+        try:
+            occupants = int(self.occupants)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("occupants must be a non-negative integer") from exc
         if occupants < 0 or occupants != self.occupants:
             raise ValueError("occupants must be a non-negative integer")
         object.__setattr__(self, "occupants", occupants)

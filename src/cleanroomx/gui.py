@@ -7692,6 +7692,9 @@ class CleanroomXApp:
                 f"({requirement})"
             )
             lines.append(f"  {item.get('summary', '')}")
+            remediation = item.get("remediation")
+            if remediation and item.get("status") != "pass":
+                lines.append(f"  Action: {remediation}")
 
         self.status_var.set(
             "System health: ready"

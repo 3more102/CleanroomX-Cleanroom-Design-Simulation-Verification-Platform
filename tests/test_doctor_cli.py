@@ -5,7 +5,13 @@ import json
 import cleanroomx.doctor_cli as doctor_cli
 
 
-def _report(*, ready: bool = True, require_bim: bool = False, deep: bool = False) -> dict:
+def _report(
+    *,
+    ready: bool = True,
+    require_bim: bool = False,
+    require_desktop: bool = False,
+    deep: bool = False,
+) -> dict:
     return {
         "schema": "cleanroomx.system-health",
         "schema_version": 1,
@@ -14,6 +20,7 @@ def _report(*, ready: bool = True, require_bim: bool = False, deep: bool = False
         "status": "ready" if ready else "not_ready",
         "required_ready": ready,
         "require_bim": require_bim,
+        "require_desktop": require_desktop,
         "deep": deep,
         "summary": {"pass": 1 if ready else 0, "warn": 0, "fail": 0 if ready else 1, "check_count": 1},
         "checks": [
@@ -33,7 +40,12 @@ def test_doctor_cli_emits_strict_json_and_success_exit(monkeypatch, capsys) -> N
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_bim=False, deep=False: _report(ready=True, require_bim=require_bim, deep=deep),
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=True,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+        ),
     )
 
     assert doctor_cli.main([]) == 0
@@ -48,7 +60,12 @@ def test_doctor_cli_returns_two_when_required_check_fails(monkeypatch, capsys) -
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_bim=False, deep=False: _report(ready=False, require_bim=require_bim, deep=deep),
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=False,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+        ),
     )
 
     assert doctor_cli.main([]) == 2
@@ -58,19 +75,32 @@ def test_doctor_cli_returns_two_when_required_check_fails(monkeypatch, capsys) -
 
 
 def test_doctor_cli_writes_atomic_output_and_forwards_require_bim(monkeypatch, tmp_path, capsys) -> None:
-    calls: list[tuple[bool, bool]] = []
+    calls: list[tuple[bool, bool, bool]] = []
 
-    def build(*, require_bim: bool = False, deep: bool = False) -> dict:
-        calls.append((require_bim, deep))
-        return _report(ready=True, require_bim=require_bim, deep=deep)
+    def build(
+        *,
+        require_bim: bool = False,
+        require_desktop: bool = False,
+        deep: bool = False,
+    ) -> dict:
+        calls.append((require_bim, require_desktop, deep))
+        return _report(
+            ready=True,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+        )
 
     monkeypatch.setattr(doctor_cli, "build_system_health_report", build)
     output = tmp_path / "doctor.json"
 
-    assert doctor_cli.main(["--require-bim", "--deep", "--output", str(output)]) == 0
-    assert calls == [(True, True)]
+    assert doctor_cli.main(
+        ["--require-bim", "--require-desktop", "--deep", "--output", str(output)]
+    ) == 0
+    assert calls == [(True, True, True)]
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["require_bim"] is True
+    assert payload["require_desktop"] is True
     assert payload["deep"] is True
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -81,7 +111,12 @@ def test_doctor_cli_text_format_is_operator_readable(monkeypatch, capsys) -> Non
     monkeypatch.setattr(
         doctor_cli,
         "build_system_health_report",
-        lambda *, require_bim=False, deep=False: _report(ready=True, require_bim=require_bim, deep=deep),
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=True,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+        ),
     )
 
     assert doctor_cli.main(["--format", "text"]) == 0

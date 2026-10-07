@@ -6,6 +6,7 @@
 - Adds `--baseline` and optional `--fail-on-regression`; compatible profile flags are enforced so shallow, desktop, BIM, and deep probes cannot be compared accidentally.
 - Preserves required-readiness exit code 2 while using exit code 3 for baseline-only regression gates, allowing CI/support to distinguish current failure from operational drift.
 - Prevents `--output` from overwriting the supplied baseline and documents the baseline workflow for operator evidence.
+- Fixes desktop teardown so the scheduled worker-result poll is cancelled when the Tk root is destroyed, preventing orphaned `after` callbacks and Tcl `invalid command name` errors during repeated application lifecycles.
 
 ## Unreleased — operator system health doctor — 2026-10-07
 

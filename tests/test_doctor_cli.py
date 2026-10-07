@@ -227,3 +227,27 @@ def test_doctor_cli_fail_on_regression_requires_baseline(capsys) -> None:
     assert doctor_cli.main(["--fail-on-regression"]) == 1
     captured = capsys.readouterr()
     assert "--fail-on-regression requires --baseline" in captured.err
+
+
+
+def test_doctor_cli_redacts_explicit_local_paths(monkeypatch, capsys) -> None:
+    report = _report(ready=True)
+    windows_path = r"C:\Users\operator\CleanroomX\gui_demo.cleanroomx.json"
+    report["runtime"]["executable"] = r"C:\Python313\python.exe"
+    report["checks"][0]["details"] = {
+        "path": windows_path,
+        "message": windows_path,
+    }
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: report,
+    )
+
+    assert doctor_cli.main(["--redact-paths"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["runtime"]["executable"] == "<redacted>/python.exe"
+    assert payload["checks"][0]["details"]["path"] == "<redacted>/gui_demo.cleanroomx.json"
+    assert payload["checks"][0]["details"]["message"] == windows_path
+    assert payload["privacy"] == {"local_paths_redacted": True}

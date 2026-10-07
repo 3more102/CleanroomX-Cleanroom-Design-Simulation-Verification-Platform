@@ -2,7 +2,7 @@
 
 ## Unreleased — system-health baseline drift gate — 2026-10-07
 
-- Verifies the active installed CleanroomX module and package initializer against wheel/RECORD integrity hashes, detecting post-install modification or corruption even when version, origin, and distribution ownership still match.
+- Extends installed-artifact integrity from the two active identity files to every hash-bearing file in the CleanroomX distribution, reporting verified, mismatched, and unverifiable RECORD entries so modifications elsewhere in the package cannot pass release qualification.
 - Verifies the active `cleanroomx/system_health.py` and `cleanroomx/__init__.py` bytes against their installed wheel/RECORD hashes, detecting post-install modification or corruption even when both files remain distribution-owned.
 - Extends installed-distribution ownership verification to `cleanroomx/__init__.py`, binding the package initializer that supplies `__version__` to the same installed artifact as the active system-health module.
 - Tightens installed-distribution provenance by requiring the imported CleanroomX module to be owned by the installed distribution file manifest, preventing same-version stray modules inside a shared `site-packages` root from passing origin checks.

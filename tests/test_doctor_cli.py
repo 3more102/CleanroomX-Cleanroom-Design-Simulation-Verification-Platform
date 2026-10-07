@@ -11,29 +11,54 @@ def _report(
     require_bim: bool = False,
     require_desktop: bool = False,
     deep: bool = False,
+    warn: bool = False,
 ) -> dict:
+    checks = [
+        {
+            "id": "synthetic",
+            "label": "Synthetic",
+            "required": True,
+            "status": "pass" if ready else "fail",
+            "summary": "synthetic",
+            "details": {},
+            "remediation": None if ready else "Repair the synthetic runtime.",
+        }
+    ]
+    if warn:
+        checks.append(
+            {
+                "id": "synthetic-advisory",
+                "label": "Synthetic advisory",
+                "required": False,
+                "status": "warn",
+                "summary": "synthetic advisory warning",
+                "details": {},
+                "remediation": "Review the synthetic advisory.",
+            }
+        )
     return {
         "schema": "cleanroomx.system-health",
         "schema_version": 1,
         "application": {"name": "CleanroomX", "version": "test"},
         "runtime": {"platform": "test", "machine": "test", "python": "test"},
-        "status": "ready" if ready else "not_ready",
+        "status": (
+            "not_ready"
+            if not ready
+            else "ready_with_warnings"
+            if warn
+            else "ready"
+        ),
         "required_ready": ready,
         "require_bim": require_bim,
         "require_desktop": require_desktop,
         "deep": deep,
-        "summary": {"pass": 1 if ready else 0, "warn": 0, "fail": 0 if ready else 1, "check_count": 1},
-        "checks": [
-            {
-                "id": "synthetic",
-                "label": "Synthetic",
-                "required": True,
-                "status": "pass" if ready else "fail",
-                "summary": "synthetic",
-                "details": {},
-                "remediation": None if ready else "Repair the synthetic runtime.",
-            }
-        ],
+        "summary": {
+            "pass": 1 if ready else 0,
+            "warn": 1 if warn else 0,
+            "fail": 0 if ready else 1,
+            "check_count": len(checks),
+        },
+        "checks": checks,
     }
 
 
@@ -145,3 +170,42 @@ def test_doctor_cli_text_format_surfaces_remediation_for_failure(monkeypatch, ca
     captured = capsys.readouterr()
     assert "Action: Repair the synthetic runtime." in captured.out
     assert captured.err == ""
+
+
+def test_doctor_cli_warning_gate_is_opt_in_and_distinct(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=True,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+            warn=True,
+        ),
+    )
+
+    assert doctor_cli.main([]) == 0
+    default_payload = json.loads(capsys.readouterr().out)
+    assert default_payload["status"] == "ready_with_warnings"
+
+    assert doctor_cli.main(["--fail-on-warnings"]) == 3
+    strict_payload = json.loads(capsys.readouterr().out)
+    assert strict_payload["status"] == "ready_with_warnings"
+
+
+def test_doctor_cli_required_failure_takes_precedence_over_warning_gate(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=False,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+            warn=True,
+        ),
+    )
+
+    assert doctor_cli.main(["--fail-on-warnings"]) == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "not_ready"

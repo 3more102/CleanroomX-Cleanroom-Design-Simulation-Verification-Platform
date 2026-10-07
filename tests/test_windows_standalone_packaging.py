@@ -51,6 +51,8 @@ def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked()
     assert '-ArgumentList "--check"' in script
     assert ".WaitForExit(30000)" in script
     assert "did not exit within 30 seconds" in script
+    assert "CLEANROOMX_CHECK_ERROR_FILE" in script
+    assert "Frozen CleanroomX --check traceback:" in script
     assert "-Wait -PassThru" not in script
 
 
@@ -123,5 +125,7 @@ def test_frozen_entry_point_delegates_to_production_gui_main() -> None:
 
     assert "from cleanroomx.gui import main" in entry
     assert 'if "--check" in sys.argv[1:]' in entry
+    assert "CLEANROOMX_CHECK_ERROR_FILE" in entry
+    assert "traceback.format_exc()" in entry
     assert "except BaseException:" in entry
     assert "raise SystemExit(_run())" in entry

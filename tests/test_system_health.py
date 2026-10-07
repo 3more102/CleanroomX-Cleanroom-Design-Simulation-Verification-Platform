@@ -114,6 +114,21 @@ def test_distribution_version_mismatch_warns_and_can_fail_strict(monkeypatch) ->
     assert strict["status"] == "fail"
     assert strict["remediation"]
 
+
+def test_distribution_identity_does_not_mask_metadata_runtime_defects(monkeypatch) -> None:
+    def fail_metadata(_name: str) -> str:
+        raise RuntimeError("synthetic metadata runtime defect")
+
+    monkeypatch.setattr(system_health.metadata, "version", fail_metadata)
+
+    try:
+        system_health._distribution_identity_check()
+    except RuntimeError as exc:
+        assert "synthetic metadata runtime defect" in str(exc)
+    else:
+        raise AssertionError("unexpected metadata runtime defects must propagate")
+
+
 def test_missing_optional_bim_is_warning_but_strict_bim_is_failure(monkeypatch) -> None:
     real_import = system_health.import_module
 

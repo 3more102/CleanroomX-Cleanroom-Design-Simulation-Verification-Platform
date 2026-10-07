@@ -51,6 +51,7 @@ def _revision(
         application_version=version,
         artifact_size=1400,
         artifact_sha256=digest_char.upper() * 64,
+        artifact_identity=("file-id", 0, ord(digest_char)),
     )
 
 

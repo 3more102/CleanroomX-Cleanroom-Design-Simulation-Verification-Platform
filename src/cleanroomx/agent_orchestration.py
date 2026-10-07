@@ -23,6 +23,7 @@ AGENT_ORCHESTRATION_METADATA_KEY = "agent_orchestration"
 AGENT_PLAN_SCHEMA_VERSION = 1
 AGENT_RUN_SCHEMA = "cleanroomx.agent-orchestration-run"
 AGENT_RUN_SCHEMA_VERSION = 1
+AGENT_RUN_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
 
 PathToken = str | int
 
@@ -262,6 +263,11 @@ class AgentOrchestrationRun:
                 "source_check_error": self.source_check_error,
             },
             "agents": [item.to_dict() for item in self.outcomes],
+        }
+        payload["integrity"] = {
+            "algorithm": "sha256",
+            "canonicalization": AGENT_RUN_CANONICALIZATION,
+            "sha256": _canonical_sha256(payload),
         }
         json.dumps(payload, sort_keys=True, allow_nan=False)
         return payload
@@ -594,6 +600,14 @@ def run_project_agents(
             break
         if failed and fail_fast:
             break
+
+    if source_stable:
+        matches, check_error = _source_revision_state(source, revision)
+        if not matches:
+            source_stable = False
+            change_stage = "final"
+            change_agent_id = None
+            source_check_error = check_error
 
     return AgentOrchestrationRun(
         project_name=project.name,

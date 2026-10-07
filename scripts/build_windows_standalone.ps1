@@ -42,6 +42,7 @@ python -m PyInstaller `
     --version-file $versionFile `
     --paths (Join-Path $repoRoot "src") `
     --collect-data cleanroomx `
+    --collect-submodules cleanroomx `
     --additional-hooks-dir $hookDir `
     --distpath $distRoot `
     --workpath $buildRoot `

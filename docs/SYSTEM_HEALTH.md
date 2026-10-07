@@ -37,18 +37,18 @@ Advisory checks cover the current Python release-qualification matrix, isolated 
 
 A previously captured JSON doctor report can be used as a known-good baseline:
 
-\`\`\`bash
+```bash
 cleanroomx-doctor --output known-good-health.json
 cleanroomx-doctor --baseline known-good-health.json
-\`\`\`
+```
 
-When a baseline is supplied, the current report gains a deterministic \`comparison\` object with schema \`cleanroomx.system-health-comparison\`. It reports per-check status regressions and improvements, added/removed checks, required-readiness transitions, and whether required diagnostic coverage disappeared.
+When a baseline is supplied, the current report gains a deterministic `comparison` object with schema `cleanroomx.system-health-comparison`. It reports per-check status regressions and improvements, added/removed checks, required-readiness transitions, and whether required diagnostic coverage disappeared.
 
-The baseline must use the same probe profile as the current run: \`--require-bim\`, \`--require-desktop\`, and \`--deep\` must match. This prevents a shallow workstation report from being compared as though it were a deep or BIM-qualified probe.
+The baseline must use the same probe profile as the current run: `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents a shallow workstation report from being compared as though it were a deep or BIM-qualified probe.
 
-Use \`--fail-on-regression\` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
+Use `--fail-on-regression` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
 
-For evidence safety, \`--output\` cannot point to the same path as the supplied baseline.
+For evidence safety, `--output` cannot point to the same path as the supplied baseline.
 
 ## Exit codes
 

@@ -973,6 +973,7 @@ def analysis_input_sha256(payload: dict) -> str:
 
 
 _RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
+_RUNTIME_FROZEN_ARTIFACT_FINGERPRINT_ALGORITHM = "sha256-frozen-executable-v1"
 _RUNTIME_CODE_FINGERPRINT_ATTEMPTS = 3
 _RUNTIME_SOURCE_FILE_MAX_BYTES = 16 * 1024 * 1024
 _RUNTIME_SOURCE_TREE_MAX_BYTES = 128 * 1024 * 1024
@@ -1133,7 +1134,32 @@ def _fingerprint_python_tree(root: Path) -> dict:
     ) from last_change
 
 
+def _fingerprint_frozen_executable(path: Path) -> dict:
+    """Fingerprint the immutable PyInstaller executable that owns bundled code."""
+    executable = Path(path).resolve()
+    if not executable.is_file():
+        raise RuntimeError(f"CleanroomX frozen executable is unavailable: {executable}")
+    try:
+        metadata, digest = stable_file_sha256(
+            executable,
+            attempts=_RUNTIME_CODE_FINGERPRINT_ATTEMPTS,
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"cannot fingerprint CleanroomX frozen executable: {executable}"
+        ) from exc
+    return {
+        "algorithm": _RUNTIME_FROZEN_ARTIFACT_FINGERPRINT_ALGORITHM,
+        "sha256": digest,
+        # Retain the schema's historical count field: one frozen code artifact.
+        "source_file_count": 1,
+        "artifact_size_bytes": metadata.st_size,
+    }
+
+
 def _capture_runtime_code_fingerprint() -> dict:
+    if bool(getattr(sys, "frozen", False)):
+        return _fingerprint_frozen_executable(Path(sys.executable))
     return _fingerprint_python_tree(Path(__file__).resolve().parent)
 
 

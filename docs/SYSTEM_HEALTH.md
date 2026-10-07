@@ -52,6 +52,8 @@ Before comparison, both reports are checked for internal consistency. Their `req
 
 The baseline must use the same probe profile as the current run: `--require-qualified-python`, `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents reports with different release-qualification or execution requirements from being compared as equivalent evidence.
 
+Each report also carries a deterministic `policy` identity containing the system-health policy version and the qualified Python-minor matrix. Baseline comparison requires that identity to match. This prevents an older report from being reused after release-qualification policy changes even when the command-line flags are identical. Reports created before policy identity was introduced must be regenerated rather than silently treated as compatible evidence.
+
 Use `--fail-on-regression` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
 
 For evidence safety, `--output` cannot point to the same path as the supplied baseline.

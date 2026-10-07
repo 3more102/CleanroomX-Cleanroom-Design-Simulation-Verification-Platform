@@ -166,6 +166,9 @@ def test_project_agents_apply_explicit_handoff_and_record_hashes(tmp_path, monke
     assert handoff.source_run_sha256 == "a" * 64
     assert len(handoff.value_sha256) == 64
     assert run.outcomes[1].run["result"]["accepted_flow"] == 1250.0
+    bundle = run.to_dict()
+    assert bundle["integrity"]["algorithm"] == "sha256"
+    assert len(bundle["integrity"]["sha256"]) == 64
 
 
 def test_continue_on_error_blocks_dependents_but_runs_independent_agents(
@@ -240,3 +243,42 @@ def test_fail_fast_stops_after_first_agent_error(tmp_path, monkeypatch):
     assert len(run.outcomes) == 1
     assert run.outcomes[0].execution_state == "error"
     assert run.status == "error"
+
+
+def test_project_agents_perform_final_source_revision_check(tmp_path, monkeypatch):
+    path = save_project_document(
+        tmp_path / "agents.cleanroomx.json",
+        _project(
+            {
+                "schema_version": 1,
+                "agents": [
+                    {"id": "requirements-agent", "analysis_id": "requirements"},
+                ],
+            }
+        ),
+    )
+
+    monkeypatch.setattr(
+        orchestration,
+        "run_analysis",
+        lambda *args, **kwargs: _FakeRun(
+            {
+                "result": {"ok": True},
+                "integrity": {"sha256": "d" * 64},
+            }
+        ),
+    )
+    states = iter(((True, None), (True, None), (False, "changed")))
+
+    def revision_state(path, expected):
+        return next(states)
+
+    monkeypatch.setattr(orchestration, "_source_revision_state", revision_state)
+
+    run = run_project_agents(path)
+
+    assert run.source_stable_during_run is False
+    assert run.source_change_stage == "final"
+    assert run.source_change_agent_id is None
+    assert run.source_check_error == "changed"
+    assert run.status == "source_changed"

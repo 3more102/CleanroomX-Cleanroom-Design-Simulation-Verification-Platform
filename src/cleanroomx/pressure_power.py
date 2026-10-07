@@ -92,9 +92,18 @@ def analyze_fan_pressure_power(
     airflow_m3_s = _finite_calculation(
         airflow / 3600.0, "airflow_m3_s"
     )
+    if airflow > 0.0 and airflow_m3_s == 0.0:
+        raise ValueError(
+            "airflow_m3_s underflowed to zero for positive airflow_m3_h"
+        )
+
     fluid_power_w = _finite_calculation(
         airflow_m3_s * pressure, "fluid_air_power_w"
     )
+    if airflow_m3_s > 0.0 and pressure > 0.0 and fluid_power_w == 0.0:
+        raise ValueError(
+            "fluid_air_power_w underflowed to zero for positive airflow and pressure"
+        )
 
     fan_efficiency = (
         None if efficiencies is None else efficiencies.fan_efficiency

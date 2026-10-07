@@ -109,7 +109,8 @@ def test_invalid_inspector_edit_leaves_undo_and_geometry_intact(app):
     workspace.apply_properties()
     app.root.update()
     assert "Height" in workspace._property_error_var.get()
-    assert workspace._property_error_label.winfo_ismapped()
+    assert workspace.inspector_visible()
+    assert workspace._property_error_label.winfo_manager() == "pack"
     assert "invalid" in workspace._property_entries["height_m"].state()
     assert workspace.layout == before
     assert app.project.metadata["spatial_layout"] == before

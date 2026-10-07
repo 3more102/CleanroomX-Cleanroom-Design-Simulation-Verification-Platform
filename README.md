@@ -136,6 +136,14 @@ Headless readiness check:
 cleanroomx-gui --check
 ```
 
+Run the full installation/runtime health check:
+
+```bash
+cleanroomx-doctor
+```
+
+Use `cleanroomx-doctor --format text` for a concise operator summary, `cleanroomx-doctor --require-bim` when native IFC/BIM support is mandatory, or `cleanroomx-doctor --deep` to execute the packaged demo's active analysis through the real application runner. JSON remains the deterministic default for support tickets and CI evidence.
+
 ## Main command-line tools
 
 Run a saved project:

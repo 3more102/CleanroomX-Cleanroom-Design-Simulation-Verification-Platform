@@ -90,6 +90,7 @@ from .runtime_diagnostics import install_tk_exception_handler, record_gui_except
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
 from .gui_start import StartCenter
+from .system_health import build_system_health_report
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -2395,6 +2396,8 @@ class CleanroomXApp:
         menubar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False)
+        help_menu.add_command(label="System Health…", command=self.show_system_health)
+        help_menu.add_separator()
         help_menu.add_command(label="About CleanroomX", command=self.show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
@@ -3900,6 +3903,13 @@ class CleanroomXApp:
                 "Project",
                 self.show_recovery_center,
                 keywords=("autosave", "restore"),
+            ),
+            PaletteCommand(
+                "system.health",
+                "Run System Health Check",
+                "Help",
+                self.show_system_health,
+                keywords=("doctor", "readiness", "runtime", "support"),
             ),
         ]
 
@@ -7642,6 +7652,58 @@ class CleanroomXApp:
                 document,
                 label="HTML report",
             )
+
+    def show_system_health(self) -> None:
+        """Run the non-destructive workstation readiness checks from the desktop."""
+        try:
+            report = build_system_health_report()
+        except (ImportError, OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            GUI_RUNTIME_LOGGER.exception("Desktop system health check failed")
+            self.status_var.set("System health check failed")
+            messagebox.showerror(
+                "CleanroomX System Health",
+                f"System health check failed.\n\n{type(exc).__name__}: {exc}",
+                parent=self.root,
+            )
+            return
+
+        summary = report.get("summary", {})
+        required_ready = bool(report.get("required_ready"))
+        status = str(report.get("status") or "unknown")
+        lines = [
+            f"CleanroomX {report.get('application', {}).get('version', __version__)}",
+            f"Status: {status.replace('_', ' ').upper()}",
+            f"Required readiness: {'PASS' if required_ready else 'FAIL'}",
+            (
+                "Checks: "
+                f"{summary.get('pass', 0)} pass, "
+                f"{summary.get('warn', 0)} warn, "
+                f"{summary.get('fail', 0)} fail"
+            ),
+            "",
+        ]
+        for item in report.get("checks", []):
+            if not isinstance(item, dict):
+                continue
+            state = str(item.get("status") or "unknown").upper()
+            requirement = "required" if item.get("required") else "advisory"
+            lines.append(
+                f"[{state}] {item.get('label', item.get('id', 'Check'))} "
+                f"({requirement})"
+            )
+            lines.append(f"  {item.get('summary', '')}")
+
+        self.status_var.set(
+            "System health: ready"
+            if required_ready
+            else "System health: required check failed"
+        )
+        dialog = messagebox.showinfo if required_ready else messagebox.showwarning
+        dialog(
+            "CleanroomX System Health",
+            "\n".join(lines).rstrip(),
+            parent=self.root,
+        )
 
     def show_about(self) -> None:
         messagebox.showinfo(

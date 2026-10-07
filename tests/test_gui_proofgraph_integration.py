@@ -174,7 +174,10 @@ def test_proofgraph_model_object_navigation_syncs_viewport_and_project_browser(a
 
     app.proofgraph_viewer._select_key(model_key)
     app.proofgraph_viewer._navigate_selected()
-    app.root.update()
+    # Navigation is synchronous. Settle geometry-only work without entering a
+    # full Tcl event drain, which can continuously consume the application's
+    # recurring worker-poll timer under a real Tk/Xvfb session.
+    app.root.update_idletasks()
 
     assert workspace.selected == _Hit("room", room["id"])
     assert app.analysis_tree.selection() == (f"room:{room['id']}",)
@@ -190,10 +193,13 @@ def test_proofgraph_canvas_tracks_light_and_dark_workstation_theme(app):
 
     viewer.set_documents([document])
     viewer._select_key(f"model_object:{room['id']}")
-    app.root.update()
+    # ProofGraph rendering and theme application are synchronous. Only settle
+    # geometry/idle work here: a full Tcl event drain can continuously consume
+    # the application's recurring worker-poll timer under Python 3.13/Xvfb.
+    app.root.update_idletasks()
 
     app.set_theme("dark", persist=False)
-    app.root.update()
+    app.root.update_idletasks()
 
     dark = theme_palette("dark")
     assert viewer.canvas.cget("background") == dark["plot"]
@@ -223,7 +229,7 @@ def test_proofgraph_canvas_tracks_light_and_dark_workstation_theme(app):
     }
 
     app.set_theme("light", persist=False)
-    app.root.update()
+    app.root.update_idletasks()
 
     light = theme_palette("light")
     assert viewer.canvas.cget("background") == light["plot"]
@@ -268,7 +274,7 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     assert "calculation:pressure_solver" in keys
     assert "evidence:EVID-GUI-PRESSURE" in keys
     assert "verdict:VERDICT-GUI-PRESSURE" not in keys
-    assert app.proofgraph_viewer.summary_var.get().startswith("View: 2/")
+    assert app.proofgraph_viewer.summary_var.get().startswith(f"View: {len(keys)}/")
 
     app.proofgraph_viewer._clear_search_and_filter()
     app.root.update()

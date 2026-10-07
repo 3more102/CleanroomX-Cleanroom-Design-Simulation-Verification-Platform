@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — operator system health doctor — 2026-10-07
+
+- Adds `cleanroomx-doctor`, a machine-readable workstation/runtime readiness check covering Python support and release qualification, application/plugin registry health, Tk availability, packaged-demo integrity, atomic persistence, and optional native IfcOpenShell availability.
+- Adds `--require-bim` so installations that depend on IFC/BIM can make missing or unloadable native support a required failure instead of an optional warning.
+- Adds `--deep` to execute the packaged demo's active analysis through the real application registry/runner, proving a bounded end-to-end analysis path without mutating the project.
+- Uses deterministic JSON and exit code 2 for failed required checks while preserving exit code 0 for ready installations, including optional warnings.
+- Adds installed-wheel CI smoke coverage plus focused CLI/backend regressions.
+- Exposes the bounded shallow health check in the desktop Help menu and command palette, with operator-readable readiness details and GUI regression coverage.
+
 ## Unreleased Release 3 — Windows artifact qualification and bounded GUI gates — 2026-10-07
 
 - Makes frozen `--check` execution non-interactive and fail-closed: windowed builds tolerate missing stdout, health checks have a 30-second process ceiling, and CI receives a traceback file instead of a hidden GUI exception dialog.

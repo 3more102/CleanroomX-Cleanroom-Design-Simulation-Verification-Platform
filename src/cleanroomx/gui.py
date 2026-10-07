@@ -2111,6 +2111,7 @@ class CleanroomXApp:
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
         self._project_diagnostics_after_id = None
+        self._worker_poll_after_id = None
         self._recent_project_paths: list[Path] = []
         self._command_palette_window: CommandPalette | None = None
         self._ui_state_path = (
@@ -2179,7 +2180,8 @@ class CleanroomXApp:
         self.description_var.trace_add("write", lambda *_: self._update_title())
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.root.after(100, self._poll_worker)
+        self.root.bind("<Destroy>", self._on_root_destroy, add="+")
+        self._schedule_worker_poll()
         if self._autosave_interval_ms:
             self.root.after(self._autosave_interval_ms, self._autosave_tick)
             self.root.after(500, self._poll_autosave_status)
@@ -7307,7 +7309,29 @@ class CleanroomXApp:
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
 
+    def _schedule_worker_poll(self) -> None:
+        try:
+            self._worker_poll_after_id = self.root.after(100, self._poll_worker)
+        except tk.TclError:
+            self._worker_poll_after_id = None
+
+    def _cancel_worker_poll(self) -> None:
+        callback_id = getattr(self, "_worker_poll_after_id", None)
+        self._worker_poll_after_id = None
+        if callback_id is None:
+            return
+        try:
+            self.root.after_cancel(callback_id)
+        except tk.TclError:
+            pass
+
+    def _on_root_destroy(self, event=None) -> None:
+        if event is not None and getattr(event, "widget", None) is not self.root:
+            return
+        self._cancel_worker_poll()
+
     def _poll_worker(self) -> None:
+        self._worker_poll_after_id = None
         try:
             while True:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
@@ -7414,7 +7438,7 @@ class CleanroomXApp:
             # A single unexpected result-rendering/history callback failure must
             # not permanently stop worker completion polling. The exception is
             # still allowed to propagate to the Tk runtime exception boundary.
-            self.root.after(100, self._poll_worker)
+            self._schedule_worker_poll()
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         self._set_text(
@@ -7747,6 +7771,7 @@ class CleanroomXApp:
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=True)
+        self._cancel_worker_poll()
         self.root.destroy()
 
 

@@ -8,6 +8,7 @@
 - Adds structured remediation guidance to system-health warnings/failures and surfaces the same next-action guidance in CLI text output and the desktop health summary.
 - Adds `--deep` to execute the packaged demo's active analysis through the real application registry/runner, proving a bounded end-to-end analysis path without mutating the project.
 - Uses deterministic JSON and exit code 2 for failed required checks while preserving exit code 0 for ready installations, including optional warnings.
+- Adds opt-in `--fail-on-warnings` automation policy: warning-only readiness remains unchanged in JSON but returns distinct exit code 3 when strict advisory gating is requested.
 - Adds installed-wheel CI smoke coverage plus focused CLI/backend regressions.
 - Exposes the bounded shallow health check in the desktop Help menu and command palette, with operator-readable readiness details and GUI regression coverage.
 

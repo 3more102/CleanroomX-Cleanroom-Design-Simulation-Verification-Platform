@@ -9,6 +9,7 @@ cleanroomx-doctor
 cleanroomx-doctor --format text
 cleanroomx-doctor --output cleanroomx-health.json
 cleanroomx-doctor --require-bim
+cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
 ```
 
@@ -25,6 +26,8 @@ Required checks cover:
 - an atomic local persistence create/read probe.
 
 Advisory checks cover the current Python release-qualification matrix, isolated plugin discovery issues, and native IfcOpenShell availability. By default, missing IFC/BIM support is a warning because it is an optional dependency. `--require-bim` promotes that check to required.
+
+`--require-desktop` adds a required real-Tk display lifecycle probe. It creates a hidden Tk root, withdraws it, settles idle layout work, and destroys it. Use this on operator workstations or packaged desktop qualification when headless Tcl availability alone is not sufficient. A missing display server, broken native Tk library, or failed root lifecycle makes required readiness fail.
 
 `--deep` adds a required end-to-end execution probe. It reloads the packaged demo, selects its configured active analysis, executes that analysis through the normal CleanroomX application runner against the packaged companion files, verifies that a result payload is produced, and confirms the loaded project input was not mutated. The engineering pass/fail status of the demo result is reported as diagnostic context; the health check is concerned with successful execution of the software path, not with treating the demo as certification evidence.
 

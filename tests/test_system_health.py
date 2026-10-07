@@ -64,7 +64,7 @@ def _mock_distribution_origin(
     monkeypatch,
     root,
     *,
-    files=("cleanroomx/system_health.py",),
+    files=("cleanroomx/system_health.py", "cleanroomx/__init__.py"),
 ) -> None:
     class FakeDistribution:
         def __init__(self) -> None:
@@ -100,6 +100,10 @@ def test_distribution_identity_matches_installed_metadata_and_origin(monkeypatch
     assert check["details"]["origin_matches_distribution"] is True
     assert check["details"]["ownership_manifest_available"] is True
     assert check["details"]["module_owned_by_distribution"] is True
+    assert check["details"]["package_initializer_owned_by_distribution"] is True
+    assert check["details"]["package_initializer_path"] == str(
+        system_health.Path(system_health.__file__).resolve().with_name("__init__.py")
+    )
     assert check["details"]["distribution_path"] == str(distribution_root)
     assert check["remediation"] is None
 
@@ -149,12 +153,42 @@ def test_distribution_identity_detects_unowned_module_inside_distribution_root(
     assert advisory["details"]["origin_matches_distribution"] is True
     assert advisory["details"]["ownership_manifest_available"] is True
     assert advisory["details"]["module_owned_by_distribution"] is False
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is True
     assert advisory["remediation"]
     assert "stray" in advisory["remediation"].lower()
 
     strict = system_health._distribution_identity_check(required=True)
     assert strict["status"] == "fail"
     assert strict["details"]["module_owned_by_distribution"] is False
+
+
+def test_distribution_identity_detects_unowned_package_initializer(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        system_health.metadata,
+        "version",
+        lambda _name: system_health.__version__,
+    )
+    distribution_root = system_health.Path(system_health.__file__).resolve().parents[1]
+    _mock_distribution_origin(
+        monkeypatch,
+        distribution_root,
+        files=("cleanroomx/system_health.py",),
+    )
+
+    advisory = system_health._distribution_identity_check(required=False)
+    assert advisory["status"] == "warn"
+    assert advisory["details"]["origin_matches_distribution"] is True
+    assert advisory["details"]["module_owned_by_distribution"] is True
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is False
+    assert advisory["remediation"]
+    assert "initializer" in advisory["remediation"].lower()
+
+    strict = system_health._distribution_identity_check(required=True)
+    assert strict["status"] == "fail"
+    assert strict["details"]["module_owned_by_distribution"] is True
+    assert strict["details"]["package_initializer_owned_by_distribution"] is False
 
 
 def test_distribution_identity_requires_file_manifest_for_provenance(
@@ -173,6 +207,7 @@ def test_distribution_identity_requires_file_manifest_for_provenance(
     assert advisory["details"]["origin_matches_distribution"] is True
     assert advisory["details"]["ownership_manifest_available"] is False
     assert advisory["details"]["module_owned_by_distribution"] is None
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is None
     assert advisory["remediation"]
     assert "file metadata" in advisory["remediation"].lower()
 
@@ -193,6 +228,7 @@ def test_missing_distribution_metadata_is_advisory_unless_required(monkeypatch) 
     assert advisory["details"]["metadata_available"] is False
     assert advisory["details"]["origin_matches_distribution"] is None
     assert advisory["details"]["module_owned_by_distribution"] is None
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is None
     assert advisory["remediation"]
 
     strict = system_health.build_system_health_report(
@@ -216,6 +252,7 @@ def test_distribution_version_mismatch_warns_and_can_fail_strict(monkeypatch) ->
     assert advisory["details"]["origin_matches_distribution"] is None
     assert advisory["details"]["ownership_manifest_available"] is None
     assert advisory["details"]["module_owned_by_distribution"] is None
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is None
     assert advisory["remediation"]
 
     strict = system_health._distribution_identity_check(required=True)
@@ -243,6 +280,7 @@ def test_distribution_identity_handles_metadata_origin_disappearing(monkeypatch)
     assert advisory["details"]["origin_matches_distribution"] is None
     assert advisory["details"]["ownership_manifest_available"] is None
     assert advisory["details"]["module_owned_by_distribution"] is None
+    assert advisory["details"]["package_initializer_owned_by_distribution"] is None
     assert advisory["remediation"]
 
 

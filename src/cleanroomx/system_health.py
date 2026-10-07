@@ -144,6 +144,7 @@ def _python_qualification_check(*, required: bool = False) -> dict[str, Any]:
 def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
     """Verify installed metadata, code origin, and distribution ownership."""
     module_path = Path(__file__).resolve()
+    package_initializer_path = module_path.with_name("__init__.py")
     try:
         distribution_version = metadata.version("cleanroomx")
     except metadata.PackageNotFoundError:
@@ -160,10 +161,12 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                 "module_version": __version__,
                 "distribution_version": None,
                 "module_path": str(module_path),
+                "package_initializer_path": str(package_initializer_path),
                 "distribution_path": None,
                 "origin_matches_distribution": None,
                 "ownership_manifest_available": None,
                 "module_owned_by_distribution": None,
+                "package_initializer_owned_by_distribution": None,
             },
             remediation=(
                 "Install CleanroomX into the active Python environment before release or deployment "
@@ -176,6 +179,7 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
     origin_matches_distribution: bool | None = None
     ownership_manifest_available: bool | None = None
     module_owned_by_distribution: bool | None = None
+    package_initializer_owned_by_distribution: bool | None = None
 
     if version_matches:
         try:
@@ -196,10 +200,12 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
                     "module_version": __version__,
                     "distribution_version": distribution_version,
                     "module_path": str(module_path),
+                    "package_initializer_path": str(package_initializer_path),
                     "distribution_path": None,
                     "origin_matches_distribution": None,
                     "ownership_manifest_available": None,
                     "module_owned_by_distribution": None,
+                    "package_initializer_owned_by_distribution": None,
                 },
                 remediation=(
                     "Repair or reinstall CleanroomX in the active Python environment, then rerun "
@@ -211,20 +217,26 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
         distribution_files = distribution.files
         ownership_manifest_available = distribution_files is not None
         if distribution_files is not None:
-            module_owned_by_distribution = any(
-                Path(distribution.locate_file(file)).resolve() == module_path
+            owned_paths = {
+                Path(distribution.locate_file(file)).resolve()
                 for file in distribution_files
+            }
+            module_owned_by_distribution = module_path in owned_paths
+            package_initializer_owned_by_distribution = (
+                package_initializer_path in owned_paths
             )
 
     consistent = (
         version_matches
         and origin_matches_distribution is True
         and module_owned_by_distribution is True
+        and package_initializer_owned_by_distribution is True
     )
     if consistent:
         summary = (
             f"Imported CleanroomX {__version__} matches installed distribution metadata, "
-            "originates from the installed distribution, and is owned by its file manifest."
+            "originates from the installed distribution, and its active module and package "
+            "initializer are owned by the distribution file manifest."
         )
         remediation = None
     elif not version_matches:
@@ -254,14 +266,23 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             "Reinstall CleanroomX from a standard wheel or other installation that preserves "
             "distribution file metadata, then rerun cleanroomx-doctor before release qualification."
         )
-    else:
+    elif module_owned_by_distribution is not True:
         summary = (
             "Imported CleanroomX is under the installed distribution location, but the imported "
-            "module is not owned by the installed distribution file manifest."
+            "system-health module is not owned by the installed distribution file manifest."
         )
         remediation = (
-            "Remove stray or shadowing CleanroomX files and reinstall the intended distribution "
-            "so the imported module is recorded as part of that installed artifact."
+            "Remove stray or shadowing CleanroomX modules and reinstall the intended distribution "
+            "so the active system-health module is recorded as part of that installed artifact."
+        )
+    else:
+        summary = (
+            "The active CleanroomX system-health module is distribution-owned, but the package "
+            "initializer that supplies package identity is not owned by the installed distribution."
+        )
+        remediation = (
+            "Remove stray or shadowing CleanroomX package initializer files and reinstall the "
+            "intended distribution so package identity and diagnostics come from the same artifact."
         )
 
     return _check(
@@ -275,12 +296,16 @@ def _distribution_identity_check(*, required: bool = False) -> dict[str, Any]:
             "module_version": __version__,
             "distribution_version": distribution_version,
             "module_path": str(module_path),
+            "package_initializer_path": str(package_initializer_path),
             "distribution_path": (
                 None if distribution_path is None else str(distribution_path)
             ),
             "origin_matches_distribution": origin_matches_distribution,
             "ownership_manifest_available": ownership_manifest_available,
             "module_owned_by_distribution": module_owned_by_distribution,
+            "package_initializer_owned_by_distribution": (
+                package_initializer_owned_by_distribution
+            ),
         },
         remediation=remediation,
     )

@@ -180,7 +180,7 @@ def test_compliance_panel_rejects_nonfinite_tolerance_without_committing(root):
     assert state["payload"] == before
     assert state["edits"] == []
     assert panel.validation_var.get() == "EDIT INVALID"
-    assert any("finite numeric value" in message for message in messages)
+    assert any("finite JSON number" in message for message in messages)
 
 
 def test_compliance_panel_duplicate_and_delete_preserve_valid_pack(root):

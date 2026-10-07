@@ -7,6 +7,7 @@
 - Adds `--deep` to execute the packaged demo's active analysis through the real application registry/runner, proving a bounded end-to-end analysis path without mutating the project.
 - Uses deterministic JSON and exit code 2 for failed required checks while preserving exit code 0 for ready installations, including optional warnings.
 - Adds installed-wheel CI smoke coverage plus focused CLI/backend regressions.
+- Exposes the bounded shallow health check in the desktop Help menu and command palette, with operator-readable readiness details and GUI regression coverage.
 
 ## Unreleased Release 3 — Windows artifact qualification and bounded GUI gates — 2026-10-07
 

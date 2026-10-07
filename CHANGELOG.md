@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — Windows artifact qualification and bounded GUI gates — 2026-10-07
+
+- Makes frozen `--check` execution non-interactive and fail-closed: windowed builds tolerate missing stdout, health checks have a 30-second process ceiling, and CI receives a traceback file instead of a hidden GUI exception dialog.
+- Makes runtime implementation provenance packaging-aware: source checkouts retain the deterministic Python-source-tree SHA-256, while PyInstaller builds fingerprint the frozen executable artifact rather than assuming unpacked `.py` files exist.
+- Includes all first-party `cleanroomx` submodules in the standalone image so dynamically resolved analysis bindings such as design requirements are present without reverting to an unbounded third-party IfcOpenShell collection policy.
+- Stages installer inputs and outputs under a short temporary path before Inno Setup compilation, removing checkout-path-length dependence for deeply nested native BIM/Tk payloads.
+- Validates per-user uninstall registration across both 32-bit and 64-bit Windows registry views, then exercises install, health check, upgrade, health check, and uninstall through the registered artifact lifecycle.
+- Bounds each CI matrix job to 30 minutes and the Python 3.13 real-Tk suite to 20 minutes with verbose fail-fast output so a failing or hanging GUI test is identified instead of consuming the runner's default multi-hour timeout.
+- Solver equations, project schemas, engineering tolerances, canonical evidence semantics, and numerical acceptance rules are unchanged.
+
 ## Unreleased Release 3 — background analysis lifecycle recovery — 2026-10-06
 
 - Delivers worker-local exits such as SystemExit, KeyboardInterrupt, and GeneratorExit to the existing GUI completion boundary, preserving their traceback and releasing the run lock without accepting failed results.

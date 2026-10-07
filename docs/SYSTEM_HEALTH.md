@@ -11,6 +11,8 @@ cleanroomx-doctor --output cleanroomx-health.json
 cleanroomx-doctor --require-bim
 cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
+cleanroomx-doctor --baseline known-good-health.json
+cleanroomx-doctor --baseline known-good-health.json --fail-on-regression
 ```
 
 The command emits strict JSON with schema `cleanroomx.system-health` by default. Each check includes a `remediation` field; warnings and failures use it for a concrete next action while passing checks leave it null. Use `--format text` for a concise operator-readable summary; remediation appears as an indented `Action:` line and exit-code semantics are identical in both formats.
@@ -31,10 +33,28 @@ Advisory checks cover the current Python release-qualification matrix, isolated 
 
 `--deep` adds a required end-to-end execution probe. It reloads the packaged demo, selects its configured active analysis, executes that analysis through the normal CleanroomX application runner against the packaged companion files, verifies that a result payload is produced, and confirms the loaded project input was not mutated. The engineering pass/fail status of the demo result is reported as diagnostic context; the health check is concerned with successful execution of the software path, not with treating the demo as certification evidence.
 
+## Baseline drift detection
+
+A previously captured JSON doctor report can be used as a known-good baseline:
+
+\`\`\`bash
+cleanroomx-doctor --output known-good-health.json
+cleanroomx-doctor --baseline known-good-health.json
+\`\`\`
+
+When a baseline is supplied, the current report gains a deterministic \`comparison\` object with schema \`cleanroomx.system-health-comparison\`. It reports per-check status regressions and improvements, added/removed checks, required-readiness transitions, and whether required diagnostic coverage disappeared.
+
+The baseline must use the same probe profile as the current run: \`--require-bim\`, \`--require-desktop\`, and \`--deep\` must match. This prevents a shallow workstation report from being compared as though it were a deep or BIM-qualified probe.
+
+Use \`--fail-on-regression\` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
+
+For evidence safety, \`--output\` cannot point to the same path as the supplied baseline.
+
 ## Exit codes
 
 - `0`: all required checks passed. The JSON status is `ready` or `ready_with_warnings`.
 - `2`: at least one required readiness check failed. The JSON status is `not_ready`.
-- `1`: the command itself could not complete an expected OS/value operation, such as publishing the requested output file.
+- `3`: `--fail-on-regression` was requested and the compatible baseline comparison detected health regression while required readiness still passed.
+- `1`: the command itself could not complete an expected OS/value operation, such as invalid baseline input, incompatible probe profiles, or publishing the requested output file.
 
 The doctor does not certify a cleanroom, validate project engineering, or replace the release qualification workflows. It reports software/runtime readiness only.

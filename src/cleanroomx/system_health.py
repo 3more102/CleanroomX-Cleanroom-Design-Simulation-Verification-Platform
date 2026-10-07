@@ -494,10 +494,11 @@ def _health_check_map(
         raise ValueError(f"{label} system-health report must be a JSON object")
     if report.get("schema") != "cleanroomx.system-health":
         raise ValueError(f"{label} report is not a cleanroomx.system-health document")
-    if report.get("schema_version") != 1:
+    schema_version = report.get("schema_version")
+    if type(schema_version) is not int or schema_version != 1:
         raise ValueError(
             f"{label} report uses unsupported system-health schema version "
-            f"{report.get('schema_version')!r}"
+            f"{schema_version!r}"
         )
     if type(report.get("required_ready")) is not bool:
         raise ValueError(f"{label} report required_ready must be boolean")
@@ -516,7 +517,7 @@ def _health_check_map(
         if check_id in indexed:
             raise ValueError(f"{label} report contains duplicate check id {check_id!r}")
         status = item.get("status")
-        if status not in _HEALTH_STATUS_RANK:
+        if not isinstance(status, str) or status not in _HEALTH_STATUS_RANK:
             raise ValueError(
                 f"{label} report check {check_id!r} has unsupported status {status!r}"
             )

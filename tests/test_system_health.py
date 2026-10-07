@@ -12,6 +12,10 @@ def test_system_health_report_has_stable_schema_and_summary() -> None:
 
     assert report["schema"] == "cleanroomx.system-health"
     assert report["schema_version"] == 1
+    assert report["policy"] == {
+        "version": system_health.SYSTEM_HEALTH_POLICY_VERSION,
+        "qualified_python_minors": ["3.11", "3.12", "3.13"],
+    }
     assert report["deep"] is False
     assert report["require_desktop"] is False
     assert report["require_qualified_python"] is False
@@ -292,6 +296,10 @@ def _synthetic_health_report(
         "schema": "cleanroomx.system-health",
         "schema_version": 1,
         "application": {"name": "CleanroomX", "version": version},
+        "policy": {
+            "version": system_health.SYSTEM_HEALTH_POLICY_VERSION,
+            "qualified_python_minors": ["3.11", "3.12", "3.13"],
+        },
         "runtime": {"platform": "test", "machine": "test", "python": "test"},
         "status": (
             "not_ready"
@@ -357,6 +365,10 @@ def test_system_health_comparison_detects_regressions_and_improvements() -> None
     assert comparison["improved"] is True
     assert comparison["baseline_application_version"] == "1.0"
     assert comparison["current_application_version"] == "1.1"
+    assert comparison["policy"] == {
+        "version": system_health.SYSTEM_HEALTH_POLICY_VERSION,
+        "qualified_python_minors": ["3.11", "3.12", "3.13"],
+    }
     assert comparison["regressions"] == [
         {
             "id": "runtime",
@@ -403,6 +415,55 @@ def test_system_health_comparison_rejects_incompatible_probe_profiles() -> None:
         assert "baseline profile does not match" in str(exc)
     else:
         raise AssertionError("profile mismatch must be rejected")
+
+
+def test_system_health_comparison_rejects_incompatible_policy_identity() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["policy"]["qualified_python_minors"] = ["3.11", "3.12"]
+
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "baseline policy does not match the current policy" in str(exc)
+    else:
+        raise AssertionError("policy mismatch must be rejected")
+
+
+def test_system_health_comparison_rejects_policy_version_mismatch() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["policy"]["version"] += 1
+
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "baseline policy does not match the current policy" in str(exc)
+    else:
+        raise AssertionError("policy-version mismatch must be rejected")
+
+
+def test_system_health_comparison_rejects_missing_policy_identity() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    del baseline["policy"]
+
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "baseline report policy must be an object" in str(exc)
+    else:
+        raise AssertionError("policy-less baseline must be rejected")
+
+
+def test_system_health_comparison_accepts_equivalent_policy_matrix_order() -> None:
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["policy"]["qualified_python_minors"].reverse()
+
+    comparison = system_health.compare_system_health_reports(baseline, current)
+
+    assert comparison["state"] == "stable"
 
 
 def test_system_health_comparison_rejects_duplicate_check_ids() -> None:

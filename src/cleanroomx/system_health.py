@@ -15,7 +15,15 @@ from .project import load_project_document
 
 
 QUALIFIED_PYTHON_MINORS = ((3, 11), (3, 12), (3, 13))
+SYSTEM_HEALTH_POLICY_VERSION = 1
 _LOCAL_PATH_DETAIL_KEYS = frozenset({"path", "executable"})
+
+
+def _qualified_python_minor_labels() -> list[str]:
+    return [
+        f"{major}.{minor_version}"
+        for major, minor_version in QUALIFIED_PYTHON_MINORS
+    ]
 
 
 def _redacted_path_text(value: str) -> str:
@@ -117,7 +125,7 @@ def _python_runtime_check() -> dict[str, Any]:
 def _python_qualification_check(*, required: bool = False) -> dict[str, Any]:
     minor = tuple(sys.version_info[:2])
     qualified = minor in QUALIFIED_PYTHON_MINORS
-    matrix = [f"{major}.{minor_version}" for major, minor_version in QUALIFIED_PYTHON_MINORS]
+    matrix = _qualified_python_minor_labels()
     return _check(
         "python-release-qualification",
         "Python release qualification",
@@ -543,6 +551,41 @@ def _health_profile(report: dict[str, Any], *, label: str) -> dict[str, bool]:
     return profile
 
 
+def _health_policy_identity(report: dict[str, Any], *, label: str) -> dict[str, Any]:
+    policy = report.get("policy")
+    if type(policy) is not dict:
+        raise ValueError(f"{label} report policy must be an object")
+
+    version = policy.get("version")
+    if type(version) is not int or version < 1:
+        raise ValueError(f"{label} report policy.version must be a positive integer")
+
+    qualified_minors = policy.get("qualified_python_minors")
+    if type(qualified_minors) is not list or not qualified_minors:
+        raise ValueError(
+            f"{label} report policy.qualified_python_minors must be a non-empty array"
+        )
+
+    normalized: list[str] = []
+    for index, value in enumerate(qualified_minors):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"{label} report policy.qualified_python_minors[{index}] "
+                "must be a non-empty string"
+            )
+        normalized.append(value.strip())
+
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(
+            f"{label} report policy.qualified_python_minors must not contain duplicates"
+        )
+
+    return {
+        "version": version,
+        "qualified_python_minors": sorted(normalized),
+    }
+
+
 def _health_check_map(
     report: dict[str, Any],
     *,
@@ -649,6 +692,14 @@ def compare_system_health_reports(
             f"(baseline={baseline_profile}, current={current_profile})"
         )
 
+    baseline_policy = _health_policy_identity(baseline, label="baseline")
+    current_policy = _health_policy_identity(current, label="current")
+    if baseline_policy != current_policy:
+        raise ValueError(
+            "system-health baseline policy does not match the current policy "
+            f"(baseline={baseline_policy}, current={current_policy})"
+        )
+
     regressions: list[dict[str, Any]] = []
     improvements: list[dict[str, Any]] = []
     for check_id in sorted(set(baseline_checks) & set(current_checks)):
@@ -736,6 +787,7 @@ def compare_system_health_reports(
         "regressed": regressed,
         "improved": improved,
         "profile": current_profile,
+        "policy": current_policy,
         "baseline_application_version": application_version(baseline),
         "current_application_version": application_version(current),
         "required_readiness": {
@@ -810,6 +862,10 @@ def build_system_health_report(
         "application": {
             "name": "CleanroomX",
             "version": __version__,
+        },
+        "policy": {
+            "version": SYSTEM_HEALTH_POLICY_VERSION,
+            "qualified_python_minors": _qualified_python_minor_labels(),
         },
         "runtime": {
             "platform": platform.platform(),

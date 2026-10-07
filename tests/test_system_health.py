@@ -264,7 +264,13 @@ def _synthetic_health_report(
         "schema_version": 1,
         "application": {"name": "CleanroomX", "version": version},
         "runtime": {"platform": "test", "machine": "test", "python": "test"},
-        "status": "ready" if required_ready else "not_ready",
+        "status": (
+            "not_ready"
+            if not required_ready
+            else "ready_with_warnings"
+            if any(item["status"] == "warn" for item in checks)
+            else "ready"
+        ),
         "required_ready": required_ready,
         "require_bim": require_bim,
         "require_desktop": require_desktop,
@@ -406,3 +412,79 @@ def test_system_health_comparison_rejects_malformed_schema_fields() -> None:
         assert "unsupported status" in str(exc)
     else:
         raise AssertionError("non-string check status must be rejected")
+
+
+def test_system_health_comparison_detects_requiredness_downgrade_as_policy_regression() -> None:
+    baseline = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass", required=True)]
+    )
+    current = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass", required=False)]
+    )
+
+    comparison = system_health.compare_system_health_reports(baseline, current)
+
+    assert comparison["regressed"] is True
+    assert comparison["state"] == "regressed"
+    assert comparison["summary"]["required_check_coverage_regressed"] is True
+    assert comparison["summary"]["requirement_change_count"] == 1
+    assert comparison["requirement_changes"] == [
+        {
+            "id": "runtime",
+            "label": "runtime",
+            "from_required": True,
+            "to_required": False,
+            "direction": "downgraded",
+            "status": "pass",
+        }
+    ]
+
+
+def test_system_health_comparison_marks_requiredness_promotion_as_coverage_expansion() -> None:
+    baseline = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass", required=False)]
+    )
+    current = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass", required=True)]
+    )
+
+    comparison = system_health.compare_system_health_reports(baseline, current)
+
+    assert comparison["regressed"] is False
+    assert comparison["improved"] is True
+    assert comparison["state"] == "improved"
+    assert comparison["summary"]["required_check_coverage_expanded"] is True
+    assert comparison["requirement_changes"][0]["direction"] == "promoted"
+
+
+def test_system_health_comparison_rejects_internally_inconsistent_reports() -> None:
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["required_ready"] = False
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "required_ready is inconsistent" in str(exc)
+    else:
+        raise AssertionError("inconsistent required readiness must be rejected")
+
+    baseline = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+    baseline["summary"]["pass"] = 0
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "summary.pass must equal 1" in str(exc)
+    else:
+        raise AssertionError("inconsistent summary counts must be rejected")
+
+    baseline = _synthetic_health_report(
+        [_synthetic_check("runtime", "warn", required=False)]
+    )
+    baseline["status"] = "ready"
+    try:
+        system_health.compare_system_health_reports(baseline, current)
+    except ValueError as exc:
+        assert "status must be 'ready_with_warnings'" in str(exc)
+    else:
+        raise AssertionError("inconsistent aggregate status must be rejected")

@@ -167,7 +167,7 @@ def test_table_behavior_sorts_flat_rows_and_keeps_missing_last(root) -> None:
     assert tree.heading("value", "text").endswith("▼")
 
 
-def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
+def test_table_behavior_copies_selected_rows_as_tsv_in_visual_order(root) -> None:
     tree = _tree(root)
     behavior = TreeviewTableBehavior(
         tree,
@@ -175,7 +175,7 @@ def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
         copy_columns=("name", "value"),
     )
     tree.selection_set(("a", "b"))
-    assert behavior.selected_tsv() == "Alpha\t2\nBeta\t10"
+    assert behavior.selected_tsv() == "Beta\t10\nAlpha\t2"
 
 
 

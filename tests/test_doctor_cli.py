@@ -229,6 +229,58 @@ def test_doctor_cli_fail_on_regression_requires_baseline(capsys) -> None:
     assert "--fail-on-regression requires --baseline" in captured.err
 
 
+def test_doctor_cli_fail_on_warning_is_opt_in_and_uses_exit_four(
+    monkeypatch,
+    capsys,
+) -> None:
+    current = _report(ready=True)
+    current["status"] = "ready_with_warnings"
+    current["summary"] = {"pass": 0, "warn": 1, "fail": 0, "check_count": 1}
+    current["checks"][0]["required"] = False
+    current["checks"][0]["status"] = "warn"
+    current["checks"][0]["summary"] = "synthetic advisory warning"
+    current["checks"][0]["remediation"] = "Inspect the synthetic advisory warning."
+
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: {
+            **current,
+            "require_bim": require_bim,
+            "require_desktop": require_desktop,
+            "deep": deep,
+        },
+    )
+
+    assert doctor_cli.main([]) == 0
+    capsys.readouterr()
+
+    assert doctor_cli.main(["--fail-on-warning"]) == 4
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ready_with_warnings"
+    assert payload["summary"]["warn"] == 1
+
+
+def test_doctor_cli_required_failure_precedes_fail_on_warning(
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: _report(
+            ready=False,
+            require_bim=require_bim,
+            require_desktop=require_desktop,
+            deep=deep,
+        ),
+    )
+
+    assert doctor_cli.main(["--fail-on-warning"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "not_ready"
+
+
 
 def test_doctor_cli_redacts_explicit_local_paths(monkeypatch, capsys) -> None:
     report = _report(ready=True)

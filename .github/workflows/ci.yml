@@ -15,6 +15,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -161,7 +162,7 @@ jobs:
         run: python -m pytest -q -ra
       - name: Run complete test suite with real Tk and skip reasons
         if: matrix.python-version == '3.13'
-        run: xvfb-run -a python -m pytest -q -ra
+        run: timeout --signal=TERM --kill-after=30s 20m xvfb-run -a python -m pytest -vv -ra --maxfail=1
       - name: Run Release 2 performance evidence
         if: matrix.python-version == '3.13'
         run: |

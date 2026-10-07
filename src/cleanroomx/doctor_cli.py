@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Treat missing or unloadable native IfcOpenShell support as a required failure",
     )
     parser.add_argument(
+        "--require-desktop",
+        action="store_true",
+        help="Require a hidden Tk desktop root to initialize, settle idle work, and close cleanly",
+    )
+    parser.add_argument(
         "--deep",
         action="store_true",
         help="Execute the packaged demo active analysis through the real application runner",
@@ -72,7 +77,11 @@ def _render_text(report: dict) -> str:
 @cli_error_boundary("cleanroomx-doctor")
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    report = build_system_health_report(require_bim=args.require_bim, deep=args.deep)
+    report = build_system_health_report(
+        require_bim=args.require_bim,
+        require_desktop=args.require_desktop,
+        deep=args.deep,
+    )
     text = (
         _render_text(report)
         if args.format == "text"

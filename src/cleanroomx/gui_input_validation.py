@@ -22,9 +22,15 @@ def parse_json_field(text: str, field_name: str) -> Any:
 
 def parse_finite_number(text: str, field_name: str) -> float:
     try:
-        value = float(text.strip())
+        value = parse_json_field(text.strip(), field_name)
     except ValueError as exc:
-        raise ValueError(f"{field_name} must be a finite numeric value") from exc
-    if not math.isfinite(value):
-        raise ValueError(f"{field_name} must be a finite numeric value")
-    return value
+        raise ValueError(f"{field_name} must be a finite JSON number: {exc}") from exc
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be a finite JSON number")
+    try:
+        numeric = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a finite JSON number") from exc
+    if not math.isfinite(numeric):
+        raise ValueError(f"{field_name} must be a finite JSON number")
+    return numeric

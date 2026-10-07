@@ -2440,6 +2440,55 @@ def test_worker_failure_keeps_traceback_for_runtime_incident_and_stays_operator_
     assert app.root.delay == 100
 
 
+def test_worker_poll_schedule_can_be_cancelled_without_leaving_tk_callback():
+    class Root:
+        def __init__(self):
+            self.cancelled = []
+
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+            return "after-1"
+
+        def after_cancel(self, callback_id):
+            self.cancelled.append(callback_id)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app._worker_poll_after_id = None
+
+    app._schedule_worker_poll()
+
+    assert app._worker_poll_after_id == "after-1"
+    assert app.root.delay == 100
+    app._cancel_worker_poll()
+    assert app._worker_poll_after_id is None
+    assert app.root.cancelled == ["after-1"]
+
+
+def test_root_destroy_cancels_only_the_root_worker_poll():
+    from types import SimpleNamespace
+
+    class Root:
+        def __init__(self):
+            self.cancelled = []
+
+        def after_cancel(self, callback_id):
+            self.cancelled.append(callback_id)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app._worker_poll_after_id = "after-2"
+
+    app._on_root_destroy(SimpleNamespace(widget=object()))
+    assert app._worker_poll_after_id == "after-2"
+    assert app.root.cancelled == []
+
+    app._on_root_destroy(SimpleNamespace(widget=app.root))
+    assert app._worker_poll_after_id is None
+    assert app.root.cancelled == ["after-2"]
+
+
 def test_worker_poll_reschedules_after_unexpected_result_processing_failure():
     import queue
 

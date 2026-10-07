@@ -51,7 +51,11 @@ CleanroomX therefore uses an optimistic revision boundary:
 
 If the session changed, the agent work is returned with `commit_state="conflict"` and stale outputs are **not** appended to the transcript.
 
-This prevents interleaving old agent answers behind newer user messages.
+The guard uses both the persisted revision and a runtime-only session-incarnation identity. This closes the delete/recreate ABA case: deleting a chat and creating a new chat with the same id and matching revision cannot cause an old in-flight batch to attach its output to the replacement chat. Incarnation ids are intentionally not serialized; loading a workspace establishes fresh runtime identities because in-flight work does not survive a process restart.
+
+After specialist execution, the coordinator rechecks the submitted chat before invoking an optional synthesizer. If the chat is already stale, synthesis is skipped and the batch returns a conflict immediately, avoiding an unnecessary or side-effecting follow-up call.
+
+This prevents interleaving old agent answers behind newer user messages and prevents stale output from crossing chat lifetimes.
 
 ## Parallel execution and deterministic transcripts
 
@@ -174,5 +178,7 @@ Focused tests cover:
 - per-agent failure isolation;
 - synthesizer access to specialist results;
 - stale result rejection when the same chat changes during execution;
+- delete/recreate ABA protection for reused chat ids;
+- stale-synthesis short-circuiting before follow-up work;
 - simultaneous execution in different chats;
 - validation before transcript mutation for duplicate/unknown agents.

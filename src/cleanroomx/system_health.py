@@ -15,6 +15,40 @@ from .project import load_project_document
 
 
 QUALIFIED_PYTHON_MINORS = ((3, 11), (3, 12), (3, 13))
+_LOCAL_PATH_DETAIL_KEYS = frozenset({"path", "executable"})
+
+
+def _redacted_path_text(value: str) -> str:
+    name = Path(value).name
+    return f"<redacted>/{name}" if name else "<redacted>"
+
+
+def _redact_path_fields(value: Any, *, key: str | None = None) -> Any:
+    if isinstance(value, dict):
+        return {
+            item_key: _redact_path_fields(item_value, key=str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_path_fields(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_path_fields(item) for item in value)
+    if (
+        isinstance(value, str)
+        and key is not None
+        and (key in _LOCAL_PATH_DETAIL_KEYS or key.endswith("_path"))
+    ):
+        return _redacted_path_text(value)
+    return value
+
+
+def redact_system_health_paths(report: dict[str, Any]) -> dict[str, Any]:
+    """Return a shareable copy with explicit local path fields redacted."""
+    if not isinstance(report, dict):
+        raise TypeError("system health report must be a dictionary")
+    redacted = _redact_path_fields(report)
+    redacted["privacy"] = {"local_paths_redacted": True}
+    return redacted
 
 
 def _check(

@@ -274,7 +274,7 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     assert "calculation:pressure_solver" in keys
     assert "evidence:EVID-GUI-PRESSURE" in keys
     assert "verdict:VERDICT-GUI-PRESSURE" not in keys
-    assert app.proofgraph_viewer.summary_var.get().startswith("View: 2/")
+    assert app.proofgraph_viewer.summary_var.get().startswith(f"View: {len(keys)}/")
 
     app.proofgraph_viewer._clear_search_and_filter()
     app.root.update()

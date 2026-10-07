@@ -7,13 +7,25 @@ from .numeric import efficiency_float, nonnegative_float, positive_float
 
 
 def room_volume_m3(room: RoomSpec) -> float:
-    """Return geometric room volume in cubic metres."""
-    return room.length_m * room.width_m * room.height_m
+    """Return geometric room volume in cubic metres.
+
+    Reject floating-point overflow/underflow in the derived volume so
+    downstream calculations cannot consume an invalid geometric result.
+    """
+    volume = room.length_m * room.width_m * room.height_m
+    if not math.isfinite(volume) or volume <= 0.0:
+        raise ValueError(
+            "room volume must remain finite and > 0 after multiplying dimensions"
+        )
+    return volume
 
 
 def air_changes_per_hour(room: RoomSpec) -> float:
     """Calculate nominal supply-air changes per hour (ACH)."""
-    return room.supply_airflow_m3_h / room_volume_m3(room)
+    ach = room.supply_airflow_m3_h / room_volume_m3(room)
+    if not math.isfinite(ach) or ach <= 0.0:
+        raise ValueError("air changes per hour must remain finite and > 0")
+    return ach
 
 
 def decay_concentration(
@@ -60,5 +72,20 @@ def recovery_time_minutes(
     if target_concentration_per_m3 >= initial_concentration_per_m3:
         return 0.0
 
-    decay_rate_per_min = (ach / 60.0) * removal_efficiency
-    return math.log(initial_concentration_per_m3 / target_concentration_per_m3) / decay_rate_per_min
+    relative_excess = (
+        initial_concentration_per_m3 - target_concentration_per_m3
+    ) / target_concentration_per_m3
+    if math.isfinite(relative_excess):
+        log_concentration_ratio = math.log1p(relative_excess)
+    else:
+        log_concentration_ratio = (
+            math.log(initial_concentration_per_m3)
+            - math.log(target_concentration_per_m3)
+        )
+
+    recovery_minutes = (
+        60.0 * log_concentration_ratio / ach / removal_efficiency
+    )
+    if not math.isfinite(recovery_minutes) or recovery_minutes <= 0.0:
+        raise ValueError("recovery time result must be finite and > 0")
+    return recovery_minutes

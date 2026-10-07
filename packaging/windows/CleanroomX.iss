@@ -36,6 +36,7 @@ SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=CleanroomX.ico
 UninstallDisplayIcon={app}\CleanroomX.exe
+UninstallDisplayName=CleanroomX
 CloseApplications=yes
 RestartApplications=no
 UsePreviousAppDir=yes

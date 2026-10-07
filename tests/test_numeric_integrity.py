@@ -220,3 +220,10 @@ def test_hvac_strict_json_boolean_is_not_coerced_to_airflow(tmp_path) -> None:
         match="cleanroom_airflow_m3_h must be a finite number",
     ):
         load_hvac_project(path)
+
+
+
+@pytest.mark.parametrize("value", (True, False))
+def test_thermal_loads_reject_boolean_occupant_count(value) -> None:
+    with pytest.raises(ValueError, match="non-negative integer"):
+        ThermalLoads(occupants=value)

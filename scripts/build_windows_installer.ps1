@@ -68,20 +68,46 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $scriptPath = Join-Path $repoRoot "packaging\windows\CleanroomX.iss"
 $scriptDir = Split-Path -Parent $scriptPath
 
-Push-Location $scriptDir
+# Inno Setup still encounters legacy path-resolution limits on deeply nested
+# native dependency trees. Stage the application under the user's short temp
+# path so installer creation does not depend on checkout-directory length.
+$stageRoot = Join-Path $env:TEMP "cleanroomx-installer-$PID"
+$stageSource = Join-Path $stageRoot "app"
+$stageOutput = Join-Path $stageRoot "out"
+Remove-Item -Recurse -Force $stageRoot -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $stageSource, $stageOutput | Out-Null
+
 try {
-    & $iscc "/DMyAppVersion=$AppVersion" "/DMyFileVersion=$FileVersion" "/DMyOutputBaseFilename=$OutputBaseFilename" $scriptPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Inno Setup compiler failed with exit code $LASTEXITCODE"
+    & robocopy.exe (Split-Path -Parent $standaloneExe) $stageSource /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP
+    $robocopyExit = $LASTEXITCODE
+    if ($robocopyExit -gt 7) {
+        throw "Installer staging copy failed with robocopy exit code $robocopyExit"
     }
+
+    Push-Location $scriptDir
+    try {
+        & $iscc "/DMyAppVersion=$AppVersion" "/DMyFileVersion=$FileVersion" "/DMyOutputBaseFilename=$OutputBaseFilename" "/DMySourceDir=$stageSource" "/DMyOutputDir=$stageOutput" $scriptPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compiler failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    $stagedInstaller = Join-Path $stageOutput "$OutputBaseFilename.exe"
+    if (-not (Test-Path $stagedInstaller -PathType Leaf)) {
+        throw "Expected staged installer was not produced: $stagedInstaller"
+    }
+    $installer = Join-Path $outputDir "$OutputBaseFilename.exe"
+    Copy-Item -Force $stagedInstaller $installer
 }
 finally {
-    Pop-Location
+    Remove-Item -Recurse -Force $stageRoot -ErrorAction SilentlyContinue
 }
 
-$installer = Join-Path $outputDir "$OutputBaseFilename.exe"
 if (-not (Test-Path $installer -PathType Leaf)) {
-    throw "Expected installer was not produced: $installer"
+    throw "Expected installer was not published: $installer"
 }
 
 $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()

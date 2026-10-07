@@ -5,9 +5,7 @@ from typing import Any
 
 
 def finite_float(value: Any, field_name: str) -> float:
-    """Return *value* as a finite float or fail before engineering use."""
-    try:
-        number = float(value)
+    """Return *value* as a finite float or fail before engineering use.\n\n    Boolean values are rejected explicitly. Python treats bool as an integer\n    subclass, so accepting it here would silently reinterpret JSON booleans as\n    engineering measurements.\n    """\n    if isinstance(value, bool):\n        raise ValueError(f"{field_name} must be a finite number, not a boolean")\n    try:\n        number = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{field_name} must be a finite number") from exc
     if not math.isfinite(number):

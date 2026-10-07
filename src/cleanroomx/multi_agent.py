@@ -36,6 +36,28 @@ class SessionRevisionConflict(RuntimeError):
         )
 
 
+class SessionIncarnationConflict(RuntimeError):
+    """Raised when a caller targets a deleted or recreated chat session."""
+
+    def __init__(
+        self,
+        session_id: str,
+        expected_instance_id: str,
+        actual_instance_id: str | None,
+    ):
+        self.session_id = session_id
+        self.expected_instance_id = expected_instance_id
+        self.actual_instance_id = actual_instance_id
+        detail = (
+            "session no longer exists"
+            if actual_instance_id is None
+            else "session was replaced"
+        )
+        super().__init__(
+            f"chat session {session_id!r} changed identity ({detail})"
+        )
+
+
 def _validate_id(value: str, *, label: str) -> str:
     if not isinstance(value, str) or not _ID_PATTERN.fullmatch(value):
         raise ValueError(
@@ -132,11 +154,20 @@ class ChatSession:
     id: str
     title: str
     revision: int
+    instance_id: str = field(
+        default_factory=lambda: uuid4().hex,
+        repr=False,
+        compare=False,
+    )
     messages: tuple[ChatMessage, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_id(self.id, label="chat session id")
+        _validate_id(
+            self.instance_id,
+            label="chat session instance id",
+        )
         _validate_non_empty_text(self.title, label="chat session title")
         if type(self.revision) is not int or self.revision < 0:
             raise ValueError("chat session revision must be a non-negative integer")
@@ -201,6 +232,7 @@ class _MutableSession:
     id: str
     title: str
     revision: int
+    instance_id: str
     messages: list[ChatMessage]
     metadata: dict[str, Any]
 
@@ -233,6 +265,7 @@ class ChatSessionStore:
                 id=session_id,
                 title=title,
                 revision=0,
+                instance_id=uuid4().hex,
                 messages=[],
                 metadata=cloned_metadata,
             )
@@ -243,9 +276,14 @@ class ChatSessionStore:
         session_id: str,
         *,
         expected_revision: int | None = None,
+        expected_instance_id: str | None = None,
     ) -> None:
         with self._lock:
             session = self._require_locked(session_id)
+            self._check_instance_locked(
+                session,
+                expected_instance_id,
+            )
             self._check_revision_locked(session, expected_revision)
             del self._sessions[session_id]
 
@@ -268,11 +306,13 @@ class ChatSessionStore:
         agent_id: str | None = None,
         metadata: Mapping[str, Any] | None = None,
         expected_revision: int | None = None,
+        expected_instance_id: str | None = None,
     ) -> ChatSession:
         return self.append_messages(
             session_id,
             ((role, content, agent_id, metadata),),
             expected_revision=expected_revision,
+            expected_instance_id=expected_instance_id,
         )
 
     def append_messages(
@@ -283,13 +323,28 @@ class ChatSessionStore:
         ],
         *,
         expected_revision: int | None = None,
+        expected_instance_id: str | None = None,
     ) -> ChatSession:
         pending = tuple(messages)
         if not pending:
             raise ValueError("at least one chat message is required")
 
         with self._lock:
-            session = self._require_locked(session_id)
+            session = self._sessions.get(session_id)
+            if session is None:
+                if expected_instance_id is not None:
+                    raise SessionIncarnationConflict(
+                        session_id,
+                        expected_instance_id,
+                        None,
+                    )
+                raise KeyError(
+                    f"unknown chat session: {session_id!r}"
+                )
+            self._check_instance_locked(
+                session,
+                expected_instance_id,
+            )
             self._check_revision_locked(session, expected_revision)
             prepared: list[ChatMessage] = []
             next_sequence = session.revision + 1
@@ -381,6 +436,7 @@ class ChatSessionStore:
                     id=session.id,
                     title=session.title,
                     revision=session.revision,
+                    instance_id=session.instance_id,
                     messages=[
                         ChatMessage.from_dict(message.to_dict())
                         for message in session.messages
@@ -398,6 +454,47 @@ class ChatSessionStore:
             return self._sessions[session_id]
         except KeyError as exc:
             raise KeyError(f"unknown chat session: {session_id!r}") from exc
+
+    def is_current(
+        self,
+        session_id: str,
+        *,
+        expected_revision: int,
+        expected_instance_id: str,
+    ) -> bool:
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError(
+                "expected chat revision must be a non-negative integer"
+            )
+        _validate_id(
+            expected_instance_id,
+            label="expected chat session instance id",
+        )
+        with self._lock:
+            session = self._sessions.get(session_id)
+            return (
+                session is not None
+                and session.instance_id == expected_instance_id
+                and session.revision == expected_revision
+            )
+
+    @staticmethod
+    def _check_instance_locked(
+        session: _MutableSession,
+        expected_instance_id: str | None,
+    ) -> None:
+        if expected_instance_id is None:
+            return
+        _validate_id(
+            expected_instance_id,
+            label="expected chat session instance id",
+        )
+        if session.instance_id != expected_instance_id:
+            raise SessionIncarnationConflict(
+                session.id,
+                expected_instance_id,
+                session.instance_id,
+            )
 
     @staticmethod
     def _check_revision_locked(
@@ -423,6 +520,7 @@ class ChatSessionStore:
             id=session.id,
             title=session.title,
             revision=session.revision,
+            instance_id=session.instance_id,
             metadata=clone_strict_json(session.metadata),
             messages=tuple(
                 ChatMessage.from_dict(message.to_dict())
@@ -763,6 +861,7 @@ class MultiAgentCoordinator:
                 "multi_agent_task_id": generated_task_id
             },
             expected_revision=initial.revision,
+            expected_instance_id=initial.instance_id,
         )
 
         def specialist_request(
@@ -801,6 +900,23 @@ class MultiAgentCoordinator:
             )
 
         synthesis: AgentExecution | None = None
+        if not self.store.is_current(
+            session_id,
+            expected_revision=submitted.revision,
+            expected_instance_id=submitted.instance_id,
+        ):
+            return AgentBatchResult(
+                task_id=generated_task_id,
+                session_id=session_id,
+                specialist_agent_ids=requested,
+                results=results,
+                synthesizer_agent_id=synthesizer_agent_id,
+                synthesis=None,
+                commit_state="conflict",
+                input_revision=submitted.revision,
+                output_revision=None,
+            )
+
         if synthesizer_spec is not None:
             synthesis_request = AgentRequest(
                 task_id=generated_task_id,
@@ -837,8 +953,12 @@ class MultiAgentCoordinator:
                 session_id,
                 transcript_messages,
                 expected_revision=submitted.revision,
+                expected_instance_id=submitted.instance_id,
             )
-        except SessionRevisionConflict:
+        except (
+            SessionRevisionConflict,
+            SessionIncarnationConflict,
+        ):
             return AgentBatchResult(
                 task_id=generated_task_id,
                 session_id=session_id,

@@ -41,6 +41,7 @@ def test_windows_standalone_build_is_windowed_onedir_branded_and_smoke_checked()
     assert "--windowed" in script
     assert "--onedir" in script
     assert "--collect-data cleanroomx" in script
+    assert "--collect-submodules cleanroomx" in script
     assert "--collect-all ifcopenshell" not in script
     assert "--additional-hooks-dir $hookDir" in script
     assert "--icon $iconPath" in script

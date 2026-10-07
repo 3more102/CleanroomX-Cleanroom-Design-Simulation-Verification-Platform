@@ -71,6 +71,9 @@ def _render_text(report: dict) -> str:
         lines.append(
             f"[{item['status'].upper()}] {item['label']} ({requirement}) - {item['summary']}"
         )
+        remediation = item.get("remediation")
+        if remediation and item.get("status") != "pass":
+            lines.append(f"  Action: {remediation}")
     return "\n".join(lines).rstrip() + "\n"
 
 

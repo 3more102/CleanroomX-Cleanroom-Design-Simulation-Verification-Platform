@@ -50,6 +50,8 @@ When a baseline is supplied, the current report gains a deterministic `compariso
 
 Before comparison, both reports are checked for internal consistency. Their `required_ready`, aggregate `status`, summary counts, and remediation fields must agree with the actual check array and remediation contract. This rejects malformed or manually altered baselines instead of using contradictory readiness evidence.
 
+Baseline provenance is also validated before drift analysis. Both documents must identify `application.name` as `CleanroomX` and provide a non-empty application version. Version changes remain comparable and are recorded in the comparison metadata, but foreign or identity-less health documents are rejected instead of being treated as CleanroomX evidence.
+
 The baseline must use the same probe profile as the current run: `--require-qualified-python`, `--require-bim`, `--require-desktop`, and `--deep` must match. This prevents reports with different release-qualification or execution requirements from being compared as equivalent evidence.
 
 Use `--fail-on-regression` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.

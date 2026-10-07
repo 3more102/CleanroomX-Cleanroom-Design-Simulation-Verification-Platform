@@ -444,6 +444,35 @@ def test_system_health_comparison_rejects_malformed_schema_fields() -> None:
         raise AssertionError("non-string check status must be rejected")
 
 
+
+
+def test_system_health_comparison_rejects_invalid_application_provenance() -> None:
+    import pytest
+
+    current = _synthetic_health_report([_synthetic_check("runtime", "pass")])
+
+    missing_application = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass")]
+    )
+    missing_application.pop("application")
+    with pytest.raises(ValueError, match="application must be an object"):
+        system_health.compare_system_health_reports(missing_application, current)
+
+    foreign_application = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass")]
+    )
+    foreign_application["application"]["name"] = "OtherTool"
+    with pytest.raises(ValueError, match="application.name must be 'CleanroomX'"):
+        system_health.compare_system_health_reports(foreign_application, current)
+
+    missing_version = _synthetic_health_report(
+        [_synthetic_check("runtime", "pass")]
+    )
+    missing_version["application"]["version"] = "   "
+    with pytest.raises(ValueError, match="application.version must be a non-empty string"):
+        system_health.compare_system_health_reports(missing_version, current)
+
+
 def test_system_health_comparison_detects_requiredness_downgrade_as_policy_regression() -> None:
     baseline = _synthetic_health_report(
         [_synthetic_check("runtime", "pass", required=True)]

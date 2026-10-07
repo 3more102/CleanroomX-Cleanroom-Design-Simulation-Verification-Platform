@@ -98,6 +98,8 @@ class AgentTask:
     def __post_init__(self) -> None:
         _nonempty(self.id, "agent_task.id")
         _nonempty(self.agent, "agent_task.agent")
+        if not isinstance(self.payload, Mapping):
+            raise MultiAgentError("agent_task.payload must be an object")
         object.__setattr__(self, "payload", _strict_json_clone(dict(self.payload)))
         object.__setattr__(
             self,
@@ -135,6 +137,8 @@ class AgentPlan:
     def __post_init__(self) -> None:
         _nonempty(self.id, "agent_plan.id")
         object.__setattr__(self, "tasks", tuple(self.tasks))
+        if not self.tasks:
+            raise MultiAgentError("agent_plan.tasks must be non-empty")
         task_ids = [task.id for task in self.tasks]
         if len(set(task_ids)) != len(task_ids):
             raise MultiAgentError("agent_plan.tasks contains duplicate task ids")
@@ -500,6 +504,19 @@ def verify_multi_agent_run(run: Mapping[str, Any]) -> dict[str, Any]:
         if result.get("status") not in AGENT_TASK_STATUSES:
             raise MultiAgentError(
                 f"multi-agent result status is invalid for task {task.id!r}"
+            )
+        blocked_by = [
+            dependency
+            for dependency in task.depends_on
+            if result_by_id[dependency]["status"] != "success"
+        ]
+        if blocked_by and result.get("status") != "blocked":
+            raise MultiAgentError(
+                f"task {task.id!r} must be blocked after unsuccessful dependencies"
+            )
+        if not blocked_by and result.get("status") == "blocked":
+            raise MultiAgentError(
+                f"task {task.id!r} is blocked without an unsuccessful dependency"
             )
         if result.get("depends_on") != list(task.depends_on):
             raise MultiAgentError(

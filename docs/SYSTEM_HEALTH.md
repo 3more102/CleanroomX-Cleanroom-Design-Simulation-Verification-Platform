@@ -14,6 +14,8 @@ cleanroomx-doctor --deep
 
 The command emits strict JSON with schema `cleanroomx.system-health` by default. Use `--format text` for a concise operator-readable summary; exit-code semantics are identical in both formats.
 
+From the desktop application, use **Help → System Health…** or the command palette action **Run System Health Check** to run the standard non-destructive readiness checks. The desktop surface intentionally runs the bounded shallow check; use `cleanroomx-doctor --deep` when an end-to-end analysis execution probe is required.
+
 Required checks cover:
 
 - the package's Python runtime requirement;

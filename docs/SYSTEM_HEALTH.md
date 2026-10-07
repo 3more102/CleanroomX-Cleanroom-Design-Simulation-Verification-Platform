@@ -8,12 +8,15 @@
 cleanroomx-doctor
 cleanroomx-doctor --format text
 cleanroomx-doctor --output cleanroomx-health.json
+cleanroomx-doctor --redact-paths --output cleanroomx-health.json
 cleanroomx-doctor --require-bim
 cleanroomx-doctor --require-desktop
 cleanroomx-doctor --deep
 ```
 
 The command emits strict JSON with schema `cleanroomx.system-health` by default. Use `--format text` for a concise operator-readable summary; exit-code semantics are identical in both formats.
+
+Use `--redact-paths` before attaching a JSON health report to a support ticket or sharing it outside the workstation. It replaces explicit path-valued fields such as executable, packaged-demo, and nested `*_path` entries with a basename-only `<redacted>/...` form without mutating the underlying health result. Free-form diagnostic messages are left unchanged so their technical meaning is preserved.
 
 From the desktop application, use **Help → System Health…** or the command palette action **Run System Health Check** to run the standard non-destructive readiness checks. The desktop surface intentionally runs the bounded shallow check; use `cleanroomx-doctor --deep` when an end-to-end analysis execution probe is required.
 

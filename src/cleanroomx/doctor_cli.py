@@ -7,7 +7,7 @@ from typing import Sequence
 
 from .cli_output import cli_error_boundary, dumps_strict_json
 from .persistence import atomic_write_text
-from .system_health import build_system_health_report
+from .system_health import build_system_health_report, redact_system_health_paths
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         help="Write the selected report format atomically to this path instead of stdout",
+    )
+    parser.add_argument(
+        "--redact-paths",
+        action="store_true",
+        help="Redact explicit local path fields before emitting or publishing the report",
     )
     return parser
 
@@ -82,6 +87,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         require_desktop=args.require_desktop,
         deep=args.deep,
     )
+    if args.redact_paths:
+        report = redact_system_health_paths(report)
     text = (
         _render_text(report)
         if args.format == "text"

@@ -243,3 +243,31 @@ def test_require_desktop_adds_required_display_probe(monkeypatch) -> None:
     assert desktop["required"] is True
     assert desktop["status"] == "pass"
 
+
+
+def test_system_health_path_redaction_is_recursive_and_non_mutating(tmp_path) -> None:
+    executable = str(tmp_path / "private" / "python.exe")
+    source = str(tmp_path / "projects" / "facility.cleanroomx.json")
+    report = {
+        "runtime": {"executable": executable},
+        "checks": [
+            {
+                "details": {
+                    "path": source,
+                    "nested": [{"source_path": source, "message": source}],
+                }
+            }
+        ],
+    }
+
+    redacted = system_health.redact_system_health_paths(report)
+
+    assert report["runtime"]["executable"] == executable
+    assert report["checks"][0]["details"]["path"] == source
+    assert redacted["runtime"]["executable"] == "<redacted>/python.exe"
+    assert redacted["checks"][0]["details"]["path"] == "<redacted>/facility.cleanroomx.json"
+    assert redacted["checks"][0]["details"]["nested"][0]["source_path"] == (
+        "<redacted>/facility.cleanroomx.json"
+    )
+    assert redacted["checks"][0]["details"]["nested"][0]["message"] == source
+    assert redacted["privacy"] == {"local_paths_redacted": True}

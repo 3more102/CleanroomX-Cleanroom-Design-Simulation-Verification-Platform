@@ -125,3 +125,26 @@ def test_doctor_cli_text_format_is_operator_readable(monkeypatch, capsys) -> Non
     assert "Required readiness: PASS" in captured.out
     assert "[PASS] Synthetic (required) - synthetic" in captured.out
     assert captured.err == ""
+
+
+def test_doctor_cli_redacts_explicit_local_paths(monkeypatch, tmp_path, capsys) -> None:
+    report = _report(ready=True)
+    private_path = str(tmp_path / "private" / "gui_demo.cleanroomx.json")
+    report["checks"][0]["details"] = {
+        "path": private_path,
+        "message": private_path,
+    }
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda *, require_bim=False, require_desktop=False, deep=False: report,
+    )
+
+    assert doctor_cli.main(["--redact-paths"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["checks"][0]["details"]["path"] == (
+        "<redacted>/gui_demo.cleanroomx.json"
+    )
+    assert payload["checks"][0]["details"]["message"] == private_path
+    assert payload["privacy"] == {"local_paths_redacted": True}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "cleanroomx.openfoam.v1",
+  "name": "SYNTHETIC test only: replace with measured cleanroom input",
+  "room_m": [
+    3,
+    2,
+    2
+  ],
+  "mesh_cells": [
+    12,
+    12,
+    8
+  ],
+  "supply_flow_m3_s": 0.15,
+  "kinematic_viscosity_m2_s": 0.000015,
+  "max_iterations": 150,
+  "output_interval": 50
+}

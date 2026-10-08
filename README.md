@@ -28,6 +28,12 @@ The current stable release is **v0.102.1**.
 - Require matching case conditions and explicit project tolerances before comparison; **never infer CFD results from the study handout**.
 - This feature is **not an integrated CFD solver**. See [CFD Ventilation Study](docs/CFD_VENTILATION_STUDY.md).
 
+### CFD solver case pipeline (external OpenFOAM)
+
+- Parameterized 3D case generation for all three ventilation layouts, with physically explicit inlet/outlet patches and SHA-256 manifest.
+- Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
+- This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
+
 ### Engineering verification
 
 CleanroomX includes engineering workflows for:

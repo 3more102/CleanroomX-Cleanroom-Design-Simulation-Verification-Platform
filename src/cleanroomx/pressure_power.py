@@ -20,6 +20,14 @@ def _nonnegative(value: float, field_name: str) -> float:
     return value
 
 
+def _finite_calculation(value: float, field_name: str) -> float:
+    if not math.isfinite(value):
+        raise ValueError(
+            f"{field_name} must be finite; derived fan-power calculation overflowed"
+        )
+    return value
+
+
 @dataclass(frozen=True)
 class FanPowerEfficiencies:
     """Optional explicit efficiency chain for fan power evidence.
@@ -81,8 +89,21 @@ def analyze_fan_pressure_power(
 ) -> dict:
     airflow = _nonnegative(airflow_m3_h, "airflow_m3_h")
     pressure = _nonnegative(pressure_pa, "pressure_pa")
-    airflow_m3_s = airflow / 3600.0
-    fluid_power_w = airflow_m3_s * pressure
+    airflow_m3_s = _finite_calculation(
+        airflow / 3600.0, "airflow_m3_s"
+    )
+    if airflow > 0.0 and airflow_m3_s == 0.0:
+        raise ValueError(
+            "airflow_m3_s underflowed to zero for positive airflow_m3_h"
+        )
+
+    fluid_power_w = _finite_calculation(
+        airflow_m3_s * pressure, "fluid_air_power_w"
+    )
+    if airflow_m3_s > 0.0 and pressure > 0.0 and fluid_power_w == 0.0:
+        raise ValueError(
+            "fluid_air_power_w underflowed to zero for positive airflow and pressure"
+        )
 
     fan_efficiency = (
         None if efficiencies is None else efficiencies.fan_efficiency
@@ -95,12 +116,18 @@ def analyze_fan_pressure_power(
     )
 
     shaft_power_w = (
-        fluid_power_w / fan_efficiency
+        _finite_calculation(
+            fluid_power_w / fan_efficiency,
+            "shaft_power_w",
+        )
         if fan_efficiency is not None
         else None
     )
     electrical_input_w = (
-        shaft_power_w / motor_efficiency / vfd_efficiency
+        _finite_calculation(
+            shaft_power_w / motor_efficiency / vfd_efficiency,
+            "electrical_input_w",
+        )
         if (
             shaft_power_w is not None
             and motor_efficiency is not None
@@ -109,7 +136,10 @@ def analyze_fan_pressure_power(
         else None
     )
     specific_fan_power_w_per_m3_s = (
-        electrical_input_w / airflow_m3_s
+        _finite_calculation(
+            electrical_input_w / airflow_m3_s,
+            "specific_fan_power_w_per_m3_s",
+        )
         if electrical_input_w is not None and airflow_m3_s > 0.0
         else None
     )

@@ -44,7 +44,12 @@ criteria, selected flow QoI, and required volume tolerance.
     cleanroomx-cfd-pipeline grid-audit my_grid_study.json \
       --output my_grid_audit.json
 
-The CLI resolves input dataset paths relative to the study JSON.
+The CLI resolves input dataset paths relative to the study JSON. VTK and
+solver-log paths must be relative, must resolve to files **within the study
+JSON's directory**, and may refer to nested directories. Absolute paths,
+parent-directory escapes, and symbolic links resolving outside that root are
+rejected before the external data is imported. This is a location check at
+resolution time, not a guarantee against concurrent filesystem mutation.
 Currently supported QoIs:
 
 - velocity_mean_m_s: volume-weighted cell-centered |U|, in m/s

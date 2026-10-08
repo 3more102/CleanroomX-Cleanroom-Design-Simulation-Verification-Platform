@@ -9,11 +9,55 @@ from cleanroomx.fan_duct_network_io import fan_duct_network_study_from_dict
 from cleanroomx.friction import (
     colebrook_darcy_friction_factor,
     resolve_darcy_friction_factor,
+    reynolds_number,
 )
 from cleanroomx.hvac_io import (
     branch_flow_network_from_dict,
     duct_network_from_dict,
 )
+
+
+def test_reynolds_number_avoids_intermediate_overflow_when_result_is_finite() -> None:
+    result = reynolds_number(
+        velocity_m_s=1.0e308,
+        hydraulic_diameter_m=1.0e308,
+        kinematic_viscosity_m2_s=1.0e308,
+    )
+
+    assert result == pytest.approx(1.0e308, rel=2e-15)
+
+
+def test_reynolds_number_rejects_unrepresentable_overflow() -> None:
+    with pytest.raises(ValueError, match="reynolds_number must be finite and > 0"):
+        reynolds_number(
+            velocity_m_s=1.0e308,
+            hydraulic_diameter_m=1.0e308,
+            kinematic_viscosity_m2_s=1.0,
+        )
+
+
+def test_reynolds_number_rejects_underflow_to_zero() -> None:
+    smallest_positive = math.nextafter(0.0, 1.0)
+
+    with pytest.raises(ValueError, match="reynolds_number must be finite and > 0"):
+        reynolds_number(
+            velocity_m_s=smallest_positive,
+            hydraulic_diameter_m=smallest_positive,
+            kinematic_viscosity_m2_s=1.0,
+        )
+
+
+def test_laminar_friction_factor_rejects_unrepresentable_overflow() -> None:
+    smallest_positive = math.nextafter(0.0, 1.0)
+
+    with pytest.raises(ValueError, match="friction_factor must be finite and > 0"):
+        resolve_darcy_friction_factor(
+            velocity_m_s=smallest_positive,
+            hydraulic_diameter_m=1.0,
+            kinematic_viscosity_m2_s=1.0,
+            absolute_roughness_m=0.0,
+            circular_geometry=True,
+        )
 
 
 def test_colebrook_solver_matches_equation_residual() -> None:

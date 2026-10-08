@@ -239,7 +239,8 @@ def _vtk_case(path,n,velocity):
 
 
 def _solver_log(path):
-    lines=[]
+    # Mark synthetic logs uniquely to model independent case outputs.
+    lines=[f"Synthetic run identifier: {path.stem}"]
     for _ in range(3):
         for field in ("Ux","Uy","Uz","p"):
             lines.append(f"Solving for {field}, Initial residual = 1e-8, Final residual = 1e-11, No Iterations 3")
@@ -262,6 +263,16 @@ def test_real_vtk_three_grid_convergence_and_incomplete_evidence(tmp_path):
     assert all(r["log_screening_status"]=="numerically_screened" for r in result["grids"])
     assert all(r["relative_volume_error"]<1e-10 for r in result["grids"])
     assert result["grids"][0]["vtk_sha256"]!=result["grids"][1]["vtk_sha256"]
+    assert len({row["log_sha256"] for row in result["grids"]}) == 3
+
+    # Distinct declared log paths cannot disguise byte-identical replay.
+    (tmp_path/"medium.log").write_bytes((tmp_path/"fine.log").read_bytes())
+    replayed=analyze_vtk_grid_study(spec,base_directory=tmp_path)
+    assert replayed["status"]=="indeterminate_or_failed"
+    assert any("Duplicate solver logs" in b for b in replayed["blockers"])
+    _solver_log(tmp_path/"medium.log")
+    restored=analyze_vtk_grid_study(spec,base_directory=tmp_path)
+    assert restored["status"]=="eligible_for_engineering_review",restored["blockers"]
     spec["runs"][0]["conditions_sha256"]="f"*64
     mismatched=analyze_vtk_grid_study(spec,base_directory=tmp_path)
     assert mismatched["status"]=="indeterminate_or_failed"

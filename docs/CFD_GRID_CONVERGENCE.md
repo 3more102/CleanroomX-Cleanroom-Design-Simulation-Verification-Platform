@@ -56,7 +56,10 @@ Currently supported QoIs:
 - contaminant_mean: volume-weighted externally solved T (project units)
 
 The VTK importer hashes the exact file bytes; the independent log audit
-hashes the raw residual log. Sample volumes must represent the room within
+hashes the raw residual log. The grid audit rejects byte-identical VTK datasets
+or solver logs replayed across resolution levels, even if the file names differ.
+This is an evidence-integrity screen, not proof that separately hashed runs
+used identical physical conditions. Sample volumes must represent the room within
 the project-defined tolerance. The reported mesh cell count must agree with
 the user's declared 3D grid dimensions. Each mesh axis must increase as the
 grid is refined, with comparable axis refinement ratios. The declared

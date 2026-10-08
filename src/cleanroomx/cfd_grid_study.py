@@ -186,6 +186,25 @@ def _analysis(rows, criteria):
     }
 
 
+
+def _resolve_study_input(base: Path, source: str, label: str) -> Path:
+    """Confine file-backed grid evidence to the directory of its study spec.
+
+    Resolve symlinks before checking containment; subdirectories are allowed.
+    This is a location check at resolution time, not protection against
+    concurrent filesystem mutation by another process.
+    """
+    relative = Path(source)
+    if relative.is_absolute() or relative.drive:
+        raise ValueError(f"{label} must be relative to the grid study directory")
+    resolved = (base / relative).resolve(strict=True)
+    if not resolved.is_relative_to(base):
+        raise ValueError(f"{label} resolves outside the grid study directory")
+    if not resolved.is_file():
+        raise ValueError(f"{label} must reference a regular file")
+    return resolved
+
+
 def analyze_vtk_grid_study(data, *, base_directory="."):
     """Compute volume-weighted QoI from REAL VTK cell fields and screen grids.
 
@@ -203,8 +222,8 @@ def analyze_vtk_grid_study(data, *, base_directory="."):
     rows=[]
     for level in LEVELS:
         run=indexed[level]
-        vtk_path=(base/run["vtk_file"]).resolve(strict=True)
-        log_path=(base/run["solver_log"]).resolve(strict=True)
+        vtk_path=_resolve_study_input(base,run["vtk_file"],f"{level} VTK file")
+        log_path=_resolve_study_input(base,run["solver_log"],f"{level} solver log")
         imported=import_vtk_case(vtk_path)
         cell_count=math.prod(run["mesh_cells"])
         if imported["mesh_cells"]!=cell_count:

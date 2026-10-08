@@ -143,6 +143,8 @@ jobs:
           tests/test_project_dossier.py
           tests/test_project_verify_cli.py
           tests/test_verification_history_cli.py
+      - name: Run System Health Doctor readiness and integrity regressions
+        run: python -m pytest -q tests/test_system_health.py tests/test_doctor_cli.py
       - name: Run complete test suite
         run: python -m pytest -q
       - name: Run Release 2 performance evidence
@@ -157,6 +159,23 @@ jobs:
           python -m venv /tmp/cleanroomx-wheel-env
           /tmp/cleanroomx-wheel-env/bin/python -m pip install --no-index /tmp/cleanroomx-wheel/cleanroomx-*.whl
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
+          set +e
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-doctor --require-installed-distribution --output /tmp/cleanroomx-installed-health.json
+          doctor_rc=$?
+          set -e
+          /tmp/cleanroomx-wheel-env/bin/python - <<'PYDOCTOR'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('/tmp/cleanroomx-installed-health.json').read_text(encoding='utf-8'))
+          assert data['schema'] == 'cleanroomx.system-health'
+          for item in data['checks']:
+              if item['status'] != 'pass':
+                  print(f"Doctor {item['id']}: {item['status']}: {item['summary']}")
+          assert data['required_ready'] is True
+          assert data['require_installed_distribution'] is True
+          assert any(x['id'] == 'distribution-identity' and x['status'] == 'pass' for x in data['checks'])
+          PYDOCTOR
+          test "$doctor_rc" -eq 0
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-bundle --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-dossier --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-verify --help
@@ -354,6 +373,38 @@ jobs:
       - name: Run native IfcOpenShell parser smoke
         run: python -m pytest -q tests/test_bim_ifc_native.py
 
+  doctor-wheel-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Build isolated release wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir /tmp/doctor-wheel
+          python -m venv /tmp/doctor-env
+          /tmp/doctor-env/bin/python -m pip install --no-index /tmp/doctor-wheel/cleanroomx-*.whl
+      - name: Audit installed wheel and report required failures
+        run: |
+          set +e
+          /tmp/doctor-env/bin/cleanroomx-doctor --require-installed-distribution --output /tmp/doctor-installed.json
+          doctor_rc=$?
+          set -e
+          /tmp/doctor-env/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('/tmp/doctor-installed.json').read_text(encoding='utf-8'))
+          for check in report['checks']:
+              print(f"{check['id']}: {check['status']}: {check['summary']}")
+          assert report['schema'] == 'cleanroomx.system-health'
+          assert report['required_ready'] is True
+          assert any(item['id'] == 'distribution-identity' and item['status'] == 'pass' for item in report['checks'])
+          PY
+          test "$doctor_rc" -eq 0
+
   required-ci:
     name: Required CI Gate
     if: ${{ always() }}
@@ -361,6 +412,7 @@ jobs:
       - test
       - windows-launcher-smoke
       - native-bim-smoke
+      - doctor-wheel-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required CI jobs succeeded
@@ -368,6 +420,7 @@ jobs:
           TEST_RESULT: ${{ needs.test.result }}
           WINDOWS_LAUNCHER_RESULT: ${{ needs.windows-launcher-smoke.result }}
           NATIVE_BIM_RESULT: ${{ needs.native-bim-smoke.result }}
+          DOCTOR_WHEEL_RESULT: ${{ needs.doctor-wheel-smoke.result }}
         run: |
           echo "Python matrix result: ${TEST_RESULT}"
           echo "Windows launcher result: ${WINDOWS_LAUNCHER_RESULT}"
@@ -375,3 +428,4 @@ jobs:
           test "${TEST_RESULT}" = "success"
           test "${WINDOWS_LAUNCHER_RESULT}" = "success"
           test "${NATIVE_BIM_RESULT}" = "success"
+          test "${DOCTOR_WHEEL_RESULT}" = "success"

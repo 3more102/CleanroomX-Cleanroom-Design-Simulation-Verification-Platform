@@ -7,6 +7,9 @@ from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
 from .cfd_audit import audit_openfoam_log
+from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
+from .cfd_grid_family import generate_grid_family
+from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
 
@@ -49,6 +52,12 @@ def build_parser():
     audit.add_argument("--max-global-continuity",type=float)
     audit.add_argument("--window",type=int,default=3)
     audit.add_argument("--output")
+    grid=sub.add_parser("grid-generate",help="Generate nine OpenFOAM cases: three configurations x three mesh resolutions")
+    grid.add_argument("spec")
+    grid.add_argument("directory")
+    verify_grid=sub.add_parser("grid-audit",help="VTK/log grounded three-grid Richardson and GCI screening")
+    verify_grid.add_argument("spec")
+    verify_grid.add_argument("--output")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -62,6 +71,27 @@ def main():
         result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="grid-generate":
+        report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="grid-audit":
+        spec=load_cli_input(load_strict_json,args.spec)
+        validate_grid_spec(spec)
+        base=Path(args.spec).resolve().parent
+        report=analyze_vtk_grid_study(spec,base_directory=base)
+        payload=dumps_strict_json(report)
+        if args.output:
+            protected=(args.spec,)+tuple(
+                str(base/run[key]) for run in spec["runs"]
+                for key in ("vtk_file","solver_log")
+            )
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
+                                      protected_inputs=protected):
+                return 1
+        else:
+            print(payload)
+        return 0 if report["status"]=="eligible_for_engineering_review" else 3
     if args.command=="scalar-prepare":
         result=prepare_scalar_case(args.flow_case,load_cli_input(load_strict_json,args.spec),
                                    args.output_directory)

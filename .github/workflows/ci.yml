@@ -167,7 +167,7 @@ jobs:
           assert data['schema'] == 'cleanroomx.system-health'
           assert data['required_ready'] is True
           assert data['require_installed_distribution'] is True
-          assert any(x['id'] == 'installed-distribution' and x['status'] == 'pass' for x in data['checks'])
+          assert any(x['id'] == 'distribution-identity' and x['status'] == 'pass' for x in data['checks'])
           PYDOCTOR
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-bundle --help
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-dossier --help

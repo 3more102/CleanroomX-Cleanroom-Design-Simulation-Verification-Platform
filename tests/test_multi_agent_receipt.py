@@ -175,3 +175,61 @@ def test_batch_receipt_rejects_noninteger_schema_version_even_with_matching_dige
 
     with pytest.raises(ValueError, match="agent batch schema version"):
         verify_agent_batch_result(document)
+
+
+@pytest.mark.parametrize("with_synthesis", (False, True))
+@pytest.mark.parametrize("revision_delta", (-1, 1, 9))
+def test_batch_verifier_rejects_rehashed_inconsistent_commit_revision(
+    with_synthesis, revision_delta
+):
+    _store, coordinator = _coordinator()
+    coordinator.register_agent("requirements", lambda _request: "ok")
+    coordinator.register_agent("verification", lambda _request: "ok")
+    if with_synthesis:
+        coordinator.register_agent("reviewer", lambda _request: "reviewed")
+
+    batch = coordinator.run(
+        "chat",
+        "check",
+        agent_ids=["requirements", "verification"],
+        synthesizer_agent_id="reviewer" if with_synthesis else None,
+        task_id="task-revision-integrity",
+    )
+    assert batch.output_revision == batch.input_revision + 2 + int(with_synthesis)
+    verify_agent_batch_result(batch.to_dict())
+
+    forged = copy.deepcopy(batch.to_dict())
+    forged["output_revision"] += revision_delta
+    unsigned = copy.deepcopy(forged)
+    unsigned.pop("integrity")
+    forged["integrity"]["sha256"] = multi_agent._canonical_json_sha256(unsigned)
+
+    with pytest.raises(
+        ValueError, match="output_revision must equal input_revision"
+    ):
+        verify_agent_batch_result(forged)
+
+
+def test_batch_revision_counts_failed_assistant_records():
+    store, coordinator = _coordinator()
+
+    def fail(_request):
+        raise RuntimeError("deliberate failure")
+
+    coordinator.register_agent("failed", fail)
+    coordinator.register_agent("ok", lambda _request: "ready")
+    coordinator.register_agent("failed-synthesis", fail)
+
+    batch = coordinator.run(
+        "chat",
+        "check",
+        agent_ids=["failed", "ok"],
+        synthesizer_agent_id="failed-synthesis",
+        task_id="task-error-count-revision",
+    )
+
+    assert batch.commit_state == "committed"
+    assert batch.error_count == 2
+    assert batch.output_revision == batch.input_revision + 3
+    assert store.get_session("chat").revision == batch.output_revision
+    assert verify_agent_batch_result(batch.to_dict()) == batch.to_dict()

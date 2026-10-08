@@ -1,0 +1,17 @@
+{
+  "schema_version": "cleanroomx.scalar-transport.v1",
+  "room_m": [
+    3,
+    2,
+    2
+  ],
+  "source_location_m": [
+    0.75,
+    0.65,
+    0.6
+  ],
+  "source_strength_m3_s": 0.000001,
+  "diffusivity_m2_s": 0.00001,
+  "iterations": 200,
+  "write_interval": 40
+}

@@ -824,6 +824,15 @@ class AgentBatchResult:
             raise ValueError(
                 "committed agent batch with a synthesizer must include synthesis"
             )
+        if self.commit_state == "committed":
+            expected_revision = self.input_revision + len(self.results) + (
+                1 if self.synthesis is not None else 0
+            )
+            if self.output_revision != expected_revision:
+                raise ValueError(
+                    "committed agent batch output_revision must equal "
+                    "input_revision plus recorded assistant message count"
+                )
         if (
             self.commit_state == "conflict"
             and self.output_revision is not None

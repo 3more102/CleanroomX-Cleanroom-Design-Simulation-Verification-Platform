@@ -263,6 +263,30 @@ def test_doctor_cli_fail_on_regression_requires_baseline(capsys) -> None:
 
 
 
+
+def test_doctor_cli_baseline_loader_has_structural_error_boundary(
+    monkeypatch, capsys,
+) -> None:
+    """Malformed baseline structures must produce a clean error, not a traceback."""
+    monkeypatch.setattr(doctor_cli, "build_system_health_report", lambda **_kwargs: _report())
+
+    def malformed_baseline(_path, *, max_bytes):
+        assert max_bytes == 2 * 1024 * 1024
+        raise KeyError("checks")
+
+    monkeypatch.setattr(doctor_cli, "load_strict_json", malformed_baseline)
+
+    assert doctor_cli.main(["--baseline", "malformed-baseline.json"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "cleanroomx-doctor: error: invalid input structure: "
+        "missing required field 'checks'\n"
+    )
+
+
+
+
 def test_doctor_cli_redacts_explicit_local_paths(monkeypatch, capsys) -> None:
     report = _report(ready=True)
     windows_path = r"C:\Users\operator\CleanroomX\gui_demo.cleanroomx.json"

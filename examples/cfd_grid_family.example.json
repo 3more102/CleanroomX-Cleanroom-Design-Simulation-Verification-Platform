@@ -1,0 +1,38 @@
+{
+  "schema_version": "cleanroomx.cfd-grid-family.v1",
+  "base_case": {
+    "schema_version": "cleanroomx.openfoam.v1",
+    "name": "SYNTHETIC mesh study; replace with measured room and airflow",
+    "room_m": [
+      3,
+      2,
+      2
+    ],
+    "mesh_cells": [
+      6,
+      6,
+      6
+    ],
+    "supply_flow_m3_s": 0.15,
+    "kinematic_viscosity_m2_s": 0.000015,
+    "max_iterations": 150,
+    "output_interval": 50
+  },
+  "mesh_levels": {
+    "coarse": [
+      6,
+      6,
+      6
+    ],
+    "medium": [
+      12,
+      12,
+      12
+    ],
+    "fine": [
+      24,
+      24,
+      24
+    ]
+  }
+}

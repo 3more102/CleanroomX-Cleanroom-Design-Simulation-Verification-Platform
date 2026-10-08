@@ -75,7 +75,7 @@ def test_table_behavior_sorts_flat_rows_and_keeps_missing_last(root) -> None:
     assert tree.heading("value", "text").endswith("▼")
 
 
-def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
+def test_table_behavior_copies_selected_rows_in_visible_order_as_tsv(root) -> None:
     tree = _tree(root)
     behavior = TreeviewTableBehavior(
         tree,
@@ -83,7 +83,16 @@ def test_table_behavior_copies_selected_rows_as_tsv(root) -> None:
         copy_columns=("name", "value"),
     )
     tree.selection_set(("a", "b"))
+
+    # The initial visible row order is Beta, Missing, Alpha.
+    # Tcl/Tk does not guarantee selection() iteration order across versions.
+    assert behavior.selected_tsv() == "Beta\t10\nAlpha\t2"
+
+    behavior.sort_by("name")
     assert behavior.selected_tsv() == "Alpha\t2\nBeta\t10"
+
+    behavior.sort_by("name")
+    assert behavior.selected_tsv() == "Beta\t10\nAlpha\t2"
 
 
 

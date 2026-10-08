@@ -61,8 +61,6 @@ def _nonempty_text(value: Any, field_name: str) -> str:
 
 
 def _string_tuple(value: Any, field_name: str) -> tuple[str, ...]:
-    if value is None:
-        return ()
     if isinstance(value, str) or not isinstance(value, list):
         raise AgentPlanError(f"{field_name} must be an array of strings")
     result = tuple(
@@ -274,8 +272,6 @@ class AgentOrchestrationRun:
 
 
 def _parse_handoffs(raw: Any, *, agent_id: str) -> tuple[AgentHandoff, ...]:
-    if raw is None:
-        return ()
     if not isinstance(raw, list):
         raise AgentPlanError(f"agent {agent_id!r} handoffs must be an array")
 
@@ -332,7 +328,7 @@ def load_agent_plan(project: ProjectDocument) -> AgentPlan:
             "agent orchestration contains unsupported field(s): " + ", ".join(unknown)
         )
     version = raw.get("schema_version")
-    if isinstance(version, bool) or version != AGENT_PLAN_SCHEMA_VERSION:
+    if type(version) is not int or version != AGENT_PLAN_SCHEMA_VERSION:
         raise AgentPlanError(
             f"agent orchestration schema_version must be {AGENT_PLAN_SCHEMA_VERSION}"
         )
@@ -378,9 +374,9 @@ def load_agent_plan(project: ProjectDocument) -> AgentPlan:
                 analysis_id=analysis_id,
                 analysis_kind=analyses[analysis_id].kind,
                 depends_on=_string_tuple(
-                    item.get("depends_on"), f"{field}.depends_on"
+                    item.get("depends_on", []), f"{field}.depends_on"
                 ),
-                handoffs=_parse_handoffs(item.get("handoffs"), agent_id=agent_id),
+                handoffs=_parse_handoffs(item.get("handoffs", []), agent_id=agent_id),
             )
         )
 

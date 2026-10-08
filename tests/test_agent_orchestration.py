@@ -282,3 +282,114 @@ def test_project_agents_perform_final_source_revision_check(tmp_path, monkeypatc
     assert run.source_change_agent_id is None
     assert run.source_check_error == "changed"
     assert run.status == "source_changed"
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    (
+        (["design"], ["design", "flow"]),
+        (["design", "flow"], ["design"]),
+        (["design", "flow"], ["design", "flow", "limit"]),
+    ),
+)
+def test_agent_plan_rejects_overlapping_handoff_destinations(first, second):
+    project = _project(
+        {
+            "schema_version": 1,
+            "agents": [
+                {"id": "requirements-agent", "analysis_id": "requirements"},
+                {
+                    "id": "design-agent",
+                    "analysis_id": "design",
+                    "depends_on": ["requirements-agent"],
+                    "handoffs": [
+                        {
+                            "source_agent": "requirements-agent",
+                            "source_path": ["result", "flow"],
+                            "target_path": first,
+                        },
+                        {
+                            "source_agent": "requirements-agent",
+                            "source_path": ["result", "flow"],
+                            "target_path": second,
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+
+    with pytest.raises(AgentPlanError, match="overlap"):
+        load_agent_plan(project)
+
+
+@pytest.mark.parametrize("non_object", (None, False, 0, [], "not-an-object"))
+def test_handoff_target_does_not_replace_existing_non_object(non_object):
+    payload = {"design": {"settings": copy.deepcopy(non_object)}}
+    original = copy.deepcopy(payload)
+
+    with pytest.raises(orchestration.AgentHandoffError, match="non-object"):
+        orchestration._write_target_path(
+            payload, ("design", "settings", "airflow_m3_h"), 1250.0
+        )
+
+    assert payload == original
+
+
+def test_handoff_target_can_create_missing_object_path():
+    payload = {"design": {}}
+
+    orchestration._write_target_path(
+        payload, ("design", "settings", "airflow_m3_h"), 1250.0
+    )
+
+    assert payload == {"design": {"settings": {"airflow_m3_h": 1250.0}}}
+
+
+def test_agent_handoff_rejects_existing_null_without_running_downstream(
+    tmp_path, monkeypatch
+):
+    project = _project(
+        {
+            "schema_version": 1,
+            "agents": [
+                {"id": "requirements-agent", "analysis_id": "requirements"},
+                {
+                    "id": "design-agent",
+                    "analysis_id": "design",
+                    "depends_on": ["requirements-agent"],
+                    "handoffs": [
+                        {
+                            "source_agent": "requirements-agent",
+                            "source_path": ["result", "flow"],
+                            "target_path": ["design", "settings", "airflow_m3_h"],
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+    project.analyses[1].input["design"]["settings"] = None
+    path = save_project_document(tmp_path / "null-handoff.cleanroomx.json", project)
+    called = []
+
+    def fake_run(kind, payload, *, base_dir=None, project_source_revision=None):
+        called.append(kind)
+        return _FakeRun(
+            {
+                "result": {"flow": 1250.0},
+                "integrity": {"sha256": "a" * 64},
+            }
+        )
+
+    monkeypatch.setattr(orchestration, "run_analysis", fake_run)
+    run = run_project_agents(path)
+
+    assert [item.execution_state for item in run.outcomes] == [
+        "completed",
+        "error",
+    ]
+    assert run.outcomes[1].error_type == "AgentHandoffError"
+    assert "non-object" in run.outcomes[1].error_message
+    assert called == ["design_requirements"]
+    assert project.analyses[1].input["design"]["settings"] is None

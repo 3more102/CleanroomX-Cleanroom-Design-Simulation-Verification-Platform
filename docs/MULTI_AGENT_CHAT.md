@@ -81,7 +81,10 @@ The coordinator does not catch `BaseException`; process-level termination signal
 
 ## Deterministic batch receipts
 
-Every returned `AgentBatchResult` is now a versioned strict-JSON document:
+Every returned `AgentBatchResult` is now a versioned strict-JSON document.
+Workspace and batch-receipt `schema_version` fields must be JSON integers;
+lookalike values such as `true` or `1.0` are rejected, even if a batch
+receipt carries a matching recomputed digest.
 
 ```text
 cleanroomx.multi-agent-batch / version 1

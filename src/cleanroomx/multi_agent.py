@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -17,6 +18,9 @@ from .strict_json import clone_strict_json, load_strict_json
 
 MULTI_AGENT_WORKSPACE_SCHEMA = "cleanroomx.multi-agent-workspace"
 MULTI_AGENT_WORKSPACE_SCHEMA_VERSION = 1
+MULTI_AGENT_BATCH_SCHEMA = "cleanroomx.multi-agent-batch"
+MULTI_AGENT_BATCH_SCHEMA_VERSION = 1
+MULTI_AGENT_BATCH_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
 
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _MESSAGE_ROLES = frozenset({"system", "user", "assistant", "tool"})
@@ -86,6 +90,18 @@ def _frozen_json_object(
 
 def _thaw_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     return clone_strict_json(dict(value))
+
+
+def _canonical_json_sha256(value: Any) -> str:
+    strict_value = clone_strict_json(value)
+    canonical = json.dumps(
+        strict_value,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -595,6 +611,67 @@ class AgentExecution:
             ),
         }
 
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "AgentExecution":
+        if type(raw) is not dict:
+            raise ValueError("agent execution must be a JSON object")
+        expected = {"agent_id", "state", "content", "data", "error"}
+        unknown = set(raw) - expected
+        missing = expected - set(raw)
+        if unknown or missing:
+            if missing:
+                raise ValueError(
+                    "agent execution is missing field(s): "
+                    + ", ".join(sorted(missing))
+                )
+            raise ValueError(
+                "agent execution contains unsupported field(s): "
+                + ", ".join(sorted(unknown))
+            )
+        if not isinstance(raw["content"], str):
+            raise ValueError("agent execution content must be a string")
+        if type(raw["data"]) is not dict:
+            raise ValueError("agent execution data must be a JSON object")
+
+        state = raw["state"]
+        error = raw["error"]
+        if state == "completed":
+            if error is not None:
+                raise ValueError(
+                    "completed agent execution error must be null"
+                )
+            return cls(
+                agent_id=raw["agent_id"],
+                state=state,
+                content=raw["content"],
+                data=raw["data"],
+            )
+
+        if state != "error":
+            raise ValueError(
+                "agent execution state must be 'completed' or 'error'"
+            )
+        if type(error) is not dict or set(error) != {"type", "message"}:
+            raise ValueError(
+                "failed agent execution error must contain type and message"
+            )
+        if not isinstance(error["type"], str) or not error["type"]:
+            raise ValueError(
+                "failed agent execution error type must be a non-empty string"
+            )
+        if not isinstance(error["message"], str):
+            raise ValueError(
+                "failed agent execution error message must be a string"
+            )
+        return cls(
+            agent_id=raw["agent_id"],
+            state=state,
+            content=raw["content"],
+            data=raw["data"],
+            error_type=error["type"],
+            error_message=error["message"],
+        )
+
 
 @dataclass(frozen=True)
 class AgentRequest:
@@ -678,9 +755,46 @@ class AgentBatchResult:
     output_revision: int | None
 
     def __post_init__(self) -> None:
+        _validate_id(self.task_id, label="task id")
+        _validate_id(self.session_id, label="chat session id")
+        if not self.specialist_agent_ids:
+            raise ValueError(
+                "agent batch must include at least one specialist agent"
+            )
+        if len(self.specialist_agent_ids) != len(set(self.specialist_agent_ids)):
+            raise ValueError(
+                "agent batch specialist agent ids must not contain duplicates"
+            )
+        for agent_id in self.specialist_agent_ids:
+            _validate_id(agent_id, label="agent id")
+        if (
+            tuple(result.agent_id for result in self.results)
+            != self.specialist_agent_ids
+        ):
+            raise ValueError(
+                "agent batch specialist results must match requested agent order"
+            )
+        if self.synthesizer_agent_id is not None:
+            _validate_id(
+                self.synthesizer_agent_id,
+                label="synthesizer agent id",
+            )
+        if self.synthesis is not None:
+            if self.synthesizer_agent_id is None:
+                raise ValueError(
+                    "agent batch synthesis requires a synthesizer agent id"
+                )
+            if self.synthesis.agent_id != self.synthesizer_agent_id:
+                raise ValueError(
+                    "agent batch synthesis must match the synthesizer agent id"
+                )
         if self.commit_state not in {"committed", "conflict"}:
             raise ValueError(
                 "agent batch commit_state must be 'committed' or 'conflict'"
+            )
+        if type(self.input_revision) is not int or self.input_revision < 0:
+            raise ValueError(
+                "agent batch input_revision must be a non-negative integer"
             )
         if (
             self.commit_state == "committed"
@@ -688,6 +802,24 @@ class AgentBatchResult:
         ):
             raise ValueError(
                 "committed agent batch must include output_revision"
+            )
+        if (
+            self.commit_state == "committed"
+            and (
+                type(self.output_revision) is not int
+                or self.output_revision <= self.input_revision
+            )
+        ):
+            raise ValueError(
+                "committed agent batch output_revision must be greater than input_revision"
+            )
+        if (
+            self.commit_state == "committed"
+            and self.synthesizer_agent_id is not None
+            and self.synthesis is None
+        ):
+            raise ValueError(
+                "committed agent batch with a synthesizer must include synthesis"
             )
         if (
             self.commit_state == "conflict"
@@ -709,8 +841,11 @@ class AgentBatchResult:
             for item in executions
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def _unsigned_dict(self) -> dict[str, Any]:
         payload = {
+            "schema": MULTI_AGENT_BATCH_SCHEMA,
+            "schema_version": MULTI_AGENT_BATCH_SCHEMA_VERSION,
+            "canonicalization": MULTI_AGENT_BATCH_CANONICALIZATION,
             "task_id": self.task_id,
             "session_id": self.session_id,
             "specialist_agent_ids": list(
@@ -731,8 +866,161 @@ class AgentBatchResult:
             "output_revision": self.output_revision,
             "error_count": self.error_count,
         }
-        clone_strict_json(payload)
-        return payload
+        return clone_strict_json(payload)
+
+    @property
+    def integrity_sha256(self) -> str:
+        return _canonical_json_sha256(self._unsigned_dict())
+
+    def receipt(self) -> dict[str, Any]:
+        return {
+            "schema": MULTI_AGENT_BATCH_SCHEMA,
+            "schema_version": MULTI_AGENT_BATCH_SCHEMA_VERSION,
+            "canonicalization": MULTI_AGENT_BATCH_CANONICALIZATION,
+            "task_id": self.task_id,
+            "session_id": self.session_id,
+            "commit_state": self.commit_state,
+            "input_revision": self.input_revision,
+            "output_revision": self.output_revision,
+            "algorithm": "sha256",
+            "sha256": self.integrity_sha256,
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = self._unsigned_dict()
+        payload["integrity"] = {
+            "algorithm": "sha256",
+            "sha256": self.integrity_sha256,
+        }
+        return clone_strict_json(payload)
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "AgentBatchResult":
+        if type(raw) is not dict:
+            raise ValueError("agent batch result must be a JSON object")
+        document = clone_strict_json(raw)
+        expected = {
+            "schema",
+            "schema_version",
+            "canonicalization",
+            "task_id",
+            "session_id",
+            "specialist_agent_ids",
+            "results",
+            "synthesizer_agent_id",
+            "synthesis",
+            "commit_state",
+            "input_revision",
+            "output_revision",
+            "error_count",
+            "integrity",
+        }
+        unknown = set(document) - expected
+        missing = expected - set(document)
+        if unknown or missing:
+            if missing:
+                raise ValueError(
+                    "agent batch result is missing field(s): "
+                    + ", ".join(sorted(missing))
+                )
+            raise ValueError(
+                "agent batch result contains unsupported field(s): "
+                + ", ".join(sorted(unknown))
+            )
+        if document["schema"] != MULTI_AGENT_BATCH_SCHEMA:
+            raise ValueError(
+                f"unsupported agent batch schema: {document['schema']!r}"
+            )
+        if document["schema_version"] != MULTI_AGENT_BATCH_SCHEMA_VERSION:
+            raise ValueError(
+                "unsupported agent batch schema version: "
+                f"{document['schema_version']!r}"
+            )
+        if document["canonicalization"] != MULTI_AGENT_BATCH_CANONICALIZATION:
+            raise ValueError(
+                "unsupported agent batch canonicalization: "
+                f"{document['canonicalization']!r}"
+            )
+
+        integrity = document["integrity"]
+        if (
+            type(integrity) is not dict
+            or set(integrity) != {"algorithm", "sha256"}
+        ):
+            raise ValueError(
+                "agent batch integrity must contain algorithm and sha256"
+            )
+        if integrity["algorithm"] != "sha256":
+            raise ValueError(
+                "unsupported agent batch integrity algorithm: "
+                f"{integrity['algorithm']!r}"
+            )
+        expected_digest = integrity["sha256"]
+        if not isinstance(expected_digest, str) or len(expected_digest) != 64:
+            raise ValueError(
+                "agent batch integrity sha256 must be a 64-character hex digest"
+            )
+        try:
+            int(expected_digest, 16)
+        except ValueError as exc:
+            raise ValueError(
+                "agent batch integrity sha256 must be hexadecimal"
+            ) from exc
+
+        unsigned = dict(document)
+        unsigned.pop("integrity")
+        actual_digest = _canonical_json_sha256(unsigned)
+        if actual_digest != expected_digest.lower():
+            raise ValueError(
+                "agent batch integrity check failed: content has changed"
+            )
+
+        if type(document["specialist_agent_ids"]) is not list:
+            raise ValueError(
+                "agent batch specialist_agent_ids must be a JSON array"
+            )
+        if type(document["results"]) is not list:
+            raise ValueError("agent batch results must be a JSON array")
+        synthesis_raw = document["synthesis"]
+        if synthesis_raw is not None and type(synthesis_raw) is not dict:
+            raise ValueError(
+                "agent batch synthesis must be a JSON object or null"
+            )
+        error_count = document["error_count"]
+        if type(error_count) is not int or error_count < 0:
+            raise ValueError(
+                "agent batch error_count must be a non-negative integer"
+            )
+
+        result = cls(
+            task_id=document["task_id"],
+            session_id=document["session_id"],
+            specialist_agent_ids=tuple(document["specialist_agent_ids"]),
+            results=tuple(
+                AgentExecution.from_dict(item)
+                for item in document["results"]
+            ),
+            synthesizer_agent_id=document["synthesizer_agent_id"],
+            synthesis=(
+                None
+                if synthesis_raw is None
+                else AgentExecution.from_dict(synthesis_raw)
+            ),
+            commit_state=document["commit_state"],
+            input_revision=document["input_revision"],
+            output_revision=document["output_revision"],
+        )
+        if error_count != result.error_count:
+            raise ValueError(
+                "agent batch error_count does not match execution results"
+            )
+        return result
+
+
+def verify_agent_batch_result(document: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate a versioned agent batch receipt without re-running any agent."""
+
+    return AgentBatchResult.from_dict(document).to_dict()
 
 
 class MultiAgentCoordinator:
@@ -931,11 +1219,28 @@ class MultiAgentCoordinator:
                 synthesis_request,
             )
 
+        expected_output_revision = submitted.revision + len(results) + (
+            0 if synthesis is None else 1
+        )
+        committed_result = AgentBatchResult(
+            task_id=generated_task_id,
+            session_id=session_id,
+            specialist_agent_ids=requested,
+            results=results,
+            synthesizer_agent_id=synthesizer_agent_id,
+            synthesis=synthesis,
+            commit_state="committed",
+            input_revision=submitted.revision,
+            output_revision=expected_output_revision,
+        )
+        batch_receipt = committed_result.receipt()
+
         transcript_messages = [
             self._execution_message(
                 generated_task_id,
                 execution,
                 phase="specialist",
+                batch_receipt=batch_receipt,
             )
             for execution in results
         ]
@@ -945,6 +1250,7 @@ class MultiAgentCoordinator:
                     generated_task_id,
                     synthesis,
                     phase="synthesis",
+                    batch_receipt=batch_receipt,
                 )
             )
 
@@ -971,17 +1277,11 @@ class MultiAgentCoordinator:
                 output_revision=None,
             )
 
-        return AgentBatchResult(
-            task_id=generated_task_id,
-            session_id=session_id,
-            specialist_agent_ids=requested,
-            results=results,
-            synthesizer_agent_id=synthesizer_agent_id,
-            synthesis=synthesis,
-            commit_state="committed",
-            input_revision=submitted.revision,
-            output_revision=committed.revision,
-        )
+        if committed.revision != expected_output_revision:
+            raise RuntimeError(
+                "committed agent batch revision did not match its receipt"
+            )
+        return committed_result
 
     def _resolve_specs(
         self,
@@ -1065,6 +1365,7 @@ class MultiAgentCoordinator:
         execution: AgentExecution,
         *,
         phase: str,
+        batch_receipt: Mapping[str, Any],
     ) -> tuple[
         str,
         str,
@@ -1087,5 +1388,8 @@ class MultiAgentCoordinator:
                 "multi_agent_task_id": task_id,
                 "phase": phase,
                 "execution": execution.to_dict(),
+                "batch_receipt": clone_strict_json(
+                    dict(batch_receipt)
+                ),
             },
         )

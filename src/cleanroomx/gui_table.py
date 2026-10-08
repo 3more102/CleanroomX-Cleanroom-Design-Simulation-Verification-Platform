@@ -283,9 +283,12 @@ class TreeviewTableBehavior:
                     for column in self.copy_columns
                 )
             )
+        # ttk.Treeview.selection() ordering varies across Tcl/Tk versions.
+        # Export selected rows in their current visible table order.
+        selected_ids = set(self.tree.selection())
         selected_rows = []
-        for iid in self.tree.selection():
-            if not self.tree.exists(iid):
+        for iid in self._ordered_children():
+            if iid not in selected_ids:
                 continue
             values = [
                 treeview_cell_text(self.tree, iid, column)

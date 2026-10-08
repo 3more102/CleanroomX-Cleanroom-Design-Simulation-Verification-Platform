@@ -430,7 +430,10 @@ class ChatSessionStore:
             raise ValueError(
                 f"unsupported multi-agent workspace schema: {raw['schema']!r}"
             )
-        if raw["schema_version"] != MULTI_AGENT_WORKSPACE_SCHEMA_VERSION:
+        if (
+            type(raw["schema_version"]) is not int
+            or raw["schema_version"] != MULTI_AGENT_WORKSPACE_SCHEMA_VERSION
+        ):
             raise ValueError(
                 "unsupported multi-agent workspace schema version: "
                 f"{raw['schema_version']!r}"
@@ -931,7 +934,10 @@ class AgentBatchResult:
             raise ValueError(
                 f"unsupported agent batch schema: {document['schema']!r}"
             )
-        if document["schema_version"] != MULTI_AGENT_BATCH_SCHEMA_VERSION:
+        if (
+            type(document["schema_version"]) is not int
+            or document["schema_version"] != MULTI_AGENT_BATCH_SCHEMA_VERSION
+        ):
             raise ValueError(
                 "unsupported agent batch schema version: "
                 f"{document['schema_version']!r}"

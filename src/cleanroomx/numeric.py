@@ -6,6 +6,8 @@ from typing import Any
 
 def finite_float(value: Any, field_name: str) -> float:
     """Return *value* as a finite float or fail before engineering use."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a finite number")
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError) as exc:

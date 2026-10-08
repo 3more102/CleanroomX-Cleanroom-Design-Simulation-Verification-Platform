@@ -535,7 +535,7 @@ def project_from_dict_with_migration_info(
     if data.get("schema") != PROJECT_SCHEMA:
         raise ProjectFormatError(f"project schema must be {PROJECT_SCHEMA!r}")
     version = data.get("schema_version")
-    if not isinstance(version, int):
+    if type(version) is not int:
         raise ProjectFormatError("schema_version must be an integer")
     if version > PROJECT_SCHEMA_VERSION:
         raise ProjectFormatError(

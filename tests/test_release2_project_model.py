@@ -121,3 +121,20 @@ def test_release2_strict_loader_rejects_duplicate_object_keys(tmp_path):
     )
     with pytest.raises(ProjectFormatError):
         load_project_document(path)
+
+
+
+def test_release2_project_model_rejects_boolean_schema_version():
+    import pytest
+    from cleanroomx.project import ProjectFormatError
+
+    raw = {
+        "schema": "cleanroomx.project",
+        "schema_version": True,
+        "project": {"name": "P", "description": "", "metadata": {}},
+        "analyses": [],
+        "active_analysis_id": None,
+    }
+
+    with pytest.raises(ProjectFormatError, match="schema_version must be an integer"):
+        project_from_dict(raw)

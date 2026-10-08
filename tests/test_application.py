@@ -1466,3 +1466,46 @@ def test_run_bundle_verification_detects_input_provenance_mismatch_even_if_resig
 
     with pytest.raises(ValueError, match="input snapshot does not match"):
         verify_analysis_run_bundle(bundle)
+
+
+@pytest.mark.parametrize("invalid", (True, 1.0))
+def test_run_bundle_verifier_rejects_rehashed_noninteger_schema_version(invalid):
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["schema_version"] = invalid
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="run bundle schema version"):
+        verify_analysis_run_bundle(bundle)
+
+
+@pytest.mark.parametrize("invalid", (False, 0.0))
+def test_run_bundle_verifier_rejects_rehashed_noninteger_dependency_count(invalid):
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    provenance = bundle["diagnostics"]["application_execution_provenance"]
+    assert provenance["external_dependency_count"] == 0
+    assert provenance["external_dependencies"] == []
+    provenance["external_dependency_count"] = invalid
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="external dependency count is invalid"):
+        verify_analysis_run_bundle(bundle)

@@ -111,7 +111,7 @@ Workspace schema:
 cleanroomx.multi-agent-workspace / version 1
 ```
 
-`ChatSessionStore.load()` uses the existing stable strict-JSON ingestion path. Duplicate session ids, unsupported fields, malformed revisions, invalid message sequences, non-finite JSON, and other invalid structures fail closed.
+`ChatSessionStore.load()` uses the existing stable strict-JSON ingestion path. Duplicate session ids, unsupported fields, malformed revisions, invalid message sequences, non-finite JSON, and other invalid structures fail closed. Persisted session and message `metadata` fields must be JSON objects; `null`, arrays, and scalars are rejected rather than silently replaced with empty metadata. Caller-facing APIs may still omit metadata when creating new records.
 
 Multi-agent chat state is intentionally separate from the existing `cleanroomx.project` schema. Engineering project files therefore remain backward compatible.
 

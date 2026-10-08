@@ -449,3 +449,31 @@ def test_workspace_rejects_noninteger_schema_version(schema_version):
 
     with pytest.raises(ValueError, match="workspace schema version"):
         ChatSessionStore.from_dict(document)
+
+
+@pytest.mark.parametrize("bad_metadata", (None, True, [], "unexpected"))
+@pytest.mark.parametrize("record", ("session", "message"))
+def test_workspace_load_rejects_nonobject_record_metadata(record, bad_metadata):
+    store = ChatSessionStore()
+    store.create_session("chat", "Strict metadata")
+    store.append_message("chat", role="user", content="request")
+    document = store.to_dict()
+
+    if record == "session":
+        document["sessions"][0]["metadata"] = bad_metadata
+    else:
+        document["sessions"][0]["messages"][0]["metadata"] = bad_metadata
+
+    with pytest.raises(ValueError, match=f"chat {record} metadata must be a JSON object"):
+        ChatSessionStore.from_dict(document)
+
+
+def test_workspace_accepts_empty_object_metadata():
+    store = ChatSessionStore()
+    store.create_session("chat", "Empty metadata")
+    store.append_message("chat", role="user", content="request")
+    document = store.to_dict()
+
+    assert document["sessions"][0]["metadata"] == {}
+    assert document["sessions"][0]["messages"][0]["metadata"] == {}
+    assert ChatSessionStore.from_dict(document).to_dict() == document

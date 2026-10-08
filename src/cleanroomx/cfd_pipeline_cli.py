@@ -5,6 +5,8 @@ import sys
 from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
+from .cfd_scalar import prepare_scalar_case, run_scalar_case
+from .cfd_audit import audit_openfoam_log
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
 
@@ -32,6 +34,21 @@ def build_parser():
     plot.add_argument("--position-m",type=float,required=True)
     plot.add_argument("--slab-thickness-m",type=float,required=True)
     plot.add_argument("--output",required=True)
+    scalar=sub.add_parser("scalar-prepare",help="Prepare independent OpenFOAM v10 point-source tracer case")
+    scalar.add_argument("flow_case",help="Finished airflow case containing nonzero-time U and polyMesh")
+    scalar.add_argument("spec",help="Dimensionless passive tracer specification JSON")
+    scalar.add_argument("output_directory")
+    scalar_runner=sub.add_parser("scalar-run",help="Run external scalarTransportFoam")
+    scalar_runner.add_argument("directory")
+    scalar_runner.add_argument("--timeout-seconds",type=int,default=3600)
+    audit=sub.add_parser("audit-log",help="Apply explicitly supplied numerical residual criteria")
+    audit.add_argument("log")
+    audit.add_argument("--fields",required=True,nargs="+")
+    audit.add_argument("--max-initial-residual",required=True,type=float)
+    audit.add_argument("--max-final-residual",required=True,type=float)
+    audit.add_argument("--max-global-continuity",type=float)
+    audit.add_argument("--window",type=int,default=3)
+    audit.add_argument("--output")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -45,6 +62,28 @@ def main():
         result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="scalar-prepare":
+        result=prepare_scalar_case(args.flow_case,load_cli_input(load_strict_json,args.spec),
+                                   args.output_directory)
+        print(dumps_strict_json(result))
+        return 0
+    if args.command=="scalar-run":
+        result=run_scalar_case(args.directory,timeout_seconds=args.timeout_seconds)
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="executed_requires_residual_and_field_validation" else 2
+    if args.command=="audit-log":
+        result=audit_openfoam_log(args.log,fields=args.fields,
+                  max_initial_residual=args.max_initial_residual,
+                  max_final_residual=args.max_final_residual,
+                  max_global_continuity=args.max_global_continuity,window=args.window)
+        payload=dumps_strict_json(result)
+        if args.output:
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
+                                      protected_inputs=(args.log,)):
+                return 1
+        else:
+            print(payload)
+        return 0 if result["status"]=="numerically_screened" else 3
     files={i:getattr(args,f"case_{i}") for i in (1,2,3)}
     if args.command=="plot":
         result=render_cfd_cross_section(files,args.output,axis=args.axis,

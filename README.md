@@ -34,6 +34,13 @@ The current stable release is **v0.102.1**.
 - Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
 - This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
 
+### Source-driven CFD passive tracer and numerical audit
+
+- Localized OpenFOAM Foundation v10 passive scalar source by point-selected finite-volume cell (separate scalar case based on computed airflow).
+- SHA-256 provenance from airflow U and polyMesh into immutable scalar-case inputs.
+- User-thresholded OpenFOAM residual/continuity log screening with fail-closed incomplete evidence; **not** proof of physical convergence or certification.
+- [Passive scalar and numerical audit guide](docs/CFD_SCALAR_TRANSPORT_AUDIT.md).
+
 ### Engineering verification
 
 CleanroomX includes engineering workflows for:

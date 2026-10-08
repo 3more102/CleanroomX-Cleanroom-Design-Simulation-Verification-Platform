@@ -8,6 +8,18 @@
 
 The current stable release is **v0.102.1**.
 
+### Workstation and package-readiness diagnostics
+
+Use `cleanroomx-doctor` to check Python qualification, package and module
+integrity, native BIM availability, Tcl/Tk readiness, packaged examples,
+plugin/analysis registry integrity, and atomic persistence. Add `--deep` to
+exercise a packaged analysis, `--require-desktop` to test an actual display,
+or `--require-installed-distribution` for a strict installation audit.
+The command supports JSON/text output, support-safe `--redact-paths`,
+and `--baseline` with `--fail-on-regression` for CI readiness drift.
+See [System Health Doctor](docs/SYSTEM_HEALTH.md) for all options, exit
+codes, privacy considerations, and limitations.
+
 ## What CleanroomX provides
 
 ### 2D + 3D cleanroom design workspace

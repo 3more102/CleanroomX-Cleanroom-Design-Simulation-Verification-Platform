@@ -260,6 +260,14 @@ def analyze_vtk_grid_study(data, *, base_directory="."):
             "log_sha256":audit["log_sha256"],
             "log_screening_status":audit["status"],
         })
+    # Different paths alone do not prove independent solver runs. A copied
+    # log or field dataset may satisfy per-run checks while reusing evidence.
+    for digest_key, label in (("vtk_sha256", "VTK datasets"),
+                              ("log_sha256", "solver logs")):
+        if len({row[digest_key] for row in rows}) != len(rows):
+            blockers.append(
+                f"Duplicate {label} across grid resolutions; independent run evidence required"
+            )
     for a,b in zip(rows,rows[1:]):
         if math.prod(a["mesh_cells"]) <= math.prod(b["mesh_cells"]):
             blockers.append("Grid cell counts are not strictly decreasing fine to coarse")

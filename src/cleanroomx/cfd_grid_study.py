@@ -54,7 +54,7 @@ def validate_grid_spec(data):
         raise ValueError("configuration must be integer 1, 2, or 3")
     _number(data["room_volume_m3"], "room_volume_m3", positive=True)
     quantity = data["quantity"]
-    if quantity not in QUANTITIES or type(quantity) is not str:
+    if type(quantity) is not str or quantity not in QUANTITIES:
         raise ValueError("quantity must be velocity_mean_m_s or contaminant_mean")
     _nonempty(data["unit"], "unit")
     if QUANTITIES[quantity] is not None and data["unit"] != QUANTITIES[quantity]:
@@ -107,7 +107,7 @@ def validate_grid_spec(data):
             raise ValueError("mesh_cells requires three positive integers")
         for key in ("vtk_file", "solver_log", "run_id"):
             _nonempty(run[key], key)
-        if not HEX64.fullmatch(run["conditions_sha256"] or ""):
+        if type(run["conditions_sha256"]) is not str or not HEX64.fullmatch(run["conditions_sha256"]):
             raise ValueError("conditions_sha256 must be lowercase SHA-256 hex")
     if set(indexed) != set(LEVELS):
         raise ValueError("levels must contain fine, medium and coarse")

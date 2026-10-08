@@ -28,6 +28,7 @@ cleanroomx-project-traceability = "cleanroomx.project_requirements_traceability_
 cleanroomx-verification-history = "cleanroomx.verification_history_cli:main"
 cleanroomx-ifc = "cleanroomx.bim_ifc_cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
+cleanroomx-cfd-study = "cleanroomx.cfd_study_cli:main"
 cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
 cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"
 cleanroomx-qualification = "cleanroomx.qualification_cli:main"

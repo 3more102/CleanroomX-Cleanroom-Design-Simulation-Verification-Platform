@@ -21,6 +21,13 @@ The current stable release is **v0.102.1**.
 - Validated, atomic property edits that keep devices attached when room coordinates change.
 - Room/device duplication with fresh IDs, synchronized views, and one-step Undo/Redo.
 
+### Cleanroom CFD study (external solver evidence)
+
+- Compare three supply/exhaust layouts: central ceiling / low-wall, distributed ceiling / low-wall, and distributed ceiling / raised perforated floor.
+- Post-process externally computed velocity vectors, concentration fields, and solver-labelled recirculation regions with volume weighting and supply/exhaust balance checks.
+- Require matching case conditions and explicit project tolerances before comparison; **never infer CFD results from the study handout**.
+- This feature is **not an integrated CFD solver**. See [CFD Ventilation Study](docs/CFD_VENTILATION_STUDY.md).
+
 ### Engineering verification
 
 CleanroomX includes engineering workflows for:

@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-from .cli_output import cli_error_boundary, dumps_strict_json, publish_cli_output
+from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
 from .system_health import (
     build_system_health_report,
@@ -139,7 +139,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     comparison = None
     if args.baseline is not None:
-        baseline = load_strict_json(args.baseline, max_bytes=2 * 1024 * 1024)
+        baseline = load_cli_input(
+            lambda path: load_strict_json(path, max_bytes=2 * 1024 * 1024),
+            args.baseline,
+        )
         comparison = compare_system_health_reports(baseline, report)
         report = {**report, "comparison": comparison}
 

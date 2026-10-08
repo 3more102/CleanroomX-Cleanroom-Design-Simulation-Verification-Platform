@@ -1,0 +1,11 @@
+{
+  "schema_version": "cleanroomx.cfd-study.v1",
+  "name": "NANENG 523 Cleanroom CFD ventilation comparison - uncomputed template",
+  "room": null,
+  "analysis": {},
+  "cases": [
+    {"configuration": 1, "cells": []},
+    {"configuration": 2, "cells": []},
+    {"configuration": 3, "cells": []}
+  ]
+}

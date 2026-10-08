@@ -1,0 +1,67 @@
+{
+  "schema_version": "cleanroomx.cfd-grid-study.v1",
+  "name": "UNVALIDATED TEMPLATE -- actual VTK files and solver logs required",
+  "configuration": 1,
+  "room_volume_m3": 12,
+  "quantity": "velocity_mean_m_s",
+  "unit": "m/s",
+  "criteria": {
+    "min_refinement_ratio": 1.1,
+    "max_relative_volume_error": 0.001,
+    "min_observed_order": 0.5,
+    "max_observed_order": 6,
+    "max_fine_gci_percent": 5,
+    "safety_factor": 1.25,
+    "max_axis_ratio_spread": 0.05
+  },
+  "log_audit": {
+    "fields": [
+      "Ux",
+      "Uy",
+      "Uz",
+      "p"
+    ],
+    "window": 3,
+    "max_initial_residual": 0.00001,
+    "max_final_residual": 1e-7,
+    "max_global_continuity": 0.000001
+  },
+  "runs": [
+    {
+      "level": "fine",
+      "mesh_cells": [
+        24,
+        24,
+        24
+      ],
+      "vtk_file": "fine.vtu",
+      "solver_log": "fine.log",
+      "run_id": "REPLACE-fine",
+      "conditions_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "level": "medium",
+      "mesh_cells": [
+        12,
+        12,
+        12
+      ],
+      "vtk_file": "medium.vtu",
+      "solver_log": "medium.log",
+      "run_id": "REPLACE-medium",
+      "conditions_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "level": "coarse",
+      "mesh_cells": [
+        6,
+        6,
+        6
+      ],
+      "vtk_file": "coarse.vtu",
+      "solver_log": "coarse.log",
+      "run_id": "REPLACE-coarse",
+      "conditions_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

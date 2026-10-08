@@ -8,7 +8,7 @@ import pytest
 
 from cleanroomx.cfd_grid_family import SCHEMA as FAMILY_SCHEMA, generate_grid_family, validate_family_spec
 from cleanroomx.cfd_grid_study import (
-    SCHEMA, _analysis, _observed_order, analyze_vtk_grid_study, validate_grid_spec,
+    SCHEMA, _analysis, _observed_order, _resolve_study_input, analyze_vtk_grid_study, validate_grid_spec,
 )
 
 
@@ -160,6 +160,51 @@ def test_invalid_grid_study_rejected(mutator):
     spec=study_spec();mutator(spec)
     with pytest.raises(ValueError):
         validate_grid_spec(spec)
+
+
+
+def test_grid_evidence_allows_files_in_nested_study_directory(tmp_path):
+    study = tmp_path / "study"
+    nested = study / "solved"
+    nested.mkdir(parents=True)
+    vtk_path = nested / "fine.vtu"
+    vtk_path.write_bytes(b"VTK-placeholder")
+    assert _resolve_study_input(study, "solved/fine.vtu", "VTK file") == vtk_path
+
+
+@pytest.mark.parametrize("escape", ["absolute", "parent"])
+def test_grid_evidence_rejects_absolute_and_parent_traversal(tmp_path, escape):
+    study = tmp_path / "study"
+    study.mkdir()
+    external = tmp_path / "external.vtu"
+    external.write_bytes(b"VTK-placeholder")
+    supplied = str(external) if escape == "absolute" else "../external.vtu"
+    with pytest.raises(ValueError, match="relative|outside"):
+        _resolve_study_input(study, supplied, "VTK file")
+
+
+def test_grid_evidence_rejects_symlink_that_escapes_study_directory(tmp_path):
+    study = tmp_path / "study"
+    study.mkdir()
+    external = tmp_path / "outside.log"
+    external.write_text("external data", encoding="utf-8")
+    link = study / "solver.log"
+    try:
+        link.symlink_to(external)
+    except (OSError, NotImplementedError):
+        pytest.skip("This runner cannot create symbolic links")
+    with pytest.raises(ValueError, match="outside"):
+        _resolve_study_input(study, "solver.log", "solver log")
+
+
+def test_grid_audit_rejects_escaping_source_before_external_vtk_import(tmp_path):
+    study = tmp_path / "study"
+    study.mkdir()
+    (tmp_path / "escape.vtu").write_bytes(b"must-not-be-read")
+    spec = study_spec()
+    spec["runs"][0]["vtk_file"] = "../escape.vtu"
+    with pytest.raises(ValueError, match="fine VTK file.*outside"):
+        analyze_vtk_grid_study(spec, base_directory=study)
 
 
 def _vtk_case(path,n,velocity):

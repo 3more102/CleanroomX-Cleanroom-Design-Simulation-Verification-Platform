@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import cleanroomx.doctor_cli as doctor_cli
 
@@ -283,3 +284,53 @@ def test_doctor_cli_redacts_explicit_local_paths(monkeypatch, capsys) -> None:
     assert payload["checks"][0]["details"]["path"] == "<redacted>/gui_demo.cleanroomx.json"
     assert payload["checks"][0]["details"]["message"] == windows_path
     assert payload["privacy"] == {"local_paths_redacted": True}
+
+
+def test_doctor_cli_output_cannot_alias_baseline_through_hardlink(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """Baseline evidence must survive even when two distinct paths share an inode."""
+    baseline = tmp_path / "baseline.json"
+    original = json.dumps(_report(ready=True), sort_keys=True).encode("utf-8")
+    baseline.write_bytes(original)
+    alias = tmp_path / "output-hardlink.json"
+    os.link(baseline, alias)
+
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda **_kwargs: _report(ready=True),
+    )
+
+    assert doctor_cli.main([
+        "--baseline", str(baseline), "--output", str(alias),
+    ]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "output path must be different from protected engineering input" in captured.err
+    assert baseline.read_bytes() == original
+    assert alias.read_bytes() == original
+
+
+def test_doctor_cli_output_can_publish_beside_distinct_baseline(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps(_report(ready=True)), encoding="utf-8")
+    original = baseline.read_bytes()
+    output = tmp_path / "current-health.json"
+
+    monkeypatch.setattr(
+        doctor_cli,
+        "build_system_health_report",
+        lambda **_kwargs: _report(ready=True),
+    )
+
+    assert doctor_cli.main([
+        "--baseline", str(baseline), "--output", str(output),
+    ]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["comparison"]["state"] == "stable"
+    assert report["required_ready"] is True
+    assert baseline.read_bytes() == original
+    assert capsys.readouterr().err == ""

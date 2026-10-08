@@ -466,17 +466,28 @@ def _write_target_path(payload: dict[str, Any], path: tuple[str, ...], value: An
 
 
 def _run_bundle_sha256(run: dict[str, Any]) -> str:
+    """Verify the upstream run's canonical content identity before handoff."""
     integrity = run.get("integrity")
-    if isinstance(integrity, dict):
-        digest = integrity.get("sha256")
-        if (
-            isinstance(digest, str)
-            and len(digest) == 64
-            and all(character in "0123456789abcdef" for character in digest)
-        ):
-            return digest
-    return _canonical_sha256(run)
-
+    if not isinstance(integrity, dict) or set(integrity) != {
+        "algorithm", "canonicalization", "sha256"
+    }:
+        raise AgentHandoffError("upstream run integrity record is invalid")
+    if (
+        integrity["algorithm"] != "sha256"
+        or integrity["canonicalization"] != AGENT_RUN_CANONICALIZATION
+    ):
+        raise AgentHandoffError("upstream run integrity algorithm is unsupported")
+    digest = integrity["sha256"]
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise AgentHandoffError("upstream run integrity SHA-256 must be lowercase hex")
+    unsigned = {key: value for key, value in run.items() if key != "integrity"}
+    if _canonical_sha256(unsigned) != digest:
+        raise AgentHandoffError("upstream run integrity check failed: content has changed")
+    return digest
 
 def _source_revision_state(
     path: Path,
@@ -550,6 +561,7 @@ def run_project_agents(
                     raise AgentHandoffError(
                         f"source agent {handoff.source_agent!r} has no completed run"
                     )
+                upstream_sha256 = _run_bundle_sha256(source_outcome.run)
                 value = _read_source_path(source_outcome.run, handoff.source_path)
                 value = _strict_snapshot(
                     value,
@@ -561,7 +573,7 @@ def run_project_agents(
                         source_agent=handoff.source_agent,
                         source_path=handoff.source_path,
                         target_path=handoff.target_path,
-                        source_run_sha256=_run_bundle_sha256(source_outcome.run),
+                        source_run_sha256=upstream_sha256,
                         value_sha256=_canonical_sha256(value),
                     )
                 )

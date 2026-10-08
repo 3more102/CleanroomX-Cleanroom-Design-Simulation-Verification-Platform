@@ -302,6 +302,17 @@ def _parse_handoffs(raw: Any, *, agent_id: str) -> tuple[AgentHandoff, ...]:
             raise AgentPlanError(
                 f"agent {agent_id!r} writes target path {dotted!r} more than once"
             )
+        for prior in handoffs:
+            prior_path = prior.target_path
+            if (
+                handoff.target_path[: len(prior_path)] == prior_path
+                or prior_path[: len(handoff.target_path)] == handoff.target_path
+            ):
+                raise AgentPlanError(
+                    f"agent {agent_id!r} handoff target paths "
+                    f"{'.'.join(prior_path)!r} and "
+                    f"{'.'.join(handoff.target_path)!r} overlap"
+                )
         target_paths.add(handoff.target_path)
         handoffs.append(handoff)
     return tuple(handoffs)
@@ -440,12 +451,12 @@ def _read_source_path(value: Any, path: tuple[PathToken, ...]) -> Any:
 def _write_target_path(payload: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
     current: dict[str, Any] = payload
     for token in path[:-1]:
-        existing = current.get(token)
-        if existing is None:
+        if token not in current:
             child: dict[str, Any] = {}
             current[token] = child
             current = child
             continue
+        existing = current[token]
         if not isinstance(existing, dict):
             raise AgentHandoffError(
                 f"target path cannot descend through non-object key {token!r}"

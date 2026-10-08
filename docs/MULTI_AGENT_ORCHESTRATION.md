@@ -48,9 +48,11 @@ the downstream analysis input immediately before execution.
 - `source_path` addresses keys and non-negative list indexes inside the upstream
   run bundle.
 - `target_path` addresses object keys inside the downstream analysis input.
-- duplicate target paths are rejected.
-- missing source paths and attempts to descend through non-object target values
-  fail closed.
+- duplicate or ancestor/descendant-overlapping target paths are rejected at plan
+  validation, regardless of declaration order.
+- missing source paths and attempts to descend through existing non-object target
+  values (including JSON `null`) fail closed. A missing intermediate object key
+  may be created, but an explicit `null` is never treated as a missing key.
 
 Every applied handoff records the upstream run SHA-256 and a canonical SHA-256 of
 the transferred value. The downstream canonical application run still records its

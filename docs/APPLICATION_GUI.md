@@ -188,7 +188,7 @@ The Start Center recent-project table can be searched by project name, path, or 
 
 ## Results and plots
 
-All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256, byte-size, and nanosecond modification-time evidence for external dependencies. Diagnostics exposes this evidence and **Export Run Bundle JSON** preserves the completed run data.
+All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256, byte-size, and nanosecond modification-time evidence for external dependencies. Diagnostics exposes this evidence and **Export Run Bundle JSON** preserves the completed run data. The standalone bundle verifier strictly requires JSON integers for `schema_version` and the provenance `external_dependency_count`; booleans or floating-point aliases are invalid even when an unkeyed SHA-256 integrity digest is recomputed.
 
 For `consistency` and `dossier`, those external dependencies are guarded as engineering run inputs rather than treated as advisory provenance only. CleanroomX fingerprints each referenced file from a stable read before execution and again after result/report generation. If a referenced file changes, disappears, or remains unstable while being fingerprinted, the run fails with an actionable error and the result is discarded. Stabilize the source files and run again. This prevents the desktop from presenting a result assembled while its external engineering inputs were changing; it does not lock files against other programs.
 

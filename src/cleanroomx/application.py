@@ -203,7 +203,10 @@ def verify_analysis_run_bundle(document: dict) -> dict:
         raise ValueError("run bundle must be a JSON object")
     if document.get("schema") != _RUN_BUNDLE_SCHEMA:
         raise ValueError(f"unsupported run bundle schema: {document.get('schema')!r}")
-    if document.get("schema_version") != _RUN_BUNDLE_SCHEMA_VERSION:
+    if (
+        type(document.get("schema_version")) is not int
+        or document["schema_version"] != _RUN_BUNDLE_SCHEMA_VERSION
+    ):
         raise ValueError(
             f"unsupported run bundle schema version: {document.get('schema_version')!r}"
         )
@@ -292,7 +295,7 @@ def verify_analysis_run_bundle(document: dict) -> dict:
 
     dependency_count = provenance.get("external_dependency_count")
     dependencies = provenance.get("external_dependencies")
-    if not isinstance(dependency_count, int) or dependency_count < 0:
+    if type(dependency_count) is not int or dependency_count < 0:
         raise ValueError("run bundle external dependency count is invalid")
     if not isinstance(dependencies, list) or len(dependencies) != dependency_count:
         raise ValueError("run bundle external dependency manifest is inconsistent")

@@ -5,8 +5,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-from .cli_output import cli_error_boundary, dumps_strict_json
-from .persistence import atomic_write_text
+from .cli_output import atomic_write_cli_output, cli_error_boundary, dumps_strict_json
 from .strict_json import load_strict_json
 from .system_health import (
     build_system_health_report,
@@ -76,10 +75,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return parser
 
-
-def _doctor_output_guard() -> None:
-    """Publication hook retained for the shared atomic-output contract."""
-    return None
 
 
 def _render_text(report: dict) -> str:
@@ -159,10 +154,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.output is None:
         sys.stdout.write(text)
     else:
-        atomic_write_text(
+        atomic_write_cli_output(
             args.output,
             text,
-            before_replace=_doctor_output_guard,
+            protected_inputs=(args.baseline,) if args.baseline is not None else (),
         )
     if not report["required_ready"]:
         return 2

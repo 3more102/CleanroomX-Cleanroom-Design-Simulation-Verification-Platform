@@ -22,7 +22,7 @@ The command emits strict JSON with schema `cleanroomx.system-health` by default.
 
 Use `--redact-paths` before attaching a JSON health report to a support ticket or sharing it outside the workstation. Explicit path-valued fields such as `path`, `executable`, and nested `*_path` values are reduced to a basename-only `<redacted>/...` form. Windows and POSIX path syntax are both recognized. The transform is non-mutating and leaves free-form diagnostic messages unchanged so technical error context is not silently rewritten.
 
-From the desktop application, use **Help → System Health…** or the command palette action **Run System Health Check** to run the standard non-destructive readiness checks. Warning and failure entries include the same actionable remediation guidance as the CLI report. The desktop surface intentionally runs the bounded shallow check; use `cleanroomx-doctor --deep` when an end-to-end analysis execution probe is required.
+This standalone integration exposes the Doctor through the CLI. A desktop **Help → System Health…** action is being integrated separately as part of the Release 3 GUI workstream; it is not yet available on `main`. Use `cleanroomx-doctor --deep` for an end-to-end analysis execution probe. Warning and failure entries include actionable remediation guidance in both JSON and text reports.
 
 Required checks cover:
 

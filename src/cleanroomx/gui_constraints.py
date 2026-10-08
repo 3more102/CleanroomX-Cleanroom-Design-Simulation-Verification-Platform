@@ -13,9 +13,17 @@ from .compliance_rulepack import (
     compliance_check_from_dict,
 )
 from .project import ProjectDocument
+from .strict_json import strict_json_loads
 
 
 _OPERATORS = ("exists", "equals", "min", "max", "range", "one_of")
+
+
+def parse_constraint_expected_json(text: str) -> Any:
+    """Parse an editor expected value using CleanroomX strict-JSON semantics."""
+    if not isinstance(text, str):
+        raise TypeError("constraint expected JSON must be text")
+    return strict_json_loads(text)
 
 
 def _analysis(project: ProjectDocument, analysis_id: str):
@@ -304,11 +312,11 @@ class _RuleDialog(tk.Toplevel):
         if operator != "exists":
             expected_text = self.vars["expected"].get().strip()
             try:
-                rule["expected"] = json.loads(expected_text)
-            except json.JSONDecodeError as exc:
+                rule["expected"] = parse_constraint_expected_json(expected_text)
+            except ValueError as exc:
                 messagebox.showerror(
                     "Invalid expected value",
-                    f"Expected must be valid JSON.\n\n{exc}",
+                    f"Expected must be strict JSON.\n\n{exc}",
                     parent=self,
                 )
                 return

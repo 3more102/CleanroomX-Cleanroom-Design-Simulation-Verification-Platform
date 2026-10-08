@@ -7,6 +7,7 @@ import pytest
 from cleanroomx.gui_requirements import (
     add_requirement,
     add_requirement_set,
+    parse_requirement_target_json,
     remove_requirement,
     remove_requirement_set,
     requirements_snapshot,
@@ -178,3 +179,16 @@ def test_requirement_ids_remain_unique_across_sets() -> None:
         add_requirement(project, "secondary", _requirement())
 
     assert project.to_dict() == before
+
+
+def test_requirement_target_editor_uses_strict_json_semantics() -> None:
+    assert parse_requirement_target_json("21.5") == 21.5
+    assert parse_requirement_target_json('"operational"') == "operational"
+
+    for invalid in (
+        "NaN",
+        "-Infinity",
+        '{"state":"at_rest","state":"operational"}',
+    ):
+        with pytest.raises(ValueError):
+            parse_requirement_target_json(invalid)

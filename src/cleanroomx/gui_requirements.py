@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .project import ProjectDocument, project_from_dict
+from .strict_json import strict_json_loads
 from .project_requirements import (
     PROJECT_REQUIREMENTS_METADATA_KEY,
     PROJECT_REQUIREMENTS_SCHEMA,
@@ -15,6 +16,13 @@ from .project_requirements import (
     normalize_project_requirements_metadata,
     project_requirements_from_dict,
 )
+
+
+def parse_requirement_target_json(text: str) -> Any:
+    """Parse a requirement target using CleanroomX strict-JSON semantics."""
+    if not isinstance(text, str):
+        raise TypeError("requirement target JSON must be text")
+    return strict_json_loads(text)
 
 
 def requirements_snapshot(project: ProjectDocument) -> dict[str, Any]:
@@ -388,7 +396,7 @@ class _RequirementDialog(tk.Toplevel):
                 text = self.target_var.get().strip()
                 if not text:
                     raise ValueError("Target JSON is required in target mode")
-                target = json.loads(text)
+                target = parse_requirement_target_json(text)
             elif mode == "bounds":
                 minimum = _optional_float(self.minimum_var.get(), "Minimum")
                 maximum = _optional_float(self.maximum_var.get(), "Maximum")
@@ -417,7 +425,7 @@ class _RequirementDialog(tk.Toplevel):
                 "assumptions": _csv_values(values["assumptions"]),
                 "notes": values["notes"] or None,
             }
-        except (ValueError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             messagebox.showerror("Invalid requirement", str(exc), parent=self)
             return
         self.result = requirement

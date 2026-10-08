@@ -34,6 +34,11 @@ The orchestration plan is stored under
 }
 ```
 
+The plan `schema_version` must be the JSON integer `1` (not `1.0` or
+`true`). Agent `depends_on` and `handoffs` arrays may be omitted, in which
+case they are empty; explicitly setting either field to `null` or any other
+non-array value is rejected.
+
 Each agent binds to one existing project analysis. Agent IDs and referenced
 analysis IDs must be unique. Dependencies form a directed acyclic graph. Ready
 agents are scheduled deterministically in declaration order, so identical project

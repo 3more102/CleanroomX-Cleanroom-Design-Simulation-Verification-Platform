@@ -156,3 +156,22 @@ def test_conflicted_batch_receipt_is_not_written_to_transcript():
         "batch_receipt" not in message.metadata
         for message in session.messages
     )
+
+
+@pytest.mark.parametrize("schema_version", (True, 1.0))
+def test_batch_receipt_rejects_noninteger_schema_version_even_with_matching_digest(
+    schema_version,
+):
+    _store, coordinator = _coordinator()
+    coordinator.register_agent("requirements", lambda _request: "ok")
+    batch = coordinator.run(
+        "chat", "review", agent_ids=["requirements"], task_id="task-version"
+    )
+    document = batch.to_dict()
+    document["schema_version"] = schema_version
+    unsigned = copy.deepcopy(document)
+    unsigned.pop("integrity")
+    document["integrity"]["sha256"] = multi_agent._canonical_json_sha256(unsigned)
+
+    with pytest.raises(ValueError, match="agent batch schema version"):
+        verify_agent_batch_result(document)

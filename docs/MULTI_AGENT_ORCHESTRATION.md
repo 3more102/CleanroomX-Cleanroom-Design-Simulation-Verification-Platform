@@ -59,8 +59,14 @@ the downstream analysis input immediately before execution.
   values (including JSON `null`) fail closed. A missing intermediate object key
   may be created, but an explicit `null` is never treated as a missing key.
 
-Every applied handoff records the upstream run SHA-256 and a canonical SHA-256 of
-the transferred value. The downstream canonical application run still records its
+Before a handoff consumes upstream results, the coordinator checks the
+upstream run's declared SHA-256 against a freshly computed hash of the complete
+unsigned run bundle. Missing, malformed, noncanonical, or mismatched integrity
+records fail closed; the downstream solver is not invoked. This provides
+tamper detection for retained evidence, not authentication of a producer.
+
+Every applied handoff records the verified upstream run SHA-256 and a canonical
+SHA-256 of the transferred value. The downstream canonical application run still records its
 complete post-handoff input snapshot and input SHA-256 through the normal
 `run_analysis()` provenance boundary.
 

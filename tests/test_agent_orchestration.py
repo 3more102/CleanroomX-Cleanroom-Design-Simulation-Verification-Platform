@@ -22,6 +22,20 @@ class _FakeRun:
         return copy.deepcopy(self._document)
 
 
+def _signed_fake_run(result):
+    """Produce a minimal test bundle with a valid canonical run digest."""
+    unsigned = {"result": copy.deepcopy(result)}
+    return _FakeRun(
+        {
+            **unsigned,
+            "integrity": {
+                "algorithm": "sha256",
+                "canonicalization": orchestration.AGENT_RUN_CANONICALIZATION,
+                "sha256": orchestration._canonical_sha256(unsigned),
+            },
+        }
+    )
+
 def _project(metadata):
     return ProjectDocument(
         name="Agent demo",
@@ -140,12 +154,7 @@ def test_project_agents_apply_explicit_handoff_and_record_hashes(tmp_path, monke
     def fake_run(kind, payload, *, base_dir=None, project_source_revision=None):
         calls.append((kind, copy.deepcopy(payload), project_source_revision))
         if kind == "design_requirements":
-            return _FakeRun(
-                {
-                    "result": {"flow": 1250.0},
-                    "integrity": {"sha256": "a" * 64},
-                }
-            )
+            return _signed_fake_run({"flow": 1250.0})
         assert payload["design"]["flow"] == 1250.0
         return _FakeRun(
             {
@@ -163,7 +172,9 @@ def test_project_agents_apply_explicit_handoff_and_record_hashes(tmp_path, monke
     assert [call[0] for call in calls] == ["design_requirements", "air_system_design"]
     assert all(call[2] == run.source_sha256 for call in calls)
     handoff = run.outcomes[1].applied_handoffs[0]
-    assert handoff.source_run_sha256 == "a" * 64
+    assert handoff.source_run_sha256 == orchestration._canonical_sha256(
+        {"result": {"flow": 1250.0}}
+    )
     assert len(handoff.value_sha256) == 64
     assert run.outcomes[1].run["result"]["accepted_flow"] == 1250.0
     bundle = run.to_dict()
@@ -375,12 +386,7 @@ def test_agent_handoff_rejects_existing_null_without_running_downstream(
 
     def fake_run(kind, payload, *, base_dir=None, project_source_revision=None):
         called.append(kind)
-        return _FakeRun(
-            {
-                "result": {"flow": 1250.0},
-                "integrity": {"sha256": "a" * 64},
-            }
-        )
+        return _signed_fake_run({"flow": 1250.0})
 
     monkeypatch.setattr(orchestration, "run_analysis", fake_run)
     run = run_project_agents(path)
@@ -444,3 +450,61 @@ def test_agent_plan_accepts_omitted_and_explicit_empty_optional_arrays():
     explicit_plan = load_agent_plan(explicit)
     assert implicit_plan.execution_order == ("requirements-agent",)
     assert implicit_plan.to_dict() == explicit_plan.to_dict()
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ("changed_result", "missing_integrity", "wrong_canonicalization", "uppercase_digest"),
+)
+def test_agent_handoff_rejects_unverified_upstream_bundle_before_downstream_solver(
+    tmp_path, monkeypatch, tamper
+):
+    project = _project(
+        {
+            "schema_version": 1,
+            "agents": [
+                {"id": "requirements-agent", "analysis_id": "requirements"},
+                {
+                    "id": "design-agent",
+                    "analysis_id": "design",
+                    "depends_on": ["requirements-agent"],
+                    "handoffs": [
+                        {
+                            "source_agent": "requirements-agent",
+                            "source_path": ["result", "flow"],
+                            "target_path": ["design", "flow"],
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    path = save_project_document(tmp_path / "integrity-agents.cleanroomx.json", project)
+    calls = []
+
+    def fake_run(kind, payload, *, base_dir=None, project_source_revision=None):
+        calls.append(kind)
+        if kind != "design_requirements":
+            raise AssertionError("unverified upstream evidence reached the solver")
+        document = _signed_fake_run({"flow": 1200.0}).to_dict()
+        if tamper == "changed_result":
+            document["result"]["flow"] = 9999.0
+        elif tamper == "missing_integrity":
+            del document["integrity"]
+        elif tamper == "wrong_canonicalization":
+            document["integrity"]["canonicalization"] = "untrusted-v1"
+        else:
+            document["integrity"]["sha256"] = document["integrity"]["sha256"].upper()
+        return _FakeRun(document)
+
+    monkeypatch.setattr(orchestration, "run_analysis", fake_run)
+    run = run_project_agents(path, fail_fast=False)
+
+    assert calls == ["design_requirements"]
+    assert run.status == "error"
+    assert [outcome.execution_state for outcome in run.outcomes] == [
+        "completed", "error"
+    ]
+    assert run.outcomes[1].error_type == "AgentHandoffError"
+    assert "integrity" in run.outcomes[1].error_message
+    assert run.outcomes[1].run is None

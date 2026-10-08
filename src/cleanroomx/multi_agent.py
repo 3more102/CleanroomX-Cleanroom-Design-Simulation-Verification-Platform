@@ -156,6 +156,8 @@ class ChatMessage:
                 "chat message contains unsupported field(s): "
                 + ", ".join(sorted(unknown))
             )
+        if type(raw["metadata"]) is not dict:
+            raise ValueError("chat message metadata must be a JSON object")
         return cls(
             sequence=raw["sequence"],
             role=raw["role"],
@@ -232,6 +234,8 @@ class ChatSession:
             )
         if type(raw["messages"]) is not list:
             raise ValueError("chat session messages must be a JSON array")
+        if type(raw["metadata"]) is not dict:
+            raise ValueError("chat session metadata must be a JSON object")
         return cls(
             id=raw["id"],
             title=raw["title"],

@@ -41,6 +41,13 @@ The current stable release is **v0.102.1**.
 - User-thresholded OpenFOAM residual/continuity log screening with fail-closed incomplete evidence; **not** proof of physical convergence or certification.
 - [Passive scalar and numerical audit guide](docs/CFD_SCALAR_TRANSPORT_AUDIT.md).
 
+### CFD mesh refinement verification
+
+- Generate nine reproducible OpenFOAM input cases across three ventilation layouts and three mesh resolutions.
+- Import real VTK velocity or scalar fields and OpenFOAM residual logs at fine, medium and coarse resolutions.
+- Compute apparent order, Richardson zero-grid estimate and fine-grid GCI using user-defined verification criteria; an acceptable GCI is **not** a claim of physically validated CFD.
+- See [three-grid convergence workflow](docs/CFD_GRID_CONVERGENCE.md).
+
 ### Engineering verification
 
 CleanroomX includes engineering workflows for:

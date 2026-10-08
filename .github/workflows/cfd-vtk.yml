@@ -6,6 +6,7 @@ on:
       - "src/cleanroomx/cfd_*.py"
       - "tests/test_cfd_pipeline.py"
       - "tests/test_cfd_scalar_audit.py"
+      - "tests/test_cfd_grid_study.py"
       - "tests/test_cfd_study.py"
       - "pyproject.toml"
       - ".github/workflows/cfd-vtk.yml"
@@ -35,4 +36,4 @@ jobs:
       - name: Verify VTK reader and plotting available
         run: python -c "import vtk, matplotlib; print(vtk.vtkVersion.GetVTKVersion(), matplotlib.__version__)"
       - name: CFD focused regression with real VTK fixtures
-        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py -ra
+        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py -ra

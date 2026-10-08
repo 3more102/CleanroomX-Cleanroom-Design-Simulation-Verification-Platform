@@ -59,7 +59,7 @@ The baseline must use the same probe profile as the current run: `--require-qual
 
 Use `--fail-on-regression` for CI or deployment gates. A current machine can still be operationally ready while a previously passing advisory check has degraded to a warning; this option makes that drift visible through exit code 3. Required readiness failures continue to take precedence with exit code 2.
 
-For evidence safety, `--output` cannot point to the same path as the supplied baseline.
+For evidence safety, `--output` cannot alias the supplied baseline, including through symlinks or hardlinks. Both pre-staging and pre-replace checks use the shared atomic CLI publication guard.
 
 ## Exit codes
 

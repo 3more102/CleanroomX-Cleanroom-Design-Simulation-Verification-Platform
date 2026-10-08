@@ -438,3 +438,14 @@ def test_stale_session_skips_synthesis_before_expensive_follow_up():
     assert batch.commit_state == "conflict"
     assert batch.synthesis is None
     assert not synthesis_called.is_set()
+
+
+@pytest.mark.parametrize("schema_version", (True, 1.0))
+def test_workspace_rejects_noninteger_schema_version(schema_version):
+    store = ChatSessionStore()
+    store.create_session("chat", "Strict version")
+    document = store.to_dict()
+    document["schema_version"] = schema_version
+
+    with pytest.raises(ValueError, match="workspace schema version"):
+        ChatSessionStore.from_dict(document)

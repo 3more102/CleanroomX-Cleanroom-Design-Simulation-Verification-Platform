@@ -1072,3 +1072,55 @@ def test_system_health_comparison_rejects_invalid_remediation_contract() -> None
         assert "passing remediation must be null" in str(exc)
     else:
         raise AssertionError("passing baseline checks must not carry remediation")
+
+
+def test_distribution_hash_sweep_ignores_pip_generated_bytecode_but_not_source(
+    monkeypatch, tmp_path
+):
+    """Installed RECORD may list pycache with no hash; source must remain verified."""
+
+    class ManifestEntry:
+        def __init__(self, path):
+            self.path = path
+
+        def __str__(self):
+            return self.path
+
+    class FakeDistribution:
+        def locate_file(self, entry):
+            return tmp_path / str(entry)
+
+    checked = []
+
+    def fake_hash(path, entry):
+        checked.append(str(entry))
+        if str(entry).endswith("unverified.py"):
+            return None, None
+        return True, "sha256"
+
+    monkeypatch.setattr(system_health, "_distribution_file_hash_status", fake_hash)
+    entries = [
+        ManifestEntry("cleanroomx/__init__.py"),
+        ManifestEntry("cleanroomx/__pycache__/__init__.cpython-311.pyc"),
+        ManifestEntry("cleanroomx/__pycache__/system_health.cpython-311.pyc"),
+    ]
+    report = system_health._distribution_package_hash_status(
+        FakeDistribution(), entries
+    )
+    assert report["package_file_count"] == 1
+    assert report["package_hash_verified_count"] == 1
+    assert report["package_hash_unverifiable_count"] == 0
+    assert report["package_hashes_match_distribution"] is True
+    assert checked == ["cleanroomx/__init__.py"]
+
+    # Regular source that lacks a RECORD hash must still fail closed.
+    entries.append(ManifestEntry("cleanroomx/unverified.py"))
+    report = system_health._distribution_package_hash_status(
+        FakeDistribution(), entries
+    )
+    assert report["package_file_count"] == 2
+    assert report["package_hash_unverifiable_count"] == 1
+    assert report["package_hashes_match_distribution"] is None
+    assert report["package_hash_unverifiable_paths"] == [
+        "cleanroomx/unverified.py"
+    ]

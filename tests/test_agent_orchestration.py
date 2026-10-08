@@ -393,3 +393,54 @@ def test_agent_handoff_rejects_existing_null_without_running_downstream(
     assert "non-object" in run.outcomes[1].error_message
     assert called == ["design_requirements"]
     assert project.analyses[1].input["design"]["settings"] is None
+
+
+@pytest.mark.parametrize("version", (1.0, True, False, None, "1", 2))
+def test_agent_plan_rejects_noninteger_or_unsupported_schema_versions(version):
+    project = _project(
+        {
+            "schema_version": version,
+            "agents": [{"id": "requirements-agent", "analysis_id": "requirements"}],
+        }
+    )
+
+    with pytest.raises(AgentPlanError, match="schema_version must be 1"):
+        load_agent_plan(project)
+
+
+@pytest.mark.parametrize("field", ("depends_on", "handoffs"))
+@pytest.mark.parametrize("invalid", (None, True, False, {}, ""))
+def test_agent_plan_rejects_explicit_nonarray_optional_fields(field, invalid):
+    agent = {"id": "requirements-agent", "analysis_id": "requirements"}
+    agent[field] = invalid
+    project = _project({"schema_version": 1, "agents": [agent]})
+
+    with pytest.raises(AgentPlanError, match=field + " must be an array"):
+        load_agent_plan(project)
+
+
+def test_agent_plan_accepts_omitted_and_explicit_empty_optional_arrays():
+    implicit = _project(
+        {
+            "schema_version": 1,
+            "agents": [{"id": "requirements-agent", "analysis_id": "requirements"}],
+        }
+    )
+    explicit = _project(
+        {
+            "schema_version": 1,
+            "agents": [
+                {
+                    "id": "requirements-agent",
+                    "analysis_id": "requirements",
+                    "depends_on": [],
+                    "handoffs": [],
+                }
+            ],
+        }
+    )
+
+    implicit_plan = load_agent_plan(implicit)
+    explicit_plan = load_agent_plan(explicit)
+    assert implicit_plan.execution_order == ("requirements-agent",)
+    assert implicit_plan.to_dict() == explicit_plan.to_dict()

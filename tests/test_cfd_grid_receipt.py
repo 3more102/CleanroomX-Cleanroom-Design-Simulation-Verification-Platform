@@ -416,3 +416,54 @@ def test_interruption_between_log_creation_and_receipt_is_flagged(
     assert result["status"] == "evidence_integrity_failed"
     assert "unreceipted_stage_log:configuration_1/coarse:checkMesh" in result["findings"]
     assert result["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("stage", ["blockMesh", "checkMesh", "simpleFoam"])
+def test_empty_successful_stage_log_with_forged_matching_digest_fails(
+    grid_family, monkeypatch, stage
+):
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    case_key = "configuration_3/medium"
+    log = grid_family / case_key / (stage + ".log")
+    log.write_bytes(b"")
+    path = grid_family / "grid_run_evidence.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    index = ("blockMesh", "checkMesh", "simpleFoam").index(stage)
+    report["cases"][case_key]["stages"][index]["log_sha256"] = (
+        hashlib.sha256(b"").hexdigest()
+    )
+    path.write_text(json.dumps(report), encoding="utf-8")
+
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert f"empty_completed_stage_log:{case_key}:{stage}" in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"
+
+
+def test_replayed_solver_log_across_configurations_is_rejected(
+    grid_family, monkeypatch
+):
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    original = grid_family / "configuration_1/coarse/simpleFoam.log"
+    substitute = grid_family / "configuration_2/fine/simpleFoam.log"
+    substitute.write_bytes(original.read_bytes())
+    path = grid_family / "grid_run_evidence.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["cases"]["configuration_2/fine"]["stages"][2]["log_sha256"] = (
+        hashlib.sha256(substitute.read_bytes()).hexdigest()
+    )
+    path.write_text(json.dumps(report), encoding="utf-8")
+
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert (
+        "replayed_solver_log_across_configurations:"
+        "configuration_2/fine:configuration_1/coarse"
+    ) in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"

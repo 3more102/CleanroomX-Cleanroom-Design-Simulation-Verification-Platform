@@ -430,3 +430,37 @@ def test_solver_digest_streams_without_path_read_bytes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "read_bytes", reject_whole_file_read)
     assert runner._hash(source) == expected
+
+
+def test_zero_exit_empty_output_is_failed_before_next_solver_stage(
+    generated, monkeypatch
+):
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    original = runner.subprocess.run
+
+    def zero_output(command, **kwargs):
+        if (Path(command[0]).name == "checkMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            calls.append(("configuration_1/coarse", "checkMesh"))
+            return SimpleNamespace(returncode=0)
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", zero_output)
+    report = run_grid_family(generated, timeout_seconds=60)
+    failed = report["cases"]["configuration_1/coarse"]
+    assert report["status"] == "incomplete"
+    assert failed["status"] == "execution_failed"
+    assert len(failed["stages"]) == 2
+    assert failed["stages"][-1]["status"] == "empty_output"
+    assert failed["stages"][-1]["returncode"] == 0
+    assert ("configuration_1/coarse", "simpleFoam") not in calls
+    assert report["cases"]["configuration_3/fine"]["status"] == (
+        "executed_requires_convergence_review"
+    )
+    verification = verify_grid_run_evidence(generated)
+    assert verification["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verification["findings"] == []
+    assert verification["engineering_review"] == "BLOCKED"

@@ -73,6 +73,25 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     except (OSError, ValueError, TypeError, KeyError) as exc:
         current_manifest_sha = None
         findings.append("source_manifest_or_inputs_invalid: " + type(exc).__name__)
+    # A source symlink can be introduced after execution without changing
+    # bytes or SHA-256. Report this independently of digest equality.
+    for key in _cases():
+        case_dir = root / key
+        if case_dir.is_symlink():
+            findings.append(f"source_case_is_symlink:{key}")
+        for folder in ("system", "constant", "0"):
+            source_dir = case_dir / folder
+            if source_dir.is_symlink():
+                findings.append(f"source_directory_is_symlink:{key}/{folder}")
+    for key in _cases():
+        for filename in (
+            "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
+            "system/fvSolution", "constant/physicalProperties",
+            "constant/momentumTransport", "0/U", "0/p",
+        ):
+            if (root / key / filename).is_symlink():
+                findings.append(f"source_file_is_symlink:{key}/{filename}")
+
     recorded_sha = receipt.get("source_manifest_sha256")
     if (type(recorded_sha) is not str
             or not _SHA256.fullmatch(recorded_sha)
@@ -165,7 +184,8 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             if data["status"] == "not_run" and stages:
                 findings.append(f"not_run_case_has_stages:{key}")
             if (data["status"] == "execution_failed"
-                    and (not stages or stages[-1].get("status") == "completed")):
+                    and (not stages or type(stages[-1]) is not dict
+                         or stages[-1].get("status") == "completed")):
                 findings.append(f"failed_case_has_no_failed_stage:{key}")
             if any(stage.get("status") != "completed" for stage in stages[:-1]
                    if type(stage) is dict):

@@ -205,11 +205,17 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 or (state == "failed" and type(code) is int and code != 0)
                 or (state in ("timed_out", "launch_failed") and code is None)
                 or (state == "empty_output" and type(code) is int and code == 0)
+                or (state == "source_drift" and type(code) is int)
             )
             if not valid_exit:
                 findings.append(f"invalid_stage_exit:{key}:{expected_command}")
             if state != "completed":
                 successful = False
+            if state == "source_drift":
+                # This is a recorded violation of source custody, not
+                # trustworthy execution evidence even if the input is later
+                # put back to its original digest.
+                findings.append(f"stage_source_drift_recorded:{key}:{expected_command}")
 
             recorded_log_sha = stage["log_sha256"]
             path = root / expected_log

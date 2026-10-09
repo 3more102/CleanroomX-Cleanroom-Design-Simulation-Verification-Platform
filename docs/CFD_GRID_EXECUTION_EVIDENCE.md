@@ -62,8 +62,14 @@ rehashes the original manifest and each case's eight manifest-bound inputs
 `foamVersion`). If an input or the manifest changed, it stops without
 launching the next process, preserves its existing incomplete receipt and
 reservation, and requires a new independently generated family for re-run.
-This limits but cannot eliminate time-of-check/time-of-use races, compromised
-binaries or hostile concurrent filesystem modification.
+The same manifest and source-input checks also run **after** each solver
+stage. If the solver itself changes the source bundle, the runner records the
+real process return code plus a `source_drift` stage result, marks that case
+`execution_failed`, and halts the remaining family without claiming an
+execution success. A post-run `grid-verify` considers any recorded
+`source_drift` to be failed evidence integrity, even if source bytes are later
+restored. This limits but cannot eliminate time-of-check/time-of-use races,
+compromised binaries or hostile concurrent filesystem modification.
 
 Each case records stage command, process return code, raw log relative path
 and SHA-256. Receipts are updated atomically after individual stages; cases

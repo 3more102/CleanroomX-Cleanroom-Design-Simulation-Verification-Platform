@@ -46,7 +46,11 @@ published v10 documentation, but still requires a real OpenFOAM v10 smoke run. P
 `postProcessing`, extra files or symbolic-link substitutions are rejected
 *before* any external process starts. Remove stale output only by deliberately
 regenerating a clean family in a **new directory**, not by overwriting
-historical run evidence. This is a source freshness and filesystem screen,
+historical run evidence. The family manifest, configuration root directories and case roots must also
+be real filesystem objects, not symlinks, including those resolving inside the
+family with byte-identical content. The post-run verifier independently checks
+the manifest and configuration-root substitutions as well as linked case and
+source paths. This is a source freshness and filesystem screen,
 not an assertion that the solver binary or physical setup is trustworthy.
 It rejects any prior run receipt or stage log
 to prevent overwriting evidence, and verifies the `foamVersion` result against

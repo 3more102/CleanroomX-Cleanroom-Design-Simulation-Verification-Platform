@@ -38,7 +38,11 @@ The executable first validates that the generation manifest lists exactly nine
 cases and all 72 expected generated inputs, and confirms input SHA-256
 digests and source containment. It also requires genuinely fresh case directories: only the eight
 manifest-bound input files in `0/`, `constant/`, and `system/` are
-permitted. Pre-existing `constant/polyMesh`, result time directories,
+permitted. For OpenFOAM **Foundation v10**, the case includes
+`constant/physicalProperties` (`viscosityModel constant` with `nu`) and
+`constant/momentumTransport` (`simulationType laminar`), rather than the
+pre-v10 dictionary names. This compatibility change is validated against
+published v10 documentation, but still requires a real OpenFOAM v10 smoke run. Pre-existing `constant/polyMesh`, result time directories,
 `postProcessing`, extra files or symbolic-link substitutions are rejected
 *before* any external process starts. Remove stale output only by deliberately
 regenerating a clean family in a **new directory**, not by overwriting

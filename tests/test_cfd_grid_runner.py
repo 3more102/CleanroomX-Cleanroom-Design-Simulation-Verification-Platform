@@ -496,3 +496,49 @@ def test_tampered_family_manifest_metadata_blocks_all_execution(
     assert calls == []
     assert not (generated / "grid_run_evidence.json").exists()
     assert not (generated / ".grid_run_reserved").exists()
+
+
+@pytest.mark.parametrize("injection", ["version_probe", "after_block_mesh"])
+@pytest.mark.parametrize("target", ["manifest", "solver_input"])
+def test_stage_source_revalidation_blocks_midrun_tampering(
+    generated, monkeypatch, injection, target
+):
+    """A valid initial preflight must not authorize later modified inputs."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    original = runner.subprocess.run
+
+    def tampering_subprocess(command, **kwargs):
+        program = Path(command[0]).name
+        result = original(command, **kwargs)
+        if (injection == "version_probe" and program == "foamVersion"
+                or injection == "after_block_mesh" and program == "blockMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            source = (
+                generated / "manifest.json"
+                if target == "manifest"
+                else generated / "configuration_1/coarse/0/U"
+            )
+            source.write_bytes(source.read_bytes() + b"\\n// synthetic in-run mutation\\n")
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", tampering_subprocess)
+    with pytest.raises(ValueError, match="(manifest|input) changed during execution"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == (
+        [] if injection == "version_probe"
+        else [("configuration_1/coarse", "blockMesh")]
+    )
+    assert ("configuration_1/coarse", "checkMesh") not in calls
+    receipt_path = generated / "grid_run_evidence.json"
+    assert receipt_path.is_file()
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "incomplete"
+    assert receipt["engineering_review"] == "BLOCKED"
+    assert len(receipt["cases"]["configuration_1/coarse"]["stages"]) == len(calls)
+    assert (generated / ".grid_run_reserved").is_dir()
+    verification = verify_grid_run_evidence(generated)
+    assert verification["status"] == "evidence_integrity_failed"
+    assert verification["engineering_review"] == "BLOCKED"

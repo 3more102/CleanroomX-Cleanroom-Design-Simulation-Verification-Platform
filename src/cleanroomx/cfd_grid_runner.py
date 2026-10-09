@@ -325,6 +325,14 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             # blocking dependent stages, rather than claiming solver success.
             if outcome == "completed" and log_path.stat().st_size == 0:
                 outcome = "empty_output"
+            # An external process may alter the source bundle *during* its
+            # last stage; a pre-stage check alone cannot catch that. Record
+            # the stage and its real exit code, but never report completion
+            # for an attempt whose originally accepted input bytes drifted.
+            try:
+                _verify_stage_source_snapshot(root, key, digest, expected_hashes)
+            except (OSError, ValueError):
+                outcome = "source_drift"
             case["stages"].append({
                 "command": stage, "returncode": returncode,
                 "status": outcome, "log": f"{key}/{stage}.log",
@@ -340,6 +348,10 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             else "execution_failed"
         )
         _write_receipt(root, report)
+        if case["stages"] and case["stages"][-1]["status"] == "source_drift":
+            # Source custody is compromised; do not launch a later case or
+            # collapse evidence into a green execution-level status.
+            return report
     if all(case["status"] == "executed_requires_convergence_review"
            for case in report["cases"].values()):
         report["status"] = "executed_requires_convergence_review"

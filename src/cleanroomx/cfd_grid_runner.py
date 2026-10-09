@@ -129,6 +129,38 @@ def _verify_generated_inputs(root: Path) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _verify_stage_source_snapshot(
+    root: Path, key: str, manifest_sha: str, expected_hashes: dict,
+) -> None:
+    """Recheck this case's immutable inputs before *each* external stage.
+
+    A correct initial preflight is insufficient when source files can change
+    during foamVersion or a prior solver stage. This bounds, but cannot remove,
+    filesystem time-of-check/time-of-use races on untrusted storage.
+    """
+    manifest = root / "manifest.json"
+    if manifest.is_symlink() or not manifest.is_file() or _hash(manifest) != manifest_sha:
+        raise ValueError("Grid family manifest changed during execution")
+    configuration, _ = key.split("/", 1)
+    workdir = root / key
+    if (root / configuration).is_symlink() or workdir.is_symlink():
+        raise ValueError(f"Case directory replaced during execution: {key}")
+    if not workdir.is_dir():
+        raise ValueError(f"Case directory missing during execution: {key}")
+    for relative in INPUTS:
+        folder, _ = relative.split("/", 1)
+        source_dir = workdir / folder
+        source = workdir / relative
+        if (source_dir.is_symlink() or source.is_symlink()
+                or not source.is_file()):
+            raise ValueError(f"Case input missing or linked during execution: {key}/{relative}")
+        resolved = source.resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            raise ValueError(f"Case input escaped family during execution: {key}/{relative}")
+        if _hash(resolved) != expected_hashes[f"{key}/{relative}"]:
+            raise ValueError(f"Case input changed during execution: {key}/{relative}")
+
+
 def _verify_pristine_case(workdir: Path, key: str) -> None:
     """Reject pre-existing solver output, which can contaminate a fresh run.
 
@@ -206,6 +238,15 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
     if not root.is_dir():
         raise ValueError("Grid family root must be a directory")
     digest = _verify_generated_inputs(root)
+    # Bind later per-stage checks to the exact manifest bytes already
+    # accepted by the complete nine-case preflight.
+    manifest_snapshot = load_strict_json_snapshot(
+        root / "manifest.json", max_bytes=2_000_000
+    )
+    if ((root / "manifest.json").is_symlink()
+            or hashlib.sha256(manifest_snapshot.raw_bytes).hexdigest() != digest):
+        raise ValueError("Grid family manifest changed during preflight")
+    expected_hashes = manifest_snapshot.value["files"]
     receipt = root / "grid_run_evidence.json"
     staging = root / ".grid_run_evidence.json.tmp"
     if receipt.exists() or receipt.is_symlink() or staging.exists() or staging.is_symlink():
@@ -259,6 +300,10 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
         case["status"] = "running"
         _write_receipt(root, report)
         for stage in STAGES:
+            # Refuse changed inputs even if the initial preflight succeeded.
+            # Preserve the incomplete receipt and reservation on failure;
+            # never launch another solver against inconsistent sources.
+            _verify_stage_source_snapshot(root, key, digest, expected_hashes)
             log_path = workdir / (stage + ".log")
             returncode = None
             outcome = "failed"

@@ -292,7 +292,7 @@ def test_existing_execution_reservation_blocks_solver_launch(generated, monkeypa
 def test_execution_reservation_persists_after_run(generated, monkeypatch):
     fake_tools(monkeypatch)
     run_grid_family(generated, timeout_seconds=60)
-    assert (generated / ".grid_run_reserved").is_dir()
+    assert not (generated / ".grid_run_reserved").exists()
     with pytest.raises(FileExistsError):
         run_grid_family(generated, timeout_seconds=60)
 
@@ -362,7 +362,7 @@ def test_version_probe_timeout_never_launches_solver(generated, monkeypatch):
         run_grid_family(generated, timeout_seconds=60)
     assert invoked == ["foamVersion"]
     assert not (generated / "grid_run_evidence.json").exists()
-    assert (generated / ".grid_run_reserved").is_dir()
+    assert not (generated / ".grid_run_reserved").exists()
 
 
 def test_nonzero_version_probe_rejected_before_solver(generated, monkeypatch):
@@ -395,7 +395,7 @@ def test_version_probe_launch_failure_is_cleanly_rejected(generated, monkeypatch
         run_grid_family(generated, timeout_seconds=60)
     assert invoked == ["foamVersion"]
     assert not (generated / "grid_run_evidence.json").exists()
-    assert (generated / ".grid_run_reserved").is_dir()
+    assert not (generated / ".grid_run_reserved").exists()
 
 
 def test_same_family_symlinked_input_is_rejected_before_solver(generated, monkeypatch):

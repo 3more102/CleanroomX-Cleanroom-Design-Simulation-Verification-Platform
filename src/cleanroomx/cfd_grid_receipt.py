@@ -160,7 +160,7 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     # Identical solver logs across distinct grid levels cannot establish
     # independent mesh executions. This is a replay screen, not proof that
     # distinct logs came from distinct runs.
-    solver_log_hashes: dict[str, dict[str, str]] = {}
+    solver_log_hashes: dict[str, str] = {}
     for key in _cases():
         data = cases[key]
         if (type(data) is not dict or set(data) != {"status", "stages"}
@@ -221,16 +221,26 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             result["logs_checked"] += 1
             if actual_sha != recorded_log_sha:
                 findings.append(f"log_digest_mismatch:{key}:{expected_command}")
-            elif expected_command == "simpleFoam":
-                configuration = key.split("/", 1)[0]
-                seen = solver_log_hashes.setdefault(configuration, {})
-                previous_grid = seen.get(actual_sha)
-                if previous_grid is not None:
-                    findings.append(
-                        f"replayed_solver_log_across_grids:{key}:{previous_grid}"
-                    )
-                else:
-                    seen[actual_sha] = key
+            else:
+                # A recorded successful solver stage must leave a nonempty
+                # diagnostic log. A matching digest of empty bytes is not
+                # sufficient execution evidence.
+                if state == "completed" and resolved.stat().st_size == 0:
+                    findings.append(f"empty_completed_stage_log:{key}:{expected_command}")
+                if expected_command == "simpleFoam" and state == "completed":
+                    previous_case = solver_log_hashes.get(actual_sha)
+                    if previous_case is not None:
+                        same_configuration = (
+                            previous_case.split("/", 1)[0] == key.split("/", 1)[0]
+                        )
+                        replay_kind = (
+                            "replayed_solver_log_across_grids"
+                            if same_configuration
+                            else "replayed_solver_log_across_configurations"
+                        )
+                        findings.append(f"{replay_kind}:{key}:{previous_case}")
+                    else:
+                        solver_log_hashes[actual_sha] = key
 
         complete = len(stages) == len(STAGES) and successful
         if complete:

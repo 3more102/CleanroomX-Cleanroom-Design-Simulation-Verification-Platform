@@ -53,6 +53,13 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
         ),
     }
 
+    if (root / "manifest.json").is_symlink():
+        findings.append("source_manifest_is_symlink")
+    for configuration in (1, 2, 3):
+        configuration_dir = root / f"configuration_{configuration}"
+        if configuration_dir.is_symlink():
+            findings.append(f"source_configuration_is_symlink:configuration_{configuration}")
+
     receipt_path = root / "grid_run_evidence.json"
     if receipt_path.is_symlink():
         findings.append("receipt_is_symlink")

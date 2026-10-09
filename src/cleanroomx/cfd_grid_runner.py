@@ -19,8 +19,8 @@ RUN_SCHEMA = "cleanroomx.cfd-grid-run.v1"
 STAGES = ("blockMesh", "checkMesh", "simpleFoam")
 INPUTS = (
     "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
-    "system/fvSolution", "constant/transportProperties",
-    "constant/turbulenceProperties", "0/U", "0/p",
+    "system/fvSolution", "constant/physicalProperties",
+    "constant/momentumTransport", "0/U", "0/p",
 )
 VERSION_PATTERN = re.compile(r"(?:OpenFOAM(?: Foundation)?[- ]?[vV]?)?10(?:\.0+)?\Z")
 

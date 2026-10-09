@@ -169,6 +169,19 @@ def test_missing_binary_prevents_execution(generated, monkeypatch):
     assert not (generated / "grid_run_evidence.json").exists()
 
 
+def test_invalid_openfoam_does_not_reserve_family(generated, monkeypatch):
+    """Failed preflight must permit a later valid first execution."""
+    fake_tools(monkeypatch, version="OpenFOAM-v2312")
+    with pytest.raises(ValueError, match="Foundation v10"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert not (generated / ".grid_run_reserved").exists()
+    assert not (generated / "grid_run_evidence.json").exists()
+    calls = fake_tools(monkeypatch, version="10")
+    report = run_grid_family(generated, timeout_seconds=60)
+    assert report["status"] == "executed_requires_convergence_review"
+    assert len(calls) == 27
+
+
 def test_invalid_timeout_is_rejected(generated):
     with pytest.raises(ValueError, match="timeout_seconds"):
         run_grid_family(generated, timeout_seconds=True)

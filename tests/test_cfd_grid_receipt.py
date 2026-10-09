@@ -299,3 +299,31 @@ def test_execution_reservation_custody_fail_closed(
     assert expected in result["findings"]
     assert result["engineering_review"] == "BLOCKED"
     assert result["physical_validation"] == "not_performed"
+
+
+def test_replayed_solver_log_with_rewritten_receipt_digest_is_rejected(
+    grid_family, monkeypatch
+):
+    # Even a mutually consistent forged log + receipt is not independent
+    # grid evidence when simpleFoam outputs match byte-for-byte.
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    first = grid_family / "configuration_1/coarse/simpleFoam.log"
+    replayed = grid_family / "configuration_1/fine/simpleFoam.log"
+    replayed.write_bytes(first.read_bytes())
+    path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    digest = hashlib.sha256(replayed.read_bytes()).hexdigest()
+    receipt["cases"]["configuration_1/fine"]["stages"][2]["log_sha256"] = digest
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert result["logs_checked"] == 27
+    assert (
+        "replayed_solver_log_across_grids:"
+        "configuration_1/fine:configuration_1/coarse"
+    ) in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"

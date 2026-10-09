@@ -183,7 +183,7 @@ def test_symlinked_solver_input_outside_family_is_rejected(generated, tmp_path):
         original.symlink_to(outside)
     except (OSError, NotImplementedError):
         pytest.skip("Symlinks unavailable")
-    with pytest.raises(ValueError, match="outside grid family"):
+    with pytest.raises(ValueError, match="must not be a symlink"):
         run_grid_family(generated)
 
 

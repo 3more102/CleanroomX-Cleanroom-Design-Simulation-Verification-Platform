@@ -399,3 +399,21 @@ def test_same_family_symlinked_input_is_rejected_before_solver(generated, monkey
         run_grid_family(generated, timeout_seconds=60)
     assert calls == []
     assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_solver_digest_streams_without_path_read_bytes(tmp_path, monkeypatch):
+    """Large solver logs must be hashed incrementally, not read all at once."""
+    import cleanroomx.cfd_grid_runner as runner
+    source = tmp_path / "solver.log"
+    payload = b"CFD synthetic fixture, not validated output.\n" * 40000
+    source.write_bytes(payload)
+    expected = hashlib.sha256(payload).hexdigest()
+    original = Path.read_bytes
+
+    def reject_whole_file_read(path):
+        if path == source:
+            raise AssertionError("whole-file read is prohibited for solver logs")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_whole_file_read)
+    assert runner._hash(source) == expected

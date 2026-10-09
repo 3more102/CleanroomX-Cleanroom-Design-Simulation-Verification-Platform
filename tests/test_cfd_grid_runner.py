@@ -238,3 +238,14 @@ def test_manifest_symlink_inside_family_is_rejected_before_execution(
         run_grid_family(generated, timeout_seconds=60)
     assert calls == []
     assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_duplicate_manifest_keys_fail_closed(generated, monkeypatch):
+    manifest = generated / "manifest.json"
+    text = manifest.read_text(encoding="utf-8")
+    manifest.write_text(text.replace('"schema_version":', '"schema_version": "invalid", "schema_version":', 1), encoding="utf-8")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="duplicate JSON object key"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert not calls
+    assert not (generated / "grid_run_evidence.json").exists()

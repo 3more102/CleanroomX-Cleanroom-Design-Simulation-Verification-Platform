@@ -4,6 +4,15 @@ Status: **BLOCKED until actual solver and measured-data evidence are attached**.
 
 This record is a review worksheet, not evidence of execution or certification. It complements [issue #1296](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/issues/1296) and the nine-case execution receipt guide.
 
+
+## Development and release tracks
+
+**Development: ACTIVE.** Continue implementation, regression testing, documentation and reviewed software changes without waiting for physical validation. A blocked scientific gate does not prohibit ongoing development.
+
+**Software-only release: CONDITIONAL.** A separately scoped software release may be considered only after exact-head required CI, security, packaging, review and reproducibility requirements are met. Label synthetic and unexecuted evidence explicitly; no scientific or cleanroom performance claims are permitted.
+
+**Scientific qualification: BLOCKED.** Real nine-case OpenFOAM runs, numerical convergence and independent measurement correlation remain outstanding. Do not change this status merely to accelerate development.
+
 ## 1. Immutable provenance
 
 Record the Git commit, operating system, OpenFOAM Foundation v10 patch version, executable locations and independently computed binary SHA-256 digests, CPU architecture, timestamp with timezone, and operator. Preserve the generated input manifest, raw source files, run receipt, all 27 stage logs, and solver output in read-only storage. Record a separately stored digest manifest and its custody owner. A digest in the same editable directory is not independent attestation.

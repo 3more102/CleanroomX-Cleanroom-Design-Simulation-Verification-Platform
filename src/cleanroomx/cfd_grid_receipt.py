@@ -197,6 +197,7 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 (state == "completed" and type(code) is int and code == 0)
                 or (state == "failed" and type(code) is int and code != 0)
                 or (state in ("timed_out", "launch_failed") and code is None)
+                or (state == "empty_output" and type(code) is int and code == 0)
             )
             if not valid_exit:
                 findings.append(f"invalid_stage_exit:{key}:{expected_command}")

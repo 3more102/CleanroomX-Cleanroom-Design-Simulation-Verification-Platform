@@ -108,6 +108,10 @@ A stage log present on disk but absent from its case's recorded stage list
 (for example, after an abrupt interruption between log creation and the next
 receipt write) also fails verification as `unreceipted_stage_log`. Preserve
 both files for investigation; never delete a log to force a passing verdict.
+The verifier also rejects an uncommitted
+`.grid_run_evidence.json.tmp` staging file/directory/symlink and any
+unrecognized v1 receipt keys or rewritten warning text. These checks flag
+inconsistent local evidence; they are not cryptographic authenticity.
 Missing/modified inputs or logs, symlinked logs, forged validation claims,
 and byte-identical `simpleFoam` logs reused across coarse/medium/fine meshes
 of one configuration fail closed. This extra replay screen cannot prove run

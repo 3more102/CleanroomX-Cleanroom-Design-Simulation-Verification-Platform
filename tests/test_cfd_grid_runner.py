@@ -197,3 +197,44 @@ def test_cli_missing_binary_reports_clean_error(generated, monkeypatch, capsys):
     assert output.out == ""
     assert "foamVersion is not available" in output.err
     assert "Traceback" not in output.err
+
+
+@pytest.mark.parametrize("relative", [
+    "configuration_1", "configuration_2/fine",
+])
+def test_symlinked_configuration_or_case_root_is_rejected(
+    generated, monkeypatch, relative
+):
+    # The target stays inside the grid family with byte-identical inputs.
+    # Symlinked parent directories must not silently relabel run evidence.
+    original = generated / relative
+    backup = original.with_name(original.name + "-original")
+    original.rename(backup)
+    try:
+        original.symlink_to(backup, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        backup.rename(original)
+        pytest.skip("Directory symlinks unavailable")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="(Configuration root|Case root).*real directory"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_manifest_symlink_inside_family_is_rejected_before_execution(
+    generated, monkeypatch
+):
+    original = generated / "manifest.json"
+    backup = generated / "manifest.original.json"
+    original.rename(backup)
+    try:
+        original.symlink_to(backup.name)
+    except (OSError, NotImplementedError):
+        backup.rename(original)
+        pytest.skip("Symlinks unavailable")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="manifest must be a real file"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()

@@ -95,6 +95,25 @@ def test_nonconvergence_or_unusable_order_fails_closed(values):
         assert result["screening_status"]=="indeterminate_or_failed"
 
 
+@pytest.mark.parametrize("spacings", [
+    (1, 1, 2),  # identical fine and medium resolutions
+    (1, 2, 2),  # identical medium and coarse resolutions
+    (2, 1, 2),  # medium is finer than the declared fine grid
+    (1, 0.5, 0.25),  # reverse-ordered grid family
+])
+def test_nonrefining_grid_spacings_fail_closed_without_division_error(spacings):
+    rows = [
+        {"value": value, "characteristic_h_m": spacing}
+        for value, spacing in zip((1.0, 2.0, 4.0), spacings)
+    ]
+    result = _analysis(rows, criteria())
+    assert result["screening_status"] == "indeterminate_or_failed"
+    assert result["observed_order"] is None
+    assert result["richardson_zero_spacing_estimate"] is None
+    assert result["fine_grid_gci_percent"] is None
+    assert "Insufficient grid refinement ratio" in result["screening_blockers"]
+
+
 def test_zero_fine_grid_value_has_no_relative_gci():
     rows=[{"value":v,"characteristic_h_m":h}
           for v,h in ((0,1),(1,2),(5,4))]
@@ -273,6 +292,13 @@ def test_real_vtk_three_grid_convergence_and_incomplete_evidence(tmp_path):
     _solver_log(tmp_path/"medium.log")
     restored=analyze_vtk_grid_study(spec,base_directory=tmp_path)
     assert restored["status"]=="eligible_for_engineering_review",restored["blockers"]
+    # A duplicate declared grid level must be reported, not raise ZeroDivisionError.
+    spec["runs"][1]["mesh_cells"] = [8, 8, 8]
+    nonrefining = analyze_vtk_grid_study(spec, base_directory=tmp_path)
+    assert nonrefining["status"] == "indeterminate_or_failed"
+    assert nonrefining["observed_order"] is None
+    assert any("not strictly decreasing" in b for b in nonrefining["blockers"])
+    spec["runs"][1]["mesh_cells"] = [4, 4, 4]
     spec["runs"][0]["conditions_sha256"]="f"*64
     mismatched=analyze_vtk_grid_study(spec,base_directory=tmp_path)
     assert mismatched["status"]=="indeterminate_or_failed"

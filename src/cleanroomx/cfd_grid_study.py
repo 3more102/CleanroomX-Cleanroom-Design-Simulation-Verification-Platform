@@ -128,6 +128,11 @@ def _observed_order(h1, h2, h3, f1, f2, f3):
         return None
     r21=h2/h1
     r32=h3/h2
+    # No positive Richardson order exists for non-refining grid spacings.
+    # In particular, r21 == 1 makes theoretical(p) divide by zero.
+    # Let the caller report an indeterminate study rather than raising.
+    if not (math.isfinite(r21) and math.isfinite(r32) and r21 > 1 and r32 > 1):
+        return None
     ratio=abs(d32/d21)
     def theoretical(p):
         # Stable for small positive p and moderate refinement ratios.

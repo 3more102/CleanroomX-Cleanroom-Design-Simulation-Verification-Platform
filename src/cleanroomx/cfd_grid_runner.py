@@ -134,7 +134,10 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
     """
     if type(timeout_seconds) is not int or not 60 <= timeout_seconds <= 86400:
         raise ValueError("timeout_seconds must be an integer in [60,86400]")
-    root = Path(directory).resolve(strict=True)
+    supplied_root = Path(directory)
+    if supplied_root.is_symlink():
+        raise ValueError("Grid family root must not be a symlink")
+    root = supplied_root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Grid family root must be a directory")
     digest = _verify_generated_inputs(root)

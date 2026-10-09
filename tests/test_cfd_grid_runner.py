@@ -366,3 +366,20 @@ def test_nonzero_version_probe_rejected_before_solver(generated, monkeypatch):
         run_grid_family(generated, timeout_seconds=60)
     assert invoked == ["foamVersion"]
     assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_version_probe_launch_failure_is_cleanly_rejected(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: "/fake/" + tool)
+    invoked = []
+
+    def cannot_launch(command, **kwargs):
+        invoked.append(Path(command[0]).name)
+        raise OSError("synthetic missing executable")
+
+    monkeypatch.setattr(runner.subprocess, "run", cannot_launch)
+    with pytest.raises(ValueError, match="foamVersion could not be launched"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert invoked == ["foamVersion"]
+    assert not (generated / "grid_run_evidence.json").exists()
+    assert (generated / ".grid_run_reserved").is_dir()

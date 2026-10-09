@@ -172,7 +172,10 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             if log.exists() or log.is_symlink():
                 raise FileExistsError("Existing OpenFOAM stage log; refuse overwrite: " + key)
         _verify_pristine_case(workdir, key)
-    # Reserve the evidence namespace before any external process starts.
+    # Validate tool availability before reserving a run: a missing or invalid
+    # OpenFOAM installation must not leave an orphaned execution reservation.
+    environment = _openfoam_version()
+    # Reserve the evidence namespace before any external solver process starts.
     # An interrupted run leaves this marker for explicit operator review;
     # silently reclaiming it could combine evidence from different attempts.
     reservation = root / ".grid_run_reserved"
@@ -184,7 +187,6 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
     # never cause an existing receipt or stage log to be overwritten.
     if receipt.exists() or receipt.is_symlink() or staging.exists() or staging.is_symlink():
         raise FileExistsError("Existing CFD execution evidence after reservation; refuse overwrite")
-    environment = _openfoam_version()
     report = {
         "schema_version": RUN_SCHEMA,
         "source_manifest_sha256": digest,

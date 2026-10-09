@@ -199,3 +199,41 @@ def test_cli_grid_verify_has_distinct_success_and_tamper_exit_codes(
     assert main() == 3
     result = json.loads(capsys.readouterr().out)
     assert result['status'] == 'evidence_integrity_failed'
+
+
+def test_symlinked_configuration_parent_fails_post_run_integrity(
+    grid_family, monkeypatch
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    original = grid_family / "configuration_2"
+    backup = grid_family / "configuration_2-original"
+    original.rename(backup)
+    try:
+        original.symlink_to(backup, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        backup.rename(original)
+        pytest.skip("Directory symlinks unavailable")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert "source_configuration_is_symlink:configuration_2" in result["findings"]
+    # All source and log bytes are unchanged, so hashes alone cannot catch it.
+    assert result["logs_checked"] == 27
+
+
+def test_symlinked_manifest_fails_post_run_integrity(
+    grid_family, monkeypatch
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    original = grid_family / "manifest.json"
+    backup = grid_family / "manifest.original.json"
+    original.rename(backup)
+    try:
+        original.symlink_to(backup.name)
+    except (OSError, NotImplementedError):
+        backup.rename(original)
+        pytest.skip("Symlinks unavailable")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert "source_manifest_is_symlink" in result["findings"]

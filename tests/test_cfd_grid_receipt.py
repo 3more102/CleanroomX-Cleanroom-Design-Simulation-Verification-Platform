@@ -237,3 +237,32 @@ def test_symlinked_manifest_fails_post_run_integrity(
     result = verify_grid_run_evidence(grid_family)
     assert result["status"] == "evidence_integrity_failed"
     assert "source_manifest_is_symlink" in result["findings"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("foam_version", "11"),
+    ("foam_version", 10),
+    ("executables", {}),
+    ("source_manifest_sha256", "0" * 64),
+])
+def test_forged_provenance_fails_closed(grid_family, monkeypatch, field, value):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text())
+    receipt[field] = value
+    receipt_path.write_text(json.dumps(receipt))
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert result["engineering_review"] == "BLOCKED"
+
+
+def test_duplicate_receipt_json_keys_fail_closed(grid_family, monkeypatch):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    receipt_path = grid_family / "grid_run_evidence.json"
+    original = receipt_path.read_text()
+    receipt_path.write_text('{"schema_version":"forged",' + original.lstrip()[1:])
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert any("unreadable_or_invalid_receipt" in finding for finding in result["findings"])

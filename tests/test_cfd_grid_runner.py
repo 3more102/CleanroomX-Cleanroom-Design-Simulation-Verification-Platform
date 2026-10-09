@@ -109,6 +109,51 @@ def test_existing_logs_block_rerun_before_execution(generated, monkeypatch):
     assert calls == []
 
 
+@pytest.mark.parametrize("artifact", [
+    "constant/polyMesh/points",
+    "100/U",
+    "postProcessing/residuals.dat",
+    "0/U.stale",
+])
+def test_preexisting_solver_artifacts_block_all_execution(generated, monkeypatch, artifact):
+    # A zero-exit solver must never borrow mesh, time or postprocessing data
+    # from an earlier execution without recording that prior run as evidence.
+    stale = generated / "configuration_2/medium" / artifact
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("stale prior-run CFD output; not generated input")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="unexpected pre-existing solver artifacts"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()
+    stale.unlink()
+    if stale.parent.name in ("polyMesh", "100", "postProcessing"):
+        stale.parent.rmdir()
+    assert len(fake_tools(monkeypatch)) == 0
+    assert run_grid_family(generated, timeout_seconds=60)["status"] == (
+        "executed_requires_convergence_review"
+    )
+
+
+def test_symlinked_generated_case_directory_is_rejected(generated, monkeypatch):
+    # Even a symlink staying inside the family must not masquerade as
+    # a pristine, independently generated OpenFOAM source directory.
+    case = generated / "configuration_1/fine"
+    original = case / "0"
+    replacement = case / "zero-original"
+    try:
+        original.rename(replacement)
+        original.symlink_to(replacement, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        if not original.exists() and replacement.exists():
+            replacement.rename(original)
+        pytest.skip("Directory symlinks unavailable")
+    fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="(outside grid family|real directory|unexpected pre-existing)"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert not (generated / "grid_run_evidence.json").exists()
+
+
 def test_non_v10_version_is_rejected_without_writing_receipt(generated, monkeypatch):
     fake_tools(monkeypatch, version="OpenFOAM-v2312")
     with pytest.raises(ValueError, match="Foundation v10"):

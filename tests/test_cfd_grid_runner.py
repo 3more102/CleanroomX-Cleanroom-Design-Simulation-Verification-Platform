@@ -306,3 +306,29 @@ def test_stage_launch_oserror_is_recorded_and_remaining_cases_continue(generated
     verified = verify_grid_run_evidence(generated)
     assert verified["status"] == "incomplete_execution_logs_integrity_verified"
     assert verified["engineering_review"] == "BLOCKED"
+
+
+def test_solver_timeout_is_receipted_and_later_cases_continue(generated, monkeypatch):
+    import subprocess
+    import cleanroomx.cfd_grid_runner as runner
+    fake_tools(monkeypatch)
+    original = runner.subprocess.run
+
+    def timeout_one(command, **kwargs):
+        if (Path(command[0]).name == "simpleFoam"
+                and kwargs.get("cwd") == generated / "configuration_2/medium"):
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", timeout_one)
+    report = run_grid_family(generated, timeout_seconds=60)
+    assert report["status"] == "incomplete"
+    failed = report["cases"]["configuration_2/medium"]
+    assert failed["status"] == "execution_failed"
+    assert failed["stages"][-1]["status"] == "timed_out"
+    assert failed["stages"][-1]["returncode"] is None
+    assert len(report["cases"]["configuration_3/fine"]["stages"]) == 3
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+    verification = verify_grid_run_evidence(generated)
+    assert verification["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verification["engineering_review"] == "BLOCKED"

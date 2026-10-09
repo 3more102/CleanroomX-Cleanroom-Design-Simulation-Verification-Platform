@@ -249,3 +249,19 @@ def test_duplicate_manifest_keys_fail_closed(generated, monkeypatch):
         run_grid_family(generated, timeout_seconds=60)
     assert not calls
     assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_symlinked_family_root_rejected_for_run_and_verify(generated, tmp_path, monkeypatch):
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+    linked = tmp_path / "linked-family"
+    try:
+        linked.symlink_to(generated, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Directory symlinks unavailable")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="root must not be a symlink"):
+        run_grid_family(linked, timeout_seconds=60)
+    with pytest.raises(ValueError, match="root must not be a symlink"):
+        verify_grid_run_evidence(linked)
+    assert not calls
+    assert not (generated / "grid_run_evidence.json").exists()

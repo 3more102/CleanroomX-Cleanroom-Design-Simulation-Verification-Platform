@@ -225,7 +225,7 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 # A recorded successful solver stage must leave a nonempty
                 # diagnostic log. A matching digest of empty bytes is not
                 # sufficient execution evidence.
-                if state == "completed" and resolved.stat().st_size == 0:
+                if state == "completed" and actual_sha == hashlib.sha256(b"").hexdigest():
                     findings.append(f"empty_completed_stage_log:{key}:{expected_command}")
                 if expected_command == "simpleFoam" and state == "completed":
                     previous_case = solver_log_hashes.get(actual_sha)

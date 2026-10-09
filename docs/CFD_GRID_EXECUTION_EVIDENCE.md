@@ -118,3 +118,8 @@ consistently rewritten by someone who controls all evidence files. Hash
 agreement does not attest executable identity, prove independent solver
 runs or validate scientific/physical results. Preserve immutable external
 copies and trusted timestamps/signatures where chain-of-custody is required.
+
+
+## Concurrent execution reservation (2026-10-09)
+
+Before checking the OpenFOAM executable version or launching any stage, `grid-run` atomically creates the directory `.grid_run_reserved` inside the generated family. A second invocation cannot create that directory and is rejected without running a solver. This is a local filesystem coordination safeguard, **not** a distributed lock or an authenticated run identifier. The reservation is deliberately retained after success, failure or interruption; existing stage logs and the receipt remain the authoritative execution evidence. Do **not** delete the reservation to force an implicit restart. Instead archive and independently verify the entire original family, then generate a fresh family in a new directory for a new run attempt. The runner does not yet provide automatic recovery or cryptographically authenticated custody. No physical or numerical approval follows from a reservation or an exit-code-zero receipt.

@@ -467,3 +467,25 @@ def test_replayed_solver_log_across_configurations_is_rejected(
         "configuration_2/fine:configuration_1/coarse"
     ) in result["findings"]
     assert result["engineering_review"] == "BLOCKED"
+
+
+def test_forged_empty_output_state_with_nonempty_log_fails_closed(
+    grid_family, monkeypatch
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    key = "configuration_2/fine"
+    # Make all receipt statuses internally consistent while lying about the
+    # physical stage log: a zero-exit stage with bytes cannot be empty_output.
+    receipt["cases"][key]["stages"][-1]["status"] = "empty_output"
+    receipt["cases"][key]["status"] = "execution_failed"
+    receipt["status"] = "incomplete"
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert (
+        "invalid_empty_output_stage_log:configuration_2/fine:simpleFoam"
+    ) in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"

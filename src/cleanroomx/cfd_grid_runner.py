@@ -58,7 +58,10 @@ def _verify_generated_inputs(root: Path) -> str:
     for relative, expected_sha in manifest["files"].items():
         if type(expected_sha) is not str or not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
             raise ValueError("Invalid generated input SHA-256")
-        path = (root / relative).resolve(strict=True)
+        candidate = root / relative
+        if candidate.is_symlink():
+            raise ValueError("Generated solver input must not be a symlink: " + relative)
+        path = candidate.resolve(strict=True)
         if not path.is_relative_to(root) or not path.is_file():
             raise ValueError("Generated input resolves outside grid family: " + relative)
         if _hash(path) != expected_sha:

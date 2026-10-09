@@ -1,6 +1,7 @@
 """Nine-case executor regressions use fake process exits, not CFD results."""
 import hashlib
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -110,7 +111,7 @@ def test_existing_logs_block_rerun_before_execution(generated, monkeypatch):
 
 def test_non_v10_version_is_rejected_without_writing_receipt(generated, monkeypatch):
     fake_tools(monkeypatch, version="OpenFOAM-v2312")
-    with pytest.raises(RuntimeError, match="Foundation v10"):
+    with pytest.raises(ValueError, match="Foundation v10"):
         run_grid_family(generated)
     assert not (generated / "grid_run_evidence.json").exists()
 
@@ -118,7 +119,7 @@ def test_non_v10_version_is_rejected_without_writing_receipt(generated, monkeypa
 def test_missing_binary_prevents_execution(generated, monkeypatch):
     import cleanroomx.cfd_grid_runner as runner
     monkeypatch.setattr(runner.shutil, "which", lambda name: None if name == "simpleFoam" else name)
-    with pytest.raises(RuntimeError, match="simpleFoam"):
+    with pytest.raises(ValueError, match="simpleFoam"):
         run_grid_family(generated)
     assert not (generated / "grid_run_evidence.json").exists()
 
@@ -139,3 +140,15 @@ def test_symlinked_solver_input_outside_family_is_rejected(generated, tmp_path):
         pytest.skip("Symlinks unavailable")
     with pytest.raises(ValueError, match="outside grid family"):
         run_grid_family(generated)
+
+
+def test_cli_missing_binary_reports_clean_error(generated, monkeypatch, capsys):
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_pipeline_cli import main
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: None)
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-cfd-pipeline", "grid-run", str(generated)])
+    assert main() == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "foamVersion is not available" in output.err
+    assert "Traceback" not in output.err

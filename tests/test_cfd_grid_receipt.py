@@ -489,3 +489,27 @@ def test_forged_empty_output_state_with_nonempty_log_fails_closed(
         "invalid_empty_output_stage_log:configuration_2/fine:simpleFoam"
     ) in result["findings"]
     assert result["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("invalid_first_status", ["not_run", "running"])
+def test_out_of_sequence_case_receipt_rejected(
+    grid_family, monkeypatch, invalid_first_status
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    first_key = "configuration_1/coarse"
+    # Remove stage records AND corresponding logs to create otherwise
+    # well-formed, hash-consistent incomplete evidence.
+    for stage in receipt["cases"][first_key]["stages"]:
+        (grid_family / stage["log"]).unlink()
+    receipt["cases"][first_key] = {
+        "status": invalid_first_status, "stages": [],
+    }
+    receipt["status"] = "incomplete"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert "out_of_sequence_case_state:configuration_1/medium" in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"

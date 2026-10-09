@@ -61,7 +61,10 @@ freedom.
 Each case records stage command, process return code, raw log relative path
 and SHA-256. Receipts are updated atomically after individual stages; cases
 with failed stages are reported as `execution_failed` while remaining cases
-are attempted. `status: incomplete` requires investigation and cannot pass
+are attempted. Even if an external stage exits with code 0, an empty log is
+marked `empty_output`, its dependent stages are not started, and that case
+remains failed. The true process return code is retained; absence of output
+is a software evidence gate, not a numerical convergence criterion. `status: incomplete` requires investigation and cannot pass
 review. When every process exits successfully the report status is
 `executed_requires_convergence_review`, **not** `validated`.
 

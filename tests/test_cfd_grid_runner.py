@@ -292,7 +292,7 @@ def test_existing_execution_reservation_blocks_solver_launch(generated, monkeypa
 def test_execution_reservation_persists_after_run(generated, monkeypatch):
     fake_tools(monkeypatch)
     run_grid_family(generated, timeout_seconds=60)
-    assert not (generated / ".grid_run_reserved").exists()
+    assert (generated / ".grid_run_reserved").is_dir()
     with pytest.raises(FileExistsError):
         run_grid_family(generated, timeout_seconds=60)
 

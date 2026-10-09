@@ -113,9 +113,10 @@ The verifier also rejects an uncommitted
 unrecognized v1 receipt keys or rewritten warning text. These checks flag
 inconsistent local evidence; they are not cryptographic authenticity.
 Missing/modified inputs or logs, symlinked logs, forged validation claims,
-and byte-identical `simpleFoam` logs reused across coarse/medium/fine meshes
-of one configuration fail closed. This extra replay screen cannot prove run
-independence when logs differ; the verifier does not invoke OpenFOAM.
+byte-empty logs from completed stages, and byte-identical `simpleFoam` logs
+reused across any two of the nine cases fail closed, including reuse between
+different ventilation configurations. This extra replay screen cannot prove
+run independence when logs differ; the verifier does not invoke OpenFOAM.
 
 A complete consistent receipt returns
 `execution_logs_integrity_verified_requires_scientific_review` (exit 0).

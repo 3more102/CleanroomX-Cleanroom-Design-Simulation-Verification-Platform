@@ -383,3 +383,19 @@ def test_version_probe_launch_failure_is_cleanly_rejected(generated, monkeypatch
     assert invoked == ["foamVersion"]
     assert not (generated / "grid_run_evidence.json").exists()
     assert (generated / ".grid_run_reserved").is_dir()
+
+
+def test_same_family_symlinked_input_is_rejected_before_solver(generated, monkeypatch):
+    original = generated / "configuration_1/fine/0/U"
+    backup = original.with_name("U-original")
+    original.rename(backup)
+    try:
+        original.symlink_to(backup.name)
+    except (OSError, NotImplementedError):
+        backup.rename(original)
+        pytest.skip("Symlinks unavailable")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()

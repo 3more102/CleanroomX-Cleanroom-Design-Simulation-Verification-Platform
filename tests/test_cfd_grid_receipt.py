@@ -329,6 +329,47 @@ def test_replayed_solver_log_with_rewritten_receipt_digest_is_rejected(
     assert result["engineering_review"] == "BLOCKED"
 
 
+@pytest.mark.parametrize("staging_kind", ["file", "directory", "symlink"])
+def test_uncommitted_receipt_staging_blocks_integrity_verification(
+    grid_family, monkeypatch, tmp_path, staging_kind
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    staging = grid_family / ".grid_run_evidence.json.tmp"
+    if staging_kind == "file":
+        staging.write_text("SYNTHETIC partial JSON write", encoding="utf-8")
+    elif staging_kind == "directory":
+        staging.mkdir()
+    else:
+        try:
+            staging.symlink_to(tmp_path / "missing.json")
+        except (OSError, NotImplementedError):
+            pytest.skip("Symlinks unavailable")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert "uncommitted_receipt_staging_present" in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("certified", True),
+    ("warning", "ISO certification accepted"),
+])
+def test_forged_receipt_claims_fail_closed(grid_family, monkeypatch, field, value):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    receipt[field] = value
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    expected = ("invalid_receipt_warning" if field == "warning"
+                else "unexpected_receipt_fields")
+    assert expected in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"
+
+
 def test_unreceipted_last_stage_log_is_not_integrity_verified(
     grid_family, monkeypatch
 ):

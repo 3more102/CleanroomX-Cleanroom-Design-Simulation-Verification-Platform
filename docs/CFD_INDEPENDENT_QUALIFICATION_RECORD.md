@@ -47,3 +47,45 @@ Attach measured supply/extract flows, pressure differentials, ACH and particle/t
 Reviewer: _unassigned_. Review date: _not recorded_. External evidence archive: _not provided_.
 
 Do not change these defaults until traceable evidence supports each field.
+
+## 6. Deterministic execution and review sequence
+
+Execute these commands only on a machine with a separately verified OpenFOAM Foundation v10 installation and enough CPU, disk and memory. Preserve the original generated family; never rerun into a directory with prior receipts.
+
+```bash
+python -m pytest -q tests/test_cfd_grid_runner.py tests/test_cfd_grid_receipt.py tests/test_cfd_pipeline.py
+cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json ./cfd_mesh_family
+cleanroomx-cfd-pipeline grid-run ./cfd_mesh_family --timeout-seconds 3600
+cleanroomx-cfd-pipeline grid-verify ./cfd_mesh_family
+```
+
+Record the full stdout/stderr, actual exit status, installed package version and Git SHA for each invocation. A green `grid-verify` means only recorded-byte integrity, never physical or numerical validation. Export VTK separately and run `grid-audit` only with a reviewed specification; do not assume that a successful `grid-run` generated VTK.
+
+## 7. Threat model and failure-injection checklist
+
+| Failure mode | Required negative test | Expected disposition |
+| --- | --- | --- |
+| Replaced source dictionary | Modify one manifest-bound file after generation | Reject before solver launch |
+| Replayed output | Substitute another grid's solver/VTK evidence | Ineligible or blocked |
+| Symlink substitution | Link manifest, case root, source file or stage log | Reject or report integrity failure |
+| Interrupted execution | Terminate between stages, preserve partial receipt | Incomplete, never PASS |
+| Nonzero solver exit | Fail one stage without suppressing other cases | Failed case and overall incomplete |
+| Truncated log | Change a recorded log after execution | Digest mismatch |
+| Forged receipt | Claim physical validation or engineering PASS | Integrity failure |
+| Incorrect OpenFOAM | Supply a non-v10 `foamVersion` | Reject before solver launch |
+| Invalid mesh ratios | Use equal or non-refining grid spacings | Indeterminate GCI |
+| Missing measurements | Supply no independent cleanroom observations | Physical validation unavailable |
+
+These are acceptance-test requirements, not claims that this document executed the tests. An attacker able to rewrite both receipt and digests can defeat local hash matching; use an independently controlled evidence store.
+
+## 8. Quantitative validation worksheet
+
+For every quantity of interest, record the measured value `m`, prediction `p`, consistent units, signed error `p-m`, absolute error `abs(p-m)`, and uncertainty estimates `u_m` and `u_p`. If uncertainty independence is defensible, combined standard uncertainty may be evaluated as `sqrt(u_m^2 + u_p^2)`; otherwise document covariance and use an appropriate correlated uncertainty model. Do not automatically interpret overlap as model validation.
+
+Capture at least: air supply and extract balance, differential pressure, air changes per hour, and any available spatial velocity, tracer decay, or particle measurements. Define sampling locations, calibration records, operational state, uncertainty coverage and acceptance criteria *before* comparing predictions. Keep calibration and independent validation datasets separate.
+
+## 9. Release decision logic
+
+A successful software CI run qualifies only the tested code revision. A complete nine-case run with intact receipts qualifies only the execution evidence for review. A numerically eligible GCI qualifies only the stated discretization-error screen. A physical validation verdict requires traceable independent measurements, documented uncertainties, relevant physics and competent sign-off. No lower gate can substitute for a higher one.
+
+**Default disposition: HOLD / BLOCKED.** No certification, ISO cleanliness class, or fabrication/operational acceptance is implied by this worksheet.

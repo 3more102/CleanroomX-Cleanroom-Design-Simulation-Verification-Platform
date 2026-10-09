@@ -154,3 +154,48 @@ def test_symlinked_solver_log_is_rejected(grid_family, monkeypatch, tmp_path):
     result = verify_grid_run_evidence(grid_family)
     assert result["status"] == "evidence_integrity_failed"
     assert "invalid_log_reference:configuration_2/coarse:blockMesh" in result["findings"]
+
+def test_post_run_symlinked_input_is_rejected_even_if_sha_matches(grid_family, monkeypatch, tmp_path):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    original = grid_family / 'configuration_1/fine/0/U'
+    copy = tmp_path / 'same_bytes.txt'
+    copy.write_bytes(original.read_bytes())
+    original.unlink()
+    try:
+        original.symlink_to(copy)
+    except (OSError, NotImplementedError):
+        pytest.skip('Symlinks unavailable')
+    result = verify_grid_run_evidence(grid_family)
+    assert result['status'] == 'evidence_integrity_failed'
+    assert 'source_file_is_symlink:configuration_1/fine/0/U' in result['findings']
+
+
+def test_malformed_failure_stage_fails_closed_without_crash(grid_family, monkeypatch):
+    synthetic_processes(monkeypatch, failure=('configuration_1/coarse', 'checkMesh'))
+    run_grid_family(grid_family, timeout_seconds=60)
+    receipt_path = grid_family / 'grid_run_evidence.json'
+    receipt = json.loads(receipt_path.read_text())
+    receipt['cases']['configuration_1/coarse']['stages'][-1] = None
+    receipt_path.write_text(json.dumps(receipt))
+    result = verify_grid_run_evidence(grid_family)
+    assert result['status'] == 'evidence_integrity_failed'
+    assert 'invalid_stage_record:configuration_1/coarse:1' in result['findings']
+
+
+def test_cli_grid_verify_has_distinct_success_and_tamper_exit_codes(
+    grid_family, monkeypatch, capsys
+):
+    import sys
+    from cleanroomx.cfd_pipeline_cli import main
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    monkeypatch.setattr(sys, 'argv', ['cleanroomx-cfd-pipeline', 'grid-verify', str(grid_family)])
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result['engineering_review'] == 'BLOCKED'
+    target = grid_family / 'configuration_3/fine/simpleFoam.log'
+    target.write_bytes(target.read_bytes() + b'CHANGED')
+    assert main() == 3
+    result = json.loads(capsys.readouterr().out)
+    assert result['status'] == 'evidence_integrity_failed'

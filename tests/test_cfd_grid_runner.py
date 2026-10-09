@@ -464,3 +464,35 @@ def test_zero_exit_empty_output_is_failed_before_next_solver_stage(
     assert verification["status"] == "incomplete_execution_logs_integrity_verified"
     assert verification["findings"] == []
     assert verification["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("tamper", [
+    "unknown_claim", "invalid_spec_hash", "wrong_family_status",
+    "swapped_case_identity", "forged_validation_limitations",
+    "negative_face_area",
+])
+def test_tampered_family_manifest_metadata_blocks_all_execution(
+    generated, monkeypatch, tamper
+):
+    manifest_path = generated / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    metadata = manifest["case_inputs"]["configuration_1/coarse"]
+    if tamper == "unknown_claim":
+        metadata["certified"] = True
+    elif tamper == "invalid_spec_hash":
+        manifest["family_spec_sha256"] = "invalid"
+    elif tamper == "wrong_family_status":
+        manifest["status"] = "validated"
+    elif tamper == "swapped_case_identity":
+        metadata["configuration"] = 2
+    elif tamper == "forged_validation_limitations":
+        metadata["limitations"] = ["certified particle cleanliness"]
+    elif tamper == "negative_face_area":
+        metadata["mesh"]["inlet_area_m2"] = -1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="(manifest|metadata|quantity|face count)"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()
+    assert not (generated / ".grid_run_reserved").exists()

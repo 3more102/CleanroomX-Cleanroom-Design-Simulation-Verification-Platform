@@ -168,9 +168,9 @@ relaxationFactors { fields { p 0.3; } equations { U 0.7; } }"""
       "system/controlDict":_header("dictionary","controlDict",control,"system"),
       "system/fvSchemes":_header("dictionary","fvSchemes",schemes,"system"),
       "system/fvSolution":_header("dictionary","fvSolution",solution,"system"),
-      "constant/transportProperties":_header("dictionary","transportProperties",
-        f'transportModel Newtonian;\nnu [0 2 -1 0 0 0 0] {spec["kinematic_viscosity_m2_s"]:.12g};',"constant"),
-      "constant/turbulenceProperties":_header("dictionary","turbulenceProperties",
+      "constant/physicalProperties":_header("dictionary","physicalProperties",
+        f'viscosityModel constant;\nnu [0 2 -1 0 0 0 0] {spec["kinematic_viscosity_m2_s"]:.12g};',"constant"),
+      "constant/momentumTransport":_header("dictionary","momentumTransport",
         "simulationType laminar;","constant"),
       "0/U":_field("U","[0 1 -1 0 0 0 0]","(0 0 0)",u,vector=True),
       "0/p":_field("p","[0 2 -2 0 0 0 0]","0",p)

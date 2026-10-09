@@ -22,7 +22,7 @@ INPUTS = (
     "system/fvSolution", "constant/transportProperties",
     "constant/turbulenceProperties", "0/U", "0/p",
 )
-VERSION_PATTERN = re.compile(r"(?:OpenFOAM(?: Foundation)?[- ]?[vV]?)?10(?:\\.0+)?\\Z")
+VERSION_PATTERN = re.compile(r"(?:OpenFOAM(?: Foundation)?[- ]?[vV]?)?10(?:\.0+)?\Z")
 
 
 def _hash(path: Path) -> str:

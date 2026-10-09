@@ -34,7 +34,10 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     recorded digests and that the receipt's internal state is consistent.
     The receipt is unsigned and the external executables are not attested.
     """
-    root = Path(directory).resolve(strict=True)
+    supplied_root = Path(directory)
+    if supplied_root.is_symlink():
+        raise ValueError("Grid family root must not be a symlink")
+    root = supplied_root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Grid family root must be a directory")
 

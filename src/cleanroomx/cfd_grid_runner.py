@@ -104,6 +104,8 @@ def _openfoam_version() -> dict:
         )
     except subprocess.TimeoutExpired as exc:
         raise ValueError("foamVersion timed out; no CFD was executed") from exc
+    except OSError as exc:
+        raise ValueError("foamVersion could not be launched; no CFD was executed") from exc
     output = ((version.stdout or "") + "\n" + (version.stderr or "")).strip()
     final_line = output.splitlines()[-1].strip() if output else ""
     if version.returncode != 0 or not VERSION_PATTERN.fullmatch(final_line):

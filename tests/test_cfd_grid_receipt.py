@@ -266,3 +266,36 @@ def test_duplicate_receipt_json_keys_fail_closed(grid_family, monkeypatch):
     result = verify_grid_run_evidence(grid_family)
     assert result["status"] == "evidence_integrity_failed"
     assert any("unreadable_or_invalid_receipt" in finding for finding in result["findings"])
+
+
+@pytest.mark.parametrize("tamper", ["missing", "file", "nonempty", "symlink"])
+def test_execution_reservation_custody_fail_closed(
+    grid_family, monkeypatch, tmp_path, tamper
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    reservation = grid_family / ".grid_run_reserved"
+    assert verify_grid_run_evidence(grid_family)["findings"] == []
+    if tamper == "missing":
+        reservation.rmdir()
+    elif tamper == "file":
+        reservation.rmdir()
+        reservation.write_text("replaced marker", encoding="utf-8")
+    elif tamper == "nonempty":
+        (reservation / "unexplained").write_text("tamper", encoding="utf-8")
+    elif tamper == "symlink":
+        reservation.rmdir()
+        try:
+            reservation.symlink_to(tmp_path, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pytest.skip("Directory symlinks unavailable")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    expected = (
+        "execution_reservation_not_empty"
+        if tamper == "nonempty"
+        else "missing_or_unsafe_execution_reservation"
+    )
+    assert expected in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"
+    assert result["physical_validation"] == "not_performed"

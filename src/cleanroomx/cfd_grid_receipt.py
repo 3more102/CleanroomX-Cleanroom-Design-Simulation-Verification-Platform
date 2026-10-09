@@ -77,6 +77,10 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
         except OSError:
             findings.append("execution_reservation_unreadable")
 
+    staging_receipt = root / ".grid_run_evidence.json.tmp"
+    if staging_receipt.exists() or staging_receipt.is_symlink():
+        findings.append("uncommitted_receipt_staging_present")
+
     receipt_path = root / "grid_run_evidence.json"
     if receipt_path.is_symlink():
         findings.append("receipt_is_symlink")
@@ -91,6 +95,20 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     if type(receipt) is not dict or receipt.get("schema_version") != RUN_SCHEMA:
         findings.append("invalid_receipt_schema")
         return result
+    # A v1 execution receipt must not smuggle an unreviewed validation or
+    # certification claim through additional, unchecked fields.
+    receipt_fields = {
+        "schema_version", "source_manifest_sha256", "foam_version",
+        "executables", "status", "engineering_review", "physical_validation",
+        "cases", "warning",
+    }
+    if set(receipt) != receipt_fields:
+        findings.append("unexpected_receipt_fields")
+    if receipt.get("warning") != (
+        "Solver execution is not residual convergence, mesh independence, "
+        "physical validation or certification"
+    ):
+        findings.append("invalid_receipt_warning")
 
     try:
         current_manifest_sha = _verify_generated_inputs(root)

@@ -36,7 +36,15 @@ cleanroomx-cfd-pipeline grid-run ./cfd_mesh_family --timeout-seconds 3600
 
 The executable first validates that the generation manifest lists exactly nine
 cases and all 72 expected generated inputs, and confirms input SHA-256
-digests and source containment. It rejects any prior run receipt or stage log
+digests and source containment. It also requires genuinely fresh case directories: only the eight
+manifest-bound input files in `0/`, `constant/`, and `system/` are
+permitted. Pre-existing `constant/polyMesh`, result time directories,
+`postProcessing`, extra files or symbolic-link substitutions are rejected
+*before* any external process starts. Remove stale output only by deliberately
+regenerating a clean family in a **new directory**, not by overwriting
+historical run evidence. This is a source freshness and filesystem screen,
+not an assertion that the solver binary or physical setup is trustworthy.
+It rejects any prior run receipt or stage log
 to prevent overwriting evidence, and verifies the `foamVersion` result against
 the targeted Foundation v10 version. These are structural and software
 provenance checks, not guarantees of scientific fidelity or filesystem race

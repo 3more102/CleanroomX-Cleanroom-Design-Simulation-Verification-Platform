@@ -223,11 +223,13 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             if actual_sha != recorded_log_sha:
                 findings.append(f"log_digest_mismatch:{key}:{expected_command}")
             else:
-                # A recorded successful solver stage must leave a nonempty
-                # diagnostic log. A matching digest of empty bytes is not
-                # sufficient execution evidence.
-                if state == "completed" and actual_sha == hashlib.sha256(b"").hexdigest():
+                # Zero-byte logs cannot substantiate successful execution;
+                # conversely empty_output must describe truly empty bytes.
+                empty_log = actual_sha == hashlib.sha256(b"").hexdigest()
+                if state == "completed" and empty_log:
                     findings.append(f"empty_completed_stage_log:{key}:{expected_command}")
+                if state == "empty_output" and not empty_log:
+                    findings.append(f"invalid_empty_output_stage_log:{key}:{expected_command}")
                 if expected_command == "simpleFoam" and state == "completed":
                     previous_case = solver_log_hashes.get(actual_sha)
                     if previous_case is not None:

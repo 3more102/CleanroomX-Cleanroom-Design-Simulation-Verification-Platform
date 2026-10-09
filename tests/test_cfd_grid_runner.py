@@ -332,3 +332,37 @@ def test_solver_timeout_is_receipted_and_later_cases_continue(generated, monkeyp
     verification = verify_grid_run_evidence(generated)
     assert verification["status"] == "incomplete_execution_logs_integrity_verified"
     assert verification["engineering_review"] == "BLOCKED"
+
+
+def test_version_probe_timeout_never_launches_solver(generated, monkeypatch):
+    import subprocess
+    import cleanroomx.cfd_grid_runner as runner
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: "/fake/" + tool)
+    invoked = []
+
+    def timeout_version(command, **kwargs):
+        invoked.append(Path(command[0]).name)
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(runner.subprocess, "run", timeout_version)
+    with pytest.raises(ValueError, match="foamVersion timed out"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert invoked == ["foamVersion"]
+    assert not (generated / "grid_run_evidence.json").exists()
+    assert (generated / ".grid_run_reserved").is_dir()
+
+
+def test_nonzero_version_probe_rejected_before_solver(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: "/fake/" + tool)
+    invoked = []
+
+    def failed_version(command, **kwargs):
+        invoked.append(Path(command[0]).name)
+        return SimpleNamespace(returncode=1, stdout="10\\n", stderr="error")
+
+    monkeypatch.setattr(runner.subprocess, "run", failed_version)
+    with pytest.raises(ValueError, match="Foundation v10"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert invoked == ["foamVersion"]
+    assert not (generated / "grid_run_evidence.json").exists()

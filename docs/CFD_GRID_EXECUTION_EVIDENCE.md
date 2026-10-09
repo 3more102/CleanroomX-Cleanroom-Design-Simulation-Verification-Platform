@@ -56,7 +56,14 @@ It rejects any prior run receipt or stage log
 to prevent overwriting evidence, and verifies the `foamVersion` result against
 the targeted Foundation v10 version. These are structural and software
 provenance checks, not guarantees of scientific fidelity or filesystem race
-freedom.
+freedom. To reduce stale-source execution risk, the runner additionally
+rehashes the original manifest and each case's eight manifest-bound inputs
+**immediately before each external stage** (including the first stage after
+`foamVersion`). If an input or the manifest changed, it stops without
+launching the next process, preserves its existing incomplete receipt and
+reservation, and requires a new independently generated family for re-run.
+This limits but cannot eliminate time-of-check/time-of-use races, compromised
+binaries or hostile concurrent filesystem modification.
 
 Each case records stage command, process return code, raw log relative path
 and SHA-256. Receipts are updated atomically after individual stages; cases

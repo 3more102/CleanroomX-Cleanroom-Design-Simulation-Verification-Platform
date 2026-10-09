@@ -69,16 +69,19 @@ def _openfoam_version() -> dict:
     for tool in ("foamVersion", *STAGES):
         found = shutil.which(tool)
         if not found:
-            raise RuntimeError(f"{tool} is not available in PATH; no CFD was executed")
+            raise ValueError(f"{tool} is not available in PATH; no CFD was executed")
         executables[tool] = found
-    version = subprocess.run(
-        [executables["foamVersion"]], capture_output=True, text=True,
-        timeout=15, check=False,
-    )
+    try:
+        version = subprocess.run(
+            [executables["foamVersion"]], capture_output=True, text=True,
+            timeout=15, check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("foamVersion timed out; no CFD was executed") from exc
     output = ((version.stdout or "") + "\n" + (version.stderr or "")).strip()
     final_line = output.splitlines()[-1].strip() if output else ""
     if version.returncode != 0 or not VERSION_PATTERN.fullmatch(final_line):
-        raise RuntimeError(
+        raise ValueError(
             "Expected OpenFOAM Foundation v10 via foamVersion; "
             "version could not be verified; no CFD was executed"
         )

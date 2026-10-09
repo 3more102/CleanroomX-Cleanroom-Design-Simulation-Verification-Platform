@@ -327,3 +327,51 @@ def test_replayed_solver_log_with_rewritten_receipt_digest_is_rejected(
         "configuration_1/fine:configuration_1/coarse"
     ) in result["findings"]
     assert result["engineering_review"] == "BLOCKED"
+
+
+def test_unreceipted_last_stage_log_is_not_integrity_verified(
+    grid_family, monkeypatch
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    # A malicious or damaged receipt claims the last stage never began
+    # and consistently downgrades both statuses to an incomplete attempt.
+    case = receipt["cases"]["configuration_2/fine"]
+    case["stages"].pop()
+    case["status"] = "running"
+    receipt["status"] = "incomplete"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert "unreceipted_stage_log:configuration_2/fine:simpleFoam" in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"
+
+
+def test_interruption_between_log_creation_and_receipt_is_flagged(
+    grid_family, monkeypatch
+):
+    import cleanroomx.cfd_grid_runner as runner
+
+    synthetic_processes(monkeypatch)
+    original = runner.subprocess.run
+
+    def interrupted(command, **kwargs):
+        if (Path(command[0]).name == "checkMesh"
+                and kwargs.get("cwd") == grid_family / "configuration_1/coarse"):
+            kwargs["stdout"].write("SYNTHETIC interrupted process, no solver result\n")
+            raise KeyboardInterrupt("synthetic interruption")
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", interrupted)
+    with pytest.raises(KeyboardInterrupt, match="synthetic interruption"):
+        run_grid_family(grid_family, timeout_seconds=60)
+    receipt = json.loads((grid_family / "grid_run_evidence.json").read_text())
+    assert receipt["status"] == "incomplete"
+    assert receipt["cases"]["configuration_1/coarse"]["status"] == "running"
+    assert len(receipt["cases"]["configuration_1/coarse"]["stages"]) == 1
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert "unreceipted_stage_log:configuration_1/coarse:checkMesh" in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"

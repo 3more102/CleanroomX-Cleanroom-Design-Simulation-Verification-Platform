@@ -15,6 +15,7 @@ import subprocess
 
 from .strict_json import load_strict_json_snapshot
 from .cfd_grid_family import LEVELS, SCHEMA as FAMILY_SCHEMA
+from .cfd_study import CONFIGURATIONS
 
 RUN_SCHEMA = "cleanroomx.cfd-grid-run.v1"
 STAGES = ("blockMesh", "checkMesh", "simpleFoam")
@@ -40,6 +41,54 @@ def _cases() -> tuple[str, ...]:
                  for configuration in (1, 2, 3) for level in LEVELS)
 
 
+_FAMILY_FIELDS = {"schema_version", "family_spec_sha256", "status", "case_inputs", "files"}
+_CASE_METADATA_FIELDS = {
+    "configuration", "layout", "mesh_cells", "mesh", "inlet_normal_speed_m_s",
+    "requested_inlet_flow_m3_s", "model", "target", "limitations",
+}
+_MESH_METADATA_FIELDS = {
+    "inlet_face_count", "outlet_face_count", "inlet_area_m2",
+    "outlet_area_m2", "nominal_cell_volume_m3",
+}
+_CASE_LIMITATIONS = [
+    "no underfloor plenum", "no scalar or particle transport",
+    "no turbulence or buoyancy", "no mesh convergence proof",
+    "empty rectangular room",
+]
+
+
+def _verify_case_metadata(key: str, value: object) -> None:
+    """Reject malformed or fabricated physical-qualification metadata."""
+    config_number = int(key.split("/", 1)[0].removeprefix("configuration_"))
+    if type(value) is not dict or set(value) != _CASE_METADATA_FIELDS:
+        raise ValueError(f"Malformed case metadata: {key}")
+    if (type(value["configuration"]) is not int
+            or value["configuration"] != config_number
+            or value["layout"] != CONFIGURATIONS[config_number]
+            or type(value["mesh_cells"]) is not int
+            or not 1 <= value["mesh_cells"] <= 20_000
+            or value["model"] != "steady incompressible isothermal laminar air (SIMPLE)"
+            or value["target"] != "OpenFOAM Foundation v10 / simpleFoam"
+            or value["limitations"] != _CASE_LIMITATIONS):
+        raise ValueError(f"Inconsistent case metadata: {key}")
+    mesh = value["mesh"]
+    if type(mesh) is not dict or set(mesh) != _MESH_METADATA_FIELDS:
+        raise ValueError(f"Malformed mesh metadata: {key}")
+    for field in ("inlet_face_count", "outlet_face_count"):
+        if type(mesh[field]) is not int or mesh[field] <= 0:
+            raise ValueError(f"Invalid mesh face count: {key}/{field}")
+    for field in (
+        "inlet_area_m2", "outlet_area_m2", "nominal_cell_volume_m3",
+    ):
+        measure = mesh[field]
+        if type(measure) not in (int, float) or not 0 < measure < float("inf"):
+            raise ValueError(f"Invalid mesh quantity: {key}/{field}")
+    for field in ("inlet_normal_speed_m_s", "requested_inlet_flow_m3_s"):
+        measure = value[field]
+        if type(measure) not in (int, float) or not 0 < measure < float("inf"):
+            raise ValueError(f"Invalid case quantity: {key}/{field}")
+
+
 def _verify_generated_inputs(root: Path) -> str:
     """Reject incomplete bundles, unexpected paths, and changed solver inputs."""
     if (root / "manifest.json").is_symlink():
@@ -52,11 +101,17 @@ def _verify_generated_inputs(root: Path) -> str:
     manifest = snapshot.value
     cases = set(_cases())
     if (type(manifest) is not dict
+            or set(manifest) != _FAMILY_FIELDS
             or manifest.get("schema_version") != FAMILY_SCHEMA
+            or manifest.get("status") != "generated_not_executed"
+            or type(manifest.get("family_spec_sha256")) is not str
+            or not re.fullmatch(r"[0-9a-f]{64}", manifest["family_spec_sha256"])
             or type(manifest.get("case_inputs")) is not dict
             or set(manifest["case_inputs"]) != cases
             or type(manifest.get("files")) is not dict):
         raise ValueError("Invalid nine-case grid family manifest")
+    for key, metadata in manifest["case_inputs"].items():
+        _verify_case_metadata(key, metadata)
     expected = {f"{case}/{item}" for case in cases for item in INPUTS}
     if set(manifest["files"]) != expected:
         raise ValueError("Grid family input file list must cover exactly 72 files")

@@ -282,3 +282,27 @@ def test_execution_reservation_persists_after_run(generated, monkeypatch):
     assert (generated / ".grid_run_reserved").is_dir()
     with pytest.raises(FileExistsError):
         run_grid_family(generated, timeout_seconds=60)
+
+
+def test_stage_launch_oserror_is_recorded_and_remaining_cases_continue(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+    calls = fake_tools(monkeypatch)
+    original = runner.subprocess.run
+
+    def launch(command, **kwargs):
+        if Path(command[0]).name == "checkMesh" and kwargs.get("cwd") == generated / "configuration_1/coarse":
+            raise OSError("synthetic executable launch failure")
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", launch)
+    report = run_grid_family(generated, timeout_seconds=60)
+    failed = report["cases"]["configuration_1/coarse"]
+    assert report["status"] == "incomplete"
+    assert failed["status"] == "execution_failed"
+    assert failed["stages"][-1]["status"] == "launch_failed"
+    assert failed["stages"][-1]["returncode"] is None
+    assert len(report["cases"]["configuration_3/fine"]["stages"]) == 3
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+    verified = verify_grid_run_evidence(generated)
+    assert verified["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verified["engineering_review"] == "BLOCKED"

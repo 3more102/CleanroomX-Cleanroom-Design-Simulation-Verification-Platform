@@ -220,6 +220,11 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
                     outcome = "timed_out"
                 except OSError:
                     outcome = "launch_failed"
+            # Successful termination without any diagnostic output is not a
+            # verifiable stage completion. Preserve the true exit code while
+            # blocking dependent stages, rather than claiming solver success.
+            if outcome == "completed" and log_path.stat().st_size == 0:
+                outcome = "empty_output"
             case["stages"].append({
                 "command": stage, "returncode": returncode,
                 "status": outcome, "log": f"{key}/{stage}.log",

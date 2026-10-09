@@ -153,6 +153,13 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             continue
         result["cases_checked"] += 1
         stages = data["stages"]
+        # An abrupt stop can leave a solver log on disk before its digest
+        # reaches the atomic JSON receipt. Never call such an incomplete
+        # snapshot integrity-verified: the unrecorded bytes are untrusted.
+        for unrecorded_stage in STAGES[len(stages):]:
+            orphan = root / key / (unrecorded_stage + ".log")
+            if orphan.exists() or orphan.is_symlink():
+                findings.append(f"unreceipted_stage_log:{key}:{unrecorded_stage}")
         successful = True
         for index, stage in enumerate(stages):
             expected_command = STAGES[index]

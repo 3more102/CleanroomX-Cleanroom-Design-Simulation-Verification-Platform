@@ -107,6 +107,11 @@ cleanroomx-cfd-pipeline grid-verify ./cfd_mesh_family
 
 The `grid-verify` command checks the 72 generated input hashes, recorded manifest
 SHA-256, nine case records, each stage-log path/digest, process exit consistency,
+and deterministic case ordering. A `running` or `not_run` case cannot be
+followed by a later started case. The manifest preflight validates its v1
+status, specification digest shape, nine configuration metadata structures,
+positive mesh quantities, and explicitly non-certifying model limitations;
+fabricated certification fields are rejected.
 and the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
 or nonempty reservation markers fail the local evidence-integrity screen.
 A stage log present on disk but absent from its case's recorded stage list

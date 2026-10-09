@@ -64,6 +64,30 @@ def _verify_generated_inputs(root: Path) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _verify_pristine_case(workdir: Path, key: str) -> None:
+    """Reject pre-existing solver output, which can contaminate a fresh run.
+
+    Generated cases contain only their eight manifest-bound source files.
+    No earlier polyMesh, time directories, VTK files, postProcessing results,
+    or unexplained symlinks may be silently carried into new evidence.
+    """
+    expected: dict[str, set[str]] = {}
+    for relative in INPUTS:
+        folder, filename = relative.split("/", 1)
+        expected.setdefault(folder, set()).add(filename)
+    if {entry.name for entry in workdir.iterdir()} != set(expected):
+        raise ValueError(f"Case has unexpected pre-existing solver artifacts: {key}")
+    for folder_name, filenames in expected.items():
+        folder = workdir / folder_name
+        if folder.is_symlink() or not folder.is_dir():
+            raise ValueError(f"Case source directory must be a real directory: {key}/{folder_name}")
+        entries = list(folder.iterdir())
+        if {entry.name for entry in entries} != filenames:
+            raise ValueError(f"Case has unexpected pre-existing solver artifacts: {key}/{folder_name}")
+        if any(entry.is_symlink() or not entry.is_file() for entry in entries):
+            raise ValueError(f"Case has linked or non-file solver inputs: {key}/{folder_name}")
+
+
 def _openfoam_version() -> dict:
     executables = {}
     for tool in ("foamVersion", *STAGES):
@@ -125,6 +149,7 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             log = workdir / (stage + ".log")
             if log.exists() or log.is_symlink():
                 raise FileExistsError("Existing OpenFOAM stage log; refuse overwrite: " + key)
+        _verify_pristine_case(workdir, key)
     environment = _openfoam_version()
     report = {
         "schema_version": RUN_SCHEMA,

@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 
+from .strict_json import load_strict_json_snapshot
 from .cfd_grid_family import LEVELS, SCHEMA as FAMILY_SCHEMA
 
 RUN_SCHEMA = "cleanroomx.cfd-grid-run.v1"
@@ -41,10 +42,9 @@ def _verify_generated_inputs(root: Path) -> str:
     manifest_path = (root / "manifest.json").resolve(strict=True)
     if not manifest_path.is_relative_to(root) or not manifest_path.is_file():
         raise ValueError("Grid family manifest must be a file inside the family")
-    raw = manifest_path.read_bytes()
-    if len(raw) > 2_000_000:
-        raise ValueError("Grid family manifest is too large")
-    manifest = json.loads(raw)
+    snapshot = load_strict_json_snapshot(manifest_path, max_bytes=2_000_000)
+    raw = snapshot.raw_bytes
+    manifest = snapshot.value
     cases = set(_cases())
     if (type(manifest) is not dict
             or manifest.get("schema_version") != FAMILY_SCHEMA

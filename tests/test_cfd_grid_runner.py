@@ -265,3 +265,20 @@ def test_symlinked_family_root_rejected_for_run_and_verify(generated, tmp_path, 
         verify_grid_run_evidence(linked)
     assert not calls
     assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_existing_execution_reservation_blocks_solver_launch(generated, monkeypatch):
+    (generated / ".grid_run_reserved").mkdir()
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(FileExistsError, match="reservation"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()
+
+
+def test_execution_reservation_persists_after_run(generated, monkeypatch):
+    fake_tools(monkeypatch)
+    run_grid_family(generated, timeout_seconds=60)
+    assert (generated / ".grid_run_reserved").is_dir()
+    with pytest.raises(FileExistsError):
+        run_grid_family(generated, timeout_seconds=60)

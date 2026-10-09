@@ -525,8 +525,16 @@ def test_stage_source_revalidation_blocks_midrun_tampering(
         return result
 
     monkeypatch.setattr(runner.subprocess, "run", tampering_subprocess)
-    with pytest.raises(ValueError, match="(manifest|input) changed during execution"):
-        run_grid_family(generated, timeout_seconds=60)
+    if injection == "version_probe":
+        with pytest.raises(ValueError, match="(manifest|input) changed during execution"):
+            run_grid_family(generated, timeout_seconds=60)
+    else:
+        result = run_grid_family(generated, timeout_seconds=60)
+        assert result["status"] == "incomplete"
+        first_stage = result["cases"]["configuration_1/coarse"]["stages"][0]
+        assert first_stage["status"] == "source_drift"
+        assert first_stage["returncode"] == 0
+        assert result["cases"]["configuration_1/coarse"]["status"] == "execution_failed"
     assert calls == (
         [] if injection == "version_probe"
         else [("configuration_1/coarse", "blockMesh")]
@@ -541,4 +549,48 @@ def test_stage_source_revalidation_blocks_midrun_tampering(
     assert (generated / ".grid_run_reserved").is_dir()
     verification = verify_grid_run_evidence(generated)
     assert verification["status"] == "evidence_integrity_failed"
+    assert verification["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("restore_sources", [False, True])
+def test_last_solver_stage_source_drift_blocks_success_and_later_claims(
+    generated, monkeypatch, restore_sources
+):
+    """Detect tampering even when there is no next solver stage to preflight."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    original = runner.subprocess.run
+    source = generated / "configuration_3/fine/0/U"
+    original_source = source.read_bytes()
+
+    def modified_last_stage(command, **kwargs):
+        result = original(command, **kwargs)
+        if (Path(command[0]).name == "simpleFoam"
+                and kwargs.get("cwd") == generated / "configuration_3/fine"):
+            source.write_bytes(original_source + b"\n// injected during final solver stage\n")
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", modified_last_stage)
+    report = run_grid_family(generated, timeout_seconds=60)
+    last_case = report["cases"]["configuration_3/fine"]
+    assert len(calls) == 27
+    assert report["status"] == "incomplete"
+    assert last_case["status"] == "execution_failed"
+    assert len(last_case["stages"]) == 3
+    assert last_case["stages"][-1]["status"] == "source_drift"
+    assert last_case["stages"][-1]["returncode"] == 0
+    assert report["engineering_review"] == "BLOCKED"
+    assert (generated / "grid_run_evidence.json").is_file()
+    assert (generated / ".grid_run_reserved").is_dir()
+
+    if restore_sources:
+        # Restoring the original bytes cannot launder the failed run.
+        source.write_bytes(original_source)
+    verification = verify_grid_run_evidence(generated)
+    assert verification["status"] == "evidence_integrity_failed"
+    assert (
+        "stage_source_drift_recorded:configuration_3/fine:simpleFoam"
+    ) in verification["findings"]
     assert verification["engineering_review"] == "BLOCKED"

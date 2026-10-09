@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 
 from .cfd_grid_runner import (
-    RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _verify_generated_inputs,
+    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _verify_generated_inputs,
 )
 from .strict_json import load_strict_json_snapshot
 
@@ -84,11 +84,7 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             if source_dir.is_symlink():
                 findings.append(f"source_directory_is_symlink:{key}/{folder}")
     for key in _cases():
-        for filename in (
-            "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
-            "system/fvSolution", "constant/physicalProperties",
-            "constant/momentumTransport", "0/U", "0/p",
-        ):
+        for filename in INPUTS:
             if (root / key / filename).is_symlink():
                 findings.append(f"source_file_is_symlink:{key}/{filename}")
 

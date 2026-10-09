@@ -48,7 +48,7 @@ def fake_tools(monkeypatch, *, failure=None, version="10"):
             return SimpleNamespace(returncode=0, stdout=version + "\n", stderr="")
         key = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
         calls.append((key, name))
-        kwargs["stdout"].write("Synthetic process-exit fixture. Not CFD validation.\n")
+        kwargs["stdout"].write(f"Synthetic process-exit fixture {key} {name}. Not CFD validation.\n")
         return SimpleNamespace(returncode=1 if (key, name) == failure else 0)
 
     monkeypatch.setattr(runner.subprocess, "run", run)

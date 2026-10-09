@@ -104,6 +104,10 @@ The `grid-verify` command checks the 72 generated input hashes, recorded manifes
 SHA-256, nine case records, each stage-log path/digest, process exit consistency,
 and the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
 or nonempty reservation markers fail the local evidence-integrity screen.
+A stage log present on disk but absent from its case's recorded stage list
+(for example, after an abrupt interruption between log creation and the next
+receipt write) also fails verification as `unreceipted_stage_log`. Preserve
+both files for investigation; never delete a log to force a passing verdict.
 Missing/modified inputs or logs, symlinked logs, forged validation claims,
 and byte-identical `simpleFoam` logs reused across coarse/medium/fine meshes
 of one configuration fail closed. This extra replay screen cannot prove run

@@ -161,6 +161,9 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     # independent mesh executions. This is a replay screen, not proof that
     # distinct logs came from distinct runs.
     solver_log_hashes: dict[str, str] = {}
+    # Cases execute in deterministic order. Once one is not_run or running,
+    # no later case can have started; a crashed run has one active prefix.
+    inactive_suffix = False
     for key in _cases():
         data = cases[key]
         if (type(data) is not dict or set(data) != {"status", "stages"}
@@ -170,6 +173,10 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             all_complete = False
             continue
         result["cases_checked"] += 1
+        if inactive_suffix and data["status"] != "not_run":
+            findings.append(f"out_of_sequence_case_state:{key}")
+        if data["status"] in ("running", "not_run"):
+            inactive_suffix = True
         stages = data["stages"]
         # An abrupt stop can leave a solver log on disk before its digest
         # reaches the atomic JSON receipt. Never call such an incomplete

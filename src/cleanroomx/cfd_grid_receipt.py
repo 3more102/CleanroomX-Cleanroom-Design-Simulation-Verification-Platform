@@ -63,6 +63,20 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
         if configuration_dir.is_symlink():
             findings.append(f"source_configuration_is_symlink:configuration_{configuration}")
 
+    # The runner reserves this namespace exactly once, before its first stage.
+    # The marker persists after both successful and interrupted execution.
+    # Its absence or substitution breaks the local execution custody record,
+    # even when receipt/log digests still match. It is not authentication.
+    reservation = root / ".grid_run_reserved"
+    if reservation.is_symlink() or not reservation.is_dir():
+        findings.append("missing_or_unsafe_execution_reservation")
+    else:
+        try:
+            if any(reservation.iterdir()):
+                findings.append("execution_reservation_not_empty")
+        except OSError:
+            findings.append("execution_reservation_unreadable")
+
     receipt_path = root / "grid_run_evidence.json"
     if receipt_path.is_symlink():
         findings.append("receipt_is_symlink")

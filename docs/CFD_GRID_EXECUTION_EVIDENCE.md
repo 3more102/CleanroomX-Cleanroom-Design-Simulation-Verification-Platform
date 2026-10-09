@@ -87,3 +87,30 @@ a successful simulation establishes particle cleanliness or ISO classification.*
 Automated runner tests mock subprocess exits and logs to verify software
 behavior. They **never invoke OpenFOAM**, and their outputs must not be
 reported as independent CFD or measured cleanroom evidence.
+
+## Independent post-run integrity screen
+
+Run the read-only verifier on the preserved nine-case family after execution or transfer:
+
+```bash
+cleanroomx-cfd-pipeline grid-verify ./cfd_mesh_family
+```
+
+The `grid-verify` command checks the 72 generated input hashes, recorded manifest
+SHA-256, nine case records, each stage-log path/digest and process exit consistency.
+Missing/modified inputs or logs, symlinked logs, and forged validation claims
+fail closed. The verifier does not invoke OpenFOAM.
+
+A complete consistent receipt returns
+`execution_logs_integrity_verified_requires_scientific_review` (exit 0).
+A consistent incomplete execution returns
+`incomplete_execution_logs_integrity_verified` (exit 3).
+Tampered or malformed evidence returns `evidence_integrity_failed` (exit 3).
+Regardless of integrity, `engineering_review` remains `BLOCKED` and
+`physical_validation` remains `not_performed`.
+
+**Trust boundary:** The receipt is unsigned and its SHA-256 hashes can be
+consistently rewritten by someone who controls all evidence files. Hash
+agreement does not attest executable identity, prove independent solver
+runs or validate scientific/physical results. Preserve immutable external
+copies and trusted timestamps/signatures where chain-of-custody is required.

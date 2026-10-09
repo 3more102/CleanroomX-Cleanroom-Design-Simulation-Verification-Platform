@@ -10,6 +10,7 @@ from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from .cfd_grid_runner import run_grid_family
+from .cfd_grid_receipt import verify_grid_run_evidence
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -59,6 +60,8 @@ def build_parser():
     execute_grid=sub.add_parser("grid-run",help="Opt-in: execute nine OpenFOAM v10 grid cases and record stage receipts")
     execute_grid.add_argument("directory")
     execute_grid.add_argument("--timeout-seconds",type=int,default=3600)
+    grid_verify=sub.add_parser("grid-verify",help="Check existing nine-case receipt/log integrity without OpenFOAM")
+    grid_verify.add_argument("directory")
     verify_grid=sub.add_parser("grid-audit",help="VTK/log grounded three-grid Richardson and GCI screening")
     verify_grid.add_argument("spec")
     verify_grid.add_argument("--output")
@@ -79,6 +82,10 @@ def main():
         report=run_grid_family(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(report))
         return 0 if report["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="grid-verify":
+        report=verify_grid_run_evidence(args.directory)
+        print(dumps_strict_json(report))
+        return 0 if report["status"]=="execution_logs_integrity_verified_requires_scientific_review" else 3
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(report))

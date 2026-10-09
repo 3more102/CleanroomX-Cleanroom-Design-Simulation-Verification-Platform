@@ -104,8 +104,10 @@ The `grid-verify` command checks the 72 generated input hashes, recorded manifes
 SHA-256, nine case records, each stage-log path/digest, process exit consistency,
 and the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
 or nonempty reservation markers fail the local evidence-integrity screen.
-Missing/modified inputs or logs, symlinked logs, and forged validation claims
-fail closed. The verifier does not invoke OpenFOAM.
+Missing/modified inputs or logs, symlinked logs, forged validation claims,
+and byte-identical `simpleFoam` logs reused across coarse/medium/fine meshes
+of one configuration fail closed. This extra replay screen cannot prove run
+independence when logs differ; the verifier does not invoke OpenFOAM.
 
 A complete consistent receipt returns
 `execution_logs_integrity_verified_requires_scientific_review` (exit 0).

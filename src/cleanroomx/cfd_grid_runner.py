@@ -36,6 +36,8 @@ def _cases() -> tuple[str, ...]:
 
 def _verify_generated_inputs(root: Path) -> str:
     """Reject incomplete bundles, unexpected paths, and changed solver inputs."""
+    if (root / "manifest.json").is_symlink():
+        raise ValueError("Grid family manifest must be a real file, not a symlink")
     manifest_path = (root / "manifest.json").resolve(strict=True)
     if not manifest_path.is_relative_to(root) or not manifest_path.is_file():
         raise ValueError("Grid family manifest must be a file inside the family")
@@ -141,8 +143,15 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
     if receipt.exists() or receipt.is_symlink() or staging.exists() or staging.is_symlink():
         raise FileExistsError("Existing grid execution receipt; refuse rerun/overwrite")
     cases = _cases()
+    for config in (1, 2, 3):
+        config_dir = root / f"configuration_{config}"
+        if config_dir.is_symlink() or not config_dir.is_dir():
+            raise ValueError(f"Configuration root must be a real directory: {config_dir.name}")
     for key in cases:
-        workdir = (root / key).resolve(strict=True)
+        raw_workdir = root / key
+        if raw_workdir.is_symlink():
+            raise ValueError(f"Case root must be a real directory: {key}")
+        workdir = raw_workdir.resolve(strict=True)
         if not workdir.is_relative_to(root) or not workdir.is_dir():
             raise ValueError("Case directory resolves outside grid family: " + key)
         for stage in STAGES:

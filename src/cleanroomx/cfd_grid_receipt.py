@@ -11,7 +11,7 @@ import re
 
 from .cfd_grid_runner import (
     INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _hash,
-    _verify_generated_inputs, _verify_runtime_source_tree,
+    _mesh_file_hashes, _verify_generated_inputs, _verify_runtime_source_tree,
 )
 from .strict_json import load_strict_json_snapshot
 
@@ -169,13 +169,36 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     inactive_suffix = False
     for key in _cases():
         data = cases[key]
-        if (type(data) is not dict or set(data) != {"status", "stages"}
+        if (type(data) is not dict
+                or set(data) != {"status", "stages", "mesh_files"}
                 or type(data["stages"]) is not list
-                or len(data["stages"]) > len(STAGES)):
+                or len(data["stages"]) > len(STAGES)
+                or type(data["mesh_files"]) is not dict
+                or len(data["mesh_files"]) > 4096):
             findings.append(f"invalid_case_record:{key}")
             all_complete = False
             continue
         result["cases_checked"] += 1
+        # v2 binds the actual final polyMesh file contents, not just link
+        # safety. Without an immutable signed receipt, this remains a local
+        # consistency screen and must not assert mesh independence.
+        recorded_mesh = data["mesh_files"]
+        if any(
+            type(name) is not str or not name or name.startswith("/")
+            or name in (".", "..") or ".." in name.split("/")
+            or "\\" in name
+            or type(digest) is not str or not _SHA256.fullmatch(digest)
+            for name, digest in recorded_mesh.items()
+        ):
+            findings.append(f"invalid_mesh_manifest:{key}")
+        else:
+            try:
+                current_mesh = _mesh_file_hashes(root / key, key)
+            except (OSError, ValueError):
+                findings.append(f"missing_or_unsafe_mesh_output:{key}")
+            else:
+                if current_mesh != recorded_mesh:
+                    findings.append(f"mesh_output_digest_mismatch:{key}")
         if inactive_suffix and data["status"] != "not_run":
             findings.append(f"out_of_sequence_case_state:{key}")
         if data["status"] in ("running", "not_run"):

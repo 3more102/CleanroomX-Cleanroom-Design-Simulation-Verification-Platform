@@ -392,6 +392,18 @@ the Foundation v10 `foamVersion` function references an optional positional
 argument and otherwise fails with `$1: unbound variable`. Bash `errexit` and
 `pipefail` remain enforced outside the explicit evidence-capture section.
 
+Foundation v10 also exposes `foamVersion` as a sourced shell function, whereas
+the Python execution runner discovers external executables using
+`shutil.which()`. When the version helper is a function, the workflow writes
+a restricted executable adapter in the runner's temporary directory. The
+adapter sources the **installed** Foundation v10 environment, requires
+`WM_PROJECT=OpenFOAM` and `WM_PROJECT_VERSION=10`, and invokes the real
+shell function. It must produce exactly the same output as a direct function
+call before being added to `PATH`. The adapter script and its SHA-256 checksum
+are included in the Actions artifact. This is an interoperability shim,
+**not** independent attestation of an OpenFOAM binary or scientific validity.
+If either version check fails, no CFD solver stage is launched.
+
 Even when `grid-run` fails, CI separately attempts read-only `grid-verify`
 and `grid-mesh-audit` and saves each command's actual return code and combined
 output in `openfoam-v10-exit-codes.txt` and the matching `.log` files. A

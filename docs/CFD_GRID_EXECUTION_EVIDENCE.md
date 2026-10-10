@@ -244,7 +244,10 @@ cell count. It checks:
   face adjacencies, not merely shared vertex positions) and the expected
   `wall` / `patch` OpenFOAM boundary declarations.
 - No gaps/overlaps in the three inlet/outlet/walls boundary patch ranges,
-  and inlet/outlet face counts matching the manifest.
+  and inlet/outlet face counts matching the manifest. For the generated layouts,
+  it also checks that supply faces are on the ceiling and exhaust faces lie on
+  side x-walls (configurations 1/2) or the floor (configuration 3); this
+  rejects correctly counted but incorrectly assigned boundary locations.
 - Stable local mesh-file digests before/after inspection and a complete,
   integrity-consistent previous execution receipt. Unsigned local hashes are
   not independent source authentication.

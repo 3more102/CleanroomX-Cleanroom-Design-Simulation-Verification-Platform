@@ -60,8 +60,8 @@ manifest-bound input files in `0/`, `constant/`, and `system/` are
 permitted. For OpenFOAM **Foundation v10**, the case includes
 `constant/physicalProperties` (`viscosityModel constant` with `nu`) and
 `constant/momentumTransport` (`simulationType laminar`), rather than the
-pre-v10 dictionary names. This compatibility change is validated against
-published v10 documentation, but still requires a real OpenFOAM v10 smoke run. Hard-linked manifests and generated inputs are rejected even when their contents
+pre-v10 dictionary names. This compatibility change is validated against published v10 documentation
+and exercised by the CI-backed synthetic OpenFOAM v10 smoke run recorded below. Hard-linked manifests and generated inputs are rejected even when their contents
 match the expected SHA-256: an extra filesystem name could permit untracked
 writes from outside the family. The post-run verifier likewise rejects
 hard-linked execution receipts and stage logs. Both the runner and independent
@@ -249,8 +249,9 @@ completed `checkMesh` stage contains a clean verdict.
 This is a text-integrity safety gate, **not** a mesh-geometry screen,
 full OpenFOAM quality certification, solver convergence or physical cleanroom
 qualification. Independent mesh/statistic checks remain in
-`grid-mesh-audit`; no real OpenFOAM v10 runs or physical measurements
-were performed here. Scientific release stays HOLD/BLOCKED.
+`grid-mesh-audit`. The synthetic CI smoke run below exercised real OpenFOAM
+v10 but is not project-specific validation; no physical measurements were
+performed. Scientific release stays HOLD/BLOCKED.
 
 ## Independent checkMesh log-to-mesh consistency gate (2026-10-10)
 
@@ -402,6 +403,24 @@ exact head commit, CI run URL and an independent copy of the TAR for longer
 review. The artifact is short-lived and is **not** authenticated provenance,
 proof of physical validation, or evidence of convergence merely because its
 integrity hashes match. A failed or incomplete run stays explicitly BLOCKED.
+
+Successful evidence at PR head `d76cd056bcf606d3d397381faeb7e275deb37786` is retained in
+[GitHub Actions run #38070787995](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38070787995).
+All 27 `blockMesh`, `checkMesh`, and `simpleFoam` stages completed for the nine
+synthetic cases; `grid-verify` checked all nine cases and 27 logs, and
+`grid-mesh-audit` screened all nine generated ASCII meshes and matching
+`checkMesh` logs. These results demonstrate software execution and local
+evidence screening for the synthetic example.
+
+Additional stacked-PR verification: [OpenFOAM execution run #38071181538](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38071181538)
+passed on `c165cb9f537a08f4a42a11efe716217c3fc37748`, including all nine
+synthetic cases, complete TAR evidence packaging, and independent
+`grid-verify` / `grid-mesh-audit` rechecks after extraction into a fresh
+directory. GitHub retained the TAR artifact (9,054,150 bytes) with
+uploaded-archive digest
+`sha256:b860a40464987d348018e69b97780e30e7f4f513018bcda1ec5b7e510d76e2f9`.
+The archive digest is transport-integrity metadata, not independent
+scientific evidence or durable external custody.
 
 The example specification is explicitly synthetic. A green workflow therefore
 demonstrates software integration with a real OpenFOAM v10 installation and

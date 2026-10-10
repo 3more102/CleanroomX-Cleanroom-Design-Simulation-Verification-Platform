@@ -351,6 +351,12 @@ def verify_generated_blockmesh_source(
         "vertex_count": len(vertex_lines),
         "hex_block_count": len(block_lines),
         "bounds_m": bounds_m,
+        # A total cell count alone cannot establish per-axis refinement.
+        # Source axes are already validated as a complete Cartesian tiling.
+        "axis_cell_counts": tuple(
+            len({point[axis] for point in original_vertices}) - 1
+            for axis in range(3)
+        ),
     }
     # Keep the default preflight result small: no full source snapshots
     # leave this function unless the caller explicitly requests them.

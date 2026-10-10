@@ -69,17 +69,48 @@ jobs:
           chmod 0755 "$version_bin/foamVersion"
           export PATH="$version_bin:$PATH"
 
+          # Exercise the actual executable interface that grid-run probes.
+          set +e
+          version_probe_output="$(foamVersion 2>&1)"
+          version_probe_rc=$?
+          set -e
+          version_probe_last="$(printf '%s\n' "$version_probe_output" | tail -n 1)"
+          if [[ "$version_probe_rc" -ne 0 || ! "$version_probe_last" =~ ^(10|OpenFOAM-10)$ ]]; then
+            printf 'Invalid Foundation v10 probe: exit=%s; expected 10 or OpenFOAM-10\n' "$version_probe_rc" >&2
+            printf '%s\n' "$version_probe_output" | tail -n 8 | cut -c 1-200 >&2
+            exit 1
+          fi
+          for tool in blockMesh checkMesh simpleFoam; do
+            command -v "$tool" >/dev/null || { printf 'Missing solver command: %s\n' "$tool" >&2; exit 1; }
+          done
+          {
+            echo "github_sha=$GITHUB_SHA"
+            echo "workflow_run_id=$GITHUB_RUN_ID"
+            echo "workflow_attempt=$GITHUB_RUN_ATTEMPT"
+            cat /etc/os-release
+            uname -a
+            dpkg-query -W openfoam10
+            echo "WM_PROJECT=${WM_PROJECT:-unknown}"
+            echo "WM_PROJECT_VERSION=${WM_PROJECT_VERSION:-unknown}"
+            echo "foam_version_probe=$version_probe_last"
+          } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
+          # Preserve each command exit code and retain a complete interrupted-run record.
           set +e
-          grid_run_output="$RUNNER_TEMP/grid-run-output.txt"
-          set +e
-          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 \
-            >"$grid_run_output" 2>&1
-          grid_run_rc=$?
+          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 > "$RUNNER_TEMP/grid-run-output.txt" 2>&1
+          run_rc=$?
+          cat "$RUNNER_TEMP/grid-run-output.txt"
+          cleanroomx-cfd-pipeline grid-verify "$family"
+          verify_rc=$?
+          cleanroomx-cfd-pipeline grid-mesh-audit "$family"
+          mesh_audit_rc=$?
           set -e
-          cat "$grid_run_output"
-          if [[ "$grid_run_rc" -ne 0 ]]; then
+          printf 'grid_run=%s\ngrid_verify=%s\ngrid_mesh_audit=%s\n' \
+            "$run_rc" "$verify_rc" "$mesh_audit_rc" \
+            | tee "$RUNNER_TEMP/openfoam-v10-exit-codes.txt"
+          if [[ "$run_rc" -ne 0 ]]; then
+            echo "grid-run failed (exit $run_rc); bounded failed-stage receipt logs:" >&2
             python - "$family" <<'PY'
           import json
           import sys
@@ -124,28 +155,51 @@ jobs:
                   print(f"--- failed log {case_name}/{stage.get('command')} rc={stage.get('returncode')} bytes={size} ---")
                   print("\n".join(tail) if tail else "<empty log>")
           PY
-            exit "$grid_run_rc"
           fi
-          grid_run_rc=$?
-          set -e
-          if [[ "$grid_run_rc" -ne 0 ]]; then
-            echo "grid-run failed with exit $grid_run_rc; OpenFOAM solver log tails:"
-            while IFS= read -r log; do
-              echo "----- $log -----"
-              tail -n 80 "$log" || true
-            done < <(find "$family" -type f -name simpleFoam.log -print | sort)
-            exit "$grid_run_rc"
+          test "$run_rc" -eq 0 && test "$verify_rc" -eq 0 && test "$mesh_audit_rc" -eq 0
+
+      - name: Pack portable execution evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=()
+          if [[ -d "$RUNNER_TEMP/cleanroomx-cfd-grid-family" ]]; then
+            files+=(cleanroomx-cfd-grid-family)
           fi
+          for name in openfoam-v10-version.txt openfoam-v10-exit-codes.txt; do
+            if [[ -f "$RUNNER_TEMP/$name" ]]; then files+=("$name"); fi
+          done
+          if (( ${#files[@]} > 0 )); then
+            # TAR preserves hidden evidence entries and the required empty
+            # .grid_run_reserved directory; directory artifact uploads do not.
+            tar -czf "$RUNNER_TEMP/openfoam-v10-grid-evidence.tar.gz" \
+              -C "$RUNNER_TEMP" "${files[@]}"
+            if [[ -d "$RUNNER_TEMP/cleanroomx-cfd-grid-family/.grid_run_reserved" ]]; then
+              tar -tzf "$RUNNER_TEMP/openfoam-v10-grid-evidence.tar.gz" \
+                | grep -Fx 'cleanroomx-cfd-grid-family/.grid_run_reserved/'
+            fi
+          fi
+
+      - name: Verify extracted evidence round-trip
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/openfoam-v10-grid-evidence.tar.gz"
+          test -s "$archive"
+          scratch="$(mktemp -d "$RUNNER_TEMP/cfd-evidence-verify.XXXXXX")"
+          tar -xzf "$archive" -C "$scratch"
+          family="$scratch/cleanroomx-cfd-grid-family"
+          test -d "$family/.grid_run_reserved"
+          test -z "$(find "$family/.grid_run_reserved" -mindepth 1 -maxdepth 1 -print -quit)"
           cleanroomx-cfd-pipeline grid-verify "$family"
           cleanroomx-cfd-pipeline grid-mesh-audit "$family"
-
-      - name: Upload execution evidence
+      - name: Upload portable execution evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: "openfoam-v10-grid-evidence-${{ github.sha }}"
-          path: |
-            ${{ runner.temp }}/cleanroomx-cfd-grid-family
-            ${{ runner.temp }}/openfoam-v10-version.txt
+          path: ${{ runner.temp }}/openfoam-v10-grid-evidence.tar.gz
+          archive: false
           if-no-files-found: warn
           retention-days: 14

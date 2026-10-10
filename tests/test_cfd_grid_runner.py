@@ -765,3 +765,27 @@ def test_regular_generated_polymesh_files_remain_permitted(generated, monkeypatc
     monkeypatch.setattr(runner.subprocess, "run", normal_mesh)
     report = run_grid_family(generated, timeout_seconds=60)
     assert report["status"] == "executed_requires_convergence_review"
+
+
+def test_generated_mesh_file_hashes_are_in_v2_receipt(generated, monkeypatch):
+    """The synthetic mesh bytes are bound, not merely link-checked."""
+    import cleanroomx.cfd_grid_runner as runner
+
+    fake_tools(monkeypatch)
+    fake_run = runner.subprocess.run
+
+    def with_mesh(command, **kwargs):
+        result = fake_run(command, **kwargs)
+        if Path(command[0]).name == "blockMesh":
+            mesh = kwargs["cwd"] / "constant/polyMesh"
+            mesh.mkdir()
+            (mesh / "points").write_bytes(b"SYNTHETIC mesh bytes")
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", with_mesh)
+    report = run_grid_family(generated, timeout_seconds=60)
+    assert report["status"] == "executed_requires_convergence_review"
+    for case in report["cases"].values():
+        assert case["mesh_files"] == {
+            "points": hashlib.sha256(b"SYNTHETIC mesh bytes").hexdigest()
+        }

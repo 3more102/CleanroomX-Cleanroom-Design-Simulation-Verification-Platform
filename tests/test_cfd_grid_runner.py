@@ -600,7 +600,10 @@ def test_generated_polymesh_is_permitted_without_extra_dictionaries(
         if Path(command[0]).name == "blockMesh":
             mesh = kwargs["cwd"] / "constant/polyMesh"
             mesh.mkdir()
-            (mesh / "points").write_text("Synthetic output; not a CFD mesh")
+            case = kwargs["cwd"].relative_to(generated).as_posix()
+            (mesh / "points").write_text(
+                f"Synthetic mesh output for {case}; not a CFD mesh"
+            )
         return completed
 
     monkeypatch.setattr(runner.subprocess, "run", emit_mesh)

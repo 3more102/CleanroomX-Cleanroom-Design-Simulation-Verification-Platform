@@ -164,6 +164,48 @@ def test_synthetic_polymesh_structural_tampering_fails_closed(tmp_path, tamper):
         screen_ascii_polymesh(case, expected_cells=expected)
 
 
+
+@pytest.mark.parametrize("mutation", [
+    "inverted_internal_face", "inverted_boundary_face",
+    "nonplanar_quadrilateral", "collinear_face",
+])
+def test_poly_mesh_geometry_rejects_invalid_winding_or_face_area(
+    tmp_path, mutation
+):
+    """The earlier face-count/edge checks alone cannot detect these defects."""
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=2)
+    if mutation.startswith("inverted_"):
+        path = mesh / "faces"
+        lines = path.read_text(encoding="ascii").splitlines(keepends=True)
+        indices = [i for i, line in enumerate(lines) if line.startswith("4(")]
+        target = indices[0 if mutation == "inverted_internal_face" else 1]
+        payload = lines[target].strip()
+        labels = payload[2:-1].split()
+        assert len(labels) == 4
+        lines[target] = "4(" + " ".join(reversed(labels)) + ")\n"
+        path.write_text("".join(lines), encoding="ascii")
+        expected_error = "winding"
+    else:
+        path = mesh / "points"
+        lines = path.read_text(encoding="ascii").splitlines(keepends=True)
+        indices = [i for i, line in enumerate(lines)
+                   if line.startswith("(") and ")" in line]
+        if mutation == "nonplanar_quadrilateral":
+            # Raise the far upper corner: quadrilateral becomes nonplanar,
+            # while remaining finite/unique with identical cell connectivity.
+            lines[indices[-1]] = "(2 1 1.3)\n"
+            expected_error = "Nonplanar"
+        else:
+            # Collapse one x=0 end face onto a line with 4 distinct points.
+            for k, index in enumerate(indices[:4]):
+                lines[index] = f"(0 {k/4} 0)\n"
+            expected_error = "degenerate"
+        path.write_text("".join(lines), encoding="ascii")
+    with pytest.raises(ValueError, match=expected_error):
+        screen_ascii_polymesh(case, expected_cells=2)
+
+
 def test_grid_mesh_audit_missing_solver_meshes_fails_without_validation(tmp_path):
     spec = {
         "schema_version": FAMILY_SCHEMA,

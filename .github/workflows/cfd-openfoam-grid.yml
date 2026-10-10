@@ -66,9 +66,25 @@ jobs:
           foamVersion | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
-          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
-          cleanroomx-cfd-pipeline grid-verify "$family"
-          cleanroomx-cfd-pipeline grid-mesh-audit "$family"
+          # Inspect every result even when the solver rejects a case. All
+          # three real exit codes are retained; diagnostic commands cannot
+          # silently turn a failed execution into a green CI run.
+          set +e
+          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-grid-run.log"
+          run_rc=${PIPESTATUS[0]}
+          cleanroomx-cfd-pipeline grid-verify "$family" 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-grid-verify.log"
+          verify_rc=${PIPESTATUS[0]}
+          cleanroomx-cfd-pipeline grid-mesh-audit "$family" 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-grid-mesh-audit.log"
+          mesh_audit_rc=${PIPESTATUS[0]}
+          set -e
+          {
+            printf 'grid_run_exit_code=%s\n' "$run_rc"
+            printf 'grid_verify_exit_code=%s\n' "$verify_rc"
+            printf 'grid_mesh_audit_exit_code=%s\n' "$mesh_audit_rc"
+          } | tee "$RUNNER_TEMP/openfoam-v10-exit-codes.txt"
+          if [[ "$run_rc" -ne 0 || "$verify_rc" -ne 0 || "$mesh_audit_rc" -ne 0 ]]; then
+            exit 1
+          fi
 
       # upload-artifact excludes hidden files and empty directories. A raw
       # directory upload would silently omit the .grid_run_evidence.json
@@ -109,5 +125,9 @@ jobs:
             ${{ runner.temp }}/openfoam-v10-grid-family.inventory.txt
             ${{ runner.temp }}/openfoam-v10-version.txt
             ${{ runner.temp }}/openfoam-v10-init-status.txt
+            ${{ runner.temp }}/openfoam-v10-grid-run.log
+            ${{ runner.temp }}/openfoam-v10-grid-verify.log
+            ${{ runner.temp }}/openfoam-v10-grid-mesh-audit.log
+            ${{ runner.temp }}/openfoam-v10-exit-codes.txt
           if-no-files-found: warn
           retention-days: 90

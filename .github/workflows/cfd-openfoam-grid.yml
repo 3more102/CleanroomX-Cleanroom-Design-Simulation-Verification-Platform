@@ -51,6 +51,19 @@ jobs:
             printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
             exit "$source_rc"
           fi
+
+          # OpenFOAM Foundation v10 defines foamVersion as a sourced shell
+          # function, while the runner validates it as an executable.
+          mkdir -p "$RUNNER_TEMP/openfoam-bin"
+          cat > "$RUNNER_TEMP/openfoam-bin/foamVersion" <<'EOF'
+          #!/usr/bin/env bash
+          set -eo pipefail
+          source /opt/openfoam10/etc/bashrc
+          foamVersion "$@"
+          EOF
+          chmod 0755 "$RUNNER_TEMP/openfoam-bin/foamVersion"
+          export PATH="$RUNNER_TEMP/openfoam-bin:$PATH"
+
           {
             echo "github_sha=$GITHUB_SHA"
             echo "workflow_run_id=$GITHUB_RUN_ID"

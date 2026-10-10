@@ -48,7 +48,7 @@ jobs:
           source_rc=$?
           set -e
           if [[ "$source_rc" -ne 0 ]]; then
-            printf 'OpenFOAM environment setup returned %s\\n' "$source_rc" >&2
+            printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
             exit "$source_rc"
           fi
           set -u
@@ -58,7 +58,8 @@ jobs:
             cat /etc/os-release
             uname -a
             dpkg-query -W openfoam10
-            foamVersion
+            echo "WM_PROJECT=${WM_PROJECT:-unknown}"
+            echo "WM_PROJECT_VERSION=${WM_PROJECT_VERSION:-unknown}"
           } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"

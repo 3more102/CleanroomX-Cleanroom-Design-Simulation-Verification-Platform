@@ -71,7 +71,18 @@ jobs:
 
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
+          set +e
           cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
+          grid_run_rc=$?
+          set -e
+          if [[ "$grid_run_rc" -ne 0 ]]; then
+            echo "grid-run failed with exit $grid_run_rc; OpenFOAM solver log tails:"
+            while IFS= read -r log; do
+              echo "----- $log -----"
+              tail -n 80 "$log" || true
+            done < <(find "$family" -type f -name simpleFoam.log -print | sort)
+            exit "$grid_run_rc"
+          fi
           cleanroomx-cfd-pipeline grid-verify "$family"
           cleanroomx-cfd-pipeline grid-mesh-audit "$family"
 

@@ -40,7 +40,16 @@ digests and source containment. It rejects a manifest whose declared coarse,
 medium and fine total cell counts fail to increase strictly, or whose same-level
 counts disagree between the three ventilation configurations. These are checks
 on the *declared metadata*, not independent validation of the actual OpenFOAM
-mesh topology or boundary conditions. It also requires genuinely fresh case directories: only the eight
+mesh topology or boundary conditions. The preflight and read-only verifier also
+parse each CleanroomX-generated ASCII `system/blockMeshDict` source using a
+bounded, restricted grammar: a single vertex list, finite unique vertex
+coordinates, exactly the declared number of unique `hex` blocks, distinct
+in-range vertex references and the generator's unit subdivisions/grading.
+The check is repeated against the source digest after parsing. It rejects a
+forged self-rehashed dictionary declaring fewer/more blocks than the manifest,
+but does **not** parse general OpenFOAM dictionaries, independently verify
+geometrical/topological quality, prove actual generated polyMesh cell counts,
+or guarantee freedom from filesystem races. It also requires genuinely fresh case directories: only the eight
 manifest-bound input files in `0/`, `constant/`, and `system/` are
 permitted. For OpenFOAM **Foundation v10**, the case includes
 `constant/physicalProperties` (`viscosityModel constant` with `nu`) and

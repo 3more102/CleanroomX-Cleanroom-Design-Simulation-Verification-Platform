@@ -47,7 +47,8 @@ def _header_properties(header: str) -> dict[str, str]:
         if not line:
             continue
         match = re.fullmatch(
-            r"([A-Za-z_][A-Za-z0-9_]*)[ \t]+(.+?)[ \t]*;", line
+            r'([A-Za-z_][A-Za-z0-9_]*)[ \t]+("(?:[^"\\]|\\.)*"|[^;]+?)[ \t]*;',
+            line,
         )
         if match is None:
             raise ValueError("Invalid OpenFOAM mesh header")
@@ -399,7 +400,11 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             metrics["checkmesh_log"] = log_screen["status"]
             report["cases"][key] = metrics
         except (OSError, ValueError) as exc:
-            report["findings"].append("invalid_or_missing_polymesh:" + key + ":" + type(exc).__name__)
+            reason = " ".join(str(exc).split())[:160]
+            report["findings"].append(
+                "invalid_or_missing_polymesh:" + key + ":" + type(exc).__name__
+                + (":" + reason if reason else "")
+            )
             report["case_errors"][key] = {
                 "type": type(exc).__name__, "message": str(exc),
             }

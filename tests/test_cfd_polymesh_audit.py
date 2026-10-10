@@ -137,6 +137,24 @@ def test_synthetic_hex_polymesh_connectivity_is_structurally_screened(tmp_path, 
     assert result["engineering_review"] == "BLOCKED"
 
 
+def test_quoted_header_fields_allow_semicolon_arch_metadata(tmp_path):
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=1)
+    for name in ("points", "faces", "owner", "neighbour", "boundary"):
+        path = mesh / name
+        source = path.read_text(encoding="ascii")
+        path.write_text(
+            source.replace(
+                "format ascii;",
+                'format ascii;\n    arch "LSB;label=32;scalar=64";',
+                1,
+            ),
+            encoding="ascii",
+        )
+    result = screen_ascii_polymesh(case, expected_cells=1)
+    assert result["cells"] == 1
+
+
 @pytest.mark.parametrize("tamper", [
     "wrong_cell_count", "owner_truncated", "wrong_vertex", "duplicate_face",
     "binary", "missing_neighbour", "boundary_gap", "point_duplicate",

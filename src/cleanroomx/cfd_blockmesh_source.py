@@ -120,6 +120,28 @@ def _generated_patch_faces(
     return signatures
 
 
+
+# Generator-specific outer grammar. Structural checks alone would accept
+# appended OpenFOAM #include/#codeStream directives, altered header metadata,
+# or executable edge/patch-merge statements after a forged manifest rehash.
+# Reject all such changes before discovering or launching an external solver.
+_CANONICAL_GENERATED_ENVELOPE = re.compile(
+    r'\AFoamFile\n\{\n'
+    r'    version 2\.0;\n'
+    r'    format ascii;\n'
+    r'    class dictionary;\n'
+    r'    location "system";\n'
+    r'    object blockMeshDict;\n'
+    r'\}\n\n'
+    r'convertToMeters 1;\n'
+    r'vertices\n\(\n.*?\n\);\n'
+    r'blocks\n\(\n.*?\n\);\n'
+    r'edges \(\);\n'
+    r'boundary\n\(\n.*?\n\);\n'
+    r'mergePatchPairs \(\);\n\Z',
+    re.DOTALL,
+)
+
 def verify_generated_blockmesh_source(
     path: Path, *, expected_cells: int, capture_vertices: bool = False
 ) -> dict:
@@ -157,6 +179,9 @@ def verify_generated_blockmesh_source(
             r"[ \t]*convertToMeters[ \t]+1[ \t]*;[ \t]*\r?",
             scale_declarations[0])):
         raise ValueError("Noncanonical generated convertToMeters scale")
+
+    if _CANONICAL_GENERATED_ENVELOPE.fullmatch(source) is None:
+        raise ValueError("Noncanonical generated blockMesh envelope")
 
     vertex_lines = _generated_section(source, "vertices")
     if len(vertex_lines) < 8 or len(vertex_lines) > 100_000:

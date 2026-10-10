@@ -77,19 +77,27 @@ jobs:
             chmod 0700 "$version_dir"
             cat > "$version_dir/foamVersion" <<'EOF'
           #!/usr/bin/env bash
-          set -eo pipefail
+          set +e
           source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -eo pipefail
+          if [[ "$source_rc" -ne 0 ]]; then
+            echo "OpenFOAM Foundation environment source failed" >&2
+            exit 1
+          fi
           if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
             echo "Expected Foundation OpenFOAM v10 environment" >&2
             exit 1
           fi
-          foamVersion "$@"
+          # Foundation's helper writes its version to stderr; the runner
+          # captures subprocess output, so convert the actual output to stdout.
+          foamVersion "$@" 2>&1
           EOF
             chmod 0700 "$version_dir/foamVersion"
-            # Verify that the subprocess adapter reports precisely the same
-            # version as the actual in-shell Foundation helper.
-            direct_version="$(foamVersion)"
-            wrapped_version="$("$version_dir/foamVersion")"
+            # Capture Foundation's real stderr version instead of treating
+            # its deliberately empty stdout as the authoritative value.
+            direct_version="$(foamVersion 2>&1)"
+            wrapped_version="$("$version_dir/foamVersion" 2>&1)"
             if [[ "$direct_version" != "$wrapped_version" ]]; then
               echo "OpenFOAM version wrapper does not match installed helper" >&2
               exit 1
@@ -148,8 +156,13 @@ jobs:
           inventory="$RUNNER_TEMP/openfoam-v10-grid-family.inventory.txt"
           tar --format=posix -C "$RUNNER_TEMP" -cf "$archive" cleanroomx-cfd-grid-family
           tar -tf "$archive" > "$inventory"
-          if [[ -f "$family/.grid_run_evidence.json" ]]; then
-            grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_evidence.json' "$inventory"
+          # The durable receipt is grid_run_evidence.json (not hidden).
+          # The hidden .grid_run_evidence.json.tmp is only a crash marker.
+          if [[ -f "$family/grid_run_evidence.json" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/grid_run_evidence.json' "$inventory"
+          fi
+          if [[ -f "$family/.grid_run_evidence.json.tmp" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_evidence.json.tmp' "$inventory"
           fi
           if [[ -d "$family/.grid_run_reserved" ]]; then
             grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_reserved/' "$inventory"

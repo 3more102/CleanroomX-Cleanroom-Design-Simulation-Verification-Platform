@@ -139,6 +139,22 @@ def _verify_generated_inputs(root: Path) -> str:
         raise ValueError("Invalid nine-case grid family manifest")
     for key, metadata in manifest["case_inputs"].items():
         _verify_case_metadata(key, metadata)
+    # The generator uses one common three-level grid family for all
+    # ventilation configurations. Strictly increasing cell totals are a
+    # necessary (not sufficient) refinement condition. Require the declared
+    # totals to agree across configurations; neither condition independently
+    # verifies the actual cell topology inside OpenFOAM.
+    reference_counts = None
+    for configuration in (1, 2, 3):
+        counts = tuple(
+            manifest["case_inputs"][f"configuration_{configuration}/{level}"]["mesh_cells"]
+            for level in LEVELS
+        )
+        if any(coarse >= fine for coarse, fine in zip(counts, counts[1:])):
+            raise ValueError("Nine-case manifest has non-refining mesh cell counts")
+        if reference_counts is not None and counts != reference_counts:
+            raise ValueError("Nine-case manifest has inconsistent configuration mesh cell counts")
+        reference_counts = counts
     expected = {f"{case}/{item}" for case in cases for item in INPUTS}
     if set(manifest["files"]) != expected:
         raise ValueError("Grid family input file list must cover exactly 72 files")

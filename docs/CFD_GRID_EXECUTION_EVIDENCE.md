@@ -84,9 +84,17 @@ or non-regular nested mesh files. The check repeats after each stage and in
 read-only `grid-verify`, including for an alias introduced after execution.
 An unsafe output tree records `source_drift` and halts later cases; these
 guards prevent ordinary off-tree aliases, not adversarial race conditions.
-**Generated mesh file contents are not independently SHA-256-bound into the
-v1 receipt**, so a successful integrity screen does not guarantee mesh
-content immutability, mesh quality, or numerical validation.
+For the new **v2** execution receipt, the runner captures a deterministic,
+relative-path-to-SHA-256 mapping of the final regular files inside each case's
+`constant/polyMesh/` tree (up to 4,096 files and 1 GiB of evidence bytes per
+case). The read-only verifier recomputes these hashes and rejects added, removed,
+or edited mesh files even if they remain ordinary nonlinked files. The mapping
+also covers nested directories; unsafe paths and aliases fail closed.
+The mapping may be empty if no mesh was produced, which is not a mesh-quality
+or mesh-generation acceptance verdict. v1 receipts lack this field and
+are rejected rather than silently treated as equivalent to v2 evidence.
+A successful hash comparison still cannot prove that recorded outputs came
+from an independent OpenFOAM process, or that numerical/physical CFD is valid.
 This is scoped to these source directories; other solver-generated output
 and time directories require separate scientific review.
 
@@ -100,7 +108,8 @@ restored. This limits but cannot eliminate time-of-check/time-of-use races,
 compromised binaries or hostile concurrent filesystem modification.
 
 Each case records stage command, process return code, raw log relative path
-and SHA-256. Receipts are updated atomically after individual stages; cases
+and SHA-256, plus a final snapshot of generated polyMesh file digests.
+Receipts are updated atomically after individual stages; cases
 with failed stages are reported as `execution_failed` while remaining cases
 are attempted. Even if an external stage exits with code 0, an empty log is
 marked `empty_output`, its dependent stages are not started, and that case
@@ -147,7 +156,8 @@ cleanroomx-cfd-pipeline grid-verify ./cfd_mesh_family
 ```
 
 The `grid-verify` command checks the 72 generated input hashes, recorded manifest
-SHA-256, nine case records, each stage-log path/digest, process exit consistency,
+SHA-256, nine case records, each stage-log path/digest, the final generated
+polyMesh file digest mapping, process exit consistency,
 and deterministic case ordering. A `running` or `not_run` case cannot be
 followed by a later started case. The manifest preflight validates its v1
 status, specification digest shape, nine configuration metadata structures,

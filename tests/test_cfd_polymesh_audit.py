@@ -26,7 +26,10 @@ def _write_foam_list(root, name, cls, rows):
     )
 
 
-def _mesh_fixture(case_dir, *, cells=2, disconnected=False, inlet_top=False, outlet_side=False):
+def _mesh_fixture(
+    case_dir, *, cells=2, disconnected=False, inlet_top=False,
+    outlet_side=False, inlet_subset=False,
+):
     """Build synthetic adjacent or disconnected hex cells (never physical evidence)."""
     mesh_dir = case_dir / "constant/polyMesh"
     mesh_dir.mkdir(parents=True)
@@ -68,6 +71,8 @@ def _mesh_fixture(case_dir, *, cells=2, disconnected=False, inlet_top=False, out
     inlet_z = 1 if inlet_top else 0
     outlet_z = 0 if inlet_top else 1
     inlet = [v for v in external if all(points[i][2] == inlet_z for i in v[0])]
+    if inlet_subset:
+        inlet = inlet[:1]
     if outlet_side:
         x_coords = [p[0] for p in points]
         x_low, x_high = min(x_coords), max(x_coords)
@@ -436,4 +441,74 @@ def test_cell_topology_source_requires_explicit_vertex_binding(tmp_path):
         screen_ascii_polymesh(
             case, expected_cells=2,
             expected_cell_signatures=(tuple(range(8)), tuple(range(4, 12))),
+        )
+
+
+def test_source_bound_patches_catch_ceiling_inlet_wall_face_swap(tmp_path):
+    """Both outlet/inlet planes and counts can remain correct after a swap."""
+    from cleanroomx.cfd_polymesh_audit import _read_list, _parse_patch_list
+
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(
+        case, cells=2, inlet_top=True, outlet_side=True, inlet_subset=True,
+    )
+    bounds = ((0.0, 2.0), (0.0, 1.0), (0.0, 1.0))
+    vertices = tuple((float(x), float(y), float(z))
+                     for x in range(3) for y in range(2) for z in range(2))
+    source_ids = {point: index for index, point in enumerate(vertices)}
+    _, points_raw = _read_list(
+        mesh / "points", mesh_object="points", mesh_class="vectorField",
+    )
+    _, faces_raw = _read_list(
+        mesh / "faces", mesh_object="faces", mesh_class="faceList",
+    )
+    _, owners_raw = _read_list(
+        mesh / "owner", mesh_object="owner", mesh_class="labelList",
+    )
+    source_ids_by_point = [
+        source_ids[tuple(map(float, raw[1:-1].split()))]
+        for raw in points_raw
+    ]
+    patches = _parse_patch_list(mesh / "boundary")
+
+    def signature(face):
+        return tuple(sorted(source_ids_by_point[int(index)]
+                            for index in face[2:-1].split()))
+
+    expectations = {
+        name: tuple(sorted(signature(face)
+                           for face in faces_raw[start:start+count]))
+        for name, (start, count) in patches.items()
+    }
+    assert screen_ascii_polymesh(
+        case, expected_cells=2, configuration=1,
+        expected_bounds=bounds, expected_vertices=vertices,
+        expected_boundary_faces=expectations,
+    )["cells"] == 2
+
+    inlet_start, inlet_count = patches["inlet"]
+    wall_start, wall_count = patches["walls"]
+    assert inlet_count == 1
+    ceiling_wall_index = next(
+        index for index in range(wall_start, wall_start + wall_count)
+        if all(float(points_raw[int(vertex)][1:-1].split()[2]) == 1
+               for vertex in faces_raw[index][2:-1].split())
+    )
+    # Swap both the face and its owner label: mesh remains well formed and
+    # inlet still sits at z=ceiling; only the intended patch identity drifts.
+    for rows in (faces_raw, owners_raw):
+        rows[inlet_start], rows[ceiling_wall_index] = (
+            rows[ceiling_wall_index], rows[inlet_start]
+        )
+    _write_foam_list(mesh, "faces", "faceList", faces_raw)
+    _write_foam_list(mesh, "owner", "labelList", owners_raw)
+    assert screen_ascii_polymesh(
+        case, expected_cells=2, configuration=1, expected_bounds=bounds,
+        expected_vertices=vertices,
+    )["cells"] == 2
+    with pytest.raises(ValueError, match="boundary patch faces differ"):
+        screen_ascii_polymesh(
+            case, expected_cells=2, configuration=1,
+            expected_bounds=bounds, expected_vertices=vertices,
+            expected_boundary_faces=expectations,
         )

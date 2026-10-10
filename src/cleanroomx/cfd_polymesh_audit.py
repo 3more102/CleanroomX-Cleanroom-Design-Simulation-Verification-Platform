@@ -125,6 +125,7 @@ def screen_ascii_polymesh(
     expected_bounds: tuple[tuple[float, float], ...] | None = None,
     expected_vertices: tuple[tuple[float, float, float], ...] | None = None,
     expected_cell_signatures: tuple[tuple[int, ...], ...] | None = None,
+    expected_boundary_faces: dict[str, tuple[tuple[int, ...], ...]] | None = None,
 ) -> dict:
     """Validate face references, cell adjacency, edges and boundary partition.
 
@@ -136,6 +137,8 @@ def screen_ascii_polymesh(
         raise ValueError("Invalid expected polyMesh cell count")
     if expected_cell_signatures is not None and expected_vertices is None:
         raise ValueError("Cell topology comparison requires source vertices")
+    if expected_boundary_faces is not None and expected_vertices is None:
+        raise ValueError("Boundary comparison requires source vertices")
     case_dir = Path(case_dir)
     mesh_dir = case_dir / "constant/polyMesh"
     if case_dir.is_symlink() or mesh_dir.is_symlink() or not mesh_dir.is_dir():
@@ -288,6 +291,24 @@ def screen_ascii_polymesh(
         raise ValueError("PolyMesh boundary does not cover all exterior faces")
     if patches["inlet"][1] == 0 or patches["outlet"][1] == 0:
         raise ValueError("Empty generated inlet/outlet mesh boundary")
+    if expected_boundary_faces is not None:
+        assert matched_source_ids is not None
+        if set(expected_boundary_faces) != {"inlet", "outlet", "walls"}:
+            raise ValueError("Incomplete generated source boundary patch set")
+        for patch_name, (start, count) in patches.items():
+            actual = tuple(sorted(
+                tuple(sorted(matched_source_ids[index] for index in ordered_faces[face]))
+                for face in range(start, start + count)
+            ))
+            source_faces = expected_boundary_faces[patch_name]
+            if (type(source_faces) is not tuple
+                    or any(type(face) is not tuple or len(face) != 4
+                           for face in source_faces)
+                    or actual != source_faces):
+                raise ValueError(
+                    "polyMesh boundary patch faces differ from blockMesh source: "
+                    + patch_name
+                )
     if configuration is not None:
         validate_generated_boundary_locations(
             ordered_points, ordered_faces, patches, configuration=configuration,
@@ -341,6 +362,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
                 expected_bounds=source_geometry["bounds_m"],
                 expected_vertices=source_geometry["vertices_m"],
                 expected_cell_signatures=source_geometry["hex_cells"],
+                expected_boundary_faces=source_geometry["boundary_faces"],
             )
             for patch_name in ("inlet", "outlet"):
                 actual = metrics["patch_face_counts"][patch_name]

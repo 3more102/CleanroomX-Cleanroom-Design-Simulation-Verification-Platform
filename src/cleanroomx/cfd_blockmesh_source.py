@@ -7,6 +7,7 @@ topology validator, or evidence that blockMesh was actually executed.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from pathlib import Path
 import re
 
@@ -39,6 +40,84 @@ def _generated_section(source: str, name: str) -> list[str]:
     )) != 1:
         raise ValueError(f"Noncanonical generated {name} section")
     return [line for line in matches[0].group(1).splitlines() if line.strip()]
+
+
+_GENERATED_FACE = re.compile(
+    r"[ \t]*\([ \t]*([0-9]+)[ \t]+([0-9]+)[ \t]+"
+    r"([0-9]+)[ \t]+([0-9]+)[ \t]*\)[ \t]*"
+)
+
+
+def _generated_patch_faces(
+    source: str, original_blocks: list[tuple[int, ...]],
+    original_vertices: list[tuple[float, float, float]],
+    canonical_ids: dict[tuple[float, float, float], int],
+) -> dict[str, tuple[tuple[int, ...], ...]]:
+    """Parse only the canonical inlet/outlet/walls faces emitted by CleanroomX.
+
+    Every declared boundary face must belong to exactly one hexahedron.
+    Missing faces, internal-face assignments or repeated faces fail closed.
+    """
+    rows = [line.strip() for line in _generated_section(source, "boundary")]
+    cursor = 0
+
+    def require(expected: str) -> None:
+        nonlocal cursor
+        if cursor >= len(rows) or rows[cursor] != expected:
+            raise ValueError("Noncanonical generated blockMesh boundary")
+        cursor += 1
+
+    signatures = {}
+    for patch_name, patch_type in (
+        ("inlet", "patch"), ("outlet", "patch"), ("walls", "wall")
+    ):
+        require(patch_name)
+        require("{")
+        require("type " + patch_type + ";")
+        require("faces")
+        require("(")
+        face_signatures = []
+        while cursor < len(rows) and rows[cursor] != ");":
+            matched = _GENERATED_FACE.fullmatch(rows[cursor])
+            if matched is None:
+                raise ValueError("Invalid generated boundary face declaration")
+            indices = tuple(int(v) for v in matched.groups())
+            if (len(set(indices)) != 4
+                    or any(index >= len(original_vertices) for index in indices)):
+                raise ValueError("Invalid generated boundary face vertex references")
+            face_signatures.append(tuple(sorted(
+                canonical_ids[original_vertices[index]] for index in indices
+            )))
+            if len(face_signatures) > 6 * MAX_BLOCKS:
+                raise ValueError("Excessive generated boundary face count")
+            cursor += 1
+        require(");")
+        require("}")
+        if patch_name != "walls" and not face_signatures:
+            raise ValueError("Empty generated inlet/outlet boundary")
+        signatures[patch_name] = tuple(sorted(face_signatures))
+    if cursor != len(rows):
+        raise ValueError("Unexpected generated blockMesh boundary sections")
+
+    all_faces = Counter()
+    for a, b, c, d, e, f, g, h in original_blocks:
+        for face in (
+            (a, d, c, b), (e, f, g, h), (a, b, f, e),
+            (b, c, g, f), (c, d, h, g), (d, a, e, h)
+        ):
+            key = tuple(sorted(
+                canonical_ids[original_vertices[index]] for index in face
+            ))
+            all_faces[key] += 1
+    if any(count not in (1, 2) for count in all_faces.values()):
+        raise ValueError("Nonmanifold generated blockMesh face incidence")
+    expected_exterior = {key for key, count in all_faces.items() if count == 1}
+    actual_faces = [face for patch in signatures.values() for face in patch]
+    if len(actual_faces) != len(set(actual_faces)):
+        raise ValueError("Repeated generated boundary face")
+    if set(actual_faces) != expected_exterior:
+        raise ValueError("Generated boundary differs from external hex faces")
+    return signatures
 
 
 def verify_generated_blockmesh_source(
@@ -101,6 +180,7 @@ def verify_generated_blockmesh_source(
             "Generated blockMesh hex count does not match declared mesh_cells"
         )
     used_blocks = set()
+    original_blocks = [] if capture_vertices else None
     for line in block_lines:
         match = _BLOCK.fullmatch(line)
         if match is None:
@@ -113,6 +193,8 @@ def verify_generated_blockmesh_source(
         if identity in used_blocks:
             raise ValueError("Duplicate generated blockMesh hexahedron")
         used_blocks.add(identity)
+        if original_blocks is not None:
+            original_blocks.append(vertex_ids)
     bounds_m = tuple(
         (min(point[axis] for point in vertices),
          max(point[axis] for point in vertices))
@@ -142,4 +224,8 @@ def verify_generated_blockmesh_source(
                          for vertex in block))
             for block in used_blocks
         ))
+        assert original_blocks is not None
+        result["boundary_faces"] = _generated_patch_faces(
+            source, original_blocks, original_vertices, canonical_ids,
+        )
     return result

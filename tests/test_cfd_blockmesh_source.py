@@ -46,6 +46,11 @@ def test_actual_generated_ascii_source_matches_declared_hexahedra(generated_sour
     assert len(set(captured["hex_cells"])) == cells
     assert all(len(cell) == 8 and len(set(cell)) == 8
                for cell in captured["hex_cells"])
+    assert set(captured["boundary_faces"]) == {"inlet", "outlet", "walls"}
+    assert all(captured["boundary_faces"][patch]
+               for patch in ("inlet", "outlet"))
+    assert all(len(set(faces)) == len(faces)
+               for faces in captured["boundary_faces"].values())
     assert len(set(captured["vertices_m"])) == 343
     assert min(v[0] for v in captured["vertices_m"]) == 0
     assert max(v[2] for v in captured["vertices_m"]) == 2
@@ -149,3 +154,31 @@ def test_generated_source_rejects_nonunit_convert_to_meters(
     path.write_text(contents, encoding="utf-8")
     with pytest.raises(ValueError, match="convertToMeters"):
         verify_generated_blockmesh_source(path, expected_cells=cells)
+
+
+@pytest.mark.parametrize("tamper", ["wrong_patch_type", "missing_boundary_face"])
+def test_generated_source_boundary_capture_rejects_tampered_faces(
+    generated_source, tamper
+):
+    path, cells = generated_source
+    source = path.read_text(encoding="utf-8")
+    if tamper == "wrong_patch_type":
+        source = source.replace(
+            "inlet\n    {\n        type patch;",
+            "inlet\n    {\n        type wall;",
+            1,
+        )
+    else:
+        lines = source.splitlines(keepends=True)
+        start = lines.index("    inlet\n")
+        face_line = next(
+            index for index in range(start + 1, len(lines))
+            if lines[index].startswith("            (")
+        )
+        del lines[face_line]
+        source = "".join(lines)
+    path.write_text(source, encoding="utf-8")
+    with pytest.raises(ValueError, match="boundary"):
+        verify_generated_blockmesh_source(
+            path, expected_cells=cells, capture_vertices=True,
+        )

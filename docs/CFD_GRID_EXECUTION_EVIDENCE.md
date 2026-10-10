@@ -301,6 +301,13 @@ cell count. It checks:
   it also checks that supply faces are on the ceiling and exhaust faces lie on
   side x-walls (configurations 1/2) or the floor (configuration 3); this
   rejects correctly counted but incorrectly assigned boundary locations.
+- Exact source-to-output boundary patch membership for `inlet`, `outlet`
+  and `walls`. The restricted generated dictionary parser verifies each
+  patch face corresponds to one external block face; the solver mesh
+  audit then binds every face to its original patch using canonical
+  vertex identities. It detects inlet/wall face swaps on the same
+  ceiling, even when patch counts, plane locations, full vertex lists and
+  hexahedral cell membership are unchanged.
 - One-to-one hexahedral cell membership comparison: once source and output
   vertex identities are matched, compare the set of eight corner vertices
   for every generated hex block against each reconstructed `polyMesh`

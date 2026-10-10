@@ -26,18 +26,23 @@ def _write_foam_list(root, name, cls, rows):
     )
 
 
-def _mesh_fixture(case_dir, *, cells=2):
-    """Build one/two adjacent synthetic hexahedra with shared internal face."""
+def _mesh_fixture(case_dir, *, cells=2, disconnected=False):
+    """Build synthetic adjacent or disconnected hex cells (never physical evidence)."""
     mesh_dir = case_dir / "constant/polyMesh"
     mesh_dir.mkdir(parents=True)
-    points = [
-        (x, y, z) for x in range(cells + 1)
-        for z in range(2) for y in range(2)
-    ]
+    points = (
+        [(3*cell + x, y, z) for cell in range(cells)
+         for x in range(2) for z in range(2) for y in range(2)]
+        if disconnected else
+        [(x, y, z) for x in range(cells + 1)
+         for z in range(2) for y in range(2)]
+    )
     mapping = {point: i for i, point in enumerate(points)}
     faces = {}
     for cell in range(cells):
         def point(x, y, z):
+            if disconnected:
+                return mapping[(3*cell + x-cell, y, z)]
             return mapping[(x, y, z)]
         a, b, c, d = (
             point(cell, 0, 0), point(cell+1, 0, 0),
@@ -117,7 +122,7 @@ def test_synthetic_hex_polymesh_connectivity_is_structurally_screened(tmp_path, 
 @pytest.mark.parametrize("tamper", [
     "wrong_cell_count", "owner_truncated", "wrong_vertex", "duplicate_face",
     "binary", "missing_neighbour", "boundary_gap", "point_duplicate",
-    "same_owner_neighbour", "unclosed_cell",
+    "same_owner_neighbour", "unclosed_cell", "wrong_patch_type",
 ])
 def test_synthetic_polymesh_structural_tampering_fails_closed(tmp_path, tamper):
     case = tmp_path / "case"
@@ -154,6 +159,11 @@ def test_synthetic_polymesh_structural_tampering_fails_closed(tmp_path, tamper):
     elif tamper == "same_owner_neighbour":
         path = mesh / "neighbour"
         path.write_text(path.read_text().replace("\n1\n)", "\n0\n)", 1))
+    elif tamper == "wrong_patch_type":
+        path = mesh / "boundary"
+        path.write_text(path.read_text().replace(
+            "inlet\n{\n    type patch;", "inlet\n{\n    type wall;", 1
+        ))
     else:
         path = mesh / "faces"
         lines = path.read_text().splitlines(keepends=True)
@@ -205,6 +215,17 @@ def test_poly_mesh_geometry_rejects_invalid_winding_or_face_area(
         path.write_text("".join(lines), encoding="ascii")
     with pytest.raises(ValueError, match=expected_error):
         screen_ascii_polymesh(case, expected_cells=2)
+
+
+@pytest.mark.parametrize("cells", [2, 3])
+def test_disconnected_hex_regions_fail_even_with_closed_well_oriented_cells(
+    tmp_path, cells
+):
+    """Disconnected hex domains must not pass as one cleanroom fluid region."""
+    case = tmp_path / "case"
+    _mesh_fixture(case, cells=cells, disconnected=True)
+    with pytest.raises(ValueError, match="Disconnected"):
+        screen_ascii_polymesh(case, expected_cells=cells)
 
 
 def test_grid_mesh_audit_missing_solver_meshes_fails_without_validation(tmp_path):

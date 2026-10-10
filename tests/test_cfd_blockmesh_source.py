@@ -551,3 +551,135 @@ def test_rehashed_unused_vertex_does_not_reach_solver_discovery(
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()
+
+
+
+def _swap_inlet_wall_face_membership(source: str) -> str:
+    """Move one canonical face each way without changing geometry or normals."""
+    rows = source.splitlines(keepends=True)
+    inlet = rows.index("    inlet\n")
+    walls = rows.index("    walls\n")
+    inlet_face = next(
+        index for index in range(inlet + 1, walls)
+        if rows[index].startswith("            (")
+    )
+    wall_face = next(
+        index for index in range(walls + 1, len(rows))
+        if rows[index].startswith("            (")
+    )
+    rows[inlet_face], rows[wall_face] = rows[wall_face], rows[inlet_face]
+    return "".join(rows)
+
+
+@pytest.mark.parametrize("configuration", [1, 2, 3])
+def test_source_rejects_patch_reassignment_with_intact_face_topology(
+    tmp_path, configuration
+):
+    """A role-swap preserves face counts, vertex sets and face windings."""
+    spec = {
+        "schema_version": SCHEMA,
+        "name": "SYNTHETIC expected ventilation layout",
+        "room_m": [1.0, 1.5, 2.0],
+        "mesh_cells": [6, 6, 6],
+        "supply_flow_m3_s": 0.1,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "max_iterations": 12,
+        "output_interval": 6,
+    }
+    generated, metadata = build_openfoam_files(spec, configuration)
+    path = tmp_path / "blockMeshDict"
+    path.write_text(generated["system/blockMeshDict"], encoding="utf-8")
+    cells = metadata["mesh_cells"]
+
+    verified = verify_generated_blockmesh_source(
+        path, expected_cells=cells, expected_configuration=configuration
+    )
+    assert verified["hex_block_count"] == cells
+    assert verify_generated_blockmesh_source(
+        path, expected_cells=cells, capture_vertices=True,
+        expected_configuration=configuration
+    )["boundary_faces"]
+
+    path.write_text(_swap_inlet_wall_face_membership(
+        path.read_text(encoding="utf-8")
+    ), encoding="utf-8")
+    # Generic source topology checks cannot determine the intended operating
+    # configuration; case-bound verification must detect role reassignment.
+    assert verify_generated_blockmesh_source(
+        path, expected_cells=cells
+    )["hex_block_count"] == cells
+    with pytest.raises(ValueError, match="boundary patch membership"):
+        verify_generated_blockmesh_source(
+            path, expected_cells=cells, expected_configuration=configuration
+        )
+    with pytest.raises(ValueError, match="boundary patch membership"):
+        verify_generated_blockmesh_source(
+            path, expected_cells=cells, capture_vertices=True,
+            expected_configuration=configuration
+        )
+
+
+@pytest.mark.parametrize("invalid_configuration", [True, 0, 4, "1", 1.0])
+def test_source_rejects_invalid_expected_configuration(
+    generated_source, invalid_configuration
+):
+    path, count = generated_source
+    with pytest.raises(ValueError, match="Invalid expected generated mesh configuration"):
+        verify_generated_blockmesh_source(
+            path, expected_cells=count, expected_configuration=invalid_configuration
+        )
+
+
+def test_generated_source_rejects_wrong_ventilation_configuration(generated_source):
+    path, cells = generated_source
+    with pytest.raises(ValueError, match="boundary patch membership"):
+        verify_generated_blockmesh_source(
+            path, expected_cells=cells, expected_configuration=2
+        )
+
+
+def test_rehashed_wrong_patch_roles_fail_before_solver_discovery(
+    tmp_path, monkeypatch
+):
+    """No claimed OpenFOAM run: tampered local manifest cannot authorize input."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC swapped inlet and wall roles",
+            "room_m": [1, 1, 1],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    path = root / relative
+    path.write_text(
+        _swap_inlet_wall_face_membership(path.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    import cleanroomx.cfd_grid_runner as runner
+
+    def forbidden_discovery(_name):
+        pytest.fail("Tampered boundary roles reached OpenFOAM discovery")
+
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match="boundary patch membership"):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()

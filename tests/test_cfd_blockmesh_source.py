@@ -778,3 +778,96 @@ def test_source_axis_counts_are_returned_without_audit_snapshots(generated_sourc
     assert compact["axis_cell_counts"] == detailed["axis_cell_counts"] == (6, 6, 6)
     assert "vertices_m" not in compact
     assert "hex_cells" not in compact
+
+
+
+def _shift_generated_source_x(source: str, delta: float) -> str:
+    """Translate only the generated vertex section; preserve other input bytes."""
+    prefix, marker, tail = source.partition("vertices\n(\n")
+    assert marker
+    vertex_section, closing, suffix = tail.partition("\n);\nblocks\n(\n")
+    assert closing
+    translated = []
+    for line in vertex_section.splitlines():
+        values = line.strip()[1:-1].split()
+        assert len(values) == 3
+        shifted_x = format(float(values[0]) + delta, ".12g")
+        translated.append(
+            "    (" + " ".join((shifted_x, values[1], values[2])) + ")"
+        )
+    return prefix + marker + "\n".join(translated) + closing + suffix
+
+
+@pytest.mark.parametrize("tamper,expected_error", [
+    ("scaled_one_case", "generated room bounds differ across cases"),
+    ("translate_all_cases", "generated room origin is not canonical"),
+])
+def test_rehashed_room_domain_mutations_fail_before_solver_discovery(
+    tmp_path, monkeypatch, tamper, expected_error
+):
+    """Same cell counts/layout cannot authorize inconsistent physical domains."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC physical-domain consistency fixture",
+            "room_m": [1, 1.5, 2],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "grid-family"
+    generate_grid_family(spec, root)
+    assert len(_verify_generated_inputs(root)) == 64
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if tamper == "scaled_one_case":
+        key = "configuration_2/medium"
+        forged_spec = dict(
+            spec["base_case"], mesh_cells=[7, 7, 7],
+            room_m=[2, 1.5, 2]
+        )
+        files, _ = build_openfoam_files(forged_spec, 2)
+        relative = f"{key}/system/blockMeshDict"
+        target = root / relative
+        target.write_text(files["system/blockMeshDict"], encoding="utf-8")
+        manifest["files"][relative] = hashlib.sha256(target.read_bytes()).hexdigest()
+    else:
+        for configuration in (1, 2, 3):
+            for level in ("coarse", "medium", "fine"):
+                relative = (
+                    f"configuration_{configuration}/{level}/system/blockMeshDict"
+                )
+                target = root / relative
+                target.write_text(
+                    _shift_generated_source_x(
+                        target.read_text(encoding="utf-8"), 0.25
+                    ),
+                    encoding="utf-8",
+                )
+                manifest["files"][relative] = hashlib.sha256(
+                    target.read_bytes()
+                ).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=expected_error):
+        _verify_generated_inputs(root)
+
+    import cleanroomx.cfd_grid_runner as runner
+
+    def forbidden_discovery(_name):
+        pytest.fail("Forged room domain reached OpenFOAM discovery")
+
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match=expected_error):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()

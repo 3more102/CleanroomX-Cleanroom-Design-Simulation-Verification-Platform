@@ -318,3 +318,35 @@ def test_mesh_cli_fails_closed_without_actual_solver_results(tmp_path, monkeypat
     stdout = capsys.readouterr().out
     assert '"mesh_structure_unverified"' in stdout
     assert '"BLOCKED"' in stdout
+
+
+@pytest.mark.parametrize("tamper", ["scale", "translate"])
+def test_source_bound_room_extent_rejects_scaled_or_shifted_hex_mesh(
+    tmp_path, tamper
+):
+    """Independently valid hexahedra must retain source room dimensions."""
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=2)
+    expected = ((0.0, 2.0), (0.0, 1.0), (0.0, 1.0))
+    assert screen_ascii_polymesh(
+        case, expected_cells=2, expected_bounds=expected
+    )["engineering_review"] == "BLOCKED"
+    points_file = mesh / "points"
+    lines = points_file.read_text(encoding="ascii").splitlines()
+    updated = []
+    for line in lines:
+        row = line.strip()
+        if row.startswith("(") and row.endswith(")") and len(row[1:-1].split()) == 3:
+            coords = [float(value) for value in row[1:-1].split()]
+            if tamper == "scale":
+                coords = [2 * value for value in coords]
+            else:
+                coords = [value + 3 for value in coords]
+            updated.append("(" + " ".join(f"{value:g}" for value in coords) + ")")
+        else:
+            updated.append(line)
+    points_file.write_text("\n".join(updated) + "\n", encoding="ascii")
+    # The mesh remains structurally valid without a source-bound extent.
+    assert screen_ascii_polymesh(case, expected_cells=2)["cells"] == 2
+    with pytest.raises(ValueError, match="room extent disagrees"):
+        screen_ascii_polymesh(case, expected_cells=2, expected_bounds=expected)

@@ -36,6 +36,7 @@ def test_actual_generated_ascii_source_matches_declared_hexahedra(generated_sour
     result = verify_generated_blockmesh_source(path, expected_cells=cells)
     assert result["hex_block_count"] == cells
     assert result["vertex_count"] == 7 * 7 * 7
+    assert result["bounds_m"] == ((0.0, 1.0), (0.0, 1.5), (0.0, 2.0))
 
 
 @pytest.mark.parametrize("mutation", [
@@ -119,3 +120,20 @@ def test_self_rehashed_forged_block_dict_cannot_launch_solver(tmp_path, monkeypa
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()
+
+
+@pytest.mark.parametrize("mutation", ["scaled", "duplicate", "missing"])
+def test_generated_source_rejects_nonunit_convert_to_meters(
+    generated_source, mutation
+):
+    path, cells = generated_source
+    contents = path.read_text(encoding="utf-8")
+    if mutation == "scaled":
+        contents = contents.replace("convertToMeters 1;", "convertToMeters 100;", 1)
+    elif mutation == "duplicate":
+        contents += "\nconvertToMeters 1;\n"
+    else:
+        contents = contents.replace("convertToMeters 1;", "", 1)
+    path.write_text(contents, encoding="utf-8")
+    with pytest.raises(ValueError, match="convertToMeters"):
+        verify_generated_blockmesh_source(path, expected_cells=cells)

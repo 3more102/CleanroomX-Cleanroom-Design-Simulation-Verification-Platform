@@ -301,6 +301,12 @@ cell count. It checks:
   it also checks that supply faces are on the ceiling and exhaust faces lie on
   side x-walls (configurations 1/2) or the floor (configuration 3); this
   rejects correctly counted but incorrectly assigned boundary locations.
+- A non-rewritten unit scale (`convertToMeters 1`) in the generated
+  `blockMeshDict`, and a coordinate-bound comparison against the actual
+  post-solver ASCII `polyMesh/points` extents. An otherwise connected,
+  well-oriented but rescaled or translated room fails this source-bound
+  comparison. The 2e-6 per-axis span tolerance covers ASCII roundoff;
+  it is a serialization tolerance, not a scientific or regulatory target.
 - Stable local mesh-file digests before/after inspection and a complete,
   integrity-consistent previous execution receipt. Unsigned local hashes are
   not independent source authentication.

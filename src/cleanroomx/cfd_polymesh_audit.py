@@ -17,6 +17,7 @@ from .cfd_polymesh_geometry import (
     validate_hex_face_geometry, validate_generated_boundary_locations,
 )
 from .cfd_checkmesh_log import screen_checkmesh_log
+from .cfd_blockmesh_source import verify_generated_blockmesh_source
 
 
 SCHEMA = "cleanroomx.cfd-polymesh-screen.v1"
@@ -119,7 +120,8 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
 
 
 def screen_ascii_polymesh(
-    case_dir: Path, *, expected_cells: int, configuration: int | None = None
+    case_dir: Path, *, expected_cells: int, configuration: int | None = None,
+    expected_bounds: tuple[tuple[float, float], ...] | None = None,
 ) -> dict:
     """Validate face references, cell adjacency, edges and boundary partition.
 
@@ -156,6 +158,25 @@ def screen_ascii_polymesh(
             raise ValueError("Nonfinite or repeated polyMesh point")
         coordinates.add(coord)
         ordered_points.append(coord)
+
+    if expected_bounds is not None:
+        # A topologically valid but translated or rescaled mesh is not the
+        # domain declared in its generated and hashed blockMeshDict.
+        if (len(expected_bounds) != 3
+                or any(len(bounds) != 2
+                       or not all(math.isfinite(v) for v in bounds)
+                       or bounds[0] >= bounds[1]
+                       for bounds in expected_bounds)):
+            raise ValueError("Invalid declared blockMesh room extent")
+        for axis, (low, high) in enumerate(expected_bounds):
+            actual_low = min(vertex[axis] for vertex in ordered_points)
+            actual_high = max(vertex[axis] for vertex in ordered_points)
+            # Serialization tolerance only, not a mesh-quality threshold:
+            # accommodate ASCII point rounding relative to each room span.
+            tolerance = (high - low) * 2e-6
+            if (abs(actual_low - low) > tolerance
+                    or abs(actual_high - high) > tolerance):
+                raise ValueError("polyMesh room extent disagrees with blockMesh source")
 
     if len(neighbours_raw) > len(faces_raw):
         raise ValueError("Too many internal faces in polyMesh")
@@ -281,10 +302,16 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             report["findings"].append("unsafe_case_path:" + key)
             continue
         try:
+            declared_cells = manifest["case_inputs"][key]["mesh_cells"]
+            source_geometry = verify_generated_blockmesh_source(
+                case_dir / "system/blockMeshDict",
+                expected_cells=declared_cells,
+            )
             metrics = screen_ascii_polymesh(
                 case_dir,
-                expected_cells=manifest["case_inputs"][key]["mesh_cells"],
+                expected_cells=declared_cells,
                 configuration=manifest["case_inputs"][key]["configuration"],
+                expected_bounds=source_geometry["bounds_m"],
             )
             for patch_name in ("inlet", "outlet"):
                 actual = metrics["patch_face_counts"][patch_name]

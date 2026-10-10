@@ -62,6 +62,17 @@ def verify_generated_blockmesh_source(path: Path, *, expected_cells: int) -> dic
     if not re.search(r"(?m)^[ \t]*object[ \t]+blockMeshDict;", source):
         raise ValueError("Generated blockMesh source identity invalid")
 
+    # The CleanroomX generator always emits unit coordinates in metres.
+    # A rewritten convertToMeters multiplier would silently scale the
+    # domain without affecting block/cell counts.
+    scale_declarations = re.findall(
+        r"(?m)^[ \t]*convertToMeters\b[^\n]*$", source
+    )
+    if (len(scale_declarations) != 1 or not re.fullmatch(
+            r"[ \t]*convertToMeters[ \t]+1[ \t]*;[ \t]*\r?",
+            scale_declarations[0])):
+        raise ValueError("Noncanonical generated convertToMeters scale")
+
     vertex_lines = _generated_section(source, "vertices")
     if len(vertex_lines) < 8 or len(vertex_lines) > 100_000:
         raise ValueError("Generated blockMesh vertex count is outside bounds")
@@ -95,4 +106,15 @@ def verify_generated_blockmesh_source(path: Path, *, expected_cells: int) -> dic
         if identity in used_blocks:
             raise ValueError("Duplicate generated blockMesh hexahedron")
         used_blocks.add(identity)
-    return {"vertex_count": len(vertex_lines), "hex_block_count": len(block_lines)}
+    bounds_m = tuple(
+        (min(point[axis] for point in vertices),
+         max(point[axis] for point in vertices))
+        for axis in range(3)
+    )
+    if any(low >= high for low, high in bounds_m):
+        raise ValueError("Degenerate generated blockMesh room extent")
+    return {
+        "vertex_count": len(vertex_lines),
+        "hex_block_count": len(block_lines),
+        "bounds_m": bounds_m,
+    }

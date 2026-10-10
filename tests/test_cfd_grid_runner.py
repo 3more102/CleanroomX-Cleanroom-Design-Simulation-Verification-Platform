@@ -708,3 +708,60 @@ def test_last_solver_stage_source_drift_blocks_success_and_later_claims(
         "stage_source_drift_recorded:configuration_3/fine:simpleFoam"
     ) in verification["findings"]
     assert verification["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("link_type", ["symlink", "hardlink"])
+def test_blockmesh_output_link_alias_fails_closed(
+    generated, monkeypatch, tmp_path, link_type
+):
+    """A solver-generated mesh must never alias an external writable file."""
+    import cleanroomx.cfd_grid_runner as runner
+
+    fake_tools(monkeypatch)
+    fake_run = runner.subprocess.run
+    external = tmp_path / "external_mesh_points"
+    external.write_text("SYNTHETIC untrusted mesh output")
+    target_case = generated / "configuration_1/coarse"
+
+    def linked_mesh(command, **kwargs):
+        completed = fake_run(command, **kwargs)
+        if Path(command[0]).name == "blockMesh" and kwargs["cwd"] == target_case:
+            mesh = target_case / "constant/polyMesh"
+            mesh.mkdir()
+            try:
+                if link_type == "symlink":
+                    (mesh / "points").symlink_to(external)
+                else:
+                    os.link(external, mesh / "points")
+            except (OSError, NotImplementedError):
+                pytest.skip("Link creation unavailable on this filesystem")
+        return completed
+
+    monkeypatch.setattr(runner.subprocess, "run", linked_mesh)
+    report = run_grid_family(generated, timeout_seconds=60)
+    assert report["status"] == "incomplete"
+    first = report["cases"]["configuration_1/coarse"]
+    assert first["status"] == "execution_failed"
+    assert first["stages"][0]["status"] == "source_drift"
+    assert report["cases"]["configuration_1/medium"]["status"] == "not_run"
+    assert (generated / "grid_run_evidence.json").exists()
+
+
+def test_regular_generated_polymesh_files_remain_permitted(generated, monkeypatch):
+    """A normal generated mesh is not mistaken for untracked dictionaries."""
+    import cleanroomx.cfd_grid_runner as runner
+
+    fake_tools(monkeypatch)
+    fake_run = runner.subprocess.run
+
+    def normal_mesh(command, **kwargs):
+        completed = fake_run(command, **kwargs)
+        if Path(command[0]).name == "blockMesh":
+            mesh = kwargs["cwd"] / "constant/polyMesh"
+            mesh.mkdir()
+            (mesh / "points").write_text("SYNTHETIC mesh fixture")
+        return completed
+
+    monkeypatch.setattr(runner.subprocess, "run", normal_mesh)
+    report = run_grid_family(generated, timeout_seconds=60)
+    assert report["status"] == "executed_requires_convergence_review"

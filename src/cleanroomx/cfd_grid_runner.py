@@ -176,6 +176,7 @@ def _verify_generated_inputs(root: Path) -> str:
     # self-described mesh-cell count in the family manifest. The source
     # parser is narrowly scoped to CleanroomX's generated ASCII format.
     source_axis_cells = {}
+    source_axis_positions = {}
     source_room_bounds = {}
     for key in sorted(cases):
         mesh_source = root / key / "system/blockMeshDict"
@@ -186,6 +187,7 @@ def _verify_generated_inputs(root: Path) -> str:
         if _hash(mesh_source) != manifest["files"][f"{key}/system/blockMeshDict"]:
             raise ValueError("Generated blockMesh source drifted during parsing: " + key)
         source_axis_cells[key] = source_geometry["axis_cell_counts"]
+        source_axis_positions[key] = source_geometry["axis_positions_m"]
         source_room_bounds[key] = source_geometry["bounds_m"]
 
     # Manifest totals cannot distinguish, e.g., 7x8x9 from 7x9x8.
@@ -217,6 +219,17 @@ def _verify_generated_inputs(root: Path) -> str:
                 "Nine-case generated mesh axes differ across configurations"
             )
         reference_axis_levels = axis_levels
+    # Axis cardinalities and room bounds do not establish identical meshes:
+    # the same interior x/y/z planes must be used by each ventilation layout.
+    for level in LEVELS:
+        reference_planes = source_axis_positions[f"configuration_1/{level}"]
+        if any(
+            source_axis_positions[f"configuration_{config}/{level}"] != reference_planes
+            for config in (2, 3)
+        ):
+            raise ValueError(
+                "Nine-case generated internal grid planes differ across configurations"
+            )
     return hashlib.sha256(raw).hexdigest()
 
 

@@ -123,7 +123,9 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
     for _ in range(patch_count):
         patch = _PATCH.match(remaining)
         if patch is None:
-            raise ValueError("Malformed OpenFOAM boundary patch")
+            snippet = re.sub(r"[^A-Za-z0-9_ .;{}()/-]+", "?", remaining[:240])
+            snippet = " ".join(snippet.split())
+            raise ValueError("Malformed OpenFOAM boundary patch near: " + snippet)
         name, patch_type, num_faces, start_face = patch.groups()
         expected_type = "wall" if name == "walls" else "patch"
         if patch_type != expected_type:

@@ -66,6 +66,41 @@ jobs:
               echo "OpenFOAM environment source returned nonzero; checking actual executables" >&2
             fi
           } | tee "$RUNNER_TEMP/openfoam-v10-init-status.txt"
+
+          # Foundation v10 supplies foamVersion as a sourced shell function.
+          # Python's shutil.which() cannot find a shell function, so provide
+          # an explicit executable adapter that calls the *installed* helper.
+          # This is not a hardcoded or simulated version response.
+          if [[ "$(type -t foamVersion)" == "function" ]]; then
+            version_dir="$RUNNER_TEMP/openfoam-version-bin"
+            mkdir -p "$version_dir"
+            chmod 0700 "$version_dir"
+            cat > "$version_dir/foamVersion" <<'EOF'
+          #!/usr/bin/env bash
+          set -eo pipefail
+          source /opt/openfoam10/etc/bashrc
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            echo "Expected Foundation OpenFOAM v10 environment" >&2
+            exit 1
+          fi
+          foamVersion "$@"
+          EOF
+            chmod 0700 "$version_dir/foamVersion"
+            # Verify that the subprocess adapter reports precisely the same
+            # version as the actual in-shell Foundation helper.
+            direct_version="$(foamVersion)"
+            wrapped_version="$("$version_dir/foamVersion")"
+            if [[ "$direct_version" != "$wrapped_version" ]]; then
+              echo "OpenFOAM version wrapper does not match installed helper" >&2
+              exit 1
+            fi
+            export PATH="$version_dir:$PATH"
+            sha256sum "$version_dir/foamVersion" | tee "$RUNNER_TEMP/openfoam-v10-wrapper.sha256"
+          fi
+          if [[ -z "$(type -P foamVersion)" ]]; then
+            echo "No executable foamVersion available to the Python runner" >&2
+            exit 1
+          fi
           foamVersion | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           {
             printf 'github_sha=%s\n' "$GITHUB_SHA"
@@ -136,6 +171,8 @@ jobs:
             ${{ runner.temp }}/openfoam-v10-version.txt
             ${{ runner.temp }}/openfoam-v10-init-status.txt
             ${{ runner.temp }}/openfoam-v10-environment.txt
+            ${{ runner.temp }}/openfoam-v10-wrapper.sha256
+            ${{ runner.temp }}/openfoam-version-bin/foamVersion
             ${{ runner.temp }}/openfoam-v10-grid-run.log
             ${{ runner.temp }}/openfoam-v10-grid-verify.log
             ${{ runner.temp }}/openfoam-v10-grid-mesh-audit.log

@@ -546,7 +546,7 @@ def test_out_of_sequence_case_receipt_rejected(
     for stage in receipt["cases"][first_key]["stages"]:
         (grid_family / stage["log"]).unlink()
     receipt["cases"][first_key] = {
-        "status": invalid_first_status, "stages": [],
+        "status": invalid_first_status, "stages": [], "mesh_files": {},
     }
     receipt["status"] = "incomplete"
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")

@@ -13,8 +13,30 @@ def _dot(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
 
 
+def _cross(
+    a: tuple[float, float, float], b: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    return (
+        a[1]*b[2] - a[2]*b[1],
+        a[2]*b[0] - a[0]*b[2],
+        a[0]*b[1] - a[1]*b[0],
+    )
+
+
 def _difference(a: tuple, b: tuple) -> tuple:
     return a[0]-b[0], a[1]-b[1], a[2]-b[2]
+
+
+def _signed_triangle_volume(
+    a: tuple[float, float, float],
+    b: tuple[float, float, float],
+    c: tuple[float, float, float],
+    reference: tuple[float, float, float],
+) -> float:
+    relative_a = _difference(a, reference)
+    relative_b = _difference(b, reference)
+    relative_c = _difference(c, reference)
+    return _dot(relative_a, _cross(relative_b, relative_c)) / 6.0
 
 
 def validate_hex_face_geometry(
@@ -24,13 +46,14 @@ def validate_hex_face_geometry(
     neighbours: list[int],
     *,
     expected_cells: int,
-) -> None:
-    """Reject zero-area, nonplanar and inward-facing polyMesh faces.
+) -> tuple[float, ...]:
+    """Reject invalid face geometry and nonpositive signed hex-cell volumes.
 
     For this narrowly supported convex hex family, each owner-side face
     normal must point out of the owner cell and into any neighbour cell.
     Use the centroid of its eight topologically identified vertices for
-    orientation testing; this does not measure skewness, volumes, or quality.
+    orientation testing. Signed volumes are computed from those oriented
+    faces; this does not measure skewness or overall mesh quality.
     """
     if (len(faces) != len(owners)
             or len(neighbours) > len(faces)
@@ -57,6 +80,7 @@ def validate_hex_face_geometry(
             for axis in range(3)
         ))
 
+    volume_terms = [[] for _ in range(expected_cells)]
     for index, vertex_ids in enumerate(faces):
         face = [points[label] for label in vertex_ids]
         max_edge = max(
@@ -91,6 +115,26 @@ def validate_hex_face_geometry(
             if (not math.isfinite(neighbour_projection)
                     or neighbour_projection >= -area_twice * max_edge * 1e-11):
                 raise ValueError("PolyMesh internal face winding does not face into neighbour")
+
+        owner_center = centers[owners[index]]
+        volume_terms[owners[index]].extend((
+            _signed_triangle_volume(face[0], face[1], face[2], owner_center),
+            _signed_triangle_volume(face[0], face[2], face[3], owner_center),
+        ))
+        if index < len(neighbours):
+            neighbour_center = centers[neighbours[index]]
+            volume_terms[neighbours[index]].extend((
+                _signed_triangle_volume(face[0], face[3], face[2], neighbour_center),
+                _signed_triangle_volume(face[0], face[2], face[1], neighbour_center),
+            ))
+
+    try:
+        cell_volumes = tuple(math.fsum(terms) for terms in volume_terms)
+    except (OverflowError, ValueError) as exc:
+        raise ValueError("PolyMesh signed cell volume is not finite") from exc
+    if any(not math.isfinite(volume) or volume <= 0 for volume in cell_volumes):
+        raise ValueError("PolyMesh cell has nonpositive signed volume")
+    return cell_volumes
 
 
 def validate_generated_boundary_locations(

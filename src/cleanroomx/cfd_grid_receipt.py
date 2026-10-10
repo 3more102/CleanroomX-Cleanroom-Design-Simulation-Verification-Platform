@@ -314,17 +314,23 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 if expected_command == "checkMesh" and state in (
                     "completed", "mesh_check_rejected"
                 ):
-                    from .cfd_checkmesh_log import screen_checkmesh_verdict
-                    try:
-                        screen_checkmesh_verdict(
-                            resolved, expected_cells=expected_cells_by_case[key]
-                        )
-                    except (OSError, ValueError):
-                        if state == "completed":
-                            findings.append(f"invalid_completed_checkmesh_verdict:{key}")
+                    declared_cells = expected_cells_by_case.get(key)
+                    if declared_cells is None:
+                        # An altered/missing source manifest is a finding,
+                        # never an uncaught exception or green receipt.
+                        findings.append(f"unavailable_checkmesh_declared_cells:{key}")
                     else:
-                        if state == "mesh_check_rejected":
-                            findings.append(f"unexpected_clean_rejected_checkmesh_verdict:{key}")
+                        from .cfd_checkmesh_log import screen_checkmesh_verdict
+                        try:
+                            screen_checkmesh_verdict(
+                                resolved, expected_cells=declared_cells
+                            )
+                        except (OSError, ValueError):
+                            if state == "completed":
+                                findings.append(f"invalid_completed_checkmesh_verdict:{key}")
+                        else:
+                            if state == "mesh_check_rejected":
+                                findings.append(f"unexpected_clean_rejected_checkmesh_verdict:{key}")
                 if expected_command == "simpleFoam" and state == "completed":
                     previous_case = solver_log_hashes.get(actual_sha)
                     if previous_case is not None:

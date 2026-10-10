@@ -155,6 +155,31 @@ def test_quoted_header_fields_allow_semicolon_arch_metadata(tmp_path):
     assert result["cells"] == 1
 
 
+def test_typed_in_groups_and_physical_type_are_supported(tmp_path):
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=1)
+    boundary = mesh / "boundary"
+    source = boundary.read_text(encoding="ascii")
+    source = source.replace(
+        "inlet\n{\n    type patch;",
+        "inlet\n{\n    type patch;\n    physicalType inlet;\n    inGroups List<word> 1(patch);",
+        1,
+    )
+    source = source.replace(
+        "outlet\n{\n    type patch;",
+        "outlet\n{\n    type patch;\n    physicalType outlet;\n    inGroups List<word> 1(patch);",
+        1,
+    )
+    source = source.replace(
+        "walls\n{\n    type wall;",
+        "walls\n{\n    type wall;\n    physicalType wall;\n    inGroups List<word> 1(wall);",
+        1,
+    )
+    boundary.write_text(source, encoding="ascii")
+    result = screen_ascii_polymesh(case, expected_cells=1)
+    assert result["cells"] == 1
+
+
 @pytest.mark.parametrize("tamper", [
     "wrong_cell_count", "owner_truncated", "wrong_vertex", "duplicate_face",
     "binary", "missing_neighbour", "boundary_gap", "point_duplicate",

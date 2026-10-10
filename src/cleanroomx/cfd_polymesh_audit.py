@@ -34,7 +34,8 @@ _LABEL = re.compile(r"\s*([0-9]+)\s*")
 _PATCH = re.compile(
     r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*"
     r"type\s+([A-Za-z_][A-Za-z0-9_]*)\s*;\s*"
-    r"(?:inGroups\s+[0-9]+\([A-Za-z_0-9 ]*\)\s*;\s*)?"
+    r"(?:physicalType\s+[A-Za-z_][A-Za-z0-9_]*\s*;\s*)?"
+    r"(?:inGroups\s+(?:List<word>\s+)?[0-9]+\([A-Za-z_0-9 ]*\)\s*;\s*)?"
     r"nFaces\s+([0-9]+)\s*;\s*startFace\s+([0-9]+)\s*;\s*\}\s*"
 )
 

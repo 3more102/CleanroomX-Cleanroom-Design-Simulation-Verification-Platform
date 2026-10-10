@@ -139,6 +139,7 @@ def test_synthetic_hex_polymesh_connectivity_is_structurally_screened(tmp_path, 
     "wrong_cell_count", "owner_truncated", "wrong_vertex", "duplicate_face",
     "binary", "missing_neighbour", "boundary_gap", "point_duplicate",
     "same_owner_neighbour", "unclosed_cell", "wrong_patch_type",
+    "duplicate_list_header_format", "duplicate_boundary_header_format",
 ])
 def test_synthetic_polymesh_structural_tampering_fails_closed(tmp_path, tamper):
     case = tmp_path / "case"
@@ -179,6 +180,16 @@ def test_synthetic_polymesh_structural_tampering_fails_closed(tmp_path, tamper):
         path = mesh / "boundary"
         path.write_text(path.read_text().replace(
             "inlet\n{\n    type patch;", "inlet\n{\n    type wall;", 1
+        ))
+    elif tamper == "duplicate_list_header_format":
+        path = mesh / "points"
+        path.write_text(path.read_text().replace(
+            "format ascii;", "format ascii;\n    format binary;", 1
+        ))
+    elif tamper == "duplicate_boundary_header_format":
+        path = mesh / "boundary"
+        path.write_text(path.read_text().replace(
+            "format ascii;", "format ascii;\n    format binary;", 1
         ))
     else:
         path = mesh / "faces"

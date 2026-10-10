@@ -9,8 +9,16 @@
 
 ## Unreleased Release 3 — bound CFD evidence-tree scans — 2026-10-10
 
-- Bounds polyMesh traversal by total entries, nesting depth, regular-file count
-  and aggregate bytes; unexpected solver source-directory entries fail fast.
+- Shares one 8,192-entry and 64-directory-depth budget across recursive
+  polyMesh walks within each `grid-run`, offline `grid-verify`, and
+  `grid-mesh-audit` invocation, including repeated safety and digest passes
+  across all nine cases.
+- Adds execution and offline-verification regressions proving nested mesh
+  trees cannot reset the total-entry budget between passes and that depth
+  overrun blocks or invalidates evidence. Existing per-case limits remain
+  4,096 regular files and 1 GiB; unexpected solver source-directory entries
+  still fail fast. These software checks do not qualify CFD; scientific review
+  remains BLOCKED.
 
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 

@@ -10,8 +10,9 @@ from pathlib import Path
 import re
 
 from .cfd_grid_runner import (
-    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _hash,
-    _mesh_file_hashes, _verify_generated_inputs, _verify_runtime_source_tree,
+    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _MeshTreeScanBudget, _cases,
+    _hash, _mesh_file_hashes, _verify_generated_inputs,
+    _verify_runtime_source_tree,
 )
 from .strict_json import load_strict_json_snapshot
 
@@ -24,7 +25,10 @@ def _file_digest(path: Path) -> str:
     return _hash(path)
 
 
-def verify_grid_run_evidence(directory: str | Path) -> dict:
+def verify_grid_run_evidence(
+    directory: str | Path, *,
+    scan_budget: _MeshTreeScanBudget | None = None,
+) -> dict:
     """Compare the existing receipt with current source files and stage logs.
 
     A success means only that the source and stage-log bytes match their
@@ -37,6 +41,8 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     root = supplied_root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Grid family root must be a directory")
+    if scan_budget is None:
+        scan_budget = _MeshTreeScanBudget()
 
     findings: list[str] = []
     result = {
@@ -147,7 +153,9 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             if (root / key / filename).is_symlink():
                 findings.append(f"source_file_is_symlink:{key}/{filename}")
         try:
-            _verify_runtime_source_tree(root / key, key)
+            _verify_runtime_source_tree(
+                root / key, key, scan_budget=scan_budget,
+            )
         except (OSError, ValueError) as exc:
             findings.append(f"unexpected_or_unsafe_source_tree:{key}:{type(exc).__name__}")
 
@@ -219,7 +227,9 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             findings.append(f"invalid_mesh_manifest:{key}")
         else:
             try:
-                current_mesh = _mesh_file_hashes(root / key, key)
+                current_mesh = _mesh_file_hashes(
+                    root / key, key, scan_budget=scan_budget,
+                )
             except (OSError, ValueError):
                 findings.append(f"missing_or_unsafe_mesh_output:{key}")
             else:

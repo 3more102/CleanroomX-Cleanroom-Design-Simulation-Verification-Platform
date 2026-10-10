@@ -735,6 +735,51 @@ def test_v2_receipt_requires_well_formed_mesh_evidence(
         assert f"invalid_mesh_manifest:{key}" in verified["findings"]
 
 
+@pytest.mark.parametrize("budget_kind", ["entries", "depth"])
+def test_offline_verifier_shares_recursive_mesh_scan_budget(
+    grid_family, monkeypatch, budget_kind
+):
+    import cleanroomx.cfd_grid_runner as runner
+
+    target_key = "configuration_1/coarse"
+    synthetic_processes(monkeypatch)
+    process = runner.subprocess.run
+
+    def create_nested_mesh(command, **kwargs):
+        result = process(command, **kwargs)
+        if Path(command[0]).name == "foamVersion":
+            return result
+        case = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
+        if Path(command[0]).name == "blockMesh" and case == target_key:
+            mesh = kwargs["cwd"] / "constant/polyMesh"
+            if budget_kind == "entries":
+                mesh.mkdir()
+                (mesh / "points").write_text("SYNTHETIC points")
+                (mesh / "faces").write_text("SYNTHETIC faces")
+            else:
+                nested = mesh / "nested" / "deeper"
+                nested.mkdir(parents=True)
+                (nested / "points").write_text("SYNTHETIC points")
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", create_nested_mesh)
+    receipt = run_grid_family(grid_family, timeout_seconds=60)
+    assert receipt["status"] == "executed_requires_convergence_review"
+
+    if budget_kind == "entries":
+        monkeypatch.setattr(runner, "_MAX_MESH_TREE_ENTRIES", 3)
+    else:
+        monkeypatch.setattr(runner, "_MAX_MESH_TREE_DEPTH", 1)
+    verified = verify_grid_run_evidence(grid_family)
+    assert verified["status"] == "evidence_integrity_failed"
+    assert f"missing_or_unsafe_mesh_output:{target_key}" in verified["findings"]
+    if budget_kind == "depth":
+        assert f"unexpected_or_unsafe_source_tree:{target_key}:ValueError" in verified[
+            "findings"
+        ]
+    assert verified["engineering_review"] == "BLOCKED"
+
+
 @pytest.mark.parametrize(
     ("mesh_pattern", "expect_replay"),
     [

@@ -11,7 +11,9 @@ import math
 from pathlib import Path
 import re
 
-from .cfd_grid_runner import _cases, _mesh_file_hashes, _verify_generated_inputs
+from .cfd_grid_runner import (
+    _MeshTreeScanBudget, _cases, _mesh_file_hashes, _verify_generated_inputs,
+)
 from .strict_json import load_strict_json_snapshot
 from .cfd_polymesh_geometry import (
     validate_hex_face_geometry, validate_generated_boundary_locations,
@@ -146,6 +148,7 @@ def screen_ascii_polymesh(
     expected_vertices: tuple[tuple[float, float, float], ...] | None = None,
     expected_cell_signatures: tuple[tuple[int, ...], ...] | None = None,
     expected_boundary_faces: dict[str, tuple[tuple[int, ...], ...]] | None = None,
+    scan_budget: _MeshTreeScanBudget | None = None,
 ) -> dict:
     """Validate face references, cell adjacency, edges and boundary partition.
 
@@ -161,10 +164,14 @@ def screen_ascii_polymesh(
     if expected_boundary_faces is not None and expected_vertices is None:
         raise ValueError("Boundary comparison requires source vertices")
     case_dir = Path(case_dir)
+    if scan_budget is None:
+        scan_budget = _MeshTreeScanBudget()
     mesh_dir = case_dir / "constant/polyMesh"
     if case_dir.is_symlink() or mesh_dir.is_symlink() or not mesh_dir.is_dir():
         raise ValueError("Missing or unsafe generated polyMesh directory")
-    before_hashes = _mesh_file_hashes(case_dir, case_dir.name)
+    before_hashes = _mesh_file_hashes(
+        case_dir, case_dir.name, scan_budget=scan_budget,
+    )
     if not set(_REQUIRED).issubset(before_hashes):
         raise ValueError("OpenFOAM polyMesh is missing required source files")
 
@@ -334,7 +341,9 @@ def screen_ascii_polymesh(
         validate_generated_boundary_locations(
             ordered_points, ordered_faces, patches, configuration=configuration,
         )
-    if _mesh_file_hashes(case_dir, case_dir.name) != before_hashes:
+    if _mesh_file_hashes(
+        case_dir, case_dir.name, scan_budget=scan_budget,
+    ) != before_hashes:
         raise ValueError("PolyMesh evidence changed during independent inspection")
     return {
         "cells": expected_cells, "points": len(vertices_raw),
@@ -367,6 +376,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
     except (OSError, ValueError, TypeError, KeyError) as exc:
         report["findings"].append("invalid_source_family:" + type(exc).__name__)
         return report
+    mesh_scan_budget = _MeshTreeScanBudget()
     for key in _cases():
         case_dir = root / key
         if (root / key.split("/")[0]).is_symlink() or case_dir.is_symlink():
@@ -387,6 +397,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
                 expected_vertices=source_geometry["vertices_m"],
                 expected_cell_signatures=source_geometry["hex_cells"],
                 expected_boundary_faces=source_geometry["boundary_faces"],
+                scan_budget=mesh_scan_budget,
             )
             for patch_name in ("inlet", "outlet"):
                 actual = metrics["patch_face_counts"][patch_name]
@@ -413,7 +424,9 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             }
     # Avoid promoting an incomplete, tampered or unsigned solver receipt.
     from .cfd_grid_receipt import verify_grid_run_evidence
-    integrity = verify_grid_run_evidence(root)
+    integrity = verify_grid_run_evidence(
+        root, scan_budget=mesh_scan_budget,
+    )
     if integrity["status"] != "execution_logs_integrity_verified_requires_scientific_review":
         report["findings"].append("execution_receipt_not_integrity_verified")
     if not report["findings"] and len(report["cases"]) == len(_cases()):

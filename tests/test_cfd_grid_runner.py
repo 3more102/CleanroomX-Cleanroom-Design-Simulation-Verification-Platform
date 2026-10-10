@@ -1038,6 +1038,37 @@ def test_generated_polymesh_tree_depth_is_bounded(generated, monkeypatch):
         runner._verify_runtime_source_tree(workdir, key)
 
 
+def test_grid_run_shares_entry_budget_across_mesh_safety_and_hash_scans(
+    generated, monkeypatch
+):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    case_dir = generated / key
+    calls = fake_tools(monkeypatch)
+    run_tool = runner.subprocess.run
+
+    def create_multi_file_mesh(command, **kwargs):
+        result = run_tool(command, **kwargs)
+        if Path(command[0]).name == "blockMesh" and kwargs["cwd"] == case_dir:
+            mesh = case_dir / "constant/polyMesh"
+            mesh.mkdir()
+            (mesh / "points").write_text("SYNTHETIC points")
+            (mesh / "faces").write_text("SYNTHETIC faces")
+        return result
+
+    monkeypatch.setattr(runner, "_MAX_MESH_TREE_ENTRIES", 3)
+    monkeypatch.setattr(runner.subprocess, "run", create_multi_file_mesh)
+    report = run_grid_family(generated, timeout_seconds=60)
+
+    first = report["cases"][key]
+    assert report["status"] == "incomplete"
+    assert first["status"] == "execution_failed"
+    assert first["stages"][0]["status"] == "source_drift"
+    assert calls == [(key, "blockMesh")]
+    assert report["cases"]["configuration_1/medium"]["status"] == "not_run"
+
+
 def test_runtime_source_directory_enumeration_is_bounded(generated, monkeypatch):
     import cleanroomx.cfd_grid_runner as runner
 

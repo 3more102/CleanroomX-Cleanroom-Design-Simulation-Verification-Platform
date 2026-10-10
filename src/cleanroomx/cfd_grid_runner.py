@@ -18,7 +18,7 @@ from .persistence import _stable_file_identity, _stable_file_path_matches_opened
 from .cfd_grid_family import LEVELS, SCHEMA as FAMILY_SCHEMA
 from .cfd_study import CONFIGURATIONS
 
-RUN_SCHEMA = "cleanroomx.cfd-grid-run.v1"
+RUN_SCHEMA = "cleanroomx.cfd-grid-run.v2"
 STAGES = ("blockMesh", "checkMesh", "simpleFoam")
 INPUTS = (
     "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
@@ -211,6 +211,47 @@ def _verify_runtime_source_tree(workdir: Path, key: str) -> None:
             raise ValueError(f"Unexpected solver source directory entries: {key}/{folder}")
 
 
+def _mesh_file_hashes(workdir: Path, key: str) -> dict[str, str]:
+    """Bind the final local polyMesh file bytes, without assessing mesh quality.
+
+    This captures solver-generated output that is intentionally absent from
+    the immutable 72-input manifest. The caller must preserve these digests
+    in the execution receipt and recheck them during offline verification.
+    """
+    mesh = workdir / "constant" / "polyMesh"
+    if mesh.is_symlink() or (mesh.exists() and not mesh.is_dir()):
+        raise ValueError(f"Unsafe generated mesh root: {key}/constant/polyMesh")
+    if not mesh.exists():
+        return {}
+    files: dict[str, str] = {}
+    total_bytes = 0
+
+    def _walk_error(exc: OSError) -> None:
+        raise ValueError(f"Unreadable mesh output: {key}/constant/polyMesh") from exc
+
+    for parent, directories, filenames in os.walk(
+        mesh, topdown=True, followlinks=False, onerror=_walk_error,
+    ):
+        for directory in directories:
+            entry = Path(parent) / directory
+            if entry.is_symlink() or not entry.is_dir():
+                raise ValueError(f"Unsafe mesh subdirectory: {key}/{entry.relative_to(workdir)}")
+        for filename in filenames:
+            entry = Path(parent) / filename
+            if entry.is_symlink() or not entry.is_file() or entry.stat().st_nlink != 1:
+                raise ValueError(f"Unsafe generated mesh file: {key}/{entry.relative_to(workdir)}")
+            relative = entry.relative_to(mesh).as_posix()
+            if len(files) >= 4096:
+                raise ValueError(f"Too many generated mesh files: {key}")
+            total_bytes += entry.stat().st_size
+            if total_bytes > 1_073_741_824:
+                raise ValueError(f"Mesh output exceeds 1 GiB evidence limit: {key}")
+            files[relative] = _hash(entry)
+    if mesh.is_symlink() or not mesh.is_dir():
+        raise ValueError(f"Generated mesh root changed while hashing: {key}")
+    return dict(sorted(files.items()))
+
+
 def _verify_stage_source_snapshot(
     root: Path, key: str, manifest_sha: str, expected_hashes: dict,
 ) -> None:
@@ -376,7 +417,7 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
         "status": "incomplete",
         "engineering_review": "BLOCKED",
         "physical_validation": "not_performed",
-        "cases": {case: {"status": "not_run", "stages": []} for case in cases},
+        "cases": {case: {"status": "not_run", "stages": [], "mesh_files": {}} for case in cases},
         "warning": "Solver execution is not residual convergence, mesh independence, physical validation or certification",
     }
     _write_receipt(root, report)
@@ -427,6 +468,14 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             _write_receipt(root, report)
             if outcome != "completed":
                 break
+        # Capture the bytes of the final mesh after the last attempted stage.
+        # A compromised tree must not produce an unqualified green receipt.
+        try:
+            case["mesh_files"] = _mesh_file_hashes(workdir, key)
+        except (OSError, ValueError):
+            if case["stages"]:
+                case["stages"][-1]["status"] = "source_drift"
+            case["mesh_files"] = {}
         case["status"] = (
             "executed_requires_convergence_review"
             if len(case["stages"]) == len(STAGES)

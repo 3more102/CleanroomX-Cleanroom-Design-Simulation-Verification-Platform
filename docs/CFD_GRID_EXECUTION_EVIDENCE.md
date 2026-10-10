@@ -370,6 +370,16 @@ and [OpenFOAM mesh validity constraints](https://www.openfoam.com/documentation/
 
 ## CI-backed OpenFOAM v10 smoke run
 
+A real Foundation v10 CI run on 2026-10-10 successfully executed `blockMesh`
+and `checkMesh` for all nine generated cases, but each `simpleFoam` case
+failed at its first time step with missing `divSchemes` entry
+`div((nuEff*dev2(T(grad(U)))))`. The generator now emits
+`div((nuEff*dev2(T(grad(U))))) Gauss linear;`, matching the
+[OpenFOAM Foundation v10 simpleFoam tutorial fvSchemes](https://github.com/OpenFOAM/OpenFOAM-10/blob/master/tutorials/incompressible/simpleFoam/drivaerFastback/system/fvSchemes).
+The prior failure is preserved in Actions run `38069650896` and **does not**
+count as a successful solve. The change is a solver dictionary correction,
+not a scientific convergence or physical-validation claim.
+
 `.github/workflows/cfd-openfoam-grid.yml` runs for relevant pull request changes
 and can also be started with `workflow_dispatch`. On Ubuntu 22.04 it installs
 OpenFOAM Foundation v10, generates the example family below, executes all nine

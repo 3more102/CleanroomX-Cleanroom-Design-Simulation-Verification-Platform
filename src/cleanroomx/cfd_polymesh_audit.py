@@ -16,6 +16,7 @@ from .strict_json import load_strict_json_snapshot
 from .cfd_polymesh_geometry import (
     validate_hex_face_geometry, validate_generated_boundary_locations,
 )
+from .cfd_checkmesh_log import screen_checkmesh_log
 
 
 SCHEMA = "cleanroomx.cfd-polymesh-screen.v1"
@@ -290,6 +291,14 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
                 declared = manifest["case_inputs"][key]["mesh"][patch_name + "_face_count"]
                 if actual != declared:
                     raise ValueError("Generated polyMesh boundary face count differs from metadata")
+            log_screen = screen_checkmesh_log(
+                case_dir / "checkMesh.log",
+                expected_cells=metrics["cells"],
+                expected_points=metrics["points"],
+                expected_faces=metrics["faces"],
+                expected_internal_faces=metrics["internal_faces"],
+            )
+            metrics["checkmesh_log"] = log_screen["status"]
             report["cases"][key] = metrics
         except (OSError, ValueError) as exc:
             report["findings"].append("invalid_or_missing_polymesh:" + key + ":" + type(exc).__name__)

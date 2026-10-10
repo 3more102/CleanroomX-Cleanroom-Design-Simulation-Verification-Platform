@@ -59,10 +59,9 @@ jobs:
           mkdir -p "$version_bin"
           cat > "$version_bin/foamVersion" <<'EOF'
           #!/usr/bin/env bash
-          set -eo pipefail
-          source /opt/openfoam10/etc/bashrc
+          set -euo pipefail
           if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
-            echo "Expected OpenFOAM Foundation v10 environment" >&2
+            printf 'Expected inherited OpenFOAM Foundation v10 environment; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
             exit 1
           fi
           echo "$WM_PROJECT_VERSION"
@@ -70,7 +69,21 @@ jobs:
           chmod 0755 "$version_bin/foamVersion"
           export PATH="$version_bin:$PATH"
 
-          # Capture provenance even when grid-run fails before any solver stage.
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          # The runner's version subprocess must return an unambiguous Foundation v10 token.
+          set +e
+          version_probe_output="$(foamVersion 2>&1)"
+          version_probe_rc=$?
+          set -e
+          version_probe_last="$(printf '%s\n' "$version_probe_output" | tail -n 1)"
+          if [[ "$version_probe_rc" -ne 0 || "$version_probe_last" != "10" ]]; then
+            printf 'OpenFOAM version probe failed: exit=%s; expected terminal token 10\n' "$version_probe_rc" >&2
+            printf '%s\n' "$version_probe_output" | tail -n 8 | cut -c 1-200 >&2
+            exit 1
+          fi
+          for tool in blockMesh checkMesh simpleFoam; do
+            command -v "$tool" >/dev/null || { printf 'Missing OpenFOAM executable: %s\n' "$tool" >&2; exit 1; }
+          done
           {
             echo "github_sha=$GITHUB_SHA"
             echo "workflow_run_id=$GITHUB_RUN_ID"
@@ -80,11 +93,10 @@ jobs:
             dpkg-query -W openfoam10
             echo "WM_PROJECT=${WM_PROJECT:-unknown}"
             echo "WM_PROJECT_VERSION=${WM_PROJECT_VERSION:-unknown}"
+            echo "foam_version_probe=$version_probe_last"
           } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
-          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
-          # Always attempt both integrity screens after a failed real run, keeping
-          # their actual outcomes; never turn a partial run into a green check.
+          # Do not mask any failure; preserve all three gate exit codes.
           set +e
           cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
           run_rc=$?
@@ -96,6 +108,13 @@ jobs:
           printf 'grid_run=%s\ngrid_verify=%s\ngrid_mesh_audit=%s\n' \
             "$run_rc" "$verify_rc" "$mesh_audit_rc" \
             | tee "$RUNNER_TEMP/openfoam-v10-exit-codes.txt"
+          if [[ "$run_rc" -ne 0 ]]; then
+            echo "grid-run failed (exit $run_rc); solver/checkMesh stage log tails:" >&2
+            while IFS= read -r log; do
+              echo "----- $log -----"
+              tail -n 80 "$log" || true
+            done < <(find "$family" -maxdepth 5 -type f \( -name "blockMesh.log" -o -name "checkMesh.log" -o -name "simpleFoam.log" \) -print | sort)
+          fi
           test "$run_rc" -eq 0 && test "$verify_rc" -eq 0 && test "$mesh_audit_rc" -eq 0
 
       - name: Pack portable execution evidence

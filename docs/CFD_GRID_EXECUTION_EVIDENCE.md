@@ -380,6 +380,8 @@ result fails the workflow. The workflow retries transient download failures
 while installing the official OpenFOAM Foundation v10 package, which depends
 on a large ParaView download. This does not change the solver version.
 
+Before generating cases, the workflow independently exercises the Foundation v10 executable version probe required by `grid-run`, expects a terminal token of `10`, and checks the three solver executables in `PATH`. Failure output is bounded in the Actions log. After a failed run, the workflow also prints up to 80 lines of each retained stage log to aid debugging. These diagnostics do not establish numerical convergence or physical cleanroom validation.
+
 The workflow packs the generated family, OpenFOAM version and command exit codes
 in `openfoam-v10-grid-evidence.tar.gz` (retained for 14 days). The TAR format
 is deliberate: GitHub directory artifacts can omit hidden entries and empty

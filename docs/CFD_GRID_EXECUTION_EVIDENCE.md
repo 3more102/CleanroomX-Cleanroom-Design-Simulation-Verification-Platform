@@ -377,9 +377,12 @@ cases through `blockMesh`, `checkMesh`, and `simpleFoam`, then runs
 `grid-verify` and `grid-mesh-audit`. The Actions artifact retains the OpenFOAM
 version and a TAR archive of the generated family for **90 days**, including
 partial evidence from failed runs. A TAR archive is necessary because the
-normal GitHub directory uploader does not preserve the hidden
-`.grid_run_evidence.json` receipt or the empty `.grid_run_reserved`
-directory reliably. These are required by the read-only receipt verifier.
+normal GitHub directory uploader does not preserve the empty
+`.grid_run_reserved/` directory or interrupted-run hidden staging file
+`.grid_run_evidence.json.tmp` reliably. The durable receipt is the **visible**
+`grid_run_evidence.json`; its presence and digest are checked separately
+by `grid-verify`. The TAR preserves both the final receipt and the exact
+directory structure, including evidence from incomplete executions.
 
 The workflow records the GitHub commit/run ID, Linux distribution and OpenFOAM package version in `openfoam-v10-environment.txt`, and separately records OpenFOAM environment initialization. It checks that
 `foamVersion`, `blockMesh`, `checkMesh`, and `simpleFoam` are actually
@@ -399,9 +402,13 @@ a restricted executable adapter in the runner's temporary directory. The
 adapter sources the **installed** Foundation v10 environment, requires
 `WM_PROJECT=OpenFOAM` and `WM_PROJECT_VERSION=10`, and invokes the real
 shell function. It must produce exactly the same output as a direct function
-call before being added to `PATH`. The adapter script and its SHA-256 checksum
-are included in the Actions artifact. This is an interoperability shim,
-**not** independent attestation of an OpenFOAM binary or scientific validity.
+call before being added to `PATH`. The real Foundation helper writes the version to **stderr**, so the
+adapter redirects that original output to stdout for the Python subprocess
+without fabricating a version. It also tolerates environment sourcing before
+enforcing shell error exit, preserving the actual source return code. The
+adapter script and its SHA-256 checksum are included in the Actions artifact.
+This is an interoperability shim, **not** independent attestation of an
+OpenFOAM binary or scientific validity.
 If either version check fails, no CFD solver stage is launched.
 
 Even when `grid-run` fails, CI separately attempts read-only `grid-verify`

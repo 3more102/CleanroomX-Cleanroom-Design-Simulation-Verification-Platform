@@ -90,3 +90,49 @@ def validate_hex_face_geometry(
             if (not math.isfinite(neighbour_projection)
                     or neighbour_projection >= -area_twice * max_edge * 1e-11):
                 raise ValueError("PolyMesh internal face winding does not face into neighbour")
+
+
+def validate_generated_boundary_locations(
+    points: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int, int]],
+    patches: dict[str, tuple[int, int]],
+    *,
+    configuration: int,
+) -> None:
+    """Screen the generated cleanroom's expected inlet/outlet planes.
+
+    CleanroomX puts supply on the room ceiling in all three configurations;
+    configuration 1/2 exhaust at an x-side wall, 3 at the floor. This
+    checks patch *placement*, not airflow boundary values or CFD validity.
+    """
+    if configuration not in (1, 2, 3):
+        raise ValueError("Unknown cleanroom configuration for mesh boundary")
+    bounds = [
+        (min(p[axis] for p in points), max(p[axis] for p in points))
+        for axis in range(3)
+    ]
+    if any(lo >= hi for lo, hi in bounds):
+        raise ValueError("Degenerate generated polyMesh room bounds")
+
+    def on_plane(face_index: int, axis: int, side: str) -> bool:
+        low, high = bounds[axis]
+        target = low if side == "min" else high
+        tolerance = (high-low) * 1e-8
+        return all(abs(points[label][axis] - target) <= tolerance
+                   for label in faces[face_index])
+
+    for patch_name in ("inlet", "outlet"):
+        start, count = patches[patch_name]
+        for face_index in range(start, start + count):
+            if patch_name == "inlet":
+                correct = on_plane(face_index, 2, "max")
+            elif configuration == 3:
+                correct = on_plane(face_index, 2, "min")
+            else:
+                correct = (on_plane(face_index, 0, "min")
+                           or on_plane(face_index, 0, "max"))
+            if not correct:
+                raise ValueError(
+                    "Generated polyMesh " + patch_name +
+                    " face does not occupy expected room boundary plane"
+                )

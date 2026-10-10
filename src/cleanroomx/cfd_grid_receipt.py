@@ -164,6 +164,14 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     # independent mesh executions. This is a replay screen, not proof that
     # distinct logs came from distinct runs.
     solver_log_hashes: dict[str, str] = {}
+    # A byte-identical *complete* generated mesh snapshot reused between
+    # levels of one configuration cannot substantiate distinct refinement.
+    # Do not compare across configurations: different boundary conditions
+    # can legitimately share the same geometric mesh. Empty snapshots have
+    # no mesh evidence to compare and are handled by scientific review.
+    mesh_snapshots_by_configuration: dict[
+        str, dict[tuple[tuple[str, str], ...], str]
+    ] = {}
     # Cases execute in deterministic order. Once one is not_run or running,
     # no later case can have started; a crashed run has one active prefix.
     inactive_suffix = False
@@ -199,6 +207,17 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             else:
                 if current_mesh != recorded_mesh:
                     findings.append(f"mesh_output_digest_mismatch:{key}")
+                elif current_mesh:
+                    config = key.split("/", 1)[0]
+                    fingerprint = tuple(sorted(current_mesh.items()))
+                    snapshots = mesh_snapshots_by_configuration.setdefault(config, {})
+                    previous = snapshots.get(fingerprint)
+                    if previous is not None:
+                        findings.append(
+                            f"replayed_mesh_output_across_grids:{key}:{previous}"
+                        )
+                    else:
+                        snapshots[fingerprint] = key
         if inactive_suffix and data["status"] != "not_run":
             findings.append(f"out_of_sequence_case_state:{key}")
         if data["status"] in ("running", "not_run"):

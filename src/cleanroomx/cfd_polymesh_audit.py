@@ -354,6 +354,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             source_geometry = verify_generated_blockmesh_source(
                 case_dir / "system/blockMeshDict",
                 expected_cells=declared_cells, capture_vertices=True,
+                expected_configuration=manifest["case_inputs"][key]["configuration"],
             )
             metrics = screen_ascii_polymesh(
                 case_dir,

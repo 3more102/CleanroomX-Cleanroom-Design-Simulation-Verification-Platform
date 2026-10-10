@@ -138,6 +138,82 @@ jobs:
           fi
           cleanroomx-cfd-pipeline grid-verify "$family"
           cleanroomx-cfd-pipeline grid-mesh-audit "$family"
+          python - "$family" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" <<'PY'
+          import hashlib
+          import json
+          import re
+          import sys
+          from collections import defaultdict
+          from pathlib import Path
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          receipt = json.loads((root / "grid_run_evidence.json").read_text(encoding="utf-8"))
+          expected = {}
+          for case in receipt.get("cases", {}).values():
+              for stage in case.get("stages", []):
+                  if stage.get("command") == "simpleFoam":
+                      expected[stage.get("log")] = stage.get("log_sha256")
+          logs = sorted(root.glob("configuration_*/**/simpleFoam.log"))
+          if len(logs) != 9 or len(expected) != 9:
+              raise SystemExit("Expected nine simpleFoam logs tied to the grid-run receipt")
+
+          summary = []
+          def emit(line):
+              print(line)
+              summary.append(line)
+
+          for path in logs:
+              if path.is_symlink():
+                  raise SystemExit("Refusing symlinked simpleFoam log")
+              resolved = path.resolve(strict=True)
+              if not resolved.is_relative_to(root) or not resolved.is_file():
+                  raise SystemExit("simpleFoam log escaped the generated case family")
+              relative = path.relative_to(root).as_posix()
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if expected.get(relative) != digest:
+                  raise SystemExit("simpleFoam log digest differs from grid-run receipt: " + relative)
+              lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+              times = []
+              residuals = defaultdict(list)
+              continuity = []
+              convergence = []
+              current_time = "?"
+              for line in lines:
+                  time_match = re.match(r"^\s*Time\s*=\s*(\S+)", line)
+                  if time_match:
+                      current_time = time_match.group(1)
+                      times.append(current_time)
+                  solve_match = re.search(
+                      r"Solving for\s+([A-Za-z][A-Za-z0-9_]*),\s*Initial residual\s*=\s*([^,]+),\s*Final residual\s*=\s*([^,]+)",
+                      line,
+                  )
+                  if solve_match:
+                      field, initial, final = solve_match.groups()
+                      residuals[field].append(
+                          f"{current_time}: {initial.strip()} -> {final.strip()}"
+                      )
+                  if "continuity errors" in line:
+                      continuity.append(line.strip())
+                  if "converg" in line.lower():
+                      convergence.append(line.strip())
+              terminal = next((line.strip() for line in reversed(lines) if line.strip()), "")
+              emit(f"--- {relative} sha256={digest} ---")
+              emit(
+                  f"Time entries={len(times)} first={times[0] if times else 'none'} "
+                  f"last={times[-1] if times else 'none'} terminal={terminal or 'empty'}"
+              )
+              emit(
+                  "Convergence messages: " + " | ".join(convergence[-3:])
+                  if convergence else "Convergence messages: none found"
+              )
+              for field, rows in sorted(residuals.items()):
+                  emit(f"{field} last residual pairs: " + " | ".join(rows[-5:]))
+              if continuity:
+                  emit("Continuity: " + " | ".join(continuity[-3:]))
+              else:
+                  emit("Continuity: no lines found")
+          Path(sys.argv[2]).write_text("\n".join(summary) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload execution evidence
         if: always()
@@ -147,5 +223,6 @@ jobs:
           path: |
             ${{ runner.temp }}/cleanroomx-cfd-grid-family
             ${{ runner.temp }}/openfoam-v10-version.txt
+            ${{ runner.temp }}/simpleFoam-residual-summary.txt
           if-no-files-found: warn
           retention-days: 14

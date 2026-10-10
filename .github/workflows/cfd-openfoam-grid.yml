@@ -51,7 +51,6 @@ jobs:
             printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
             exit "$source_rc"
           fi
-          set -u
           {
             echo "github_sha=$GITHUB_SHA"
             echo "workflow_run_id=$GITHUB_RUN_ID"

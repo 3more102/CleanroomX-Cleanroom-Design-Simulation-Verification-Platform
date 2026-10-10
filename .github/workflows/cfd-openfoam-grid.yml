@@ -46,13 +46,13 @@ jobs:
           source /opt/openfoam10/etc/bashrc
           set -u
           {
-  printf 'github_sha=%s\\n' "$GITHUB_SHA"
-  printf 'workflow_run_id=%s\\n' "$GITHUB_RUN_ID"
-  cat /etc/os-release
-  uname -a
-  dpkg-query -W -f='${Package} ${Version}\\n' openfoam10
-  foamVersion
-} | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
+            echo "github_sha=$GITHUB_SHA"
+            echo "workflow_run_id=$GITHUB_RUN_ID"
+            cat /etc/os-release
+            uname -a
+            dpkg-query -W openfoam10
+            foamVersion
+          } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
           cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600

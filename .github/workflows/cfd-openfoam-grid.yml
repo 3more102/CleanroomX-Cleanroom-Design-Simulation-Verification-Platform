@@ -37,7 +37,7 @@ jobs:
           sudo wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key
           sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
           sudo apt-get update
-          sudo apt-get install -y openfoam10
+          sudo apt-get install --no-install-recommends -y openfoam10
           test -f /opt/openfoam10/etc/bashrc
 
       - name: Run and screen the synthetic nine-case family

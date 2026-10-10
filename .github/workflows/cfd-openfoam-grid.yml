@@ -37,7 +37,7 @@ jobs:
           sudo wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key
           sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y openfoam10
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=120 -o Acquire::https::Timeout=120 install --no-install-recommends -y openfoam10
           test -f /opt/openfoam10/etc/bashrc
 
       - name: Run and screen the synthetic nine-case family
@@ -45,7 +45,14 @@ jobs:
           set -eo pipefail
           source /opt/openfoam10/etc/bashrc
           set -u
-          foamVersion | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
+          {
+  printf 'github_sha=%s\\n' "$GITHUB_SHA"
+  printf 'workflow_run_id=%s\\n' "$GITHUB_RUN_ID"
+  cat /etc/os-release
+  uname -a
+  dpkg-query -W -f='${Package} ${Version}\\n' openfoam10
+  foamVersion
+} | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
           cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600

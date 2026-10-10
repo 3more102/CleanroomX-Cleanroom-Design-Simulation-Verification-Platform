@@ -176,6 +176,7 @@ def _verify_generated_inputs(root: Path) -> str:
     # self-described mesh-cell count in the family manifest. The source
     # parser is narrowly scoped to CleanroomX's generated ASCII format.
     source_axis_cells = {}
+    source_room_bounds = {}
     for key in sorted(cases):
         mesh_source = root / key / "system/blockMeshDict"
         source_geometry = verify_generated_blockmesh_source(
@@ -185,11 +186,21 @@ def _verify_generated_inputs(root: Path) -> str:
         if _hash(mesh_source) != manifest["files"][f"{key}/system/blockMeshDict"]:
             raise ValueError("Generated blockMesh source drifted during parsing: " + key)
         source_axis_cells[key] = source_geometry["axis_cell_counts"]
+        source_room_bounds[key] = source_geometry["bounds_m"]
 
     # Manifest totals cannot distinguish, e.g., 7x8x9 from 7x9x8.
     # Use source-verified Cartesian axes to require the same grid for all
     # ventilation configurations and strictly increasing *each* axis
     # through coarse -> medium -> fine. This does not prove CFD convergence.
+    # All nine cases are generated from the SAME room dimensions. A
+    # self-rehashed manifest must not allow an isolated translated/scaled
+    # model to masquerade as a refinement or ventilation comparison.
+    # The CleanroomX generator anchors all three axes at zero metres.
+    expected_bounds = source_room_bounds["configuration_1/coarse"]
+    if any(low != 0.0 for low, _ in expected_bounds):
+        raise ValueError("Nine-case generated room origin is not canonical")
+    if any(bounds != expected_bounds for bounds in source_room_bounds.values()):
+        raise ValueError("Nine-case generated room bounds differ across cases")
     reference_axis_levels = None
     for configuration in (1, 2, 3):
         axis_levels = tuple(

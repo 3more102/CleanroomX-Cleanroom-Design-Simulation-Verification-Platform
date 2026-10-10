@@ -1,0 +1,228 @@
+name: OpenFOAM Foundation v10 grid execution
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cfd-openfoam-grid.yml"
+      - "docs/CFD_GRID_EXECUTION_EVIDENCE.md"
+      - "examples/cfd_grid_family.example.json"
+      - "pyproject.toml"
+      - "src/cleanroomx/cfd_*.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cfd-openfoam-v10-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  openfoam-v10-grid:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install CleanroomX CFD package
+        run: python -m pip install -e ".[dev,cfd]"
+
+      - name: Install OpenFOAM Foundation v10
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common wget
+          sudo wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key
+          sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
+          sudo apt-get update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=120 -o Acquire::https::Timeout=120 install --no-install-recommends -y openfoam10
+          test -f /opt/openfoam10/etc/bashrc
+
+      - name: Run and screen the synthetic nine-case family
+        run: |
+          set -eo pipefail
+          set +e
+          source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
+
+          # Foundation's foamVersion helper is a sourced shell function,
+          # while CleanroomX probes an executable by this name. Report the
+          # version only after validating the installed environment.
+          version_bin="$RUNNER_TEMP/openfoam-version-bin"
+          mkdir -p "$version_bin"
+          cat > "$version_bin/foamVersion" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            printf 'Expected inherited OpenFOAM Foundation v10 environment; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            exit 1
+          fi
+          echo "$WM_PROJECT_VERSION"
+          EOF
+          chmod 0755 "$version_bin/foamVersion"
+          export PATH="$version_bin:$PATH"
+
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
+          set +e
+          grid_run_output="$RUNNER_TEMP/grid-run-output.txt"
+          set +e
+          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 \
+            >"$grid_run_output" 2>&1
+          grid_run_rc=$?
+          set -e
+          cat "$grid_run_output"
+          if [[ "$grid_run_rc" -ne 0 ]]; then
+            python - "$family" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          receipt_path = root / "grid_run_evidence.json"
+          try:
+              report = json.loads(receipt_path.read_text(encoding="utf-8"))
+          except (OSError, ValueError, UnicodeError) as exc:
+              print(f"Could not inspect grid-run receipt: {type(exc).__name__}", file=sys.stderr)
+              raise SystemExit(0)
+
+          seen = set()
+          for case_name, case in report.get("cases", {}).items():
+              for stage in case.get("stages", []):
+                  if stage.get("status") == "completed" and stage.get("returncode") == 0:
+                      continue
+                  relative = stage.get("log")
+                  if not isinstance(relative, str):
+                      print(f"--- failed stage without a log path: {case_name}/{stage.get('command')} ---")
+                      continue
+                  candidate = root / relative
+                  try:
+                      if candidate.is_symlink():
+                          raise ValueError("log path is a symlink")
+                      log_path = candidate.resolve(strict=True)
+                      if not log_path.is_relative_to(root) or not log_path.is_file():
+                          raise ValueError("log path is outside the case family")
+                      size = log_path.stat().st_size
+                      with log_path.open("rb") as stream:
+                          stream.seek(max(0, size - 32768))
+                          tail = stream.read().decode("utf-8", "replace").splitlines()[-80:]
+                  except (OSError, ValueError) as exc:
+                      print(f"--- cannot read failed log {case_name}/{relative}: {type(exc).__name__} ---")
+                      continue
+                  digest = stage.get("log_sha256")
+                  if isinstance(digest, str) and digest in seen:
+                      continue
+                  if isinstance(digest, str):
+                      seen.add(digest)
+                  print(f"--- failed log {case_name}/{stage.get('command')} rc={stage.get('returncode')} bytes={size} ---")
+                  print("\n".join(tail) if tail else "<empty log>")
+          PY
+            exit "$grid_run_rc"
+          fi
+          grid_run_rc=$?
+          set -e
+          if [[ "$grid_run_rc" -ne 0 ]]; then
+            echo "grid-run failed with exit $grid_run_rc; OpenFOAM solver log tails:"
+            while IFS= read -r log; do
+              echo "----- $log -----"
+              tail -n 80 "$log" || true
+            done < <(find "$family" -type f -name simpleFoam.log -print | sort)
+            exit "$grid_run_rc"
+          fi
+          cleanroomx-cfd-pipeline grid-verify "$family"
+          cleanroomx-cfd-pipeline grid-mesh-audit "$family"
+          python - "$family" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" <<'PY'
+          import hashlib
+          import json
+          import re
+          import sys
+          from collections import defaultdict
+          from pathlib import Path
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          receipt = json.loads((root / "grid_run_evidence.json").read_text(encoding="utf-8"))
+          expected = {}
+          for case in receipt.get("cases", {}).values():
+              for stage in case.get("stages", []):
+                  if stage.get("command") == "simpleFoam":
+                      expected[stage.get("log")] = stage.get("log_sha256")
+          logs = sorted(root.glob("configuration_*/**/simpleFoam.log"))
+          if len(logs) != 9 or len(expected) != 9:
+              raise SystemExit("Expected nine simpleFoam logs tied to the grid-run receipt")
+
+          summary = []
+          def emit(line):
+              print(line)
+              summary.append(line)
+
+          for path in logs:
+              if path.is_symlink():
+                  raise SystemExit("Refusing symlinked simpleFoam log")
+              resolved = path.resolve(strict=True)
+              if not resolved.is_relative_to(root) or not resolved.is_file():
+                  raise SystemExit("simpleFoam log escaped the generated case family")
+              relative = path.relative_to(root).as_posix()
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if expected.get(relative) != digest:
+                  raise SystemExit("simpleFoam log digest differs from grid-run receipt: " + relative)
+              lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+              times = []
+              residuals = defaultdict(list)
+              continuity = []
+              convergence = []
+              current_time = "?"
+              for line in lines:
+                  time_match = re.match(r"^\s*Time\s*=\s*(\S+)", line)
+                  if time_match:
+                      current_time = time_match.group(1)
+                      times.append(current_time)
+                  solve_match = re.search(
+                      r"Solving for\s+([A-Za-z][A-Za-z0-9_]*),\s*Initial residual\s*=\s*([^,]+),\s*Final residual\s*=\s*([^,]+)",
+                      line,
+                  )
+                  if solve_match:
+                      field, initial, final = solve_match.groups()
+                      residuals[field].append(
+                          f"{current_time}: {initial.strip()} -> {final.strip()}"
+                      )
+                  if "continuity errors" in line:
+                      continuity.append(line.strip())
+                  if "converg" in line.lower():
+                      convergence.append(line.strip())
+              terminal = next((line.strip() for line in reversed(lines) if line.strip()), "")
+              emit(f"--- {relative} sha256={digest} ---")
+              emit(
+                  f"Time entries={len(times)} first={times[0] if times else 'none'} "
+                  f"last={times[-1] if times else 'none'} terminal={terminal or 'empty'}"
+              )
+              emit(
+                  "Convergence messages: " + " | ".join(convergence[-3:])
+                  if convergence else "Convergence messages: none found"
+              )
+              for field, rows in sorted(residuals.items()):
+                  emit(f"{field} last residual pairs: " + " | ".join(rows[-5:]))
+              if continuity:
+                  emit("Continuity: " + " | ".join(continuity[-3:]))
+              else:
+                  emit("Continuity: no lines found")
+          Path(sys.argv[2]).write_text("\n".join(summary) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload execution evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: "openfoam-v10-grid-evidence-${{ github.sha }}"
+          path: |
+            ${{ runner.temp }}/cleanroomx-cfd-grid-family
+            ${{ runner.temp }}/openfoam-v10-version.txt
+            ${{ runner.temp }}/simpleFoam-residual-summary.txt
+          if-no-files-found: warn
+          retention-days: 14

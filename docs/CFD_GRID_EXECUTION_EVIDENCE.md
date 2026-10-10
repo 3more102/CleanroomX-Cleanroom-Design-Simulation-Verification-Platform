@@ -36,13 +36,32 @@ cleanroomx-cfd-pipeline grid-run ./cfd_mesh_family --timeout-seconds 3600
 
 The executable first validates that the generation manifest lists exactly nine
 cases and all 72 expected generated inputs, and confirms input SHA-256
-digests and source containment. It also requires genuinely fresh case directories: only the eight
+digests and source containment. It rejects a manifest whose declared coarse,
+medium and fine total cell counts fail to increase strictly, or whose same-level
+counts disagree between the three ventilation configurations. These are checks
+on the *declared metadata*, not independent validation of the actual OpenFOAM
+mesh topology or boundary conditions. The preflight and read-only verifier also
+parse each CleanroomX-generated ASCII `system/blockMeshDict` source using a
+bounded, restricted grammar: a single vertex list, finite unique vertex
+coordinates, exactly the declared number of unique `hex` blocks, distinct
+in-range vertex references, the generator's unit subdivisions/grading,
+and (also in default, non-capturing preflight) exact exterior face
+membership for the generated inlet/outlet/walls boundary patches. The
+source screen refuses a missing, duplicated, internal or noncanonical
+boundary face even when the local manifest and source digest are
+self-rehashed. Full coordinates and patch signatures are only returned
+to independent mesh audit callers using `capture_vertices=True`.
+The check is repeated against the source digest after parsing. It rejects a
+forged self-rehashed dictionary declaring fewer/more blocks than the manifest,
+but does **not** parse general OpenFOAM dictionaries, independently verify
+geometrical/topological quality, prove actual generated polyMesh cell counts,
+or guarantee freedom from filesystem races. It also requires genuinely fresh case directories: only the eight
 manifest-bound input files in `0/`, `constant/`, and `system/` are
 permitted. For OpenFOAM **Foundation v10**, the case includes
 `constant/physicalProperties` (`viscosityModel constant` with `nu`) and
 `constant/momentumTransport` (`simulationType laminar`), rather than the
-pre-v10 dictionary names. This compatibility change is validated against
-published v10 documentation, but still requires a real OpenFOAM v10 smoke run. Hard-linked manifests and generated inputs are rejected even when their contents
+pre-v10 dictionary names. This compatibility change is validated against published v10 documentation
+and exercised by the CI-backed synthetic OpenFOAM v10 smoke run recorded below. Hard-linked manifests and generated inputs are rejected even when their contents
 match the expected SHA-256: an extra filesystem name could permit untracked
 writes from outside the family. The post-run verifier likewise rejects
 hard-linked execution receipts and stage logs. Both the runner and independent
@@ -91,11 +110,21 @@ case). It rechecks these immutable mesh bytes immediately before and after
 `checkMesh` and `simpleFoam`; any changes are rejected as source drift or
 a pre-stage execution blocker, never silently adopted as a new baseline.
 The read-only verifier recomputes the original hashes and rejects added, removed,
-or edited mesh files even if they remain ordinary nonlinked files. The mapping
+or edited mesh files even if they remain ordinary nonlinked files. For each
+ventilation configuration, it also flags *identical nonempty complete mesh
+snapshots* across coarse/medium/fine levels, even if their recorded digests
+match. Separate configurations may legitimately share geometric mesh bytes,
+so this replay screen is intentionally configuration-local. The mapping
 also covers nested directories; unsafe paths and aliases fail closed.
 The mapping may be empty if no mesh was produced, which is not a mesh-quality
 or mesh-generation acceptance verdict. v1 receipts lack this field and
 are rejected rather than silently treated as equivalent to v2 evidence.
+One scan budget is shared across all recursive mesh walks within one
+`grid-run`, `grid-verify`, or `grid-mesh-audit` invocation: at most 8,192
+entries total and directory nesting depth 64. The same budget covers safety
+walks and digest passes across the nine cases, so a caller cannot reset the
+entry cap by triggering another scan. Exceeding either limit fails the
+execution or offline screen closed.
 A successful hash comparison still cannot prove that recorded outputs came
 from an independent OpenFOAM process, or that numerical/physical CFD is valid.
 This is scoped to these source directories; other solver-generated output
@@ -160,13 +189,13 @@ cleanroomx-cfd-pipeline grid-verify ./cfd_mesh_family
 
 The `grid-verify` command checks the 72 generated input hashes, recorded manifest
 SHA-256, nine case records, each stage-log path/digest, the final generated
-polyMesh file digest mapping, process exit consistency,
-and deterministic case ordering. A `running` or `not_run` case cannot be
+polyMesh file digest mapping, complete-mesh replay within a configuration,
+process exit consistency, and deterministic case ordering. A `running` or `not_run` case cannot be
 followed by a later started case. The manifest preflight validates its v1
 status, specification digest shape, nine configuration metadata structures,
 positive mesh quantities, and explicitly non-certifying model limitations;
-fabricated certification fields are rejected.
-and the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
+fabricated certification fields are rejected. The verifier also checks
+the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
 or nonempty reservation markers fail the local evidence-integrity screen.
 A stage log present on disk but absent from its case's recorded stage list
 (for example, after an abrupt interruption between log creation and the next
@@ -174,7 +203,7 @@ receipt write) also fails verification as `unreceipted_stage_log`. Preserve
 both files for investigation; never delete a log to force a passing verdict.
 The verifier also rejects an uncommitted
 `.grid_run_evidence.json.tmp` staging file/directory/symlink and any
-unrecognized v1 receipt keys or rewritten warning text. These checks flag
+unrecognized v2 receipt keys or rewritten warning text. These checks flag
 inconsistent local evidence; they are not cryptographic authenticity.
 Missing/modified inputs or logs, symlinked logs, forged validation claims,
 byte-empty logs from completed stages, and byte-identical `simpleFoam` logs
@@ -200,3 +229,203 @@ copies and trusted timestamps/signatures where chain-of-custody is required.
 ## Concurrent execution reservation (2026-10-09)
 
 After validating the OpenFOAM executable version and before launching any stage, `grid-run` atomically creates the directory `.grid_run_reserved` inside the generated family. A second invocation cannot create that directory and is rejected without running a solver. This is a local filesystem coordination safeguard, **not** a distributed lock or an authenticated run identifier. The reservation is deliberately retained after success, failure or interruption; existing stage logs and the receipt remain the authoritative execution evidence. Do **not** delete the reservation to force an implicit restart. Instead archive and independently verify the entire original family, then generate a fresh family in a new directory for a new run attempt. The runner does not yet provide automatic recovery or cryptographically authenticated custody. No physical or numerical approval follows from a reservation or an exit-code-zero receipt.
+
+
+## Immediate checkMesh solver-launch guard (2026-10-10)
+
+The opt-in `grid-run` now checks the bounded local `checkMesh.log` verdict
+**before** launching `simpleFoam`. An explicit `Mesh OK.` followed by
+a terminal `End` is required; any `Failed N mesh checks.`, fatal/error
+diagnostic, missing verdict, ambiguity, or trailing output blocks that case,
+even when `checkMesh` exits with code zero. The runner records the
+original return code and SHA-256 log hash with `mesh_check_rejected`,
+skips dependent `simpleFoam`, and continues other independent cases.
+The immediate gate also requires one printed `cells: N` statistic matching
+the generated case manifest's declared cell total. A clean `Mesh OK.` for
+the wrong number of cells, duplicate cell statistics or absent cell count
+cannot launch `simpleFoam`. The independent verifier binds that comparison
+to re-hashed original manifest bytes, including when receipt/log digests
+were locally rewritten. This is declared-count integrity, not a
+polyMesh topology or independent physical mesh verification.
+
+The offline receipt verifier also checks that a recorded
+`mesh_check_rejected` is not contradictory with a clean log and that a
+completed `checkMesh` stage contains a clean verdict.
+
+This is a text-integrity safety gate, **not** a mesh-geometry screen,
+full OpenFOAM quality certification, solver convergence or physical cleanroom
+qualification. Independent mesh/statistic checks remain in
+`grid-mesh-audit`. The synthetic CI smoke run below exercised real OpenFOAM
+v10 but is not project-specific validation; no physical measurements were
+performed. Scientific release stays HOLD/BLOCKED.
+
+## Independent checkMesh log-to-mesh consistency gate (2026-10-10)
+
+The read-only `grid-mesh-audit` now also screens each case's recorded
+`checkMesh.log` after parsing its actual ASCII `polyMesh`. For all nine cases
+it requires one exact standalone `Mesh OK.` verdict, one terminal `End`,
+no reported `Failed N mesh checks.` or fatal/error diagnostics, and exactly
+one printed value for each of `points`, `faces`, `internal faces` and
+`cells`. Those values must equal the counts independently reconstructed
+from the corresponding `polyMesh` files. The log must be ordinary,
+unlinked, UTF-8 text within a 16 MiB bound and must remain hash-stable
+while screened. An external `checkMesh` exit code of zero is not treated
+as a substitute for its text verdict: OpenFOAM can print a failure count
+even when the utility exits successfully.
+
+The format screen supports the narrow single-time, Foundation-style
+`checkMesh` output expected from CleanroomX's controlled serial workflow.
+Other formats, multiple mesh-time analyses or missing count lines are
+reported as **unverified**, not silently accepted. Matching locally
+recorded log content still does not authenticate the tool, prove that
+OpenFOAM ran, establish mesh quality against independent thresholds,
+or establish convergence/physical performance. All test logs are
+**synthetic fixtures**. Scientific review remains **BLOCKED**.
+
+See the OpenFOAM Foundation `checkMesh` source for the distinct
+`Mesh OK.` and `Failed N mesh checks.` summary branches.
+
+## Independent ASCII polyMesh structural screening (2026-10-10)
+
+After preserving all nine **real** OpenFOAM mesh outputs, run:
+
+```bash
+cleanroomx-cfd-pipeline grid-mesh-audit ./cfd_mesh_family
+```
+
+This **read-only** command checks the existing execution receipt with
+`grid-verify` and screens each configuration/grid's actual generated
+`constant/polyMesh/points`, `faces`, `owner`, `neighbour` and
+`boundary` ASCII files. Unlike the input-only `blockMeshDict` screen,
+it compares **actual face and cell references** against the declared mesh
+cell count. It checks:
+
+- Properly bounded ASCII FoamFile and counted lists; reject binary/compressed,
+  missing, symlinked or otherwise unsupported mesh files.
+- Finite unique point coordinates, quadrilateral face vertices with valid
+  indices, distinct faces, and consistent owner/neighbour lists.
+- Exactly six faces per expected generated hexahedral cell and per-cell edge
+  multiplicity of two, an elementary **topological** closure check.
+- A single connected fluid-cell region (using only internal owner/neighbour
+  face adjacencies, not merely shared vertex positions) and the expected
+  `wall` / `patch` OpenFOAM boundary declarations.
+- No gaps/overlaps in the three inlet/outlet/walls boundary patch ranges,
+  and inlet/outlet face counts matching the manifest. For the generated layouts,
+  it also checks that supply faces are on the ceiling and exhaust faces lie on
+  side x-walls (configurations 1/2) or the floor (configuration 3); this
+  rejects correctly counted but incorrectly assigned boundary locations.
+- Exact source-to-output boundary patch membership for `inlet`, `outlet`
+  and `walls`. The restricted generated dictionary parser verifies each
+  patch face corresponds to one external block face; the solver mesh
+  audit then binds every face to its original patch using canonical
+  vertex identities. It detects inlet/wall face swaps on the same
+  ceiling, even when patch counts, plane locations, full vertex lists and
+  hexahedral cell membership are unchanged.
+- One-to-one hexahedral cell membership comparison: once source and output
+  vertex identities are matched, compare the set of eight corner vertices
+  for every generated hex block against each reconstructed `polyMesh`
+  cell, independent of face/point/cell ordering. This rejects changes
+  in cell membership even if all coordinates, outer bounds, counts and
+  individually valid cell geometry still match.
+- Signed cell volumes are accumulated from the owner-oriented faces (reversed
+  for each neighbour) using a cell-local reference point. Nonfinite or
+  nonpositive volumes fail the structural screen; the report records the
+  minimum and maximum volume in m³. Positivity is only an orientation and
+  degeneracy check; no CFD mesh-quality threshold is inferred.
+- Full source-to-output vertex-set consistency: the audited mesh must contain
+  each generated blockMesh vertex once, independent of OpenFOAM's point order.
+  Matching uses bounded three-axis coordinate tolerances (2e-6 of each room
+  span) and detects displaced interior vertices even when the room extents
+  and hexahedral topology still pass. This is an input/output consistency
+  check, not proof of numerical or physical accuracy.
+- A non-rewritten unit scale (`convertToMeters 1`) in the generated
+  `blockMeshDict`, and a coordinate-bound comparison against the actual
+  post-solver ASCII `polyMesh/points` extents. An otherwise connected,
+  well-oriented but rescaled or translated room fails this source-bound
+  comparison. The 2e-6 per-axis span tolerance covers ASCII roundoff;
+  it is a serialization tolerance, not a scientific or regulatory target.
+- Stable local mesh-file digests before/after inspection and a complete,
+  integrity-consistent previous execution receipt. Unsigned local hashes are
+  not independent source authentication.
+- Mesh output traversal shares an 8,192-entry and 64-directory-depth budget
+  across all recursive walks and repeated safety/hash passes in each
+  `grid-run`, `grid-verify`, or `grid-mesh-audit` invocation. Each case also
+  has a 4,096 regular-file and 1 GiB file-byte cap. Unexpected input-directory
+  entries fail as soon as the expected set is exceeded; links and nonregular
+  entries also fail closed.
+
+A fully screened nine-case family is labeled
+`mesh_structure_screened_requires_scientific_review` (CLI exit 0).
+Missing files, incomplete execution receipts, unsupported OpenFOAM formats or
+mismatched mesh topology are **not** accepted (exit 3). Unit tests construct
+**synthetic** ASCII meshes: they are parser regressions, not actual OpenFOAM
+runs, physical qualification or evidence of CFD correctness.
+
+**Limits:** The bounded parser intentionally accepts only the predictable,
+small, ASCII hexahedral meshes generated by the CleanroomX workflow.
+One shared budget caps recursive polyMesh walks at 8,192 total entries across
+all nine cases and repeated scans in a single `grid-run`, `grid-verify`, or
+`grid-mesh-audit` invocation; directory nesting is limited to 64 levels.
+Each case also has a 4,096 regular-file and 1 GiB aggregate-byte cap. The
+runner stops when an input directory contains more entries than its expected
+set, without enumerating an attacker-controlled remainder. The parser is not
+a full OpenFOAM parser or solver. The auditor additionally
+screens individual faces for zero area, nonplanarity and owner/neighbour
+normal direction (with a bounded numerical tolerance), and requires eight
+identified vertices per hexahedral cell, and positive signed cell volumes.
+These elementary geometric sanity checks cannot establish CFD-quality volume
+magnitudes, acceptable nonorthogonality, skewness, wall metrics, mass
+conservation, numerical convergence or cleanroom performance.
+Inspect real `checkMesh` logs, residuals, VTK fields, independent grid
+studies and measured data before any scientific or release decision.
+Scientific/physical review remains **BLOCKED**.
+
+Source: [OpenFOAM mesh files](https://doc.cfd.direct/openfoam/user-guide-v13/mesh-files)
+and [OpenFOAM mesh validity constraints](https://www.openfoam.com/documentation/user-guide/4-mesh-generation-and-conversion/4.1-mesh-description).
+
+## CI-backed OpenFOAM v10 smoke run
+
+`.github/workflows/cfd-openfoam-grid.yml` runs for relevant pull request changes
+and can also be started with `workflow_dispatch`. On Ubuntu 22.04 it installs
+OpenFOAM Foundation v10, generates the example family below, executes all nine
+cases through `blockMesh`, `checkMesh`, and `simpleFoam`, then runs
+`grid-verify` and `grid-mesh-audit`. The Actions artifact retains the OpenFOAM
+version, execution receipt, stage logs, and generated mesh files for 14 days,
+including partial evidence from failed runs.
+
+Successful evidence at PR head `d76cd056bcf606d3d397381faeb7e275deb37786` is retained in
+[GitHub Actions run #38070787995](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38070787995).
+All 27 `blockMesh`, `checkMesh`, and `simpleFoam` stages completed for the nine
+synthetic cases; `grid-verify` checked all nine cases and 27 logs, and
+`grid-mesh-audit` screened all nine generated ASCII meshes and matching
+`checkMesh` logs. These results demonstrate software execution and local
+evidence screening for the synthetic example.
+
+At exact PR head `70f2bb6108861d2a0300696cf7b850d5d4983db0`,
+[GitHub Actions run #38072422179](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38072422179)
+completed all 27 `blockMesh`, `checkMesh`, and `simpleFoam` stage invocations
+with exit code 0. Each of the nine `simpleFoam` logs has 600 time entries
+(1–600 s), ends with `End`, and reports `SIMPLE: Convergence criteria found`.
+The workflow summary labels each log with its SHA-256 and records residual
+and continuity samples, but does not compare them with project-defined
+acceptance criteria or assign a convergence verdict. `grid-verify` reported
+`execution_logs_integrity_verified_requires_scientific_review` for nine cases
+and 27 logs with no findings; `grid-mesh-audit` screened all nine meshes and
+matching `checkMesh` logs. Both reports retain engineering review
+`BLOCKED` and physical validation `not_performed`. These checks do not prove
+numerical convergence, mesh independence or physical performance.
+
+An earlier downloaded artifact from run
+[38071545159](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38071545159)
+omitted the empty hidden `.grid_run_reserved` directory. Offline
+`grid-verify` on that ZIP returned
+`missing_or_unsafe_execution_reservation`; its in-job check had passed before
+upload. The archive-preservation follow-up remains in separate draft PR #1300.
+
+The example specification is explicitly synthetic. A green workflow therefore
+demonstrates software integration with a real OpenFOAM v10 installation and
+local evidence/mesh screening for that synthetic case family. It does not
+establish convergence, independent mesh quality, real-room performance,
+physical correlation, or release readiness. Keep scientific review **BLOCKED**
+until project-specific inputs, numerical review, independent measurements, and
+all release evidence are available.

@@ -1,6 +1,7 @@
 """Grid-run receipts are software evidence, never physical CFD validation."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -49,6 +50,11 @@ def synthetic_processes(monkeypatch, *, failure=None):
             return SimpleNamespace(returncode=0, stdout="10\n", stderr="")
         case = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
         kwargs["stdout"].write(f"SYNTHETIC process fixture {case} {name}\n")
+        if name == "checkMesh":
+            expected_cells = json.loads((
+                kwargs["cwd"].parents[1] / "manifest.json"
+            ).read_text(encoding="utf-8"))["case_inputs"][case]["mesh_cells"]
+            kwargs["stdout"].write(f"cells: {expected_cells}\nMesh OK.\nEnd\n")
         return SimpleNamespace(
             returncode=1 if (case, name) == failure else 0
         )
@@ -108,6 +114,74 @@ def test_postrun_unmanifested_source_file_is_not_integrity_verified(
         "unexpected_or_unsafe_source_tree:configuration_3/medium:"
     ) for finding in report["findings"])
     assert report["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("tamper", [
+    "non_refining_grid_count", "inconsistent_configuration_grid"
+])
+def test_forged_manifest_refinement_still_fails_with_matching_receipt_hash(
+    grid_family, monkeypatch, tamper
+):
+    """A rewritten unsigned receipt cannot bypass structural grid preflight."""
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    manifest_path = grid_family / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    cases = manifest["case_inputs"]
+    if tamper == "non_refining_grid_count":
+        cases["configuration_1/fine"]["mesh_cells"] = (
+            cases["configuration_1/medium"]["mesh_cells"]
+        )
+    else:
+        cases["configuration_2/medium"]["mesh_cells"] += 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["source_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    checked = verify_grid_run_evidence(grid_family)
+    assert checked["status"] == "evidence_integrity_failed"
+    assert any(finding.startswith("source_manifest_or_inputs_invalid:")
+               for finding in checked["findings"])
+    assert checked["engineering_review"] == "BLOCKED"
+
+
+def test_rehashed_duplicate_hexahedron_fails_offline_source_integrity(
+    grid_family, monkeypatch
+):
+    """Rewriting the local manifest and receipt hashes cannot hide duplicate blocks."""
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    source_path = grid_family / relative
+    lines = source_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    indices = [i for i, line in enumerate(lines)
+               if line.lstrip().startswith("hex ")]
+    lines[indices[1]] = lines[indices[0]]
+    source_path.write_text("".join(lines), encoding="utf-8")
+
+    manifest_path = grid_family / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["source_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    verified = verify_grid_run_evidence(grid_family)
+    assert verified["status"] == "evidence_integrity_failed"
+    assert any(item.startswith("source_manifest_or_inputs_invalid:")
+               for item in verified["findings"])
+    assert verified["engineering_review"] == "BLOCKED"
 
 
 def test_modified_solver_log_fails_integrity_screen(grid_family, monkeypatch):
@@ -659,3 +733,133 @@ def test_v2_receipt_requires_well_formed_mesh_evidence(
         assert "invalid_receipt_schema" in verified["findings"]
     else:
         assert f"invalid_mesh_manifest:{key}" in verified["findings"]
+
+
+@pytest.mark.parametrize("budget_kind", ["entries", "depth"])
+def test_offline_verifier_shares_recursive_mesh_scan_budget(
+    grid_family, monkeypatch, budget_kind
+):
+    import cleanroomx.cfd_grid_runner as runner
+
+    target_key = "configuration_1/coarse"
+    synthetic_processes(monkeypatch)
+    process = runner.subprocess.run
+
+    def create_nested_mesh(command, **kwargs):
+        result = process(command, **kwargs)
+        if Path(command[0]).name == "foamVersion":
+            return result
+        case = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
+        if Path(command[0]).name == "blockMesh" and case == target_key:
+            mesh = kwargs["cwd"] / "constant/polyMesh"
+            if budget_kind == "entries":
+                mesh.mkdir()
+                (mesh / "points").write_text("SYNTHETIC points")
+                (mesh / "faces").write_text("SYNTHETIC faces")
+            else:
+                nested = mesh / "nested" / "deeper"
+                nested.mkdir(parents=True)
+                (nested / "points").write_text("SYNTHETIC points")
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", create_nested_mesh)
+    receipt = run_grid_family(grid_family, timeout_seconds=60)
+    assert receipt["status"] == "executed_requires_convergence_review"
+
+    if budget_kind == "entries":
+        monkeypatch.setattr(runner, "_MAX_MESH_TREE_ENTRIES", 3)
+    else:
+        monkeypatch.setattr(runner, "_MAX_MESH_TREE_DEPTH", 1)
+    verified = verify_grid_run_evidence(grid_family)
+    assert verified["status"] == "evidence_integrity_failed"
+    assert f"missing_or_unsafe_mesh_output:{target_key}" in verified["findings"]
+    if budget_kind == "depth":
+        assert f"unexpected_or_unsafe_source_tree:{target_key}:ValueError" in verified[
+            "findings"
+        ]
+    assert verified["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize(
+    ("mesh_pattern", "expect_replay"),
+    [
+        ("same_configuration", True),
+        ("distinct_levels", False),
+        ("same_level_different_configurations", False),
+    ],
+)
+def test_grid_verify_screens_replayed_complete_mesh_snapshots(
+    grid_family, monkeypatch, mesh_pattern, expect_replay
+):
+    """All snapshots are synthetic; equality only screens potential replay."""
+    import cleanroomx.cfd_grid_runner as runner
+
+    synthetic_processes(monkeypatch)
+    original_run = runner.subprocess.run
+
+    def with_mesh(cmd, **kwargs):
+        result = original_run(cmd, **kwargs)
+        if Path(cmd[0]).name != "blockMesh":
+            return result
+        key = kwargs["cwd"].relative_to(grid_family).as_posix()
+        if mesh_pattern == "same_level_different_configurations":
+            selected = ("configuration_1/coarse", "configuration_2/coarse")
+        else:
+            selected = ("configuration_1/coarse", "configuration_1/medium")
+        if key in selected:
+            mesh_root = kwargs["cwd"] / "constant" / "polyMesh"
+            mesh_root.mkdir()
+            payload = (
+                b"SYNTHETIC same generated mesh snapshot"
+                if mesh_pattern != "distinct_levels"
+                else f"SYNTHETIC distinct mesh for {key}".encode("ascii")
+            )
+            (mesh_root / "points").write_bytes(payload)
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", with_mesh)
+    report = run_grid_family(grid_family, timeout_seconds=60)
+    assert report["status"] == "executed_requires_convergence_review"
+    checked = verify_grid_run_evidence(grid_family)
+    if expect_replay:
+        assert checked["status"] == "evidence_integrity_failed"
+        assert (
+            "replayed_mesh_output_across_grids:"
+            "configuration_1/medium:configuration_1/coarse"
+        ) in checked["findings"]
+    else:
+        assert checked["status"] == (
+            "execution_logs_integrity_verified_requires_scientific_review"
+        )
+        assert checked["findings"] == []
+    assert checked["engineering_review"] == "BLOCKED"
+
+
+def test_forged_checkmesh_count_with_rehashed_unsigned_receipt_is_rejected(
+    grid_family, monkeypatch
+):
+    """Rehashing a false local checkMesh result cannot validate the receipt."""
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    key = "configuration_2/medium"
+    path = grid_family / key / "checkMesh.log"
+    manifest = json.loads((grid_family / "manifest.json").read_text(
+        encoding="utf-8"
+    ))
+    cells = manifest["case_inputs"][key]["mesh_cells"]
+    source = path.read_text(encoding="utf-8")
+    assert f"cells: {cells}\n" in source
+    path.write_text(
+        source.replace(f"cells: {cells}\n", f"cells: {cells + 1}\n"),
+        encoding="utf-8",
+    )
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    stage = receipt["cases"][key]["stages"][1]
+    assert stage["command"] == "checkMesh"
+    stage["log_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    checked = verify_grid_run_evidence(grid_family)
+    assert checked["status"] == "evidence_integrity_failed"
+    assert f"invalid_completed_checkmesh_verdict:{key}" in checked["findings"]
+    assert checked["engineering_review"] == "BLOCKED"

@@ -15,7 +15,7 @@
     ],
     "supply_flow_m3_s": 0.15,
     "kinematic_viscosity_m2_s": 0.000015,
-    "max_iterations": 150,
+    "max_iterations": 600,
     "output_interval": 50
   },
   "mesh_levels": {

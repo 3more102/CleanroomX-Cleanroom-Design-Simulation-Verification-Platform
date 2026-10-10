@@ -15,6 +15,7 @@ import subprocess
 
 from .strict_json import load_strict_json_snapshot
 from .persistence import _stable_file_identity, _stable_file_path_matches_opened
+from .cfd_blockmesh_source import verify_generated_blockmesh_source
 from .cfd_grid_family import LEVELS, SCHEMA as FAMILY_SCHEMA
 from .cfd_study import CONFIGURATIONS
 
@@ -171,6 +172,16 @@ def _verify_generated_inputs(root: Path) -> str:
             raise ValueError("Generated solver input must not be hardlinked: " + relative)
         if _hash(path) != expected_sha:
             raise ValueError("Generated solver input changed: " + relative)
+    # Read the canonical source dictionary rather than trusting a mutable,
+    # self-described mesh-cell count in the family manifest. The source
+    # parser is narrowly scoped to CleanroomX's generated ASCII format.
+    for key in sorted(cases):
+        mesh_source = root / key / "system/blockMeshDict"
+        verify_generated_blockmesh_source(
+            mesh_source, expected_cells=manifest["case_inputs"][key]["mesh_cells"]
+        )
+        if _hash(mesh_source) != manifest["files"][f"{key}/system/blockMeshDict"]:
+            raise ValueError("Generated blockMesh source drifted during parsing: " + key)
     return hashlib.sha256(raw).hexdigest()
 
 

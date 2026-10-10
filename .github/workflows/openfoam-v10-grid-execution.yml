@@ -14,6 +14,7 @@ on:
   push:
     branches:
       - main
+      - "chatgpt/cfd-mesh-replay-evidence-20261010"
     paths:
       - ".github/workflows/openfoam-v10-grid-execution.yml"
       - "docs/CFD_GRID_EXECUTION_EVIDENCE.md"

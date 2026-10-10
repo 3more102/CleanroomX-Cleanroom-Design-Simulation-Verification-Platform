@@ -26,7 +26,7 @@ def _write_foam_list(root, name, cls, rows):
     )
 
 
-def _mesh_fixture(case_dir, *, cells=2, disconnected=False):
+def _mesh_fixture(case_dir, *, cells=2, disconnected=False, inlet_top=False, outlet_side=False):
     """Build synthetic adjacent or disconnected hex cells (never physical evidence)."""
     mesh_dir = case_dir / "constant/polyMesh"
     mesh_dir.mkdir(parents=True)
@@ -65,8 +65,19 @@ def _mesh_fixture(case_dir, *, cells=2, disconnected=False):
     internal = [entry for entry in faces.values() if len(entry[1]) == 2]
     external = [entry for entry in faces.values() if len(entry[1]) == 1]
     # Partition boundaries in fixed inlet/outlet/walls order.
-    inlet = [v for v in external if all(points[i][2] == 0 for i in v[0])]
-    outlet = [v for v in external if all(points[i][2] == 1 for i in v[0])]
+    inlet_z = 1 if inlet_top else 0
+    outlet_z = 0 if inlet_top else 1
+    inlet = [v for v in external if all(points[i][2] == inlet_z for i in v[0])]
+    if outlet_side:
+        x_coords = [p[0] for p in points]
+        x_low, x_high = min(x_coords), max(x_coords)
+        outlet = [
+            v for v in external if
+            all(points[i][0] == x_low for i in v[0]) or
+            all(points[i][0] == x_high for i in v[0])
+        ]
+    else:
+        outlet = [v for v in external if all(points[i][2] == outlet_z for i in v[0])]
     walls = [v for v in external if v not in inlet and v not in outlet]
     ordered = internal + inlet + outlet + walls
     _write_foam_list(
@@ -226,6 +237,36 @@ def test_disconnected_hex_regions_fail_even_with_closed_well_oriented_cells(
     _mesh_fixture(case, cells=cells, disconnected=True)
     with pytest.raises(ValueError, match="Disconnected"):
         screen_ascii_polymesh(case, expected_cells=cells)
+
+
+
+@pytest.mark.parametrize("configuration,outlet_side", [
+    (1, True), (2, True), (3, False),
+])
+def test_generated_patch_locations_match_configuration(
+    tmp_path, configuration, outlet_side
+):
+    case = tmp_path / "case"
+    _mesh_fixture(case, cells=2, inlet_top=True, outlet_side=outlet_side)
+    screened = screen_ascii_polymesh(
+        case, expected_cells=2, configuration=configuration,
+    )
+    assert screened["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("inlet_top,outlet_side,configuration", [
+    (False, False, 3), (True, False, 1),
+    (True, True, 3),
+])
+def test_generated_patch_location_mismatch_is_blocked(
+    tmp_path, inlet_top, outlet_side, configuration
+):
+    case = tmp_path / "case"
+    _mesh_fixture(case, cells=2, inlet_top=inlet_top, outlet_side=outlet_side)
+    with pytest.raises(ValueError, match="expected room boundary plane"):
+        screen_ascii_polymesh(
+            case, expected_cells=2, configuration=configuration,
+        )
 
 
 def test_grid_mesh_audit_missing_solver_meshes_fails_without_validation(tmp_path):

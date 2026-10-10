@@ -39,6 +39,25 @@ _PATCH = re.compile(
 )
 
 
+def _header_properties(header: str) -> dict[str, str]:
+    """Parse unique, single-line FoamFile header fields."""
+    properties = {}
+    for line in header.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = re.fullmatch(
+            r"([A-Za-z_][A-Za-z0-9_]*)[ \t]+(.+?)[ \t]*;", line
+        )
+        if match is None:
+            raise ValueError("Invalid OpenFOAM mesh header")
+        name, value = match.groups()
+        if name in properties:
+            raise ValueError("Duplicate OpenFOAM mesh header property: " + name)
+        properties[name] = value.strip()
+    return properties
+
+
 def _read_list(path: Path, *, mesh_object: str, mesh_class: str) -> tuple[int, list[str]]:
     """Parse exactly one bounded canonical ASCII list, rejecting foreign syntax."""
     if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
@@ -55,13 +74,11 @@ def _read_list(path: Path, *, mesh_object: str, mesh_class: str) -> tuple[int, l
     headers = list(_HEADER.finditer(source))
     if len(headers) != 1:
         raise ValueError(f"Invalid mesh header count: {mesh_object}")
-    header = headers[0].group(1)
+    header = _header_properties(headers[0].group(1))
     for property_name, expected in (
         ("format", "ascii"), ("object", mesh_object), ("class", mesh_class)
     ):
-        if not re.search(
-            rf"(?m)^\s*{property_name}\s+{re.escape(expected)}\s*;", header
-        ):
+        if header.get(property_name) != expected:
             raise ValueError(f"Unsupported mesh {property_name}: {mesh_object}")
     tail = source[headers[0].end():]
     matched = _LIST.fullmatch(tail)
@@ -87,13 +104,12 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
     except UnicodeError as exc:
         raise ValueError("Non-ASCII OpenFOAM boundary file") from exc
     headers = list(_HEADER.finditer(source))
-    if len(headers) != 1 or not re.search(
-        r"(?m)^\s*format\s+ascii\s*;", headers[0].group(1)
-    ) or not re.search(
-        r"(?m)^\s*object\s+boundary\s*;", headers[0].group(1)
-    ) or not re.search(
-        r"(?m)^\s*class\s+polyBoundaryMesh\s*;", headers[0].group(1)
-    ):
+    if len(headers) != 1:
+        raise ValueError("Invalid OpenFOAM boundary header")
+    header = _header_properties(headers[0].group(1))
+    if (header.get("format") != "ascii"
+            or header.get("object") != "boundary"
+            or header.get("class") != "polyBoundaryMesh"):
         raise ValueError("Invalid OpenFOAM boundary header")
     match = _LIST.fullmatch(source[headers[0].end():])
     if match is None:

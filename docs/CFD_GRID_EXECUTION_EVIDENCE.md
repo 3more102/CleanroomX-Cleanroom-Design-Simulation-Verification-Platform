@@ -406,7 +406,14 @@ call before being added to `PATH`. The real Foundation helper writes the version
 adapter redirects that original output to stdout for the Python subprocess
 without fabricating a version. It also tolerates environment sourcing before
 enforcing shell error exit, preserving the actual source return code. The
-adapter script and its SHA-256 checksum are included in the Actions artifact.
+`openfoam-v10-version.txt` evidence file also captures the actual version
+from stderr. The adapter script and its **relative-path** SHA-256 checksum are
+included in the Actions artifact, and can be verified after downloading it:
+
+```bash
+(cd openfoam-version-bin && sha256sum -c ../openfoam-v10-wrapper.sha256)
+```
+
 This is an interoperability shim, **not** independent attestation of an
 OpenFOAM binary or scientific validity.
 If either version check fails, no CFD solver stage is launched.

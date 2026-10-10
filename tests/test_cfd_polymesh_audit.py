@@ -187,3 +187,29 @@ def test_grid_mesh_audit_missing_solver_meshes_fails_without_validation(tmp_path
     assert "execution_receipt_not_integrity_verified" in result["findings"]
     assert result["physical_validation"] == "not_performed"
     assert result["engineering_review"] == "BLOCKED"
+
+
+def test_mesh_cli_fails_closed_without_actual_solver_results(tmp_path, monkeypatch, capsys):
+    """A generated-only nine-case family must not yield a green mesh verdict."""
+    import sys
+    from cleanroomx.cfd_pipeline_cli import main
+
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": FOAM_SCHEMA, "name": "synthetic CLI fixture",
+            "room_m": [1, 1, 1], "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1, "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12, "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6], "medium": [7, 7, 7], "fine": [8, 8, 8],
+        },
+    }
+    family = tmp_path / "grid_family"
+    generate_grid_family(spec, family)
+    monkeypatch.setattr(sys, "argv", ["cleanroomx-cfd-pipeline", "grid-mesh-audit", str(family)])
+    assert main() == 3
+    stdout = capsys.readouterr().out
+    assert '"mesh_structure_unverified"' in stdout
+    assert '"BLOCKED"' in stdout

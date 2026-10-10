@@ -41,50 +41,141 @@ jobs:
           test -f /opt/openfoam10/etc/bashrc
 
       - name: Run and screen the synthetic nine-case family
+        shell: bash
         run: |
+          # OpenFOAM's sourced environment contains optional shell probes.
+          # Do not let GitHub's implicit bash -e abort during those probes:
+          # inspect the resulting tools and version explicitly instead.
+          set +e
+          set +u
+          source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          # Foundation v10 defines foamVersion as a shell function whose
+          # alias helper references $1. Bash nounset breaks it with no args.
+          # Keep errexit/pipefail, but do not re-enable nounset after sourcing.
           set -eo pipefail
+          {
+            printf 'openfoam_bashrc_exit_code=%s\n' "$source_rc"
+            for executable in foamVersion blockMesh checkMesh simpleFoam; do
+              if ! command -v "$executable"; then
+                printf 'missing_openfoam_executable=%s\n' "$executable"
+                exit 1
+              fi
+            done
+            if [[ "$source_rc" -ne 0 ]]; then
+              echo "OpenFOAM environment source returned nonzero; checking actual executables" >&2
+            fi
+          } | tee "$RUNNER_TEMP/openfoam-v10-init-status.txt"
+
+          # Foundation v10 supplies foamVersion as a sourced shell function.
+          # Python's shutil.which() cannot find a shell function, so provide
+          # an explicit executable adapter that calls the *installed* helper.
+          # This is not a hardcoded or simulated version response.
+          if [[ "$(type -t foamVersion)" == "function" ]]; then
+            version_dir="$RUNNER_TEMP/openfoam-version-bin"
+            mkdir -p "$version_dir"
+            chmod 0700 "$version_dir"
+            cat > "$version_dir/foamVersion" <<'EOF'
+          #!/usr/bin/env bash
           set +e
           source /opt/openfoam10/etc/bashrc
           source_rc=$?
-          set -e
+          set -eo pipefail
           if [[ "$source_rc" -ne 0 ]]; then
-            printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
-            exit "$source_rc"
-          fi
-
-          # Foundation's foamVersion helper is a sourced shell function,
-          # while CleanroomX probes an executable by this name. Report the
-          # version only after validating the installed environment.
-          version_bin="$RUNNER_TEMP/openfoam-version-bin"
-          mkdir -p "$version_bin"
-          cat > "$version_bin/foamVersion" <<'EOF'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
-            printf 'Expected inherited OpenFOAM Foundation v10 environment; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            echo "OpenFOAM Foundation environment source failed" >&2
             exit 1
           fi
-          echo "$WM_PROJECT_VERSION"
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            echo "Expected Foundation OpenFOAM v10 environment" >&2
+            exit 1
+          fi
+          # Foundation's helper writes its version to stderr; the runner
+          # captures subprocess output, so convert the actual output to stdout.
+          foamVersion "$@" 2>&1
           EOF
-          chmod 0755 "$version_bin/foamVersion"
-          export PATH="$version_bin:$PATH"
-
+            chmod 0700 "$version_dir/foamVersion"
+            # Capture Foundation's real stderr version instead of treating
+            # its deliberately empty stdout as the authoritative value.
+            direct_version="$(foamVersion 2>&1)"
+            wrapped_version="$("$version_dir/foamVersion" 2>&1)"
+            if [[ "$direct_version" != "$wrapped_version" ]]; then
+              echo "OpenFOAM version wrapper does not match installed helper" >&2
+              exit 1
+            fi
+            export PATH="$version_dir:$PATH"
+            (
+              cd "$version_dir"
+              sha256sum foamVersion
+            ) | tee "$RUNNER_TEMP/openfoam-v10-wrapper.sha256"
+          fi
+          if [[ -z "$(type -P foamVersion)" ]]; then
+            echo "No executable foamVersion available to the Python runner" >&2
+            exit 1
+          fi
+          # The installed shell helper writes the actual version to stderr.
+          # Preserve it in the archive and do not fabricate version output.
+          foamVersion 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
+          {
+            printf 'github_sha=%s\n' "$GITHUB_SHA"
+            printf 'github_run_id=%s\n' "$GITHUB_RUN_ID"
+            cat /etc/os-release
+            uname -a
+            dpkg-query -W openfoam10
+          } | tee "$RUNNER_TEMP/openfoam-v10-environment.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
+          # Inspect every result even when the solver rejects a case. All
+          # three real exit codes are retained; diagnostic commands cannot
+          # silently turn a failed execution into a green CI run.
           set +e
-          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
-          grid_run_rc=$?
+          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-grid-run.log"
+          run_rc=${PIPESTATUS[0]}
+          cleanroomx-cfd-pipeline grid-verify "$family" 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-grid-verify.log"
+          verify_rc=${PIPESTATUS[0]}
+          cleanroomx-cfd-pipeline grid-mesh-audit "$family" 2>&1 | tee "$RUNNER_TEMP/openfoam-v10-grid-mesh-audit.log"
+          mesh_audit_rc=${PIPESTATUS[0]}
           set -e
-          if [[ "$grid_run_rc" -ne 0 ]]; then
-            echo "grid-run failed with exit $grid_run_rc; OpenFOAM solver log tails:"
-            while IFS= read -r log; do
-              echo "----- $log -----"
-              tail -n 80 "$log" || true
-            done < <(find "$family" -type f -name simpleFoam.log -print | sort)
-            exit "$grid_run_rc"
+          {
+            printf 'grid_run_exit_code=%s\n' "$run_rc"
+            printf 'grid_verify_exit_code=%s\n' "$verify_rc"
+            printf 'grid_mesh_audit_exit_code=%s\n' "$mesh_audit_rc"
+          } | tee "$RUNNER_TEMP/openfoam-v10-exit-codes.txt"
+          if [[ "$run_rc" -ne 0 || "$verify_rc" -ne 0 || "$mesh_audit_rc" -ne 0 ]]; then
+            exit 1
           fi
-          cleanroomx-cfd-pipeline grid-verify "$family"
-          cleanroomx-cfd-pipeline grid-mesh-audit "$family"
+
+      # upload-artifact excludes hidden files and empty directories. A raw
+      # directory upload would silently omit the .grid_run_evidence.json
+      # receipt and the empty .grid_run_reserved custody marker.
+      - name: Package complete nine-case evidence (including hidden files)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          if [[ ! -d "$family" ]]; then
+            echo "No generated nine-case family to archive" >&2
+            exit 0
+          fi
+          archive="$RUNNER_TEMP/openfoam-v10-grid-family.tar"
+          inventory="$RUNNER_TEMP/openfoam-v10-grid-family.inventory.txt"
+          tar --format=posix -C "$RUNNER_TEMP" -cf "$archive" cleanroomx-cfd-grid-family
+          tar -tf "$archive" > "$inventory"
+          # The durable receipt is grid_run_evidence.json (not hidden).
+          # The hidden .grid_run_evidence.json.tmp is only a crash marker.
+          if [[ -f "$family/grid_run_evidence.json" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/grid_run_evidence.json' "$inventory"
+          fi
+          if [[ -f "$family/.grid_run_evidence.json.tmp" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_evidence.json.tmp' "$inventory"
+          fi
+          if [[ -d "$family/.grid_run_reserved" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_reserved/' "$inventory"
+          fi
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum openfoam-v10-grid-family.tar > openfoam-v10-grid-family.tar.sha256
+          )
 
       - name: Upload execution evidence
         if: always()
@@ -92,7 +183,17 @@ jobs:
         with:
           name: "openfoam-v10-grid-evidence-${{ github.sha }}"
           path: |
-            ${{ runner.temp }}/cleanroomx-cfd-grid-family
+            ${{ runner.temp }}/openfoam-v10-grid-family.tar
+            ${{ runner.temp }}/openfoam-v10-grid-family.tar.sha256
+            ${{ runner.temp }}/openfoam-v10-grid-family.inventory.txt
             ${{ runner.temp }}/openfoam-v10-version.txt
+            ${{ runner.temp }}/openfoam-v10-init-status.txt
+            ${{ runner.temp }}/openfoam-v10-environment.txt
+            ${{ runner.temp }}/openfoam-v10-wrapper.sha256
+            ${{ runner.temp }}/openfoam-version-bin/foamVersion
+            ${{ runner.temp }}/openfoam-v10-grid-run.log
+            ${{ runner.temp }}/openfoam-v10-grid-verify.log
+            ${{ runner.temp }}/openfoam-v10-grid-mesh-audit.log
+            ${{ runner.temp }}/openfoam-v10-exit-codes.txt
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

@@ -151,7 +151,12 @@ writePrecision 10;
 runTimeModifiable no;"""
     schemes="""ddtSchemes { default steadyState; }
 gradSchemes { default Gauss linear; }
-divSchemes { default none; div(phi,U) bounded Gauss upwind; div((nuEff*dev2(T(grad(U))))) Gauss linear; }
+divSchemes
+{
+  default none;
+  div(phi,U) bounded Gauss upwind;
+  div((nuEff*dev2(T(grad(U))))) Gauss linear;
+}
 laplacianSchemes { default Gauss linear corrected; }
 interpolationSchemes { default linear; }
 snGradSchemes { default corrected; }

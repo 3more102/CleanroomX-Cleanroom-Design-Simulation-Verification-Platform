@@ -135,6 +135,14 @@ def test_generate_nine_openfoam_cases_reproducibly(tmp_path):
             assert expected["mesh_cells"]==math.prod(spec["mesh_levels"][level])
             assert (root/"system/blockMeshDict").is_file()
             assert (root/"0/U").is_file()
+            # Foundation v10 simpleFoam fails at Time=1s without the
+            # laminar Stokes-stress divergence scheme in every case.
+            fv_schemes=(root/"system/fvSchemes").read_text(encoding="utf-8")
+            assert "div(phi,U) bounded Gauss upwind;" in fv_schemes
+            assert "div((nuEff*dev2(T(grad(U))))) Gauss linear;" in fv_schemes
+            assert hashlib.sha256((root/"system/fvSchemes").read_bytes()).hexdigest()==report["files"][
+                f"configuration_{config}/{level}/system/fvSchemes"
+            ]
             assert hashlib.sha256((root/"0/U").read_bytes()).hexdigest()==report["files"][
                 f"configuration_{config}/{level}/0/U"
             ]

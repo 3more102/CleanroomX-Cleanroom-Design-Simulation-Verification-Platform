@@ -370,13 +370,85 @@ and [OpenFOAM mesh validity constraints](https://www.openfoam.com/documentation/
 
 ## CI-backed OpenFOAM v10 smoke run
 
+A real Foundation v10 CI run on 2026-10-10 successfully executed `blockMesh`
+and `checkMesh` for all nine generated cases, but each `simpleFoam` case
+failed at its first time step with missing `divSchemes` entry
+`div((nuEff*dev2(T(grad(U)))))`. The generator now emits
+`div((nuEff*dev2(T(grad(U))))) Gauss linear;`, matching the
+[OpenFOAM Foundation v10 simpleFoam tutorial fvSchemes](https://github.com/OpenFOAM/OpenFOAM-10/blob/master/tutorials/incompressible/simpleFoam/drivaerFastback/system/fvSchemes).
+The prior failure is preserved in Actions run `38069650896` and **does not**
+count as a successful solve. The change is a solver dictionary correction,
+not a scientific convergence or physical-validation claim.
+
 `.github/workflows/cfd-openfoam-grid.yml` runs for relevant pull request changes
 and can also be started with `workflow_dispatch`. On Ubuntu 22.04 it installs
 OpenFOAM Foundation v10, generates the example family below, executes all nine
 cases through `blockMesh`, `checkMesh`, and `simpleFoam`, then runs
 `grid-verify` and `grid-mesh-audit`. The Actions artifact retains the OpenFOAM
-version, execution receipt, stage logs, and generated mesh files for 14 days,
-including partial evidence from failed runs.
+version and a TAR archive of the generated family for **90 days**, including
+partial evidence from failed runs. A TAR archive is necessary because the
+normal GitHub directory uploader does not preserve the empty
+`.grid_run_reserved/` directory or interrupted-run hidden staging file
+`.grid_run_evidence.json.tmp` reliably. The durable receipt is the **visible**
+`grid_run_evidence.json`; its presence and digest are checked separately
+by `grid-verify`. The TAR preserves both the final receipt and the exact
+directory structure, including evidence from incomplete executions.
+
+The workflow records the GitHub commit/run ID, Linux distribution and OpenFOAM package version in `openfoam-v10-environment.txt`, and separately records OpenFOAM environment initialization. It checks that
+`foamVersion`, `blockMesh`, `checkMesh`, and `simpleFoam` are actually
+executable before running a case. Its `openfoam-v10-init-status.txt` records
+the shell environment-script return code and executable locations. A nonzero
+environment-source status is only tolerated when the required tools are
+discoverable; the runner still enforces its Foundation v10 version requirement.
+The workflow intentionally does **not** enable Bash `nounset` after sourcing:
+the Foundation v10 `foamVersion` function references an optional positional
+argument and otherwise fails with `$1: unbound variable`. Bash `errexit` and
+`pipefail` remain enforced outside the explicit evidence-capture section.
+
+Foundation v10 also exposes `foamVersion` as a sourced shell function, whereas
+the Python execution runner discovers external executables using
+`shutil.which()`. When the version helper is a function, the workflow writes
+a restricted executable adapter in the runner's temporary directory. The
+adapter sources the **installed** Foundation v10 environment, requires
+`WM_PROJECT=OpenFOAM` and `WM_PROJECT_VERSION=10`, and invokes the real
+shell function. It must produce exactly the same output as a direct function
+call before being added to `PATH`. The real Foundation helper writes the version to **stderr**, so the
+adapter redirects that original output to stdout for the Python subprocess
+without fabricating a version. It also tolerates environment sourcing before
+enforcing shell error exit, preserving the actual source return code. The
+`openfoam-v10-version.txt` evidence file also captures the actual version
+from stderr. The adapter script and its **relative-path** SHA-256 checksum are
+included in the Actions artifact, and can be verified after downloading it:
+
+```bash
+(cd openfoam-version-bin && sha256sum -c ../openfoam-v10-wrapper.sha256)
+```
+
+This is an interoperability shim, **not** independent attestation of an
+OpenFOAM binary or scientific validity.
+If either version check fails, no CFD solver stage is launched.
+
+Even when `grid-run` fails, CI separately attempts read-only `grid-verify`
+and `grid-mesh-audit` and saves each command's actual return code and combined
+output in `openfoam-v10-exit-codes.txt` and the matching `.log` files. A
+nonzero result from **any** of these three commands makes the job fail. The
+logs are diagnostics, never surrogate independent CFD or physical evidence.
+
+Download the workflow artifact, then restore and screen its contents in a
+controlled directory (inspect the archive's paths before extraction):
+
+```bash
+sha256sum -c openfoam-v10-grid-family.tar.sha256
+tar -tf openfoam-v10-grid-family.tar
+tar -xf openfoam-v10-grid-family.tar
+cleanroomx-cfd-pipeline grid-verify ./cleanroomx-cfd-grid-family
+cleanroomx-cfd-pipeline grid-mesh-audit ./cleanroomx-cfd-grid-family
+```
+
+The checksum detects unintentional archive changes after publication, but the
+checksum and archive are **not authenticated evidence** if an adversary can
+replace both. Actions artifacts are retention-limited and are not immutable
+long-term custody. A red CI run remains red even if a partial archive uploads.
 
 The example specification is explicitly synthetic. A green workflow therefore
 demonstrates software integration with a real OpenFOAM v10 installation and

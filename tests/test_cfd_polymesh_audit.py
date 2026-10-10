@@ -307,6 +307,10 @@ def test_grid_mesh_audit_missing_solver_meshes_fails_without_validation(tmp_path
     result = audit_grid_family_polymesh(family)
     assert result["status"] == "mesh_structure_unverified"
     assert len(result["findings"]) >= 9
+    assert result["case_errors"]["configuration_1/coarse"] == {
+        "type": "ValueError",
+        "message": "Missing or unsafe generated polyMesh directory",
+    }
     assert "execution_receipt_not_integrity_verified" in result["findings"]
     assert result["physical_validation"] == "not_performed"
     assert result["engineering_review"] == "BLOCKED"

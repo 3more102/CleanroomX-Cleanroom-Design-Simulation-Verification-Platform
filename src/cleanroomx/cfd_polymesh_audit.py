@@ -354,7 +354,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
     report = {
         "schema_version": SCHEMA, "status": "mesh_structure_unverified",
         "engineering_review": "BLOCKED", "physical_validation": "not_performed",
-        "cases": {}, "findings": [],
+        "cases": {}, "case_errors": {}, "findings": [],
         "warning": "Structural mesh screening cannot prove CFD convergence or physical validation",
     }
     try:
@@ -400,6 +400,9 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             report["cases"][key] = metrics
         except (OSError, ValueError) as exc:
             report["findings"].append("invalid_or_missing_polymesh:" + key + ":" + type(exc).__name__)
+            report["case_errors"][key] = {
+                "type": type(exc).__name__, "message": str(exc),
+            }
     # Avoid promoting an incomplete, tampered or unsigned solver receipt.
     from .cfd_grid_receipt import verify_grid_run_evidence
     integrity = verify_grid_run_evidence(root)

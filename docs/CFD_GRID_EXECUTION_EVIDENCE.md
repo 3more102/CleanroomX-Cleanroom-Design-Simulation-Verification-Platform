@@ -340,6 +340,10 @@ cell count. It checks:
 - Stable local mesh-file digests before/after inspection and a complete,
   integrity-consistent previous execution receipt. Unsigned local hashes are
   not independent source authentication.
+- Mesh output traversal is capped at 8,192 total entries and 64 directory
+  levels per case, in addition to 4,096 regular files and 1 GiB of file bytes.
+  Unexpected input-directory entries fail as soon as the expected set is
+  exceeded; links and nonregular entries also fail closed.
 
 A fully screened nine-case family is labeled
 `mesh_structure_screened_requires_scientific_review` (CLI exit 0).

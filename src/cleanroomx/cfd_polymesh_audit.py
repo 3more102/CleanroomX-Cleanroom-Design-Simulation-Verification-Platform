@@ -28,7 +28,7 @@ _FACE = re.compile(r"\s*([0-9]+)\s*\(\s*([0-9 ]+)\s*\)\s*")
 _LABEL = re.compile(r"\s*([0-9]+)\s*")
 _PATCH = re.compile(
     r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*"
-    r"type\s+[A-Za-z_][A-Za-z0-9_]*\s*;\s*"
+    r"type\s+([A-Za-z_][A-Za-z0-9_]*)\s*;\s*"
     r"(?:inGroups\s+[0-9]+\([A-Za-z_0-9 ]*\)\s*;\s*)?"
     r"nFaces\s+([0-9]+)\s*;\s*startFace\s+([0-9]+)\s*;\s*\}\s*"
 )
@@ -102,7 +102,10 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
         patch = _PATCH.match(remaining)
         if patch is None:
             raise ValueError("Malformed OpenFOAM boundary patch")
-        name, num_faces, start_face = patch.groups()
+        name, patch_type, num_faces, start_face = patch.groups()
+        expected_type = "wall" if name == "walls" else "patch"
+        if patch_type != expected_type:
+            raise ValueError("Unexpected OpenFOAM boundary patch type: " + name)
         if name in patches:
             raise ValueError("Duplicate OpenFOAM boundary patch")
         patches[name] = (int(start_face), int(num_faces))
@@ -160,6 +163,24 @@ def screen_ascii_polymesh(case_dir: Path, *, expected_cells: int) -> dict:
             field.append(int(item.group(1)))
     if set(owners + neighbours) != set(range(expected_cells)):
         raise ValueError("PolyMesh actual cell labels disagree with declared count")
+    # A set of independent, individually closed hexes must not pass as a
+    # single connected cleanroom fluid domain. Only internal faces create
+    # traversable cell adjacencies; coincident vertices do not.
+    adjacency = [set() for _ in range(expected_cells)]
+    for owner, neighbour in zip(owners, neighbours):
+        if owner == neighbour:
+            raise ValueError("Invalid self-adjacent polyMesh internal face")
+        adjacency[owner].add(neighbour)
+        adjacency[neighbour].add(owner)
+    connected = {0}
+    pending = [0]
+    while pending:
+        current = pending.pop()
+        for neighbour in adjacency[current] - connected:
+            connected.add(neighbour)
+            pending.append(neighbour)
+    if len(connected) != expected_cells:
+        raise ValueError("Disconnected generated polyMesh cell regions")
 
     edges_per_cell = [Counter() for _ in range(expected_cells)]
     incident_faces = [0] * expected_cells

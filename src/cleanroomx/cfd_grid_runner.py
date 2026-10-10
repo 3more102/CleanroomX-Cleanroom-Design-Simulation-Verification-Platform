@@ -175,14 +175,37 @@ def _verify_generated_inputs(root: Path) -> str:
     # Read the canonical source dictionary rather than trusting a mutable,
     # self-described mesh-cell count in the family manifest. The source
     # parser is narrowly scoped to CleanroomX's generated ASCII format.
+    source_axis_cells = {}
     for key in sorted(cases):
         mesh_source = root / key / "system/blockMeshDict"
-        verify_generated_blockmesh_source(
+        source_geometry = verify_generated_blockmesh_source(
             mesh_source, expected_cells=manifest["case_inputs"][key]["mesh_cells"],
             expected_configuration=manifest["case_inputs"][key]["configuration"],
         )
         if _hash(mesh_source) != manifest["files"][f"{key}/system/blockMeshDict"]:
             raise ValueError("Generated blockMesh source drifted during parsing: " + key)
+        source_axis_cells[key] = source_geometry["axis_cell_counts"]
+
+    # Manifest totals cannot distinguish, e.g., 7x8x9 from 7x9x8.
+    # Use source-verified Cartesian axes to require the same grid for all
+    # ventilation configurations and strictly increasing *each* axis
+    # through coarse -> medium -> fine. This does not prove CFD convergence.
+    reference_axis_levels = None
+    for configuration in (1, 2, 3):
+        axis_levels = tuple(
+            source_axis_cells[f"configuration_{configuration}/{level}"]
+            for level in LEVELS
+        )
+        if any(
+            any(low[axis] >= high[axis] for axis in range(3))
+            for low, high in zip(axis_levels, axis_levels[1:])
+        ):
+            raise ValueError("Nine-case generated mesh axes do not refine strictly")
+        if reference_axis_levels is not None and axis_levels != reference_axis_levels:
+            raise ValueError(
+                "Nine-case generated mesh axes differ across configurations"
+            )
+        reference_axis_levels = axis_levels
     return hashlib.sha256(raw).hexdigest()
 
 

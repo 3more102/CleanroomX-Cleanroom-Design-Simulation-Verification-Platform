@@ -13,7 +13,9 @@ import re
 
 from .cfd_grid_runner import _cases, _mesh_file_hashes, _verify_generated_inputs
 from .strict_json import load_strict_json_snapshot
-from .cfd_polymesh_geometry import validate_hex_face_geometry
+from .cfd_polymesh_geometry import (
+    validate_hex_face_geometry, validate_generated_boundary_locations,
+)
 
 
 SCHEMA = "cleanroomx.cfd-polymesh-screen.v1"
@@ -115,7 +117,9 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
     return patches
 
 
-def screen_ascii_polymesh(case_dir: Path, *, expected_cells: int) -> dict:
+def screen_ascii_polymesh(
+    case_dir: Path, *, expected_cells: int, configuration: int | None = None
+) -> dict:
     """Validate face references, cell adjacency, edges and boundary partition.
 
     Does not compute cell volumes, nonorthogonality or
@@ -235,6 +239,10 @@ def screen_ascii_polymesh(case_dir: Path, *, expected_cells: int) -> dict:
         raise ValueError("PolyMesh boundary does not cover all exterior faces")
     if patches["inlet"][1] == 0 or patches["outlet"][1] == 0:
         raise ValueError("Empty generated inlet/outlet mesh boundary")
+    if configuration is not None:
+        validate_generated_boundary_locations(
+            ordered_points, ordered_faces, patches, configuration=configuration,
+        )
     if _mesh_file_hashes(case_dir, case_dir.name) != before_hashes:
         raise ValueError("PolyMesh evidence changed during independent inspection")
     return {
@@ -273,7 +281,9 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             continue
         try:
             metrics = screen_ascii_polymesh(
-                case_dir, expected_cells=manifest["case_inputs"][key]["mesh_cells"]
+                case_dir,
+                expected_cells=manifest["case_inputs"][key]["mesh_cells"],
+                configuration=manifest["case_inputs"][key]["configuration"],
             )
             for patch_name in ("inlet", "outlet"):
                 actual = metrics["patch_face_counts"][patch_name]

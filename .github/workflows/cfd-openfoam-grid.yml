@@ -72,7 +72,60 @@ jobs:
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
           set +e
-          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
+          grid_run_output="$RUNNER_TEMP/grid-run-output.txt"
+          set +e
+          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 \
+            >"$grid_run_output" 2>&1
+          grid_run_rc=$?
+          set -e
+          cat "$grid_run_output"
+          if [[ "$grid_run_rc" -ne 0 ]]; then
+            python - "$family" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          receipt_path = root / "grid_run_evidence.json"
+          try:
+              report = json.loads(receipt_path.read_text(encoding="utf-8"))
+          except (OSError, ValueError, UnicodeError) as exc:
+              print(f"Could not inspect grid-run receipt: {type(exc).__name__}", file=sys.stderr)
+              raise SystemExit(0)
+
+          seen = set()
+          for case_name, case in report.get("cases", {}).items():
+              for stage in case.get("stages", []):
+                  if stage.get("status") == "completed" and stage.get("returncode") == 0:
+                      continue
+                  relative = stage.get("log")
+                  if not isinstance(relative, str):
+                      print(f"--- failed stage without a log path: {case_name}/{stage.get('command')} ---")
+                      continue
+                  candidate = root / relative
+                  try:
+                      if candidate.is_symlink():
+                          raise ValueError("log path is a symlink")
+                      log_path = candidate.resolve(strict=True)
+                      if not log_path.is_relative_to(root) or not log_path.is_file():
+                          raise ValueError("log path is outside the case family")
+                      size = log_path.stat().st_size
+                      with log_path.open("rb") as stream:
+                          stream.seek(max(0, size - 32768))
+                          tail = stream.read().decode("utf-8", "replace").splitlines()[-80:]
+                  except (OSError, ValueError) as exc:
+                      print(f"--- cannot read failed log {case_name}/{relative}: {type(exc).__name__} ---")
+                      continue
+                  digest = stage.get("log_sha256")
+                  if isinstance(digest, str) and digest in seen:
+                      continue
+                  if isinstance(digest, str):
+                      seen.add(digest)
+                  print(f"--- failed log {case_name}/{stage.get('command')} rc={stage.get('returncode')} bytes={size} ---")
+                  print("\n".join(tail) if tail else "<empty log>")
+          PY
+            exit "$grid_run_rc"
+          fi
           grid_run_rc=$?
           set -e
           if [[ "$grid_run_rc" -ne 0 ]]; then

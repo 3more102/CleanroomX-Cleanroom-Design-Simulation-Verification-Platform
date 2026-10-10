@@ -50,7 +50,10 @@ jobs:
           set +u
           source /opt/openfoam10/etc/bashrc
           source_rc=$?
-          set -euo pipefail
+          # Foundation v10 defines foamVersion as a shell function whose
+          # alias helper references $1. Bash nounset breaks it with no args.
+          # Keep errexit/pipefail, but do not re-enable nounset after sourcing.
+          set -eo pipefail
           {
             printf 'openfoam_bashrc_exit_code=%s\n' "$source_rc"
             for executable in foamVersion blockMesh checkMesh simpleFoam; do

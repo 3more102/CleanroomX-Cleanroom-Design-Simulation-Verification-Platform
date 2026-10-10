@@ -250,3 +250,76 @@ def test_rehashed_bad_boundary_fails_before_external_foam_process(
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()
+
+
+@pytest.mark.parametrize("tamper", [
+    "include", "code_stream", "extra_directive", "changed_class",
+    "duplicate_format", "nonempty_edges", "patch_merge",
+])
+def test_generated_source_rejects_noncanonical_outer_grammar(generated_source, tamper):
+    """A rehashed manifest must not legitimize unknown OpenFOAM directives."""
+    path, count = generated_source
+    source = path.read_text(encoding="utf-8")
+    if tamper == "include":
+        source += '\n#include "externalDict"\n'
+    elif tamper == "code_stream":
+        source += '\n#codeStream { code "external"; }\n'
+    elif tamper == "extra_directive":
+        source += "\nfunctions { unexpected 1; }\n"
+    elif tamper == "changed_class":
+        source = source.replace("class dictionary;", "class volScalarField;", 1)
+    elif tamper == "duplicate_format":
+        source = source.replace("format ascii;", "format ascii;\n    format binary;", 1)
+    elif tamper == "nonempty_edges":
+        source = source.replace("edges ();", "edges ( arc (0 1) (0 0 0) );", 1)
+    else:
+        source = source.replace(
+            "mergePatchPairs ();", "mergePatchPairs ((inlet outlet));", 1
+        )
+    path.write_text(source, encoding="utf-8")
+    with pytest.raises(ValueError, match="Noncanonical generated blockMesh envelope"):
+        verify_generated_blockmesh_source(path, expected_cells=count)
+
+
+def test_rehashed_included_dict_fails_before_solver_discovery(tmp_path, monkeypatch):
+    """Source-level directives fail even if local unsigned hashes were rewritten."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC external directive preflight",
+            "room_m": [1, 1, 1],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    source_path = root / relative
+    source_path.write_text(
+        source_path.read_text(encoding="utf-8")
+        + '\n#include "arbitraryDict"\n',
+        encoding="utf-8",
+    )
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    import cleanroomx.cfd_grid_runner as runner
+    def forbidden_discovery(_name):
+        pytest.fail("Unapproved OpenFOAM directive reached solver discovery")
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match="Noncanonical generated blockMesh envelope"):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()

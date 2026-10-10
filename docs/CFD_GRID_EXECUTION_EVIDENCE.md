@@ -366,8 +366,27 @@ and can also be started with `workflow_dispatch`. On Ubuntu 22.04 it installs
 OpenFOAM Foundation v10, generates the example family below, executes all nine
 cases through `blockMesh`, `checkMesh`, and `simpleFoam`, then runs
 `grid-verify` and `grid-mesh-audit`. The Actions artifact retains the OpenFOAM
-version, execution receipt, stage logs, and generated mesh files for 14 days,
-including partial evidence from failed runs.
+version and a TAR archive of the generated family for **90 days**, including
+partial evidence from failed runs. A TAR archive is necessary because the
+normal GitHub directory uploader does not preserve the hidden
+`.grid_run_evidence.json` receipt or the empty `.grid_run_reserved`
+directory reliably. These are required by the read-only receipt verifier.
+
+Download the workflow artifact, then restore and screen its contents in a
+controlled directory (inspect the archive's paths before extraction):
+
+```bash
+sha256sum -c openfoam-v10-grid-family.tar.sha256
+tar -tf openfoam-v10-grid-family.tar
+tar -xf openfoam-v10-grid-family.tar
+cleanroomx-cfd-pipeline grid-verify ./cleanroomx-cfd-grid-family
+cleanroomx-cfd-pipeline grid-mesh-audit ./cleanroomx-cfd-grid-family
+```
+
+The checksum detects unintentional archive changes after publication, but the
+checksum and archive are **not authenticated evidence** if an adversary can
+replace both. Actions artifacts are retention-limited and are not immutable
+long-term custody. A red CI run remains red even if a partial archive uploads.
 
 The example specification is explicitly synthetic. A green workflow therefore
 demonstrates software integration with a real OpenFOAM v10 installation and

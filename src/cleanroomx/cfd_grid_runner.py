@@ -27,6 +27,10 @@ INPUTS = (
     "constant/momentumTransport", "0/U", "0/p",
 )
 VERSION_PATTERN = re.compile(r"(?:OpenFOAM(?: Foundation)?[- ]?[vV]?)?10(?:\.0+)?\Z")
+_MAX_MESH_FILES = 4096
+_MAX_MESH_BYTES = 1_073_741_824
+_MAX_MESH_TREE_ENTRIES = 8192
+_MAX_MESH_TREE_DEPTH = 64
 
 
 def _hash(path: Path) -> str:
@@ -257,33 +261,73 @@ def _verify_runtime_source_tree(workdir: Path, key: str) -> None:
                 # inputs. It must nevertheless contain only local, ordinary
                 # files/directories: checkMesh/simpleFoam must not read an
                 # externally writable alias through this output tree.
-                def _mesh_walk_error(exc: OSError) -> None:
-                    raise ValueError(
-                        f"Unreadable generated mesh tree: {key}/constant/polyMesh"
-                    ) from exc
-
-                for parent, directories, files in os.walk(
-                    mesh, topdown=True, followlinks=False,
-                    onerror=_mesh_walk_error,
-                ):
-                    for name in directories:
-                        entry = Path(parent) / name
-                        if entry.is_symlink() or not entry.is_dir():
-                            raise ValueError(
-                                f"Unsafe generated mesh directory: {key}/{entry.relative_to(workdir)}"
-                            )
-                    for name in files:
-                        entry = Path(parent) / name
-                        if (entry.is_symlink() or not entry.is_file()
-                                or entry.stat().st_nlink != 1):
-                            raise ValueError(
-                                f"Unsafe generated mesh file: {key}/{entry.relative_to(workdir)}"
-                            )
+                for _entry in _walk_mesh_tree(mesh, key):
+                    pass
                 if mesh.is_symlink() or not mesh.is_dir():
                     raise ValueError(f"Generated mesh replaced during inspection: {key}")
                 allowed.add("polyMesh")
-        if {entry.name for entry in directory.iterdir()} != allowed:
+        names = set()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    names.add(entry.name)
+                    if len(names) > len(allowed):
+                        raise ValueError(
+                            f"Unexpected solver source directory entry limit: {key}/{folder}"
+                        )
+        except OSError as exc:
+            raise ValueError(
+                f"Unreadable solver source directory: {key}/{folder}"
+            ) from exc
+        if names != allowed:
             raise ValueError(f"Unexpected solver source directory entries: {key}/{folder}")
+
+
+def _walk_mesh_tree(mesh: Path, key: str):
+    """Yield safe mesh entries while bounding total work and directory depth."""
+    pending = [(mesh, 0)]
+    visited = 0
+    while pending:
+        parent, depth = pending.pop()
+        if parent.is_symlink() or not parent.is_dir():
+            raise ValueError(f"Unsafe generated mesh directory: {key}/{parent}")
+        try:
+            with os.scandir(parent) as entries:
+                for item in entries:
+                    visited += 1
+                    if visited > _MAX_MESH_TREE_ENTRIES:
+                        raise ValueError(f"Generated mesh tree exceeds entry limit: {key}")
+                    entry = Path(item.path)
+                    try:
+                        if item.is_symlink():
+                            raise ValueError(
+                                f"Unsafe generated mesh entry: {key}/{entry}"
+                            )
+                        if item.is_dir(follow_symlinks=False):
+                            if depth >= _MAX_MESH_TREE_DEPTH:
+                                raise ValueError(
+                                    f"Generated mesh tree exceeds depth limit: {key}"
+                                )
+                            yield entry, True
+                            pending.append((entry, depth + 1))
+                        elif item.is_file(follow_symlinks=False):
+                            if item.stat(follow_symlinks=False).st_nlink != 1:
+                                raise ValueError(
+                                    f"Unsafe generated mesh file: {key}/{entry}"
+                                )
+                            yield entry, False
+                        else:
+                            raise ValueError(
+                                f"Unsupported generated mesh entry: {key}/{entry}"
+                            )
+                    except OSError as exc:
+                        raise ValueError(
+                            f"Unreadable generated mesh entry: {key}/{entry}"
+                        ) from exc
+        except OSError as exc:
+            raise ValueError(
+                f"Unreadable generated mesh directory: {key}/{parent}"
+            ) from exc
 
 
 def _mesh_file_hashes(workdir: Path, key: str) -> dict[str, str]:
@@ -292,6 +336,8 @@ def _mesh_file_hashes(workdir: Path, key: str) -> dict[str, str]:
     This captures solver-generated output that is intentionally absent from
     the immutable 72-input manifest. The caller must preserve these digests
     in the execution receipt and recheck them during offline verification.
+    The entry count, nesting depth, file count, and total byte limits bound
+    inspection work even when the output directory is adversarial.
     """
     mesh = workdir / "constant" / "polyMesh"
     if mesh.is_symlink() or (mesh.exists() and not mesh.is_dir()):
@@ -300,28 +346,16 @@ def _mesh_file_hashes(workdir: Path, key: str) -> dict[str, str]:
         return {}
     files: dict[str, str] = {}
     total_bytes = 0
-
-    def _walk_error(exc: OSError) -> None:
-        raise ValueError(f"Unreadable mesh output: {key}/constant/polyMesh") from exc
-
-    for parent, directories, filenames in os.walk(
-        mesh, topdown=True, followlinks=False, onerror=_walk_error,
-    ):
-        for directory in directories:
-            entry = Path(parent) / directory
-            if entry.is_symlink() or not entry.is_dir():
-                raise ValueError(f"Unsafe mesh subdirectory: {key}/{entry.relative_to(workdir)}")
-        for filename in filenames:
-            entry = Path(parent) / filename
-            if entry.is_symlink() or not entry.is_file() or entry.stat().st_nlink != 1:
-                raise ValueError(f"Unsafe generated mesh file: {key}/{entry.relative_to(workdir)}")
-            relative = entry.relative_to(mesh).as_posix()
-            if len(files) >= 4096:
-                raise ValueError(f"Too many generated mesh files: {key}")
-            total_bytes += entry.stat().st_size
-            if total_bytes > 1_073_741_824:
-                raise ValueError(f"Mesh output exceeds 1 GiB evidence limit: {key}")
-            files[relative] = _hash(entry)
+    for entry, is_directory in _walk_mesh_tree(mesh, key):
+        if is_directory:
+            continue
+        relative = entry.relative_to(mesh).as_posix()
+        if len(files) >= _MAX_MESH_FILES:
+            raise ValueError(f"Too many generated mesh files: {key}")
+        total_bytes += entry.stat().st_size
+        if total_bytes > _MAX_MESH_BYTES:
+            raise ValueError(f"Mesh output exceeds 1 GiB evidence limit: {key}")
+        files[relative] = _hash(entry)
     if mesh.is_symlink() or not mesh.is_dir():
         raise ValueError(f"Generated mesh root changed while hashing: {key}")
     return dict(sorted(files.items()))

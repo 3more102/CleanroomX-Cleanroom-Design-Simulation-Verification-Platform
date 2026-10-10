@@ -132,6 +132,8 @@ def test_synthetic_hex_polymesh_connectivity_is_structurally_screened(tmp_path, 
     assert result["points"] == (cells + 1) * 4
     assert result["internal_faces"] == cells - 1
     assert result["faces"] == 5 * cells + 1
+    assert result["minimum_cell_volume_m3"] == pytest.approx(1.0)
+    assert result["maximum_cell_volume_m3"] == pytest.approx(1.0)
     assert result["engineering_review"] == "BLOCKED"
 
 

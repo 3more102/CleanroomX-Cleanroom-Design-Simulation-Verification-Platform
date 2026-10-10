@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased Release 3 — signed polyMesh cell-volume screen — 2026-10-10
+
+- Computes signed cell volumes from the owner-oriented ASCII polyMesh faces,
+  reversing internal faces for each neighbour. Nonfinite and nonpositive
+  volumes fail the structural screen; reports include minimum and maximum
+  cell volume in m³. This adds no CFD mesh-quality or scientific threshold.
+
+## Unreleased Release 3 — bound CFD evidence-tree scans — 2026-10-10
+
+- Bounds polyMesh traversal by total entries, nesting depth, regular-file count
+  and aggregate bytes; unexpected solver source-directory entries fail fast.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

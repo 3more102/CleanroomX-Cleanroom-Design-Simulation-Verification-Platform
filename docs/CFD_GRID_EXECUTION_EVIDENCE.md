@@ -365,9 +365,32 @@ and [OpenFOAM mesh validity constraints](https://www.openfoam.com/documentation/
 and can also be started with `workflow_dispatch`. On Ubuntu 22.04 it installs
 OpenFOAM Foundation v10, generates the example family below, executes all nine
 cases through `blockMesh`, `checkMesh`, and `simpleFoam`, then runs
-`grid-verify` and `grid-mesh-audit`. The Actions artifact retains the OpenFOAM
-version, execution receipt, stage logs, and generated mesh files for 14 days,
-including partial evidence from failed runs.
+`grid-verify` and `grid-mesh-audit`. A failed `grid-run` still triggers both
+read-only evidence screens, with each actual exit code recorded; any nonzero
+result fails the workflow. The workflow retries transient download failures
+while installing the official OpenFOAM Foundation v10 package, which depends
+on a large ParaView download. This does not change the solver version.
+
+The workflow packs the generated family, OpenFOAM version and command exit codes
+in `openfoam-v10-grid-evidence.tar.gz` (retained for 14 days). The TAR format
+is deliberate: GitHub directory artifacts can omit hidden entries and empty
+directories, but local `grid-verify` requires the **empty**
+`.grid_run_reserved` marker. The archive is created even when the CFD commands
+fail, provided any execution evidence exists. After downloading, inspect the
+archive's contents and extract it in a trusted, fresh directory (do not merge
+with an earlier run):
+
+```bash
+tar -tzf openfoam-v10-grid-evidence.tar.gz | head
+tar -xzf openfoam-v10-grid-evidence.tar.gz -C ./fresh-evidence
+cleanroomx-cfd-pipeline grid-verify ./fresh-evidence/cleanroomx-cfd-grid-family
+```
+
+Create `fresh-evidence` before extraction. Keep the GitHub artifact digest,
+exact head commit, CI run URL and an independent copy of the TAR for longer
+review. The artifact is short-lived and is **not** authenticated provenance,
+proof of physical validation, or evidence of convergence merely because its
+integrity hashes match. A failed or incomplete run stays explicitly BLOCKED.
 
 The example specification is explicitly synthetic. A green workflow therefore
 demonstrates software integration with a real OpenFOAM v10 installation and

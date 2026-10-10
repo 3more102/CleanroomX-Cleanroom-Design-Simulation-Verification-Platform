@@ -178,6 +178,34 @@ def _verify_runtime_source_tree(workdir: Path, key: str) -> None:
             if mesh.is_symlink() or (mesh.exists() and not mesh.is_dir()):
                 raise ValueError(f"Unsafe generated mesh directory: {key}/constant/polyMesh")
             if mesh.is_dir():
+                # The mesh is solver-generated, not one of the 72 signed
+                # inputs. It must nevertheless contain only local, ordinary
+                # files/directories: checkMesh/simpleFoam must not read an
+                # externally writable alias through this output tree.
+                def _mesh_walk_error(exc: OSError) -> None:
+                    raise ValueError(
+                        f"Unreadable generated mesh tree: {key}/constant/polyMesh"
+                    ) from exc
+
+                for parent, directories, files in os.walk(
+                    mesh, topdown=True, followlinks=False,
+                    onerror=_mesh_walk_error,
+                ):
+                    for name in directories:
+                        entry = Path(parent) / name
+                        if entry.is_symlink() or not entry.is_dir():
+                            raise ValueError(
+                                f"Unsafe generated mesh directory: {key}/{entry.relative_to(workdir)}"
+                            )
+                    for name in files:
+                        entry = Path(parent) / name
+                        if (entry.is_symlink() or not entry.is_file()
+                                or entry.stat().st_nlink != 1):
+                            raise ValueError(
+                                f"Unsafe generated mesh file: {key}/{entry.relative_to(workdir)}"
+                            )
+                if mesh.is_symlink() or not mesh.is_dir():
+                    raise ValueError(f"Generated mesh replaced during inspection: {key}")
                 allowed.add("polyMesh")
         if {entry.name for entry in directory.iterdir()} != allowed:
             raise ValueError(f"Unexpected solver source directory entries: {key}/{folder}")

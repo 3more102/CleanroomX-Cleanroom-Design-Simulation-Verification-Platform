@@ -347,10 +347,12 @@ cell count. It checks:
 - Stable local mesh-file digests before/after inspection and a complete,
   integrity-consistent previous execution receipt. Unsigned local hashes are
   not independent source authentication.
-- Mesh output traversal is capped at 8,192 total entries and 64 directory
-  levels per case, in addition to 4,096 regular files and 1 GiB of file bytes.
-  Unexpected input-directory entries fail as soon as the expected set is
-  exceeded; links and nonregular entries also fail closed.
+- Mesh output traversal shares an 8,192-entry and 64-directory-depth budget
+  across all recursive walks and repeated safety/hash passes in each
+  `grid-run`, `grid-verify`, or `grid-mesh-audit` invocation. Each case also
+  has a 4,096 regular-file and 1 GiB file-byte cap. Unexpected input-directory
+  entries fail as soon as the expected set is exceeded; links and nonregular
+  entries also fail closed.
 
 A fully screened nine-case family is labeled
 `mesh_structure_screened_requires_scientific_review` (CLI exit 0).
@@ -399,8 +401,8 @@ synthetic cases; `grid-verify` checked all nine cases and 27 logs, and
 `checkMesh` logs. These results demonstrate software execution and local
 evidence screening for the synthetic example.
 
-A later exact PR-head run at `76f50d8bb66927d940c556d1b560f5b6d5e018b4`,
-[GitHub Actions run #38071903319](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38071903319),
+At exact PR head `70f2bb6108861d2a0300696cf7b850d5d4983db0`,
+[GitHub Actions run #38072422179](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38072422179)
 completed all 27 `blockMesh`, `checkMesh`, and `simpleFoam` stage invocations
 with exit code 0. Each of the nine `simpleFoam` logs has 600 time entries
 (1–600 s), ends with `End`, and reports `SIMPLE: Convergence criteria found`.

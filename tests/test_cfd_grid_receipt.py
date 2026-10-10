@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -67,6 +68,27 @@ def test_verify_27_receipted_logs_without_claiming_validation(grid_family, monke
     assert result["findings"] == []
     assert result["engineering_review"] == "BLOCKED"
     assert result["physical_validation"] == "not_performed"
+
+
+@pytest.mark.parametrize("relative,expected_finding", [
+    ("grid_run_evidence.json", "receipt_is_hardlinked"),
+    ("configuration_2/coarse/blockMesh.log",
+     "hardlinked_stage_log:configuration_2/coarse:blockMesh"),
+])
+def test_external_hardlink_alias_blocks_evidence_integrity(
+    grid_family, monkeypatch, tmp_path, relative, expected_finding
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    assert verify_grid_run_evidence(grid_family)["findings"] == []
+    try:
+        os.link(grid_family / relative, tmp_path / "writable_alias")
+    except (OSError, NotImplementedError):
+        pytest.skip("Hard links unavailable on this filesystem")
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert expected_finding in result["findings"]
+    assert result["engineering_review"] == "BLOCKED"
 
 
 def test_modified_solver_log_fails_integrity_screen(grid_family, monkeypatch):

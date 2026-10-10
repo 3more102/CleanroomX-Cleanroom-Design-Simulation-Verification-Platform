@@ -96,6 +96,8 @@ def _verify_generated_inputs(root: Path) -> str:
     manifest_path = (root / "manifest.json").resolve(strict=True)
     if not manifest_path.is_relative_to(root) or not manifest_path.is_file():
         raise ValueError("Grid family manifest must be a file inside the family")
+    if manifest_path.stat().st_nlink != 1:
+        raise ValueError("Grid family manifest must not be hardlinked")
     snapshot = load_strict_json_snapshot(manifest_path, max_bytes=2_000_000)
     raw = snapshot.raw_bytes
     manifest = snapshot.value
@@ -124,6 +126,8 @@ def _verify_generated_inputs(root: Path) -> str:
         path = candidate.resolve(strict=True)
         if not path.is_relative_to(root) or not path.is_file():
             raise ValueError("Generated input resolves outside grid family: " + relative)
+        if path.stat().st_nlink != 1:
+            raise ValueError("Generated solver input must not be hardlinked: " + relative)
         if _hash(path) != expected_sha:
             raise ValueError("Generated solver input changed: " + relative)
     return hashlib.sha256(raw).hexdigest()
@@ -139,7 +143,8 @@ def _verify_stage_source_snapshot(
     filesystem time-of-check/time-of-use races on untrusted storage.
     """
     manifest = root / "manifest.json"
-    if manifest.is_symlink() or not manifest.is_file() or _hash(manifest) != manifest_sha:
+    if (manifest.is_symlink() or not manifest.is_file()
+            or manifest.stat().st_nlink != 1 or _hash(manifest) != manifest_sha):
         raise ValueError("Grid family manifest changed during execution")
     configuration, _ = key.split("/", 1)
     workdir = root / key
@@ -157,6 +162,8 @@ def _verify_stage_source_snapshot(
         resolved = source.resolve(strict=True)
         if not resolved.is_relative_to(root):
             raise ValueError(f"Case input escaped family during execution: {key}/{relative}")
+        if resolved.stat().st_nlink != 1:
+            raise ValueError(f"Case input hardlinked during execution: {key}/{relative}")
         if _hash(resolved) != expected_hashes[f"{key}/{relative}"]:
             raise ValueError(f"Case input changed during execution: {key}/{relative}")
 

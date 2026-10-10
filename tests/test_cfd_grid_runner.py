@@ -1,6 +1,7 @@
 """Nine-case executor regressions use fake process exits, not CFD results."""
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -89,6 +90,27 @@ def test_failed_stage_blocks_review_but_other_cases_remain_recorded(generated, m
     assert "simpleFoam" not in [stage["command"] for stage in failed["stages"]]
     assert len(calls) == 26
     assert report["cases"]["configuration_3/fine"]["status"] == "executed_requires_convergence_review"
+
+
+@pytest.mark.parametrize("relative", [
+    "manifest.json",
+    "configuration_2/medium/0/U",
+])
+def test_hardlinked_generated_input_rejected_before_execution(
+    generated, monkeypatch, tmp_path, relative
+):
+    # A hard link retains the input bytes and digest but exposes a second
+    # writable name outside the generated family.
+    try:
+        os.link(generated / relative, tmp_path / "outside_alias")
+    except (OSError, NotImplementedError):
+        pytest.skip("Hard links unavailable on this filesystem")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match="hardlinked"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / "grid_run_evidence.json").exists()
+    assert not (generated / ".grid_run_reserved").exists()
 
 
 def test_input_tampering_fails_preflight_before_execution(generated, monkeypatch):

@@ -86,6 +86,8 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
         findings.append("receipt_is_symlink")
         return result
     try:
+        if receipt_path.stat().st_nlink != 1:
+            findings.append("receipt_is_hardlinked")
         receipt = load_strict_json_snapshot(
             receipt_path, max_bytes=2_000_000
         ).value
@@ -228,6 +230,9 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 resolved = path.resolve(strict=True)
                 if not resolved.is_relative_to(root) or not resolved.is_file():
                     raise ValueError("outside case family or not a regular file")
+                if resolved.stat().st_nlink != 1:
+                    findings.append(f"hardlinked_stage_log:{key}:{expected_command}")
+                    continue
                 actual_sha = _file_digest(resolved)
             except (OSError, ValueError):
                 findings.append(f"missing_or_unsafe_log:{key}:{expected_command}")

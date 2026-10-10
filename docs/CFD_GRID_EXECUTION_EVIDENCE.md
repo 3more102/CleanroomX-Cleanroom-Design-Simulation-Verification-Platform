@@ -42,7 +42,15 @@ permitted. For OpenFOAM **Foundation v10**, the case includes
 `constant/physicalProperties` (`viscosityModel constant` with `nu`) and
 `constant/momentumTransport` (`simulationType laminar`), rather than the
 pre-v10 dictionary names. This compatibility change is validated against
-published v10 documentation, but still requires a real OpenFOAM v10 smoke run. Pre-existing `constant/polyMesh`, result time directories,
+published v10 documentation, but still requires a real OpenFOAM v10 smoke run. Hard-linked manifests and generated inputs are rejected even when their contents
+match the expected SHA-256: an extra filesystem name could permit untracked
+writes from outside the family. The post-run verifier likewise rejects
+hard-linked execution receipts and stage logs. This is a conservative local
+custody screen, **not** proof of provenance or protection against an adversary
+who can rewrite both evidence and hashes. Filesystems lacking meaningful
+hard-link counts require separate custody controls.
+
+Pre-existing `constant/polyMesh`, result time directories,
 `postProcessing`, extra files or symbolic-link substitutions are rejected
 *before* any external process starts. Remove stale output only by deliberately
 regenerating a clean family in a **new directory**, not by overwriting

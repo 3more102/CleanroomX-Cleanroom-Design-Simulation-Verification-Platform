@@ -358,3 +358,21 @@ Scientific/physical review remains **BLOCKED**.
 
 Source: [OpenFOAM mesh files](https://doc.cfd.direct/openfoam/user-guide-v13/mesh-files)
 and [OpenFOAM mesh validity constraints](https://www.openfoam.com/documentation/user-guide/4-mesh-generation-and-conversion/4.1-mesh-description).
+
+## CI-backed OpenFOAM v10 smoke run
+
+`.github/workflows/cfd-openfoam-grid.yml` runs for relevant pull request changes
+and can also be started with `workflow_dispatch`. On Ubuntu 22.04 it installs
+OpenFOAM Foundation v10, generates the example family below, executes all nine
+cases through `blockMesh`, `checkMesh`, and `simpleFoam`, then runs
+`grid-verify` and `grid-mesh-audit`. The Actions artifact retains the OpenFOAM
+version, execution receipt, stage logs, and generated mesh files for 14 days,
+including partial evidence from failed runs.
+
+The example specification is explicitly synthetic. A green workflow therefore
+demonstrates software integration with a real OpenFOAM v10 installation and
+local evidence/mesh screening for that synthetic case family. It does not
+establish convergence, independent mesh quality, real-room performance,
+physical correlation, or release readiness. Keep scientific review **BLOCKED**
+until project-specific inputs, numerical review, independent measurements, and
+all release evidence are available.

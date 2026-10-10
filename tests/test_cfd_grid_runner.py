@@ -549,6 +549,69 @@ def test_tampered_family_manifest_metadata_blocks_all_execution(
     assert not (generated / ".grid_run_reserved").exists()
 
 
+@pytest.mark.parametrize("unexpected", [
+    "system/fvOptions", "0/U.extra", "constant/turbulenceProperties",
+    "constant/polyMesh",
+])
+def test_unmanifested_source_artifact_during_blockmesh_blocks_run(
+    generated, monkeypatch, unexpected
+):
+    """Even byte-perfect listed inputs cannot authorize added dictionaries."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    previous = runner.subprocess.run
+
+    def inject(command, **kwargs):
+        finished = previous(command, **kwargs)
+        if (Path(command[0]).name == "blockMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            target = kwargs["cwd"] / unexpected
+            target.write_text("UNTRACKED synthetic source; not OpenFOAM evidence")
+        return finished
+
+    monkeypatch.setattr(runner.subprocess, "run", inject)
+    report = run_grid_family(generated, timeout_seconds=60)
+    assert calls == [("configuration_1/coarse", "blockMesh")]
+    first = report["cases"]["configuration_1/coarse"]
+    assert first["status"] == "execution_failed"
+    assert first["stages"][-1]["status"] == "source_drift"
+    assert report["status"] == "incomplete"
+    verification = verify_grid_run_evidence(generated)
+    assert verification["status"] == "evidence_integrity_failed"
+    assert any(x.startswith(
+        "unexpected_or_unsafe_source_tree:configuration_1/coarse:"
+    ) for x in verification["findings"])
+
+
+def test_generated_polymesh_is_permitted_without_extra_dictionaries(
+    generated, monkeypatch
+):
+    """The known blockMesh output must not be mistaken for source tampering."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    previous = runner.subprocess.run
+
+    def emit_mesh(command, **kwargs):
+        completed = previous(command, **kwargs)
+        if Path(command[0]).name == "blockMesh":
+            mesh = kwargs["cwd"] / "constant/polyMesh"
+            mesh.mkdir()
+            (mesh / "points").write_text("Synthetic output; not a CFD mesh")
+        return completed
+
+    monkeypatch.setattr(runner.subprocess, "run", emit_mesh)
+    receipt = run_grid_family(generated, timeout_seconds=60)
+    assert len(calls) == 27
+    assert receipt["status"] == "executed_requires_convergence_review"
+    report = verify_grid_run_evidence(generated)
+    assert report["status"] == "execution_logs_integrity_verified_requires_scientific_review"
+    assert report["engineering_review"] == "BLOCKED"
+
+
 @pytest.mark.parametrize("injection", ["version_probe", "after_block_mesh"])
 @pytest.mark.parametrize("target", ["manifest", "solver_input"])
 def test_stage_source_revalidation_blocks_midrun_tampering(

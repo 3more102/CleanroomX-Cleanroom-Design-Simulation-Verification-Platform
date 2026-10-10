@@ -91,6 +91,25 @@ def test_external_hardlink_alias_blocks_evidence_integrity(
     assert result["engineering_review"] == "BLOCKED"
 
 
+@pytest.mark.parametrize("unexpected", [
+    "system/fvOptions", "0/U.extra", "constant/turbulenceProperties",
+])
+def test_postrun_unmanifested_source_file_is_not_integrity_verified(
+    grid_family, monkeypatch, unexpected
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    assert verify_grid_run_evidence(grid_family)["findings"] == []
+    target = grid_family / "configuration_3/medium" / unexpected
+    target.write_text("Untracked source injected after execution")
+    report = verify_grid_run_evidence(grid_family)
+    assert report["status"] == "evidence_integrity_failed"
+    assert any(finding.startswith(
+        "unexpected_or_unsafe_source_tree:configuration_3/medium:"
+    ) for finding in report["findings"])
+    assert report["engineering_review"] == "BLOCKED"
+
+
 def test_modified_solver_log_fails_integrity_screen(grid_family, monkeypatch):
     synthetic_processes(monkeypatch)
     run_grid_family(grid_family, timeout_seconds=60)

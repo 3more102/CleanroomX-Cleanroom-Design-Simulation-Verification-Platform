@@ -11,7 +11,7 @@ import re
 
 from .cfd_grid_runner import (
     INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _hash,
-    _verify_generated_inputs,
+    _verify_generated_inputs, _verify_runtime_source_tree,
 )
 from .strict_json import load_strict_json_snapshot
 
@@ -128,6 +128,10 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
         for filename in INPUTS:
             if (root / key / filename).is_symlink():
                 findings.append(f"source_file_is_symlink:{key}/{filename}")
+        try:
+            _verify_runtime_source_tree(root / key, key)
+        except (OSError, ValueError) as exc:
+            findings.append(f"unexpected_or_unsafe_source_tree:{key}:{type(exc).__name__}")
 
     recorded_sha = receipt.get("source_manifest_sha256")
     if (type(recorded_sha) is not str

@@ -554,3 +554,33 @@ def test_out_of_sequence_case_receipt_rejected(
     assert result["status"] == "evidence_integrity_failed"
     assert "out_of_sequence_case_state:configuration_1/medium" in result["findings"]
     assert result["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("link_type", ["symlink", "hardlink"])
+def test_postrun_polymesh_alias_breaks_local_evidence_integrity(
+    grid_family, monkeypatch, tmp_path, link_type
+):
+    """Replayed receipts do not excuse unsafe links in generated mesh output."""
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    assert verify_grid_run_evidence(grid_family)["findings"] == []
+
+    external = tmp_path / "outside_mesh_points"
+    external.write_text("SYNTHETIC external mesh file")
+    mesh = grid_family / "configuration_2/fine/constant/polyMesh"
+    mesh.mkdir()
+    try:
+        if link_type == "symlink":
+            (mesh / "points").symlink_to(external)
+        else:
+            os.link(external, mesh / "points")
+    except (OSError, NotImplementedError):
+        pytest.skip("Link creation unavailable on this filesystem")
+
+    result = verify_grid_run_evidence(grid_family)
+    assert result["status"] == "evidence_integrity_failed"
+    assert any(
+        f.startswith("unexpected_or_unsafe_source_tree:configuration_2/fine:")
+        for f in result["findings"]
+    )
+    assert result["engineering_review"] == "BLOCKED"

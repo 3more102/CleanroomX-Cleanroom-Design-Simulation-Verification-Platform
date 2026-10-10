@@ -65,7 +65,7 @@ jobs:
             echo "Expected OpenFOAM Foundation v10 environment" >&2
             exit 1
           fi
-          printf '%s\\n' "$WM_PROJECT_VERSION"
+          echo "$WM_PROJECT_VERSION"
           EOF
           chmod 0755 "$version_bin/foamVersion"
           export PATH="$version_bin:$PATH"

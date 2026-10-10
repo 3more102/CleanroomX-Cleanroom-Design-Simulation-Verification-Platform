@@ -144,6 +144,40 @@ def test_forged_manifest_refinement_still_fails_with_matching_receipt_hash(
     assert checked["engineering_review"] == "BLOCKED"
 
 
+def test_rehashed_duplicate_hexahedron_fails_offline_source_integrity(
+    grid_family, monkeypatch
+):
+    """Rewriting the local manifest and receipt hashes cannot hide duplicate blocks."""
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    source_path = grid_family / relative
+    lines = source_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    indices = [i for i, line in enumerate(lines)
+               if line.lstrip().startswith("hex ")]
+    lines[indices[1]] = lines[indices[0]]
+    source_path.write_text("".join(lines), encoding="utf-8")
+
+    manifest_path = grid_family / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["source_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    verified = verify_grid_run_evidence(grid_family)
+    assert verified["status"] == "evidence_integrity_failed"
+    assert any(item.startswith("source_manifest_or_inputs_invalid:")
+               for item in verified["findings"])
+    assert verified["engineering_review"] == "BLOCKED"
+
+
 def test_modified_solver_log_fails_integrity_screen(grid_family, monkeypatch):
     synthetic_processes(monkeypatch)
     run_grid_family(grid_family, timeout_seconds=60)

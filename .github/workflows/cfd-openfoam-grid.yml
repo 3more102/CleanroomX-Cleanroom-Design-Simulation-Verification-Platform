@@ -41,10 +41,28 @@ jobs:
           test -f /opt/openfoam10/etc/bashrc
 
       - name: Run and screen the synthetic nine-case family
+        shell: bash
         run: |
-          set -eo pipefail
+          # OpenFOAM's sourced environment contains optional shell probes.
+          # Do not let GitHub's implicit bash -e abort during those probes:
+          # inspect the resulting tools and version explicitly instead.
+          set +e
+          set +u
           source /opt/openfoam10/etc/bashrc
-          set -u
+          source_rc=$?
+          set -euo pipefail
+          {
+            printf 'openfoam_bashrc_exit_code=%s\n' "$source_rc"
+            for executable in foamVersion blockMesh checkMesh simpleFoam; do
+              if ! command -v "$executable"; then
+                printf 'missing_openfoam_executable=%s\n' "$executable"
+                exit 1
+              fi
+            done
+            if [[ "$source_rc" -ne 0 ]]; then
+              echo "OpenFOAM environment source returned nonzero; checking actual executables" >&2
+            fi
+          } | tee "$RUNNER_TEMP/openfoam-v10-init-status.txt"
           foamVersion | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
@@ -90,5 +108,6 @@ jobs:
             ${{ runner.temp }}/openfoam-v10-grid-family.tar.sha256
             ${{ runner.temp }}/openfoam-v10-grid-family.inventory.txt
             ${{ runner.temp }}/openfoam-v10-version.txt
+            ${{ runner.temp }}/openfoam-v10-init-status.txt
           if-no-files-found: warn
           retention-days: 90

@@ -357,6 +357,12 @@ def verify_generated_blockmesh_source(
             len({point[axis] for point in original_vertices}) - 1
             for axis in range(3)
         ),
+        # Small per-axis snapshots are needed to distinguish meshes with
+        # identical shape and room bounds but displaced interior grid planes.
+        "axis_positions_m": tuple(
+            tuple(sorted({point[axis] for point in original_vertices}))
+            for axis in range(3)
+        ),
     }
     # Keep the default preflight result small: no full source snapshots
     # leave this function unless the caller explicitly requests them.

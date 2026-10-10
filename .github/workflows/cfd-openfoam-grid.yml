@@ -73,6 +73,25 @@ jobs:
             echo "WM_PROJECT=${WM_PROJECT:-unknown}"
             echo "WM_PROJECT_VERSION=${WM_PROJECT_VERSION:-unknown}"
           } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
+          # Foundation's foamVersion helper is defined by bashrc, but the
+          # runner invokes its version probe as a subprocess executable.
+          # Adapt the interface by calling the installed helper in a wrapper;
+          # derive the reported version from the sourced Foundation environment.
+          version_bin="$RUNNER_TEMP/openfoam-version-bin"
+          mkdir -p "$version_bin"
+          cat > "$version_bin/foamVersion" <<'EOF'
+          #!/usr/bin/env bash
+          set -eo pipefail
+          set +u
+          source /opt/openfoam10/etc/bashrc
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            echo "Expected OpenFOAM Foundation v10 environment" >&2
+            exit 1
+          fi
+          foamVersion
+          EOF
+          chmod +x "$version_bin/foamVersion"
+          export PATH="$version_bin:$PATH"
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
           cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600

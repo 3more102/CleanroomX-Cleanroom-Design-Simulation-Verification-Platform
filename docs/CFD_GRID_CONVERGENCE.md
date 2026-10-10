@@ -27,7 +27,10 @@ Output folders: configuration_1/coarse, configuration_1/medium,
 configuration_1/fine, and the same three levels for configurations 2 and 3.
 Each contains system, constant, and 0 solver input dictionaries. SHA-256
 digests are generated for all 72 inputs. Existing destinations are not
-overwritten. Each case can be run using blockMesh, checkMesh and simpleFoam
+overwritten. The opt-in `cleanroomx-cfd-pipeline grid-run ./cfd_mesh_family` command
+runs all nine cases and preserves stage-by-stage process logs and SHA-256
+receipts; see [nine-case execution evidence](CFD_GRID_EXECUTION_EVIDENCE.md).
+Each case can be run using blockMesh, checkMesh and simpleFoam
 in its individual case directory. The generator does not itself run any
 solver, does not prove physical mesh quality, and retains the current
 per-case 20,000-cell bound.

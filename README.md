@@ -58,6 +58,7 @@ codes, privacy considerations, and limitations.
 - Generate nine reproducible OpenFOAM input cases across three ventilation layouts and three mesh resolutions.
 - Import real VTK velocity or scalar fields and OpenFOAM residual logs at fine, medium and coarse resolutions.
 - Compute apparent order, Richardson zero-grid estimate and fine-grid GCI using user-defined verification criteria; an acceptable GCI is **not** a claim of physically validated CFD.
+- Opt-in `grid-run` executes the nine cases with per-stage logs and SHA-256 receipts. Successful solver exits require separate numerical and physical validation; see [execution evidence](docs/CFD_GRID_EXECUTION_EVIDENCE.md).
 - See [three-grid convergence workflow](docs/CFD_GRID_CONVERGENCE.md).
 
 ### Engineering verification

@@ -178,7 +178,8 @@ def _verify_generated_inputs(root: Path) -> str:
     for key in sorted(cases):
         mesh_source = root / key / "system/blockMeshDict"
         verify_generated_blockmesh_source(
-            mesh_source, expected_cells=manifest["case_inputs"][key]["mesh_cells"]
+            mesh_source, expected_cells=manifest["case_inputs"][key]["mesh_cells"],
+            expected_configuration=manifest["case_inputs"][key]["configuration"],
         )
         if _hash(mesh_source) != manifest["files"][f"{key}/system/blockMeshDict"]:
             raise ValueError("Generated blockMesh source drifted during parsing: " + key)

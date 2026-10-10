@@ -584,3 +584,78 @@ def test_postrun_polymesh_alias_breaks_local_evidence_integrity(
         for f in result["findings"]
     )
     assert result["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("tamper", ["modify", "delete", "add", "forge"])
+def test_v2_mesh_manifest_detects_postrun_regular_file_tampering(
+    grid_family, monkeypatch, tamper
+):
+    """Changed regular mesh bytes are detected even if no links are involved."""
+    import hashlib
+    import cleanroomx.cfd_grid_runner as runner
+
+    synthetic_processes(monkeypatch)
+    original_run = runner.subprocess.run
+    target_key = "configuration_1/coarse"
+    target_dir = grid_family / target_key
+    expected_bytes = b"SYNTHETIC mesh result from fake process"
+
+    def with_nested_mesh(cmd, **kwargs):
+        result = original_run(cmd, **kwargs)
+        if (Path(cmd[0]).name == "blockMesh"
+                and kwargs.get("cwd") == target_dir):
+            folder = target_dir / "constant/polyMesh/nested"
+            folder.mkdir(parents=True)
+            (folder / "points").write_bytes(expected_bytes)
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", with_nested_mesh)
+    receipt = run_grid_family(grid_family, timeout_seconds=60)
+    assert receipt["cases"][target_key]["mesh_files"] == {
+        "nested/points": hashlib.sha256(expected_bytes).hexdigest()
+    }
+    assert verify_grid_run_evidence(grid_family)["findings"] == []
+
+    mesh_file = target_dir / "constant/polyMesh/nested/points"
+    if tamper == "modify":
+        mesh_file.write_bytes(b"CHANGED ordinary mesh bytes")
+    elif tamper == "delete":
+        mesh_file.unlink()
+    elif tamper == "add":
+        (mesh_file.parent / "extra").write_text("UNRECEIPTED synthetic output")
+    else:
+        receipt_path = grid_family / "grid_run_evidence.json"
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        data["cases"][target_key]["mesh_files"]["nested/points"] = "0" * 64
+        receipt_path.write_text(json.dumps(data), encoding="utf-8")
+
+    verified = verify_grid_run_evidence(grid_family)
+    assert verified["status"] == "evidence_integrity_failed"
+    assert f"mesh_output_digest_mismatch:{target_key}" in verified["findings"]
+    assert verified["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("mutation", ["missing_mesh_manifest", "v1_schema", "unsafe_key"])
+def test_v2_receipt_requires_well_formed_mesh_evidence(
+    grid_family, monkeypatch, mutation
+):
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    path = grid_family / "grid_run_evidence.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    key = "configuration_2/medium"
+    if mutation == "missing_mesh_manifest":
+        del data["cases"][key]["mesh_files"]
+    elif mutation == "v1_schema":
+        data["schema_version"] = "cleanroomx.cfd-grid-run.v1"
+    else:
+        data["cases"][key]["mesh_files"]["../untrusted"] = "a" * 64
+    path.write_text(json.dumps(data), encoding="utf-8")
+    verified = verify_grid_run_evidence(grid_family)
+    assert verified["status"] == "evidence_integrity_failed"
+    if mutation == "missing_mesh_manifest":
+        assert f"invalid_case_record:{key}" in verified["findings"]
+    elif mutation == "v1_schema":
+        assert "invalid_receipt_schema" in verified["findings"]
+    else:
+        assert f"invalid_mesh_manifest:{key}" in verified["findings"]

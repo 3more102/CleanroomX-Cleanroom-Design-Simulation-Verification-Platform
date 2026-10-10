@@ -94,7 +94,10 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
         raise ValueError("Invalid OpenFOAM boundary list")
     remaining = match.group(2)
     patches = {}
-    for _ in range(int(match.group(1))):
+    patch_count = int(match.group(1))
+    if not 1 <= patch_count <= 256:
+        raise ValueError("Unbounded OpenFOAM boundary patch count")
+    for _ in range(patch_count):
         patch = _PATCH.match(remaining)
         if patch is None:
             raise ValueError("Malformed OpenFOAM boundary patch")

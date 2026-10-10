@@ -12,7 +12,7 @@ from cleanroomx.cfd_blockmesh_source import (
     verify_generated_blockmesh_source,
 )
 from cleanroomx.cfd_grid_family import SCHEMA as FAMILY_SCHEMA, generate_grid_family
-from cleanroomx.cfd_grid_runner import run_grid_family
+from cleanroomx.cfd_grid_runner import _verify_generated_inputs, run_grid_family
 from cleanroomx.cfd_openfoam import SCHEMA, build_openfoam_files
 
 
@@ -683,3 +683,98 @@ def test_rehashed_wrong_patch_roles_fail_before_solver_discovery(
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()
+
+
+
+@pytest.mark.parametrize("initial_levels,case,forged_axes,expected_error", [
+    (
+        {"coarse": [6, 6, 6], "medium": [7, 8, 9], "fine": [8, 10, 11]},
+        "configuration_2/medium",
+        [7, 9, 8],
+        "generated mesh axes differ across configurations",
+    ),
+    (
+        {"coarse": [7, 7, 7], "medium": [8, 9, 10], "fine": [10, 12, 13]},
+        "configuration_1/medium",
+        [6, 10, 12],
+        "generated mesh axes do not refine strictly",
+    ),
+])
+def test_same_total_cells_cannot_forge_grid_axis_refinement(
+    tmp_path, monkeypatch, initial_levels, case, forged_axes, expected_error
+):
+    """Source geometry, hashes and total cell counts can all still agree."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC grid-axis replay test",
+            "room_m": [1, 1.5, 2],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": initial_levels,
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    original_manifest_sha = _verify_generated_inputs(root)
+    assert len(original_manifest_sha) == 64
+
+    config_number = int(case.split("/", 1)[0].removeprefix("configuration_"))
+    level = case.split("/", 1)[1]
+    original_count = 1
+    for dimension in initial_levels[level]:
+        original_count *= dimension
+    tampered_count = 1
+    for dimension in forged_axes:
+        tampered_count *= dimension
+    assert tampered_count == original_count
+
+    modified_spec = dict(spec["base_case"], mesh_cells=forged_axes)
+    forged_files, forged_metadata = build_openfoam_files(
+        modified_spec, config_number
+    )
+    assert forged_metadata["mesh_cells"] == original_count
+    relative = f"{case}/system/blockMeshDict"
+    source_path = root / relative
+    source_path.write_text(
+        forged_files["system/blockMeshDict"], encoding="utf-8"
+    )
+    assert verify_generated_blockmesh_source(
+        source_path, expected_cells=original_count,
+        expected_configuration=config_number
+    )["axis_cell_counts"] == tuple(forged_axes)
+
+    # The manifest remains locally unsigned; regenerating its digest alone
+    # must not promote an anisotropically replayed mesh family.
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match=expected_error):
+        _verify_generated_inputs(root)
+
+    import cleanroomx.cfd_grid_runner as runner
+
+    def forbidden_discovery(_name):
+        pytest.fail("Forged source grid dimensions reached external solver discovery")
+
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match=expected_error):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()
+
+
+def test_source_axis_counts_are_returned_without_audit_snapshots(generated_source):
+    path, cells = generated_source
+    compact = verify_generated_blockmesh_source(path, expected_cells=cells)
+    detailed = verify_generated_blockmesh_source(
+        path, expected_cells=cells, capture_vertices=True,
+    )
+    assert compact["axis_cell_counts"] == detailed["axis_cell_counts"] == (6, 6, 6)
+    assert "vertices_m" not in compact
+    assert "hex_cells" not in compact

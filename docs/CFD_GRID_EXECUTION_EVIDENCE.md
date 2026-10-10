@@ -36,7 +36,11 @@ cleanroomx-cfd-pipeline grid-run ./cfd_mesh_family --timeout-seconds 3600
 
 The executable first validates that the generation manifest lists exactly nine
 cases and all 72 expected generated inputs, and confirms input SHA-256
-digests and source containment. It also requires genuinely fresh case directories: only the eight
+digests and source containment. It rejects a manifest whose declared coarse,
+medium and fine total cell counts fail to increase strictly, or whose same-level
+counts disagree between the three ventilation configurations. These are checks
+on the *declared metadata*, not independent validation of the actual OpenFOAM
+mesh topology or boundary conditions. It also requires genuinely fresh case directories: only the eight
 manifest-bound input files in `0/`, `constant/`, and `system/` are
 permitted. For OpenFOAM **Foundation v10**, the case includes
 `constant/physicalProperties` (`viscosityModel constant` with `nu`) and

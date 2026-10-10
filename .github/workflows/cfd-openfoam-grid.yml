@@ -52,13 +52,43 @@ jobs:
           cleanroomx-cfd-pipeline grid-verify "$family"
           cleanroomx-cfd-pipeline grid-mesh-audit "$family"
 
+      # upload-artifact excludes hidden files and empty directories. A raw
+      # directory upload would silently omit the .grid_run_evidence.json
+      # receipt and the empty .grid_run_reserved custody marker.
+      - name: Package complete nine-case evidence (including hidden files)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          if [[ ! -d "$family" ]]; then
+            echo "No generated nine-case family to archive" >&2
+            exit 0
+          fi
+          archive="$RUNNER_TEMP/openfoam-v10-grid-family.tar"
+          inventory="$RUNNER_TEMP/openfoam-v10-grid-family.inventory.txt"
+          tar --format=posix -C "$RUNNER_TEMP" -cf "$archive" cleanroomx-cfd-grid-family
+          tar -tf "$archive" > "$inventory"
+          if [[ -f "$family/.grid_run_evidence.json" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_evidence.json' "$inventory"
+          fi
+          if [[ -d "$family/.grid_run_reserved" ]]; then
+            grep -Fxq 'cleanroomx-cfd-grid-family/.grid_run_reserved/' "$inventory"
+          fi
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum openfoam-v10-grid-family.tar > openfoam-v10-grid-family.tar.sha256
+          )
+
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: "openfoam-v10-grid-evidence-${{ github.sha }}"
           path: |
-            ${{ runner.temp }}/cleanroomx-cfd-grid-family
+            ${{ runner.temp }}/openfoam-v10-grid-family.tar
+            ${{ runner.temp }}/openfoam-v10-grid-family.tar.sha256
+            ${{ runner.temp }}/openfoam-v10-grid-family.inventory.txt
             ${{ runner.temp }}/openfoam-v10-version.txt
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

@@ -59,10 +59,9 @@ jobs:
           mkdir -p "$version_bin"
           cat > "$version_bin/foamVersion" <<'EOF'
           #!/usr/bin/env bash
-          set -eo pipefail
-          source /opt/openfoam10/etc/bashrc
+          set -euo pipefail
           if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
-            echo "Expected OpenFOAM Foundation v10 environment" >&2
+            printf 'Expected inherited OpenFOAM Foundation v10 environment; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
             exit 1
           fi
           echo "$WM_PROJECT_VERSION"

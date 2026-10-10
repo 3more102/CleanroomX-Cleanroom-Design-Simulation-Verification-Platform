@@ -1004,3 +1004,71 @@ def test_zero_exit_checkmesh_wrong_cell_count_blocks_simplefoam(
     assert verified["status"] == "incomplete_execution_logs_integrity_verified"
     assert verified["findings"] == []
     assert verified["engineering_review"] == "BLOCKED"
+
+
+def test_generated_polymesh_tree_entry_count_is_bounded(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    workdir = generated / key
+    mesh = workdir / "constant" / "polyMesh"
+    mesh.mkdir()
+    (mesh / "part_a").mkdir()
+    (mesh / "part_b").mkdir()
+    monkeypatch.setattr(runner, "_MAX_MESH_TREE_ENTRIES", 1)
+
+    with pytest.raises(ValueError, match="entry limit"):
+        runner._mesh_file_hashes(workdir, key)
+    with pytest.raises(ValueError, match="entry limit"):
+        runner._verify_runtime_source_tree(workdir, key)
+
+
+def test_generated_polymesh_tree_depth_is_bounded(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    workdir = generated / key
+    mesh = workdir / "constant" / "polyMesh"
+    (mesh / "level_one" / "level_two").mkdir(parents=True)
+    monkeypatch.setattr(runner, "_MAX_MESH_TREE_DEPTH", 1)
+
+    with pytest.raises(ValueError, match="depth limit"):
+        runner._mesh_file_hashes(workdir, key)
+    with pytest.raises(ValueError, match="depth limit"):
+        runner._verify_runtime_source_tree(workdir, key)
+
+
+def test_runtime_source_directory_enumeration_is_bounded(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    workdir = generated / key
+    constant = workdir / "constant"
+    original_scandir = runner.os.scandir
+    consumed = 0
+
+    class EndlessEntries:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def __iter__(self):
+            nonlocal consumed
+            for index in range(1000):
+                consumed += 1
+                yield SimpleNamespace(name=f"unmanifested_{index}")
+
+    def fake_scandir(path):
+        if Path(path) == constant:
+            return EndlessEntries()
+        return original_scandir(path)
+
+    monkeypatch.setattr(runner.os, "scandir", fake_scandir)
+    expected_count = sum(
+        item.startswith("constant/") for item in runner.INPUTS
+    )
+    with pytest.raises(ValueError, match="entry limit"):
+        runner._verify_runtime_source_tree(workdir, key)
+    assert consumed == expected_count + 1

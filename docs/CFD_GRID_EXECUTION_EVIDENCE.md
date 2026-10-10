@@ -91,7 +91,11 @@ case). It rechecks these immutable mesh bytes immediately before and after
 `checkMesh` and `simpleFoam`; any changes are rejected as source drift or
 a pre-stage execution blocker, never silently adopted as a new baseline.
 The read-only verifier recomputes the original hashes and rejects added, removed,
-or edited mesh files even if they remain ordinary nonlinked files. The mapping
+or edited mesh files even if they remain ordinary nonlinked files. For each
+ventilation configuration, it also flags *identical nonempty complete mesh
+snapshots* across coarse/medium/fine levels, even if their recorded digests
+match. Separate configurations may legitimately share geometric mesh bytes,
+so this replay screen is intentionally configuration-local. The mapping
 also covers nested directories; unsafe paths and aliases fail closed.
 The mapping may be empty if no mesh was produced, which is not a mesh-quality
 or mesh-generation acceptance verdict. v1 receipts lack this field and
@@ -160,13 +164,13 @@ cleanroomx-cfd-pipeline grid-verify ./cfd_mesh_family
 
 The `grid-verify` command checks the 72 generated input hashes, recorded manifest
 SHA-256, nine case records, each stage-log path/digest, the final generated
-polyMesh file digest mapping, process exit consistency,
-and deterministic case ordering. A `running` or `not_run` case cannot be
+polyMesh file digest mapping, complete-mesh replay within a configuration,
+process exit consistency, and deterministic case ordering. A `running` or `not_run` case cannot be
 followed by a later started case. The manifest preflight validates its v1
 status, specification digest shape, nine configuration metadata structures,
 positive mesh quantities, and explicitly non-certifying model limitations;
-fabricated certification fields are rejected.
-and the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
+fabricated certification fields are rejected. The verifier also checks
+the retained empty `.grid_run_reserved` directory. Missing, linked, replaced,
 or nonempty reservation markers fail the local evidence-integrity screen.
 A stage log present on disk but absent from its case's recorded stage list
 (for example, after an abrupt interruption between log creation and the next
@@ -174,7 +178,7 @@ receipt write) also fails verification as `unreceipted_stage_log`. Preserve
 both files for investigation; never delete a log to force a passing verdict.
 The verifier also rejects an uncommitted
 `.grid_run_evidence.json.tmp` staging file/directory/symlink and any
-unrecognized v1 receipt keys or rewritten warning text. These checks flag
+unrecognized v2 receipt keys or rewritten warning text. These checks flag
 inconsistent local evidence; they are not cryptographic authenticity.
 Missing/modified inputs or logs, symlinked logs, forged validation claims,
 byte-empty logs from completed stages, and byte-identical `simpleFoam` logs

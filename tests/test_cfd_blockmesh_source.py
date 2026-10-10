@@ -871,3 +871,91 @@ def test_rehashed_room_domain_mutations_fail_before_solver_discovery(
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()
+
+
+
+def test_source_axes_capture_interior_planes_without_full_mesh_snapshot(
+    generated_source
+):
+    path, cells = generated_source
+    compact = verify_generated_blockmesh_source(path, expected_cells=cells)
+    assert len(compact["axis_positions_m"]) == 3
+    assert tuple(len(axis) for axis in compact["axis_positions_m"]) == (7, 7, 7)
+    assert compact["axis_positions_m"][0][0] == 0
+    assert compact["axis_positions_m"][0][-1] == 1
+    assert "vertices_m" not in compact
+    assert "hex_cells" not in compact
+
+
+def test_rehashed_interior_grid_plane_shift_fails_before_solver_discovery(
+    tmp_path, monkeypatch
+):
+    """Nonuniform internal plane with equal cell counts and room bounds fails."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC interior plane mismatch",
+            "room_m": [1, 1.5, 2],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    assert len(_verify_generated_inputs(root)) == 64
+
+    relative = "configuration_2/medium/system/blockMeshDict"
+    path = root / relative
+    old = format(1.0 / 7.0, ".12g")
+    original = path.read_text(encoding="utf-8")
+    prefix, marker, tail = original.partition("vertices\n(\n")
+    assert marker
+    body, closing, suffix = tail.partition("\n);\nblocks\n(\n")
+    assert closing
+    adjusted = []
+    moved_vertices = 0
+    for line in body.splitlines():
+        values = line.strip()[1:-1].split()
+        if values[0] == old:
+            values[0] = "0.155"
+            moved_vertices += 1
+        adjusted.append("    (" + " ".join(values) + ")")
+    assert moved_vertices == 64
+    path.write_text(
+        prefix + marker + "\n".join(adjusted) + closing + suffix,
+        encoding="utf-8",
+    )
+    geometry = verify_generated_blockmesh_source(
+        path, expected_cells=343, expected_configuration=2
+    )
+    assert geometry["axis_cell_counts"] == (7, 7, 7)
+    assert geometry["bounds_m"] == ((0.0, 1.0), (0.0, 1.5), (0.0, 2.0))
+    assert 0.155 in geometry["axis_positions_m"][0]
+
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="internal grid planes differ"):
+        _verify_generated_inputs(root)
+
+    import cleanroomx.cfd_grid_runner as runner
+
+    def forbidden_discovery(_name):
+        pytest.fail("Altered internal source planes reached solver discovery")
+
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match="internal grid planes differ"):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()

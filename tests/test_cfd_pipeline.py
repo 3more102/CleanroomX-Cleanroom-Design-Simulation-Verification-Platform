@@ -29,6 +29,7 @@ def test_mesh_and_flow_generation(tmp_path):
         assert "hex (" in (f/"system/blockMeshDict").read_text()
         assert "pressureInletOutletVelocity" in (f/"0/U").read_text()
         assert "simulationType laminar;" in (f/"constant/momentumTransport").read_text()
+        assert "div((nuEff*dev2(T(grad(U))))) Gauss linear;" in (f/"system/fvSchemes").read_text()
         assert "viscosityModel constant;" in (f/"constant/physicalProperties").read_text()
         assert "nu [0 2 -1 0 0 0 0] 1.5e-05;" in (f/"constant/physicalProperties").read_text()
         assert not (f/"constant/transportProperties").exists()

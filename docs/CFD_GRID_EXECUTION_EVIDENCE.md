@@ -378,6 +378,10 @@ executable before running a case. Its `openfoam-v10-init-status.txt` records
 the shell environment-script return code and executable locations. A nonzero
 environment-source status is only tolerated when the required tools are
 discoverable; the runner still enforces its Foundation v10 version requirement.
+The workflow intentionally does **not** enable Bash `nounset` after sourcing:
+the Foundation v10 `foamVersion` function references an optional positional
+argument and otherwise fails with `$1: unbound variable`. Bash `errexit` and
+`pipefail` remain enforced outside the explicit evidence-capture section.
 
 Even when `grid-run` fails, CI separately attempts read-only `grid-verify`
 and `grid-mesh-audit` and saves each command's actual return code and combined

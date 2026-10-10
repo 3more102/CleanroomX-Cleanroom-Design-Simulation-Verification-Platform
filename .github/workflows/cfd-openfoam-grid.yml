@@ -43,7 +43,14 @@ jobs:
       - name: Run and screen the synthetic nine-case family
         run: |
           set -eo pipefail
+          set +e
           source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
           set -u
           {
             echo "github_sha=$GITHUB_SHA"

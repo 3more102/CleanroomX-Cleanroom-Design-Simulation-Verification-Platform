@@ -38,6 +38,8 @@ def test_actual_generated_ascii_source_matches_declared_hexahedra(generated_sour
     assert result["vertex_count"] == 7 * 7 * 7
     assert result["bounds_m"] == ((0.0, 1.0), (0.0, 1.5), (0.0, 2.0))
     assert "vertices_m" not in result
+    assert "hex_cells" not in result
+    assert "boundary_faces" not in result
     captured = verify_generated_blockmesh_source(
         path, expected_cells=cells, capture_vertices=True,
     )
@@ -178,7 +180,73 @@ def test_generated_source_boundary_capture_rejects_tampered_faces(
         del lines[face_line]
         source = "".join(lines)
     path.write_text(source, encoding="utf-8")
+    # Preflight's default, non-capturing path must fail too: this is the
+    # path grid-run / grid-verify use before external commands can start.
+    with pytest.raises(ValueError, match="boundary"):
+        verify_generated_blockmesh_source(path, expected_cells=cells)
     with pytest.raises(ValueError, match="boundary"):
         verify_generated_blockmesh_source(
             path, expected_cells=cells, capture_vertices=True,
         )
+
+
+@pytest.mark.parametrize("tamper", ["wrong_patch_type", "missing_boundary_face"])
+def test_rehashed_bad_boundary_fails_before_external_foam_process(
+    tmp_path, monkeypatch, tamper
+):
+    """Synthetic preflight tampering: new SHA-256 cannot bypass topology gate."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC boundary tamper, not actual CFD",
+            "room_m": [1, 1, 1],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    source_path = root / relative
+    raw = source_path.read_text(encoding="utf-8")
+    if tamper == "wrong_patch_type":
+        raw = raw.replace(
+            "inlet\n    {\n        type patch;",
+            "inlet\n    {\n        type wall;",
+            1,
+        )
+    else:
+        lines = raw.splitlines(keepends=True)
+        first = lines.index("    inlet\n")
+        index = next(
+            i for i in range(first + 1, len(lines))
+            if lines[i].startswith("            (")
+        )
+        del lines[index]
+        raw = "".join(lines)
+    source_path.write_text(raw, encoding="utf-8")
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(
+        source_path.read_bytes()
+    ).hexdigest()
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True), encoding="utf-8",
+    )
+    import cleanroomx.cfd_grid_runner as runner
+    def external_call_forbidden(_name):
+        pytest.fail("Malformed source boundary reached external tool discovery")
+    monkeypatch.setattr(runner.shutil, "which", external_call_forbidden)
+    with pytest.raises(ValueError, match="boundary"):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()

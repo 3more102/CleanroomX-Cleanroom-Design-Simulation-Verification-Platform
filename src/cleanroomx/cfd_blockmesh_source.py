@@ -125,8 +125,10 @@ def verify_generated_blockmesh_source(
 ) -> dict:
     """Screen expected block count, vertex references and duplicate blocks.
 
-    A match to a self-declared count does not authenticate a generated source,
-    prove geometrical validity or establish actual OpenFOAM mesh cell counts.
+    Always validate the complete generated exterior boundary against the
+    declared blocks, including ordinary preflight without capture_vertices.
+    A match does not authenticate source provenance or prove mesh quality,
+    solver execution or numerical correctness.
     """
     if type(expected_cells) is not int or not 1 <= expected_cells <= MAX_BLOCKS:
         raise ValueError("Invalid declared blockMesh cell count")
@@ -160,7 +162,9 @@ def verify_generated_blockmesh_source(
     if len(vertex_lines) < 8 or len(vertex_lines) > 100_000:
         raise ValueError("Generated blockMesh vertex count is outside bounds")
     vertices = set()
-    original_vertices = [] if capture_vertices else None
+    # Every execution preflight must inspect source boundary membership;
+    # it requires generator-order vertex IDs even without audit capture.
+    original_vertices = []
     for line in vertex_lines:
         match = _VERTEX.fullmatch(line)
         if match is None:
@@ -171,8 +175,7 @@ def verify_generated_blockmesh_source(
         if coords in vertices:
             raise ValueError("Duplicate generated blockMesh vertex coordinates")
         vertices.add(coords)
-        if original_vertices is not None:
-            original_vertices.append(coords)
+        original_vertices.append(coords)
 
     block_lines = _generated_section(source, "blocks")
     if len(block_lines) != expected_cells:
@@ -180,7 +183,7 @@ def verify_generated_blockmesh_source(
             "Generated blockMesh hex count does not match declared mesh_cells"
         )
     used_blocks = set()
-    original_blocks = [] if capture_vertices else None
+    original_blocks = []
     for line in block_lines:
         match = _BLOCK.fullmatch(line)
         if match is None:
@@ -193,8 +196,7 @@ def verify_generated_blockmesh_source(
         if identity in used_blocks:
             raise ValueError("Duplicate generated blockMesh hexahedron")
         used_blocks.add(identity)
-        if original_blocks is not None:
-            original_blocks.append(vertex_ids)
+        original_blocks.append(vertex_ids)
     bounds_m = tuple(
         (min(point[axis] for point in vertices),
          max(point[axis] for point in vertices))
@@ -207,16 +209,21 @@ def verify_generated_blockmesh_source(
         "hex_block_count": len(block_lines),
         "bounds_m": bounds_m,
     }
-    # Explicit opt-in: mesh auditing needs full source coordinates, whereas
-    # preflight callers do not need to allocate or serialize this extra data.
+    # Keep the default preflight result small: no full source snapshots
+    # leave this function unless the caller explicitly requests them.
+    # Boundary membership, however, MUST be checked in both paths.
+    canonical_vertices = (
+        tuple(sorted(vertices)) if capture_vertices else original_vertices
+    )
+    canonical_ids = {
+        coordinates: index for index, coordinates
+        in enumerate(canonical_vertices)
+    }
+    boundary_faces = _generated_patch_faces(
+        source, original_blocks, original_vertices, canonical_ids,
+    )
     if capture_vertices:
-        canonical_vertices = tuple(sorted(vertices))
-        canonical_ids = {
-            coordinates: index for index, coordinates
-            in enumerate(canonical_vertices)
-        }
-        assert original_vertices is not None
-        # Compare cells by canonical coordinate identity, not OpenFOAM's
+        # Compare blocks by canonical coordinate identity, not OpenFOAM's
         # arbitrary point/cell numbering or the order of source blocks.
         result["vertices_m"] = canonical_vertices
         result["hex_cells"] = tuple(sorted(
@@ -224,8 +231,5 @@ def verify_generated_blockmesh_source(
                          for vertex in block))
             for block in used_blocks
         ))
-        assert original_blocks is not None
-        result["boundary_faces"] = _generated_patch_faces(
-            source, original_blocks, original_vertices, canonical_ids,
-        )
+        result["boundary_faces"] = boundary_faces
     return result

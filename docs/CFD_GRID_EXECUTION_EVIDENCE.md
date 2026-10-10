@@ -44,7 +44,13 @@ mesh topology or boundary conditions. The preflight and read-only verifier also
 parse each CleanroomX-generated ASCII `system/blockMeshDict` source using a
 bounded, restricted grammar: a single vertex list, finite unique vertex
 coordinates, exactly the declared number of unique `hex` blocks, distinct
-in-range vertex references and the generator's unit subdivisions/grading.
+in-range vertex references, the generator's unit subdivisions/grading,
+and (also in default, non-capturing preflight) exact exterior face
+membership for the generated inlet/outlet/walls boundary patches. The
+source screen refuses a missing, duplicated, internal or noncanonical
+boundary face even when the local manifest and source digest are
+self-rehashed. Full coordinates and patch signatures are only returned
+to independent mesh audit callers using `capture_vertices=True`.
 The check is repeated against the source digest after parsing. It rejects a
 forged self-rehashed dictionary declaring fewer/more blocks than the manifest,
 but does **not** parse general OpenFOAM dictionaries, independently verify

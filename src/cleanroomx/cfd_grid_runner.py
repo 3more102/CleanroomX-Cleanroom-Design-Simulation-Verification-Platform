@@ -431,6 +431,12 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             # Preserve the incomplete receipt and reservation on failure;
             # never launch another solver against inconsistent sources.
             _verify_stage_source_snapshot(root, key, digest, expected_hashes)
+            # Once blockMesh has finished, the generated mesh becomes an
+            # immutable baseline for checkMesh/simpleFoam in this workflow.
+            # A concurrent edit between stage invocations is not accepted.
+            if (stage != "blockMesh"
+                    and _mesh_file_hashes(workdir, key) != case["mesh_files"]):
+                raise ValueError(f"Generated mesh changed between solver stages: {key}")
             log_path = workdir / (stage + ".log")
             returncode = None
             outcome = "failed"
@@ -458,6 +464,13 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             # for an attempt whose originally accepted input bytes drifted.
             try:
                 _verify_stage_source_snapshot(root, key, digest, expected_hashes)
+                current_mesh = _mesh_file_hashes(workdir, key)
+                if stage == "blockMesh":
+                    # Record the immediate post-blockMesh revision rather than
+                    # accepting whatever files remain after later solver stages.
+                    case["mesh_files"] = current_mesh
+                elif current_mesh != case["mesh_files"]:
+                    outcome = "source_drift"
             except (OSError, ValueError):
                 outcome = "source_drift"
             case["stages"].append({
@@ -468,14 +481,15 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             _write_receipt(root, report)
             if outcome != "completed":
                 break
-        # Capture the bytes of the final mesh after the last attempted stage.
-        # A compromised tree must not produce an unqualified green receipt.
+        # Recheck the final mesh against the immediately post-blockMesh
+        # snapshot. Do not overwrite that baseline with changed later output.
         try:
-            case["mesh_files"] = _mesh_file_hashes(workdir, key)
+            if _mesh_file_hashes(workdir, key) != case["mesh_files"]:
+                if case["stages"]:
+                    case["stages"][-1]["status"] = "source_drift"
         except (OSError, ValueError):
             if case["stages"]:
                 case["stages"][-1]["status"] = "source_drift"
-            case["mesh_files"] = {}
         case["status"] = (
             "executed_requires_convergence_review"
             if len(case["stages"]) == len(STAGES)

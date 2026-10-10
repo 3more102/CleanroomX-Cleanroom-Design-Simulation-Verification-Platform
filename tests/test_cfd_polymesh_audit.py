@@ -197,9 +197,10 @@ def test_poly_mesh_geometry_rejects_invalid_winding_or_face_area(
             lines[indices[-1]] = "(2 1 1.3)\n"
             expected_error = "Nonplanar"
         else:
-            # Collapse one x=0 end face onto a line with 4 distinct points.
-            for k, index in enumerate(indices[:4]):
-                lines[index] = f"(0 {k/4} 0)\n"
+            # Collapse the first internal x=1 face onto a line while
+            # retaining four distinct points; it is checked first.
+            for k, index in enumerate(indices[4:8]):
+                lines[index] = f"(1 {k/4} 0)\n"
             expected_error = "degenerate"
         path.write_text("".join(lines), encoding="ascii")
     with pytest.raises(ValueError, match=expected_error):

@@ -159,6 +159,43 @@ _CANONICAL_GENERATED_ENVELOPE = re.compile(
     re.DOTALL,
 )
 
+def _validate_generated_structured_grid(
+    original_vertices: list[tuple[float, float, float]],
+    original_blocks: list[tuple[int, ...]],
+) -> None:
+    """Require the complete, nonoverlapping Cartesian grid emitted by CleanroomX.
+
+    This is a generator-specific source integrity gate, not a generic
+    blockMesh topology validator or evidence of independent solver execution.
+    """
+    axes = tuple(
+        tuple(sorted({point[coordinate] for point in original_vertices}))
+        for coordinate in range(3)
+    )
+    # Count before enumerating any Cartesian product: a malicious source
+    # containing many unique axis values must not cause cubic allocation.
+    if math.prod(len(axis) for axis in axes) != len(original_vertices):
+        raise ValueError("Generated blockMesh vertices are not a complete Cartesian grid")
+    if math.prod(len(axis) - 1 for axis in axes) != len(original_blocks):
+        raise ValueError("Generated blockMesh cells do not tile the Cartesian grid")
+    successors = tuple(
+        {axis[index]: axis[index + 1] for index in range(len(axis) - 1)}
+        for axis in axes
+    )
+    occupied = set()
+    for indices in original_blocks:
+        low = original_vertices[indices[0]]
+        high = original_vertices[indices[6]]
+        # All individual hexes already passed exact, right-handed,
+        # axis-aligned corner checks; now forbid skipped internal planes.
+        if any(successors[axis].get(low[axis]) != high[axis]
+               for axis in range(3)):
+            raise ValueError("Generated blockMesh cell skips a Cartesian grid interval")
+        if low in occupied:
+            raise ValueError("Generated blockMesh cells overlap on the Cartesian grid")
+        occupied.add(low)
+
+
 def verify_generated_blockmesh_source(
     path: Path, *, expected_cells: int, capture_vertices: bool = False
 ) -> dict:
@@ -262,6 +299,7 @@ def verify_generated_blockmesh_source(
     )
     if any(low >= high for low, high in bounds_m):
         raise ValueError("Degenerate generated blockMesh room extent")
+    _validate_generated_structured_grid(original_vertices, original_blocks)
     result = {
         "vertex_count": len(vertex_lines),
         "hex_block_count": len(block_lines),

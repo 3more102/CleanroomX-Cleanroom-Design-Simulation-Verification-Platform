@@ -85,9 +85,12 @@ read-only `grid-verify`, including for an alias introduced after execution.
 An unsafe output tree records `source_drift` and halts later cases; these
 guards prevent ordinary off-tree aliases, not adversarial race conditions.
 For the new **v2** execution receipt, the runner captures a deterministic,
-relative-path-to-SHA-256 mapping of the final regular files inside each case's
-`constant/polyMesh/` tree (up to 4,096 files and 1 GiB of evidence bytes per
-case). The read-only verifier recomputes these hashes and rejects added, removed,
+relative-path-to-SHA-256 mapping of the regular files immediately after each
+case's `blockMesh` stage (up to 4,096 files and 1 GiB of evidence bytes per
+case). It rechecks these immutable mesh bytes immediately before and after
+`checkMesh` and `simpleFoam`; any changes are rejected as source drift or
+a pre-stage execution blocker, never silently adopted as a new baseline.
+The read-only verifier recomputes the original hashes and rejects added, removed,
 or edited mesh files even if they remain ordinary nonlinked files. The mapping
 also covers nested directories; unsafe paths and aliases fail closed.
 The mapping may be empty if no mesh was produced, which is not a mesh-quality
@@ -108,7 +111,7 @@ restored. This limits but cannot eliminate time-of-check/time-of-use races,
 compromised binaries or hostile concurrent filesystem modification.
 
 Each case records stage command, process return code, raw log relative path
-and SHA-256, plus a final snapshot of generated polyMesh file digests.
+and SHA-256, plus a frozen post-`blockMesh` snapshot of generated polyMesh digests.
 Receipts are updated atomically after individual stages; cases
 with failed stages are reported as `execution_failed` while remaining cases
 are attempted. Even if an external stage exits with code 0, an empty log is

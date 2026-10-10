@@ -51,7 +51,10 @@ def fake_tools(monkeypatch, *, failure=None, version="10"):
         calls.append((key, name))
         kwargs["stdout"].write(f"Synthetic process-exit fixture {key} {name}. Not CFD validation.\n")
         if name == "checkMesh":
-            kwargs["stdout"].write("Mesh OK.\nEnd\n")
+            expected_cells = json.loads((
+                kwargs["cwd"].parents[1] / "manifest.json"
+            ).read_text(encoding="utf-8"))["case_inputs"][key]["mesh_cells"]
+            kwargs["stdout"].write(f"cells: {expected_cells}\nMesh OK.\nEnd\n")
         return SimpleNamespace(returncode=1 if (key, name) == failure else 0)
 
     monkeypatch.setattr(runner.subprocess, "run", run)
@@ -961,6 +964,42 @@ def test_zero_exit_failed_checkmesh_log_blocks_simplefoam(
     assert report["cases"]["configuration_3/fine"]["status"] == (
         "executed_requires_convergence_review"
     )
+    verified = verify_grid_run_evidence(generated)
+    assert verified["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verified["findings"] == []
+    assert verified["engineering_review"] == "BLOCKED"
+
+
+def test_zero_exit_checkmesh_wrong_cell_count_blocks_simplefoam(
+    generated, monkeypatch
+):
+    """Clean verdict but mismatched declared cell count blocks solver launch."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    previous = runner.subprocess.run
+
+    def wrong_cells(command, **kwargs):
+        if (Path(command[0]).name == "checkMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            key = "configuration_1/coarse"
+            cells = json.loads((generated / "manifest.json").read_text(
+                encoding="utf-8"
+            ))["case_inputs"][key]["mesh_cells"]
+            calls.append((key, "checkMesh"))
+            kwargs["stdout"].write(f"cells: {cells + 1}\nMesh OK.\nEnd\n")
+            return SimpleNamespace(returncode=0)
+        return previous(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", wrong_cells)
+    report = run_grid_family(generated, timeout_seconds=60)
+    first = report["cases"]["configuration_1/coarse"]
+    assert report["status"] == "incomplete"
+    assert first["stages"][-1]["returncode"] == 0
+    assert first["stages"][-1]["status"] == "mesh_check_rejected"
+    assert ("configuration_1/coarse", "simpleFoam") not in calls
+    assert len(calls) == 26
     verified = verify_grid_run_evidence(generated)
     assert verified["status"] == "incomplete_execution_logs_integrity_verified"
     assert verified["findings"] == []

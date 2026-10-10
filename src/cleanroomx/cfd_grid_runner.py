@@ -505,7 +505,10 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
                 # Post-run mesh topology and count audits remain separate.
                 from .cfd_checkmesh_log import screen_checkmesh_verdict
                 try:
-                    screen_checkmesh_verdict(log_path)
+                    screen_checkmesh_verdict(
+                        log_path,
+                        expected_cells=manifest_snapshot.value["case_inputs"][key]["mesh_cells"],
+                    )
                 except (OSError, ValueError):
                     outcome = "mesh_check_rejected"
             case["stages"].append({

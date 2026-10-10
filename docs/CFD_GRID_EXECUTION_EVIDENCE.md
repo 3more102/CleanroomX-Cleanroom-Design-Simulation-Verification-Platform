@@ -228,6 +228,14 @@ diagnostic, missing verdict, ambiguity, or trailing output blocks that case,
 even when `checkMesh` exits with code zero. The runner records the
 original return code and SHA-256 log hash with `mesh_check_rejected`,
 skips dependent `simpleFoam`, and continues other independent cases.
+The immediate gate also requires one printed `cells: N` statistic matching
+the generated case manifest's declared cell total. A clean `Mesh OK.` for
+the wrong number of cells, duplicate cell statistics or absent cell count
+cannot launch `simpleFoam`. The independent verifier binds that comparison
+to re-hashed original manifest bytes, including when receipt/log digests
+were locally rewritten. This is declared-count integrity, not a
+polyMesh topology or independent physical mesh verification.
+
 The offline receipt verifier also checks that a recorded
 `mesh_check_rejected` is not contradictory with a clean log and that a
 completed `checkMesh` stage contains a clean verdict.

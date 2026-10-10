@@ -114,6 +114,24 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     except (OSError, ValueError, TypeError, KeyError) as exc:
         current_manifest_sha = None
         findings.append("source_manifest_or_inputs_invalid: " + type(exc).__name__)
+    # Compare checkMesh cell counts against the exact source manifest bytes.
+    # This local integrity check is not authenticated execution provenance.
+    expected_cells_by_case: dict[str, int] = {}
+    if current_manifest_sha is not None:
+        try:
+            snapshot = load_strict_json_snapshot(
+                root / "manifest.json", max_bytes=2_000_000
+            )
+            if ((root / "manifest.json").is_symlink()
+                    or hashlib.sha256(snapshot.raw_bytes).hexdigest()
+                    != current_manifest_sha):
+                raise ValueError("Grid source manifest changed while checking cell totals")
+            expected_cells_by_case = {
+                key: snapshot.value["case_inputs"][key]["mesh_cells"]
+                for key in _cases()
+            }
+        except (OSError, ValueError, TypeError, KeyError):
+            findings.append("source_manifest_mesh_counts_unavailable")
     # A source symlink can be introduced after execution without changing
     # bytes or SHA-256. Report this independently of digest equality.
     for key in _cases():
@@ -298,7 +316,9 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 ):
                     from .cfd_checkmesh_log import screen_checkmesh_verdict
                     try:
-                        screen_checkmesh_verdict(resolved)
+                        screen_checkmesh_verdict(
+                            resolved, expected_cells=expected_cells_by_case[key]
+                        )
                     except (OSError, ValueError):
                         if state == "completed":
                             findings.append(f"invalid_completed_checkmesh_verdict:{key}")

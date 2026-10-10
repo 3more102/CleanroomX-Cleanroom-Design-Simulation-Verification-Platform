@@ -27,12 +27,16 @@ _STATS = {
 
 
 
-def screen_checkmesh_verdict(log: str | Path) -> dict[str, str]:
+def screen_checkmesh_verdict(
+    log: str | Path, *, expected_cells: int,
+) -> dict[str, str]:
     """Immediate bounded log-verdict gate, not a mesh/CFD validation.
 
     Fail closed on contradictory/failed/incomplete checkMesh text even when
     OpenFOAM returns exit status 0. Mesh statistics are checked separately.
     """
+    if type(expected_cells) is not int or expected_cells <= 0:
+        raise ValueError("Invalid expected checkMesh cell count")
     path = Path(log)
     if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
         raise ValueError("Missing or unsafe checkMesh log")
@@ -55,6 +59,9 @@ def screen_checkmesh_verdict(log: str | Path) -> dict[str, str]:
         raise ValueError("checkMesh output incomplete or contains trailing diagnostics")
     if _FAILED.search(source) or _ERROR.search(source):
         raise ValueError("checkMesh reports failed checks or fatal diagnostics")
+    matches = _STATS["cells"].findall(source)
+    if len(matches) != 1 or int(matches[0]) != expected_cells:
+        raise ValueError("checkMesh cell count is absent, ambiguous or differs from case manifest")
     if _hash(path) != before_sha:
         raise ValueError("checkMesh log changed during verdict screening")
     return {"status": "checkmesh_verdict_screened", "engineering_review": "BLOCKED"}

@@ -1,6 +1,7 @@
 """Grid-run receipts are software evidence, never physical CFD validation."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -50,7 +51,10 @@ def synthetic_processes(monkeypatch, *, failure=None):
         case = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
         kwargs["stdout"].write(f"SYNTHETIC process fixture {case} {name}\n")
         if name == "checkMesh":
-            kwargs["stdout"].write("Mesh OK.\nEnd\n")
+            expected_cells = json.loads((
+                kwargs["cwd"].parents[1] / "manifest.json"
+            ).read_text(encoding="utf-8"))["case_inputs"][case]["mesh_cells"]
+            kwargs["stdout"].write(f"cells: {expected_cells}\nMesh OK.\nEnd\n")
         return SimpleNamespace(
             returncode=1 if (case, name) == failure else 0
         )
@@ -783,4 +787,34 @@ def test_grid_verify_screens_replayed_complete_mesh_snapshots(
             "execution_logs_integrity_verified_requires_scientific_review"
         )
         assert checked["findings"] == []
+    assert checked["engineering_review"] == "BLOCKED"
+
+
+def test_forged_checkmesh_count_with_rehashed_unsigned_receipt_is_rejected(
+    grid_family, monkeypatch
+):
+    """Rehashing a false local checkMesh result cannot validate the receipt."""
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    key = "configuration_2/medium"
+    path = grid_family / key / "checkMesh.log"
+    manifest = json.loads((grid_family / "manifest.json").read_text(
+        encoding="utf-8"
+    ))
+    cells = manifest["case_inputs"][key]["mesh_cells"]
+    source = path.read_text(encoding="utf-8")
+    assert f"cells: {cells}\n" in source
+    path.write_text(
+        source.replace(f"cells: {cells}\n", f"cells: {cells + 1}\n"),
+        encoding="utf-8",
+    )
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    stage = receipt["cases"][key]["stages"][1]
+    assert stage["command"] == "checkMesh"
+    stage["log_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    checked = verify_grid_run_evidence(grid_family)
+    assert checked["status"] == "evidence_integrity_failed"
+    assert f"invalid_completed_checkmesh_verdict:{key}" in checked["findings"]
     assert checked["engineering_review"] == "BLOCKED"

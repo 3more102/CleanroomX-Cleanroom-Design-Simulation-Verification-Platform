@@ -134,8 +134,8 @@ def test_source_count_mismatch_blocks_even_explicit_mesh_ok(tmp_path):
 ])
 def test_early_checkmesh_verdict_accepts_explicit_clean_log(tmp_path, diagnostic):
     path = tmp_path / "checkMesh.log"
-    path.write_text("Synthetic log, not OpenFOAM evidence\n" + diagnostic)
-    result = screen_checkmesh_verdict(path)
+    path.write_text("Synthetic log, not OpenFOAM evidence\ncells: 12\n" + diagnostic)
+    result = screen_checkmesh_verdict(path, expected_cells=12)
     assert result["status"] == "checkmesh_verdict_screened"
     assert result["engineering_review"] == "BLOCKED"
 
@@ -150,6 +150,20 @@ def test_early_checkmesh_verdict_rejects_failed_or_ambiguous_log(
     tmp_path, diagnostic
 ):
     path = tmp_path / "checkMesh.log"
-    path.write_text("Synthetic log, not OpenFOAM evidence\n" + diagnostic)
+    path.write_text("Synthetic log, not OpenFOAM evidence\ncells: 12\n" + diagnostic)
     with pytest.raises(ValueError):
-        screen_checkmesh_verdict(path)
+        screen_checkmesh_verdict(path, expected_cells=12)
+
+
+@pytest.mark.parametrize("prefix", [
+    "",
+    "cells: 11\n",
+    "cells: 12\ncells: 12\n",
+])
+def test_early_checkmesh_verdict_requires_single_matching_cell_count(
+    tmp_path, prefix
+):
+    log = tmp_path / "checkMesh.log"
+    log.write_text("SYNTHETIC not real OpenFOAM evidence\n" + prefix + "Mesh OK.\nEnd\n")
+    with pytest.raises(ValueError, match="cell count"):
+        screen_checkmesh_verdict(log, expected_cells=12)

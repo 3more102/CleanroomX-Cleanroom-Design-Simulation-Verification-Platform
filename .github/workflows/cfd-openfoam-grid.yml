@@ -52,21 +52,29 @@ jobs:
             exit "$source_rc"
           fi
 
-          # OpenFOAM Foundation v10 defines foamVersion as a sourced shell
-          # function, while the runner validates it as an executable.
-          mkdir -p "$RUNNER_TEMP/openfoam-bin"
-          cat > "$RUNNER_TEMP/openfoam-bin/foamVersion" <<'EOF'
+          # Foundation's foamVersion helper is a sourced shell function,
+          # while CleanroomX probes an executable by this name. Report the
+          # version only after validating the installed environment.
+          version_bin="$RUNNER_TEMP/openfoam-version-bin"
+          mkdir -p "$version_bin"
+          cat > "$version_bin/foamVersion" <<'EOF'
           #!/usr/bin/env bash
           set -eo pipefail
           source /opt/openfoam10/etc/bashrc
-          foamVersion "$@"
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            echo "Expected OpenFOAM Foundation v10 environment" >&2
+            exit 1
+          fi
+          echo "$WM_PROJECT_VERSION"
           EOF
-          chmod 0755 "$RUNNER_TEMP/openfoam-bin/foamVersion"
-          export PATH="$RUNNER_TEMP/openfoam-bin:$PATH"
+          chmod 0755 "$version_bin/foamVersion"
+          export PATH="$version_bin:$PATH"
 
+          # Capture provenance even when grid-run fails before any solver stage.
           {
             echo "github_sha=$GITHUB_SHA"
             echo "workflow_run_id=$GITHUB_RUN_ID"
+            echo "workflow_attempt=$GITHUB_RUN_ATTEMPT"
             cat /etc/os-release
             uname -a
             dpkg-query -W openfoam10

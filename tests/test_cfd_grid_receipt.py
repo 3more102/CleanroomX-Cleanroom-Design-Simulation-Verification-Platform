@@ -659,3 +659,58 @@ def test_v2_receipt_requires_well_formed_mesh_evidence(
         assert "invalid_receipt_schema" in verified["findings"]
     else:
         assert f"invalid_mesh_manifest:{key}" in verified["findings"]
+
+
+@pytest.mark.parametrize(
+    ("mesh_pattern", "expect_replay"),
+    [
+        ("same_configuration", True),
+        ("distinct_levels", False),
+        ("same_level_different_configurations", False),
+    ],
+)
+def test_grid_verify_screens_replayed_complete_mesh_snapshots(
+    grid_family, monkeypatch, mesh_pattern, expect_replay
+):
+    """All snapshots are synthetic; equality only screens potential replay."""
+    import cleanroomx.cfd_grid_runner as runner
+
+    synthetic_processes(monkeypatch)
+    original_run = runner.subprocess.run
+
+    def with_mesh(cmd, **kwargs):
+        result = original_run(cmd, **kwargs)
+        if Path(cmd[0]).name != "blockMesh":
+            return result
+        key = kwargs["cwd"].relative_to(grid_family).as_posix()
+        if mesh_pattern == "same_level_different_configurations":
+            selected = ("configuration_1/coarse", "configuration_2/coarse")
+        else:
+            selected = ("configuration_1/coarse", "configuration_1/medium")
+        if key in selected:
+            mesh_root = kwargs["cwd"] / "constant" / "polyMesh"
+            mesh_root.mkdir()
+            payload = (
+                b"SYNTHETIC same generated mesh snapshot"
+                if mesh_pattern != "distinct_levels"
+                else f"SYNTHETIC distinct mesh for {key}".encode("ascii")
+            )
+            (mesh_root / "points").write_bytes(payload)
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", with_mesh)
+    report = run_grid_family(grid_family, timeout_seconds=60)
+    assert report["status"] == "executed_requires_convergence_review"
+    checked = verify_grid_run_evidence(grid_family)
+    if expect_replay:
+        assert checked["status"] == "evidence_integrity_failed"
+        assert (
+            "replayed_mesh_output_across_grids:"
+            "configuration_1/medium:configuration_1/coarse"
+        ) in checked["findings"]
+    else:
+        assert checked["status"] == (
+            "execution_logs_integrity_verified_requires_scientific_review"
+        )
+        assert checked["findings"] == []
+    assert checked["engineering_review"] == "BLOCKED"

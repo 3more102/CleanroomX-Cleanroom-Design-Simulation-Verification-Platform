@@ -454,6 +454,35 @@ def test_solver_digest_streams_without_path_read_bytes(tmp_path, monkeypatch):
     assert runner._hash(source) == expected
 
 
+@pytest.mark.parametrize("digest_source", ["runner", "receipt"])
+def test_streamed_cfd_evidence_hash_fails_on_concurrent_append(
+    tmp_path, monkeypatch, digest_source
+):
+    """A changed file must not pass merely because pre-read bytes hash cleanly."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import _file_digest
+
+    source = tmp_path / "case-stage.log"
+    source.write_bytes(b"synthetic CFD software test only\\n")
+    real_fstat = runner.os.fstat
+    calls = 0
+
+    def inject_mutation(fd):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            with source.open("ab") as stream:
+                stream.write(b"mutated after hash read")
+        return real_fstat(fd)
+
+    monkeypatch.setattr(runner.os, "fstat", inject_mutation)
+    with pytest.raises(ValueError, match="changed during hashing"):
+        if digest_source == "runner":
+            runner._hash(source)
+        else:
+            _file_digest(source)
+
+
 def test_zero_exit_empty_output_is_failed_before_next_solver_stage(
     generated, monkeypatch
 ):

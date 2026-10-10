@@ -10,7 +10,8 @@ from pathlib import Path
 import re
 
 from .cfd_grid_runner import (
-    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _verify_generated_inputs,
+    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _hash,
+    _verify_generated_inputs,
 )
 from .strict_json import load_strict_json_snapshot
 
@@ -19,12 +20,8 @@ _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _file_digest(path: Path) -> str:
-    """Hash potentially large solver logs without reading them into memory."""
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Stream and validate one stable evidence-file revision."""
+    return _hash(path)
 
 
 def verify_grid_run_evidence(directory: str | Path) -> dict:

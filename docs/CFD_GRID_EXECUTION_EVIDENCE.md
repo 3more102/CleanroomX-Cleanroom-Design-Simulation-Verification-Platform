@@ -45,7 +45,11 @@ pre-v10 dictionary names. This compatibility change is validated against
 published v10 documentation, but still requires a real OpenFOAM v10 smoke run. Hard-linked manifests and generated inputs are rejected even when their contents
 match the expected SHA-256: an extra filesystem name could permit untracked
 writes from outside the family. The post-run verifier likewise rejects
-hard-linked execution receipts and stage logs. This is a conservative local
+hard-linked execution receipts and stage logs. Both the runner and independent
+verifier now bind streamed file SHA-256 calculations to stable file-descriptor
+and path metadata before and after hashing, failing closed on ordinary
+concurrent writes or pathname replacement. These checks cannot guarantee
+freedom from filesystem races or malicious restore-with-metadata attacks. This is a conservative local
 custody screen, **not** proof of provenance or protection against an adversary
 who can rewrite both evidence and hashes. Filesystems lacking meaningful
 hard-link counts require separate custody controls.

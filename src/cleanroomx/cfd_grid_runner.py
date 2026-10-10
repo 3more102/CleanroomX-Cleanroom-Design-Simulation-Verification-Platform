@@ -14,6 +14,7 @@ import shutil
 import subprocess
 
 from .strict_json import load_strict_json_snapshot
+from .persistence import _stable_file_identity, _stable_file_path_matches_opened
 from .cfd_grid_family import LEVELS, SCHEMA as FAMILY_SCHEMA
 from .cfd_study import CONFIGURATIONS
 
@@ -28,11 +29,35 @@ VERSION_PATTERN = re.compile(r"(?:OpenFOAM(?: Foundation)?[- ]?[vV]?)?10(?:\.0+)
 
 
 def _hash(path: Path) -> str:
-    """Hash solver inputs and logs without loading potentially large files into RAM."""
+    """Hash a stable, single-linked file revision in bounded memory.
+
+    Before and after the streamed read, bind the opened descriptor to the
+    filesystem path and compare revision metadata. This detects replacement
+    and ordinary concurrent writes; it is not a guarantee against hostile
+    mutations that deliberately restore metadata between observations.
+    """
+    if path.is_symlink():
+        raise ValueError(f"Refuse symlinked CFD evidence: {path}")
     digest = hashlib.sha256()
     with path.open("rb") as handle:
+        before_path = path.stat()
+        before_handle = os.fstat(handle.fileno())
+        if (before_path.st_nlink != 1 or before_handle.st_nlink != 1
+                or not _stable_file_path_matches_opened(before_path, before_handle)):
+            raise ValueError(f"CFD evidence file changed or hardlinked during hashing: {path}")
+        total_bytes = 0
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            total_bytes += len(chunk)
             digest.update(chunk)
+        after_handle = os.fstat(handle.fileno())
+        after_path = path.stat()
+    if (path.is_symlink() or after_path.st_nlink != 1
+            or after_handle.st_nlink != 1
+            or _stable_file_identity(before_path) != _stable_file_identity(after_path)
+            or _stable_file_identity(before_handle) != _stable_file_identity(after_handle)
+            or not _stable_file_path_matches_opened(after_path, after_handle)
+            or total_bytes != after_handle.st_size):
+        raise ValueError(f"CFD evidence file changed during hashing: {path}")
     return digest.hexdigest()
 
 

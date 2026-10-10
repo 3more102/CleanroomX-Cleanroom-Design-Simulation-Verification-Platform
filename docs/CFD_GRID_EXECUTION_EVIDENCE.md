@@ -372,6 +372,19 @@ normal GitHub directory uploader does not preserve the hidden
 `.grid_run_evidence.json` receipt or the empty `.grid_run_reserved`
 directory reliably. These are required by the read-only receipt verifier.
 
+The workflow records OpenFOAM environment initialization and checks that
+`foamVersion`, `blockMesh`, `checkMesh`, and `simpleFoam` are actually
+executable before running a case. Its `openfoam-v10-init-status.txt` records
+the shell environment-script return code and executable locations. A nonzero
+environment-source status is only tolerated when the required tools are
+discoverable; the runner still enforces its Foundation v10 version requirement.
+
+Even when `grid-run` fails, CI separately attempts read-only `grid-verify`
+and `grid-mesh-audit` and saves each command's actual return code and combined
+output in `openfoam-v10-exit-codes.txt` and the matching `.log` files. A
+nonzero result from **any** of these three commands makes the job fail. The
+logs are diagnostics, never surrogate independent CFD or physical evidence.
+
 Download the workflow artifact, then restore and screen its contents in a
 controlled directory (inspect the archive's paths before extraction):
 

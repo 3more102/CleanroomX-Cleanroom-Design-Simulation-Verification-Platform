@@ -110,6 +110,40 @@ def test_postrun_unmanifested_source_file_is_not_integrity_verified(
     assert report["engineering_review"] == "BLOCKED"
 
 
+@pytest.mark.parametrize("tamper", [
+    "non_refining_grid_count", "inconsistent_configuration_grid"
+])
+def test_forged_manifest_refinement_still_fails_with_matching_receipt_hash(
+    grid_family, monkeypatch, tamper
+):
+    """A rewritten unsigned receipt cannot bypass structural grid preflight."""
+    import hashlib
+
+    synthetic_processes(monkeypatch)
+    run_grid_family(grid_family, timeout_seconds=60)
+    manifest_path = grid_family / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    cases = manifest["case_inputs"]
+    if tamper == "non_refining_grid_count":
+        cases["configuration_1/fine"]["mesh_cells"] = (
+            cases["configuration_1/medium"]["mesh_cells"]
+        )
+    else:
+        cases["configuration_2/medium"]["mesh_cells"] += 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    receipt_path = grid_family / "grid_run_evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["source_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    checked = verify_grid_run_evidence(grid_family)
+    assert checked["status"] == "evidence_integrity_failed"
+    assert any(finding.startswith("source_manifest_or_inputs_invalid:")
+               for finding in checked["findings"])
+    assert checked["engineering_review"] == "BLOCKED"
+
+
 def test_modified_solver_log_fails_integrity_screen(grid_family, monkeypatch):
     synthetic_processes(monkeypatch)
     run_grid_family(grid_family, timeout_seconds=60)

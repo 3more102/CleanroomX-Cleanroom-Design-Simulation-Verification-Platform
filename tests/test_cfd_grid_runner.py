@@ -549,6 +549,40 @@ def test_tampered_family_manifest_metadata_blocks_all_execution(
     assert not (generated / ".grid_run_reserved").exists()
 
 
+@pytest.mark.parametrize("tamper", [
+    "same_count_across_levels",
+    "reversed_refinement",
+    "inconsistent_configuration_grid",
+])
+def test_refinement_manifest_metadata_is_checked_before_solver_launch(
+    generated, monkeypatch, tamper
+):
+    """Metadata tampering must not turn an invalid family into a solver run."""
+    manifest_path = generated / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    cases = manifest["case_inputs"]
+    if tamper == "same_count_across_levels":
+        cases["configuration_1/medium"]["mesh_cells"] = (
+            cases["configuration_1/coarse"]["mesh_cells"]
+        )
+        reason = "non-refining"
+    elif tamper == "reversed_refinement":
+        cases["configuration_2/fine"]["mesh_cells"] = (
+            cases["configuration_2/coarse"]["mesh_cells"] - 1
+        )
+        reason = "non-refining"
+    else:
+        cases["configuration_3/medium"]["mesh_cells"] += 1
+        reason = "inconsistent configuration"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match=reason):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / ".grid_run_reserved").exists()
+    assert not (generated / "grid_run_evidence.json").exists()
+
+
 @pytest.mark.parametrize("unexpected", [
     "system/fvOptions", "0/U.extra", "constant/turbulenceProperties",
     "constant/polyMesh",

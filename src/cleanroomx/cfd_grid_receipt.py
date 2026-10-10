@@ -250,6 +250,8 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 or (state == "failed" and type(code) is int and code != 0)
                 or (state in ("timed_out", "launch_failed") and code is None)
                 or (state == "empty_output" and type(code) is int and code == 0)
+                or (state == "mesh_check_rejected" and expected_command == "checkMesh"
+                    and type(code) is int and code == 0)
                 or (state == "source_drift" and type(code) is int)
             )
             if not valid_exit:
@@ -291,6 +293,18 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                     findings.append(f"empty_completed_stage_log:{key}:{expected_command}")
                 if state == "empty_output" and not empty_log:
                     findings.append(f"invalid_empty_output_stage_log:{key}:{expected_command}")
+                if expected_command == "checkMesh" and state in (
+                    "completed", "mesh_check_rejected"
+                ):
+                    from .cfd_checkmesh_log import screen_checkmesh_verdict
+                    try:
+                        screen_checkmesh_verdict(resolved)
+                    except (OSError, ValueError):
+                        if state == "completed":
+                            findings.append(f"invalid_completed_checkmesh_verdict:{key}")
+                    else:
+                        if state == "mesh_check_rejected":
+                            findings.append(f"unexpected_clean_rejected_checkmesh_verdict:{key}")
                 if expected_command == "simpleFoam" and state == "completed":
                     previous_case = solver_log_hashes.get(actual_sha)
                     if previous_case is not None:

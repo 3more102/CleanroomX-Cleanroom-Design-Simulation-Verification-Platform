@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from cleanroomx.cfd_checkmesh_log import screen_checkmesh_log
+from cleanroomx.cfd_checkmesh_log import screen_checkmesh_log, screen_checkmesh_verdict
 
 
 def _synthetic_checkmesh_log(path, *, points=12, faces=11, internal=1, cells=2):
@@ -126,3 +126,30 @@ def test_source_count_mismatch_blocks_even_explicit_mesh_ok(tmp_path):
     _synthetic_checkmesh_log(path, cells=216, faces=900, points=400)
     with pytest.raises(ValueError, match="disagrees with polyMesh"):
         _screen(path)
+
+
+@pytest.mark.parametrize("diagnostic", [
+    "Mesh OK.\nEnd\n",
+    "points: 12\nMesh OK.\nEnd\n",
+])
+def test_early_checkmesh_verdict_accepts_explicit_clean_log(tmp_path, diagnostic):
+    path = tmp_path / "checkMesh.log"
+    path.write_text("Synthetic log, not OpenFOAM evidence\n" + diagnostic)
+    result = screen_checkmesh_verdict(path)
+    assert result["status"] == "checkmesh_verdict_screened"
+    assert result["engineering_review"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("diagnostic", [
+    "Failed 2 mesh checks.\nEnd\n",
+    "Mesh OK.\nFailed 2 mesh checks.\nEnd\n",
+    "Mesh OK.\nEnd\nTrailing output",
+    "Mesh OK.\nMesh OK.\nEnd\n",
+])
+def test_early_checkmesh_verdict_rejects_failed_or_ambiguous_log(
+    tmp_path, diagnostic
+):
+    path = tmp_path / "checkMesh.log"
+    path.write_text("Synthetic log, not OpenFOAM evidence\n" + diagnostic)
+    with pytest.raises(ValueError):
+        screen_checkmesh_verdict(path)

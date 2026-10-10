@@ -50,6 +50,8 @@ def fake_tools(monkeypatch, *, failure=None, version="10"):
         key = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
         calls.append((key, name))
         kwargs["stdout"].write(f"Synthetic process-exit fixture {key} {name}. Not CFD validation.\n")
+        if name == "checkMesh":
+            kwargs["stdout"].write("Mesh OK.\nEnd\n")
         return SimpleNamespace(returncode=1 if (key, name) == failure else 0)
 
     monkeypatch.setattr(runner.subprocess, "run", run)
@@ -920,3 +922,46 @@ def test_mesh_drift_between_stage_receipt_and_next_launch_blocks_run(
     verdict = verify_grid_run_evidence(generated)
     assert verdict["status"] == "evidence_integrity_failed"
     assert f"mesh_output_digest_mismatch:{first_key}" in verdict["findings"]
+
+
+@pytest.mark.parametrize("bad_log", [
+    "Failed 2 mesh checks.\nEnd\n",
+    "Mesh OK.\nFailed 1 mesh checks.\nEnd\n",
+    "No explicit check result\nEnd\n",
+    "Mesh OK.\nEnd\nUnexpected trailing output\n",
+])
+def test_zero_exit_failed_checkmesh_log_blocks_simplefoam(
+    generated, monkeypatch, bad_log
+):
+    """All process calls are mocked; this is not a physical CFD result."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    prior = runner.subprocess.run
+
+    def rejected(command, **kwargs):
+        if (Path(command[0]).name == "checkMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            calls.append(("configuration_1/coarse", "checkMesh"))
+            kwargs["stdout"].write(bad_log)
+            return SimpleNamespace(returncode=0)
+        return prior(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", rejected)
+    report = run_grid_family(generated, timeout_seconds=60)
+    failed = report["cases"]["configuration_1/coarse"]
+    assert report["status"] == "incomplete"
+    assert failed["status"] == "execution_failed"
+    assert len(failed["stages"]) == 2
+    assert failed["stages"][-1]["status"] == "mesh_check_rejected"
+    assert failed["stages"][-1]["returncode"] == 0
+    assert ("configuration_1/coarse", "simpleFoam") not in calls
+    assert len(calls) == 26
+    assert report["cases"]["configuration_3/fine"]["status"] == (
+        "executed_requires_convergence_review"
+    )
+    verified = verify_grid_run_evidence(generated)
+    assert verified["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verified["findings"] == []
+    assert verified["engineering_review"] == "BLOCKED"

@@ -26,6 +26,40 @@ _STATS = {
 }
 
 
+
+def screen_checkmesh_verdict(log: str | Path) -> dict[str, str]:
+    """Immediate bounded log-verdict gate, not a mesh/CFD validation.
+
+    Fail closed on contradictory/failed/incomplete checkMesh text even when
+    OpenFOAM returns exit status 0. Mesh statistics are checked separately.
+    """
+    path = Path(log)
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+        raise ValueError("Missing or unsafe checkMesh log")
+    if path.stat().st_size > MAX_LOG_BYTES:
+        raise ValueError("Oversized checkMesh log")
+    before_sha = _hash(path)
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_LOG_BYTES + 1)
+    if not raw or len(raw) > MAX_LOG_BYTES or b"\x00" in raw:
+        raise ValueError("Empty, oversized or binary checkMesh log")
+    try:
+        source = raw.decode("utf-8")
+    except UnicodeError as exc:
+        raise ValueError("checkMesh log is not valid UTF-8") from exc
+    verdicts = list(_VERDICT.finditer(source))
+    endings = list(_END.finditer(source))
+    if len(verdicts) != 1 or len(endings) != 1:
+        raise ValueError("Missing or ambiguous checkMesh Mesh OK / End verdict")
+    if verdicts[0].start() >= endings[0].start() or source[endings[0].end():].strip():
+        raise ValueError("checkMesh output incomplete or contains trailing diagnostics")
+    if _FAILED.search(source) or _ERROR.search(source):
+        raise ValueError("checkMesh reports failed checks or fatal diagnostics")
+    if _hash(path) != before_sha:
+        raise ValueError("checkMesh log changed during verdict screening")
+    return {"status": "checkmesh_verdict_screened", "engineering_review": "BLOCKED"}
+
+
 def screen_checkmesh_log(
     log: str | Path, *,
     expected_cells: int,

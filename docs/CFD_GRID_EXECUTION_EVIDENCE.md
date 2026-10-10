@@ -219,6 +219,25 @@ copies and trusted timestamps/signatures where chain-of-custody is required.
 After validating the OpenFOAM executable version and before launching any stage, `grid-run` atomically creates the directory `.grid_run_reserved` inside the generated family. A second invocation cannot create that directory and is rejected without running a solver. This is a local filesystem coordination safeguard, **not** a distributed lock or an authenticated run identifier. The reservation is deliberately retained after success, failure or interruption; existing stage logs and the receipt remain the authoritative execution evidence. Do **not** delete the reservation to force an implicit restart. Instead archive and independently verify the entire original family, then generate a fresh family in a new directory for a new run attempt. The runner does not yet provide automatic recovery or cryptographically authenticated custody. No physical or numerical approval follows from a reservation or an exit-code-zero receipt.
 
 
+## Immediate checkMesh solver-launch guard (2026-10-10)
+
+The opt-in `grid-run` now checks the bounded local `checkMesh.log` verdict
+**before** launching `simpleFoam`. An explicit `Mesh OK.` followed by
+a terminal `End` is required; any `Failed N mesh checks.`, fatal/error
+diagnostic, missing verdict, ambiguity, or trailing output blocks that case,
+even when `checkMesh` exits with code zero. The runner records the
+original return code and SHA-256 log hash with `mesh_check_rejected`,
+skips dependent `simpleFoam`, and continues other independent cases.
+The offline receipt verifier also checks that a recorded
+`mesh_check_rejected` is not contradictory with a clean log and that a
+completed `checkMesh` stage contains a clean verdict.
+
+This is a text-integrity safety gate, **not** a mesh-geometry screen,
+full OpenFOAM quality certification, solver convergence or physical cleanroom
+qualification. Independent mesh/statistic checks remain in
+`grid-mesh-audit`; no real OpenFOAM v10 runs or physical measurements
+were performed here. Scientific release stays HOLD/BLOCKED.
+
 ## Independent checkMesh log-to-mesh consistency gate (2026-10-10)
 
 The read-only `grid-mesh-audit` now also screens each case's recorded

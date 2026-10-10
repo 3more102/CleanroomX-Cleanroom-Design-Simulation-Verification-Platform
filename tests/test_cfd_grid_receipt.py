@@ -49,6 +49,8 @@ def synthetic_processes(monkeypatch, *, failure=None):
             return SimpleNamespace(returncode=0, stdout="10\n", stderr="")
         case = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
         kwargs["stdout"].write(f"SYNTHETIC process fixture {case} {name}\n")
+        if name == "checkMesh":
+            kwargs["stdout"].write("Mesh OK.\nEnd\n")
         return SimpleNamespace(
             returncode=1 if (case, name) == failure else 0
         )

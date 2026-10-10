@@ -500,6 +500,14 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
                     outcome = "source_drift"
             except (OSError, ValueError):
                 outcome = "source_drift"
+            if stage == "checkMesh" and outcome == "completed":
+                # An exit code of zero does not guarantee Mesh OK.
+                # Post-run mesh topology and count audits remain separate.
+                from .cfd_checkmesh_log import screen_checkmesh_verdict
+                try:
+                    screen_checkmesh_verdict(log_path)
+                except (OSError, ValueError):
+                    outcome = "mesh_check_rejected"
             case["stages"].append({
                 "command": stage, "returncode": returncode,
                 "status": outcome, "log": f"{key}/{stage}.log",

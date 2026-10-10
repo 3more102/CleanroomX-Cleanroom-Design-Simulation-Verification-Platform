@@ -73,16 +73,7 @@ jobs:
             echo "WM_PROJECT=${WM_PROJECT:-unknown}"
             echo "WM_PROJECT_VERSION=${WM_PROJECT_VERSION:-unknown}"
           } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
-          mkdir -p "$RUNNER_TEMP/openfoam-bin"
-          cat > "$RUNNER_TEMP/openfoam-bin/foamVersion" <<'EOF'
-          #!/usr/bin/env bash
-          set -eo pipefail
-          source /opt/openfoam10/etc/bashrc
-          foamVersion
-          EOF
-          chmod +x "$RUNNER_TEMP/openfoam-bin/foamVersion"
-          export PATH="$RUNNER_TEMP/openfoam-bin:$PATH"
-                    family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
           cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
           cleanroomx-cfd-pipeline grid-verify "$family"

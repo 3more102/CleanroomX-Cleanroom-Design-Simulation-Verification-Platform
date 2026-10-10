@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from cleanroomx.cfd_blockmesh_source import verify_generated_blockmesh_source
+from cleanroomx.cfd_blockmesh_source import (
+    _validate_generated_structured_grid,
+    verify_generated_blockmesh_source,
+)
 from cleanroomx.cfd_grid_family import SCHEMA as FAMILY_SCHEMA, generate_grid_family
 from cleanroomx.cfd_grid_runner import run_grid_family
 from cleanroomx.cfd_openfoam import SCHEMA, build_openfoam_files
@@ -437,6 +440,114 @@ def test_rehashed_reversed_inlet_normal_never_reaches_openfoam(
 
     monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
     with pytest.raises(ValueError, match="boundary face winding"):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()
+
+
+
+def _rectilinear_two_row_fixture(x_coordinates, x_intervals):
+    """Build minimal synthetic axis-aligned hexes without an OpenFOAM process."""
+    points = [
+        (float(x), float(y), float(z))
+        for z in (0, 1)
+        for y in (0, 1)
+        for x in x_coordinates
+    ]
+    nx = len(x_coordinates)
+
+    def vertex(i, j, k):
+        return (k * 2 + j) * nx + i
+
+    blocks = [
+        (
+            vertex(left, 0, 0), vertex(right, 0, 0),
+            vertex(right, 1, 0), vertex(left, 1, 0),
+            vertex(left, 0, 1), vertex(right, 0, 1),
+            vertex(right, 1, 1), vertex(left, 1, 1),
+        )
+        for left, right in x_intervals
+    ]
+    return points, blocks
+
+
+def test_generated_grid_accepts_complete_nonuniform_cartesian_tiling():
+    points, blocks = _rectilinear_two_row_fixture(
+        [0, 0.75, 2.5], [(0, 1), (1, 2)]
+    )
+    assert _validate_generated_structured_grid(points, blocks) is None
+
+
+@pytest.mark.parametrize("intervals,diagnostic", [
+    ([(0, 1), (2, 3)], "do not tile"),
+    ([(0, 1), (0, 1), (2, 3)], "overlap"),
+    ([(0, 2), (1, 2), (2, 3)], "skips"),
+])
+def test_generated_grid_rejects_holes_overlaps_and_skipped_planes(
+    intervals, diagnostic
+):
+    points, blocks = _rectilinear_two_row_fixture([0, 1, 2, 4], intervals)
+    with pytest.raises(ValueError, match=diagnostic):
+        _validate_generated_structured_grid(points, blocks)
+
+
+def test_generated_source_rejects_unreferenced_vertex(generated_source):
+    """Every source vertex must be part of the complete structured grid."""
+    path, count = generated_source
+    source = path.read_text(encoding="utf-8")
+    marker = ");\nblocks\n(\n"
+    assert source.count(marker) == 1
+    source = source.replace(marker, "    (99 99 99)\n" + marker, 1)
+    path.write_text(source, encoding="utf-8")
+    with pytest.raises(ValueError, match="complete Cartesian grid"):
+        verify_generated_blockmesh_source(path, expected_cells=count)
+
+
+def test_rehashed_unused_vertex_does_not_reach_solver_discovery(
+    tmp_path, monkeypatch
+):
+    """Self-rehashed local source cannot bypass Cartesian completeness."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC injected unused mesh point",
+            "room_m": [1, 1, 1],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    source_path = root / relative
+    raw = source_path.read_text(encoding="utf-8")
+    marker = ");\nblocks\n(\n"
+    assert raw.count(marker) == 1
+    source_path.write_text(
+        raw.replace(marker, "    (99 99 99)\n" + marker, 1),
+        encoding="utf-8",
+    )
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    import cleanroomx.cfd_grid_runner as runner
+
+    def forbidden_discovery(_name):
+        pytest.fail("An invalid Cartesian mesh reached external solver discovery")
+
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match="complete Cartesian grid"):
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()

@@ -789,3 +789,97 @@ def test_generated_mesh_file_hashes_are_in_v2_receipt(generated, monkeypatch):
         assert case["mesh_files"] == {
             "points": hashlib.sha256(b"SYNTHETIC mesh bytes").hexdigest()
         }
+
+
+@pytest.mark.parametrize("tampering_stage", ["checkMesh", "simpleFoam"])
+@pytest.mark.parametrize("tamper", ["rewrite", "extra"])
+def test_mesh_changes_after_blockmesh_block_later_stages(
+    generated, monkeypatch, tampering_stage, tamper
+):
+    """Changing ordinary polyMesh bytes after blockMesh is source drift."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    original_run = runner.subprocess.run
+    first_key = "configuration_1/coarse"
+    first_dir = generated / first_key
+    base_bytes = b"SYNTHETIC original mesh points"
+
+    def mutate_mesh(command, **kwargs):
+        result = original_run(command, **kwargs)
+        stage = Path(command[0]).name
+        if kwargs.get("cwd") == first_dir:
+            mesh = first_dir / "constant/polyMesh"
+            if stage == "blockMesh":
+                mesh.mkdir()
+                (mesh / "points").write_bytes(base_bytes)
+            elif stage == tampering_stage:
+                if tamper == "rewrite":
+                    (mesh / "points").write_bytes(b"SYNTHETIC altered mesh points")
+                else:
+                    (mesh / "injected").write_bytes(b"SYNTHETIC new mesh output")
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", mutate_mesh)
+    report = run_grid_family(generated, timeout_seconds=60)
+    first = report["cases"][first_key]
+    assert report["status"] == "incomplete"
+    assert first["status"] == "execution_failed"
+    assert first["stages"][-1]["command"] == tampering_stage
+    assert first["stages"][-1]["returncode"] == 0
+    assert first["stages"][-1]["status"] == "source_drift"
+    assert first["mesh_files"] == {
+        "points": hashlib.sha256(base_bytes).hexdigest()
+    }
+    assert len(calls) == (2 if tampering_stage == "checkMesh" else 3)
+    assert report["cases"]["configuration_1/medium"]["status"] == "not_run"
+    verdict = verify_grid_run_evidence(generated)
+    assert verdict["status"] == "evidence_integrity_failed"
+    assert f"mesh_output_digest_mismatch:{first_key}" in verdict["findings"]
+    assert f"stage_source_drift_recorded:{first_key}:{tampering_stage}" in verdict["findings"]
+
+
+def test_mesh_drift_between_stage_receipt_and_next_launch_blocks_run(
+    generated, monkeypatch
+):
+    """A change after blockMesh receipt cannot be used by checkMesh."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    original_run = runner.subprocess.run
+    original_write = runner._write_receipt
+    first_key = "configuration_1/coarse"
+    first_dir = generated / first_key
+    original_mesh_bytes = b"SYNTHETIC post-blockMesh output"
+    edited = False
+
+    def generated_mesh(command, **kwargs):
+        finished = original_run(command, **kwargs)
+        if Path(command[0]).name == "blockMesh" and kwargs["cwd"] == first_dir:
+            mesh = first_dir / "constant/polyMesh"
+            mesh.mkdir()
+            (mesh / "points").write_bytes(original_mesh_bytes)
+        return finished
+
+    def tamper_after_receipt(root, report):
+        nonlocal edited
+        original_write(root, report)
+        first = report["cases"][first_key]
+        if (not edited and first["status"] == "running"
+                and len(first["stages"]) == 1):
+            edited = True
+            (first_dir / "constant/polyMesh/points").write_bytes(
+                b"SYNTHETIC modified after receipt"
+            )
+
+    monkeypatch.setattr(runner.subprocess, "run", generated_mesh)
+    monkeypatch.setattr(runner, "_write_receipt", tamper_after_receipt)
+    with pytest.raises(ValueError, match="Generated mesh changed between solver stages"):
+        run_grid_family(generated, timeout_seconds=60)
+    assert edited
+    assert calls == [(first_key, "blockMesh")]
+    verdict = verify_grid_run_evidence(generated)
+    assert verdict["status"] == "evidence_integrity_failed"
+    assert f"mesh_output_digest_mismatch:{first_key}" in verdict["findings"]

@@ -68,6 +68,7 @@ def _generated_patch_faces(
         cursor += 1
 
     signatures = {}
+    face_windings = {}
     for patch_name, patch_type in (
         ("inlet", "patch"), ("outlet", "patch"), ("walls", "wall")
     ):
@@ -85,9 +86,12 @@ def _generated_patch_faces(
             if (len(set(indices)) != 4
                     or any(index >= len(original_vertices) for index in indices)):
                 raise ValueError("Invalid generated boundary face vertex references")
-            face_signatures.append(tuple(sorted(
+            winding = tuple(
                 canonical_ids[original_vertices[index]] for index in indices
-            )))
+            )
+            signature = tuple(sorted(winding))
+            face_signatures.append(signature)
+            face_windings[signature] = winding
             if len(face_signatures) > 6 * MAX_BLOCKS:
                 raise ValueError("Excessive generated boundary face count")
             cursor += 1
@@ -100,15 +104,18 @@ def _generated_patch_faces(
         raise ValueError("Unexpected generated blockMesh boundary sections")
 
     all_faces = Counter()
+    expected_windings = {}
     for a, b, c, d, e, f, g, h in original_blocks:
         for face in (
             (a, d, c, b), (e, f, g, h), (a, b, f, e),
             (b, c, g, f), (c, d, h, g), (d, a, e, h)
         ):
-            key = tuple(sorted(
+            winding = tuple(
                 canonical_ids[original_vertices[index]] for index in face
-            ))
+            )
+            key = tuple(sorted(winding))
             all_faces[key] += 1
+            expected_windings.setdefault(key, winding)
     if any(count not in (1, 2) for count in all_faces.values()):
         raise ValueError("Nonmanifold generated blockMesh face incidence")
     expected_exterior = {key for key, count in all_faces.items() if count == 1}
@@ -117,6 +124,16 @@ def _generated_patch_faces(
         raise ValueError("Repeated generated boundary face")
     if set(actual_faces) != expected_exterior:
         raise ValueError("Generated boundary differs from external hex faces")
+    # Sorted membership does not detect reversed OpenFOAM boundary normals.
+    # Accept cyclic rotations only, never a reflection or noncyclic winding.
+    for signature in expected_exterior:
+        winding = face_windings[signature]
+        canonical = expected_windings[signature]
+        if not any(
+            winding == canonical[index:] + canonical[:index]
+            for index in range(4)
+        ):
+            raise ValueError("Generated boundary face winding is not outward")
     return signatures
 
 
@@ -220,6 +237,22 @@ def verify_generated_blockmesh_source(
         identity = frozenset(vertex_ids)
         if identity in used_blocks:
             raise ValueError("Duplicate generated blockMesh hexahedron")
+        # The generator emits six positive-area faces of an axis-aligned
+        # hexahedron with a fixed right-handed corner order. Vertex-count
+        # and membership checks alone cannot detect inverted or twisted hexes.
+        corners = tuple(original_vertices[index] for index in vertex_ids)
+        axes = [sorted({point[axis] for point in corners}) for axis in range(3)]
+        if any(len(values) != 2 for values in axes):
+            raise ValueError("Noncanonical generated hex geometry")
+        (x0, x1), (y0, y1), (z0, z1) = axes
+        expected_corners = (
+            (x0, y0, z0), (x1, y0, z0),
+            (x1, y1, z0), (x0, y1, z0),
+            (x0, y0, z1), (x1, y0, z1),
+            (x1, y1, z1), (x0, y1, z1),
+        )
+        if corners != expected_corners:
+            raise ValueError("Noncanonical generated hex geometry")
         used_blocks.add(identity)
         original_blocks.append(vertex_ids)
     bounds_m = tuple(

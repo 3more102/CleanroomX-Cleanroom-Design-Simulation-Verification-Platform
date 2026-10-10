@@ -124,6 +124,7 @@ def screen_ascii_polymesh(
     case_dir: Path, *, expected_cells: int, configuration: int | None = None,
     expected_bounds: tuple[tuple[float, float], ...] | None = None,
     expected_vertices: tuple[tuple[float, float, float], ...] | None = None,
+    expected_cell_signatures: tuple[tuple[int, ...], ...] | None = None,
 ) -> dict:
     """Validate face references, cell adjacency, edges and boundary partition.
 
@@ -133,6 +134,8 @@ def screen_ascii_polymesh(
     """
     if type(expected_cells) is not int or not 1 <= expected_cells <= 20_000:
         raise ValueError("Invalid expected polyMesh cell count")
+    if expected_cell_signatures is not None and expected_vertices is None:
+        raise ValueError("Cell topology comparison requires source vertices")
     case_dir = Path(case_dir)
     mesh_dir = case_dir / "constant/polyMesh"
     if case_dir.is_symlink() or mesh_dir.is_symlink() or not mesh_dir.is_dir():
@@ -180,10 +183,11 @@ def screen_ascii_polymesh(
                     or abs(actual_high - high) > tolerance):
                 raise ValueError("polyMesh room extent disagrees with blockMesh source")
 
+    matched_source_ids = None
     if expected_vertices is not None:
         if expected_bounds is None:
             raise ValueError("Source-bound vertices require declared room bounds")
-        validate_generated_vertex_positions(
+        matched_source_ids = validate_generated_vertex_positions(
             ordered_points, expected_vertices, bounds_m=expected_bounds,
         )
 
@@ -218,6 +222,7 @@ def screen_ascii_polymesh(
         raise ValueError("Disconnected generated polyMesh cell regions")
 
     edges_per_cell = [Counter() for _ in range(expected_cells)]
+    cell_vertices = [set() for _ in range(expected_cells)]
     incident_faces = [0] * expected_cells
     used_points = set()
     face_identity = set()
@@ -248,6 +253,7 @@ def screen_ascii_polymesh(
         for cell in adjacent:
             incident_faces[cell] += 1
             edges_per_cell[cell].update(edges)
+            cell_vertices[cell].update(labels)
     if len(used_points) != len(vertices_raw):
         raise ValueError("Unused polyMesh vertex")
     if any(count != 6 for count in incident_faces):
@@ -258,6 +264,18 @@ def screen_ascii_polymesh(
         ordered_points, ordered_faces, owners, neighbours,
         expected_cells=expected_cells,
     )
+    if expected_cell_signatures is not None:
+        assert matched_source_ids is not None
+        if (len(expected_cell_signatures) != expected_cells
+                or any(len(cell) != 8 or len(set(cell)) != 8
+                       for cell in expected_cell_signatures)):
+            raise ValueError("Invalid generated blockMesh cell signatures")
+        actual_cells = Counter(
+            tuple(sorted(matched_source_ids[index] for index in cell))
+            for cell in cell_vertices
+        )
+        if actual_cells != Counter(expected_cell_signatures):
+            raise ValueError("polyMesh cell connectivity differs from blockMesh source")
 
     if set(patches) != {"inlet", "outlet", "walls"}:
         raise ValueError("Unexpected generated polyMesh boundary names")
@@ -322,6 +340,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
                 configuration=manifest["case_inputs"][key]["configuration"],
                 expected_bounds=source_geometry["bounds_m"],
                 expected_vertices=source_geometry["vertices_m"],
+                expected_cell_signatures=source_geometry["hex_cells"],
             )
             for patch_name in ("inlet", "outlet"):
                 actual = metrics["patch_face_counts"][patch_name]

@@ -392,7 +392,48 @@ def test_source_lattice_accepts_reordered_points_and_bounded_roundoff(tmp_path):
                     for x in range(3) for y in range(2) for z in range(2))
     perturbed = [(x + (1e-8 if x == 1 else 0.0), y, z)
                  for x, y, z in reversed(lattice)]
-    validate_generated_vertex_positions(
+    mapped = validate_generated_vertex_positions(
         perturbed, lattice,
         bounds_m=((0.0, 2.0), (0.0, 1.0), (0.0, 1.0)),
     )
+    assert mapped == tuple(reversed(range(len(lattice))))
+
+
+def test_source_bound_hexahedral_membership_rejects_forged_cell_topology(tmp_path):
+    """A mesh can pass geometry and vertex checks but disagree with source cells."""
+    case = tmp_path / "case"
+    _mesh_fixture(case, cells=2)
+    bounds = ((0.0, 2.0), (0.0, 1.0), (0.0, 1.0))
+    vertices = tuple((float(x), float(y), float(z))
+                     for x in range(3) for y in range(2) for z in range(2))
+    actual_hexes = (
+        tuple(range(8)),
+        tuple(range(4, 12)),
+    )
+    result = screen_ascii_polymesh(
+        case, expected_cells=2, expected_bounds=bounds,
+        expected_vertices=vertices, expected_cell_signatures=actual_hexes,
+    )
+    assert result["cells"] == 2
+    forged_source_hexes = (
+        (1, 2, 3, 4, 5, 6, 7, 8),
+        tuple(range(4, 12)),
+    )
+    # The mesh remains well-connected and geometrically plausible; only
+    # its source-to-cell membership is no longer consistent.
+    with pytest.raises(ValueError, match="cell connectivity differs"):
+        screen_ascii_polymesh(
+            case, expected_cells=2, expected_bounds=bounds,
+            expected_vertices=vertices,
+            expected_cell_signatures=forged_source_hexes,
+        )
+
+
+def test_cell_topology_source_requires_explicit_vertex_binding(tmp_path):
+    case = tmp_path / "case"
+    _mesh_fixture(case, cells=2)
+    with pytest.raises(ValueError, match="requires source vertices"):
+        screen_ascii_polymesh(
+            case, expected_cells=2,
+            expected_cell_signatures=(tuple(range(8)), tuple(range(4, 12))),
+        )

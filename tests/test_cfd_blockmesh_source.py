@@ -42,6 +42,10 @@ def test_actual_generated_ascii_source_matches_declared_hexahedra(generated_sour
         path, expected_cells=cells, capture_vertices=True,
     )
     assert len(captured["vertices_m"]) == result["vertex_count"]
+    assert len(captured["hex_cells"]) == cells
+    assert len(set(captured["hex_cells"])) == cells
+    assert all(len(cell) == 8 and len(set(cell)) == 8
+               for cell in captured["hex_cells"])
     assert len(set(captured["vertices_m"])) == 343
     assert min(v[0] for v in captured["vertices_m"]) == 0
     assert max(v[2] for v in captured["vertices_m"]) == 2

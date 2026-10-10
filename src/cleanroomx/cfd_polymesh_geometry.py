@@ -144,7 +144,7 @@ def validate_generated_vertex_positions(
     source_vertices: tuple[tuple[float, float, float], ...],
     *,
     bounds_m: tuple[tuple[float, float], ...],
-) -> None:
+) -> tuple[int, ...]:
     """Match the complete solver point set to generated blockMesh vertices.
 
     This checks source/mesh coordinate consistency, not cell quality or
@@ -168,8 +168,10 @@ def validate_generated_vertex_positions(
             for axis in range(3)
         )
 
-    pending: dict[tuple[int, int, int], list[tuple[float, float, float]]] = {}
-    for vertex in source_vertices:
+    pending: dict[
+        tuple[int, int, int], list[tuple[int, tuple[float, float, float]]]
+    ] = {}
+    for source_id, vertex in enumerate(source_vertices):
         key = bucket(vertex)
         items = pending.setdefault(key, [])
         # A generated grid has far fewer than 2 points in any tolerance bin.
@@ -177,9 +179,10 @@ def validate_generated_vertex_positions(
         # allowing an unbounded nearest-neighbour search.
         if items:
             raise ValueError("Ambiguous generated source vertex tolerance bin")
-        items.append(vertex)
+        items.append((source_id, vertex))
 
     neighbours = tuple(product((-1, 0, 1), repeat=3))
+    source_ids = []
     for vertex in points:
         cell = bucket(vertex)
         matching = []
@@ -188,15 +191,17 @@ def validate_generated_vertex_positions(
             items = pending.get(neighbour_key)
             if not items:
                 continue
-            for candidate in items:
+            for candidate_id, candidate in items:
                 if all(abs(vertex[axis] - candidate[axis]) <= tolerances[axis]
                        for axis in range(3)):
-                    matching.append((neighbour_key, candidate))
+                    matching.append((neighbour_key, candidate_id, candidate))
         if len(matching) != 1:
             raise ValueError("polyMesh vertex differs from generated source lattice")
-        neighbour_key, candidate = matching[0]
-        pending[neighbour_key].remove(candidate)
+        neighbour_key, candidate_id, candidate = matching[0]
+        pending[neighbour_key].remove((candidate_id, candidate))
+        source_ids.append(candidate_id)
         if not pending[neighbour_key]:
             del pending[neighbour_key]
     if pending:
         raise ValueError("Generated source vertices missing from polyMesh")
+    return tuple(source_ids)

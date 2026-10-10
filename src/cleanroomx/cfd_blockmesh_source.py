@@ -81,6 +81,7 @@ def verify_generated_blockmesh_source(
     if len(vertex_lines) < 8 or len(vertex_lines) > 100_000:
         raise ValueError("Generated blockMesh vertex count is outside bounds")
     vertices = set()
+    original_vertices = [] if capture_vertices else None
     for line in vertex_lines:
         match = _VERTEX.fullmatch(line)
         if match is None:
@@ -91,6 +92,8 @@ def verify_generated_blockmesh_source(
         if coords in vertices:
             raise ValueError("Duplicate generated blockMesh vertex coordinates")
         vertices.add(coords)
+        if original_vertices is not None:
+            original_vertices.append(coords)
 
     block_lines = _generated_section(source, "blocks")
     if len(block_lines) != expected_cells:
@@ -125,5 +128,18 @@ def verify_generated_blockmesh_source(
     # Explicit opt-in: mesh auditing needs full source coordinates, whereas
     # preflight callers do not need to allocate or serialize this extra data.
     if capture_vertices:
-        result["vertices_m"] = tuple(sorted(vertices))
+        canonical_vertices = tuple(sorted(vertices))
+        canonical_ids = {
+            coordinates: index for index, coordinates
+            in enumerate(canonical_vertices)
+        }
+        assert original_vertices is not None
+        # Compare cells by canonical coordinate identity, not OpenFOAM's
+        # arbitrary point/cell numbering or the order of source blocks.
+        result["vertices_m"] = canonical_vertices
+        result["hex_cells"] = tuple(sorted(
+            tuple(sorted(canonical_ids[original_vertices[vertex]]
+                         for vertex in block))
+            for block in used_blocks
+        ))
     return result

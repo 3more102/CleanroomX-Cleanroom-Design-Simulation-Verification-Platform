@@ -301,6 +301,12 @@ cell count. It checks:
   it also checks that supply faces are on the ceiling and exhaust faces lie on
   side x-walls (configurations 1/2) or the floor (configuration 3); this
   rejects correctly counted but incorrectly assigned boundary locations.
+- One-to-one hexahedral cell membership comparison: once source and output
+  vertex identities are matched, compare the set of eight corner vertices
+  for every generated hex block against each reconstructed `polyMesh`
+  cell, independent of face/point/cell ordering. This rejects changes
+  in cell membership even if all coordinates, outer bounds, counts and
+  individually valid cell geometry still match.
 - Full source-to-output vertex-set consistency: the audited mesh must contain
   each generated blockMesh vertex once, independent of OpenFOAM's point order.
   Matching uses bounded three-axis coordinate tolerances (2e-6 of each room

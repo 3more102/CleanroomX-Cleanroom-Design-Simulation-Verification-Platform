@@ -13,29 +13,29 @@ import re
 
 MAX_SOURCE_BYTES = 8 * 1024 * 1024
 MAX_BLOCKS = 20_000
-_NUMBER = r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+_NUMBER = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 _VERTEX = re.compile(
-    rf"[ \\t]*\\([ \\t]*({_NUMBER})[ \\t]+({_NUMBER})[ \\t]+({_NUMBER})[ \\t]*\\)[ \\t]*"
+    rf"[ \t]*\([ \t]*({_NUMBER})[ \t]+({_NUMBER})[ \t]+({_NUMBER})[ \t]*\)[ \t]*"
 )
 _BLOCK = re.compile(
-    r"[ \\t]*hex[ \\t]+\\([ \\t]*"
-    + r"[ \\t]+".join([r"([0-9]+)"] * 8)
-    + r"[ \\t]*\\)[ \\t]+\\([ \\t]*1[ \\t]+1[ \\t]+1[ \\t]*\\)"
-    + r"[ \\t]+simpleGrading[ \\t]+\\([ \\t]*1[ \\t]+1[ \\t]+1[ \\t]*\\)[ \\t]*"
+    r"[ \t]*hex[ \t]+\([ \t]*"
+    + r"[ \t]+".join([r"([0-9]+)"] * 8)
+    + r"[ \t]*\)[ \t]+\([ \t]*1[ \t]+1[ \t]+1[ \t]*\)"
+    + r"[ \t]+simpleGrading[ \t]+\([ \t]*1[ \t]+1[ \t]+1[ \t]*\)[ \t]*"
 )
 
 
 def _generated_section(source: str, name: str) -> list[str]:
     """Select exactly one canonical multiline list, with no loose entries."""
     pattern = re.compile(
-        rf"^{re.escape(name)}[ \\t]*\\r?\\n\\([ \\t]*\\r?\\n(.*?)^\\);[ \\t]*\\r?$",
+        rf"^{re.escape(name)}[ \t]*\r?\n\([ \t]*\r?\n(.*?)^\);[ \t]*\r?$",
         re.MULTILINE | re.DOTALL,
     )
     matches = list(pattern.finditer(source))
     # Also refuse extra declarations, including malformed duplicate lists:
     # the generator emits these keys once each, at the start of a line.
     if len(matches) != 1 or len(re.findall(
-        rf"^{re.escape(name)}(?:[ \\t]|$)", source, flags=re.MULTILINE
+        rf"^{re.escape(name)}(?:[ \t]|$)", source, flags=re.MULTILINE
     )) != 1:
         raise ValueError(f"Noncanonical generated {name} section")
     return [line for line in matches[0].group(1).splitlines() if line.strip()]
@@ -57,9 +57,9 @@ def verify_generated_blockmesh_source(path: Path, *, expected_cells: int) -> dic
         source = raw.decode("utf-8")
     except UnicodeError as exc:
         raise ValueError("Generated blockMesh source is not UTF-8") from exc
-    if not re.search(r"(?m)^[ \\t]*format[ \\t]+ascii;", source):
+    if not re.search(r"(?m)^[ \t]*format[ \t]+ascii;", source):
         raise ValueError("Generated blockMesh source is not declared ASCII")
-    if not re.search(r"(?m)^[ \\t]*object[ \\t]+blockMeshDict;", source):
+    if not re.search(r"(?m)^[ \t]*object[ \t]+blockMeshDict;", source):
         raise ValueError("Generated blockMesh source identity invalid")
 
     vertex_lines = _generated_section(source, "vertices")

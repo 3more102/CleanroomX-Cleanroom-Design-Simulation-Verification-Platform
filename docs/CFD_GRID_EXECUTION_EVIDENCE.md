@@ -219,6 +219,32 @@ copies and trusted timestamps/signatures where chain-of-custody is required.
 After validating the OpenFOAM executable version and before launching any stage, `grid-run` atomically creates the directory `.grid_run_reserved` inside the generated family. A second invocation cannot create that directory and is rejected without running a solver. This is a local filesystem coordination safeguard, **not** a distributed lock or an authenticated run identifier. The reservation is deliberately retained after success, failure or interruption; existing stage logs and the receipt remain the authoritative execution evidence. Do **not** delete the reservation to force an implicit restart. Instead archive and independently verify the entire original family, then generate a fresh family in a new directory for a new run attempt. The runner does not yet provide automatic recovery or cryptographically authenticated custody. No physical or numerical approval follows from a reservation or an exit-code-zero receipt.
 
 
+## Independent checkMesh log-to-mesh consistency gate (2026-10-10)
+
+The read-only `grid-mesh-audit` now also screens each case's recorded
+`checkMesh.log` after parsing its actual ASCII `polyMesh`. For all nine cases
+it requires one exact standalone `Mesh OK.` verdict, one terminal `End`,
+no reported `Failed N mesh checks.` or fatal/error diagnostics, and exactly
+one printed value for each of `points`, `faces`, `internal faces` and
+`cells`. Those values must equal the counts independently reconstructed
+from the corresponding `polyMesh` files. The log must be ordinary,
+unlinked, UTF-8 text within a 16 MiB bound and must remain hash-stable
+while screened. An external `checkMesh` exit code of zero is not treated
+as a substitute for its text verdict: OpenFOAM can print a failure count
+even when the utility exits successfully.
+
+The format screen supports the narrow single-time, Foundation-style
+`checkMesh` output expected from CleanroomX's controlled serial workflow.
+Other formats, multiple mesh-time analyses or missing count lines are
+reported as **unverified**, not silently accepted. Matching locally
+recorded log content still does not authenticate the tool, prove that
+OpenFOAM ran, establish mesh quality against independent thresholds,
+or establish convergence/physical performance. All test logs are
+**synthetic fixtures**. Scientific review remains **BLOCKED**.
+
+See the OpenFOAM Foundation `checkMesh` source for the distinct
+`Mesh OK.` and `Failed N mesh checks.` summary branches.
+
 ## Independent ASCII polyMesh structural screening (2026-10-10)
 
 After preserving all nine **real** OpenFOAM mesh outputs, run:

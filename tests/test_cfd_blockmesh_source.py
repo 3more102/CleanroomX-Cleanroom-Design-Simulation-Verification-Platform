@@ -37,6 +37,14 @@ def test_actual_generated_ascii_source_matches_declared_hexahedra(generated_sour
     assert result["hex_block_count"] == cells
     assert result["vertex_count"] == 7 * 7 * 7
     assert result["bounds_m"] == ((0.0, 1.0), (0.0, 1.5), (0.0, 2.0))
+    assert "vertices_m" not in result
+    captured = verify_generated_blockmesh_source(
+        path, expected_cells=cells, capture_vertices=True,
+    )
+    assert len(captured["vertices_m"]) == result["vertex_count"]
+    assert len(set(captured["vertices_m"])) == 343
+    assert min(v[0] for v in captured["vertices_m"]) == 0
+    assert max(v[2] for v in captured["vertices_m"]) == 2
 
 
 @pytest.mark.parametrize("mutation", [

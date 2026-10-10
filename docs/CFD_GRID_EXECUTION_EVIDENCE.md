@@ -301,6 +301,12 @@ cell count. It checks:
   it also checks that supply faces are on the ceiling and exhaust faces lie on
   side x-walls (configurations 1/2) or the floor (configuration 3); this
   rejects correctly counted but incorrectly assigned boundary locations.
+- Full source-to-output vertex-set consistency: the audited mesh must contain
+  each generated blockMesh vertex once, independent of OpenFOAM's point order.
+  Matching uses bounded three-axis coordinate tolerances (2e-6 of each room
+  span) and detects displaced interior vertices even when the room extents
+  and hexahedral topology still pass. This is an input/output consistency
+  check, not proof of numerical or physical accuracy.
 - A non-rewritten unit scale (`convertToMeters 1`) in the generated
   `blockMeshDict`, and a coordinate-bound comparison against the actual
   post-solver ASCII `polyMesh/points` extents. An otherwise connected,

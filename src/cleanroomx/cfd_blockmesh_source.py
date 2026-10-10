@@ -41,7 +41,9 @@ def _generated_section(source: str, name: str) -> list[str]:
     return [line for line in matches[0].group(1).splitlines() if line.strip()]
 
 
-def verify_generated_blockmesh_source(path: Path, *, expected_cells: int) -> dict:
+def verify_generated_blockmesh_source(
+    path: Path, *, expected_cells: int, capture_vertices: bool = False
+) -> dict:
     """Screen expected block count, vertex references and duplicate blocks.
 
     A match to a self-declared count does not authenticate a generated source,
@@ -49,6 +51,8 @@ def verify_generated_blockmesh_source(path: Path, *, expected_cells: int) -> dic
     """
     if type(expected_cells) is not int or not 1 <= expected_cells <= MAX_BLOCKS:
         raise ValueError("Invalid declared blockMesh cell count")
+    if type(capture_vertices) is not bool:
+        raise ValueError("capture_vertices must be a boolean")
     with path.open("rb") as handle:
         raw = handle.read(MAX_SOURCE_BYTES + 1)
     if len(raw) > MAX_SOURCE_BYTES:
@@ -113,8 +117,13 @@ def verify_generated_blockmesh_source(path: Path, *, expected_cells: int) -> dic
     )
     if any(low >= high for low, high in bounds_m):
         raise ValueError("Degenerate generated blockMesh room extent")
-    return {
+    result = {
         "vertex_count": len(vertex_lines),
         "hex_block_count": len(block_lines),
         "bounds_m": bounds_m,
     }
+    # Explicit opt-in: mesh auditing needs full source coordinates, whereas
+    # preflight callers do not need to allocate or serialize this extra data.
+    if capture_vertices:
+        result["vertices_m"] = tuple(sorted(vertices))
+    return result

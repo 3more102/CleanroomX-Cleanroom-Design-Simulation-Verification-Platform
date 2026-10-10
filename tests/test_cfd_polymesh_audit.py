@@ -350,3 +350,49 @@ def test_source_bound_room_extent_rejects_scaled_or_shifted_hex_mesh(
     assert screen_ascii_polymesh(case, expected_cells=2)["cells"] == 2
     with pytest.raises(ValueError, match="room extent disagrees"):
         screen_ascii_polymesh(case, expected_cells=2, expected_bounds=expected)
+
+
+def test_source_bound_vertex_lattice_rejects_internal_plane_shift(tmp_path):
+    """A changed interior plane can preserve all bounds and valid hex faces."""
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=2)
+    bounds = ((0.0, 2.0), (0.0, 1.0), (0.0, 1.0))
+    lattice = tuple(
+        (float(x), float(y), float(z))
+        for x in range(3) for y in range(2) for z in range(2)
+    )
+    assert screen_ascii_polymesh(
+        case, expected_cells=2,
+        expected_bounds=bounds, expected_vertices=lattice,
+    )["cells"] == 2
+    # Move all four interior x=1 vertices to x=.7 without touching the
+    # room extrema, face planarity, or per-cell topological connectivity.
+    path = mesh / "points"
+    old = path.read_text(encoding="ascii")
+    changed = "\n".join(
+        "(0.7 " + line[3:] if line.startswith("(1 ") else line
+        for line in old.splitlines()
+    ) + "\n"
+    assert changed != old
+    path.write_text(changed, encoding="ascii")
+    assert screen_ascii_polymesh(
+        case, expected_cells=2, expected_bounds=bounds,
+    )["cells"] == 2
+    with pytest.raises(ValueError, match="source lattice"):
+        screen_ascii_polymesh(
+            case, expected_cells=2,
+            expected_bounds=bounds, expected_vertices=lattice,
+        )
+
+
+def test_source_lattice_accepts_reordered_points_and_bounded_roundoff(tmp_path):
+    """Vertex matching is set-based, not dependent on OpenFOAM point IDs."""
+    from cleanroomx.cfd_polymesh_geometry import validate_generated_vertex_positions
+    lattice = tuple((float(x), float(y), float(z))
+                    for x in range(3) for y in range(2) for z in range(2))
+    perturbed = [(x + (1e-8 if x == 1 else 0.0), y, z)
+                 for x, y, z in reversed(lattice)]
+    validate_generated_vertex_positions(
+        perturbed, lattice,
+        bounds_m=((0.0, 2.0), (0.0, 1.0), (0.0, 1.0)),
+    )

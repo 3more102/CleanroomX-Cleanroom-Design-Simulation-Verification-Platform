@@ -6,6 +6,7 @@ OpenFOAM checkMesh, numerical verification, or physical CFD qualification.
 from __future__ import annotations
 
 import math
+from itertools import product
 
 
 def _dot(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
@@ -136,3 +137,66 @@ def validate_generated_boundary_locations(
                     "Generated polyMesh " + patch_name +
                     " face does not occupy expected room boundary plane"
                 )
+
+
+def validate_generated_vertex_positions(
+    points: list[tuple[float, float, float]],
+    source_vertices: tuple[tuple[float, float, float], ...],
+    *,
+    bounds_m: tuple[tuple[float, float], ...],
+) -> None:
+    """Match the complete solver point set to generated blockMesh vertices.
+
+    This checks source/mesh coordinate consistency, not cell quality or
+    geometric accuracy. Mesh point ordering may differ from source ordering.
+    Bounded spatial bins avoid quadratic comparisons on large meshes.
+    """
+    if (not points or len(points) != len(source_vertices)
+            or len(bounds_m) != 3
+            or any(len(bounds) != 2 or not all(math.isfinite(v) for v in bounds)
+                   or bounds[0] >= bounds[1] for bounds in bounds_m)):
+        raise ValueError("polyMesh vertex count or source extent mismatch")
+    tolerances = tuple((high - low) * 2e-6 for low, high in bounds_m)
+    if any(not math.isfinite(t) or t <= 0 for t in tolerances):
+        raise ValueError("Unrepresentable source vertex tolerance")
+
+    def bucket(point):
+        if len(point) != 3 or not all(math.isfinite(v) for v in point):
+            raise ValueError("Nonfinite mesh or source vertex")
+        return tuple(
+            math.floor((point[axis] - bounds_m[axis][0]) / tolerances[axis])
+            for axis in range(3)
+        )
+
+    pending: dict[tuple[int, int, int], list[tuple[float, float, float]]] = {}
+    for vertex in source_vertices:
+        key = bucket(vertex)
+        items = pending.setdefault(key, [])
+        # A generated grid has far fewer than 2 points in any tolerance bin.
+        # Reject adversarial, nearly coincident source points rather than
+        # allowing an unbounded nearest-neighbour search.
+        if items:
+            raise ValueError("Ambiguous generated source vertex tolerance bin")
+        items.append(vertex)
+
+    neighbours = tuple(product((-1, 0, 1), repeat=3))
+    for vertex in points:
+        cell = bucket(vertex)
+        matching = []
+        for dx, dy, dz in neighbours:
+            neighbour_key = (cell[0] + dx, cell[1] + dy, cell[2] + dz)
+            items = pending.get(neighbour_key)
+            if not items:
+                continue
+            for candidate in items:
+                if all(abs(vertex[axis] - candidate[axis]) <= tolerances[axis]
+                       for axis in range(3)):
+                    matching.append((neighbour_key, candidate))
+        if len(matching) != 1:
+            raise ValueError("polyMesh vertex differs from generated source lattice")
+        neighbour_key, candidate = matching[0]
+        pending[neighbour_key].remove(candidate)
+        if not pending[neighbour_key]:
+            del pending[neighbour_key]
+    if pending:
+        raise ValueError("Generated source vertices missing from polyMesh")

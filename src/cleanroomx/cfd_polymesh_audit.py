@@ -15,6 +15,7 @@ from .cfd_grid_runner import _cases, _mesh_file_hashes, _verify_generated_inputs
 from .strict_json import load_strict_json_snapshot
 from .cfd_polymesh_geometry import (
     validate_hex_face_geometry, validate_generated_boundary_locations,
+    validate_generated_vertex_positions,
 )
 from .cfd_checkmesh_log import screen_checkmesh_log
 from .cfd_blockmesh_source import verify_generated_blockmesh_source
@@ -122,6 +123,7 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
 def screen_ascii_polymesh(
     case_dir: Path, *, expected_cells: int, configuration: int | None = None,
     expected_bounds: tuple[tuple[float, float], ...] | None = None,
+    expected_vertices: tuple[tuple[float, float, float], ...] | None = None,
 ) -> dict:
     """Validate face references, cell adjacency, edges and boundary partition.
 
@@ -177,6 +179,13 @@ def screen_ascii_polymesh(
             if (abs(actual_low - low) > tolerance
                     or abs(actual_high - high) > tolerance):
                 raise ValueError("polyMesh room extent disagrees with blockMesh source")
+
+    if expected_vertices is not None:
+        if expected_bounds is None:
+            raise ValueError("Source-bound vertices require declared room bounds")
+        validate_generated_vertex_positions(
+            ordered_points, expected_vertices, bounds_m=expected_bounds,
+        )
 
     if len(neighbours_raw) > len(faces_raw):
         raise ValueError("Too many internal faces in polyMesh")
@@ -305,13 +314,14 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             declared_cells = manifest["case_inputs"][key]["mesh_cells"]
             source_geometry = verify_generated_blockmesh_source(
                 case_dir / "system/blockMeshDict",
-                expected_cells=declared_cells,
+                expected_cells=declared_cells, capture_vertices=True,
             )
             metrics = screen_ascii_polymesh(
                 case_dir,
                 expected_cells=declared_cells,
                 configuration=manifest["case_inputs"][key]["configuration"],
                 expected_bounds=source_geometry["bounds_m"],
+                expected_vertices=source_geometry["vertices_m"],
             )
             for patch_name in ("inlet", "outlet"):
                 actual = metrics["patch_face_counts"][patch_name]

@@ -323,3 +323,120 @@ def test_rehashed_included_dict_fails_before_solver_discovery(tmp_path, monkeypa
         run_grid_family(root, timeout_seconds=60)
     assert not (root / ".grid_run_reserved").exists()
     assert not (root / "grid_run_evidence.json").exists()
+
+
+
+def _rewrite_first_generated_inlet_face(source, *, reverse):
+    """Change ordering without changing patch membership or face counts."""
+    lines = source.splitlines(keepends=True)
+    inlet = lines.index("    inlet\n")
+    face_line = next(
+        index for index in range(inlet + 1, len(lines))
+        if lines[index].startswith("            (")
+    )
+    vertices = lines[face_line].strip()[1:-1].split()
+    assert len(vertices) == 4
+    if reverse:
+        vertices = [vertices[0], vertices[3], vertices[2], vertices[1]]
+    else:
+        vertices = vertices[1:] + vertices[:1]
+    lines[face_line] = "            (" + " ".join(vertices) + ")\n"
+    return "".join(lines)
+
+
+@pytest.mark.parametrize("tamper", [
+    "inverted_lower_edge", "inverted_upper_edge", "skewed_corner",
+])
+def test_generated_source_rejects_inverted_or_twisted_hex_geometry(
+    generated_source, tamper
+):
+    path, cells = generated_source
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    if tamper == "skewed_corner":
+        vertex = next(
+            i for i, line in enumerate(lines) if line.strip() == "(0 0 0)"
+        )
+        lines[vertex] = lines[vertex].replace(
+            "(0 0 0)", "(0.13 0.07 0)", 1
+        )
+    else:
+        block = next(
+            i for i, line in enumerate(lines)
+            if line.lstrip().startswith("hex (")
+        )
+        prefix, rest = lines[block].split("hex (", 1)
+        ids, suffix = rest.split(")", 1)
+        values = ids.split()
+        first, second = (0, 1) if tamper == "inverted_lower_edge" else (4, 5)
+        values[first], values[second] = values[second], values[first]
+        lines[block] = prefix + "hex (" + " ".join(values) + ")" + suffix
+    path.write_text("".join(lines), encoding="utf-8")
+    with pytest.raises(ValueError, match="Noncanonical generated hex geometry"):
+        verify_generated_blockmesh_source(path, expected_cells=cells)
+
+
+def test_generated_source_rejects_reversed_boundary_normal(generated_source):
+    path, cells = generated_source
+    path.write_text(_rewrite_first_generated_inlet_face(
+        path.read_text(encoding="utf-8"), reverse=True,
+    ), encoding="utf-8")
+    with pytest.raises(ValueError, match="boundary face winding"):
+        verify_generated_blockmesh_source(path, expected_cells=cells)
+    with pytest.raises(ValueError, match="boundary face winding"):
+        verify_generated_blockmesh_source(
+            path, expected_cells=cells, capture_vertices=True,
+        )
+
+
+def test_generated_source_accepts_cyclic_boundary_face_rotation(generated_source):
+    path, cells = generated_source
+    path.write_text(_rewrite_first_generated_inlet_face(
+        path.read_text(encoding="utf-8"), reverse=False,
+    ), encoding="utf-8")
+    verified = verify_generated_blockmesh_source(path, expected_cells=cells)
+    assert verified["hex_block_count"] == cells
+
+
+def test_rehashed_reversed_inlet_normal_never_reaches_openfoam(
+    tmp_path, monkeypatch
+):
+    """Only a synthetic preflight guard; no OpenFOAM execution or measurements."""
+    spec = {
+        "schema_version": FAMILY_SCHEMA,
+        "base_case": {
+            "schema_version": SCHEMA,
+            "name": "SYNTHETIC reversed inlet normal",
+            "room_m": [1, 1, 1],
+            "mesh_cells": [6, 6, 6],
+            "supply_flow_m3_s": 0.1,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "max_iterations": 12,
+            "output_interval": 6,
+        },
+        "mesh_levels": {
+            "coarse": [6, 6, 6],
+            "medium": [7, 7, 7],
+            "fine": [8, 8, 8],
+        },
+    }
+    root = tmp_path / "family"
+    generate_grid_family(spec, root)
+    relative = "configuration_1/coarse/system/blockMeshDict"
+    source_path = root / relative
+    source_path.write_text(_rewrite_first_generated_inlet_face(
+        source_path.read_text(encoding="utf-8"), reverse=True,
+    ), encoding="utf-8")
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][relative] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    import cleanroomx.cfd_grid_runner as runner
+
+    def forbidden_discovery(_name):
+        pytest.fail("Invalid inlet face winding reached external solver discovery")
+
+    monkeypatch.setattr(runner.shutil, "which", forbidden_discovery)
+    with pytest.raises(ValueError, match="boundary face winding"):
+        run_grid_family(root, timeout_seconds=60)
+    assert not (root / ".grid_run_reserved").exists()
+    assert not (root / "grid_run_evidence.json").exists()

@@ -196,8 +196,51 @@ def _validate_generated_structured_grid(
         occupied.add(low)
 
 
+
+
+def _verify_generated_patch_layout(
+    original_vertices: list[tuple[float, float, float]],
+    canonical_ids: dict[tuple[float, float, float], int],
+    actual_patches: dict[str, tuple[tuple[int, ...], ...]],
+    configuration: int,
+) -> None:
+    """Check the exact generator-assigned face membership for a configuration.
+
+    The source may renumber points or rotate boundary faces without changing
+    meaning, but inlet/outlet/walls assignments must match CleanroomX's
+    declared deterministic configuration. This is not physical CFD validation.
+    """
+    from .cfd_openfoam import _layout
+
+    axes = tuple(
+        tuple(sorted({point[axis] for point in original_vertices}))
+        for axis in range(3)
+    )
+    nx, ny, nz = (len(axis) - 1 for axis in axes)
+    generated_vertices = tuple(
+        (x, y, z) for z in axes[2] for y in axes[1] for x in axes[0]
+    )
+    try:
+        layout = _layout(nx, ny, nz, configuration)
+    except (ValueError, ZeroDivisionError) as exc:
+        raise ValueError("Generated patch layout is not canonical") from exc
+    for patch in ("inlet", "outlet", "walls"):
+        expected = tuple(sorted(
+            tuple(sorted(
+                canonical_ids[generated_vertices[vertex_id]]
+                for vertex_id in face
+            ))
+            for face in layout[patch]
+        ))
+        if actual_patches[patch] != expected:
+            raise ValueError(
+                "Generated boundary patch membership differs from "
+                f"configuration {configuration}: {patch}"
+            )
+
 def verify_generated_blockmesh_source(
-    path: Path, *, expected_cells: int, capture_vertices: bool = False
+    path: Path, *, expected_cells: int, capture_vertices: bool = False,
+    expected_configuration: int | None = None,
 ) -> dict:
     """Screen expected block count, vertex references and duplicate blocks.
 
@@ -210,6 +253,10 @@ def verify_generated_blockmesh_source(
         raise ValueError("Invalid declared blockMesh cell count")
     if type(capture_vertices) is not bool:
         raise ValueError("capture_vertices must be a boolean")
+    if (expected_configuration is not None
+            and (type(expected_configuration) is not int
+                 or expected_configuration not in (1, 2, 3))):
+        raise ValueError("Invalid expected generated mesh configuration")
     with path.open("rb") as handle:
         raw = handle.read(MAX_SOURCE_BYTES + 1)
     if len(raw) > MAX_SOURCE_BYTES:
@@ -318,6 +365,11 @@ def verify_generated_blockmesh_source(
     boundary_faces = _generated_patch_faces(
         source, original_blocks, original_vertices, canonical_ids,
     )
+    if expected_configuration is not None:
+        _verify_generated_patch_layout(
+            original_vertices, canonical_ids, boundary_faces,
+            expected_configuration,
+        )
     if capture_vertices:
         # Compare blocks by canonical coordinate identity, not OpenFOAM's
         # arbitrary point/cell numbering or the order of source blocks.

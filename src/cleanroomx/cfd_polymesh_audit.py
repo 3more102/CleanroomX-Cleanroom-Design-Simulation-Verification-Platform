@@ -34,7 +34,8 @@ _LABEL = re.compile(r"\s*([0-9]+)\s*")
 _PATCH = re.compile(
     r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*"
     r"type\s+([A-Za-z_][A-Za-z0-9_]*)\s*;\s*"
-    r"(?:inGroups\s+[0-9]+\([A-Za-z_0-9 ]*\)\s*;\s*)?"
+    r"(?:physicalType\s+[A-Za-z_][A-Za-z0-9_]*\s*;\s*)?"
+    r"(?:inGroups\s+(?:List<word>\s+)?[0-9]+\([A-Za-z_0-9 ]*\)\s*;\s*)?"
     r"nFaces\s+([0-9]+)\s*;\s*startFace\s+([0-9]+)\s*;\s*\}\s*"
 )
 
@@ -47,7 +48,8 @@ def _header_properties(header: str) -> dict[str, str]:
         if not line:
             continue
         match = re.fullmatch(
-            r"([A-Za-z_][A-Za-z0-9_]*)[ \t]+(.+?)[ \t]*;", line
+            r'([A-Za-z_][A-Za-z0-9_]*)[ \t]+("(?:[^"\\]|\\.)*"|[^;]+?)[ \t]*;',
+            line,
         )
         if match is None:
             raise ValueError("Invalid OpenFOAM mesh header")
@@ -122,7 +124,9 @@ def _parse_patch_list(path: Path) -> dict[str, tuple[int, int]]:
     for _ in range(patch_count):
         patch = _PATCH.match(remaining)
         if patch is None:
-            raise ValueError("Malformed OpenFOAM boundary patch")
+            snippet = re.sub(r"[^A-Za-z0-9_ .;{}()/-]+", "?", remaining[:240])
+            snippet = " ".join(snippet.split())
+            raise ValueError("Malformed OpenFOAM boundary patch near: " + snippet)
         name, patch_type, num_faces, start_face = patch.groups()
         expected_type = "wall" if name == "walls" else "patch"
         if patch_type != expected_type:
@@ -354,7 +358,7 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
     report = {
         "schema_version": SCHEMA, "status": "mesh_structure_unverified",
         "engineering_review": "BLOCKED", "physical_validation": "not_performed",
-        "cases": {}, "findings": [],
+        "cases": {}, "case_errors": {}, "findings": [],
         "warning": "Structural mesh screening cannot prove CFD convergence or physical validation",
     }
     try:
@@ -399,7 +403,14 @@ def audit_grid_family_polymesh(directory: str | Path) -> dict:
             metrics["checkmesh_log"] = log_screen["status"]
             report["cases"][key] = metrics
         except (OSError, ValueError) as exc:
-            report["findings"].append("invalid_or_missing_polymesh:" + key + ":" + type(exc).__name__)
+            reason = " ".join(str(exc).split())[:160]
+            report["findings"].append(
+                "invalid_or_missing_polymesh:" + key + ":" + type(exc).__name__
+                + (":" + reason if reason else "")
+            )
+            report["case_errors"][key] = {
+                "type": type(exc).__name__, "message": str(exc),
+            }
     # Avoid promoting an incomplete, tampered or unsigned solver receipt.
     from .cfd_grid_receipt import verify_grid_run_evidence
     integrity = verify_grid_run_evidence(root)

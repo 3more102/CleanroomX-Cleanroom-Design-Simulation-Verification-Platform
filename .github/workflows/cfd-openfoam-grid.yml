@@ -69,20 +69,19 @@ jobs:
           chmod 0755 "$version_bin/foamVersion"
           export PATH="$version_bin:$PATH"
 
-          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
-          # The runner's version subprocess must return an unambiguous Foundation v10 token.
+          # Exercise the actual executable interface that grid-run probes.
           set +e
           version_probe_output="$(foamVersion 2>&1)"
           version_probe_rc=$?
           set -e
           version_probe_last="$(printf '%s\n' "$version_probe_output" | tail -n 1)"
-          if [[ "$version_probe_rc" -ne 0 || "$version_probe_last" != "10" ]]; then
-            printf 'OpenFOAM version probe failed: exit=%s; expected terminal token 10\n' "$version_probe_rc" >&2
+          if [[ "$version_probe_rc" -ne 0 || ! "$version_probe_last" =~ ^(10|OpenFOAM-10)$ ]]; then
+            printf 'Invalid Foundation v10 probe: exit=%s; expected 10 or OpenFOAM-10\n' "$version_probe_rc" >&2
             printf '%s\n' "$version_probe_output" | tail -n 8 | cut -c 1-200 >&2
             exit 1
           fi
           for tool in blockMesh checkMesh simpleFoam; do
-            command -v "$tool" >/dev/null || { printf 'Missing OpenFOAM executable: %s\n' "$tool" >&2; exit 1; }
+            command -v "$tool" >/dev/null || { printf 'Missing solver command: %s\n' "$tool" >&2; exit 1; }
           done
           {
             echo "github_sha=$GITHUB_SHA"
@@ -95,11 +94,13 @@ jobs:
             echo "WM_PROJECT_VERSION=${WM_PROJECT_VERSION:-unknown}"
             echo "foam_version_probe=$version_probe_last"
           } | tee "$RUNNER_TEMP/openfoam-v10-version.txt"
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
-          # Do not mask any failure; preserve all three gate exit codes.
+          # Preserve each command exit code and retain a complete interrupted-run record.
           set +e
-          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600
+          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 > "$RUNNER_TEMP/grid-run-output.txt" 2>&1
           run_rc=$?
+          cat "$RUNNER_TEMP/grid-run-output.txt"
           cleanroomx-cfd-pipeline grid-verify "$family"
           verify_rc=$?
           cleanroomx-cfd-pipeline grid-mesh-audit "$family"
@@ -109,11 +110,51 @@ jobs:
             "$run_rc" "$verify_rc" "$mesh_audit_rc" \
             | tee "$RUNNER_TEMP/openfoam-v10-exit-codes.txt"
           if [[ "$run_rc" -ne 0 ]]; then
-            echo "grid-run failed (exit $run_rc); solver/checkMesh stage log tails:" >&2
-            while IFS= read -r log; do
-              echo "----- $log -----"
-              tail -n 80 "$log" || true
-            done < <(find "$family" -maxdepth 5 -type f \( -name "blockMesh.log" -o -name "checkMesh.log" -o -name "simpleFoam.log" \) -print | sort)
+            echo "grid-run failed (exit $run_rc); bounded failed-stage receipt logs:" >&2
+            python - "$family" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          receipt_path = root / "grid_run_evidence.json"
+          try:
+              report = json.loads(receipt_path.read_text(encoding="utf-8"))
+          except (OSError, ValueError, UnicodeError) as exc:
+              print(f"Could not inspect grid-run receipt: {type(exc).__name__}", file=sys.stderr)
+              raise SystemExit(0)
+
+          seen = set()
+          for case_name, case in report.get("cases", {}).items():
+              for stage in case.get("stages", []):
+                  if stage.get("status") == "completed" and stage.get("returncode") == 0:
+                      continue
+                  relative = stage.get("log")
+                  if not isinstance(relative, str):
+                      print(f"--- failed stage without a log path: {case_name}/{stage.get('command')} ---")
+                      continue
+                  candidate = root / relative
+                  try:
+                      if candidate.is_symlink():
+                          raise ValueError("log path is a symlink")
+                      log_path = candidate.resolve(strict=True)
+                      if not log_path.is_relative_to(root) or not log_path.is_file():
+                          raise ValueError("log path is outside the case family")
+                      size = log_path.stat().st_size
+                      with log_path.open("rb") as stream:
+                          stream.seek(max(0, size - 32768))
+                          tail = stream.read().decode("utf-8", "replace").splitlines()[-80:]
+                  except (OSError, ValueError) as exc:
+                      print(f"--- cannot read failed log {case_name}/{relative}: {type(exc).__name__} ---")
+                      continue
+                  digest = stage.get("log_sha256")
+                  if isinstance(digest, str) and digest in seen:
+                      continue
+                  if isinstance(digest, str):
+                      seen.add(digest)
+                  print(f"--- failed log {case_name}/{stage.get('command')} rc={stage.get('returncode')} bytes={size} ---")
+                  print("\n".join(tail) if tail else "<empty log>")
+          PY
           fi
           test "$run_rc" -eq 0 && test "$verify_rc" -eq 0 && test "$mesh_audit_rc" -eq 0
 
@@ -140,6 +181,20 @@ jobs:
             fi
           fi
 
+      - name: Verify extracted evidence round-trip
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/openfoam-v10-grid-evidence.tar.gz"
+          test -s "$archive"
+          scratch="$(mktemp -d "$RUNNER_TEMP/cfd-evidence-verify.XXXXXX")"
+          tar -xzf "$archive" -C "$scratch"
+          family="$scratch/cleanroomx-cfd-grid-family"
+          test -d "$family/.grid_run_reserved"
+          test -z "$(find "$family/.grid_run_reserved" -mindepth 1 -maxdepth 1 -print -quit)"
+          cleanroomx-cfd-pipeline grid-verify "$family"
+          cleanroomx-cfd-pipeline grid-mesh-audit "$family"
       - name: Upload portable execution evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

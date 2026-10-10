@@ -137,6 +137,49 @@ def test_synthetic_hex_polymesh_connectivity_is_structurally_screened(tmp_path, 
     assert result["engineering_review"] == "BLOCKED"
 
 
+def test_quoted_header_fields_allow_semicolon_arch_metadata(tmp_path):
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=1)
+    for name in ("points", "faces", "owner", "neighbour", "boundary"):
+        path = mesh / name
+        source = path.read_text(encoding="ascii")
+        path.write_text(
+            source.replace(
+                "format ascii;",
+                'format ascii;\n    arch "LSB;label=32;scalar=64";',
+                1,
+            ),
+            encoding="ascii",
+        )
+    result = screen_ascii_polymesh(case, expected_cells=1)
+    assert result["cells"] == 1
+
+
+def test_typed_in_groups_and_physical_type_are_supported(tmp_path):
+    case = tmp_path / "case"
+    mesh = _mesh_fixture(case, cells=1)
+    boundary = mesh / "boundary"
+    source = boundary.read_text(encoding="ascii")
+    source = source.replace(
+        "inlet\n{\n    type patch;",
+        "inlet\n{\n    type patch;\n    physicalType inlet;\n    inGroups List<word> 1(patch);",
+        1,
+    )
+    source = source.replace(
+        "outlet\n{\n    type patch;",
+        "outlet\n{\n    type patch;\n    physicalType outlet;\n    inGroups List<word> 1(patch);",
+        1,
+    )
+    source = source.replace(
+        "walls\n{\n    type wall;",
+        "walls\n{\n    type wall;\n    physicalType wall;\n    inGroups List<word> 1(wall);",
+        1,
+    )
+    boundary.write_text(source, encoding="ascii")
+    result = screen_ascii_polymesh(case, expected_cells=1)
+    assert result["cells"] == 1
+
+
 @pytest.mark.parametrize("tamper", [
     "wrong_cell_count", "owner_truncated", "wrong_vertex", "duplicate_face",
     "binary", "missing_neighbour", "boundary_gap", "point_duplicate",
@@ -307,6 +350,10 @@ def test_grid_mesh_audit_missing_solver_meshes_fails_without_validation(tmp_path
     result = audit_grid_family_polymesh(family)
     assert result["status"] == "mesh_structure_unverified"
     assert len(result["findings"]) >= 9
+    assert result["case_errors"]["configuration_1/coarse"] == {
+        "type": "ValueError",
+        "message": "Missing or unsafe generated polyMesh directory",
+    }
     assert "execution_receipt_not_integrity_verified" in result["findings"]
     assert result["physical_validation"] == "not_performed"
     assert result["engineering_review"] == "BLOCKED"

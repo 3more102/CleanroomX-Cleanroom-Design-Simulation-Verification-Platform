@@ -20,7 +20,7 @@ _TIME = re.compile(r"^Time\s*=\s*([^\s]+)", re.MULTILINE)
 _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({_NUMBER})"
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
                          rf"\s*,\s*cumulative\s*=\s*({_NUMBER})")
-_BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|nan|inf", re.I)
+_BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|\\bnan\\b|\\binf\\b", re.I)
 
 
 def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),

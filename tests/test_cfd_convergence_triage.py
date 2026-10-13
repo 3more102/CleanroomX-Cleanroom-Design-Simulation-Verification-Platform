@@ -1,7 +1,9 @@
 """Synthetic tests; no OpenFOAM execution or scientific qualification."""
+import json
+
 import pytest
 
-from cleanroomx.cfd_convergence_triage import diagnose_log
+from cleanroomx.cfd_convergence_triage import diagnose_log, main
 
 
 def test_complete_log_is_diagnostic_only(tmp_path):
@@ -166,3 +168,24 @@ def test_invalid_field_selection_is_rejected(tmp_path, fields):
     log.write_text(_complete_step("1") + "End\n")
     with pytest.raises(ValueError, match="fields"):
         diagnose_log(log, fields=fields)
+
+
+def test_cli_valid_evidence_remains_blocked(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + "End\n")
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(log)])
+    assert main() == 0
+    report = json.loads(capsys.readouterr().out)[str(log)]
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["scientific_validation"] == "BLOCKED"
+    assert report["last_step_missing_fields"] == []
+
+
+def test_cli_incomplete_last_step_fails_closed(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + _complete_step("2", fields=("p",)) + "End\n")
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(log)])
+    assert main() == 3
+    report = json.loads(capsys.readouterr().out)[str(log)]
+    assert "INCOMPLETE_FINAL_TIME_STEP" in report["problems"]
+    assert report["scientific_validation"] == "BLOCKED"

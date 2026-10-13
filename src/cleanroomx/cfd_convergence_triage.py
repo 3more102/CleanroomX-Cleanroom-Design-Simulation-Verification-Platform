@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 from collections import deque
 from pathlib import Path
@@ -48,7 +49,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         raise ValueError("log exceeds 64 MiB diagnostic limit")
     data = raw.decode("utf-8")
 
-    times: list[str] = []
+    time_steps = 0
+    last_time: str | None = None
     previous_time: float | None = None
     bad_time = False
     malformed_time = False
@@ -66,13 +68,15 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     malformed_continuity = False
     end_markers = 0
 
-    for line in data.splitlines():
+    lines = data.splitlines()
+    for line in lines:
         time_match = _TIME_LINE.fullmatch(line)
         if time_match:
-            if times and (set(fields) - last_step_fields or not last_step_continuity):
+            if time_steps and (set(fields) - last_step_fields or not last_step_continuity):
                 incomplete_prior_steps += 1
             stamp = time_match.group(1)
-            times.append(stamp)
+            time_steps += 1
+            last_time = stamp
             try:
                 numeric_time = float(stamp)
             except ValueError:
@@ -110,7 +114,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
                 if field in sample_counts:
                     sample_counts[field] += 1
                     recent_residuals[field].append((a, b))
-            if times:
+            if time_steps:
                 last_step_fields.add(field)
             else:
                 orphan_records += 1
@@ -126,7 +130,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             if all(math.isfinite(x) for x in values):
                 continuity_samples += 1
                 recent_global_continuity.append(values[1])
-                if times:
+                if time_steps:
                     last_step_continuity += 1
                 else:
                     orphan_records += 1
@@ -145,11 +149,11 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             "missing": sample_counts[field] == 0,
         }
 
-    last_nonblank_line = data.rstrip().splitlines()
-    clean_end = bool(last_nonblank_line and last_nonblank_line[-1].strip() == "End")
+    last_nonblank_line = next((line.strip() for line in reversed(lines) if line.strip()), None)
+    clean_end = last_nonblank_line == "End"
     missing_last_fields = sorted(set(fields) - last_step_fields)
     problems = []
-    if not times:
+    if not time_steps:
         problems.append("NO_TIME_STEPS")
     if bad_time:
         problems.append("INVALID_OR_NONMONOTONIC_TIME_STEPS")
@@ -175,16 +179,16 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         problems.append("MISSING_REQUIRED_FIELD")
     if not continuity_samples:
         problems.append("NO_CONTINUITY_RECORDS")
-    if times and (missing_last_fields or not last_step_continuity):
+    if time_steps and (missing_last_fields or not last_step_continuity):
         problems.append("INCOMPLETE_FINAL_TIME_STEP")
 
     return {
         "status": "DIAGNOSTIC_ONLY" if not problems else "INCOMPLETE_OR_INVALID",
         "scientific_validation": "BLOCKED",
         "source_sha256": hashlib.sha256(raw).hexdigest(),
-        "time_steps": len(times),
-        "last_time": times[-1] if times else None,
-        "time_sequence_monotonic": bool(times) and not (bad_time or malformed_time),
+        "time_steps": time_steps,
+        "last_time": last_time,
+        "time_sequence_monotonic": bool(time_steps) and not (bad_time or malformed_time),
         "terminal_end": clean_end,
         "fields": field_report,
         "incomplete_prior_time_steps": incomplete_prior_steps,
@@ -213,6 +217,22 @@ def main() -> int:
                              "problems": [str(exc)]}
     # Cross-file checks are diagnostic integrity guards, not authentication.
     # Identical bytes cannot distinguish independent executions.
+    # Lexical path normalization detects aliases without following links.
+    aliases: dict[str, list[str]] = {}
+    for path in args.logs:
+        normalized = os.path.normcase(os.path.abspath(path))
+        aliases.setdefault(normalized, [])
+        if path not in aliases[normalized]:
+            aliases[normalized].append(path)
+    for shared_paths in aliases.values():
+        if len(shared_paths) > 1:
+            for path in shared_paths:
+                reports[path]["status"] = "INCOMPLETE_OR_INVALID"
+                if "DUPLICATE_INPUT_PATH" not in reports[path]["problems"]:
+                    reports[path]["problems"].append("DUPLICATE_INPUT_PATH")
+                reports[path]["duplicate_input_paths"] = [
+                    other for other in shared_paths if other != path
+                ]
     counts: dict[str, int] = {}
     for path in args.logs:
         counts[path] = counts.get(path, 0) + 1

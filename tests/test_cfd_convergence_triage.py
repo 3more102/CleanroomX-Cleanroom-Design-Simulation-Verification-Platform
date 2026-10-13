@@ -433,3 +433,65 @@ def test_bounded_read_catches_growth_after_stat(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "open", growing_stream)
     with pytest.raises(ValueError, match="diagnostic limit"):
         diagnose_log(log)
+
+
+
+def test_large_step_count_retains_only_latest_stamp(tmp_path):
+    log = tmp_path / "long_steps.log"
+    log.write_text(
+        "".join(_complete_step(str(i)) for i in range(1, 1001)) + "End\n"
+    )
+    report = diagnose_log(log, window=2)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["time_steps"] == 1000
+    assert report["last_time"] == "1000"
+    assert report["time_sequence_monotonic"] is True
+    assert report["fields"]["p"]["samples"] == 1000
+    assert report["fields"]["p"]["recent_initial"] == [0.01, 0.01]
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_cli_flags_dot_path_alias_as_duplicate_input(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + "End\n")
+    other = str(tmp_path / "." / "solver.log")
+    # Explicit /./ segment survives in the CLI argument despite Path normalization.
+    alias = str(tmp_path) + "/./solver.log"
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(log), alias])
+    assert main() == 3
+    reports = json.loads(capsys.readouterr().out)
+    assert len(reports) == 2
+    assert "DUPLICATE_INPUT_PATH" in reports[str(log)]["problems"]
+    assert "DUPLICATE_INPUT_PATH" in reports[alias]["problems"]
+    assert reports[str(log)]["duplicate_input_paths"] == [alias]
+    assert reports[alias]["duplicate_input_paths"] == [str(log)]
+    assert all(r["scientific_validation"] == "BLOCKED" for r in reports.values())
+
+
+def test_cli_flags_relative_absolute_alias(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + "End\n")
+    monkeypatch.setattr(
+        "sys.argv", ["cfd_convergence_triage", "solver.log", str(log)]
+    )
+    assert main() == 3
+    reports = json.loads(capsys.readouterr().out)
+    assert "DUPLICATE_INPUT_PATH" in reports["solver.log"]["problems"]
+    assert "DUPLICATE_INPUT_PATH" in reports[str(log)]["problems"]
+    assert reports["solver.log"]["duplicate_input_paths"] == [str(log)]
+    assert reports[str(log)]["duplicate_input_paths"] == ["solver.log"]
+
+
+def test_cli_distinct_sources_do_not_flag_alias(tmp_path, monkeypatch, capsys):
+    first = tmp_path / "first.log"
+    second = tmp_path / "second.log"
+    first.write_text(_complete_step("1") + "End\n")
+    second.write_text(_complete_step("2") + "End\n")
+    monkeypatch.setattr(
+        "sys.argv", ["cfd_convergence_triage", str(first), str(second)]
+    )
+    assert main() == 0
+    reports = json.loads(capsys.readouterr().out)
+    assert all("DUPLICATE_INPUT_PATH" not in r["problems"] for r in reports.values())
+    assert all("duplicate_input_paths" not in r for r in reports.values())

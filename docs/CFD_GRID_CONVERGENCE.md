@@ -113,8 +113,10 @@ The command performs a bounded read of at most 64 MiB plus one guard byte
 of UTF-8 log data without invoking OpenFOAM, including when the log grows
 after an initial file-size check. It retains only the requested recent
 `--window` residual and global-continuity values in memory while preserving
-the total counts and full-log SHA-256. Input bytes and decoded text are still
-materialized under the 64 MiB cap. It reports solver residual history, recent
+the total counts, latest time stamp, and full-log SHA-256. It maintains only
+a running time-step count instead of a separate list of all time stamps,
+and reuses its parsed line list to find the final nonblank `End`.
+Input bytes and decoded text are still materialized under the 64 MiB cap. It reports solver residual history, recent
 global continuity errors, a count of time steps, and observations about the
 final time step. It fails closed for missing or repeated terminal End markers,
 fatal/nonfinite tokens, negative residuals, invalid or non-increasing time
@@ -137,8 +139,9 @@ compliance with a cleanroom standard.
 
 When the standalone CLI receives multiple log paths, it rejects byte-identical
 files across distinct input paths with `DUPLICATE_LOG_BYTES` and rejects
-repeated identical input path arguments with `DUPLICATE_INPUT_PATH`; either
-case returns exit code 3. Individual SHA-256 digests are retained in the JSON
+repeated input paths with `DUPLICATE_INPUT_PATH`, including lexical aliases
+such as relative versus absolute paths or `./` components; either case returns
+exit code 3. Aliased path names are included in `duplicate_input_paths`. Individual SHA-256 digests are retained in the JSON
 report and duplicate source paths are listed. Identical bytes are ambiguous
 execution evidence, not proof of intentional replay; different bytes do not
 establish independent executions. The CLI does **not** automatically inspect

@@ -1,4 +1,6 @@
 """Synthetic tests; no OpenFOAM execution or scientific qualification."""
+import pytest
+
 from cleanroomx.cfd_convergence_triage import diagnose_log
 
 
@@ -33,3 +35,34 @@ def test_fatal_marker_blocks(tmp_path):
     log = tmp_path / "simpleFoam.log"
     log.write_text("Time = 1\nFOAM FATAL ERROR\nEnd\n")
     assert "FATAL_OR_NONFINITE_TOKEN" in diagnose_log(log)["problems"]
+
+
+@pytest.mark.parametrize("bad_token", ["NaN", "-inf", "+INF", "infinity"])
+def test_nonfinite_tokens_fail_closed(tmp_path, bad_token):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(f"Time = 1\nsolver diagnostic: {bad_token}\nEnd\n")
+    report = diagnose_log(log)
+    assert "FATAL_OR_NONFINITE_TOKEN" in report["problems"]
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_end_in_middle_is_not_terminal(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text("Time = 1\nEnd\nunexpected solver output after end\n")
+    report = diagnose_log(log)
+    assert report["terminal_end"] is False
+    assert "MISSING_TERMINAL_END" in report["problems"]
+
+
+def test_trailing_blank_lines_after_end_are_valid_terminator(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text("Time = 1\nEnd\n\n   \n")
+    assert diagnose_log(log)["terminal_end"] is True
+
+
+def test_invalid_utf8_log_is_rejected_not_silently_replaced(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_bytes(b"Time = 1\nEnd\n\xff\n")
+    with pytest.raises(UnicodeDecodeError):
+        diagnose_log(log)

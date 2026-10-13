@@ -49,7 +49,9 @@ def workspace(tmp_path):
 
 def test_gui_baseline_filter_updates_from_real_analysis_changes(workspace):
     root, panel, project, baseline, current, status = workspace
+    assert str(panel.delta_combo.cget("state")) == "disabled"
     assert panel.load_baseline_path(baseline)["regressed"] is False
+    assert str(panel.delta_combo.cget("state")) == "readonly"
     assert panel.baseline_comparison["summary"]["new_issue_count"] == 0
 
     current["project"] = ProjectDocument(
@@ -77,6 +79,7 @@ def test_gui_baseline_filter_updates_from_real_analysis_changes(workspace):
     root.update()
     assert panel.delta_var.get() == "All"
     assert panel.baseline_comparison is None
+    assert str(panel.delta_combo.cget("state")) == "disabled"
     assert len(panel.tree.get_children()) == panel.last_result["summary"]["issue_count"]
 
 

@@ -330,3 +330,65 @@ def test_record_trailing_whitespace_is_accepted(tmp_path):
     assert report["status"] == "DIAGNOSTIC_ONLY"
     assert report["problems"] == []
     assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_cli_rejects_identical_log_bytes_from_distinct_paths(tmp_path, monkeypatch, capsys):
+    first = tmp_path / "case_a.log"
+    second = tmp_path / "case_b.log"
+    for path in (first, second):
+        path.write_text(_complete_step("1") + "End\n")
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(first), str(second)])
+    assert main() == 3
+    reports = json.loads(capsys.readouterr().out)
+    assert reports[str(first)]["source_sha256"] == reports[str(second)]["source_sha256"]
+    for path, other in ((first, second), (second, first)):
+        result = reports[str(path)]
+        assert result["status"] == "INCOMPLETE_OR_INVALID"
+        assert result["scientific_validation"] == "BLOCKED"
+        assert "DUPLICATE_LOG_BYTES" in result["problems"]
+        assert result["duplicate_log_paths"] == [str(other)]
+
+
+def test_cli_allows_distinct_complete_log_bytes(tmp_path, monkeypatch, capsys):
+    first = tmp_path / "case_a.log"
+    second = tmp_path / "case_b.log"
+    first.write_text(_complete_step("1") + "End\n")
+    second.write_text(_complete_step("2") + "End\n")
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(first), str(second)])
+    assert main() == 0
+    reports = json.loads(capsys.readouterr().out)
+    assert set(reports) == {str(first), str(second)}
+    assert all(x["status"] == "DIAGNOSTIC_ONLY" for x in reports.values())
+    assert all(x["scientific_validation"] == "BLOCKED" for x in reports.values())
+    assert all("DUPLICATE_LOG_BYTES" not in x["problems"] for x in reports.values())
+
+
+def test_cli_rejects_duplicate_input_path(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + "End\n")
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(log), str(log)])
+    assert main() == 3
+    result = json.loads(capsys.readouterr().out)[str(log)]
+    assert result["status"] == "INCOMPLETE_OR_INVALID"
+    assert "DUPLICATE_INPUT_PATH" in result["problems"]
+    assert result["scientific_validation"] == "BLOCKED"
+    assert "DUPLICATE_LOG_BYTES" not in result["problems"]
+
+
+def test_cli_replay_is_reported_even_with_one_other_invalid_log(tmp_path, monkeypatch, capsys):
+    first = tmp_path / "case_a.log"
+    second = tmp_path / "case_b.log"
+    broken = tmp_path / "broken.log"
+    first.write_text(_complete_step("1") + "End\n")
+    second.write_bytes(first.read_bytes())
+    broken.write_text("Time = 1\nEnd\n")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["cfd_convergence_triage", str(first), str(broken), str(second)],
+    )
+    assert main() == 3
+    reports = json.loads(capsys.readouterr().out)
+    assert "DUPLICATE_LOG_BYTES" in reports[str(first)]["problems"]
+    assert "DUPLICATE_LOG_BYTES" in reports[str(second)]["problems"]
+    assert reports[str(broken)]["status"] == "INCOMPLETE_OR_INVALID"
+    assert "DUPLICATE_LOG_BYTES" not in reports[str(broken)]["problems"]

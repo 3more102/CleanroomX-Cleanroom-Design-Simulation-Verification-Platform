@@ -131,8 +131,15 @@ nor a DIAGNOSTIC_ONLY label verifies nonlinear convergence, mass/particle
 balance, mesh independence, physical accuracy, independent execution, or
 compliance with a cleanroom standard.
 
-The CLI does **not** automatically inspect every log in the nine-case grid
-family. Project-specific convergence tolerances, trusted solver provenance,
+When the standalone CLI receives multiple log paths, it rejects byte-identical
+files across distinct input paths with `DUPLICATE_LOG_BYTES` and rejects
+repeated identical input path arguments with `DUPLICATE_INPUT_PATH`; either
+case returns exit code 3. Individual SHA-256 digests are retained in the JSON
+report and duplicate source paths are listed. Identical bytes are ambiguous
+execution evidence, not proof of intentional replay; different bytes do not
+establish independent executions. The CLI does **not** automatically inspect
+every log in the nine-case grid family. Project-specific convergence
+tolerances, trusted solver provenance,
 independent mesh and boundary-condition checks, and comparison against
 measured cleanroom data are separately required under issue #1296.
 

@@ -206,6 +206,30 @@ def main() -> int:
             reports[path] = {"status": "INCOMPLETE_OR_INVALID",
                              "scientific_validation": "BLOCKED",
                              "problems": [str(exc)]}
+    # Cross-file checks are diagnostic integrity guards, not authentication.
+    # Identical bytes cannot distinguish independent executions.
+    counts: dict[str, int] = {}
+    for path in args.logs:
+        counts[path] = counts.get(path, 0) + 1
+    for path, count in counts.items():
+        if count > 1:
+            reports[path]["status"] = "INCOMPLETE_OR_INVALID"
+            reports[path]["problems"].append("DUPLICATE_INPUT_PATH")
+
+    by_digest: dict[str, list[str]] = {}
+    for path, report in reports.items():
+        digest = report.get("source_sha256")
+        if digest is not None:
+            by_digest.setdefault(digest, []).append(path)
+    for shared_paths in by_digest.values():
+        if len(shared_paths) > 1:
+            for path in shared_paths:
+                reports[path]["status"] = "INCOMPLETE_OR_INVALID"
+                reports[path]["problems"].append("DUPLICATE_LOG_BYTES")
+                reports[path]["duplicate_log_paths"] = [
+                    other for other in shared_paths if other != path
+                ]
+
     print(json.dumps(reports, indent=2, allow_nan=False, sort_keys=True))
     return 0 if all(r["status"] == "DIAGNOSTIC_ONLY" for r in reports.values()) else 3
 

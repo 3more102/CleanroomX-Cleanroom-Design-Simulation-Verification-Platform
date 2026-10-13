@@ -153,7 +153,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         ttk.Label(filter_row, text="Baseline").pack(side="left")
         self.delta_combo = ttk.Combobox(
             filter_row, textvariable=self.delta_var,
-            values=("All", "New"), state="readonly", width=7,
+            values=("All", "New"), state="disabled", width=7,
         )
         self.delta_combo.pack(side="left", padx=(4, 8))
         ttk.Button(
@@ -327,6 +327,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._baseline_path = baseline_path
         self._baseline_revision = revision_before
         self._baseline_report = report
+        self.delta_combo.configure(state="readonly")
         self.delta_var.set("All")
         self.refresh()
         return self.baseline_comparison
@@ -338,6 +339,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.baseline_comparison = None
         self._baseline_new_ids.clear()
         self.delta_var.set("All")
+        self.delta_combo.configure(state="disabled")
         if self.last_result is not None:
             self._set_summary(self.last_result)
             self._populate()

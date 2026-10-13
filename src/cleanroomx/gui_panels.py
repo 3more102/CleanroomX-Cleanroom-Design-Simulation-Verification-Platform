@@ -101,7 +101,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.baseline_button = ttk.Button(
             action_row, text="Compare baseline…",
             command=self.choose_baseline,
-            state="normal" if self._source_path_getter() is not None else "disabled",
+            state="normal",  # An unsaved project gets an explicit error on selection.
         )
         self.baseline_button.pack(side="left", padx=2)
         self.clear_baseline_button = ttk.Button(

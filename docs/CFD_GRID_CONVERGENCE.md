@@ -102,6 +102,33 @@ closure, physical/BC consistency, mesh quality, source selection,
 wall treatment, turbulence modeling, grid family adequacy, validation
 against measurements and relevant design/qualification requirements.
 
+## Standalone solver-log triage (read-only)
+
+For an actual completed OpenFOAM Foundation-style simpleFoam.log, run:
+
+    python -m cleanroomx.cfd_convergence_triage \
+      path/to/simpleFoam.log --fields Ux Uy Uz p --window 5
+
+The command reads up to 64 MiB of UTF-8 log data without invoking OpenFOAM.
+It reports a SHA-256 of the input log bytes, solver residual history, recent
+global continuity errors, a count of time steps, and observations about the
+final time step. It fails closed for missing or repeated terminal End markers,
+fatal/nonfinite tokens, negative residuals, invalid or non-increasing time
+stamps, missing required fields, missing final-step continuity, and solver
+records preceding the first time stamp. It rejects symlinked log paths.
+
+Exit code 0 means the log met these **diagnostic parsing conditions** only;
+exit code 3 means the log was incomplete or invalid. Both outcomes keep
+scientific_validation=BLOCKED. Neither a small final linear-system residual
+nor a DIAGNOSTIC_ONLY label verifies nonlinear convergence, mass/particle
+balance, mesh independence, physical accuracy, independent execution, or
+compliance with a cleanroom standard.
+
+The CLI does **not** automatically inspect every log in the nine-case grid
+family. Project-specific convergence tolerances, trusted solver provenance,
+independent mesh and boundary-condition checks, and comparison against
+measured cleanroom data are separately required under issue #1296.
+
 ## References
 
 - NASA Glenn Research Center, *Examining Spatial (Grid) Convergence*:

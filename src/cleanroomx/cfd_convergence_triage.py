@@ -20,7 +20,7 @@ _TIME = re.compile(r"^Time\s*=\s*([^\s]+)", re.MULTILINE)
 _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({_NUMBER})"
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
                          rf"\s*,\s*cumulative\s*=\s*({_NUMBER})")
-_BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|\\bnan\\b|\\binf\\b", re.I)
+_BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|\b(?:nan|inf|infinity)\b", re.I)
 
 
 def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),
@@ -34,7 +34,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     if p.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
     raw = p.read_bytes()
-    data = raw.decode("utf-8", errors="replace")
+    data = raw.decode("utf-8")
     times = _TIME.findall(data)
     rows = {}
     for match in _SOLVE.finditer(data):
@@ -63,7 +63,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             "last_final": samples[-1]["final"] if samples else None,
             "missing": not samples,
         }
-    clean_end = bool(re.search(r"(?m)^End\s*$", data))
+    clean_end = bool(data.rstrip().splitlines() and data.rstrip().splitlines()[-1].strip() == "End")
     problems = []
     if not times:
         problems.append("NO_TIME_STEPS")

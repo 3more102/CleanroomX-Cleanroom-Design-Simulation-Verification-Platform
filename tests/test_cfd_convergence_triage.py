@@ -189,3 +189,77 @@ def test_cli_incomplete_last_step_fails_closed(tmp_path, monkeypatch, capsys):
     report = json.loads(capsys.readouterr().out)[str(log)]
     assert "INCOMPLETE_FINAL_TIME_STEP" in report["problems"]
     assert report["scientific_validation"] == "BLOCKED"
+
+
+
+def test_incomplete_middle_step_cannot_be_hidden_by_a_complete_final_step(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(
+        _complete_step("1")
+        + _complete_step("2", fields=("p",))
+        + _complete_step("3")
+        + "End\n"
+    )
+    report = diagnose_log(log)
+    assert report["incomplete_prior_time_steps"] == 1
+    assert report["last_step_missing_fields"] == []
+    assert "INCOMPLETE_PRIOR_TIME_STEP" in report["problems"]
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_missing_middle_continuity_cannot_be_hidden_by_later_steps(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(
+        _complete_step("1")
+        + _complete_step("2", continuity=False)
+        + _complete_step("3")
+        + "End\n"
+    )
+    report = diagnose_log(log)
+    assert report["incomplete_prior_time_steps"] == 1
+    assert report["last_step_continuity_samples"] == 1
+    assert "INCOMPLETE_PRIOR_TIME_STEP" in report["problems"]
+
+
+@pytest.mark.parametrize("bad_value", ["not_a_number", "1e309"])
+def test_malformed_continuity_not_masked_by_earlier_valid_record(tmp_path, bad_value):
+    log = tmp_path / "simpleFoam.log"
+    bad = (
+        f"time step continuity errors : sum local = {bad_value}, "
+        "global = 2e-8, cumulative = 2e-8\n"
+    )
+    log.write_text(_complete_step("1") + bad + "End\n")
+    report = diagnose_log(log)
+    assert report["continuity_samples"] == 1
+    assert "MALFORMED_CONTINUITY_RECORD" in report["problems"]
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+
+
+@pytest.mark.parametrize("bad_value", ["not_a_number", "1e309"])
+def test_malformed_solver_record_not_masked_by_valid_residuals(tmp_path, bad_value):
+    log = tmp_path / "simpleFoam.log"
+    bad = (
+        f"solver: Solving for p, Initial residual = {bad_value}, "
+        "Final residual = 1e-5, No Iterations 2\n"
+    )
+    log.write_text(_complete_step("1") + bad + "End\n")
+    report = diagnose_log(log)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    if bad_value == "not_a_number":
+        assert "MALFORMED_SOLVER_RECORD" in report["problems"]
+    else:
+        assert "INVALID_RESIDUAL_VALUE" in report["problems"]
+
+
+def test_rejects_log_under_symlinked_parent_directory(tmp_path):
+    actual = tmp_path / "actual"
+    actual.mkdir()
+    (actual / "simpleFoam.log").write_text(_complete_step("1") + "End\n")
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(actual, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlinks are unavailable on this platform")
+    with pytest.raises(ValueError, match="symlinked"):
+        diagnose_log(alias / "simpleFoam.log")

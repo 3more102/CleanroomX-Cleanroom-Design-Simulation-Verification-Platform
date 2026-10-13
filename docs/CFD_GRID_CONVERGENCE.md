@@ -111,7 +111,14 @@ For an actual completed OpenFOAM Foundation-style simpleFoam.log, run:
 
 The command performs a bounded read of at most 64 MiB plus one guard byte
 of UTF-8 log data without invoking OpenFOAM, including when the log grows
-after an initial file-size check. It retains only the requested recent
+after an initial file-size check. Before accepting parsed bytes, it compares
+the source path's device/inode identity, size and nanosecond modification time
+before and after reading, and rechecks whether any path component became a
+symbolic link. A detected replacement or mutation fails with
+`log changed during diagnostic read`. This is a conservative filesystem
+consistency check, not atomic snapshotting or authenticated provenance:
+concurrent edits may still evade metadata comparisons.
+It retains only the requested recent
 `--window` residual and global-continuity values in memory while preserving
 the total counts, latest time stamp, and full-log SHA-256. It maintains only
 a running time-step count instead of a separate list of all time stamps,

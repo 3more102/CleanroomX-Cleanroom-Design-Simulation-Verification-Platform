@@ -1,6 +1,7 @@
 """Synthetic tests; no OpenFOAM execution or scientific qualification."""
 import io
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -454,7 +455,6 @@ def test_large_step_count_retains_only_latest_stamp(tmp_path):
 def test_cli_flags_dot_path_alias_as_duplicate_input(tmp_path, monkeypatch, capsys):
     log = tmp_path / "solver.log"
     log.write_text(_complete_step("1") + "End\n")
-    other = str(tmp_path / "." / "solver.log")
     # Explicit /./ segment survives in the CLI argument despite Path normalization.
     alias = str(tmp_path) + "/./solver.log"
     monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(log), alias])
@@ -495,3 +495,60 @@ def test_cli_distinct_sources_do_not_flag_alias(tmp_path, monkeypatch, capsys):
     reports = json.loads(capsys.readouterr().out)
     assert all("DUPLICATE_INPUT_PATH" not in r["problems"] for r in reports.values())
     assert all("duplicate_input_paths" not in r for r in reports.values())
+
+
+
+def test_diagnostic_rejects_in_place_growth_during_open(tmp_path, monkeypatch):
+    log = tmp_path / "changing.log"
+    log.write_text(_complete_step("1") + "End\n")
+    original_open = Path.open
+
+    def mutating_open(self, *args, **kwargs):
+        if self == log and args and args[0] == "rb":
+            with original_open(self, "ab") as stream:
+                stream.write(b"concurrent appended bytes\n")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", mutating_open)
+    with pytest.raises(ValueError, match="log changed during diagnostic read"):
+        diagnose_log(log)
+
+
+def test_diagnostic_rejects_atomic_same_size_path_swap(tmp_path, monkeypatch):
+    log = tmp_path / "changing.log"
+    replacement = tmp_path / "replacement.log"
+    data = _complete_step("1") + "End\n"
+    log.write_text(data)
+    replacement.write_text(data)
+    if not log.stat().st_ino or log.stat().st_ino == replacement.stat().st_ino:
+        pytest.skip("stable distinct file identity is unavailable")
+    original_open = Path.open
+
+    def swapping_open(self, *args, **kwargs):
+        if self == log and args and args[0] == "rb":
+            os.replace(replacement, log)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", swapping_open)
+    with pytest.raises(ValueError, match="log changed during diagnostic read"):
+        diagnose_log(log)
+
+
+def test_cli_reports_mutating_log_without_crashing(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "changing.log"
+    log.write_text(_complete_step("1") + "End\n")
+    original_open = Path.open
+
+    def mutating_open(self, *args, **kwargs):
+        if self == log and args and args[0] == "rb":
+            with original_open(self, "ab") as stream:
+                stream.write(b"late bytes\n")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", mutating_open)
+    monkeypatch.setattr("sys.argv", ["cfd_convergence_triage", str(log)])
+    assert main() == 3
+    report = json.loads(capsys.readouterr().out)[str(log)]
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["scientific_validation"] == "BLOCKED"
+    assert any("log changed during diagnostic read" in p for p in report["problems"])

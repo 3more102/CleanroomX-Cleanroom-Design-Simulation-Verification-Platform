@@ -40,13 +40,22 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     p = Path(path)
     if any(component.is_symlink() for component in (p, *p.parents)) or not p.is_file():
         raise ValueError("missing or symlinked log")
-    if p.stat().st_size > _MAX_LOG_BYTES:
+    before = p.stat()
+    if before.st_size > _MAX_LOG_BYTES:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
     # Bounded read remains bounded if the file grows after the initial stat.
     with p.open("rb") as stream:
         raw = stream.read(_MAX_LOG_BYTES + 1)
     if len(raw) > _MAX_LOG_BYTES:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
+    # A changed path, file size, or modification time invalidates this
+    # diagnostic snapshot, even when the new bytes look like a valid log.
+    after = p.stat()
+    fingerprint = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns)
+    if fingerprint(before) != fingerprint(after) or any(
+        component.is_symlink() for component in (p, *p.parents)
+    ):
+        raise ValueError("log changed during diagnostic read")
     data = raw.decode("utf-8")
 
     time_steps = 0

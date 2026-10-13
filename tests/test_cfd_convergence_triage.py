@@ -263,3 +263,70 @@ def test_rejects_log_under_symlinked_parent_directory(tmp_path):
         pytest.skip("directory symlinks are unavailable on this platform")
     with pytest.raises(ValueError, match="symlinked"):
         diagnose_log(alias / "simpleFoam.log")
+
+
+@pytest.mark.parametrize("invalid_marker", [
+    "Time =",
+    "Time = 2 trailing",
+    "Time = 2 3",
+])
+def test_malformed_intermediate_time_marker_cannot_be_skipped(tmp_path, invalid_marker):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(
+        _complete_step("1")
+        + invalid_marker + "\n"
+        + _complete_step("3")
+        + "End\n"
+    )
+    report = diagnose_log(log)
+    assert "MALFORMED_TIME_MARKER" in report["problems"]
+    assert report["time_sequence_monotonic"] is False
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("suffix", [
+    " injected_tail",
+    " Solving for p, Initial residual = 0.1, Final residual = 0.01, No Iterations 1",
+])
+def test_solver_record_trailing_data_cannot_pass_as_complete(tmp_path, suffix):
+    log = tmp_path / "simpleFoam.log"
+    source = _complete_step("1")
+    log.write_text(source.replace("No Iterations 2\n", "No Iterations 2" + suffix + "\n", 1) + "End\n")
+    report = diagnose_log(log)
+    assert "MALFORMED_SOLVER_RECORD" in report["problems"]
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+
+
+@pytest.mark.parametrize("suffix", [
+    " forged_tail",
+    " time step continuity errors : sum local = 1, global = 1, cumulative = 1",
+])
+def test_continuity_record_trailing_data_cannot_pass_as_complete(tmp_path, suffix):
+    log = tmp_path / "simpleFoam.log"
+    source = _complete_step("1")
+    log.write_text(source.replace("cumulative = 2e-8\n", "cumulative = 2e-8" + suffix + "\n", 1) + "End\n")
+    report = diagnose_log(log)
+    assert "MALFORMED_CONTINUITY_RECORD" in report["problems"]
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+
+
+def test_excessively_long_iteration_integer_fails_closed(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    source = _complete_step("1")
+    log.write_text(source.replace("No Iterations 2\n", "No Iterations " + ("9" * 5000) + "\n", 1) + "End\n")
+    report = diagnose_log(log)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert "MALFORMED_SOLVER_RECORD" in report["problems"]
+
+
+def test_record_trailing_whitespace_is_accepted(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    source = _complete_step("1")
+    source = source.replace("No Iterations 2\n", "No Iterations 2   \n")
+    source = source.replace("cumulative = 2e-8\n", "cumulative = 2e-8  \n")
+    log.write_text(source + "End\n")
+    report = diagnose_log(log)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["problems"] == []
+    assert report["scientific_validation"] == "BLOCKED"

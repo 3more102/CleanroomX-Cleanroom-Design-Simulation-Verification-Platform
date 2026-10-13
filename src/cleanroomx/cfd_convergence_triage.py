@@ -14,9 +14,10 @@ from pathlib import Path
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 _SOLVE = re.compile(
     rf"Solving for\s+([A-Za-z][\w.]*)\s*,\s*Initial residual\s*=\s*({_NUMBER})"
-    rf"\s*,\s*Final residual\s*=\s*({_NUMBER})\s*,\s*No Iterations\s+(\d+)"
+    rf"\s*,\s*Final residual\s*=\s*({_NUMBER})\s*,\s*No Iterations\s+(\d{1,12})"
 )
 _TIME_LINE = re.compile(r"^\s*Time\s*=\s*(\S+)\s*$")
+_TIME_START = re.compile(r"^\s*Time\s*=")
 _END_LINE = re.compile(r"^\s*End\s*$")
 _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({_NUMBER})"
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
@@ -46,6 +47,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     times: list[str] = []
     previous_time: float | None = None
     bad_time = False
+    malformed_time = False
     rows: dict[str, list[dict]] = {}
     continuity: list[dict] = []
     last_step_fields: set[str] = set()
@@ -79,10 +81,18 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             last_step_continuity = 0
             continue
 
+        if _TIME_START.match(line):
+            malformed_time = True
+            continue
+
         if _END_LINE.fullmatch(line):
             end_markers += 1
         solve_match = _SOLVE.search(line)
-        if "Solving for" in line and solve_match is None:
+        if "Solving for" in line and (
+            solve_match is None
+            or line[solve_match.end():].strip()
+            or line.count("Solving for") > 1
+        ):
             malformed_solver = True
         if solve_match:
             field, initial, final, iterations = solve_match.groups()
@@ -98,7 +108,11 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             else:
                 orphan_records += 1
         continuity_match = _CONTINUITY.search(line)
-        if "time step continuity errors" in line.lower() and continuity_match is None:
+        if "time step continuity errors" in line.lower() and (
+            continuity_match is None
+            or line[continuity_match.end():].strip()
+            or line.lower().count("time step continuity errors") > 1
+        ):
             malformed_continuity = True
         if continuity_match:
             values = tuple(map(float, continuity_match.groups()))
@@ -134,6 +148,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         problems.append("NO_TIME_STEPS")
     if bad_time:
         problems.append("INVALID_OR_NONMONOTONIC_TIME_STEPS")
+    if malformed_time:
+        problems.append("MALFORMED_TIME_MARKER")
     if not clean_end:
         problems.append("MISSING_TERMINAL_END")
     if end_markers > 1:
@@ -163,7 +179,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         "source_sha256": hashlib.sha256(raw).hexdigest(),
         "time_steps": len(times),
         "last_time": times[-1] if times else None,
-        "time_sequence_monotonic": bool(times) and not bad_time,
+        "time_sequence_monotonic": bool(times) and not (bad_time or malformed_time),
         "terminal_end": clean_end,
         "fields": field_report,
         "incomplete_prior_time_steps": incomplete_prior_steps,

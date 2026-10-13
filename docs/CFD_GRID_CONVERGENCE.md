@@ -114,8 +114,11 @@ It reports a SHA-256 of the input log bytes, solver residual history, recent
 global continuity errors, a count of time steps, and observations about the
 final time step. It fails closed for missing or repeated terminal End markers,
 fatal/nonfinite tokens, negative residuals, invalid or non-increasing time
-stamps, missing required fields or continuity in **any** time step, malformed
-solver/continuity records, and solver records preceding the first time stamp.
+stamps, malformed or skipped `Time =` markers, missing required fields or
+continuity in **any** time step, and malformed solver/continuity records
+(including appended content or unbounded iteration integers). Trailing
+whitespace on otherwise valid records is allowed. Solver records preceding
+the first time stamp remain an error.
 The `incomplete_prior_time_steps` count detects incomplete earlier steps
 even when the final step is complete. Both the log and its parent directories
 must not be symbolic links; this is not protection against concurrent path

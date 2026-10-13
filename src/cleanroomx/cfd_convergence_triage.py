@@ -34,7 +34,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     ):
         raise ValueError("fields must contain 1-32 distinct valid solver field names")
     p = Path(path)
-    if not p.is_file() or p.is_symlink():
+    if any(component.is_symlink() for component in (p, *p.parents)) or not p.is_file():
         raise ValueError("missing or symlinked log")
     if p.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
@@ -50,13 +50,18 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     continuity: list[dict] = []
     last_step_fields: set[str] = set()
     last_step_continuity = 0
+    incomplete_prior_steps = 0
     orphan_records = 0
     invalid_residual = False
+    malformed_solver = False
+    malformed_continuity = False
     end_markers = 0
 
     for line in data.splitlines():
         time_match = _TIME_LINE.fullmatch(line)
         if time_match:
+            if times and (set(fields) - last_step_fields or not last_step_continuity):
+                incomplete_prior_steps += 1
             stamp = time_match.group(1)
             times.append(stamp)
             try:
@@ -77,6 +82,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         if _END_LINE.fullmatch(line):
             end_markers += 1
         solve_match = _SOLVE.search(line)
+        if "Solving for" in line and solve_match is None:
+            malformed_solver = True
         if solve_match:
             field, initial, final, iterations = solve_match.groups()
             a, b = float(initial), float(final)
@@ -91,6 +98,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             else:
                 orphan_records += 1
         continuity_match = _CONTINUITY.search(line)
+        if "time step continuity errors" in line.lower() and continuity_match is None:
+            malformed_continuity = True
         if continuity_match:
             values = tuple(map(float, continuity_match.groups()))
             if all(math.isfinite(x) for x in values):
@@ -101,6 +110,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
                     last_step_continuity += 1
                 else:
                     orphan_records += 1
+            else:
+                malformed_continuity = True
 
     field_report = {}
     for field in fields:
@@ -131,6 +142,12 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         problems.append("FATAL_OR_NONFINITE_TOKEN")
     if invalid_residual:
         problems.append("INVALID_RESIDUAL_VALUE")
+    if malformed_solver:
+        problems.append("MALFORMED_SOLVER_RECORD")
+    if malformed_continuity:
+        problems.append("MALFORMED_CONTINUITY_RECORD")
+    if incomplete_prior_steps:
+        problems.append("INCOMPLETE_PRIOR_TIME_STEP")
     if orphan_records:
         problems.append("ORPHAN_SOLVER_RECORDS")
     if any(item["missing"] for item in field_report.values()):
@@ -149,6 +166,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         "time_sequence_monotonic": bool(times) and not bad_time,
         "terminal_end": clean_end,
         "fields": field_report,
+        "incomplete_prior_time_steps": incomplete_prior_steps,
         "last_step_missing_fields": missing_last_fields,
         "last_step_continuity_samples": last_step_continuity,
         "continuity_samples": len(continuity),

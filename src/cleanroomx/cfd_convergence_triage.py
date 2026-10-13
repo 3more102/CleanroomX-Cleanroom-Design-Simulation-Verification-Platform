@@ -14,7 +14,7 @@ from pathlib import Path
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 _SOLVE = re.compile(
     rf"Solving for\s+([A-Za-z][\w.]*)\s*,\s*Initial residual\s*=\s*({_NUMBER})"
-    rf"\s*,\s*Final residual\s*=\s*({_NUMBER})\s*,\s*No Iterations\s+(\d{1,12})"
+    rf"\s*,\s*Final residual\s*=\s*({_NUMBER})\s*,\s*No Iterations\s+(\d{{1,12}})"
 )
 _TIME_LINE = re.compile(r"^\s*Time\s*=\s*(\S+)\s*$")
 _TIME_START = re.compile(r"^\s*Time\s*=")

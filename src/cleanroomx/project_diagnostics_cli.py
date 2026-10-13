@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -14,6 +15,11 @@ from .project import (
     capture_project_file_revision,
     load_project_document_with_revision,
     project_file_revision_matches,
+)
+from .strict_json import load_strict_json_snapshot
+from .project_diagnostics_baseline import (
+    compare_project_diagnostics,
+    markdown_project_diagnostics_comparison,
 )
 from .project_diagnostics import (
     analyze_project_diagnostics,
@@ -41,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         help="Write the report atomically to this path instead of stdout",
+    )
+    parser.add_argument(
+        "--baseline", help="Compare with a prior project-diagnostics JSON report",
+    )
+    parser.add_argument(
+        "--fail-on-regression", action="store_true",
+        help="With --baseline, fail only for new errors/warnings (exit 3)",
     )
     return parser
 
@@ -160,7 +173,33 @@ def _assert_project_publication_safe(
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.fail_on_regression and not args.baseline:
+            raise ValueError("--fail-on-regression requires --baseline")
         source = resolve_cli_path(args.project, label="project")
+        baseline_path = (
+            resolve_cli_path(args.baseline, label="baseline")
+            if args.baseline else None
+        )
+        if baseline_path is not None and _paths_alias(source, baseline_path):
+            raise ValueError("diagnostics baseline must not alias project source")
+        if baseline_path is not None and args.output and _paths_alias(
+            baseline_path, args.output
+        ):
+            raise ValueError("diagnostics output must not overwrite baseline")
+        baseline_revision = None
+        baseline_report = None
+        baseline_bytes = None
+        if baseline_path is not None:
+            baseline_revision = capture_project_file_revision(baseline_path)
+            baseline_snapshot = load_strict_json_snapshot(
+                baseline_path, max_bytes=2 * 1024 * 1024
+            )
+            baseline_report = baseline_snapshot.value
+            baseline_bytes = baseline_snapshot.raw_bytes
+            if not project_file_revision_matches(
+                baseline_revision, capture_project_file_revision(baseline_path)
+            ):
+                raise CliStateError("diagnostics baseline changed during input read")
         project, revision_before = load_project_document_with_revision(source)
         if args.output:
             _assert_project_output_is_safe(
@@ -175,6 +214,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "project file changed during diagnostics; report was discarded"
             )
         result = _attach_source_evidence(result, source, revision_after)
+        comparison = None
+        if baseline_report is not None:
+            provenance = baseline_report.get("source") if isinstance(baseline_report, dict) else None
+            if not isinstance(provenance, dict) or provenance.get("path") != str(source):
+                raise ValueError("diagnostics baseline source path does not match project source")
+            comparison = compare_project_diagnostics(baseline_report, result)
+            comparison["baseline_report_sha256"] = hashlib.sha256(baseline_bytes).hexdigest()
+            result["comparison"] = comparison
         text = (
             json.dumps(
                 result,
@@ -185,27 +232,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             + "\n"
             if args.output_format == "json"
-            else markdown_project_diagnostics_report(result)
-        )
-        if args.output:
-            _assert_project_publication_safe(
-                project,
-                source=source,
-                revision=revision_before,
-                output=args.output,
+            else (
+                markdown_project_diagnostics_report(result)
+                + (markdown_project_diagnostics_comparison(comparison) if comparison else "")
             )
-            atomic_write_text(
-                args.output,
-                text,
-                before_replace=lambda: _assert_project_publication_safe(
+        )
+        def check_baseline_unchanged():
+            if baseline_path is not None and not project_file_revision_matches(
+                baseline_revision, capture_project_file_revision(baseline_path)
+            ):
+                raise CliStateError(
+                    "diagnostics baseline changed before report publication"
+                )
+        check_baseline_unchanged()
+        if args.output:
+            def guard_publication():
+                _assert_project_publication_safe(
                     project,
                     source=source,
                     revision=revision_before,
                     output=args.output,
-                ),
-            )
+                )
+                check_baseline_unchanged()
+                if baseline_path is not None and _paths_alias(
+                    baseline_path, args.output
+                ):
+                    raise ValueError("diagnostics output must not overwrite baseline")
+            guard_publication()
+            atomic_write_text(args.output, text, before_replace=guard_publication)
         else:
             sys.stdout.write(text)
+        if args.fail_on_regression:
+            return 3 if comparison["regressed"] else 0
         return project_diagnostics_exit_code(result)
     except (OSError, CliStateError, ValueError) as exc:
         print(f"cleanroomx-project-check: error: {exc}", file=sys.stderr)

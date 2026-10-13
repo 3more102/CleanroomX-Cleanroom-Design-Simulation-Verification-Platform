@@ -2836,6 +2836,7 @@ class CleanroomXApp:
             navigate_callback=self._navigate_project_diagnostic,
             export_callback=self.export_project_diagnostics,
             status_setter=self.status_var.set,
+            source_path_getter=lambda: self.project_path,
         )
         self.output_notebook.add(self.problems_panel, text="Problems")
         self.diagnostics_text = self._add_text_tab(

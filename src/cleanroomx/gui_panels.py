@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, messagebox, ttk
 
+from .project import capture_project_file_revision, project_file_revision_matches
+from .project_diagnostics_baseline import compare_project_diagnostics
+from .strict_json import load_strict_json_snapshot
 from .project_diagnostics import analyze_project_diagnostics
 
 
@@ -25,6 +29,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         navigate_callback: Callable[[dict[str, Any]], None],
         export_callback: Callable[[dict[str, Any]], None] | None = None,
         status_setter: Callable[[str], None] | None = None,
+        source_path_getter: Callable[[], str | Path | None] | None = None,
     ) -> None:
         super().__init__(master)
         self._project_getter = project_getter
@@ -32,6 +37,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self._navigate_callback = navigate_callback
         self._export_callback = export_callback
         self._status_setter = status_setter or (lambda _message: None)
+        self._source_path_getter = source_path_getter or (lambda: None)
+        self._baseline_report: dict[str, Any] | None = None
+        self._baseline_path: Path | None = None
+        self._baseline_revision = None
+        self._baseline_new_ids: set[int] = set()
+        self.baseline_comparison: dict[str, Any] | None = None
         self._issues_by_iid: dict[str, dict[str, Any]] = {}
         self.last_result: dict[str, Any] | None = None
         self._sort_column = "severity"
@@ -41,6 +52,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var = tk.StringVar(value="All")
         self.category_var = tk.StringVar(value="All")
         self.object_var = tk.StringVar(value="All")
+        self.delta_var = tk.StringVar(value="All")
         self.summary_var = tk.StringVar(value="Project diagnostics not evaluated")
         self.visible_var = tk.StringVar(value="0 visible")
         self._build()
@@ -50,6 +62,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             self.severity_var,
             self.category_var,
             self.object_var,
+            self.delta_var,
         ):
             variable.trace_add("write", lambda *_: self._populate())
 
@@ -85,6 +98,16 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             state="normal" if self._export_callback is not None else "disabled",
         )
         self.export_button.pack(side="left", padx=2)
+        self.baseline_button = ttk.Button(
+            action_row, text="Compare baseline…",
+            command=self.choose_baseline,
+            state="normal",  # An unsaved project gets an explicit error on selection.
+        )
+        self.baseline_button.pack(side="left", padx=2)
+        self.clear_baseline_button = ttk.Button(
+            action_row, text="Clear baseline", command=self.clear_baseline,
+        )
+        self.clear_baseline_button.pack(side="left", padx=2)
         ttk.Label(
             action_row,
             textvariable=self.summary_var,
@@ -127,6 +150,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             width=18,
         )
         self.object_combo.pack(side="left", padx=(4, 8))
+        ttk.Label(filter_row, text="Baseline").pack(side="left")
+        self.delta_combo = ttk.Combobox(
+            filter_row, textvariable=self.delta_var,
+            values=("All", "New"), state="disabled", width=7,
+        )
+        self.delta_combo.pack(side="left", padx=(4, 8))
         ttk.Button(
             filter_row,
             text="Clear filters",
@@ -257,6 +286,124 @@ class ProjectDiagnosticsPanel(ttk.Frame):
                 return str(value)
         return ""
 
+    def choose_baseline(self) -> None:
+        """Ask for a prior JSON diagnostics report; never modify the project."""
+        path = filedialog.askopenfilename(
+            parent=self, title="Compare project diagnostics against baseline",
+            filetypes=[("JSON diagnostics", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            self.load_baseline_path(path)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Diagnostics baseline rejected", str(exc), parent=self)
+            self._status_setter("Diagnostics baseline rejected")
+
+    def load_baseline_path(self, path: str | Path) -> dict[str, Any]:
+        """Load a bounded report from the exact saved project source path."""
+        source = self._source_path_getter()
+        if source is None:
+            raise ValueError("Save the project before comparing diagnostics baselines")
+        source_path = Path(source).expanduser().resolve(strict=False)
+        baseline_path = Path(path).expanduser().resolve(strict=False)
+        if source_path == baseline_path:
+            raise ValueError("baseline cannot be the project source file")
+        revision_before = capture_project_file_revision(baseline_path)
+        snapshot = load_strict_json_snapshot(baseline_path, max_bytes=2 * 1024 * 1024)
+        if not project_file_revision_matches(
+            revision_before, capture_project_file_revision(baseline_path)
+        ):
+            raise ValueError("diagnostics baseline changed during read")
+        report = snapshot.value
+        if not isinstance(report, dict) or not isinstance(report.get("source"), dict):
+            raise ValueError("baseline must be a saved JSON project-diagnostics report")
+        if report["source"].get("path") != str(source_path):
+            raise ValueError("baseline source does not match the opened project path")
+        current = analyze_project_diagnostics(
+            self._project_getter(), base_dir=self._base_dir_getter()
+        )
+        compare_project_diagnostics(report, current)
+        self._baseline_path = baseline_path
+        self._baseline_revision = revision_before
+        self._baseline_report = report
+        self.delta_combo.configure(state="readonly")
+        self.delta_var.set("All")
+        self.refresh()
+        return self.baseline_comparison
+
+    def clear_baseline(self) -> None:
+        self._baseline_path = None
+        self._baseline_revision = None
+        self._baseline_report = None
+        self.baseline_comparison = None
+        self._baseline_new_ids.clear()
+        self.delta_var.set("All")
+        self.delta_combo.configure(state="disabled")
+        if self.last_result is not None:
+            self._set_summary(self.last_result)
+            self._populate()
+
+    @staticmethod
+    def _issue_key(issue: dict[str, Any]) -> tuple[str, ...]:
+        element = issue["element"]
+        element_id = element.get("id") or ""
+        return (
+            issue["rule"], issue["category"], element["type"], element_id,
+            "" if element_id else (element.get("name") or ""), issue["severity"],
+        )
+
+    def _compute_baseline_delta(self, result: dict[str, Any]) -> None:
+        self._baseline_new_ids.clear()
+        self.baseline_comparison = None
+        if self._baseline_report is None:
+            return
+        if (
+            self._baseline_path is None
+            or not project_file_revision_matches(
+                self._baseline_revision,
+                capture_project_file_revision(self._baseline_path),
+            )
+            or self._source_path_getter() is None
+            or self._baseline_report["source"]["path"] != str(
+                Path(self._source_path_getter()).expanduser().resolve(strict=False)
+            )
+        ):
+            self.clear_baseline()
+            self._status_setter("Diagnostics baseline changed or belongs to another project")
+            return
+        try:
+            comparison = compare_project_diagnostics(self._baseline_report, result)
+        except ValueError as exc:
+            self.clear_baseline()
+            self._status_setter(f"Diagnostics baseline rejected: {exc}")
+            return
+        self.baseline_comparison = comparison
+        counts = Counter(
+            {self._issue_key(item): item["count"] for item in comparison["new_issues"]}
+        )
+        for issue in result["issues"]:
+            key = self._issue_key(issue)
+            if counts[key] > 0:
+                self._baseline_new_ids.add(id(issue))
+                counts[key] -= 1
+
+    def _set_summary(self, result: dict[str, Any]) -> None:
+        summary = result.get("summary", {})
+        label = "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
+            status=str(summary.get("status", "unknown")).upper(),
+            errors=summary.get("error_count", 0),
+            warnings=summary.get("warning_count", 0),
+            info=summary.get("info_count", 0),
+        )
+        if self.baseline_comparison is not None:
+            delta = self.baseline_comparison["summary"]
+            label += (
+                f" · Δ +{delta['new_actionable_count']} actionable"
+                f" / -{delta['resolved_issue_count']} resolved"
+            )
+        self.summary_var.set(label)
+
     def _all_issues(self) -> list[dict[str, Any]]:
         if not isinstance(self.last_result, dict):
             return []
@@ -294,6 +441,8 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         query = self.search_var.get().strip().casefold()
         visible: list[dict[str, Any]] = []
         for issue in issues:
+            if self.delta_var.get() == "New" and id(issue) not in self._baseline_new_ids:
+                continue
             issue_severity = str(issue.get("severity", "")).casefold()
             if severity and severity != "all" and issue_severity != severity:
                 continue
@@ -362,6 +511,7 @@ class ProjectDiagnosticsPanel(ttk.Frame):
         self.severity_var.set("All")
         self.category_var.set("All")
         self.object_var.set("All")
+        self.delta_var.set("All")
         self.search_entry.focus_set()
 
     def _populate(self) -> None:
@@ -427,15 +577,12 @@ class ProjectDiagnosticsPanel(ttk.Frame):
             return None
 
         self.last_result = result
-        summary = result.get("summary", {})
-        self.summary_var.set(
-            "{status} · {errors} error(s) · {warnings} warning(s) · {info} info".format(
-                status=str(summary.get("status", "unknown")).upper(),
-                errors=summary.get("error_count", 0),
-                warnings=summary.get("warning_count", 0),
-                info=summary.get("info_count", 0),
-            )
-        )
+        try:
+            self._compute_baseline_delta(result)
+        except (OSError, ValueError) as exc:
+            self.clear_baseline()
+            self._status_setter(f"Diagnostics baseline unavailable: {exc}")
+        self._set_summary(result)
         self._refresh_filter_values()
         self._populate()
         return result

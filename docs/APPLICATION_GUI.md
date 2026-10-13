@@ -259,3 +259,22 @@ This interface does not edit requirements or mappings, infer standards limits,
 convert units, run comparisons, or issue verification verdicts. Project
 requirements verification remains under the canonical Release 3 workflow and
 verification engine.
+
+## Diagnostics baselines in the Problems panel
+
+The Problems workspace provides **Compare baseline…**, **Clear baseline**,
+and a **Baseline: All / New** filter. Choose a previous JSON report exported
+from the *same saved project path*. The panel uses the same deterministic
+project-diagnostics comparison engine as `cleanroomx-project-check --baseline`.
+The summary reports new actionable and resolved findings, while **New**
+filters to only the newly introduced issue instances (including duplicates,
+which retain multiset semantics). Existing issue navigation and filters
+continue to work.
+
+The GUI loads the baseline through a bounded strict JSON reader (2 MiB),
+compares its source path with the saved project, and rechecks the baseline's
+byte revision on refresh. Invalid, changed, or foreign-project baselines
+are rejected or cleared. The GUI compares the **current in-memory project**;
+unsaved edits can therefore appear in the preview. This is not a signed,
+persistent, or independently qualified report; for revision-bound evidence,
+save the project and export using the diagnostics CLI.

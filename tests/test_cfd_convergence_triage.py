@@ -1,7 +1,11 @@
 """Synthetic tests; no OpenFOAM execution or scientific qualification."""
+import io
 import json
+from pathlib import Path
 
 import pytest
+
+import cleanroomx.cfd_convergence_triage as triage
 
 from cleanroomx.cfd_convergence_triage import diagnose_log, main
 
@@ -392,3 +396,40 @@ def test_cli_replay_is_reported_even_with_one_other_invalid_log(tmp_path, monkey
     assert "DUPLICATE_LOG_BYTES" in reports[str(second)]["problems"]
     assert reports[str(broken)]["status"] == "INCOMPLETE_OR_INVALID"
     assert "DUPLICATE_LOG_BYTES" not in reports[str(broken)]["problems"]
+
+
+
+def test_recent_window_retains_counts_across_many_steps(tmp_path):
+    """Each field still reports all samples while storing just the requested window."""
+    log = tmp_path / "many_steps.log"
+    log.write_text(
+        "".join(_complete_step(str(i)) for i in range(1, 251)) + "End\n"
+    )
+    result = diagnose_log(log, window=3)
+    assert result["status"] == "DIAGNOSTIC_ONLY"
+    assert result["scientific_validation"] == "BLOCKED"
+    assert result["time_steps"] == 250
+    assert result["continuity_samples"] == 250
+    assert result["recent_global_continuity"] == [2e-8] * 3
+    for field in ("Ux", "Uy", "Uz", "p"):
+        info = result["fields"][field]
+        assert info["samples"] == 250
+        assert info["recent_initial"] == [0.01] * 3
+        assert info["recent_final"] == [0.0001] * 3
+
+
+def test_bounded_read_catches_growth_after_stat(tmp_path, monkeypatch):
+    """An increasing file must not bypass the 64-MiB bounded-read guard."""
+    log = tmp_path / "growing.log"
+    log.write_text("Time = 1\nEnd\n")
+    monkeypatch.setattr(triage, "_MAX_LOG_BYTES", 256)
+    original_open = Path.open
+
+    def growing_stream(self, *args, **kwargs):
+        if self == log and args and args[0] == "rb":
+            return io.BytesIO(b"x" * 257)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", growing_stream)
+    with pytest.raises(ValueError, match="diagnostic limit"):
+        diagnose_log(log)

@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import re
+from collections import deque
 from pathlib import Path
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
@@ -23,6 +24,7 @@ _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
                          rf"\s*,\s*cumulative\s*=\s*({_NUMBER})")
 _BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|\b(?:nan|inf|infinity)\b", re.I)
+_MAX_LOG_BYTES = 64 * 1024 * 1024
 
 
 def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),
@@ -37,10 +39,12 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     p = Path(path)
     if any(component.is_symlink() for component in (p, *p.parents)) or not p.is_file():
         raise ValueError("missing or symlinked log")
-    if p.stat().st_size > 64 * 1024 * 1024:
+    if p.stat().st_size > _MAX_LOG_BYTES:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
-    raw = p.read_bytes()
-    if len(raw) > 64 * 1024 * 1024:
+    # Bounded read remains bounded if the file grows after the initial stat.
+    with p.open("rb") as stream:
+        raw = stream.read(_MAX_LOG_BYTES + 1)
+    if len(raw) > _MAX_LOG_BYTES:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
     data = raw.decode("utf-8")
 
@@ -48,8 +52,11 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     previous_time: float | None = None
     bad_time = False
     malformed_time = False
-    rows: dict[str, list[dict]] = {}
-    continuity: list[dict] = []
+    # Retain only the requested recent window, not every solver iteration.
+    sample_counts = {field: 0 for field in fields}
+    recent_residuals = {field: deque(maxlen=window) for field in fields}
+    continuity_samples = 0
+    recent_global_continuity = deque(maxlen=window)
     last_step_fields: set[str] = set()
     last_step_continuity = 0
     incomplete_prior_steps = 0
@@ -100,9 +107,9 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             if not (math.isfinite(a) and math.isfinite(b)) or a < 0 or b < 0:
                 invalid_residual = True
             else:
-                rows.setdefault(field, []).append({
-                    "initial": a, "final": b, "iterations": int(iterations)
-                })
+                if field in sample_counts:
+                    sample_counts[field] += 1
+                    recent_residuals[field].append((a, b))
             if times:
                 last_step_fields.add(field)
             else:
@@ -117,9 +124,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         if continuity_match:
             values = tuple(map(float, continuity_match.groups()))
             if all(math.isfinite(x) for x in values):
-                continuity.append({
-                    "local": values[0], "global": values[1], "cumulative": values[2]
-                })
+                continuity_samples += 1
+                recent_global_continuity.append(values[1])
                 if times:
                     last_step_continuity += 1
                 else:
@@ -129,15 +135,14 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
 
     field_report = {}
     for field in fields:
-        samples = rows.get(field, [])
-        recent = samples[-window:]
+        recent = recent_residuals[field]
         field_report[field] = {
-            "samples": len(samples),
-            "recent_initial": [r["initial"] for r in recent],
-            "recent_final": [r["final"] for r in recent],
-            "last_initial": samples[-1]["initial"] if samples else None,
-            "last_final": samples[-1]["final"] if samples else None,
-            "missing": not samples,
+            "samples": sample_counts[field],
+            "recent_initial": [r[0] for r in recent],
+            "recent_final": [r[1] for r in recent],
+            "last_initial": recent[-1][0] if recent else None,
+            "last_final": recent[-1][1] if recent else None,
+            "missing": sample_counts[field] == 0,
         }
 
     last_nonblank_line = data.rstrip().splitlines()
@@ -168,7 +173,7 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         problems.append("ORPHAN_SOLVER_RECORDS")
     if any(item["missing"] for item in field_report.values()):
         problems.append("MISSING_REQUIRED_FIELD")
-    if not continuity:
+    if not continuity_samples:
         problems.append("NO_CONTINUITY_RECORDS")
     if times and (missing_last_fields or not last_step_continuity):
         problems.append("INCOMPLETE_FINAL_TIME_STEP")
@@ -185,8 +190,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         "incomplete_prior_time_steps": incomplete_prior_steps,
         "last_step_missing_fields": missing_last_fields,
         "last_step_continuity_samples": last_step_continuity,
-        "continuity_samples": len(continuity),
-        "recent_global_continuity": [x["global"] for x in continuity[-window:]],
+        "continuity_samples": continuity_samples,
+        "recent_global_continuity": list(recent_global_continuity),
         "problems": problems,
         "note": "Linear solver residuals are not proof of physical convergence or mass balance.",
     }

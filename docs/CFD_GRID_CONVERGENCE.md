@@ -109,8 +109,12 @@ For an actual completed OpenFOAM Foundation-style simpleFoam.log, run:
     python -m cleanroomx.cfd_convergence_triage \
       path/to/simpleFoam.log --fields Ux Uy Uz p --window 5
 
-The command reads up to 64 MiB of UTF-8 log data without invoking OpenFOAM.
-It reports a SHA-256 of the input log bytes, solver residual history, recent
+The command performs a bounded read of at most 64 MiB plus one guard byte
+of UTF-8 log data without invoking OpenFOAM, including when the log grows
+after an initial file-size check. It retains only the requested recent
+`--window` residual and global-continuity values in memory while preserving
+the total counts and full-log SHA-256. Input bytes and decoded text are still
+materialized under the 64 MiB cap. It reports solver residual history, recent
 global continuity errors, a count of time steps, and observations about the
 final time step. It fails closed for missing or repeated terminal End markers,
 fatal/nonfinite tokens, negative residuals, invalid or non-increasing time

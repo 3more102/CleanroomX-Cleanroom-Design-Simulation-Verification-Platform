@@ -246,12 +246,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
         check_baseline_unchanged()
         if args.output:
-            _assert_project_publication_safe(
-                project,
-                source=source,
-                revision=revision_before,
-                output=args.output,
-            )
             def guard_publication():
                 _assert_project_publication_safe(
                     project,

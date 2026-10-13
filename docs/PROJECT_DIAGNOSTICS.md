@@ -76,3 +76,38 @@ The diagnostics service itself is read-only and therefore does not participate i
 This feature is a project/model health checker. It does not invent ISO, GMP, regulatory, commissioning, TAB, manufacturer, or project acceptance criteria.
 
 A `pass` means the configured CleanroomX software/model/provenance checks found no errors or warnings. It does **not** establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Applicable standards and acceptance criteria remain explicit project inputs.
+
+## Baseline regression screening (project-wide)
+
+Use a saved JSON diagnostics report as a baseline for later model revisions:
+
+```bash
+cleanroomx-project-check project.cleanroomx.json --output baseline.json
+# After editing the same project:
+cleanroomx-project-check project.cleanroomx.json --baseline baseline.json --fail-on-regression --output delta.json
+```
+
+A comparison groups findings by rule, category, severity, element type and stable
+element ID (falling back to element name). Repeated findings are **counted**,
+not collapsed. Finding prose and sequences do not define identity. An
+escalation from `info` to `warning` counts as a new warning and a resolved
+informational finding. JSON includes `comparison.summary`,
+`comparison.new_issues`, `comparison.resolved_issues` and
+`comparison.baseline_report_sha256`. Markdown includes a dedicated comparison.
+
+The baseline must be a compatible, strict JSON diagnostics report from the
+**same project name and source path**. This is a conservative provenance gate:
+moving/renaming a project requires an operator-established new baseline, and
+equal names/paths alone do not prove authenticated project identity. Baseline
+input is capped at 2 MiB, rechecked for byte changes, and protected against
+overwriting by `--output`. Source engineering inputs retain their existing
+output protection.
+
+The optional `--fail-on-regression` mode changes exit semantics specifically
+for baseline-managed CI: **0** means no *new* warning/error, even if old findings
+persist; **3** means at least one new warning/error; **2** means an invalid
+baseline, unsafe path, I/O or revision failure. Without this flag, the legacy
+project diagnostics exit codes remain unchanged (0 clean, 1 actionable, 2
+invalid). New informational findings are reported, but not treated as actionable
+regressions. This detects **software diagnostics drift** only; it does not
+certify cleanroom performance or establish requirements compliance.

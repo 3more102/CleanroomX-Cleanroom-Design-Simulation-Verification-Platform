@@ -16,7 +16,8 @@ _SOLVE = re.compile(
     rf"Solving for\s+([A-Za-z][\w.]*)\s*,\s*Initial residual\s*=\s*({_NUMBER})"
     rf"\s*,\s*Final residual\s*=\s*({_NUMBER})\s*,\s*No Iterations\s+(\d+)"
 )
-_TIME = re.compile(r"^Time\s*=\s*([^\s]+)", re.MULTILINE)
+_TIME_LINE = re.compile(r"^\s*Time\s*=\s*(\S+)\s*$")
+_END_LINE = re.compile(r"^\s*End\s*$")
 _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({_NUMBER})"
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
                          rf"\s*,\s*cumulative\s*=\s*({_NUMBER})")
@@ -25,32 +26,82 @@ _BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|\b(?:
 
 def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),
                  window: int = 5) -> dict:
-    """Extract evidence without asserting that a run converged."""
+    """Extract step-aware solver diagnostics; never assert scientific convergence."""
     if window < 1 or window > 10000:
         raise ValueError("window must be between 1 and 10000")
+    if not fields or len(fields) > 32 or len(set(fields)) != len(fields) or any(
+        not re.fullmatch(r"[A-Za-z][\w.]*", field) for field in fields
+    ):
+        raise ValueError("fields must contain 1-32 distinct valid solver field names")
     p = Path(path)
     if not p.is_file() or p.is_symlink():
         raise ValueError("missing or symlinked log")
     if p.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("log exceeds 64 MiB diagnostic limit")
     raw = p.read_bytes()
+    if len(raw) > 64 * 1024 * 1024:
+        raise ValueError("log exceeds 64 MiB diagnostic limit")
     data = raw.decode("utf-8")
-    times = _TIME.findall(data)
-    rows = {}
-    for match in _SOLVE.finditer(data):
-        field, initial, final, iterations = match.groups()
-        a, b = float(initial), float(final)
-        if not (math.isfinite(a) and math.isfinite(b)):
+
+    times: list[str] = []
+    previous_time: float | None = None
+    bad_time = False
+    rows: dict[str, list[dict]] = {}
+    continuity: list[dict] = []
+    last_step_fields: set[str] = set()
+    last_step_continuity = 0
+    orphan_records = 0
+    invalid_residual = False
+    end_markers = 0
+
+    for line in data.splitlines():
+        time_match = _TIME_LINE.fullmatch(line)
+        if time_match:
+            stamp = time_match.group(1)
+            times.append(stamp)
+            try:
+                numeric_time = float(stamp)
+            except ValueError:
+                bad_time = True
+            else:
+                if not math.isfinite(numeric_time) or (
+                    previous_time is not None and numeric_time <= previous_time
+                ):
+                    bad_time = True
+                if math.isfinite(numeric_time):
+                    previous_time = numeric_time
+            last_step_fields.clear()
+            last_step_continuity = 0
             continue
-        rows.setdefault(field, []).append({
-            "initial": a, "final": b, "iterations": int(iterations)
-        })
-    continuity = []
-    for local, global_, cumulative in _CONTINUITY.findall(data):
-        values = tuple(map(float, (local, global_, cumulative)))
-        if all(math.isfinite(x) for x in values):
-            continuity.append({"local": values[0], "global": values[1],
-                               "cumulative": values[2]})
+
+        if _END_LINE.fullmatch(line):
+            end_markers += 1
+        solve_match = _SOLVE.search(line)
+        if solve_match:
+            field, initial, final, iterations = solve_match.groups()
+            a, b = float(initial), float(final)
+            if not (math.isfinite(a) and math.isfinite(b)) or a < 0 or b < 0:
+                invalid_residual = True
+            else:
+                rows.setdefault(field, []).append({
+                    "initial": a, "final": b, "iterations": int(iterations)
+                })
+            if times:
+                last_step_fields.add(field)
+            else:
+                orphan_records += 1
+        continuity_match = _CONTINUITY.search(line)
+        if continuity_match:
+            values = tuple(map(float, continuity_match.groups()))
+            if all(math.isfinite(x) for x in values):
+                continuity.append({
+                    "local": values[0], "global": values[1], "cumulative": values[2]
+                })
+                if times:
+                    last_step_continuity += 1
+                else:
+                    orphan_records += 1
+
     field_report = {}
     for field in fields:
         samples = rows.get(field, [])
@@ -63,26 +114,43 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
             "last_final": samples[-1]["final"] if samples else None,
             "missing": not samples,
         }
-    clean_end = bool(data.rstrip().splitlines() and data.rstrip().splitlines()[-1].strip() == "End")
+
+    last_nonblank_line = data.rstrip().splitlines()
+    clean_end = bool(last_nonblank_line and last_nonblank_line[-1].strip() == "End")
+    missing_last_fields = sorted(set(fields) - last_step_fields)
     problems = []
     if not times:
         problems.append("NO_TIME_STEPS")
+    if bad_time:
+        problems.append("INVALID_OR_NONMONOTONIC_TIME_STEPS")
     if not clean_end:
         problems.append("MISSING_TERMINAL_END")
+    if end_markers > 1:
+        problems.append("MULTIPLE_END_MARKERS")
     if _BAD.search(data):
         problems.append("FATAL_OR_NONFINITE_TOKEN")
+    if invalid_residual:
+        problems.append("INVALID_RESIDUAL_VALUE")
+    if orphan_records:
+        problems.append("ORPHAN_SOLVER_RECORDS")
     if any(item["missing"] for item in field_report.values()):
         problems.append("MISSING_REQUIRED_FIELD")
     if not continuity:
         problems.append("NO_CONTINUITY_RECORDS")
+    if times and (missing_last_fields or not last_step_continuity):
+        problems.append("INCOMPLETE_FINAL_TIME_STEP")
+
     return {
         "status": "DIAGNOSTIC_ONLY" if not problems else "INCOMPLETE_OR_INVALID",
         "scientific_validation": "BLOCKED",
         "source_sha256": hashlib.sha256(raw).hexdigest(),
         "time_steps": len(times),
         "last_time": times[-1] if times else None,
+        "time_sequence_monotonic": bool(times) and not bad_time,
         "terminal_end": clean_end,
         "fields": field_report,
+        "last_step_missing_fields": missing_last_fields,
+        "last_step_continuity_samples": last_step_continuity,
         "continuity_samples": len(continuity),
         "recent_global_continuity": [x["global"] for x in continuity[-window:]],
         "problems": problems,

@@ -44,6 +44,13 @@ def test_matrix_is_unique_traceable_and_covers_pinned_source_inventory():
     assert len([row for row in rows if row["id"].startswith("OF10-API-")]) == 94
     assert len([row for row in rows if row["id"].startswith("OF10-TUTORIAL-CASE-")]) == 240
     assert len([row for row in rows if row["id"].startswith("OF10-TURB-")]) == 53
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-GEOM-")]) == 9
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-BASIC-")]) == 6
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-DERIVED-")]) == 6
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-WALL-")]) == 5
+    assert len([row for row in rows if row["id"].startswith("OF10-FV-SCHEME-TERM-")]) == 7
+    assert len([row for row in rows if row["id"].startswith("OF10-TIME-SCHEME-")]) == 6
+    assert len([row for row in rows if row["id"].startswith("OF10-LINSOLVER-")]) == 6
     matrix_refs = {row["upstream_reference"] for row in rows}
     for inventory_type in (
         "src Make/files library/API build units",
@@ -65,15 +72,15 @@ def test_scoring_counts_only_complete_rows_and_reports_all_three_tracks():
         text=True,
     )
     report = json.loads(result.stdout)
-    assert report["rows"] == 678
+    assert report["rows"] == 723
     assert set(report["tracks"]) == {"native_status", "integration_status", "cleanroom_status"}
     assert report["tracks"]["native_status"]["complete"] == 0
     assert report["tracks"]["integration_status"]["complete"] == 0
     assert report["tracks"]["cleanroom_status"]["complete"] == 0
-    assert report["tracks"]["native_status"]["denominator"] == 150
-    assert report["tracks"]["integration_status"]["denominator"] == 675
+    assert report["tracks"]["native_status"]["denominator"] == 192
+    assert report["tracks"]["integration_status"]["denominator"] == 717
     assert report["tracks"]["cleanroom_status"]["denominator"] == 21
     summary = (ROOT / "docs" / "OPENFOAM_FOUNDATION_V10_PARITY.md").read_text(encoding="utf-8")
-    assert "| Native solver capability parity | 0 | 150 | 0.00% |" in summary
-    assert "| End-to-end OpenFOAM integration coverage | 0 | 675 | 0.00% |" in summary
+    assert "| Native solver capability parity | 0 | 192 | 0.00% |" in summary
+    assert "| End-to-end OpenFOAM integration coverage | 0 | 717 | 0.00% |" in summary
     assert "| Validated cleanroom engineering workflows | 0 | 21 | 0.00% |" in summary

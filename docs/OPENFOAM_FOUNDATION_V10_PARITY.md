@@ -23,13 +23,16 @@ The turbulence rows enumerate the Foundation v10 user guide's 19
 incompressible RAS models, 14 compressible RAS models, and 10 LES models for
 each compressibility family.
 
-The API inventory is at the source build-unit level: it does not enumerate
-every C++ class, registration-table entry, boundary-condition type, scheme
-variant, dictionary keyword, or third-party dependency as its own row. The
-guide-backed rows identify those documented feature families. This boundary
-is explicit so a high aggregate score cannot be mistaken for symbol-by-symbol
-API parity. Expanding the documented registries into one row per public type
-is still a matrix-completeness task.
+The matrix has individual rows for the guide-listed geometric patch types,
+basic boundary conditions, selected derived conditions and wall functions;
+seven `fvSchemes` term categories; six named time-scheme choices; and six
+linear-solver algorithms. The v10 guide says its boundary-condition lists are
+not complete and describes many additional scheme variants. The API inventory
+is at the source build-unit level: it does not enumerate every C++ class,
+runtime registration, boundary-condition/plugin type, scheme variant,
+dictionary keyword, or third-party dependency as its own row. This explicit
+boundary prevents a high aggregate score from being mistaken for
+symbol-by-symbol API parity; a full runtime-registry inventory remains work.
 
 ## Status and scoring rules
 
@@ -67,20 +70,25 @@ meaning.
 
 <!-- SCORE TABLES START -->
 
-Matrix rows: 678
+Matrix rows: 723
 
 | Track | Complete | Denominator | Score |
 |---|---:|---:|---:|
-| Native solver capability parity | 0 | 150 | 0.00% |
-| End-to-end OpenFOAM integration coverage | 0 | 675 | 0.00% |
+| Native solver capability parity | 0 | 192 | 0.00% |
+| End-to-end OpenFOAM integration coverage | 0 | 717 | 0.00% |
 | Validated cleanroom engineering workflows | 0 | 21 | 0.00% |
 
 ### Native solver capability parity by category
 
 | Category | Complete | Denominator | Score |
 |---|---:|---:|---:|
-| Boundary conditions | 0 | 1 | 0.00% |
-| Finite-volume methods and algorithms | 0 | 3 | 0.00% |
+| Boundary conditions / basic | 0 | 6 | 0.00% |
+| Boundary conditions / derived | 0 | 6 | 0.00% |
+| Boundary conditions / turbulence wall functions | 0 | 5 | 0.00% |
+| Boundary patch types / geometric | 0 | 9 | 0.00% |
+| Finite-volume methods and algorithms | 0 | 1 | 0.00% |
+| Finite-volume scheme categories | 0 | 7 | 0.00% |
+| Linear solver algorithms | 0 | 6 | 0.00% |
 | Mesh generation, conversion, and quality | 0 | 3 | 0.00% |
 | Multi-region and coupling | 0 | 2 | 0.00% |
 | Parallel execution | 0 | 3 | 0.00% |
@@ -99,6 +107,7 @@ Matrix rows: 678
 | Solver applications / ‘Basic’ CFD codes | 0 | 3 | 0.00% |
 | Solver model/source components | 0 | 23 | 0.00% |
 | Steady and transient algorithms | 0 | 1 | 0.00% |
+| Time discretization schemes | 0 | 6 | 0.00% |
 | Turbulence models / Compressible LES | 0 | 10 | 0.00% |
 | Turbulence models / Compressible RAS | 0 | 14 | 0.00% |
 | Turbulence models / Incompressible LES | 0 | 10 | 0.00% |
@@ -109,10 +118,15 @@ Matrix rows: 678
 | Category | Complete | Denominator | Score |
 |---|---:|---:|---:|
 | APIs, tutorials, tests, and reproducible workflows | 0 | 9 | 0.00% |
-| Boundary conditions | 0 | 1 | 0.00% |
+| Boundary conditions / basic | 0 | 6 | 0.00% |
+| Boundary conditions / derived | 0 | 6 | 0.00% |
+| Boundary conditions / turbulence wall functions | 0 | 5 | 0.00% |
+| Boundary patch types / geometric | 0 | 9 | 0.00% |
 | Case execution and reproducibility | 0 | 2 | 0.00% |
 | Case setup and configuration | 0 | 6 | 0.00% |
-| Finite-volume methods and algorithms | 0 | 3 | 0.00% |
+| Finite-volume methods and algorithms | 0 | 1 | 0.00% |
+| Finite-volume scheme categories | 0 | 7 | 0.00% |
+| Linear solver algorithms | 0 | 6 | 0.00% |
 | Mesh generation, conversion, and quality | 0 | 9 | 0.00% |
 | Multi-region and coupling | 0 | 2 | 0.00% |
 | OpenFOAM tutorial workflows | 0 | 240 | 0.00% |
@@ -146,6 +160,7 @@ Matrix rows: 678
 | Standard utilities / Surface mesh (e.g. OBJ/STL) tools | 0 | 29 | 0.00% |
 | Standard utilities / Thermophysical-related utilities | 0 | 5 | 0.00% |
 | Steady and transient algorithms | 0 | 1 | 0.00% |
+| Time discretization schemes | 0 | 6 | 0.00% |
 | Turbulence models / Compressible LES | 0 | 10 | 0.00% |
 | Turbulence models / Compressible RAS | 0 | 14 | 0.00% |
 | Turbulence models / Incompressible LES | 0 | 10 | 0.00% |

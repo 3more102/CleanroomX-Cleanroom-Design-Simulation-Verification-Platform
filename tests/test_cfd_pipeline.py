@@ -28,7 +28,17 @@ def test_mesh_and_flow_generation(tmp_path):
         f=tmp_path/"cases"/f"configuration_{cfg}"
         assert "hex (" in (f/"system/blockMeshDict").read_text()
         assert "pressureInletOutletVelocity" in (f/"0/U").read_text()
-        assert "simulationType laminar;" in (f/"constant/turbulenceProperties").read_text()
+        properties=(f/"constant/physicalProperties").read_text()
+        assert "object physicalProperties;" in properties
+        assert "viscosityModel constant;" in properties
+        assert "nu 1.5e-05;" in properties
+        momentum=(f/"constant/momentumTransport").read_text()
+        assert "object momentumTransport;" in momentum
+        assert "simulationType laminar;" in momentum
+        assert not (f/"constant/transportProperties").exists()
+        assert not (f/"constant/turbulenceProperties").exists()
+        schemes=(f/"system/fvSchemes").read_text()
+        assert "div((nuEff*dev2(T(grad(U))))) Gauss linear;" in schemes
     with pytest.raises(FileExistsError):
         export_openfoam_cases(s,tmp_path/"cases")
     copy=export_openfoam_cases(s,tmp_path/"other")

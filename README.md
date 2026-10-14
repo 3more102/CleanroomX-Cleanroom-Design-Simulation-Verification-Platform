@@ -45,6 +45,7 @@ codes, privacy considerations, and limitations.
 - Parameterized 3D case generation for all three ventilation layouts, with physically explicit inlet/outlet patches and SHA-256 manifest.
 - Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
 - This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
+- Track documented Foundation v10 capabilities, measured parity scores, and open evidence gaps in the [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
 
 ### Source-driven CFD passive tracer and numerical audit
 

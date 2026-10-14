@@ -2,6 +2,7 @@ import csv
 import json
 import subprocess
 import sys
+import pytest
 from pathlib import Path
 
 
@@ -84,3 +85,53 @@ def test_scoring_counts_only_complete_rows_and_reports_all_three_tracks():
     assert "| Native solver capability parity | 0 | 192 | 0.00% |" in summary
     assert "| End-to-end OpenFOAM integration coverage | 0 | 717 | 0.00% |" in summary
     assert "| Validated cleanroom engineering workflows | 0 | 21 | 0.00% |" in summary
+
+@pytest.mark.parametrize(
+    ("track", "evidence", "expected_error"),
+    [
+        ("native_status", "synthetic fixture passed", "PASS:"),
+        ("integration_status", "PASS: OpenFOAM Foundation v10 synthetic fixture", "non-synthetic"),
+        ("cleanroom_status", "PASS: measured values only", "uncertainty"),
+    ],
+)
+def test_complete_status_requires_scope_appropriate_passing_evidence(track, evidence, expected_error):
+    rows = load(MATRIX)
+    row = rows[0]
+    row[track] = "complete"
+    row["implementation_path"] = "src/cleanroomx/example.py"
+    row["test_evidence"] = evidence
+    row["remaining_gap"] = "none"
+
+    # The CLI reads the checked-in matrix, so exercise validator on a temporary copy.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        matrix_path = Path(directory) / "matrix.csv"
+        with matrix_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        checked = subprocess.run(
+            [sys.executable, str(SCORER), "--matrix", str(matrix_path), "--inventory", str(INVENTORY)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    assert checked.returncode == 2
+    assert expected_error in checked.stderr
+
+
+def test_complete_native_row_can_score_with_pass_evidence_and_no_remaining_gap():
+    rows = load(MATRIX)
+    inventory = load(INVENTORY)
+    row = rows[0]
+    row.update(
+        native_status="complete",
+        implementation_path="src/cleanroomx/example.py",
+        test_evidence="PASS: independently verified numerical comparison",
+        remaining_gap="none",
+    )
+    from scripts.openfoam_v10_parity_score import validate
+
+    validate(rows, inventory)

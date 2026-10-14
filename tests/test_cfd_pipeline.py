@@ -1,6 +1,7 @@
 """SYNTHETIC regression fixtures; not proof of real CFD physics validation."""
 import json
 import math
+from types import SimpleNamespace
 import pytest
 
 from cleanroomx.cfd_openfoam import (
@@ -72,6 +73,39 @@ def test_solver_not_installed_fails_closed(tmp_path,monkeypatch):
     monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:None)
     with pytest.raises(RuntimeError,match="not found"):
         run_openfoam_cases(tmp_path/"cases")
+
+def test_runner_requires_foundation_v10_environment(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","2312")
+    with pytest.raises(RuntimeError,match="OpenFOAM Foundation v10"):
+        run_openfoam_cases(tmp_path/"cases")
+
+def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","10")
+    banner=("  \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox\n"
+            "  \\\\    /   O peration     | Website:  https://openfoam.org\n"
+            "     \\\\/     M anipulation  | Version:  10\n"
+            "Build  : 10-c4cf895ad8fa\n")
+
+    def fake_run(command,*,cwd,stdout,stderr,timeout,check):
+        stdout.write(banner)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
+    result=run_openfoam_cases(tmp_path/"cases")
+    assert result["status"]=="executed_requires_convergence_review"
+    assert result["solver_release"]=="OpenFOAM Foundation v10"
+    assert result["solver_build"]=="10-c4cf895ad8fa"
+    assert all(
+        stage["openfoam"]["is_foundation_v10"]
+        for case in result["cases"].values()
+        for stage in case["stages"]
+    )
 
 def test_tampered_case_fails_closed(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")

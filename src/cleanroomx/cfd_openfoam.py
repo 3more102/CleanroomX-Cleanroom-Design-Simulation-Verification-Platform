@@ -7,7 +7,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -15,6 +17,7 @@ from .cfd_study import CONFIGURATIONS
 
 SCHEMA = "cleanroomx.openfoam.v1"
 MAX_CELLS = 20_000
+FOUNDATION_RELEASE = "10"
 
 def _number(x, name):
     if type(x) not in (int, float) or not math.isfinite(x) or x <= 0:
@@ -218,6 +221,23 @@ def export_openfoam_cases(spec,directory):
         raise
     return manifest
 
+def _foundation_v10_banner(log_text):
+    """Extract and identify the Foundation banner from an OpenFOAM log."""
+    version = re.search(r"^.*\bVersion:\s*(\S+)\s*$", log_text, re.MULTILINE)
+    website = re.search(r"Website:\s*(https://\S+)", log_text)
+    build = re.search(r"^Build\s*:\s*(\S+)\s*$", log_text, re.MULTILINE)
+    info = {
+        "version": version.group(1) if version else None,
+        "website": website.group(1) if website else None,
+        "build": build.group(1) if build else None,
+    }
+    info["is_foundation_v10"] = (
+        info["version"] == FOUNDATION_RELEASE
+        and info["website"] == "https://openfoam.org"
+        and bool(info["build"])
+    )
+    return info
+
 def run_openfoam_cases(directory,*,timeout_seconds=3600):
     """Opt-in external execution; never imply CFD convergence from process exit."""
     if type(timeout_seconds) is not int or not 60<=timeout_seconds<=86400:
@@ -230,25 +250,52 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
         f=(root/relative).resolve(strict=True)
         if not f.is_relative_to(root) or hashlib.sha256(f.read_bytes()).hexdigest()!=sha:
             raise ValueError("Tampered generated solver file: "+relative)
+    executables={}
     for name in ("blockMesh","checkMesh","simpleFoam"):
-        if shutil.which(name) is None:
+        path=shutil.which(name)
+        if path is None:
             raise RuntimeError(name+" not found; install the targeted OpenFOAM release")
+        executables[name]=path
+    project=os.environ.get("WM_PROJECT")
+    version=os.environ.get("WM_PROJECT_VERSION")
+    if project!="OpenFOAM" or version!=FOUNDATION_RELEASE:
+        raise RuntimeError(
+            "Expected the OpenFOAM Foundation v10 environment "
+            "(WM_PROJECT=OpenFOAM, WM_PROJECT_VERSION=10); source its etc/bashrc"
+        )
     results={}
+    expected_build=None
     for cfg in (1,2,3):
         stages=[]
         workdir=root/f"configuration_{cfg}"
         for executable in ("blockMesh","checkMesh","simpleFoam"):
             log=workdir/f"{executable}.log"
             with log.open("x",encoding="utf-8") as output:
-                result=subprocess.run([executable],cwd=workdir,stdout=output,
+                result=subprocess.run([executables[executable]],cwd=workdir,stdout=output,
                                       stderr=subprocess.STDOUT,timeout=timeout_seconds,check=False)
+            log_text=log.read_text(encoding="utf-8",errors="replace")
+            banner=_foundation_v10_banner(log_text)
             stages.append({"program":executable,"returncode":result.returncode,
                            "log":str(log.relative_to(root)),
-                           "log_sha256":hashlib.sha256(log.read_bytes()).hexdigest()})
+                           "log_sha256":hashlib.sha256(log.read_bytes()).hexdigest(),
+                           "openfoam":banner})
             if result.returncode:
                 results[str(cfg)]={"status":"solver_failed","stages":stages}
                 return {"status":"incomplete","cases":results,
                         "warning":"Check logs and convergence; execution is not validation"}
+            if not banner["is_foundation_v10"]:
+                results[str(cfg)]={"status":"unsupported_release","stages":stages}
+                return {"status":"incomplete","cases":results,
+                        "warning":"Expected an OpenFOAM Foundation v10 banner; later stages were not run"}
+            if expected_build is None:
+                expected_build=banner["build"]
+            elif banner["build"]!=expected_build:
+                results[str(cfg)]={"status":"inconsistent_build","stages":stages}
+                return {"status":"incomplete","cases":results,
+                        "warning":"OpenFOAM build changed during the case set; later stages were not run"}
         results[str(cfg)]={"status":"executed_requires_convergence_review","stages":stages}
     return {"status":"executed_requires_convergence_review","cases":results,
+            "solver_release":"OpenFOAM Foundation v10",
+            "solver_build":expected_build,
+            "executables":executables,
             "warning":"Review residuals, mass conservation, mesh sensitivity and physical validity"}

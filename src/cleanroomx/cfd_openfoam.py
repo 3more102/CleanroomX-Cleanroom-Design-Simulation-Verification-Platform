@@ -52,6 +52,12 @@ def _header(cls,name,body,loc):
 def _idx(i,j,k,nx,ny):
     return (k*(ny+1)+j)*(nx+1)+i
 
+def _center_in_sixths(index,count,intervals):
+    """Return whether a cell center falls in normalized sixth-based intervals."""
+    center_scaled=6*(2*index+1)
+    return any(start*2*count<=center_scaled<stop*2*count
+               for start,stop in intervals)
+
 def _layout(nx,ny,nz,config):
     patches={x:[] for x in ("inlet","outlet","walls")}
     for k in range(nz):
@@ -73,9 +79,14 @@ def _layout(nx,ny,nz,config):
                         if config==1:
                             supply=nx//3<=i<nx-nx//3 and ny//3<=j<ny-ny//3
                         else:
-                            supply=i%2==0 and j%2==0
+                            # Fixed normalized rectangles preserve the physical
+                            # supply footprint across the 6/12/24-cell families.
+                            supply=(_center_in_sixths(i,nx,((0,2),(4,6)))
+                                    and _center_in_sixths(j,ny,((1,2),(4,5))))
                         patch="inlet" if supply else "walls"
-                    elif config==3 and side=="bottom" and i%2==0 and j%2==0:
+                    elif (config==3 and side=="bottom"
+                          and _center_in_sixths(i,nx,((0,2),(4,6)))
+                          and _center_in_sixths(j,ny,((1,2),(4,5)))):
                         patch="outlet"
                     elif config in (1,2) and side in ("left","right") and k<max(1,nz//3):
                         patch="outlet"

@@ -44,6 +44,27 @@ def test_fatal_marker_blocks(tmp_path):
     assert "FATAL_OR_NONFINITE_TOKEN" in diagnose_log(log)["problems"]
 
 
+def test_foundation_v10_seconds_and_sigfpe_startup_are_valid(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    step = _complete_step("1s")
+    log.write_text(
+        "sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).\n"
+        + step
+        + _complete_step("2s")
+        + "End\n"
+    )
+    report = diagnose_log(log)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["time_sequence_monotonic"] is True
+    assert report["last_time"] == "2s"
+
+
+def test_floating_point_exception_error_line_blocks(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text("Time = 1s\nFloating point exception (core dumped)\nEnd\n")
+    assert "FATAL_OR_NONFINITE_TOKEN" in diagnose_log(log)["problems"]
+
+
 @pytest.mark.parametrize("bad_token", ["NaN", "-inf", "+INF", "infinity"])
 def test_nonfinite_tokens_fail_closed(tmp_path, bad_token):
     log = tmp_path / "simpleFoam.log"

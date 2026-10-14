@@ -18,13 +18,17 @@ _SOLVE = re.compile(
     rf"Solving for\s+([A-Za-z][\w.]*)\s*,\s*Initial residual\s*=\s*({_NUMBER})"
     rf"\s*,\s*Final residual\s*=\s*({_NUMBER})\s*,\s*No Iterations\s+(\d{{1,12}})"
 )
-_TIME_LINE = re.compile(r"^\s*Time\s*=\s*(\S+)\s*$")
+_TIME_LINE = re.compile(rf"^\s*Time\s*=\s*({_NUMBER})(s?)\s*$")
 _TIME_START = re.compile(r"^\s*Time\s*=")
 _END_LINE = re.compile(r"^\s*End\s*$")
 _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({_NUMBER})"
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
                          rf"\s*,\s*cumulative\s*=\s*({_NUMBER})")
-_BAD = re.compile(r"FOAM FATAL|Floating point exception|Segmentation fault|\b(?:nan|inf|infinity)\b", re.I)
+_BAD = re.compile(
+    r"(?im)^\s*(?:FOAM FATAL(?: IO)? ERROR\b|Floating point exception\b|Segmentation fault\b)"
+    r"|\b(?:nan|inf|infinity)\b",
+    re.I,
+)
 _MAX_LOG_BYTES = 64 * 1024 * 1024
 
 
@@ -83,11 +87,11 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         if time_match:
             if time_steps and (set(fields) - last_step_fields or not last_step_continuity):
                 incomplete_prior_steps += 1
-            stamp = time_match.group(1)
+            stamp = "".join(time_match.groups())
             time_steps += 1
             last_time = stamp
             try:
-                numeric_time = float(stamp)
+                numeric_time = float(time_match.group(1))
             except ValueError:
                 bad_time = True
             else:

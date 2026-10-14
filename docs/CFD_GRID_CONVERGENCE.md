@@ -132,6 +132,12 @@ continuity in **any** time step, and malformed solver/continuity records
 (including appended content or unbounded iteration integers). Trailing
 whitespace on otherwise valid records is allowed. Solver records preceding
 the first time stamp remain an error.
+Foundation logs that report time in seconds as `Time = 12s` are accepted
+alongside unitless numeric stamps. The startup notice
+`sigFpe : Enabling floating point exception trapping` is not treated as a
+solver failure; an actual `Floating point exception` error line still fails
+closed.
+
 The `incomplete_prior_time_steps` count detects incomplete earlier steps
 even when the final step is complete. Both the log and its parent directories
 must not be symbolic links; this is not protection against concurrent path

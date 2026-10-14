@@ -22,6 +22,10 @@ _TIME_LINE = re.compile(r"^\s*Time\s*=\s*(\S+)\s*$")
 _TIME_VALUE = re.compile(rf"^({_NUMBER})(s?)$")
 _TIME_START = re.compile(r"^\s*Time\s*=")
 _END_LINE = re.compile(r"^\s*End\s*$")
+_CONTROL_START = re.compile(r"^\s*SIMPLE:\s*Convergence criteria found\s*$")
+_CONTROL_TOLERANCE = re.compile(
+    rf"^\s*([A-Za-z][\w.]*)\s*:\s*tolerance\s+({_NUMBER})\s*$"
+)
 _CONTINUITY = re.compile(rf"time step continuity errors\s*:\s*sum local\s*=\s*({_NUMBER})"
                          rf"\s*,\s*global\s*=\s*({_NUMBER})"
                          rf"\s*,\s*cumulative\s*=\s*({_NUMBER})")
@@ -81,9 +85,22 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     malformed_solver = False
     malformed_continuity = False
     end_markers = 0
+    control_blocks = 0
+    control_block_active = False
+    control_tolerances: dict[str, float] = {}
+    malformed_controls = False
+    last_step_initials: dict[str, float] = {}
+    duplicate_last_step_fields: set[str] = set()
 
     lines = data.splitlines()
     for line in lines:
+        if _CONTROL_START.fullmatch(line):
+            control_blocks += 1
+            control_block_active = True
+            if control_blocks > 1:
+                malformed_controls = True
+            continue
+
         time_match = _TIME_LINE.fullmatch(line)
         if time_match:
             if time_steps and (set(fields) - last_step_fields or not last_step_continuity):
@@ -104,11 +121,27 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
                     previous_time = numeric_time
             last_step_fields.clear()
             last_step_continuity = 0
+            last_step_initials.clear()
+            duplicate_last_step_fields.clear()
+            control_block_active = False
             continue
 
         if _TIME_START.match(line):
             malformed_time = True
             continue
+
+        if control_block_active:
+            if "tolerance" in line.lower():
+                control_match = _CONTROL_TOLERANCE.fullmatch(line)
+                if control_match is None:
+                    malformed_controls = True
+                else:
+                    field, raw_tolerance = control_match.groups()
+                    tolerance = float(raw_tolerance)
+                    if not math.isfinite(tolerance) or tolerance < 0 or field in control_tolerances:
+                        malformed_controls = True
+                    else:
+                        control_tolerances[field] = tolerance
 
         if _END_LINE.fullmatch(line):
             end_markers += 1
@@ -129,7 +162,11 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
                     sample_counts[field] += 1
                     recent_residuals[field].append((a, b))
             if time_steps:
+                if field in last_step_initials:
+                    duplicate_last_step_fields.add(field)
                 last_step_fields.add(field)
+                if math.isfinite(a) and a >= 0:
+                    last_step_initials[field] = a
             else:
                 orphan_records += 1
         continuity_match = _CONTINUITY.search(line)
@@ -166,6 +203,48 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     last_nonblank_line = next((line.strip() for line in reversed(lines) if line.strip()), None)
     clean_end = last_nonblank_line == "End"
     missing_last_fields = sorted(set(fields) - last_step_fields)
+
+    # OpenFOAM v10 prints convergence controls under SIMPLE as field names,
+    # while vector U is commonly logged as Ux/Uy/Uz. The max component is a
+    # conservative log proxy, not a reproduction of the solver's internal
+    # residualControl calculation.
+    control_screen: dict[str, dict] = {}
+    controls_valid = control_blocks == 1 and bool(control_tolerances) and not malformed_controls
+    control_screen_problem = (
+        not controls_valid or not clean_end or end_markers != 1 or not time_steps
+        or bad_time or malformed_time
+        or bool(missing_last_fields) or bool(duplicate_last_step_fields)
+        or not last_step_continuity or incomplete_prior_steps or orphan_records
+        or malformed_solver or malformed_continuity or invalid_residual or bool(_BAD.search(data))
+    )
+    for field, tolerance in sorted(control_tolerances.items()):
+        source_fields = ("Ux", "Uy", "Uz") if field == "U" else (field,)
+        observed = [last_step_initials.get(name) for name in source_fields]
+        if control_screen_problem or any(value is None for value in observed):
+            control_screen[field] = {
+                "status": "UNKNOWN",
+                "tolerance": tolerance,
+                "observed_initial_residual": None,
+                "source_fields": list(source_fields),
+            }
+            continue
+        if tolerance == 0:
+            ratio = None
+        else:
+            ratio = max(observed) / tolerance
+        control_screen[field] = {
+            "status": "BELOW_TOLERANCE" if max(observed) < tolerance else "NOT_BELOW_TOLERANCE",
+            "tolerance": tolerance,
+            "observed_initial_residual": max(observed),
+            "source_fields": list(source_fields),
+            "component_initial_residuals": dict(zip(source_fields, observed)),
+            "tolerance_ratio": ratio,
+        }
+    control_screen_complete = (
+        not control_screen_problem
+        and bool(control_screen)
+        and all(item["status"] != "UNKNOWN" for item in control_screen.values())
+    )
     problems = []
     if not time_steps:
         problems.append("NO_TIME_STEPS")
@@ -208,6 +287,13 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         "incomplete_prior_time_steps": incomplete_prior_steps,
         "last_step_missing_fields": missing_last_fields,
         "last_step_continuity_samples": last_step_continuity,
+        "terminal_residual_control_screen": {
+            "status": "AVAILABLE" if control_screen_complete else "UNKNOWN",
+            "criteria_blocks": control_blocks,
+            "malformed_or_duplicate_criteria": malformed_controls,
+            "fields": control_screen,
+            "note": "Log-based linear initial-residual screen only; vector U uses the maximum logged component and does not reproduce OpenFOAM's internal residualControl calculation.",
+        },
         "continuity_samples": continuity_samples,
         "recent_global_continuity": list(recent_global_continuity),
         "problems": problems,

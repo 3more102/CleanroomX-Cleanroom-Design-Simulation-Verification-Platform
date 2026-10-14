@@ -59,6 +59,56 @@ def test_foundation_v10_seconds_and_sigfpe_startup_are_valid(tmp_path):
     assert report["last_time"] == "2s"
 
 
+def test_terminal_residual_control_screen_uses_strict_limit_and_vector_proxy(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(
+        "SIMPLE: Convergence criteria found\n"
+        "        p: tolerance 0.01\n"
+        "        U: tolerance 0.1\n"
+        + _complete_step("1").replace("Initial residual = 0.01", "Initial residual = 0.1", 1)
+        + "End\n"
+    )
+    report = diagnose_log(log)
+    screen = report["terminal_residual_control_screen"]
+    assert screen["status"] == "AVAILABLE"
+    assert screen["fields"]["p"]["status"] == "NOT_BELOW_TOLERANCE"
+    assert screen["fields"]["U"]["status"] == "NOT_BELOW_TOLERANCE"
+    assert screen["fields"]["U"]["observed_initial_residual"] == 0.1
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+@pytest.mark.parametrize(
+    "criteria",
+    [
+        "SIMPLE: Convergence criteria found\np: tolerance 1e-5\np: tolerance 1e-4\n",
+        "SIMPLE: Convergence criteria found\np: tolerance nan\n",
+        "SIMPLE: Convergence criteria found\np: tolerance 1e-5 trailing\n",
+    ],
+)
+def test_malformed_or_duplicate_residual_controls_are_unknown(tmp_path, criteria):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(criteria + _complete_step("1") + "End\n")
+    screen = diagnose_log(log)["terminal_residual_control_screen"]
+    assert screen["status"] == "UNKNOWN"
+    assert all(item["status"] == "UNKNOWN" for item in screen["fields"].values())
+
+
+def test_missing_control_block_and_incomplete_final_step_are_unknown(tmp_path):
+    log = tmp_path / "simpleFoam.log"
+    log.write_text(_complete_step("1", fields=("p",)) + "End\n")
+    screen = diagnose_log(log)["terminal_residual_control_screen"]
+    assert screen["status"] == "UNKNOWN"
+    assert screen["fields"] == {}
+
+    log.write_text(
+        "SIMPLE: Convergence criteria found\np: tolerance 1e-5\n"
+        + _complete_step("1", fields=("p",))
+        + "End\n"
+    )
+    report = diagnose_log(log)
+    assert report["terminal_residual_control_screen"]["fields"]["p"]["status"] == "UNKNOWN"
+
+
 def test_floating_point_exception_error_line_blocks(tmp_path):
     log = tmp_path / "simpleFoam.log"
     log.write_text("Time = 1s\nFloating point exception (core dumped)\nEnd\n")

@@ -138,6 +138,16 @@ alongside unitless numeric stamps. The startup notice
 solver failure; an actual `Floating point exception` error line still fails
 closed.
 
+When a Foundation log prints a single `SIMPLE: Convergence criteria found`
+block, the report also includes `terminal_residual_control_screen`. It reads
+the displayed field tolerances and compares them with the last time step's
+logged initial linear residuals using OpenFOAM's strict `<` boundary. For a
+configured vector `U`, the screen uses the maximum of the logged `Ux`, `Uy`,
+and `Uz` initial residuals as a conservative component proxy. This is not the
+solver's internal vector `residualControl` value or a nonlinear convergence
+decision. Missing, repeated, malformed, or ambiguous criteria/terminal records
+produce `UNKNOWN`; the screen never changes `scientific_validation=BLOCKED`.
+
 The `incomplete_prior_time_steps` count detects incomplete earlier steps
 even when the final step is complete. Both the log and its parent directories
 must not be symbolic links; this is not protection against concurrent path

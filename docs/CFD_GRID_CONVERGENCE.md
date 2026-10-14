@@ -102,6 +102,77 @@ closure, physical/BC consistency, mesh quality, source selection,
 wall treatment, turbulence modeling, grid family adequacy, validation
 against measurements and relevant design/qualification requirements.
 
+## Standalone solver-log triage (read-only)
+
+For an actual completed OpenFOAM Foundation-style simpleFoam.log, run:
+
+    python -m cleanroomx.cfd_convergence_triage \
+      path/to/simpleFoam.log --fields Ux Uy Uz p --window 5
+
+The command performs a bounded read of at most 64 MiB plus one guard byte
+of UTF-8 log data without invoking OpenFOAM, including when the log grows
+after an initial file-size check. Before accepting parsed bytes, it compares
+the source path's device/inode identity, size and nanosecond modification time
+before and after reading, and rechecks whether any path component became a
+symbolic link. A detected replacement or mutation fails with
+`log changed during diagnostic read`. This is a conservative filesystem
+consistency check, not atomic snapshotting or authenticated provenance:
+concurrent edits may still evade metadata comparisons.
+It retains only the requested recent
+`--window` residual and global-continuity values in memory while preserving
+the total counts, latest time stamp, and full-log SHA-256. It maintains only
+a running time-step count instead of a separate list of all time stamps,
+and reuses its parsed line list to find the final nonblank `End`.
+Input bytes and decoded text are still materialized under the 64 MiB cap. It reports solver residual history, recent
+global continuity errors, a count of time steps, and observations about the
+final time step. It fails closed for missing or repeated terminal End markers,
+fatal/nonfinite tokens, negative residuals, invalid or non-increasing time
+stamps, malformed or skipped `Time =` markers, missing required fields or
+continuity in **any** time step, and malformed solver/continuity records
+(including appended content or unbounded iteration integers). Trailing
+whitespace on otherwise valid records is allowed. Solver records preceding
+the first time stamp remain an error.
+Foundation logs that report time in seconds as `Time = 12s` are accepted
+alongside unitless numeric stamps. The startup notice
+`sigFpe : Enabling floating point exception trapping` is not treated as a
+solver failure; an actual `Floating point exception` error line still fails
+closed.
+
+When a Foundation log prints a single `SIMPLE: Convergence criteria found`
+block, the report also includes `terminal_residual_control_screen`. It reads
+the displayed field tolerances and compares them with the last time step's
+logged initial linear residuals using OpenFOAM's strict `<` boundary. For a
+configured vector `U`, the screen uses the maximum of the logged `Ux`, `Uy`,
+and `Uz` initial residuals as a conservative component proxy. This is not the
+solver's internal vector `residualControl` value or a nonlinear convergence
+decision. Missing, repeated, malformed, or ambiguous criteria/terminal records
+produce `UNKNOWN`; the screen never changes `scientific_validation=BLOCKED`.
+
+The `incomplete_prior_time_steps` count detects incomplete earlier steps
+even when the final step is complete. Both the log and its parent directories
+must not be symbolic links; this is not protection against concurrent path
+replacement.
+
+Exit code 0 means the log met these **diagnostic parsing conditions** only;
+exit code 3 means the log was incomplete or invalid. Both outcomes keep
+scientific_validation=BLOCKED. Neither a small final linear-system residual
+nor a DIAGNOSTIC_ONLY label verifies nonlinear convergence, mass/particle
+balance, mesh independence, physical accuracy, independent execution, or
+compliance with a cleanroom standard.
+
+When the standalone CLI receives multiple log paths, it rejects byte-identical
+files across distinct input paths with `DUPLICATE_LOG_BYTES` and rejects
+repeated input paths with `DUPLICATE_INPUT_PATH`, including lexical aliases
+such as relative versus absolute paths or `./` components; either case returns
+exit code 3. Aliased path names are included in `duplicate_input_paths`. Individual SHA-256 digests are retained in the JSON
+report and duplicate source paths are listed. Identical bytes are ambiguous
+execution evidence, not proof of intentional replay; different bytes do not
+establish independent executions. The CLI does **not** automatically inspect
+every log in the nine-case grid family. Project-specific convergence
+tolerances, trusted solver provenance,
+independent mesh and boundary-condition checks, and comparison against
+measured cleanroom data are separately required under issue #1296.
+
 ## References
 
 - NASA Glenn Research Center, *Examining Spatial (Grid) Convergence*:

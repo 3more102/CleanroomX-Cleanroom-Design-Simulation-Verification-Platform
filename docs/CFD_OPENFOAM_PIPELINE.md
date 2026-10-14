@@ -1,10 +1,18 @@
 # CleanroomX external OpenFOAM CFD pipeline
 
-This feature generates three 3D case directories for **OpenFOAM Foundation
-v10** steady incompressible laminar flow, optionally executes the external
-blockMesh/checkMesh/simpleFoam programs, and imports independently solved VTK
-cell fields. It provides sampled-cell cross-section PNGs for reviewing velocity
-and optional scalar concentration data.
+This feature generates three 3D case directories for steady incompressible
+laminar flow with **OpenFOAM Foundation v10** (default) or **v14**, can opt in
+to external `blockMesh`/`checkMesh` plus the release-specific solver, and
+imports externally solved VTK cell fields. It provides sampled-cell
+cross-section PNGs for reviewing velocity and optional scalar concentration
+data. This is still an external-solver integration, not a CleanroomX CFD
+solver.
+
+The generated dictionaries use the Foundation v10 physicalProperties and
+momentumTransport names. The fvSchemes file includes the viscous-stress
+divergence term used by the v10 simpleFoam tutorial. These are version-specific
+case-input checks; they do not replace running the generated case with the
+target release.
 
 ## Educational source and limits
 
@@ -31,21 +39,45 @@ Generate all three cases without OpenFOAM installed:
 
     cleanroomx-cfd-pipeline generate examples/cfd_openfoam_spec.example.json ./cfd_cases
 
+Generate a Foundation v14 case bundle explicitly:
+
+    cleanroomx-cfd-pipeline generate examples/cfd_openfoam_spec.example.json ./cfd_cases_v14 --openfoam-version v14
+
 Inspect the resulting system, constant, and 0 field files. The manifest binds
 each generated input using SHA-256; existing output directories are not
 overwritten. Supply airflow is imposed by downward velocity determined from
 each configuration's explicit inlet patch area.
 
-Install OpenFOAM Foundation v10 on Linux/WSL and put blockMesh, checkMesh and
-simpleFoam on PATH. Then opt in:
+For the default v10 bundle, install OpenFOAM Foundation v10 on Linux/WSL,
+source that installation's `etc/bashrc` in the environment that starts
+CleanroomX, and put `blockMesh`, `checkMesh` and `simpleFoam` on PATH. The
+runner requires `WM_PROJECT=OpenFOAM`, `WM_PROJECT_VERSION=10`, and a matching
+`OpenFOAM-10` solver version banner. Then opt in:
 
     cleanroomx-cfd-pipeline run ./cfd_cases --timeout-seconds 3600
 
-The runner checks input hashes, uses no shell and records solver logs. A zero
-return code is **not CFD convergence**: inspect residuals, continuity,
+For a v14 bundle, install the pinned OpenFOAM Foundation v14 release, source
+that installation's `etc/bashrc`, and put `blockMesh`, `checkMesh` and
+`foamRun` on PATH. The runner requires `WM_PROJECT=OpenFOAM`,
+`WM_PROJECT_VERSION=14`, and an `OpenFOAM-14` solver version banner:
+
+    cleanroomx-cfd-pipeline run ./cfd_cases_v14 --openfoam-version v14 --timeout-seconds 3600
+
+The v14 files use the documented `solver incompressibleFluid` case selector,
+`physicalProperties` and `momentumTransport` dictionaries. The v10 nine-case
+grid workflow used by issue #1296 remains pinned to v10. The v14 generator and
+runner have generated-dictionary and mocked-command tests only in this
+environment; there is no real v14 solver execution evidence here.
+
+The runner checks input hashes, uses no shell, verifies the active Foundation
+release and solver banner, and writes `run_manifest.json` with the exact
+executable paths, commands, version probe, input hashes, exit codes and log
+hashes. It refuses to overwrite a previous run manifest or solver logs. This
+local manifest is provenance evidence, not an immutable external archive. A
+zero return code is **not CFD convergence**: inspect residuals, continuity,
 boundary flux balance, turbulence/Reynolds applicability, mesh quality and
-grid independence. Other OpenFOAM versions may require solver template
-changes: v11+ Foundation uses foamRun solver modules.
+grid independence. The v14 case template selects the `incompressibleFluid`
+module through `foamRun`, following the v14 case configuration.
 
 ## Import actual CFD results (VTK/VTU)
 
@@ -87,8 +119,14 @@ integration, dossier and ProofGraph evidence. The exporter is intentionally
 bounded to 20,000 hexahedral cells for a reproducible first solver pipeline,
 not as a declared mesh-accuracy target.
 
-OpenFOAM references:
-https://doc.openfoam.com/2306/tools/processing/solvers/rtm/incompressible/simpleFoam/
-https://doc.openfoam.com/2606/quickstart/
-https://cpp.openfoam.org/v10/scalarTransportFoam_8C_source.html
-https://doc.cfd.direct/openfoam/user-guide-v13/solvers-modules
+Release-specific baseline references:
+- OpenFOAM Foundation v10 [pitzDaily physicalProperties](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/constant/physicalProperties), [momentumTransport](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/constant/momentumTransport) and [fvSchemes](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/system/fvSchemes).
+- OpenFOAM Foundation v10 [turbulence guide](https://doc.cfd.direct/openfoam/user-guide-v10/turbulence) and [scalarTransportFoam source](https://cpp.openfoam.org/v10/scalarTransportFoam_8C_source.html).
+- OpenFOAM Foundation v14 [release notes](https://openfoam.org/release/14/) and [tagged source](https://github.com/OpenFOAM/OpenFOAM-14/tree/version-14).
+- OpenFOAM Foundation v14 [pitzDailySteady controlDict](https://github.com/OpenFOAM/OpenFOAM-14/blob/version-14/tutorials/incompressibleFluid/pitzDailySteady/system/controlDict).
+
+OpenFOAM.com documentation describes a separately maintained distribution
+and is not used as the parity baseline for either Foundation release.
+
+See the separate [Foundation v10 capability matrix](OPENFOAM_FOUNDATION_V10_PARITY.md)
+and [pinned v14 capability matrix and scores](OPENFOAM_V14_PARITY.md).

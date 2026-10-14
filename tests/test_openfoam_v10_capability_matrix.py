@@ -1,0 +1,86 @@
+import csv
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MATRIX = ROOT / "docs" / "openfoam_foundation_v10_capabilities.csv"
+INVENTORY = ROOT / "docs" / "openfoam_foundation_v10_source_inventory.csv"
+SCORER = ROOT / "scripts" / "openfoam_v10_parity_score.py"
+
+
+def load(path):
+    with path.open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def test_matrix_is_unique_traceable_and_covers_pinned_source_inventory():
+    rows = load(MATRIX)
+    inventory = load(INVENTORY)
+    ids = [row["id"] for row in rows]
+
+    assert len(ids) == len(set(ids))
+    assert all(row["upstream_reference"].startswith("https://") for row in rows)
+    assert all(row["remaining_gap"].strip() for row in rows)
+    assert {row["inventory_type"] for row in inventory} == {
+        "solver Make/files build units",
+        "utility Make/files build units",
+        "src Make/files library/API build units",
+        "tutorial cases containing system/controlDict",
+    }
+    counts = {}
+    for row in inventory:
+        counts[row["inventory_type"]] = counts.get(row["inventory_type"], 0) + 1
+    assert counts == {
+        "solver Make/files build units": 72,
+        "utility Make/files build units": 151,
+        "src Make/files library/API build units": 94,
+        "tutorial cases containing system/controlDict": 240,
+    }
+    assert len([row for row in rows if row["id"].startswith("OF10-SOLVER-")]) == 49
+    assert len([row for row in rows if row["id"].startswith("OF10-UTILITY-")]) == 149
+    assert len([row for row in rows if row["id"].startswith("OF10-API-")]) == 94
+    assert len([row for row in rows if row["id"].startswith("OF10-TUTORIAL-CASE-")]) == 240
+    assert len([row for row in rows if row["id"].startswith("OF10-TURB-")]) == 53
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-GEOM-")]) == 9
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-BASIC-")]) == 6
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-DERIVED-")]) == 6
+    assert len([row for row in rows if row["id"].startswith("OF10-BC-WALL-")]) == 5
+    assert len([row for row in rows if row["id"].startswith("OF10-FV-SCHEME-TERM-")]) == 7
+    assert len([row for row in rows if row["id"].startswith("OF10-TIME-SCHEME-")]) == 6
+    assert len([row for row in rows if row["id"].startswith("OF10-LINSOLVER-")]) == 6
+    matrix_refs = {row["upstream_reference"] for row in rows}
+    for inventory_type in (
+        "src Make/files library/API build units",
+        "tutorial cases containing system/controlDict",
+    ):
+        assert all(
+            row["upstream_reference"] in matrix_refs
+            for row in inventory
+            if row["inventory_type"] == inventory_type
+        )
+
+
+def test_scoring_counts_only_complete_rows_and_reports_all_three_tracks():
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["rows"] == 723
+    assert set(report["tracks"]) == {"native_status", "integration_status", "cleanroom_status"}
+    assert report["tracks"]["native_status"]["complete"] == 0
+    assert report["tracks"]["integration_status"]["complete"] == 0
+    assert report["tracks"]["cleanroom_status"]["complete"] == 0
+    assert report["tracks"]["native_status"]["denominator"] == 192
+    assert report["tracks"]["integration_status"]["denominator"] == 717
+    assert report["tracks"]["cleanroom_status"]["denominator"] == 21
+    summary = (ROOT / "docs" / "OPENFOAM_FOUNDATION_V10_PARITY.md").read_text(encoding="utf-8")
+    assert "| Native solver capability parity | 0 | 192 | 0.00% |" in summary
+    assert "| End-to-end OpenFOAM integration coverage | 0 | 717 | 0.00% |" in summary
+    assert "| Validated cleanroom engineering workflows | 0 | 21 | 0.00% |" in summary

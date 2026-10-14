@@ -6,6 +6,12 @@ blockMesh/checkMesh/simpleFoam programs, and imports independently solved VTK
 cell fields. It provides sampled-cell cross-section PNGs for reviewing velocity
 and optional scalar concentration data.
 
+The generated dictionaries use the Foundation v10 physicalProperties and
+momentumTransport names. The fvSchemes file includes the viscous-stress
+divergence term used by the v10 simpleFoam tutorial. These are version-specific
+case-input checks; they do not replace running the generated case with the
+target release.
+
 ## Educational source and limits
 
 The uploaded NANENG 523 Lab 1 CFD handout describes three single-pass airflow
@@ -36,8 +42,13 @@ each generated input using SHA-256; existing output directories are not
 overwritten. Supply airflow is imposed by downward velocity determined from
 each configuration's explicit inlet patch area.
 
-Install OpenFOAM Foundation v10 on Linux/WSL and put blockMesh, checkMesh and
-simpleFoam on PATH. Then opt in:
+Install OpenFOAM Foundation v10 on Linux/WSL and source its `etc/bashrc` so
+`WM_PROJECT=OpenFOAM` and `WM_PROJECT_VERSION=10`; keep `blockMesh`,
+`checkMesh`, and `simpleFoam` on PATH. The runner checks those environment
+markers, then verifies each executable's log banner identifies
+`https://openfoam.org`, Version 10, and one consistent build. It records the
+resolved executable paths and build identifier. Other OpenFOAM distributions
+and releases are rejected by this v10 case runner. Then opt in:
 
     cleanroomx-cfd-pipeline run ./cfd_cases --timeout-seconds 3600
 
@@ -88,7 +99,9 @@ bounded to 20,000 hexahedral cells for a reproducible first solver pipeline,
 not as a declared mesh-accuracy target.
 
 OpenFOAM references:
-https://doc.openfoam.com/2306/tools/processing/solvers/rtm/incompressible/simpleFoam/
-https://doc.openfoam.com/2606/quickstart/
+https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/constant/physicalProperties
+https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/constant/momentumTransport
+https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/system/fvSchemes
+https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/etc/bashrc
+https://doc.cfd.direct/openfoam/user-guide-v10/turbulence
 https://cpp.openfoam.org/v10/scalarTransportFoam_8C_source.html
-https://doc.cfd.direct/openfoam/user-guide-v13/solvers-modules

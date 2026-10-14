@@ -50,6 +50,11 @@ def fake_tools(monkeypatch, *, failure=None, version="10"):
         key = kwargs["cwd"].relative_to(kwargs["cwd"].parents[1]).as_posix()
         calls.append((key, name))
         kwargs["stdout"].write(f"Synthetic process-exit fixture {key} {name}. Not CFD validation.\n")
+        if name == "checkMesh":
+            expected_cells = json.loads((
+                kwargs["cwd"].parents[1] / "manifest.json"
+            ).read_text(encoding="utf-8"))["case_inputs"][key]["mesh_cells"]
+            kwargs["stdout"].write(f"cells: {expected_cells}\nMesh OK.\nEnd\n")
         return SimpleNamespace(returncode=1 if (key, name) == failure else 0)
 
     monkeypatch.setattr(runner.subprocess, "run", run)
@@ -549,6 +554,40 @@ def test_tampered_family_manifest_metadata_blocks_all_execution(
     assert not (generated / ".grid_run_reserved").exists()
 
 
+@pytest.mark.parametrize("tamper", [
+    "same_count_across_levels",
+    "reversed_refinement",
+    "inconsistent_configuration_grid",
+])
+def test_refinement_manifest_metadata_is_checked_before_solver_launch(
+    generated, monkeypatch, tamper
+):
+    """Metadata tampering must not turn an invalid family into a solver run."""
+    manifest_path = generated / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    cases = manifest["case_inputs"]
+    if tamper == "same_count_across_levels":
+        cases["configuration_1/medium"]["mesh_cells"] = (
+            cases["configuration_1/coarse"]["mesh_cells"]
+        )
+        reason = "non-refining"
+    elif tamper == "reversed_refinement":
+        cases["configuration_2/fine"]["mesh_cells"] = (
+            cases["configuration_2/coarse"]["mesh_cells"] - 1
+        )
+        reason = "non-refining"
+    else:
+        cases["configuration_3/medium"]["mesh_cells"] += 1
+        reason = "inconsistent configuration"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = fake_tools(monkeypatch)
+    with pytest.raises(ValueError, match=reason):
+        run_grid_family(generated, timeout_seconds=60)
+    assert calls == []
+    assert not (generated / ".grid_run_reserved").exists()
+    assert not (generated / "grid_run_evidence.json").exists()
+
+
 @pytest.mark.parametrize("unexpected", [
     "system/fvOptions", "0/U.extra", "constant/turbulenceProperties",
     "constant/polyMesh",
@@ -600,7 +639,10 @@ def test_generated_polymesh_is_permitted_without_extra_dictionaries(
         if Path(command[0]).name == "blockMesh":
             mesh = kwargs["cwd"] / "constant/polyMesh"
             mesh.mkdir()
-            (mesh / "points").write_text("Synthetic output; not a CFD mesh")
+            case = kwargs["cwd"].relative_to(generated).as_posix()
+            (mesh / "points").write_text(
+                f"Synthetic mesh output for {case}; not a CFD mesh"
+            )
         return completed
 
     monkeypatch.setattr(runner.subprocess, "run", emit_mesh)
@@ -883,3 +925,181 @@ def test_mesh_drift_between_stage_receipt_and_next_launch_blocks_run(
     verdict = verify_grid_run_evidence(generated)
     assert verdict["status"] == "evidence_integrity_failed"
     assert f"mesh_output_digest_mismatch:{first_key}" in verdict["findings"]
+
+
+@pytest.mark.parametrize("bad_log", [
+    "Failed 2 mesh checks.\nEnd\n",
+    "Mesh OK.\nFailed 1 mesh checks.\nEnd\n",
+    "No explicit check result\nEnd\n",
+    "Mesh OK.\nEnd\nUnexpected trailing output\n",
+])
+def test_zero_exit_failed_checkmesh_log_blocks_simplefoam(
+    generated, monkeypatch, bad_log
+):
+    """All process calls are mocked; this is not a physical CFD result."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    prior = runner.subprocess.run
+
+    def rejected(command, **kwargs):
+        if (Path(command[0]).name == "checkMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            calls.append(("configuration_1/coarse", "checkMesh"))
+            kwargs["stdout"].write(bad_log)
+            return SimpleNamespace(returncode=0)
+        return prior(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", rejected)
+    report = run_grid_family(generated, timeout_seconds=60)
+    failed = report["cases"]["configuration_1/coarse"]
+    assert report["status"] == "incomplete"
+    assert failed["status"] == "execution_failed"
+    assert len(failed["stages"]) == 2
+    assert failed["stages"][-1]["status"] == "mesh_check_rejected"
+    assert failed["stages"][-1]["returncode"] == 0
+    assert ("configuration_1/coarse", "simpleFoam") not in calls
+    assert len(calls) == 26
+    assert report["cases"]["configuration_3/fine"]["status"] == (
+        "executed_requires_convergence_review"
+    )
+    verified = verify_grid_run_evidence(generated)
+    assert verified["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verified["findings"] == []
+    assert verified["engineering_review"] == "BLOCKED"
+
+
+def test_zero_exit_checkmesh_wrong_cell_count_blocks_simplefoam(
+    generated, monkeypatch
+):
+    """Clean verdict but mismatched declared cell count blocks solver launch."""
+    import cleanroomx.cfd_grid_runner as runner
+    from cleanroomx.cfd_grid_receipt import verify_grid_run_evidence
+
+    calls = fake_tools(monkeypatch)
+    previous = runner.subprocess.run
+
+    def wrong_cells(command, **kwargs):
+        if (Path(command[0]).name == "checkMesh"
+                and kwargs.get("cwd") == generated / "configuration_1/coarse"):
+            key = "configuration_1/coarse"
+            cells = json.loads((generated / "manifest.json").read_text(
+                encoding="utf-8"
+            ))["case_inputs"][key]["mesh_cells"]
+            calls.append((key, "checkMesh"))
+            kwargs["stdout"].write(f"cells: {cells + 1}\nMesh OK.\nEnd\n")
+            return SimpleNamespace(returncode=0)
+        return previous(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", wrong_cells)
+    report = run_grid_family(generated, timeout_seconds=60)
+    first = report["cases"]["configuration_1/coarse"]
+    assert report["status"] == "incomplete"
+    assert first["stages"][-1]["returncode"] == 0
+    assert first["stages"][-1]["status"] == "mesh_check_rejected"
+    assert ("configuration_1/coarse", "simpleFoam") not in calls
+    assert len(calls) == 26
+    verified = verify_grid_run_evidence(generated)
+    assert verified["status"] == "incomplete_execution_logs_integrity_verified"
+    assert verified["findings"] == []
+    assert verified["engineering_review"] == "BLOCKED"
+
+
+def test_generated_polymesh_tree_entry_count_is_bounded(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    workdir = generated / key
+    mesh = workdir / "constant" / "polyMesh"
+    mesh.mkdir()
+    (mesh / "part_a").mkdir()
+    (mesh / "part_b").mkdir()
+    monkeypatch.setattr(runner, "_MAX_MESH_TREE_ENTRIES", 1)
+
+    with pytest.raises(ValueError, match="entry limit"):
+        runner._mesh_file_hashes(workdir, key)
+    with pytest.raises(ValueError, match="entry limit"):
+        runner._verify_runtime_source_tree(workdir, key)
+
+
+def test_generated_polymesh_tree_depth_is_bounded(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    workdir = generated / key
+    mesh = workdir / "constant" / "polyMesh"
+    (mesh / "level_one" / "level_two").mkdir(parents=True)
+    monkeypatch.setattr(runner, "_MAX_MESH_TREE_DEPTH", 1)
+
+    with pytest.raises(ValueError, match="depth limit"):
+        runner._mesh_file_hashes(workdir, key)
+    with pytest.raises(ValueError, match="depth limit"):
+        runner._verify_runtime_source_tree(workdir, key)
+
+
+def test_grid_run_shares_entry_budget_across_mesh_safety_and_hash_scans(
+    generated, monkeypatch
+):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    case_dir = generated / key
+    calls = fake_tools(monkeypatch)
+    run_tool = runner.subprocess.run
+
+    def create_multi_file_mesh(command, **kwargs):
+        result = run_tool(command, **kwargs)
+        if Path(command[0]).name == "blockMesh" and kwargs["cwd"] == case_dir:
+            mesh = case_dir / "constant/polyMesh"
+            mesh.mkdir()
+            (mesh / "points").write_text("SYNTHETIC points")
+            (mesh / "faces").write_text("SYNTHETIC faces")
+        return result
+
+    monkeypatch.setattr(runner, "_MAX_MESH_TREE_ENTRIES", 3)
+    monkeypatch.setattr(runner.subprocess, "run", create_multi_file_mesh)
+    report = run_grid_family(generated, timeout_seconds=60)
+
+    first = report["cases"][key]
+    assert report["status"] == "incomplete"
+    assert first["status"] == "execution_failed"
+    assert first["stages"][0]["status"] == "source_drift"
+    assert calls == [(key, "blockMesh")]
+    assert report["cases"]["configuration_1/medium"]["status"] == "not_run"
+
+
+def test_runtime_source_directory_enumeration_is_bounded(generated, monkeypatch):
+    import cleanroomx.cfd_grid_runner as runner
+
+    key = "configuration_1/coarse"
+    workdir = generated / key
+    constant = workdir / "constant"
+    original_scandir = runner.os.scandir
+    consumed = 0
+
+    class EndlessEntries:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def __iter__(self):
+            nonlocal consumed
+            for index in range(1000):
+                consumed += 1
+                yield SimpleNamespace(name=f"unmanifested_{index}")
+
+    def fake_scandir(path):
+        if Path(path) == constant:
+            return EndlessEntries()
+        return original_scandir(path)
+
+    monkeypatch.setattr(runner.os, "scandir", fake_scandir)
+    expected_count = sum(
+        item.startswith("constant/") for item in runner.INPUTS
+    )
+    with pytest.raises(ValueError, match="entry limit"):
+        runner._verify_runtime_source_tree(workdir, key)
+    assert consumed == expected_count + 1

@@ -10,8 +10,9 @@ from pathlib import Path
 import re
 
 from .cfd_grid_runner import (
-    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _cases, _hash,
-    _mesh_file_hashes, _verify_generated_inputs, _verify_runtime_source_tree,
+    INPUTS, RUN_SCHEMA, STAGES, VERSION_PATTERN, _MeshTreeScanBudget, _cases,
+    _hash, _mesh_file_hashes, _verify_generated_inputs,
+    _verify_runtime_source_tree,
 )
 from .strict_json import load_strict_json_snapshot
 
@@ -24,7 +25,10 @@ def _file_digest(path: Path) -> str:
     return _hash(path)
 
 
-def verify_grid_run_evidence(directory: str | Path) -> dict:
+def verify_grid_run_evidence(
+    directory: str | Path, *,
+    scan_budget: _MeshTreeScanBudget | None = None,
+) -> dict:
     """Compare the existing receipt with current source files and stage logs.
 
     A success means only that the source and stage-log bytes match their
@@ -37,6 +41,8 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     root = supplied_root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Grid family root must be a directory")
+    if scan_budget is None:
+        scan_budget = _MeshTreeScanBudget()
 
     findings: list[str] = []
     result = {
@@ -114,6 +120,24 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     except (OSError, ValueError, TypeError, KeyError) as exc:
         current_manifest_sha = None
         findings.append("source_manifest_or_inputs_invalid: " + type(exc).__name__)
+    # Compare checkMesh cell counts against the exact source manifest bytes.
+    # This local integrity check is not authenticated execution provenance.
+    expected_cells_by_case: dict[str, int] = {}
+    if current_manifest_sha is not None:
+        try:
+            snapshot = load_strict_json_snapshot(
+                root / "manifest.json", max_bytes=2_000_000
+            )
+            if ((root / "manifest.json").is_symlink()
+                    or hashlib.sha256(snapshot.raw_bytes).hexdigest()
+                    != current_manifest_sha):
+                raise ValueError("Grid source manifest changed while checking cell totals")
+            expected_cells_by_case = {
+                key: snapshot.value["case_inputs"][key]["mesh_cells"]
+                for key in _cases()
+            }
+        except (OSError, ValueError, TypeError, KeyError):
+            findings.append("source_manifest_mesh_counts_unavailable")
     # A source symlink can be introduced after execution without changing
     # bytes or SHA-256. Report this independently of digest equality.
     for key in _cases():
@@ -129,7 +153,9 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             if (root / key / filename).is_symlink():
                 findings.append(f"source_file_is_symlink:{key}/{filename}")
         try:
-            _verify_runtime_source_tree(root / key, key)
+            _verify_runtime_source_tree(
+                root / key, key, scan_budget=scan_budget,
+            )
         except (OSError, ValueError) as exc:
             findings.append(f"unexpected_or_unsafe_source_tree:{key}:{type(exc).__name__}")
 
@@ -164,6 +190,14 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
     # independent mesh executions. This is a replay screen, not proof that
     # distinct logs came from distinct runs.
     solver_log_hashes: dict[str, str] = {}
+    # A byte-identical *complete* generated mesh snapshot reused between
+    # levels of one configuration cannot substantiate distinct refinement.
+    # Do not compare across configurations: different boundary conditions
+    # can legitimately share the same geometric mesh. Empty snapshots have
+    # no mesh evidence to compare and are handled by scientific review.
+    mesh_snapshots_by_configuration: dict[
+        str, dict[tuple[tuple[str, str], ...], str]
+    ] = {}
     # Cases execute in deterministic order. Once one is not_run or running,
     # no later case can have started; a crashed run has one active prefix.
     inactive_suffix = False
@@ -193,12 +227,25 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
             findings.append(f"invalid_mesh_manifest:{key}")
         else:
             try:
-                current_mesh = _mesh_file_hashes(root / key, key)
+                current_mesh = _mesh_file_hashes(
+                    root / key, key, scan_budget=scan_budget,
+                )
             except (OSError, ValueError):
                 findings.append(f"missing_or_unsafe_mesh_output:{key}")
             else:
                 if current_mesh != recorded_mesh:
                     findings.append(f"mesh_output_digest_mismatch:{key}")
+                elif current_mesh:
+                    config = key.split("/", 1)[0]
+                    fingerprint = tuple(sorted(current_mesh.items()))
+                    snapshots = mesh_snapshots_by_configuration.setdefault(config, {})
+                    previous = snapshots.get(fingerprint)
+                    if previous is not None:
+                        findings.append(
+                            f"replayed_mesh_output_across_grids:{key}:{previous}"
+                        )
+                    else:
+                        snapshots[fingerprint] = key
         if inactive_suffix and data["status"] != "not_run":
             findings.append(f"out_of_sequence_case_state:{key}")
         if data["status"] in ("running", "not_run"):
@@ -231,6 +278,8 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                 or (state == "failed" and type(code) is int and code != 0)
                 or (state in ("timed_out", "launch_failed") and code is None)
                 or (state == "empty_output" and type(code) is int and code == 0)
+                or (state == "mesh_check_rejected" and expected_command == "checkMesh"
+                    and type(code) is int and code == 0)
                 or (state == "source_drift" and type(code) is int)
             )
             if not valid_exit:
@@ -272,6 +321,26 @@ def verify_grid_run_evidence(directory: str | Path) -> dict:
                     findings.append(f"empty_completed_stage_log:{key}:{expected_command}")
                 if state == "empty_output" and not empty_log:
                     findings.append(f"invalid_empty_output_stage_log:{key}:{expected_command}")
+                if expected_command == "checkMesh" and state in (
+                    "completed", "mesh_check_rejected"
+                ):
+                    declared_cells = expected_cells_by_case.get(key)
+                    if declared_cells is None:
+                        # An altered/missing source manifest is a finding,
+                        # never an uncaught exception or green receipt.
+                        findings.append(f"unavailable_checkmesh_declared_cells:{key}")
+                    else:
+                        from .cfd_checkmesh_log import screen_checkmesh_verdict
+                        try:
+                            screen_checkmesh_verdict(
+                                resolved, expected_cells=declared_cells
+                            )
+                        except (OSError, ValueError):
+                            if state == "completed":
+                                findings.append(f"invalid_completed_checkmesh_verdict:{key}")
+                        else:
+                            if state == "mesh_check_rejected":
+                                findings.append(f"unexpected_clean_rejected_checkmesh_verdict:{key}")
                 if expected_command == "simpleFoam" and state == "completed":
                     previous_case = solver_log_hashes.get(actual_sha)
                     if previous_case is not None:

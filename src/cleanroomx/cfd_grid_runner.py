@@ -15,6 +15,7 @@ import subprocess
 
 from .strict_json import load_strict_json_snapshot
 from .persistence import _stable_file_identity, _stable_file_path_matches_opened
+from .cfd_blockmesh_source import verify_generated_blockmesh_source
 from .cfd_grid_family import LEVELS, SCHEMA as FAMILY_SCHEMA
 from .cfd_study import CONFIGURATIONS
 
@@ -26,6 +27,10 @@ INPUTS = (
     "constant/momentumTransport", "0/U", "0/p",
 )
 VERSION_PATTERN = re.compile(r"(?:OpenFOAM(?: Foundation)?[- ]?[vV]?)?10(?:\.0+)?\Z")
+_MAX_MESH_FILES = 4096
+_MAX_MESH_BYTES = 1_073_741_824
+_MAX_MESH_TREE_ENTRIES = 8192
+_MAX_MESH_TREE_DEPTH = 64
 
 
 def _hash(path: Path) -> str:
@@ -139,6 +144,22 @@ def _verify_generated_inputs(root: Path) -> str:
         raise ValueError("Invalid nine-case grid family manifest")
     for key, metadata in manifest["case_inputs"].items():
         _verify_case_metadata(key, metadata)
+    # The generator uses one common three-level grid family for all
+    # ventilation configurations. Strictly increasing cell totals are a
+    # necessary (not sufficient) refinement condition. Require the declared
+    # totals to agree across configurations; neither condition independently
+    # verifies the actual cell topology inside OpenFOAM.
+    reference_counts = None
+    for configuration in (1, 2, 3):
+        counts = tuple(
+            manifest["case_inputs"][f"configuration_{configuration}/{level}"]["mesh_cells"]
+            for level in LEVELS
+        )
+        if any(coarse >= fine for coarse, fine in zip(counts, counts[1:])):
+            raise ValueError("Nine-case manifest has non-refining mesh cell counts")
+        if reference_counts is not None and counts != reference_counts:
+            raise ValueError("Nine-case manifest has inconsistent configuration mesh cell counts")
+        reference_counts = counts
     expected = {f"{case}/{item}" for case in cases for item in INPUTS}
     if set(manifest["files"]) != expected:
         raise ValueError("Grid family input file list must cover exactly 72 files")
@@ -155,16 +176,97 @@ def _verify_generated_inputs(root: Path) -> str:
             raise ValueError("Generated solver input must not be hardlinked: " + relative)
         if _hash(path) != expected_sha:
             raise ValueError("Generated solver input changed: " + relative)
+    # Read the canonical source dictionary rather than trusting a mutable,
+    # self-described mesh-cell count in the family manifest. The source
+    # parser is narrowly scoped to CleanroomX's generated ASCII format.
+    source_axis_cells = {}
+    source_axis_positions = {}
+    source_room_bounds = {}
+    for key in sorted(cases):
+        mesh_source = root / key / "system/blockMeshDict"
+        source_geometry = verify_generated_blockmesh_source(
+            mesh_source, expected_cells=manifest["case_inputs"][key]["mesh_cells"],
+            expected_configuration=manifest["case_inputs"][key]["configuration"],
+        )
+        if _hash(mesh_source) != manifest["files"][f"{key}/system/blockMeshDict"]:
+            raise ValueError("Generated blockMesh source drifted during parsing: " + key)
+        source_axis_cells[key] = source_geometry["axis_cell_counts"]
+        source_axis_positions[key] = source_geometry["axis_positions_m"]
+        source_room_bounds[key] = source_geometry["bounds_m"]
+
+    # Manifest totals cannot distinguish, e.g., 7x8x9 from 7x9x8.
+    # Use source-verified Cartesian axes to require the same grid for all
+    # ventilation configurations and strictly increasing *each* axis
+    # through coarse -> medium -> fine. This does not prove CFD convergence.
+    # All nine cases are generated from the SAME room dimensions. A
+    # self-rehashed manifest must not allow an isolated translated/scaled
+    # model to masquerade as a refinement or ventilation comparison.
+    # The CleanroomX generator anchors all three axes at zero metres.
+    expected_bounds = source_room_bounds["configuration_1/coarse"]
+    if any(low != 0.0 for low, _ in expected_bounds):
+        raise ValueError("Nine-case generated room origin is not canonical")
+    if any(bounds != expected_bounds for bounds in source_room_bounds.values()):
+        raise ValueError("Nine-case generated room bounds differ across cases")
+    reference_axis_levels = None
+    for configuration in (1, 2, 3):
+        axis_levels = tuple(
+            source_axis_cells[f"configuration_{configuration}/{level}"]
+            for level in LEVELS
+        )
+        if any(
+            any(low[axis] >= high[axis] for axis in range(3))
+            for low, high in zip(axis_levels, axis_levels[1:])
+        ):
+            raise ValueError("Nine-case generated mesh axes do not refine strictly")
+        if reference_axis_levels is not None and axis_levels != reference_axis_levels:
+            raise ValueError(
+                "Nine-case generated mesh axes differ across configurations"
+            )
+        reference_axis_levels = axis_levels
+    # Axis cardinalities and room bounds do not establish identical meshes:
+    # the same interior x/y/z planes must be used by each ventilation layout.
+    for level in LEVELS:
+        reference_planes = source_axis_positions[f"configuration_1/{level}"]
+        if any(
+            source_axis_positions[f"configuration_{config}/{level}"] != reference_planes
+            for config in (2, 3)
+        ):
+            raise ValueError(
+                "Nine-case generated internal grid planes differ across configurations"
+            )
     return hashlib.sha256(raw).hexdigest()
 
 
-def _verify_runtime_source_tree(workdir: Path, key: str) -> None:
+class _MeshTreeScanBudget:
+    """Share entry work across every recursive scan in one public operation."""
+
+    def __init__(self):
+        self.total_entries = 0
+
+    def record_entry(self, key: str) -> None:
+        if self.total_entries >= _MAX_MESH_TREE_ENTRIES:
+            raise ValueError(
+                f"Generated mesh evidence exceeds total entry limit: {key}"
+            )
+        self.total_entries += 1
+
+    @staticmethod
+    def check_directory_depth(key: str, path: Path, depth: int) -> None:
+        if depth > _MAX_MESH_TREE_DEPTH:
+            raise ValueError(f"Generated mesh tree exceeds depth limit: {key}/{path}")
+
+
+def _verify_runtime_source_tree(
+    workdir: Path, key: str, *, scan_budget: _MeshTreeScanBudget | None = None,
+) -> None:
     """Reject unmanifested input files even after OpenFOAM creates polyMesh.
 
     Only `constant/polyMesh` may be generated by the planned blockMesh
     stage. Runtime time directories and postProcessing are outside the three
     immutable source directories; their numerical validity needs review.
     """
+    if scan_budget is None:
+        scan_budget = _MeshTreeScanBudget()
     for folder in ("system", "0", "constant"):
         directory = workdir / folder
         if directory.is_symlink() or not directory.is_dir():
@@ -182,41 +284,84 @@ def _verify_runtime_source_tree(workdir: Path, key: str) -> None:
                 # inputs. It must nevertheless contain only local, ordinary
                 # files/directories: checkMesh/simpleFoam must not read an
                 # externally writable alias through this output tree.
-                def _mesh_walk_error(exc: OSError) -> None:
-                    raise ValueError(
-                        f"Unreadable generated mesh tree: {key}/constant/polyMesh"
-                    ) from exc
-
-                for parent, directories, files in os.walk(
-                    mesh, topdown=True, followlinks=False,
-                    onerror=_mesh_walk_error,
-                ):
-                    for name in directories:
-                        entry = Path(parent) / name
-                        if entry.is_symlink() or not entry.is_dir():
-                            raise ValueError(
-                                f"Unsafe generated mesh directory: {key}/{entry.relative_to(workdir)}"
-                            )
-                    for name in files:
-                        entry = Path(parent) / name
-                        if (entry.is_symlink() or not entry.is_file()
-                                or entry.stat().st_nlink != 1):
-                            raise ValueError(
-                                f"Unsafe generated mesh file: {key}/{entry.relative_to(workdir)}"
-                            )
+                for _entry in _walk_mesh_tree(mesh, key, scan_budget=scan_budget):
+                    pass
                 if mesh.is_symlink() or not mesh.is_dir():
                     raise ValueError(f"Generated mesh replaced during inspection: {key}")
                 allowed.add("polyMesh")
-        if {entry.name for entry in directory.iterdir()} != allowed:
+        names = set()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    names.add(entry.name)
+                    if len(names) > len(allowed):
+                        raise ValueError(
+                            f"Unexpected solver source directory entry limit: {key}/{folder}"
+                        )
+        except OSError as exc:
+            raise ValueError(
+                f"Unreadable solver source directory: {key}/{folder}"
+            ) from exc
+        if names != allowed:
             raise ValueError(f"Unexpected solver source directory entries: {key}/{folder}")
 
 
-def _mesh_file_hashes(workdir: Path, key: str) -> dict[str, str]:
+def _walk_mesh_tree(
+    mesh: Path, key: str, *, scan_budget: _MeshTreeScanBudget | None = None,
+):
+    """Yield safe mesh entries under a shared count and nesting-depth budget."""
+    if scan_budget is None:
+        scan_budget = _MeshTreeScanBudget()
+    pending = [(mesh, 0)]
+    while pending:
+        parent, depth = pending.pop()
+        if parent.is_symlink() or not parent.is_dir():
+            raise ValueError(f"Unsafe generated mesh directory: {key}/{parent}")
+        try:
+            with os.scandir(parent) as entries:
+                for item in entries:
+                    scan_budget.record_entry(key)
+                    entry = Path(item.path)
+                    try:
+                        if item.is_symlink():
+                            raise ValueError(
+                                f"Unsafe generated mesh entry: {key}/{entry}"
+                            )
+                        if item.is_dir(follow_symlinks=False):
+                            child_depth = depth + 1
+                            scan_budget.check_directory_depth(key, entry, child_depth)
+                            yield entry, True
+                            pending.append((entry, child_depth))
+                        elif item.is_file(follow_symlinks=False):
+                            if item.stat(follow_symlinks=False).st_nlink != 1:
+                                raise ValueError(
+                                    f"Unsafe generated mesh file: {key}/{entry}"
+                                )
+                            yield entry, False
+                        else:
+                            raise ValueError(
+                                f"Unsupported generated mesh entry: {key}/{entry}"
+                            )
+                    except OSError as exc:
+                        raise ValueError(
+                            f"Unreadable generated mesh entry: {key}/{entry}"
+                        ) from exc
+        except OSError as exc:
+            raise ValueError(
+                f"Unreadable generated mesh directory: {key}/{parent}"
+            ) from exc
+
+
+def _mesh_file_hashes(
+    workdir: Path, key: str, *, scan_budget: _MeshTreeScanBudget | None = None,
+) -> dict[str, str]:
     """Bind the final local polyMesh file bytes, without assessing mesh quality.
 
     This captures solver-generated output that is intentionally absent from
     the immutable 72-input manifest. The caller must preserve these digests
     in the execution receipt and recheck them during offline verification.
+    The entry count, nesting depth, file count, and total byte limits bound
+    inspection work even when the output directory is adversarial.
     """
     mesh = workdir / "constant" / "polyMesh"
     if mesh.is_symlink() or (mesh.exists() and not mesh.is_dir()):
@@ -225,35 +370,26 @@ def _mesh_file_hashes(workdir: Path, key: str) -> dict[str, str]:
         return {}
     files: dict[str, str] = {}
     total_bytes = 0
-
-    def _walk_error(exc: OSError) -> None:
-        raise ValueError(f"Unreadable mesh output: {key}/constant/polyMesh") from exc
-
-    for parent, directories, filenames in os.walk(
-        mesh, topdown=True, followlinks=False, onerror=_walk_error,
+    for entry, is_directory in _walk_mesh_tree(
+        mesh, key, scan_budget=scan_budget,
     ):
-        for directory in directories:
-            entry = Path(parent) / directory
-            if entry.is_symlink() or not entry.is_dir():
-                raise ValueError(f"Unsafe mesh subdirectory: {key}/{entry.relative_to(workdir)}")
-        for filename in filenames:
-            entry = Path(parent) / filename
-            if entry.is_symlink() or not entry.is_file() or entry.stat().st_nlink != 1:
-                raise ValueError(f"Unsafe generated mesh file: {key}/{entry.relative_to(workdir)}")
-            relative = entry.relative_to(mesh).as_posix()
-            if len(files) >= 4096:
-                raise ValueError(f"Too many generated mesh files: {key}")
-            total_bytes += entry.stat().st_size
-            if total_bytes > 1_073_741_824:
-                raise ValueError(f"Mesh output exceeds 1 GiB evidence limit: {key}")
-            files[relative] = _hash(entry)
+        if is_directory:
+            continue
+        relative = entry.relative_to(mesh).as_posix()
+        if len(files) >= _MAX_MESH_FILES:
+            raise ValueError(f"Too many generated mesh files: {key}")
+        total_bytes += entry.stat().st_size
+        if total_bytes > _MAX_MESH_BYTES:
+            raise ValueError(f"Mesh output exceeds 1 GiB evidence limit: {key}")
+        files[relative] = _hash(entry)
     if mesh.is_symlink() or not mesh.is_dir():
         raise ValueError(f"Generated mesh root changed while hashing: {key}")
     return dict(sorted(files.items()))
 
 
 def _verify_stage_source_snapshot(
-    root: Path, key: str, manifest_sha: str, expected_hashes: dict,
+    root: Path, key: str, manifest_sha: str, expected_hashes: dict, *,
+    scan_budget: _MeshTreeScanBudget | None = None,
 ) -> None:
     """Recheck this case's immutable inputs before *each* external stage.
 
@@ -271,7 +407,7 @@ def _verify_stage_source_snapshot(
         raise ValueError(f"Case directory replaced during execution: {key}")
     if not workdir.is_dir():
         raise ValueError(f"Case directory missing during execution: {key}")
-    _verify_runtime_source_tree(workdir, key)
+    _verify_runtime_source_tree(workdir, key, scan_budget=scan_budget)
     for relative in INPUTS:
         folder, _ = relative.split("/", 1)
         source_dir = workdir / folder
@@ -374,6 +510,7 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             or hashlib.sha256(manifest_snapshot.raw_bytes).hexdigest() != digest):
         raise ValueError("Grid family manifest changed during preflight")
     expected_hashes = manifest_snapshot.value["files"]
+    mesh_scan_budget = _MeshTreeScanBudget()
     receipt = root / "grid_run_evidence.json"
     staging = root / ".grid_run_evidence.json.tmp"
     if receipt.exists() or receipt.is_symlink() or staging.exists() or staging.is_symlink():
@@ -430,12 +567,17 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             # Refuse changed inputs even if the initial preflight succeeded.
             # Preserve the incomplete receipt and reservation on failure;
             # never launch another solver against inconsistent sources.
-            _verify_stage_source_snapshot(root, key, digest, expected_hashes)
+            _verify_stage_source_snapshot(
+                root, key, digest, expected_hashes,
+                scan_budget=mesh_scan_budget,
+            )
             # Once blockMesh has finished, the generated mesh becomes an
             # immutable baseline for checkMesh/simpleFoam in this workflow.
             # A concurrent edit between stage invocations is not accepted.
             if (stage != "blockMesh"
-                    and _mesh_file_hashes(workdir, key) != case["mesh_files"]):
+                    and _mesh_file_hashes(
+                        workdir, key, scan_budget=mesh_scan_budget,
+                    ) != case["mesh_files"]):
                 raise ValueError(f"Generated mesh changed between solver stages: {key}")
             log_path = workdir / (stage + ".log")
             returncode = None
@@ -463,8 +605,13 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
             # the stage and its real exit code, but never report completion
             # for an attempt whose originally accepted input bytes drifted.
             try:
-                _verify_stage_source_snapshot(root, key, digest, expected_hashes)
-                current_mesh = _mesh_file_hashes(workdir, key)
+                _verify_stage_source_snapshot(
+                    root, key, digest, expected_hashes,
+                    scan_budget=mesh_scan_budget,
+                )
+                current_mesh = _mesh_file_hashes(
+                    workdir, key, scan_budget=mesh_scan_budget,
+                )
                 if stage == "blockMesh":
                     # Record the immediate post-blockMesh revision rather than
                     # accepting whatever files remain after later solver stages.
@@ -473,6 +620,17 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
                     outcome = "source_drift"
             except (OSError, ValueError):
                 outcome = "source_drift"
+            if stage == "checkMesh" and outcome == "completed":
+                # An exit code of zero does not guarantee Mesh OK.
+                # Post-run mesh topology and count audits remain separate.
+                from .cfd_checkmesh_log import screen_checkmesh_verdict
+                try:
+                    screen_checkmesh_verdict(
+                        log_path,
+                        expected_cells=manifest_snapshot.value["case_inputs"][key]["mesh_cells"],
+                    )
+                except (OSError, ValueError):
+                    outcome = "mesh_check_rejected"
             case["stages"].append({
                 "command": stage, "returncode": returncode,
                 "status": outcome, "log": f"{key}/{stage}.log",
@@ -484,7 +642,9 @@ def run_grid_family(directory: str | Path, *, timeout_seconds: int = 3600) -> di
         # Recheck the final mesh against the immediately post-blockMesh
         # snapshot. Do not overwrite that baseline with changed later output.
         try:
-            if _mesh_file_hashes(workdir, key) != case["mesh_files"]:
+            if _mesh_file_hashes(
+                workdir, key, scan_budget=mesh_scan_budget,
+            ) != case["mesh_files"]:
                 if case["stages"]:
                     case["stages"][-1]["status"] = "source_drift"
         except (OSError, ValueError):

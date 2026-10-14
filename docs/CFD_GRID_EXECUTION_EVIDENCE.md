@@ -429,3 +429,20 @@ establish convergence, independent mesh quality, real-room performance,
 physical correlation, or release readiness. Keep scientific review **BLOCKED**
 until project-specific inputs, numerical review, independent measurements, and
 all release evidence are available.
+
+
+## Refinement-invariant synthetic boundary patches (2026-10-14)
+
+Configurations 2 and 3 use four ceiling supply rectangles at fixed normalized
+room coordinates: x spans [0, 1/3) and [2/3, 1), crossed with y spans
+[1/6, 1/3) and [2/3, 5/6). Configuration 3 uses the same footprint for its
+floor exhaust. The patch selection is cell-center based and aligns exactly on
+the example 6, 12 and 24 cell grids. A regression independently decodes face
+vertices, expands each footprint onto a common 24 by 24 mask, and requires
+identical masks at all three levels.
+
+This repairs a setup inconsistency in the earlier alternating-cell stencil.
+It makes these boundary locations comparable across the three synthetic
+meshes; it does not establish grid convergence, numerical convergence or
+physical validity. These cases remain synthetic and engineering review remains
+BLOCKED.

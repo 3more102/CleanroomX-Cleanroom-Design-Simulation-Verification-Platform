@@ -43,9 +43,9 @@ codes, privacy considerations, and limitations.
 ### CFD solver case pipeline (external OpenFOAM)
 
 - Parameterized 3D case generation for all three ventilation layouts, with physically explicit inlet/outlet patches and SHA-256 manifest.
-- Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
-- This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
-- Track documented Foundation v10 capabilities, measured parity scores, and open evidence gaps in the [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
+- Opt-in OpenFOAM Foundation v10 (default) and v14 case generation/execution paths, VTK cell-field import, and cross-section previews. Nine-case grid generation for issue #1296 remains pinned to v10.
+- This is **not a native or physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
+- Track Foundation v10 parity and issue #1296 evidence gaps in the [v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md); the separate Foundation v14 matrix and scores are in [v14 capability parity](docs/OPENFOAM_V14_PARITY.md) and [its row-level matrix](docs/OPENFOAM_V14_CAPABILITY_MATRIX.csv).
 
 ### Source-driven CFD passive tracer and numerical audit
 

@@ -15,14 +15,16 @@ from .strict_json import load_strict_json
 
 def build_parser():
     parser=argparse.ArgumentParser(prog="cleanroomx-cfd-pipeline",
-                                   description="OpenFOAM v10 and VTK cleanroom CFD pipeline")
+                                   description="OpenFOAM Foundation v10/v14 case workflow and VTK cleanroom CFD pipeline")
     sub=parser.add_subparsers(dest="command",required=True)
     create=sub.add_parser("generate",help="Generate three OpenFOAM cases")
     create.add_argument("spec")
     create.add_argument("directory")
-    runner=sub.add_parser("run",help="Opt-in: run blockMesh, checkMesh, simpleFoam")
+    create.add_argument("--openfoam-version",choices=("v10","v14"),default="v10")
+    runner=sub.add_parser("run",help="Opt-in: run blockMesh, checkMesh and the release-specific solver")
     runner.add_argument("directory")
     runner.add_argument("--timeout-seconds",type=int,default=3600)
+    runner.add_argument("--openfoam-version",choices=("v10","v14"))
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -52,7 +54,7 @@ def build_parser():
     audit.add_argument("--max-global-continuity",type=float)
     audit.add_argument("--window",type=int,default=3)
     audit.add_argument("--output")
-    grid=sub.add_parser("grid-generate",help="Generate nine OpenFOAM cases: three configurations x three mesh resolutions")
+    grid=sub.add_parser("grid-generate",help="Generate nine OpenFOAM v10 cases: three configurations x three mesh resolutions")
     grid.add_argument("spec")
     grid.add_argument("directory")
     verify_grid=sub.add_parser("grid-audit",help="VTK/log grounded three-grid Richardson and GCI screening")
@@ -64,11 +66,13 @@ def build_parser():
 def main():
     args=build_parser().parse_args()
     if args.command=="generate":
-        result=export_openfoam_cases(load_cli_input(load_strict_json,args.spec),args.directory)
+        result=export_openfoam_cases(load_cli_input(load_strict_json,args.spec),args.directory,
+                                     openfoam_version=args.openfoam_version)
         print(dumps_strict_json(result))
         return 0
     if args.command=="run":
-        result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
+        result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds,
+                                  openfoam_version=args.openfoam_version)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
     if args.command=="grid-generate":

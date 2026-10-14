@@ -1,6 +1,7 @@
 """SYNTHETIC regression fixtures; not proof of real CFD physics validation."""
 import json
 import math
+from types import SimpleNamespace
 import pytest
 
 from cleanroomx.cfd_openfoam import (
@@ -66,15 +67,125 @@ def test_invalid_spec_rejected(field,value):
 def test_unsupported_config():
     with pytest.raises(ValueError):build_openfoam_files(spec(),True)
     with pytest.raises(ValueError):build_openfoam_files(spec(),4)
+    with pytest.raises(ValueError,match="openfoam_version"):
+        build_openfoam_files(spec(),1,openfoam_version="v13")
+
+def test_v14_case_uses_modular_solver_and_v14_properties():
+    files,meta=build_openfoam_files(spec(),1,openfoam_version="v14")
+    assert meta["openfoam_release"]=="OpenFOAM Foundation 14"
+    assert meta["solver_command"]=="foamRun"
+    assert meta["target"]=="OpenFOAM Foundation v14 / foamRun -solver incompressibleFluid"
+    control=files["system/controlDict"]
+    assert "solver incompressibleFluid;" in control
+    assert "application simpleFoam;" not in control
+    assert "constant/physicalProperties" in files
+    assert "viscosityModel constant;" in files["constant/physicalProperties"]
+    assert "nu 1.5e-05;" in files["constant/physicalProperties"]
+    assert "simulationType laminar;" in files["constant/momentumTransport"]
+    assert "constant/transportProperties" not in files
+    assert "constant/turbulenceProperties" not in files
+    assert "dimensions [velocity];" in files["0/U"]
+    assert "dimensions [kinematicPressure];" in files["0/p"]
+
+def test_v14_runner_checks_foamrun_and_records_mocked_commands(tmp_path,monkeypatch):
+    manifest=export_openfoam_cases(spec(),tmp_path/"cases",openfoam_version="v14")
+    assert manifest["openfoam_release"]=="OpenFOAM Foundation 14"
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "14")
+    looked_up=[]
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:looked_up.append(name) or "/usr/bin/mock")
+    commands=[]
+    def mocked_run(command,**kwargs):
+        if command[-1] == "-help":
+            return SimpleNamespace(returncode=0,stdout="OpenFOAM-14\n",stderr="")
+        commands.append(command)
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",mocked_run)
+    result=run_openfoam_cases(tmp_path/"cases",openfoam_version="v14")
+    assert looked_up==["blockMesh","checkMesh","foamRun"]
+    assert commands==[["/usr/bin/mock"],["/usr/bin/mock"],["/usr/bin/mock"]]*3
+    assert result["status"]=="executed_requires_convergence_review"
+    assert result["run_manifest"]=="run_manifest.json"
+    assert all(case["status"]=="executed_requires_convergence_review" for case in result["cases"].values())
+    run_manifest=json.loads((tmp_path/"cases"/"run_manifest.json").read_text())
+    assert run_manifest["openfoam_release"]=="OpenFOAM Foundation 14"
+    assert run_manifest["timeout_seconds"]==3600
+    assert run_manifest["active_environment"]["WM_PROJECT_VERSION"]=="14"
+    assert run_manifest["version_probe"]["observed_banner_lines"]==["OpenFOAM-14"]
+    assert run_manifest["input_manifest_sha256"]
+    assert set(run_manifest["cases"])=={"1","2","3"}
+    assert all(stage["command"]==["/usr/bin/mock"] and stage["log_sha256"]
+               for case in run_manifest["cases"].values() for stage in case["stages"])
+    prior_run_manifest=(tmp_path/"cases"/"run_manifest.json").read_bytes()
+    with pytest.raises(FileExistsError,match="Refusing to overwrite existing OpenFOAM run manifest"):
+        run_openfoam_cases(tmp_path/"cases",openfoam_version="v14")
+    assert (tmp_path/"cases"/"run_manifest.json").read_bytes()==prior_run_manifest
+    with pytest.raises(ValueError,match="does not match"):
+        run_openfoam_cases(tmp_path/"cases",openfoam_version="v10")
+
+def test_runner_records_failed_external_stage_without_claiming_execution(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases",openfoam_version="v14")
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "14")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    commands=[]
+    def mocked_run(command,**kwargs):
+        if command[-1] == "-help":
+            return SimpleNamespace(returncode=0,stdout="OpenFOAM-14\n",stderr="")
+        commands.append(command)
+        return SimpleNamespace(returncode=2)
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",mocked_run)
+    result=run_openfoam_cases(tmp_path/"cases")
+    assert result["status"]=="incomplete"
+    assert commands==[["/fake/blockMesh"]]
+    record=json.loads((tmp_path/"cases"/"run_manifest.json").read_text())
+    assert record["status"]=="incomplete"
+    assert record["failure"]["stage"]["program"]=="blockMesh"
+    assert record["failure"]["stage"]["returncode"]==2
+
+def test_v14_runner_fails_closed_without_foamrun(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases",openfoam_version="v14")
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "14")
+    monkeypatch.setattr(
+        "cleanroomx.cfd_openfoam.shutil.which",
+        lambda name: f"/fake/{name}" if name in {"blockMesh", "checkMesh"} else None,
+    )
+    with pytest.raises(RuntimeError,match="foamRun not found"):
+        run_openfoam_cases(tmp_path/"cases")
 
 def test_solver_not_installed_fails_closed(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "10")
     monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:None)
     with pytest.raises(RuntimeError,match="not found"):
         run_openfoam_cases(tmp_path/"cases")
 
+def test_runner_rejects_mismatched_active_foundation_release(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases",openfoam_version="v14")
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "10")
+    with pytest.raises(RuntimeError,match="active OpenFOAM environment mismatch"):
+        run_openfoam_cases(tmp_path/"cases")
+
+def test_runner_rejects_solver_binary_from_other_release(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases",openfoam_version="v14")
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "14")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:"/usr/bin/mock")
+    monkeypatch.setattr(
+        "cleanroomx.cfd_openfoam.subprocess.run",
+        lambda *args,**kwargs:SimpleNamespace(returncode=0,stdout="OpenFOAM-140\n",stderr=""),
+    )
+    with pytest.raises(RuntimeError,match="did not identify OpenFOAM Foundation 14"):
+        run_openfoam_cases(tmp_path/"cases")
+    assert not (tmp_path/"cases"/"run_manifest.json").exists()
+
 def test_tampered_case_fails_closed(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setenv("WM_PROJECT", "OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION", "10")
     p=tmp_path/"cases/configuration_1/0/U"
     p.write_text(p.read_text()+"\n// tamper")
     monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:"/usr/bin/mock")

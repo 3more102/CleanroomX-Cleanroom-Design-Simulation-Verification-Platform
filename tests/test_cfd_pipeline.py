@@ -48,6 +48,38 @@ def test_patch_topology_is_closed():
         assert len(faces)==len(set(faces))
         assert p["inlet"] and p["outlet"]
 
+def _horizontal_patch_mask(faces,n,plane):
+    """Expand horizontal faces to an independently decoded 24x24 footprint."""
+    mask=set()
+    for face in faces:
+        ijk=[]
+        for vertex in face:
+            i=vertex%(n+1)
+            j=(vertex//(n+1))%(n+1)
+            k=vertex//((n+1)*(n+1))
+            ijk.append((i,j,k))
+        assert {k for _,_,k in ijk}=={plane}
+        i0=min(i for i,_,_ in ijk); i1=max(i for i,_,_ in ijk)
+        j0=min(j for _,j,_ in ijk); j1=max(j for _,j,_ in ijk)
+        assert i1-i0==j1-j0==1
+        scale=24//n
+        mask.update((x,y)
+                    for x in range(i0*scale,i1*scale)
+                    for y in range(j0*scale,j1*scale))
+    return mask
+
+@pytest.mark.parametrize(("config","patch","plane"),[
+    (2,"inlet",6),(3,"inlet",6),(3,"outlet",0),
+])
+def test_normalized_boundary_patch_footprints_are_refinement_invariant(config,patch,plane):
+    expected={(x,y) for x in (*range(0,8),*range(16,24))
+                      for y in (*range(4,8),*range(16,20))}
+    footprints=[]
+    for n in (6,12,24):
+        faces=_layout(n,n,n,config)[patch]
+        footprints.append(_horizontal_patch_mask(faces,n,plane*n//6))
+    assert footprints==[expected,expected,expected]
+
 @pytest.mark.parametrize("field,value",[
     ("schema_version","bogus"),("mesh_cells",[80,80,80]),
     ("mesh_cells",[6.5,6,6]),("room_m",[2,0,1]),

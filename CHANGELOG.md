@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — bounded OpenFOAM residual-trend diagnostics — 2026-10-15
+
+- Adds bounded first-window versus tail-window median initial-residual summaries to the read-only single-log and nine-case triage commands. Short logs use disjoint reduced windows; trend ratios remain descriptive and never satisfy convergence or validation criteria.
+- Records reproducible 36-field diagnostics of the archived synthetic Foundation v10 runs 67 and 68, preserving the failed terminal residual screens and blocked scientific-validation status.
+- Does not alter OpenFOAM cases, solver settings, tolerances, acceptance criteria, or engineering verdicts.
+
 ## Unreleased Release 3 — Foundation v10 surface-flux VTK audit — 2026-10-15
 
 - Extends the opt-in nine-case Foundation v10 workflow to export native `phi` surface fluxes through pinned `foamToVTK -surfaceFields` support and independently recheck the resulting face-normal vectors against native face geometry and values.

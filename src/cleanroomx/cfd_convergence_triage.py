@@ -12,6 +12,7 @@ import os
 import re
 from collections import deque
 from pathlib import Path
+from statistics import median
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 _SOLVE = re.compile(
@@ -38,10 +39,12 @@ _MAX_LOG_BYTES = 64 * 1024 * 1024
 
 
 def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),
-                 window: int = 5) -> dict:
+                 window: int = 5, trend_window: int = 50) -> dict:
     """Extract step-aware solver diagnostics; never assert scientific convergence."""
     if window < 1 or window > 10000:
         raise ValueError("window must be between 1 and 10000")
+    if type(trend_window) is not int or not 1 <= trend_window <= 10000:
+        raise ValueError("trend_window must be an integer between 1 and 10000")
     if not fields or len(fields) > 32 or len(set(fields)) != len(fields) or any(
         not re.fullmatch(r"[A-Za-z][\w.]*", field) for field in fields
     ):
@@ -75,6 +78,8 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     # Retain only the requested recent window, not every solver iteration.
     sample_counts = {field: 0 for field in fields}
     recent_residuals = {field: deque(maxlen=window) for field in fields}
+    first_residual_window = {field: [] for field in fields}
+    tail_residual_window = {field: deque(maxlen=trend_window) for field in fields}
     continuity_samples = 0
     recent_global_continuity = deque(maxlen=window)
     last_step_fields: set[str] = set()
@@ -161,6 +166,9 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
                 if field in sample_counts:
                     sample_counts[field] += 1
                     recent_residuals[field].append((a, b))
+                    if len(first_residual_window[field]) < trend_window:
+                        first_residual_window[field].append(a)
+                    tail_residual_window[field].append(a)
             if time_steps:
                 if field in last_step_initials:
                     duplicate_last_step_fields.add(field)
@@ -189,8 +197,40 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
                 malformed_continuity = True
 
     field_report = {}
+    residual_trends = {}
     for field in fields:
         recent = recent_residuals[field]
+        initial_values = first_residual_window[field]
+        tail_values = list(tail_residual_window[field])
+        # Keep the first and tail windows disjoint. For short logs, shrink both
+        # windows equally rather than comparing overlapping samples.
+        trend_samples = min(trend_window, sample_counts[field] // 2)
+        if trend_samples < 1:
+            trend_status = "INSUFFICIENT_SAMPLES"
+            initial_median = None
+            tail_median = None
+            trend_ratio = None
+        else:
+            initial_median = median(initial_values[:trend_samples])
+            tail_median = median(tail_values[-trend_samples:])
+        if trend_samples >= 1 and initial_median == 0:
+            trend_status = "ZERO_INITIAL_MEDIAN"
+            trend_ratio = None
+        elif trend_samples >= 1:
+            trend_ratio = tail_median / initial_median
+            if math.isfinite(trend_ratio):
+                trend_status = "COMPUTED"
+            else:
+                trend_status = "NONFINITE_RATIO"
+                trend_ratio = None
+        residual_trends[field] = {
+            "status": trend_status,
+            "sample_count": sample_counts[field],
+            "window_samples": trend_samples,
+            "initial_window_median": initial_median,
+            "tail_window_median": tail_median,
+            "tail_to_initial_median_ratio": trend_ratio,
+        }
         field_report[field] = {
             "samples": sample_counts[field],
             "recent_initial": [r[0] for r in recent],
@@ -284,6 +324,12 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
         "time_sequence_monotonic": bool(time_steps) and not (bad_time or malformed_time),
         "terminal_end": clean_end,
         "fields": field_report,
+        "residual_trend": {
+            "status": "DESCRIPTIVE_ONLY",
+            "window_samples_requested": trend_window,
+            "fields": residual_trends,
+            "note": "For each requested field, compares medians of non-overlapping first and last bounded windows of logged initial linear residuals. Short logs use disjoint reduced windows; fewer than two samples, zero initial medians, and non-finite ratios are not divided. Ratios are descriptive only: a lower tail median does not establish nonlinear or physical convergence and is not an acceptance test.",
+        },
         "incomplete_prior_time_steps": incomplete_prior_steps,
         "last_step_missing_fields": missing_last_fields,
         "last_step_continuity_samples": last_step_continuity,
@@ -666,7 +712,7 @@ def audit_grid_family_inputs(directory: str | Path) -> dict:
 
 def diagnose_grid_family(directory: str | Path, *,
                          fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),
-                         window: int = 5) -> dict:
+                         window: int = 5, trend_window: int = 50) -> dict:
     """Triage logs, input fingerprints, and available final-time fluxes for 3x3 cases.
 
     A complete report means all nine expected logs were distinct and
@@ -675,6 +721,8 @@ def diagnose_grid_family(directory: str | Path, *,
     """
     if type(window) is not int or window < 1 or window > 10000:
         raise ValueError("window must be between 1 and 10000")
+    if type(trend_window) is not int or not 1 <= trend_window <= 10000:
+        raise ValueError("trend_window must be an integer between 1 and 10000")
     fields = tuple(fields)
     if not fields or len(fields) > 32 or len(set(fields)) != len(fields) or any(
         not re.fullmatch(r"[A-Za-z][\w.]*", field) for field in fields
@@ -721,7 +769,9 @@ def diagnose_grid_family(directory: str | Path, *,
         if path.is_file() or path.is_symlink():
             present += 1
             try:
-                report = diagnose_log(path, fields=fields, window=window)
+                report = diagnose_log(
+                    path, fields=fields, window=window, trend_window=trend_window
+                )
             except (OSError, UnicodeError, ValueError) as exc:
                 report = {
                     "status": "INCOMPLETE_OR_INVALID",
@@ -835,9 +885,13 @@ def grid_family_main(argv: list[str] | None = None) -> int:
     parser.add_argument("directory", help="Grid-family directory containing configuration_1..3/{coarse,medium,fine}")
     parser.add_argument("--fields", nargs="+", default=["Ux", "Uy", "Uz", "p"])
     parser.add_argument("--window", type=int, default=5)
+    parser.add_argument("--trend-window", type=int, default=50)
     args = parser.parse_args(argv)
     try:
-        report = diagnose_grid_family(args.directory, fields=tuple(args.fields), window=args.window)
+        report = diagnose_grid_family(
+            args.directory, fields=tuple(args.fields), window=args.window,
+            trend_window=args.trend_window,
+        )
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps(report, indent=2, allow_nan=False, sort_keys=True))
@@ -849,11 +903,15 @@ def main() -> int:
     parser.add_argument("logs", nargs="+")
     parser.add_argument("--fields", nargs="+", default=["Ux", "Uy", "Uz", "p"])
     parser.add_argument("--window", type=int, default=5)
+    parser.add_argument("--trend-window", type=int, default=50)
     args = parser.parse_args()
     reports = {}
     for path in args.logs:
         try:
-            reports[path] = diagnose_log(path, fields=tuple(args.fields), window=args.window)
+            reports[path] = diagnose_log(
+                path, fields=tuple(args.fields), window=args.window,
+                trend_window=args.trend_window,
+            )
         except (OSError, UnicodeError, ValueError) as exc:
             reports[path] = {"status": "INCOMPLETE_OR_INVALID",
                              "scientific_validation": "BLOCKED",

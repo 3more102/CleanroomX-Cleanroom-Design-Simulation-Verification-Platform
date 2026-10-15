@@ -495,6 +495,142 @@ def test_recent_window_retains_counts_across_many_steps(tmp_path):
         assert info["samples"] == 250
         assert info["recent_initial"] == [0.01] * 3
         assert info["recent_final"] == [0.0001] * 3
+    trend = result["residual_trend"]
+    assert trend["status"] == "DESCRIPTIVE_ONLY"
+    assert trend["window_samples_requested"] == 50
+    assert trend["fields"]["p"]["window_samples"] == 50
+    assert trend["fields"]["p"]["tail_to_initial_median_ratio"] == 1.0
+
+
+def test_residual_trend_compares_first_and_tail_medians(tmp_path):
+    log = tmp_path / "trending.log"
+    values = [0.8, 0.4, 0.2, 0.1, 0.05, 0.025]
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 1e-8, No Iterations 2\n"
+            "time step continuity errors : sum local = 1e-8, "
+            "global = 1e-8, cumulative = 1e-8\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    report = diagnose_log(log, fields=("p",), window=2, trend_window=3)
+    trend = report["residual_trend"]
+    pressure = trend["fields"]["p"]
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert trend["status"] == "DESCRIPTIVE_ONLY"
+    assert pressure["status"] == "COMPUTED"
+    assert pressure["sample_count"] == 6
+    assert pressure["window_samples"] == 3
+    assert pressure["initial_window_median"] == 0.4
+    assert pressure["tail_window_median"] == 0.05
+    assert pressure["tail_to_initial_median_ratio"] == pytest.approx(0.125)
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+@pytest.mark.parametrize(
+    ("values", "trend_window", "expected_status"),
+    [
+        ([0.0], 10, "INSUFFICIENT_SAMPLES"),
+        ([0.0, 0.0], 1, "ZERO_INITIAL_MEDIAN"),
+    ],
+)
+def test_residual_trend_does_not_divide_insufficient_or_zero_baselines(
+    tmp_path, values, trend_window, expected_status
+):
+    log = tmp_path / "edge_trend.log"
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 0, No Iterations 1\n"
+            "time step continuity errors : sum local = 0, "
+            "global = 0, cumulative = 0\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    trend = diagnose_log(log, fields=("p",), trend_window=trend_window)["residual_trend"]
+    assert trend["fields"]["p"]["status"] == expected_status
+    assert trend["fields"]["p"]["tail_to_initial_median_ratio"] is None
+
+
+def test_residual_trend_short_log_uses_disjoint_reduced_windows(tmp_path):
+    log = tmp_path / "short_trend.log"
+    values = [0.8, 0.4, 0.2, 0.1, 0.05, 0.025]
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 1e-8, No Iterations 2\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    pressure = diagnose_log(log, fields=("p",), trend_window=50)["residual_trend"]["fields"]["p"]
+    assert pressure["status"] == "COMPUTED"
+    assert pressure["window_samples"] == 3
+    assert pressure["initial_window_median"] == 0.4
+    assert pressure["tail_window_median"] == 0.05
+    assert pressure["tail_to_initial_median_ratio"] == pytest.approx(0.125)
+
+
+def test_residual_trend_nonfinite_ratio_is_json_safe(tmp_path):
+    log = tmp_path / "extreme_trend.log"
+    values = [5e-324, 5e-324, 1e308, 1e308]
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 0, No Iterations 1\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    report = diagnose_log(log, fields=("p",), trend_window=1)
+    pressure = report["residual_trend"]["fields"]["p"]
+    assert pressure["status"] == "NONFINITE_RATIO"
+    assert pressure["initial_window_median"] == 5e-324
+    assert pressure["tail_window_median"] == 1e308
+    assert pressure["tail_to_initial_median_ratio"] is None
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize("trend_window", [0, 10001, True, 1.0])
+def test_residual_trend_window_requires_bounded_exact_integer(tmp_path, trend_window):
+    log = tmp_path / "trend_window.log"
+    log.write_text(_complete_step("1") + "End\n")
+    with pytest.raises(ValueError, match="trend_window"):
+        diagnose_log(log, trend_window=trend_window)
+
+
+def test_grid_family_residual_trend_window_is_reported_and_configurable(
+    tmp_path, capsys
+):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    report = diagnose_grid_family(root, trend_window=17)
+    trend = report["cases"]["configuration_1/coarse"]["residual_trend"]
+    assert trend["window_samples_requested"] == 17
+    assert trend["fields"]["p"]["status"] == "INSUFFICIENT_SAMPLES"
+
+    assert grid_family_main([str(root), "--trend-window", "23"]) == 0
+    cli_report = json.loads(capsys.readouterr().out)
+    cli_trend = cli_report["cases"]["configuration_1/coarse"]["residual_trend"]
+    assert cli_trend["window_samples_requested"] == 23
+
+
+def test_single_log_cli_accepts_trend_window(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + _complete_step("2") + "End\n")
+    monkeypatch.setattr(
+        "sys.argv", ["cfd_convergence_triage", str(log), "--trend-window", "7"]
+    )
+    assert main() == 0
+    report = json.loads(capsys.readouterr().out)[str(log)]
+    assert report["residual_trend"]["window_samples_requested"] == 7
 
 
 def test_bounded_read_catches_growth_after_stat(tmp_path, monkeypatch):

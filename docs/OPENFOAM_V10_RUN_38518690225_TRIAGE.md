@@ -49,6 +49,35 @@ proxy; it does not reproduce OpenFOAM's internal vector residual-control
 calculation. These ratios are a linear-residual screen only and do not establish
 nonlinear convergence or quantify solution error.
 
+## Stop condition and recent residual trend
+
+All nine `controlDict` files have the same `stopAt endTime`, `endTime 600`,
+and `deltaT 1` settings. The solvers therefore reached the configured 600-step
+end point; the `End` marker does not show that the `residualControl` criteria
+were met.
+
+The table below compares the median of the last 50 outer-iteration initial
+residuals with the median of the first 50. For `U`, each iteration uses the
+largest logged `Ux`, `Uy`, or `Uz` residual. Values below 1 show a lower
+tail median, not convergence or a proven error reduction.
+
+| Configuration | Grid | U tail/initial median | p tail/initial median |
+|---|---|---:|---:|
+| 1 | coarse | 0.963 | 0.964 |
+| 1 | medium | 0.316 | 0.293 |
+| 1 | fine | 0.00663 | 0.0105 |
+| 2 | coarse | 0.800 | 0.851 |
+| 2 | medium | 0.295 | 0.290 |
+| 2 | fine | 0.173 | 0.227 |
+| 3 | coarse | 0.229 | 0.252 |
+| 3 | medium | 0.318 | 0.496 |
+| 3 | fine | 0.338 | 0.567 |
+
+The mixed trend (including near-plateauing coarse cases and continuing
+reductions in other cases) does not point to one log-derived root cause. The
+fixed end point explains why these runs stopped at 600 steps, but not why the
+residual levels differ across configurations and grids.
+
 ## Interpretation and next work
 
 The current model inputs describe a synthetic, steady, isothermal, laminar

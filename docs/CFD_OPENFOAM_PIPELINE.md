@@ -72,32 +72,37 @@ changes: v11+ Foundation uses foamRun solver modules.
 
 The GitHub nine-case Foundation v10 workflow additionally requires
 `foamToVTK`. After each successful `simpleFoam` run, it exports the latest
-cell velocity field with ASCII polyhedral output, imports the resulting VTK,
+cell velocity `U` and kinematic-pressure `p` fields with ASCII polyhedral output, imports the resulting VTK,
 and binds its hash and cell count to the generated-input manifest. It then
 reopens and verifies all nine outputs before uploading the evidence artifact.
 This workflow export is a reproducibility and ingestion check; it is not part
 of the standalone `run` command and does not establish CFD convergence,
 mesh independence, or physical validation.
 
-The nine-case v10 workflow also compares the exported cell velocity with the
-native final-time OpenFOAM `U` field. It uses the `cellID` cell-data array
+The nine-case v10 workflow compares exported cell velocity and kinematic
+pressure with the native final-time OpenFOAM `U` and `p` fields. It uses the
+`cellID` cell-data array
 written by Foundation v10 `foamToVTK`: the upstream
 [`internalWriter::writeCellIDs` implementation](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK/internalWriter.C)
 emits the original mesh cell index for every cell. CleanroomX requires a
-complete, unique ID mapping and compares all three velocity components by that
-ID; it does not infer cell correspondence from VTK array order. The audit
+complete, unique ID mapping and compares each U component and p scalar by that
+ID; it does not infer cell correspondence from VTK array order. The U audit
 requires cell-data `U`, so it cannot silently substitute point-to-cell
-interpolation.
+interpolation. The p audit requires a native `volScalarField` with kinematic-
+pressure dimensions `[0 2 -2 0 0 0 0]` and a scalar cell-data `p` array.
 
-Foundation v10's legacy VTK output declares this `U` array as `float`.
-The parity receipt reports the measured component errors and bounds them using
-binary32 rounding plus half a last decimal place at the workflow's six-digit
-ASCII precision. This tolerance describes field serialization only; it is not
-a CFD solver acceptance threshold and provides no convergence or physical
-validation evidence.
+Foundation v10's legacy VTK output declares these U and p arrays as `float`.
+The parity receipt reports measured component/scalar errors and bounds them
+using binary32 rounding plus half a last decimal place at the workflow's
+six-digit ASCII precision. These tolerances describe field serialization only;
+they are not CFD solver acceptance thresholds and provide no convergence or
+physical validation evidence.
 
-The independently rechecked run 58 archive and per-case native/VTK hashes are
-recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).
+The independently rechecked run 58 U archive and per-case native/VTK hashes
+are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).
+Run 61 extends that check to native final-time `U` and `p`; its artifact,
+per-case errors, and independent digest checks are recorded in [the run 61
+U/p parity report](OPENFOAM_V10_RUN_38768856636_NATIVE_U_P_VTK_PARITY.md).
 
 ## Import actual CFD results (VTK/VTU)
 

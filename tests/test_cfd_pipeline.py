@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from cleanroomx.cfd_openfoam import (
-    SCHEMA, _layout, build_openfoam_files, export_openfoam_cases,
+    SCHEMA, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
     run_openfoam_cases, validate_openfoam_spec,
 )
 from cleanroomx.cfd_vtk import import_vtk_case, populate_study_from_vtk
@@ -26,6 +26,14 @@ def test_mesh_and_flow_generation(tmp_path):
         assert meta["mesh_cells"]==216
         assert meta["mesh"]["outlet_face_count"]>0
         assert meta["inlet_normal_speed_m_s"]*meta["mesh"]["inlet_area_m2"]==pytest.approx(0.15)
+        audit=meta["boundary_audit"]
+        assert audit["status"]=="input_geometry_and_inlet_flow_consistent"
+        assert audit["inlet"]["outward_normal_area_m2"]=={"+z":audit["inlet"]["area_m2"]}
+        assert audit["inlet"]["prescribed_inward_volume_flow_m3_s"]==pytest.approx(0.15)
+        assert set(audit["outlet"]["outward_normal_area_m2"])==({"-z"} if cfg==3 else {"+x","-x"})
+        assert audit["outlet"]["actual_solver_volume_flow_m3_s"] is None
+        assert audit["flow_balance_status"]=="not_measured"
+        assert audit["scientific_validation"]=="BLOCKED"
         f=tmp_path/"cases"/f"configuration_{cfg}"
         assert "hex (" in (f/"system/blockMeshDict").read_text()
         assert "pressureInletOutletVelocity" in (f/"0/U").read_text()
@@ -44,6 +52,23 @@ def test_mesh_and_flow_generation(tmp_path):
         export_openfoam_cases(s,tmp_path/"cases")
     copy=export_openfoam_cases(s,tmp_path/"other")
     assert copy==manifest
+
+@pytest.mark.parametrize("configuration",[1,2,3])
+def test_boundary_audit_rejects_outward_inlet_velocity(configuration):
+    files,metadata=build_openfoam_files(spec(),configuration)
+    tampered=dict(files)
+    tampered["0/U"]=tampered["0/U"].replace("(0 0 -","(0 0 +",1)
+    with pytest.raises(ValueError,match="does not point into"):
+        audit_openfoam_boundary_inputs(tampered,metadata)
+
+def test_boundary_audit_rejects_blockmesh_geometry_changed_after_metadata():
+    files,metadata=build_openfoam_files(spec(),3)
+    tampered=dict(files)
+    tampered["system/blockMeshDict"]=tampered["system/blockMeshDict"].replace(
+        "(0 0 0)","(0.1 0 0)",1
+    )
+    with pytest.raises(ValueError,match="geometry disagrees"):
+        audit_openfoam_boundary_inputs(tampered,metadata)
 
 def test_patch_topology_is_closed():
     nx=ny=nz=6
@@ -101,6 +126,7 @@ def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
     assert result["status"]=="executed_requires_convergence_review"
     assert result["solver_release"]=="OpenFOAM Foundation v10"
     assert result["solver_build"]=="10-c4cf895ad8fa"
+    assert set(result["boundary_audits"])=={"1","2","3"}
     assert all(
         stage["openfoam"]["is_foundation_v10"]
         for case in result["cases"].values()
@@ -113,6 +139,16 @@ def test_tampered_case_fails_closed(tmp_path,monkeypatch):
     p.write_text(p.read_text()+"\n// tamper")
     monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:"/usr/bin/mock")
     with pytest.raises(ValueError,match="Tampered"):
+        run_openfoam_cases(tmp_path/"cases")
+
+def test_tampered_boundary_audit_manifest_fails_before_solver_launch(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    manifest_path=tmp_path/"cases/manifest.json"
+    manifest=json.loads(manifest_path.read_text())
+    manifest["evidence"]["1"]["boundary_audit"]["inlet"]["area_m2"]+=1
+    manifest_path.write_text(json.dumps(manifest))
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    with pytest.raises(ValueError,match="Boundary audit metadata mismatch"):
         run_openfoam_cases(tmp_path/"cases")
 
 def vtk_fixture(path, concentration=1., recirc=0., speed=.2):

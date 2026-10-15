@@ -129,6 +129,205 @@ def _field(name, dims, initial, entries, vector=False):
         body+=f"    {patch}\n    {{\n        {content}\n    }}\n"
     return _header("volVectorField" if vector else "volScalarField",name,body+"}","0")
 
+def _parenthesized_section(text, name):
+    match=re.search(rf"(?m)^\s*{re.escape(name)}\s*\(",text)
+    if not match:
+        raise ValueError(f"Missing {name} section in blockMeshDict")
+    start=match.end()
+    depth=1
+    for position in range(start,len(text)):
+        if text[position]=="(":
+            depth+=1
+        elif text[position]==")":
+            depth-=1
+            if depth==0:
+                return text[start:position]
+    raise ValueError(f"Unclosed {name} section in blockMeshDict")
+
+def _face_area_vector(face, vertices):
+    points=[vertices[index] for index in face]
+    if len(points)<3 or len(set(face))!=len(face):
+        raise ValueError("Boundary face must contain distinct vertex indices")
+    vector=[0.0,0.0,0.0]
+    for current,following in zip(points,points[1:]+points[:1]):
+        vector[0]+=current[1]*following[2]-current[2]*following[1]
+        vector[1]+=current[2]*following[0]-current[0]*following[2]
+        vector[2]+=current[0]*following[1]-current[1]*following[0]
+    vector=[component*0.5 for component in vector]
+    area=math.sqrt(sum(component*component for component in vector))
+    if not math.isfinite(area) or area<=0:
+        raise ValueError("Boundary face has zero or invalid area")
+    return vector,area
+
+def _field_patch_block(field_text, patch):
+    blocks=re.findall(
+        rf"(?ms)^\s*{re.escape(patch)}\s*\{{(.*?)^\s*\}}",
+        field_text,
+    )
+    if len(blocks)!=1:
+        raise ValueError(f"Expected exactly one {patch} boundary entry")
+    return blocks[0]
+
+def audit_openfoam_boundary_inputs(files, metadata):
+    """Audit generated patch geometry and prescribed inlet volume flow.
+
+    The outlet flow is solver-derived and is intentionally reported as
+    unmeasured; this input audit does not claim mass balance or validation.
+    """
+    if type(files) is not dict or type(metadata) is not dict:
+        raise ValueError("case files and metadata must be objects")
+    configuration=metadata.get("configuration")
+    if type(configuration) is not int or configuration not in (1,2,3):
+        raise ValueError("boundary audit requires configuration 1, 2, or 3")
+    try:
+        mesh_text=files["system/blockMeshDict"]
+        velocity_text=files["0/U"]
+        pressure_text=files["0/p"]
+        mesh_metadata=metadata["mesh"]
+        requested_flow_raw=metadata["requested_inlet_flow_m3_s"]
+    except (KeyError,TypeError,ValueError) as error:
+        raise ValueError("case is missing boundary audit inputs") from error
+    if type(requested_flow_raw) not in (int,float):
+        raise ValueError("requested inlet flow must be numeric")
+    requested_flow=float(requested_flow_raw)
+    if not all(math.isfinite(value) and value>0 for value in (requested_flow,)):
+        raise ValueError("requested inlet flow must be finite and positive")
+
+    number=r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+    vertex_section=_parenthesized_section(mesh_text,"vertices")
+    vertices=[]
+    for match in re.finditer(rf"\(\s*({number})\s+({number})\s+({number})\s*\)",vertex_section):
+        point=tuple(float(value) for value in match.groups())
+        if not all(math.isfinite(value) for value in point):
+            raise ValueError("blockMeshDict contains a non-finite vertex")
+        vertices.append(point)
+    if not vertices:
+        raise ValueError("blockMeshDict has no parseable vertices")
+
+    boundary_section=_parenthesized_section(mesh_text,"boundary")
+    patch_matches=list(re.finditer(
+        r"(?ms)^\s*(inlet|outlet|walls)\s*\{\s*type\s+(\w+)\s*;\s*faces\s*\((.*?)\);\s*\}",
+        boundary_section,
+    ))
+    patches={match.group(1):match for match in patch_matches}
+    if set(patches)!={"inlet","outlet","walls"} or len(patch_matches)!=3:
+        raise ValueError("blockMeshDict must contain exactly inlet, outlet, and walls patches")
+    patch_types={name:match.group(2) for name,match in patches.items()}
+    if patch_types!={"inlet":"patch","outlet":"patch","walls":"wall"}:
+        raise ValueError("blockMeshDict patch types do not match the generated case")
+
+    face_data={}
+    for patch,match in patches.items():
+        face_text=match.group(3)
+        faces=[tuple(int(value) for value in found.groups()) for found in
+               re.finditer(r"\(\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\)",face_text)]
+        if not faces:
+            raise ValueError(f"{patch} patch has no parseable faces")
+        rows=[]
+        for face in faces:
+            if any(index>=len(vertices) for index in face):
+                raise ValueError(f"{patch} patch references a missing vertex")
+            vector,area=_face_area_vector(face,vertices)
+            normal=tuple(component/area for component in vector)
+            rows.append((normal,area))
+        face_data[patch]=rows
+
+    expected_mesh=mesh_metadata
+    for patch,count_key,area_key in (
+        ("inlet","inlet_face_count","inlet_area_m2"),
+        ("outlet","outlet_face_count","outlet_area_m2"),
+    ):
+        actual_count=len(face_data[patch])
+        actual_area=sum(area for _,area in face_data[patch])
+        try:
+            expected_count=expected_mesh[count_key]
+            expected_area=float(expected_mesh[area_key])
+        except (KeyError,TypeError,ValueError) as error:
+            raise ValueError(f"mesh metadata is missing {patch} geometry") from error
+        if type(expected_count) is not int or not math.isfinite(expected_area) or expected_area<=0:
+            raise ValueError(f"mesh metadata has invalid {patch} geometry")
+        if actual_count!=expected_count or not math.isclose(actual_area,expected_area,rel_tol=1e-10,abs_tol=1e-12):
+            raise ValueError(f"{patch} face geometry disagrees with generated metadata")
+
+    expected_inlet=(0.0,0.0,1.0)
+    for normal,_ in face_data["inlet"]:
+        if sum(a*b for a,b in zip(normal,expected_inlet))<1-1e-9:
+            raise ValueError("inlet faces must have upward outward normals")
+    expected_outlet=(0.0,0.0,-1.0) if configuration==3 else None
+    for normal,_ in face_data["outlet"]:
+        if expected_outlet is not None:
+            aligned=sum(a*b for a,b in zip(normal,expected_outlet))>1-1e-9
+        else:
+            aligned=abs(abs(normal[0])-1)<1e-9 and abs(normal[1])<1e-9 and abs(normal[2])<1e-9
+        if not aligned:
+            raise ValueError("outlet face normal does not match the selected layout")
+
+    inlet_block=_field_patch_block(velocity_text,"inlet")
+    if not re.search(r"\btype\s+fixedValue\s*;",inlet_block):
+        raise ValueError("inlet velocity must use fixedValue")
+    vector_match=re.search(rf"\bvalue\s+uniform\s*\(\s*({number})\s+({number})\s+({number})\s*\)\s*;",inlet_block)
+    if not vector_match:
+        raise ValueError("inlet velocity must be a uniform vector")
+    velocity=tuple(float(value) for value in vector_match.groups())
+    if not all(math.isfinite(value) for value in velocity):
+        raise ValueError("inlet velocity contains a non-finite value")
+    computed_flow=0.0
+    for normal,area in face_data["inlet"]:
+        inward_speed=-sum(a*b for a,b in zip(normal,velocity))
+        if inward_speed<=0:
+            raise ValueError("prescribed inlet velocity does not point into the mesh")
+        computed_flow+=area*inward_speed
+    if not math.isclose(computed_flow,requested_flow,rel_tol=1e-9,abs_tol=1e-12):
+        raise ValueError("prescribed inlet velocity and patch geometry do not reproduce requested flow")
+
+    expected_types={"outlet":"pressureInletOutletVelocity","walls":"noSlip"}
+    for patch,kind in expected_types.items():
+        if not re.search(rf"\btype\s+{kind}\s*;",_field_patch_block(velocity_text,patch)):
+            raise ValueError(f"velocity condition on {patch} must use {kind}")
+    pressure_types={"inlet":"zeroGradient","outlet":"fixedValue","walls":"zeroGradient"}
+    for patch,kind in pressure_types.items():
+        block=_field_patch_block(pressure_text,patch)
+        if not re.search(rf"\btype\s+{kind}\s*;",block):
+            raise ValueError(f"pressure condition on {patch} must use {kind}")
+    if not re.search(r"\bvalue\s+uniform\s+0\s*;",_field_patch_block(pressure_text,"outlet")):
+        raise ValueError("outlet pressure must be the generated zero-gauge value")
+
+    def rounded(value):
+        return float(f"{value:.12g}")
+    def direction(normal):
+        axis=max(range(3),key=lambda index:abs(normal[index]))
+        sign="+" if normal[axis]>=0 else "-"
+        return sign+"xyz"[axis]
+    normal_areas={}
+    for patch in ("inlet","outlet"):
+        grouped={}
+        for normal,area in face_data[patch]:
+            key=direction(normal)
+            grouped[key]=grouped.get(key,0.0)+area
+        normal_areas[patch]={key:rounded(value) for key,value in sorted(grouped.items())}
+    return {
+        "schema_version":"cleanroomx.openfoam-boundary-audit.v1",
+        "status":"input_geometry_and_inlet_flow_consistent",
+        "configuration":configuration,
+        "inlet":{
+            "face_count":len(face_data["inlet"]),
+            "area_m2":rounded(sum(area for _,area in face_data["inlet"])),
+            "outward_normal_area_m2":normal_areas["inlet"],
+            "velocity_m_s":[rounded(value) for value in velocity],
+            "prescribed_inward_volume_flow_m3_s":rounded(computed_flow),
+            "requested_volume_flow_m3_s":rounded(requested_flow),
+        },
+        "outlet":{
+            "face_count":len(face_data["outlet"]),
+            "area_m2":rounded(sum(area for _,area in face_data["outlet"])),
+            "outward_normal_area_m2":normal_areas["outlet"],
+            "actual_solver_volume_flow_m3_s":None,
+            "actual_solver_flux_status":"not_measured",
+        },
+        "flow_balance_status":"not_measured",
+        "scientific_validation":"BLOCKED",
+    }
+
 def build_openfoam_files(spec, configuration):
     validate_openfoam_spec(spec)
     if type(configuration) is not int or configuration not in CONFIGURATIONS:
@@ -190,6 +389,7 @@ relaxationFactors { fields { p 0.3; } equations { U 0.7; } }"""
               "target":"OpenFOAM Foundation v10 / simpleFoam",
               "limitations":["no underfloor plenum","no scalar or particle transport",
                   "no turbulence or buoyancy","no mesh convergence proof","empty rectangular room"]}
+    metadata["boundary_audit"]=audit_openfoam_boundary_inputs(files,metadata)
     return files,metadata
 
 def export_openfoam_cases(spec,directory):
@@ -246,10 +446,26 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
     manifest=json.loads((root/"manifest.json").read_text(encoding="utf-8"))
     if manifest.get("schema_version")!=SCHEMA or set(manifest.get("evidence",{}))!={"1","2","3"}:
         raise ValueError("Incomplete OpenFOAM bundle")
+    case_inputs=("system/blockMeshDict","system/controlDict","system/fvSchemes",
+                 "system/fvSolution","constant/physicalProperties",
+                 "constant/momentumTransport","0/U","0/p")
+    expected_files={f"configuration_{cfg}/{relative}" for cfg in (1,2,3) for relative in case_inputs}
+    if not isinstance(manifest.get("files"),dict) or set(manifest["files"])!=expected_files:
+        raise ValueError("OpenFOAM bundle must bind the exact 24 generated case inputs")
     for relative,sha in manifest["files"].items():
         f=(root/relative).resolve(strict=True)
         if not f.is_relative_to(root) or hashlib.sha256(f.read_bytes()).hexdigest()!=sha:
             raise ValueError("Tampered generated solver file: "+relative)
+    boundary_audits={}
+    for cfg in (1,2,3):
+        metadata=manifest["evidence"][str(cfg)]
+        case_files={relative:(root/f"configuration_{cfg}"/relative).read_text(encoding="utf-8")
+                    for relative in ("system/blockMeshDict","0/U","0/p")}
+        audit=audit_openfoam_boundary_inputs(case_files,metadata)
+        recorded=metadata.get("boundary_audit")
+        if recorded is not None and recorded!=audit:
+            raise ValueError(f"Boundary audit metadata mismatch for configuration {cfg}")
+        boundary_audits[str(cfg)]=audit
     executables={}
     for name in ("blockMesh","checkMesh","simpleFoam"):
         path=shutil.which(name)
@@ -281,20 +497,21 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
                            "openfoam":banner})
             if result.returncode:
                 results[str(cfg)]={"status":"solver_failed","stages":stages}
-                return {"status":"incomplete","cases":results,
+                return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
                         "warning":"Check logs and convergence; execution is not validation"}
             if not banner["is_foundation_v10"]:
                 results[str(cfg)]={"status":"unsupported_release","stages":stages}
-                return {"status":"incomplete","cases":results,
+                return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
                         "warning":"Expected an OpenFOAM Foundation v10 banner; later stages were not run"}
             if expected_build is None:
                 expected_build=banner["build"]
             elif banner["build"]!=expected_build:
                 results[str(cfg)]={"status":"inconsistent_build","stages":stages}
-                return {"status":"incomplete","cases":results,
+                return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
                         "warning":"OpenFOAM build changed during the case set; later stages were not run"}
         results[str(cfg)]={"status":"executed_requires_convergence_review","stages":stages}
     return {"status":"executed_requires_convergence_review","cases":results,
+            "boundary_audits":boundary_audits,
             "solver_release":"OpenFOAM Foundation v10",
             "solver_build":expected_build,
             "executables":executables,

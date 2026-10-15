@@ -32,6 +32,13 @@ in its individual case directory. The generator does not itself run any
 solver, does not prove physical mesh quality, and retains the current
 per-case 20,000-cell bound.
 
+Each case manifest also contains an input-only boundary audit. It recomputes
+patch face areas and outward normals from `blockMeshDict`, checks the generated
+velocity and pressure patch types, and verifies that prescribed inlet normal
+velocity integrates to the input supply flow. The audit records the actual
+outlet solver flux and flow balance as `not_measured`; it does not assert that
+the synthetic geometry or flow represents a real cleanroom.
+
 ## Evaluate VTK fields from three completed flow runs
 
 Use the separate example template for one ventilation configuration. Copy

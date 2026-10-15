@@ -37,6 +37,16 @@ Generate all three cases without OpenFOAM installed:
 
     cleanroomx-cfd-pipeline generate examples/cfd_openfoam_spec.example.json ./cfd_cases
 
+Each case manifest includes an input-only boundary audit. It reads the
+generated `blockMeshDict` face coordinates, recomputes inlet/outlet areas and
+outward normals, checks the generated `U`/`p` patch-condition types, and
+integrates the prescribed inlet velocity over the inlet faces against the
+requested supply flow. The audit records the outlet solver flux as
+`not_measured`, the flow balance as `not_measured`, and scientific validation
+as `BLOCKED`. It does not establish that the example room, patch placement,
+or requested flow matches a real cleanroom, and it does not replace reviewing
+the solver's actual inlet/outlet `phi` after execution.
+
 Inspect the resulting system, constant, and 0 field files. The manifest binds
 each generated input using SHA-256; existing output directories are not
 overwritten. Supply airflow is imposed by downward velocity determined from
@@ -52,7 +62,9 @@ and releases are rejected by this v10 case runner. Then opt in:
 
     cleanroomx-cfd-pipeline run ./cfd_cases --timeout-seconds 3600
 
-The runner checks input hashes, uses no shell and records solver logs. A zero
+The runner checks input hashes, recomputes the boundary audit from the bound
+case files, returns those audit records with its execution receipt, uses no
+shell and records solver logs. A zero
 return code is **not CFD convergence**: inspect residuals, continuity,
 boundary flux balance, turbulence/Reynolds applicability, mesh quality and
 grid independence. Other OpenFOAM versions may require solver template

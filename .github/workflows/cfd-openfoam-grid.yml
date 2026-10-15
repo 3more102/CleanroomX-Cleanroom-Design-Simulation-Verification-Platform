@@ -63,6 +63,7 @@ jobs:
           python - "$family" <<'PY'
           import hashlib
           import json
+          import math
           import os
           import shutil
           import subprocess
@@ -88,6 +89,48 @@ jobs:
           expected_files = manifest.get("files")
           if not isinstance(expected_files, dict) or len(expected_files) != 72:
               raise SystemExit("Grid-family manifest does not list exactly 72 generated inputs")
+          case_input_paths = (
+              "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
+              "system/fvSolution", "constant/physicalProperties",
+              "constant/momentumTransport", "0/U", "0/p",
+          )
+          expected_file_paths = {
+              f"{case_id}/{relative}"
+              for case_id in expected_cases
+              for relative in case_input_paths
+          }
+          if set(expected_files) != expected_file_paths:
+              raise SystemExit("Grid-family manifest does not bind the exact inputs used by all nine cases")
+          for case_id in sorted(expected_cases):
+              case = manifest["case_inputs"][case_id]
+              audit = case.get("boundary_audit") if isinstance(case, dict) else None
+              if not isinstance(audit, dict):
+                  raise SystemExit("Missing generated boundary audit: " + case_id)
+              if audit.get("schema_version") != "cleanroomx.openfoam-boundary-audit.v1":
+                  raise SystemExit("Unexpected boundary-audit schema: " + case_id)
+              if audit.get("status") != "input_geometry_and_inlet_flow_consistent":
+                  raise SystemExit("Generated boundary input audit failed: " + case_id)
+              if audit.get("flow_balance_status") != "not_measured":
+                  raise SystemExit("Boundary audit must not claim solver flux balance: " + case_id)
+              if audit.get("scientific_validation") != "BLOCKED":
+                  raise SystemExit("Boundary audit must preserve blocked scientific validation: " + case_id)
+              inlet = audit.get("inlet", {})
+              actual_flow = inlet.get("prescribed_inward_volume_flow_m3_s")
+              requested_flow = inlet.get("requested_volume_flow_m3_s")
+              if (
+                  type(actual_flow) not in (int, float)
+                  or type(requested_flow) not in (int, float)
+                  or not math.isfinite(actual_flow)
+                  or not math.isfinite(requested_flow)
+                  or requested_flow <= 0
+                  or abs(actual_flow - requested_flow) > max(1e-12, abs(requested_flow) * 1e-9)
+              ):
+                  raise SystemExit("Inlet area/normal/velocity does not reproduce requested flow: " + case_id)
+              outlet = audit.get("outlet", {})
+              if outlet.get("actual_solver_volume_flow_m3_s") is not None:
+                  raise SystemExit("Input audit must not fabricate outlet solver flux: " + case_id)
+          print("Generated blockMesh faces, boundary normals, and prescribed inlet flow passed for all nine cases.")
+          print("Outlet solver flux and physical validation remain unmeasured/blocked.")
           for relative, expected_sha in expected_files.items():
               candidate = root / relative
               if candidate.is_symlink():

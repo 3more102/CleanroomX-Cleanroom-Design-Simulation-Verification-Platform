@@ -133,6 +133,11 @@ def test_generate_nine_openfoam_cases_reproducibly(tmp_path):
             root=tmp_path/"family"/f"configuration_{config}"/level
             expected=report["case_inputs"][f"configuration_{config}/{level}"]
             assert expected["mesh_cells"]==math.prod(spec["mesh_levels"][level])
+            boundary_audit=expected["boundary_audit"]
+            assert boundary_audit["status"]=="input_geometry_and_inlet_flow_consistent"
+            assert boundary_audit["flow_balance_status"]=="not_measured"
+            assert boundary_audit["outlet"]["actual_solver_volume_flow_m3_s"] is None
+            assert boundary_audit["scientific_validation"]=="BLOCKED"
             assert (root/"system/blockMeshDict").is_file()
             assert (root/"0/U").is_file()
             assert hashlib.sha256((root/"0/U").read_bytes()).hexdigest()==report["files"][

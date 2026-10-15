@@ -12,6 +12,7 @@ from cleanroomx.cfd_openfoam import (
 from cleanroomx.cfd_vtk import (
     audit_openfoam_vtk_boundary_patch,
     audit_openfoam_vtk_pressure,
+    audit_openfoam_vtk_surface_flux,
     audit_openfoam_vtk_velocity,
     import_vtk_case,
     populate_study_from_vtk,
@@ -394,6 +395,10 @@ def openfoam_patch_fixture(case_dir):
         "FoamFile { format ascii; class labelList; object owner; }",
         "2", "(", "0", "1", ");", "",
     )),encoding="ascii")
+    (mesh/"neighbour").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object neighbour; }",
+        "0", "(", ");", "",
+    )),encoding="ascii")
     (mesh/"boundary").write_text("\n".join((
         "FoamFile { format ascii; class polyBoundaryMesh; object boundary; }",
         "1", "(", "outlet", "{", "type patch;", "nFaces 2;", "startFace 0;", "}", ");", "",
@@ -500,6 +505,158 @@ def test_openfoam_vtk_boundary_patch_parity_rejects_wrong_geometry_id_and_values
     legacy_vtk_patch_fixture(exported,perturb_velocity=0.1)
     with pytest.raises(ValueError,match="patch U differs"):
         audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
+
+def openfoam_surface_flux_fixture(case_dir, *, uniform_boundary=False, wrong_dimensions=False):
+    mesh, time_dir = openfoam_patch_fixture(case_dir)
+    dimensions = "[0 1 -1 0 0 0 0]" if wrong_dimensions else "[0 3 -1 0 0 0 0]"
+    values = "uniform 0;" if uniform_boundary else (
+        "nonuniform List<scalar> 2 (1.234567891 -2.5);"
+    )
+    (time_dir/"phi").write_text("\n".join((
+        "FoamFile { format ascii; class surfaceScalarField; object phi; }",
+        f"dimensions {dimensions};",
+        "internalField nonuniform List<scalar> 0 ();",
+        f"boundaryField {{ outlet {{ type calculated; value {values} }} }}",
+        "",
+    )), encoding="ascii")
+    return mesh, time_dir
+
+def legacy_vtk_surface_flux_fixture(
+    path, *, reverse=False, perturb=0.0, include_phi=True, centres=None, vectors=None
+):
+    vtk = pytest.importorskip("vtk")
+    centres = centres or ((1/3, 1/3, 0), (5/3, 1/3, 0))
+    vectors = vectors or ((0, 0, 1.234567891), (0, 0, -2.5))
+    if reverse:
+        centres = tuple(reversed(centres))
+        vectors = tuple(reversed(vectors))
+    poly = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    for centre in centres:
+        points.InsertNextPoint(*centre)
+    poly.SetPoints(points)
+    if include_phi:
+        flux = vtk.vtkFloatArray()
+        flux.SetName("phi")
+        flux.SetNumberOfComponents(3)
+        for vector in vectors:
+            flux.InsertNextTuple3(vector[0], vector[1], vector[2] + perturb)
+        poly.GetPointData().AddArray(flux)
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(str(path))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(poly)
+    assert writer.Write() == 1
+
+def test_openfoam_vtk_surface_flux_parity_maps_internal_then_boundary_faces(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case)
+    (mesh/"faces").write_text("\n".join((
+        "FoamFile { format ascii; class faceList; object faces; }",
+        "3", "(", "3(0 1 2)", "3(1 4 5)", "3(0 2 3)", ");", "",
+    )), encoding="ascii")
+    (mesh/"owner").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object owner; }",
+        "3", "(", "0", "0", "1", ");", "",
+    )), encoding="ascii")
+    (mesh/"neighbour").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object neighbour; }",
+        "1", "(", "1", ");", "",
+    )), encoding="ascii")
+    (mesh/"boundary").write_text("\n".join((
+        "FoamFile { format ascii; class polyBoundaryMesh; object boundary; }",
+        "1", "(", "outlet", "{", "type patch;", "nFaces 2;", "startFace 1;", "}", ");", "",
+    )), encoding="ascii")
+    (time_dir/"phi").write_text("\n".join((
+        "FoamFile { format ascii; class surfaceScalarField; object phi; }",
+        "dimensions [0 3 -1 0 0 0 0];",
+        "internalField nonuniform List<scalar> 1 (0.123456789);",
+        "boundaryField { outlet { type calculated; value nonuniform List<scalar> 2 (1.234567891 -2.5); } }",
+        "",
+    )), encoding="ascii")
+    exported = tmp_path/"surfaceFields_150.vtk"
+    legacy_vtk_surface_flux_fixture(
+        exported,
+        centres=((1/3, 1/3, 0), (5/3, 1/3, 0), (0, 1/3, 1/3)),
+        vectors=((0, 0, 0.123456789), (0, 0, 1.234567891), (-2.5, 0, 0)),
+    )
+
+    report = audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    assert report["internal_face_count"] == 1
+    assert report["boundary_face_count"] == 2
+    assert report["face_count"] == 3
+    assert report["compared_flux_vector_components"] == 9
+    assert report["status"] == "PASS"
+
+def test_openfoam_vtk_surface_flux_parity_uses_mesh_face_order_and_rounding_bounds(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case)
+    exported = tmp_path/"surfaceFields_150.vtk"
+    legacy_vtk_surface_flux_fixture(exported)
+
+    report = audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    assert report["status"] == "PASS"
+    assert report["field"] == "phi"
+    assert report["dimensions"] == "[0 3 -1 0 0 0 0]"
+    assert report["field_representation"] == "phi_times_oriented_unit_face_normal"
+    assert report["face_mapping"] == "native_polyMesh_face_index_verified_by_serialized_face_centres"
+    assert report["face_count"] == 2
+    assert report["internal_face_count"] == 0
+    assert report["boundary_face_count"] == 2
+    assert report["compared_flux_vector_components"] == 6
+    assert report["boundary_field_types"] == {"outlet": "calculated"}
+    assert report["vtk_phi_scalar_type"] == "float"
+    assert report["max_absolute_flux_error_m3_s"] > 0
+    assert report["max_absolute_flux_error_m3_s"] <= report["max_allowed_flux_error_m3_s"]
+    assert report["max_face_centre_error_m"] <= report["max_allowed_face_centre_error_m"]
+
+def test_openfoam_vtk_surface_flux_parity_rejects_wrong_order_values_and_dimensions(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case)
+    exported = tmp_path/"surfaceFields_150.vtk"
+
+    legacy_vtk_surface_flux_fixture(exported, reverse=True)
+    with pytest.raises(ValueError, match="face centre"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    legacy_vtk_surface_flux_fixture(exported, perturb=0.1)
+    with pytest.raises(ValueError, match="phi differs"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    legacy_vtk_surface_flux_fixture(exported, include_phi=False)
+    with pytest.raises(ValueError, match="phi vectors"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    (time_dir/"phi").write_text((time_dir/"phi").read_text(encoding="ascii").replace(
+        "dimensions [0 3 -1 0 0 0 0];", "dimensions [0 1 -1 0 0 0 0];"
+    ), encoding="ascii")
+    with pytest.raises(ValueError, match="volume-flux dimensions"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+def test_openfoam_vtk_surface_flux_parity_accepts_uniform_zero_wall_flux(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case, uniform_boundary=True)
+    exported = tmp_path/"surfaceFields_150.vtk"
+    legacy_vtk_surface_flux_fixture(exported)
+    vtk = pytest.importorskip("vtk")
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(str(exported))
+    reader.Update()
+    values = reader.GetOutput().GetPointData().GetArray("phi")
+    values.SetTuple3(0, 0, 0, 0)
+    values.SetTuple3(1, 0, 0, 0)
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(str(exported))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(reader.GetOutput())
+    assert writer.Write() == 1
+
+    report = audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+    assert report["status"] == "PASS"
+    assert report["boundary_field_types"] == {"outlet": "calculated"}
+    assert report["max_absolute_flux_error_m3_s"] == 0
 
 def test_actual_vtk_field_import_and_pareto(tmp_path):
     sources={}

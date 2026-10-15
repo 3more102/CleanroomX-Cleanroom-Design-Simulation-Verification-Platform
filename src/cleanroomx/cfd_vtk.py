@@ -59,6 +59,7 @@ _FOAM_INTERNAL_SCALAR_FIELD = re.compile(
     re.DOTALL,
 )
 MAX_OPENFOAM_FIELD_BYTES = 64 * 1024 * 1024
+MAX_OPENFOAM_FACES = 600_000
 # The current Foundation v10 run artifacts write legacy VTK FIELD values with
 # six significant decimal digits unless a different writer precision is used.
 OPENFOAM_VTK_ASCII_PRECISION = 6
@@ -494,6 +495,16 @@ def _read_openfoam_mesh_owners(path, face_count, mesh_root):
     return [int(token) for token in tokens], digest
 
 
+def _read_openfoam_mesh_neighbours(path, mesh_root):
+    text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh neighbours", root=mesh_root)
+    clean = _strip_foam_comments(text)
+    count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh neighbours")
+    tokens = re.findall(r"\d+", body)
+    if count > MAX_OPENFOAM_FACES or len(tokens) != count or re.sub(r"\d+", "", body).strip():
+        raise ValueError("OpenFOAM mesh neighbour list does not match its declared count")
+    return [int(token) for token in tokens], digest
+
+
 def _read_openfoam_boundary_patches(path, face_count, mesh_root):
     text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh boundary", root=mesh_root)
     clean = _strip_foam_comments(text)
@@ -534,6 +545,145 @@ def _read_openfoam_boundary_patches(path, face_count, mesh_root):
             raise ValueError("OpenFOAM boundary patch face ranges overlap or contain gaps")
         cursor = end
     return patches, digest
+
+
+def _foam_scalar_values(body, declared_count, description):
+    tokens = re.findall(_FOAM_NUMBER, body)
+    if len(tokens) != declared_count or re.sub(_FOAM_NUMBER, "", body).strip():
+        raise ValueError(f"{description} does not match its declared scalar count")
+    values = [float(token) for token in tokens]
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(f"{description} contains a non-finite value")
+    return values
+
+
+def _read_native_openfoam_surface_flux(path, internal_face_count, patches):
+    """Read a Foundation v10 ASCII surfaceScalarField phi in mesh-face order."""
+    text, digest = _read_stable_ascii_file(path, "Native OpenFOAM phi")
+    clean = _strip_foam_comments(text)
+    if not re.search(r"\bclass\s+surfaceScalarField\s*;", clean):
+        raise ValueError("Native OpenFOAM phi is not a surfaceScalarField")
+    if not re.search(r"\bobject\s+phi\s*;", clean):
+        raise ValueError("Native OpenFOAM field object is not phi")
+    if not re.search(r"\bdimensions\s+\[\s*0\s+3\s+-1\s+0\s+0\s+0\s+0\s*\]\s*;", clean):
+        raise ValueError("Native OpenFOAM phi must have volume-flux dimensions")
+
+    internal_uniform = re.findall(rf"\binternalField\s+uniform\s+({_FOAM_NUMBER})\s*;", clean)
+    internal_nonuniform = re.findall(
+        r"\binternalField\s+nonuniform\s+List\s*<\s*scalar\s*>\s*(\d+)\s*\((.*?)\)\s*;",
+        clean,
+        flags=re.DOTALL,
+    )
+    if len(internal_uniform) == 1 and not internal_nonuniform:
+        internal_values = [float(internal_uniform[0])] * internal_face_count
+    elif not internal_uniform and len(internal_nonuniform) == 1:
+        declared_count, body = internal_nonuniform[0]
+        if int(declared_count) != internal_face_count:
+            raise ValueError("Native OpenFOAM phi internal values do not match the neighbour face count")
+        internal_values = _foam_scalar_values(body, internal_face_count, "Native OpenFOAM phi internal field")
+    else:
+        raise ValueError("Native OpenFOAM phi must contain one supported internal scalar field")
+
+    boundary = _extract_foam_braced_block(clean, "boundaryField", "Native OpenFOAM phi")
+    field_patch_names = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\{", boundary)
+    expected_patch_names = [patch["name"] for patch in patches]
+    if len(field_patch_names) != len(expected_patch_names) or set(field_patch_names) != set(expected_patch_names):
+        raise ValueError("Native OpenFOAM phi patch names do not match the polyMesh boundary")
+
+    boundary_values = {}
+    boundary_types = {}
+    for patch in patches:
+        patch_name = patch["name"]
+        patch_text = _extract_foam_braced_block(
+            boundary, patch_name, "Native OpenFOAM phi boundaryField"
+        )
+        types = re.findall(r"\btype\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", patch_text)
+        if len(types) != 1:
+            raise ValueError(f"Native OpenFOAM phi patch {patch_name} must declare one type")
+
+        uniform = re.findall(rf"\bvalue\s+uniform\s+({_FOAM_NUMBER})\s*;", patch_text)
+        nonuniform = re.findall(
+            r"\bvalue\s+nonuniform\s+List\s*<\s*scalar\s*>\s*(\d+)\s*\((.*?)\)\s*;",
+            patch_text,
+            flags=re.DOTALL,
+        )
+        if len(uniform) == 1 and not nonuniform:
+            values = [float(uniform[0])] * patch["face_count"]
+        elif not uniform and len(nonuniform) == 1:
+            declared_count, body = nonuniform[0]
+            if int(declared_count) != patch["face_count"]:
+                raise ValueError(f"Native OpenFOAM phi patch {patch_name} count is invalid")
+            values = _foam_scalar_values(body, patch["face_count"], f"Native OpenFOAM phi patch {patch_name}")
+        else:
+            raise ValueError(f"Native OpenFOAM phi patch {patch_name} has no supported scalar values")
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError(f"Native OpenFOAM phi patch {patch_name} contains a non-finite value")
+        boundary_values[patch_name] = values
+        boundary_types[patch_name] = types[0]
+
+    ordered_patches = sorted(patches, key=lambda patch: patch["start_face"])
+    expected_start = internal_face_count
+    values = list(internal_values)
+    for patch in ordered_patches:
+        if patch["start_face"] != expected_start:
+            raise ValueError("OpenFOAM boundary patches do not start after the internal faces")
+        values.extend(boundary_values[patch["name"]])
+        expected_start += patch["face_count"]
+    return values, digest, boundary_types
+
+
+def _openfoam_face_centres_and_normals(points, faces):
+    centres = []
+    normals = []
+    for face in faces:
+        origin = points[face[0]]
+        area_vector = [0.0, 0.0, 0.0]
+        weighted_centre = [0.0, 0.0, 0.0]
+        total_triangle_area = 0.0
+        triangle_vectors = []
+        for index in range(1, len(face) - 1):
+            left = points[face[index]]
+            right = points[face[index + 1]]
+            left_delta = tuple(left[axis] - origin[axis] for axis in range(3))
+            right_delta = tuple(right[axis] - origin[axis] for axis in range(3))
+            cross = (
+                left_delta[1] * right_delta[2] - left_delta[2] * right_delta[1],
+                left_delta[2] * right_delta[0] - left_delta[0] * right_delta[2],
+                left_delta[0] * right_delta[1] - left_delta[1] * right_delta[0],
+            )
+            triangle_area_vector = tuple(component * 0.5 for component in cross)
+            triangle_area = math.sqrt(sum(component * component for component in triangle_area_vector))
+            if not math.isfinite(triangle_area) or triangle_area <= 0.0:
+                raise ValueError("OpenFOAM mesh contains a degenerate face triangle")
+            triangle_vectors.append(triangle_area_vector)
+            for axis in range(3):
+                area_vector[axis] += triangle_area_vector[axis]
+                weighted_centre[axis] += triangle_area * (
+                    origin[axis] + left[axis] + right[axis]
+                ) / 3.0
+            total_triangle_area += triangle_area
+
+        area_magnitude = math.sqrt(sum(component * component for component in area_vector))
+        if not math.isfinite(area_magnitude) or area_magnitude <= 0.0:
+            raise ValueError("OpenFOAM mesh contains a face with zero oriented area")
+        normal = tuple(component / area_magnitude for component in area_vector)
+        if any(sum(a * b for a, b in zip(triangle, normal)) <= 0.0 for triangle in triangle_vectors):
+            raise ValueError("OpenFOAM face is not a convex, consistently wound polygon")
+        centre = tuple(component / total_triangle_area for component in weighted_centre)
+        scale = max(
+            math.sqrt(sum((points[face[i]][axis] - origin[axis]) ** 2 for axis in range(3)))
+            for i in range(1, len(face))
+        )
+        planar_tolerance = max(1e-12, scale * 1e-10)
+        if any(
+            abs(sum((points[point_id][axis] - origin[axis]) * normal[axis] for axis in range(3)))
+            > planar_tolerance
+            for point_id in face
+        ):
+            raise ValueError("OpenFOAM surface-field parity supports planar faces only")
+        centres.append(centre)
+        normals.append(normal)
+    return centres, normals
 
 
 def _foam_patch_expected_values(text, field_name, patch_name, components, internal_values, owners, face_ids):
@@ -798,6 +948,141 @@ def audit_openfoam_vtk_boundary_patch(
         "max_allowed_pressure_error_m2_s2": maximum_p_allowed,
         "max_float32_pressure_residual_m2_s2": maximum_p_float32_residual,
         "max_relative_pressure_error": maximum_p_relative,
+        "tolerance_basis": "two IEEE-754 binary32 round-to-nearest bounds (field cast and VTK reader) plus half-unit in the last place for the configured ASCII significant-digit precision",
+    }
+
+
+def audit_openfoam_vtk_surface_flux(
+    native_phi_path,
+    poly_mesh_directory,
+    vtk_surface_path,
+    *,
+    ascii_precision=OPENFOAM_VTK_ASCII_PRECISION,
+):
+    """Compare Foundation v10 surfaceScalarField phi with foamToVTK output.
+
+    Foundation v10 writes surface fields as face-centre points, with phi
+    represented as the vector phi times the oriented unit face normal. The
+    native polyMesh face index is checked against each serialized centre before
+    comparing its vector components.
+    """
+    if type(ascii_precision) is not int or not 6 <= ascii_precision <= 17:
+        raise ValueError("ASCII precision must be an integer from 6 through 17 significant digits")
+    mesh_root = Path(poly_mesh_directory)
+    if mesh_root.is_symlink() or not mesh_root.is_dir():
+        raise ValueError("OpenFOAM polyMesh directory must be a regular, non-symlink directory")
+
+    points, points_sha = _read_openfoam_mesh_points(mesh_root / "points", mesh_root)
+    faces, faces_sha = _read_openfoam_mesh_faces(mesh_root / "faces", len(points), mesh_root)
+    if not 0 < len(faces) <= MAX_OPENFOAM_FACES:
+        raise ValueError("OpenFOAM mesh face count is invalid or exceeds the audit limit")
+    owners, owners_sha = _read_openfoam_mesh_owners(mesh_root / "owner", len(faces), mesh_root)
+    neighbours, neighbours_sha = _read_openfoam_mesh_neighbours(mesh_root / "neighbour", mesh_root)
+    patches, boundary_sha = _read_openfoam_boundary_patches(mesh_root / "boundary", len(faces), mesh_root)
+    if not patches or min(patch["start_face"] for patch in patches) != len(neighbours):
+        raise ValueError("OpenFOAM boundary does not begin after the internal faces")
+    if any(owner < 0 for owner in owners) or any(neighbour < 0 for neighbour in neighbours):
+        raise ValueError("OpenFOAM mesh contains a negative cell reference")
+
+    native_values, native_sha, boundary_types = _read_native_openfoam_surface_flux(
+        native_phi_path, len(neighbours), patches
+    )
+    if len(native_values) != len(faces):
+        raise ValueError("Native OpenFOAM phi does not cover every polyMesh face")
+    centres, normals = _openfoam_face_centres_and_normals(points, faces)
+
+    source = Path(vtk_surface_path)
+    if source.is_symlink() or not source.is_file() or source.suffix.lower() != ".vtk":
+        raise ValueError("foamToVTK surface-field output must be a regular legacy VTK file")
+    before = source.stat()
+    if before.st_size > MAX_VTK_BYTES:
+        raise ValueError("VTK surface-field file exceeds bounded input limit")
+    with source.open("rb") as stream:
+        source_sha = hashlib.file_digest(stream, "sha256").hexdigest()
+    try:
+        import vtk
+    except ImportError as exc:
+        raise RuntimeError("pip install vtk to read VTK surface-field data") from exc
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(str(source))
+    reader.Update()
+    dataset = reader.GetOutput()
+    after = source.stat()
+    if (after.st_mtime_ns, after.st_size) != (before.st_mtime_ns, before.st_size):
+        raise ValueError("VTK surface-field file changed during parity ingestion")
+    with source.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != source_sha:
+            raise ValueError("VTK surface-field content changed during parity ingestion")
+    if dataset is None or dataset.GetNumberOfPoints() != len(faces) or dataset.GetNumberOfCells() != 0:
+        raise ValueError("foamToVTK surface-field points do not cover the native mesh faces")
+
+    flux_vectors = dataset.GetPointData().GetArray("phi")
+    if flux_vectors is None or flux_vectors.GetNumberOfComponents() != 3:
+        raise ValueError("foamToVTK surface fields must contain three-component phi vectors")
+    if flux_vectors.GetNumberOfTuples() != len(faces):
+        raise ValueError("foamToVTK phi vector count differs from the native mesh face count")
+    if flux_vectors.GetDataTypeAsString() != "float":
+        raise ValueError("Surface-flux parity requires the foamToVTK float32 representation")
+
+    max_flux_error = 0.0
+    max_flux_allowed = 0.0
+    max_centre_error = 0.0
+    max_centre_allowed = 0.0
+    compared_components = 0
+    for face_id, (native_phi, centre, normal) in enumerate(zip(native_values, centres, normals)):
+        vtk_centre = tuple(float(value) for value in dataset.GetPoint(face_id))
+        vtk_vector = tuple(float(value) for value in flux_vectors.GetTuple3(face_id))
+        if not all(math.isfinite(value) for value in (*vtk_centre, *vtk_vector)):
+            raise ValueError("foamToVTK surface-field points or phi vectors contain non-finite values")
+        expected_vector = tuple(native_phi * component for component in normal)
+        for native_value, vtk_value in zip(centre, vtk_centre):
+            expected_float32, conversion_bound = _float32_rounding_bound(native_value)
+            serialization_bound = _ascii_rounding_bound(expected_float32, ascii_precision)
+            reader_bound = conversion_bound + serialization_bound
+            allowed = conversion_bound + reader_bound
+            residual = abs(vtk_value - expected_float32)
+            if residual > reader_bound + 4.0 * math.ulp(expected_float32):
+                raise ValueError("foamToVTK face centre differs from the native polyMesh face ordering")
+            max_centre_error = max(max_centre_error, abs(vtk_value - native_value))
+            max_centre_allowed = max(max_centre_allowed, allowed)
+        for native_value, vtk_value in zip(expected_vector, vtk_vector):
+            expected_float32, conversion_bound = _float32_rounding_bound(native_value)
+            serialization_bound = _ascii_rounding_bound(expected_float32, ascii_precision)
+            reader_bound = conversion_bound + serialization_bound
+            allowed = conversion_bound + reader_bound
+            residual = abs(vtk_value - expected_float32)
+            if residual > reader_bound + 4.0 * math.ulp(expected_float32):
+                raise ValueError("foamToVTK phi differs from native face flux beyond float32/ASCII precision")
+            max_flux_error = max(max_flux_error, abs(vtk_value - native_value))
+            max_flux_allowed = max(max_flux_allowed, allowed)
+            compared_components += 1
+
+    return {
+        "status": "PASS",
+        "field": "phi",
+        "dimensions": "[0 3 -1 0 0 0 0]",
+        "field_representation": "phi_times_oriented_unit_face_normal",
+        "face_mapping": "native_polyMesh_face_index_verified_by_serialized_face_centres",
+        "face_count": len(faces),
+        "internal_face_count": len(neighbours),
+        "boundary_face_count": len(faces) - len(neighbours),
+        "compared_flux_vector_components": compared_components,
+        "boundary_field_types": boundary_types,
+        "native_field_sha256": native_sha,
+        "vtk_sha256": source_sha,
+        "vtk_phi_scalar_type": flux_vectors.GetDataTypeAsString(),
+        "ascii_significant_digits": ascii_precision,
+        "max_absolute_flux_error_m3_s": max_flux_error,
+        "max_allowed_flux_error_m3_s": max_flux_allowed,
+        "max_face_centre_error_m": max_centre_error,
+        "max_allowed_face_centre_error_m": max_centre_allowed,
+        "native_mesh_sha256": {
+            "points": points_sha,
+            "faces": faces_sha,
+            "owner": owners_sha,
+            "neighbour": neighbours_sha,
+            "boundary": boundary_sha,
+        },
         "tolerance_basis": "two IEEE-754 binary32 round-to-nearest bounds (field cast and VTK reader) plus half-unit in the last place for the configured ASCII significant-digit precision",
     }
 

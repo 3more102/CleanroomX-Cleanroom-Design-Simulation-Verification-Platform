@@ -75,9 +75,10 @@ changes: v11+ Foundation uses foamRun solver modules.
 
 The GitHub nine-case Foundation v10 workflow additionally requires
 `foamToVTK`. After each successful `simpleFoam` run, it exports the latest
-cell velocity `U` and kinematic-pressure `p` fields with ASCII polyhedral output, imports the resulting VTK,
-and binds its hash and cell count to the generated-input manifest. It then
-reopens and verifies all nine outputs before uploading the evidence artifact.
+cell velocity `U`, kinematic-pressure `p`, and surface flux `phi` with ASCII
+output, imports the cell dataset, and binds its hash and cell count to the
+generated-input manifest. It then reopens and verifies all nine outputs before
+uploading the evidence artifact.
 This workflow export is a reproducibility and ingestion check; it is not part
 of the standalone `run` command and does not establish CFD convergence,
 mesh independence, or physical validation.
@@ -100,6 +101,18 @@ using binary32 rounding plus half a last decimal place at the workflow's
 six-digit ASCII precision. These tolerances describe field serialization only;
 they are not CFD solver acceptance thresholds and provide no convergence or
 physical validation evidence.
+
+The workflow also requests `foamToVTK -surfaceFields` for the native
+`surfaceScalarField phi`. In the pinned Foundation v10 implementation,
+[`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
+converts each scalar flux to `phi` times the oriented unit face normal, and
+[`writeSurfFields.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK/writeSurfFields.C)
+serializes those values with the mesh face centres in face order. CleanroomX
+reconstructs face centres and normals from the archived `polyMesh`, checks the
+serialized centre sequence, and compares all three vector components within
+the float32/ASCII bounds. This checks the v10 export representation for the
+synthetic mesh family; it does not set a flow-balance criterion or establish
+solver convergence or physical validity.
 
 The independently rechecked run 58 U archive and per-case native/VTK hashes
 are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).

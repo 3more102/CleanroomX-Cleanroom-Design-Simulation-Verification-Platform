@@ -45,6 +45,26 @@ Foundation v10 exports the legacy VTK `U` array as float32. The recorded bound a
 
 After downloading the archive, its SHA-256 and all 18 native/VTK file digests were independently checked. Re-running CleanroomX's parity audit on the archived files reproduced each of the nine recorded parity results exactly.
 
+## Numerical-screening observations
+
+The triage JSON reports byte-identical solver-condition inputs across the three grid levels within each configuration for `0/U`, `0/p`, `constant/physicalProperties`, `constant/momentumTransport`, `system/controlDict`, `system/fvSchemes`, and `system/fvSolution`. It hashes `system/blockMeshDict` separately. This confirms the recorded input comparison; it does not establish that the conditions or geometry are physically correct.
+
+The table reports each logged terminal initial residual divided by its configured residual-screen tolerance (`U`: `1e-6`; `p`: `1e-5`). This is the documented log-based screen, not a reproduction of OpenFOAM's internal residual-control calculation. Fluxes are final-time `phi` measurements; no project balance threshold is defined.
+
+| Case | U residual/tolerance | p residual/tolerance | Net outlet flow (m³/s) | Reverse inward outlet flow (m³/s) | Flux imbalance |
+|---|---:|---:|---:|---:|---:|
+| configuration_1/coarse | 10,027.3× | 4,258.7× | 0.149863793 | 0.005590868 | 0.090804% |
+| configuration_1/medium | 521.9× | 446.3× | 0.150008012 | 0.022107697 | 0.005341% |
+| configuration_1/fine | 6,607.5× | 6,022.2× | 0.150186394 | 0.006768355 | 0.124263% |
+| configuration_2/coarse | 23,246.1× | 6,727.5× | 0.149719282 | 0 | 0.187145% |
+| configuration_2/medium | 52,810.0× | 12,796.0× | 0.149862684 | 0 | 0.091544% |
+| configuration_2/fine | 39,726.1× | 13,984.5× | 0.149946582 | 0 | 0.035612% |
+| configuration_3/coarse | 84,128.4× | 14,823.1× | 0.149743598 | 0 | 0.170935% |
+| configuration_3/medium | 123,064.9× | 23,027.7× | 0.149893535 | 0 | 0.070977% |
+| configuration_3/fine | 174,725.4× | 25,911.7× | 0.149915670 | 0 | 0.056220% |
+
+Configuration 1's generated outlet spans the `+x` and `-x` faces, and its `phi` record contains inward outlet flux at all three grid levels. This is an observed property of the synthetic setup; the archive does not establish whether that reverse flow is appropriate for any real cleanroom or identify its cause. Across all configurations, the residual screens fail. The grid-level outlet-flow values alone therefore do not establish convergence or justify GCI.
+
 ## Remaining engineering and scientific limits
 
 - This is synthetic execution evidence. The generated model is an empty rectangular room without an underfloor plenum, turbulence or buoyancy, scalar/particle transport, or physical measurement inputs.

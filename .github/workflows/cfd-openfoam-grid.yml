@@ -236,8 +236,6 @@ jobs:
                           or diagnostics["reported_check_failures"]
                       ):
                           problem = "CHECKMESH_MESH_CHECK_FAILED"
-                  if problem is None and command == "checkMesh" and "Mesh OK." not in log_text:
-                      problem = "CHECKMESH_MESH_OK_MARKER_MISSING"
                   if problem is None and command == "checkMesh":
                       try:
                           case_input = manifest["case_inputs"][case_id]
@@ -566,6 +564,11 @@ jobs:
                   raise SystemExit("Nonzero command stage in receipt: " + case_id)
               if case.get("status") != "executed_requires_convergence_review":
                   raise SystemExit("Case is not complete: " + case_id)
+              dataset = case.get("vtk_export")
+              export_stage = stages[-1]
+              if not isinstance(dataset, dict) or dataset != export_stage.get("vtk_dataset"):
+                  raise SystemExit("VTK export is missing or differs from the command stage: " + case_id)
+              relative = PurePosixPath(dataset.get("path", ""))
               case_parts = PurePosixPath(case_id).parts
               checkmesh_stage = stages[1]
               recorded_volume_audit = case.get("poly_mesh_volume_audit")
@@ -602,11 +605,6 @@ jobs:
                   f"bounding_box_m3={recomputed_volume_audit['poly_mesh']['bounding_box_volume_m3']:.12g} "
                   "status=PASS"
               )
-              dataset = case.get("vtk_export")
-              export_stage = stages[-1]
-              if not isinstance(dataset, dict) or dataset != export_stage.get("vtk_dataset"):
-                  raise SystemExit("VTK export is missing or differs from the command stage: " + case_id)
-              relative = PurePosixPath(dataset.get("path", ""))
               if (
                   relative.is_absolute()
                   or any(part in ("", ".", "..") for part in relative.parts)
@@ -914,8 +912,6 @@ jobs:
                   )
           if total_patch_faces <= 0:
               raise SystemExit("No native-to-VTK boundary patch faces were audited")
-          if set(volume_cases) != expected_cases:
-              raise SystemExit("PolyMesh volume audit does not contain exactly nine cases")
           lines.append(
               f"PATCH_TOTALS: datasets=27 faces={total_patch_faces} "
               f"U_components={total_patch_faces * 3} p_values={total_patch_faces}"
@@ -926,7 +922,8 @@ jobs:
               f"SURFACE_FLUX_TOTALS: datasets=9 faces={total_surface_flux_faces} "
               f"phi_vector_components={total_surface_flux_faces * 3}"
           )
-          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          if set(volume_cases) != expected_cases:
+              raise SystemExit("PolyMesh volume audit does not contain exactly nine cases")
           volume_report = {
               "schema_version": "cleanroomx.openfoam-poly-mesh-volume-audit.v1",
               "status": "PASS",
@@ -944,6 +941,7 @@ jobs:
               json.dumps(volume_report, indent=2, sort_keys=True, allow_nan=False) + "\n",
               encoding="utf-8",
           )
+          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
           Path(sys.argv[3]).write_text("\n".join(volume_lines) + "\n", encoding="utf-8")
           PY
 

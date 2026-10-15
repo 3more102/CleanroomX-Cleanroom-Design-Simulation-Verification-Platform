@@ -47,21 +47,26 @@ records all nine cases' terminal residual-to-setting multiples and compares
 early/late log medians. Every case remains above the generated residual screen;
 the analysis is descriptive and does not diagnose a physical cause.
 
+The [run 67 execution report](OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md)
+records the later exact-head workflow receipt and per-case hashes. It confirms
+execution and field-serialization evidence for synthetic inputs only; residual
+and physical-validation gates remain open.
+
 The runner now records a structured, raw-log-hash-bound `checkMesh` summary
 and stops before `simpleFoam` when required Foundation v10 records are missing,
 ambiguous, non-finite, or report a failed check. It applies no project mesh
 acceptance thresholds; see [the diagnostic receipt guide](OPENFOAM_CHECKMESH_DIAGNOSTICS.md).
+
 The Foundation v10 workflow also receipt-binds each `checkMesh.log` digest,
 reconstructs every cell volume from the ASCII `polyMesh` points, faces, owner,
 and neighbour lists, and compares cell counts, minimum/maximum/total volumes,
 the reconstructed bounding-box volume, and manifest-derived room volume. The
 uploaded `poly_mesh_volume_audit.json` records the five mesh-file hashes and
-the comparison tolerances. CheckMesh rounding bounds come from the longest
-numeric precision present in its volume summary; floating-point bounds cover
-the reconstruction arithmetic using `128 × binary64 epsilon ×
-max(1, |value|)`. These are serialization and arithmetic tolerances only, not
-CFD acceptance thresholds. The audit checks consistency of the synthetic mesh
-evidence; it does not establish mesh quality, numerical convergence, or
+the comparison tolerances. CheckMesh rounding bounds come from the numeric
+precision present in its volume summary; floating-point bounds cover the
+reconstruction arithmetic. These are serialization and arithmetic tolerances,
+not CFD acceptance thresholds. The audit checks consistency of the synthetic
+mesh evidence; it does not establish mesh quality, numerical convergence, or
 physical suitability.
 
 This verifies solver execution and VTK ingestion for that synthetic run only.
@@ -187,7 +192,7 @@ against measurements and relevant design/qualification requirements.
 For an actual completed OpenFOAM Foundation-style simpleFoam.log, run:
 
     python -m cleanroomx.cfd_convergence_triage \
-      path/to/simpleFoam.log --fields Ux Uy Uz p --window 5 --trend-window 50
+      path/to/simpleFoam.log --fields Ux Uy Uz p --window 5
 
 The command performs a bounded read of at most 64 MiB plus one guard byte
 of UTF-8 log data without invoking OpenFOAM, including when the log grows
@@ -199,12 +204,8 @@ symbolic link. A detected replacement or mutation fails with
 consistency check, not atomic snapshotting or authenticated provenance:
 concurrent edits may still evade metadata comparisons.
 It retains only the requested recent
-`--window` residual and global-continuity values plus the first and last
-`--trend-window` initial residuals per requested field, while preserving
-the total counts, latest time stamp, and full-log SHA-256. The compared trend
-windows are disjoint; for shorter logs, both shrink to at most half the
-available samples. Both windows are bounded to 10,000 samples;
-`--trend-window` defaults to 50. It maintains only
+`--window` residual and global-continuity values in memory while preserving
+the total counts, latest time stamp, and full-log SHA-256. It maintains only
 a running time-step count instead of a separate list of all time stamps,
 and reuses its parsed line list to find the final nonblank `End`.
 Input bytes and decoded text are still materialized under the 64 MiB cap. It reports solver residual history, recent
@@ -231,24 +232,6 @@ and `Uz` initial residuals as a conservative component proxy. This is not the
 solver's internal vector `residualControl` value or a nonlinear convergence
 decision. Missing, repeated, malformed, or ambiguous criteria/terminal records
 produce `UNKNOWN`; the screen never changes `scientific_validation=BLOCKED`.
-
-The `residual_trend` record compares the median initial linear residual in the
-first and last disjoint windows for each requested field. Each window uses
-`min(--trend-window, floor(sample_count / 2))` samples so short logs never
-compare overlapping records. It reports both medians and their ratio, with
-`INSUFFICIENT_SAMPLES` when fewer than two records exist and
-`ZERO_INITIAL_MEDIAN` when a ratio would divide by zero. A ratio that
-overflows to a non-finite value is reported as `NONFINITE_RATIO`. The trend is
-descriptive only: a ratio below one means the selected tail median is lower
-than the selected initial median. It has no pass/fail
-threshold and does not show monotonic reduction, reproduce vector `U`
-residualControl, establish solver convergence, or change the blocked
-scientific-validation status.
-
-Descriptive trend analyses of the archived synthetic Foundation v10 runs 67
-and 68, including per-case medians and ratios, are recorded in the
-[run 67 report](OPENFOAM_V10_RUN_38777678904_RESIDUAL_TREND.md) and the
-[run 68 report](OPENFOAM_V10_RUN_38779101381_RESIDUAL_TREND.md).
 
 The `incomplete_prior_time_steps` count detects incomplete earlier steps
 even when the final step is complete. Both the log and its parent directories
@@ -280,7 +263,7 @@ measured cleanroom data are separately required under issue #1296.
 Use the read-only family command after the nine Foundation v10 runs have
 completed:
 
-    cleanroomx-cfd-grid-triage ./cfd_mesh_family --window 5 --trend-window 50
+    cleanroomx-cfd-grid-triage ./cfd_mesh_family --window 5
 
 It reads only the expected
 `configuration_1..3/{coarse,medium,fine}/simpleFoam.log` files and writes a
@@ -312,10 +295,7 @@ byte digest. It does **not** mean the configured residual screen passed.
 `configured_residual_screen` separately reports whether each case's logged
 Foundation `U` and `p` initial residuals are below the tolerances shown in
 its log. The vector-`U` comparison uses the largest logged component as a
-proxy. Each case also has the descriptive `residual_trend` values for its
-requested logged fields; `--trend-window` selects the number of initial and
-tail samples used for each median. These ratios do not add convergence
-criteria. Even when the residual screen is below tolerance,
+proxy. Even when the residual screen is below tolerance,
 `scientific_validation` remains `BLOCKED`: this command does not establish
 nonlinear or physical convergence, independent executions, mass balance,
 mesh independence, model suitability, or cleanroom performance. It does not

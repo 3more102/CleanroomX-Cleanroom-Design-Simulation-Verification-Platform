@@ -334,3 +334,41 @@ def test_run_70_surface_flux_parity_is_partial_and_keeps_completion_counts_zero(
     assert report_json["tracks"]["integration_status"]["complete"] == 0
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38782861576_POLYMESH_VOLUME_AUDIT.md"
+
+    for capability_id in ("OF10-UTILITY-checkMesh", "OF10-MESH-QUALITY", "OF10-MESH-DESCRIPTION"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 80" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11995514437" in row["test_evidence"]
+        assert "project" in row["remaining_gap"].lower()
+
+    for capability_id in ("OF10-PHYSICAL-PROPERTIES", "OF10-MOMENTUM-TRANSPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 80" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "8bd5c2fd138c39ca8e836358cd622a6e13de4d2a24a7de16af1a7c32267cc839" in report_text
+    assert "0.883858" in report_text
+    assert "12.0 / 12.0 / 12.0 / 12.0" in report_text
+    assert "scientific validation remains `BLOCKED`" in report_text
+    assert "not mesh-quality or CFD acceptance thresholds" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

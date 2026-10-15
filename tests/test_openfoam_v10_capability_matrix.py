@@ -135,3 +135,34 @@ def test_complete_native_row_can_score_with_pass_evidence_and_no_remaining_gap()
     from scripts.openfoam_v10_parity_score import validate
 
     validate(rows, inventory)
+
+
+def test_run_54_evidence_is_partial_and_keeps_parity_scope():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    simple_foam = rows["OF10-SOLVER-simpleFoam"]
+    runner = rows["OF10-EXTERNAL-RUNNER"]
+    report = "docs/OPENFOAM_V10_RUN_38675919475_TRIAGE.md"
+
+    assert simple_foam["integration_status"] == "partial"
+    assert "Run 54" in simple_foam["test_evidence"]
+    assert "synthetic" in simple_foam["test_evidence"]
+    assert "no project flux-balance criterion is set" in simple_foam["test_evidence"]
+    assert report in simple_foam["test_evidence"]
+
+    assert runner["integration_status"] == "partial"
+    assert runner["cleanroom_status"] == "partial"
+    assert "Run 54" in runner["test_evidence"]
+    assert "synthetic" in runner["test_evidence"]
+    assert report in runner["test_evidence"]
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

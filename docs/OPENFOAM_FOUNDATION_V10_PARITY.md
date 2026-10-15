@@ -211,6 +211,8 @@ independent cleanroom airflow/pressure/particle measurements with uncertainty
 and quantified comparison. Until then the workflow status remains blocked or
 partial and no scientific validation claim is made.
 
+The latest synthetic execution is [Foundation v10 run 38675919475](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38675919475), summarized in [the run 54 flux and convergence report](OPENFOAM_V10_RUN_38675919475_TRIAGE.md). It completed 27/27 solver stages across nine cases and measured final-time `phi` fields for all nine. Relative boundary-flux imbalance was 0.005341%–0.187145%, with no project-defined acceptance criterion. All 18 terminal `U`/`p` residual comparisons still exceeded their configured tolerances, so convergence review and scientific validation remain blocked. The matrix reflects this as partial integration evidence only; the three scores remain 0/192 native, 0/717 integration, and 0/21 cleanroom workflows.
+
 ## Verification snapshot
 
 Local software verification used CPython 3.12.14.
@@ -246,3 +248,4 @@ standard utility catalogs, the Foundation v10 user guide sections for case
 setup, mesh, finite-volume methods, turbulence, parallelism, and post-process
 workflows, and the pinned source inventory above. Refresh the source snapshot
 and re-review every row when changing the target release.
+

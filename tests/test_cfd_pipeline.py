@@ -1,6 +1,7 @@
 """SYNTHETIC regression fixtures; not proof of real CFD physics validation."""
 import json
 import math
+import re
 from types import SimpleNamespace
 import pytest
 
@@ -74,6 +75,33 @@ def test_boundary_audit_rejects_blockmesh_geometry_changed_after_metadata():
         "(0 0 0)","(0.1 0 0)",1
     )
     with pytest.raises(ValueError,match="geometry disagrees"):
+        audit_openfoam_boundary_inputs(tampered,metadata)
+
+@pytest.mark.parametrize(("mutation","message"),[
+    ("duplicate","duplicated across patches"),
+    ("omit","cover every exterior hex face"),
+])
+def test_boundary_audit_rejects_duplicate_or_missing_exterior_faces(mutation,message):
+    files,metadata=build_openfoam_files(spec(),1)
+    tampered=dict(files)
+    mesh=tampered["system/blockMeshDict"]
+    match=re.search(
+        r"(?ms)(^\s*inlet\s*\{.*?^\s*faces\s*\(\s*)(.*?)(^\s*\);\s*\})",mesh
+    )
+    assert match is not None
+    face_lines=list(re.finditer(
+        r"(?m)^\s*(\(\s*\d+\s+\d+\s+\d+\s+\d+\s*\))\s*$",match.group(2)
+    ))
+    assert len(face_lines)>=2
+    body=match.group(2)
+    if mutation=="duplicate":
+        first,second=face_lines[0],face_lines[1]
+        body=body[:second.start(1)]+first.group(1)+body[second.end(1):]
+    else:
+        last=face_lines[-1]
+        body=body[:last.start()]+body[last.end():]
+    tampered["system/blockMeshDict"]=mesh[:match.start(2)]+body+mesh[match.end(2):]
+    with pytest.raises(ValueError,match=message):
         audit_openfoam_boundary_inputs(tampered,metadata)
 
 def test_patch_topology_is_closed():

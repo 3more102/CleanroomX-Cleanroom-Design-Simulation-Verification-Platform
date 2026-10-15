@@ -159,6 +159,28 @@ def _face_area_vector(face, vertices):
         raise ValueError("Boundary face has zero or invalid area")
     return vector,area
 
+def _hex_exterior_face_signatures(block_text, vertex_count):
+    """Return the complete exterior-face set for generated hex blocks."""
+    matches=list(re.finditer(
+        r"\bhex\s*\(\s*([^()]*)\)\s*\(\s*([^()]*)\)\s*simpleGrading\s*\(\s*([^()]*)\)",
+        block_text,
+    ))
+    declarations=len(re.findall(r"\bhex\s*\(",block_text))
+    if not matches or len(matches)!=declarations:
+        raise ValueError("blockMeshDict must contain only supported generated hex blocks")
+    face_uses={}
+    for match in matches:
+        ids=tuple(int(value) for value in re.findall(r"\d+",match.group(1)))
+        if len(ids)!=8 or len(set(ids))!=8 or any(index>=vertex_count for index in ids):
+            raise ValueError("blockMeshDict hex block has invalid vertex indices")
+        a,b,c,d,e,f,g,h=ids
+        for face in ((a,d,c,b),(e,f,g,h),(a,e,h,d),(b,c,g,f),(a,b,f,e),(d,h,g,c)):
+            signature=tuple(sorted(face))
+            face_uses[signature]=face_uses.get(signature,0)+1
+    if any(count>2 for count in face_uses.values()):
+        raise ValueError("blockMeshDict hex topology contains a non-manifold face")
+    return {signature for signature,count in face_uses.items() if count==1}
+
 def _field_patch_block(field_text, patch):
     blocks=re.findall(
         rf"(?ms)^\s*{re.escape(patch)}\s*\{{(.*?)^\s*\}}",
@@ -205,6 +227,8 @@ def audit_openfoam_boundary_inputs(files, metadata):
         raise ValueError("blockMeshDict has no parseable vertices")
 
     boundary_section=_parenthesized_section(mesh_text,"boundary")
+    blocks_section=_parenthesized_section(mesh_text,"blocks")
+    exterior_faces=_hex_exterior_face_signatures(blocks_section,len(vertices))
     patch_matches=list(re.finditer(
         r"(?ms)^\s*(inlet|outlet|walls)\s*\{\s*type\s+(\w+)\s*;\s*faces\s*\((.*?)\);\s*\}",
         boundary_section,
@@ -217,6 +241,7 @@ def audit_openfoam_boundary_inputs(files, metadata):
         raise ValueError("blockMeshDict patch types do not match the generated case")
 
     face_data={}
+    assigned_faces=set()
     for patch,match in patches.items():
         face_text=match.group(3)
         faces=[tuple(int(value) for value in found.groups()) for found in
@@ -227,10 +252,18 @@ def audit_openfoam_boundary_inputs(files, metadata):
         for face in faces:
             if any(index>=len(vertices) for index in face):
                 raise ValueError(f"{patch} patch references a missing vertex")
+            signature=tuple(sorted(face))
+            if signature in assigned_faces:
+                raise ValueError("blockMeshDict boundary face is duplicated across patches")
+            if signature not in exterior_faces:
+                raise ValueError("blockMeshDict boundary face is not an exterior hex face")
+            assigned_faces.add(signature)
             vector,area=_face_area_vector(face,vertices)
             normal=tuple(component/area for component in vector)
             rows.append((normal,area))
         face_data[patch]=rows
+    if assigned_faces!=exterior_faces:
+        raise ValueError("blockMeshDict boundary patches do not cover every exterior hex face")
 
     expected_mesh=mesh_metadata
     for patch,count_key,area_key in (

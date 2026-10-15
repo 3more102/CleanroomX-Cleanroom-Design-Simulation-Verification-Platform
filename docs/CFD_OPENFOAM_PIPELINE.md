@@ -38,7 +38,10 @@ Generate all three cases without OpenFOAM installed:
     cleanroomx-cfd-pipeline generate examples/cfd_openfoam_spec.example.json ./cfd_cases
 
 Each case manifest includes an input-only boundary audit. It reads the
-generated `blockMeshDict` face coordinates, recomputes inlet/outlet areas and
+generated `blockMeshDict` face coordinates, derives the complete exterior-face
+set from its hex blocks, and requires each exterior face exactly once across
+the patches. Duplicate, omitted, internal, non-manifold, or unsupported block
+faces are rejected. It recomputes inlet/outlet areas and
 outward normals, checks the generated `U`/`p` patch-condition types, and
 integrates the prescribed inlet velocity over the inlet faces against the
 requested supply flow. The audit records the outlet solver flux as

@@ -18,6 +18,11 @@ DEFAULT_MATRIX = ROOT / "docs" / "openfoam_foundation_v10_capabilities.csv"
 DEFAULT_INVENTORY = ROOT / "docs" / "openfoam_foundation_v10_source_inventory.csv"
 TRACKS = ("native_status", "integration_status", "cleanroom_status")
 STATES = {"complete", "partial", "blocked", "unsupported", "na"}
+INTEGRATION_EVIDENCE = re.compile(
+    r"PASS: OpenFOAM Foundation v10; non-synthetic run; "
+    r"run_manifest=https://[^;\s]+; manifest_sha256=[0-9a-f]{64}",
+    re.IGNORECASE,
+)
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -63,11 +68,12 @@ def validate(rows: list[dict[str, str]], inventory: list[dict[str, str]]) -> Non
                     raise ValueError(f"{row['id']}: complete {track} requires remaining_gap to be 'none'")
                 if not evidence.startswith("pass:"):
                     raise ValueError(f"{row['id']}: complete {track} requires test_evidence beginning PASS:")
-                if track == "integration_status" and not (
-                    "openfoam foundation v10" in evidence and "non-synthetic" in evidence
+                if track == "integration_status" and not INTEGRATION_EVIDENCE.fullmatch(
+                    row["test_evidence"].strip()
                 ):
                     raise ValueError(
-                        f"{row['id']}: complete integration requires non-synthetic Foundation v10 evidence"
+                        f"{row['id']}: complete integration requires a structured positive Foundation v10 "
+                        "run-manifest record for a non-synthetic run"
                     )
                 if track == "cleanroom_status" and not (
                     "measured" in evidence and "uncertainty" in evidence

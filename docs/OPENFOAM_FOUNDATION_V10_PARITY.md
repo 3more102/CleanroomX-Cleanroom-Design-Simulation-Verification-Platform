@@ -38,10 +38,10 @@ symbol-by-symbol API parity; a full runtime-registry inventory remains work.
 
 For each track, the score is `complete rows / rows with status other than na`.
 `complete` requires an implementation path, `test_evidence` beginning with
-`PASS:`, and `remaining_gap` set to `none`. Integration rows additionally
-require non-synthetic evidence from OpenFOAM Foundation v10; cleanroom rows
-require measured evidence and uncertainty. `partial`, `blocked`, and
-`unsupported` remain in the denominator and do not count in the numerator.
+`PASS:`, and `remaining_gap` set to `none`. A complete integration row must use this exact
+structured evidence form: `PASS: OpenFOAM Foundation v10; non-synthetic run; run_manifest=<HTTPS URL>; manifest_sha256=<64 hex characters>`. This prevents a negated prose sentence from qualifying because it contains matching
+substrings. Complete cleanroom rows still require measured evidence and
+uncertainty. `partial`, `blocked`, and `unsupported` remain in the denominator and do not count in the numerator.
 `na` means the row does not belong to that track and is excluded. The scoring
 script rejects missing fields, invalid states, duplicate IDs, non-HTTPS
 references, and incomplete or synthetic-only evidence marked complete.

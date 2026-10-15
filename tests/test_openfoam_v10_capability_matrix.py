@@ -90,7 +90,12 @@ def test_scoring_counts_only_complete_rows_and_reports_all_three_tracks():
     ("track", "evidence", "expected_error"),
     [
         ("native_status", "synthetic fixture passed", "PASS:"),
-        ("integration_status", "PASS: OpenFOAM Foundation v10 synthetic fixture", "non-synthetic"),
+        ("integration_status", "PASS: OpenFOAM Foundation v10 synthetic fixture", "structured positive"),
+        (
+            "integration_status",
+            "PASS: no non-synthetic OpenFOAM Foundation v10 evidence exists",
+            "structured positive",
+        ),
         ("cleanroom_status", "PASS: measured values only", "uncertainty"),
     ],
 )
@@ -130,6 +135,26 @@ def test_complete_native_row_can_score_with_pass_evidence_and_no_remaining_gap()
         native_status="complete",
         implementation_path="src/cleanroomx/example.py",
         test_evidence="PASS: independently verified numerical comparison",
+        remaining_gap="none",
+    )
+    from scripts.openfoam_v10_parity_score import validate
+
+    validate(rows, inventory)
+
+
+
+def test_complete_integration_accepts_only_structured_positive_run_evidence():
+    rows = load(MATRIX)
+    inventory = load(INVENTORY)
+    row = rows[0]
+    row.update(
+        integration_status="complete",
+        implementation_path="src/cleanroomx/cfd_openfoam.py; tests/test_cfd_pipeline.py",
+        test_evidence=(
+            "PASS: OpenFOAM Foundation v10; non-synthetic run; "
+            "run_manifest=https://example.invalid/runs/manifest.json; "
+            "manifest_sha256=" + "a" * 64
+        ),
         remaining_gap="none",
     )
     from scripts.openfoam_v10_parity_score import validate

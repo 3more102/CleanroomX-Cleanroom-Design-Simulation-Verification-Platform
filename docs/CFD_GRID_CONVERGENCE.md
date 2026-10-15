@@ -173,6 +173,30 @@ tolerances, trusted solver provenance,
 independent mesh and boundary-condition checks, and comparison against
 measured cleanroom data are separately required under issue #1296.
 
+## Triage all nine solver logs
+
+Use the read-only family command after the nine Foundation v10 runs have
+completed:
+
+    cleanroomx-cfd-grid-triage ./cfd_mesh_family --window 5
+
+It reads only the expected
+`configuration_1..3/{coarse,medium,fine}/simpleFoam.log` files and writes a
+per-case JSON report. Missing, malformed, byte-identical, or unexpected
+`simpleFoam.log` files fail closed. The optional fields and recent-sample
+window have the same limits as the single-log diagnostic.
+
+Exit code 0 means all nine logs were structurally parseable and distinct by
+byte digest. It does **not** mean the configured residual screen passed.
+`configured_residual_screen` separately reports whether each case's logged
+Foundation `U` and `p` initial residuals are below the tolerances shown in
+its log. The vector-`U` comparison uses the largest logged component as a
+proxy. Even when the residual screen is below tolerance,
+`scientific_validation` remains `BLOCKED`: this command does not establish
+nonlinear or physical convergence, independent executions, mass balance,
+mesh independence, model suitability, or cleanroom performance. It does not
+run OpenFOAM.
+
 ## References
 
 - NASA Glenn Research Center, *Examining Spatial (Grid) Convergence*:

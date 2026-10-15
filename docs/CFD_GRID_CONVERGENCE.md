@@ -36,6 +36,12 @@ Foundation v10 logs. These regular synthetic meshes have no project-defined
 quality acceptance thresholds and do not establish suitability for a physical
 cleanroom geometry.
 
+The [run 67 execution report](OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md)
+records all 36 successful OpenFOAM command stages, the boundary-input audit,
+per-case solver and VTK digests, and the residual/flux screens. Its output
+remains diagnostic: U/p residual screening did not pass, and no project
+flow-balance criterion or independent physical measurements are available.
+
 This verifies solver execution and VTK ingestion for that synthetic run only.
 It does not make the residual or flux screens pass, establish mesh independence,
 or change scientific validation from `BLOCKED`. The workflow does not yet

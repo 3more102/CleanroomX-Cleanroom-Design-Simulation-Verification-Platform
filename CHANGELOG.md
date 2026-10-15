@@ -5,6 +5,13 @@
 - Extends the opt-in nine-case Foundation v10 workflow to export native `phi` surface fluxes through pinned `foamToVTK -surfaceFields` support and independently recheck the resulting face-normal vectors against native face geometry and values.
 - Adds bounded parsing for native surface-scalar fields and polyMesh face geometry, with explicit face-centre ordering, float32/ASCII serialization bounds, file hashes, synthetic regressions, and diagnostic-only evidence; no flow-balance threshold, convergence verdict, or scientific-acceptance status changes.
 
+## Unreleased Release 3 — hash-bound OpenFOAM checkMesh diagnostics — 2026-10-15
+
+- Adds a strict Foundation v10 parser for mesh counts, cell types, bounding box, face areas, cell volumes, and reported geometric checks; each receipt binds the parsed values to the raw log SHA-256.
+- Records incomplete, ambiguous, non-finite, and tool-reported failure states explicitly, and stops before `simpleFoam` when `checkMesh` evidence is incomplete or reports failed checks.
+- Labels the summary diagnostic-only and leaves project acceptance unevaluated because no project-specific mesh criteria or verified physical geometry are available.
+- Adds a regression fixture copied from archived run 66 evidence; it does not create a real-case result or change the CFD scientific-validation status.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

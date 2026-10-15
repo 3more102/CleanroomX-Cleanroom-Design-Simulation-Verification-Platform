@@ -471,6 +471,376 @@ def _foundation_v10_banner(log_text):
     )
     return info
 
+
+def parse_openfoam_checkmesh_log(log_text, source_log_sha256):
+    """Extract hash-bound Foundation checkMesh diagnostics without judging quality.
+
+    The report preserves OpenFOAM's printed checks and geometric measurements,
+    but deliberately applies no project-specific acceptance thresholds.
+    Missing, repeated, malformed, or non-finite records remain explicit.
+    """
+    if type(log_text) is not str:
+        raise ValueError("checkMesh log must be text")
+    if type(source_log_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", source_log_sha256):
+        raise ValueError("checkMesh log SHA-256 must be 64 lowercase hexadecimal characters")
+    if hashlib.sha256(log_text.encode("utf-8")).hexdigest() != source_log_sha256:
+        raise ValueError("checkMesh log SHA-256 does not match the supplied text")
+
+    report = {
+        "schema_version": "cleanroomx.openfoam-checkmesh-diagnostics.v1",
+        "parse_status": None,
+        "source_log_sha256": source_log_sha256,
+        "interpretation": "diagnostic_only",
+        "project_acceptance": "not_assessed_no_project_criteria",
+        "counts": {"cell_types": {}},
+        "geometry": {},
+        "reported_checks": {},
+        "patch_topology": [],
+        "reported_check_failures": [],
+        "mesh_result": "unknown",
+        "missing_fields": [],
+        "ambiguous_fields": [],
+        "invalid_fields": [],
+    }
+    number = r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?|[-+]?(?:nan|inf(?:inity)?))"
+
+    def extract(label, pattern, convert, target, key):
+        matches = list(re.finditer(pattern, log_text, re.MULTILINE | re.IGNORECASE))
+        if not matches:
+            report["missing_fields"].append(label)
+            return
+        if len(matches) != 1:
+            report["ambiguous_fields"].append(label)
+            return
+        try:
+            target[key] = convert(matches[0])
+        except (TypeError, ValueError, OverflowError):
+            report["invalid_fields"].append(label)
+
+    def integer(match):
+        return int(match.group(1))
+
+    def finite_float(raw):
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ValueError("non-finite metric")
+        return value
+
+    def float_group(group):
+        return lambda match: finite_float(match.group(group))
+
+    def vector_group(group):
+        def convert(match):
+            values = [finite_float(item) for item in match.group(group).split()]
+            if len(values) != 3:
+                raise ValueError("expected three components")
+            return values
+        return convert
+
+    def check_status(match, group):
+        value = match.group(group).rstrip(".").lower()
+        if value not in ("ok", "failed"):
+            raise ValueError("unrecognized checkMesh status")
+        return value
+
+    counts = report["counts"]
+    geometry = report["geometry"]
+    checks = report["reported_checks"]
+
+    for label, pattern, key in (
+        ("points", r"^\s*points:\s*(\d+)\s*$", "points"),
+        ("faces", r"^\s*faces:\s*(\d+)\s*$", "faces"),
+        ("internal_faces", r"^\s*internal faces:\s*(\d+)\s*$", "internal_faces"),
+        ("cells", r"^\s*cells:\s*(\d+)\s*$", "cells"),
+        ("faces_per_cell", r"^\s*faces per cell:\s*(\d+)\s*$", "faces_per_cell"),
+        ("boundary_patches", r"^\s*boundary patches:\s*(\d+)\s*$", "boundary_patches"),
+        ("point_zones", r"^\s*point zones:\s*(\d+)\s*$", "point_zones"),
+        ("face_zones", r"^\s*face zones:\s*(\d+)\s*$", "face_zones"),
+        ("cell_zones", r"^\s*cell zones:\s*(\d+)\s*$", "cell_zones"),
+    ):
+        extract(label, pattern, integer, counts, key)
+
+    for label, pattern, key in (
+        ("hexahedra", r"^\s*hexahedra:\s*(\d+)\s*$", "hexahedra"),
+        ("prisms", r"^\s*prisms:\s*(\d+)\s*$", "prisms"),
+        ("wedges", r"^\s*wedges:\s*(\d+)\s*$", "wedges"),
+        ("pyramids", r"^\s*pyramids:\s*(\d+)\s*$", "pyramids"),
+        ("tet_wedges", r"^\s*tet wedges:\s*(\d+)\s*$", "tet_wedges"),
+        ("tetrahedra", r"^\s*tetrahedra:\s*(\d+)\s*$", "tetrahedra"),
+        ("polyhedra", r"^\s*polyhedra:\s*(\d+)\s*$", "polyhedra"),
+    ):
+        extract(label, pattern, integer, counts["cell_types"], key)
+
+    extract(
+        "number_of_regions",
+        r"^\s*Number of regions:\s*(\d+)\s*\((OK|Failed)\)\.?\s*$",
+        integer,
+        counts,
+        "regions",
+    )
+    regions_status = list(re.finditer(
+        r"^\s*Number of regions:\s*\d+\s*\((OK|Failed)\)\.?\s*$",
+        log_text,
+        re.MULTILINE | re.IGNORECASE,
+    ))
+    if len(regions_status) == 1:
+        checks["number_of_regions"] = regions_status[0].group(1).lower()
+    elif len(regions_status) > 1:
+        report["ambiguous_fields"].append("number_of_regions_status")
+    else:
+        report["missing_fields"].append("number_of_regions_status")
+
+    patch_topology_markers = list(re.finditer(
+        r"^\s*Checking patch topology for multiply connected surfaces\.\.\.\s*$",
+        log_text,
+        re.MULTILINE | re.IGNORECASE,
+    ))
+    if not patch_topology_markers:
+        report["missing_fields"].append("patch_topology_section")
+    elif len(patch_topology_markers) != 1:
+        report["ambiguous_fields"].append("patch_topology_section")
+    else:
+        topology_start = patch_topology_markers[0].end()
+        geometry_markers = list(re.finditer(
+            r"^\s*Checking geometry\.\.\.\s*$",
+            log_text[topology_start:],
+            re.MULTILINE | re.IGNORECASE,
+        ))
+        if len(geometry_markers) != 1:
+            report["missing_fields" if not geometry_markers else "ambiguous_fields"].append(
+                "patch_topology_section_end"
+            )
+        else:
+            topology_text = log_text[topology_start:topology_start + geometry_markers[0].start()]
+            table_headers = list(re.finditer(
+                r"^\s*Patch\s+Faces\s+Points\s+Surface topology\s*$",
+                topology_text,
+                re.MULTILINE | re.IGNORECASE,
+            ))
+            if not table_headers:
+                report["missing_fields"].append("patch_topology_header")
+                patch_rows = []
+            elif len(table_headers) != 1:
+                report["ambiguous_fields"].append("patch_topology_header")
+                patch_rows = []
+            else:
+                table_text = topology_text[table_headers[0].end():]
+                patch_rows = list(re.finditer(
+                    r"^\s*([A-Za-z0-9_.-]+)\s+(\d+)\s+(\d+)\s+(OK|Failed)"
+                    r"(?:\s*\(([^)]*)\))?\s*$",
+                    table_text,
+                    re.MULTILINE | re.IGNORECASE,
+                ))
+            report["patch_topology"] = [
+                {
+                    "name": match.group(1),
+                    "faces": int(match.group(2)),
+                    "points": int(match.group(3)),
+                    "status": match.group(4).lower(),
+                    "description": match.group(5),
+                }
+                for match in patch_rows
+            ]
+            patch_names = [row["name"] for row in report["patch_topology"]]
+            if not patch_rows:
+                report["missing_fields"].append("patch_topology_rows")
+            if len(patch_names) != len(set(patch_names)):
+                report["ambiguous_fields"].append("patch_topology_names")
+            expected_patch_count = counts.get("boundary_patches")
+            if expected_patch_count is not None and len(patch_rows) != expected_patch_count:
+                report["invalid_fields"].append("patch_topology_count")
+            if patch_rows:
+                checks["patch_topology"] = (
+                    "failed" if any(row["status"] != "ok" for row in report["patch_topology"])
+                    else "ok"
+                )
+
+    bbox_pattern = (
+        rf"^\s*Overall domain bounding box\s*\(\s*([^)]*)\)\s*\(\s*([^)]*)\)\s*$"
+    )
+    def parse_bbox(match):
+        lower = [finite_float(value) for value in match.group(1).split()]
+        upper = [finite_float(value) for value in match.group(2).split()]
+        if len(lower) != 3 or len(upper) != 3:
+            raise ValueError("expected two 3D points")
+        return [lower, upper]
+    extract("domain_bounding_box", bbox_pattern, parse_bbox, geometry, "domain_bounding_box")
+
+    for label, pattern, key in (
+        ("geometric_directions", r"^\s*Mesh has \d+ geometric .* directions\s*\(([^)]*)\)\s*$", "geometric_directions"),
+        ("solution_directions", r"^\s*Mesh has \d+ solution .* directions\s*\(([^)]*)\)\s*$", "solution_directions"),
+    ):
+        def parse_directions(match):
+            values = [int(value) for value in match.group(1).split()]
+            if len(values) != 3 or any(value not in (0, 1) for value in values):
+                raise ValueError("expected three direction flags")
+            return values
+        extract(label, pattern, parse_directions, geometry, key)
+
+    for label, pattern, key in (
+        ("max_cell_openness", rf"^\s*Max cell openness\s*=\s*{number}\s+(OK|Failed)\.?\s*$", "max_cell_openness"),
+        ("max_aspect_ratio", rf"^\s*Max aspect ratio\s*=\s*{number}\s+(OK|Failed)\.?\s*$", "max_aspect_ratio"),
+        ("max_skewness", rf"^\s*Max skewness\s*=\s*{number}\s+(OK|Failed)\.?\s*$", "max_skewness"),
+    ):
+        extract(label, pattern, float_group(1), geometry, key)
+        status_key = label.removeprefix("max_")
+        status_matches = list(re.finditer(pattern, log_text, re.MULTILINE | re.IGNORECASE))
+        if len(status_matches) == 1:
+            checks[status_key] = check_status(status_matches[0], 2)
+        elif len(status_matches) > 1:
+            report["ambiguous_fields"].append(label + "_status")
+        else:
+            report["missing_fields"].append(label + "_status")
+
+    face_area_pattern = (
+        rf"^\s*Minimum face area\s*=\s*{number}\.\s*Maximum face area\s*=\s*{number}\.\s*"
+        r"Face area magnitudes (OK|Failed)\.?\s*$"
+    )
+    def parse_face_areas(match):
+        return [finite_float(match.group(1)), finite_float(match.group(2))]
+    extract("face_area_range", face_area_pattern, parse_face_areas, geometry, "face_area_range_m2")
+    area_matches = list(re.finditer(face_area_pattern, log_text, re.MULTILINE | re.IGNORECASE))
+    if len(area_matches) == 1:
+        checks["face_area_magnitudes"] = check_status(area_matches[0], 3)
+    elif len(area_matches) > 1:
+        report["ambiguous_fields"].append("face_area_magnitudes_status")
+    else:
+        report["missing_fields"].append("face_area_magnitudes_status")
+
+    volume_pattern = (
+        rf"^\s*Min volume\s*=\s*{number}\.\s*Max volume\s*=\s*{number}\.\s*"
+        rf"Total volume\s*=\s*{number}\.\s*Cell volumes (OK|Failed)\.?\s*$"
+    )
+    def parse_volumes(match):
+        return [finite_float(match.group(1)), finite_float(match.group(2)), finite_float(match.group(3))]
+    extract("cell_volume_range", volume_pattern, parse_volumes, geometry, "cell_volume_range_m3")
+    volume_matches = list(re.finditer(volume_pattern, log_text, re.MULTILINE | re.IGNORECASE))
+    if len(volume_matches) == 1:
+        checks["cell_volumes"] = check_status(volume_matches[0], 4)
+    elif len(volume_matches) > 1:
+        report["ambiguous_fields"].append("cell_volumes_status")
+    else:
+        report["missing_fields"].append("cell_volumes_status")
+
+    nonorth_pattern = rf"^\s*Mesh non-orthogonality Max:\s*{number}\s+average:\s*{number}\s*$"
+    def parse_nonorth(match):
+        return [finite_float(match.group(1)), finite_float(match.group(2))]
+    extract("non_orthogonality", nonorth_pattern, parse_nonorth, geometry, "non_orthogonality_deg_max_average")
+
+    for label, pattern, key in (
+        ("boundary_openness", rf"^\s*Boundary openness\s*\(([^)]*)\)\s+(OK|Failed)\.?\s*$", "boundary_openness"),
+        ("non_orthogonality_check", r"^\s*Non-orthogonality check (OK|Failed)\.?\s*$", "non_orthogonality"),
+        ("boundary_definition", r"^\s*Boundary definition (OK|Failed)\.?\s*$", "boundary_definition"),
+        ("cell_to_face_addressing", r"^\s*Cell to face addressing (OK|Failed)\.?\s*$", "cell_to_face_addressing"),
+        ("point_usage", r"^\s*Point usage (OK|Failed)\.?\s*$", "point_usage"),
+        ("upper_triangular_ordering", r"^\s*Upper triangular ordering (OK|Failed)\.?\s*$", "upper_triangular_ordering"),
+        ("face_vertices", r"^\s*Face vertices (OK|Failed)\.?\s*$", "face_vertices"),
+    ):
+        target = geometry if label == "boundary_openness" else checks
+        def parse_status_line(match, key=key, label=label):
+            if label == "boundary_openness":
+                values = [finite_float(value) for value in match.group(1).split()]
+                if len(values) != 3:
+                    raise ValueError("expected three components")
+                checks[key] = match.group(2).lower()
+                return values
+            return match.group(1).lower()
+        output_key = "boundary_openness_vector" if label == "boundary_openness" else key
+        extract(label, pattern, parse_status_line, target, output_key)
+
+    extract(
+        "face_pyramids",
+        r"^\s*Face pyramids (OK|Failed)\.?\s*$",
+        lambda match: match.group(1).lower(),
+        checks,
+        "face_pyramids",
+    )
+    coupled_point_pattern = (
+        rf"^\s*Coupled point location match\s*\(average\s+{number}\)\s+(OK|Failed)\.?\s*$"
+    )
+    def parse_coupled_point_location(match):
+        geometry["coupled_point_location_average"] = finite_float(match.group(1))
+        return match.group(2).lower()
+    extract(
+        "coupled_point_location",
+        coupled_point_pattern,
+        parse_coupled_point_location,
+        checks,
+        "coupled_point_location",
+    )
+
+    mesh_ok = list(re.finditer(r"^\s*Mesh OK\.\s*$", log_text, re.MULTILINE | re.IGNORECASE))
+    failures = list(re.finditer(
+        r"^\s*Failed\s+(\d+)\s+mesh checks?\.\s*$",
+        log_text,
+        re.MULTILINE | re.IGNORECASE,
+    ))
+    if len(mesh_ok) + len(failures) == 1:
+        if mesh_ok:
+            report["mesh_result"] = "mesh_ok"
+        else:
+            report["mesh_result"] = "checks_failed"
+            report["failed_check_count"] = int(failures[0].group(1))
+    elif len(mesh_ok) + len(failures) == 0:
+        report["missing_fields"].append("mesh_result_marker")
+    else:
+        report["ambiguous_fields"].append("mesh_result_marker")
+
+    failed_reported_checks = sorted(
+        name for name, status in checks.items() if status == "failed"
+    )
+    if report["mesh_result"] == "mesh_ok" and failed_reported_checks:
+        report["mesh_result"] = "unknown"
+        report["ambiguous_fields"].append("mesh_result_consistency")
+    elif report["mesh_result"] == "checks_failed" and "failed_check_count" in report:
+        if report["failed_check_count"] == 0:
+            report["invalid_fields"].append("failed_check_count")
+        elif failed_reported_checks and len(failed_reported_checks) > report["failed_check_count"]:
+            report["ambiguous_fields"].append("failed_check_count")
+
+    for count_key in ("points", "faces", "cells", "boundary_patches", "regions"):
+        value = counts.get(count_key)
+        if value is not None and value <= 0:
+            report["invalid_fields"].append(count_key)
+    if counts.get("internal_faces") is not None and counts.get("faces") is not None:
+        if counts["internal_faces"] > counts["faces"]:
+            report["invalid_fields"].append("internal_faces")
+    for key in ("max_cell_openness", "max_aspect_ratio", "max_skewness"):
+        value = geometry.get(key)
+        if value is not None and not math.isfinite(value):
+            report["invalid_fields"].append(key)
+    if "face_area_range_m2" in geometry:
+        low, high = geometry["face_area_range_m2"]
+        if low <= 0 or high < low:
+            report["invalid_fields"].append("face_area_range_m2")
+    if "cell_volume_range_m3" in geometry:
+        low, high, total = geometry["cell_volume_range_m3"]
+        if low <= 0 or high < low or total <= 0:
+            report["invalid_fields"].append("cell_volume_range_m3")
+    if "domain_bounding_box" in geometry:
+        lower, upper = geometry["domain_bounding_box"]
+        if any(low > high for low, high in zip(lower, upper)):
+            report["invalid_fields"].append("domain_bounding_box")
+    if counts.get("cells") is not None and all(
+        cell_type in counts["cell_types"]
+        for cell_type in ("hexahedra", "prisms", "wedges", "pyramids", "tet_wedges", "tetrahedra", "polyhedra")
+    ):
+        if sum(counts["cell_types"].values()) != counts["cells"]:
+            report["invalid_fields"].append("cell_type_total")
+
+    for key in ("missing_fields", "ambiguous_fields", "invalid_fields"):
+        report[key] = sorted(set(report[key]))
+    report["reported_check_failures"] = sorted(
+        key for key, status in checks.items() if status == "failed"
+    )
+    if report["ambiguous_fields"]:
+        report["parse_status"] = "ambiguous"
+    elif report["missing_fields"] or report["invalid_fields"]:
+        report["parse_status"] = "incomplete"
+    else:
+        report["parse_status"] = "complete"
+    return report
+
 def run_openfoam_cases(directory,*,timeout_seconds=3600):
     """Opt-in external execution; never imply CFD convergence from process exit."""
     if type(timeout_seconds) is not int or not 60<=timeout_seconds<=86400:
@@ -522,12 +892,18 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
             with log.open("x",encoding="utf-8") as output:
                 result=subprocess.run([executables[executable]],cwd=workdir,stdout=output,
                                       stderr=subprocess.STDOUT,timeout=timeout_seconds,check=False)
-            log_text=log.read_text(encoding="utf-8",errors="replace")
+            log_bytes=log.read_bytes()
+            log_text=log_bytes.decode("utf-8",errors="replace")
             banner=_foundation_v10_banner(log_text)
             stages.append({"program":executable,"returncode":result.returncode,
                            "log":str(log.relative_to(root)),
-                           "log_sha256":hashlib.sha256(log.read_bytes()).hexdigest(),
+                           "log_sha256":hashlib.sha256(log_bytes).hexdigest(),
                            "openfoam":banner})
+            if executable=="checkMesh":
+                stages[-1]["mesh_quality_diagnostics"] = parse_openfoam_checkmesh_log(
+                    log_text,
+                    stages[-1]["log_sha256"],
+                )
             if result.returncode:
                 results[str(cfg)]={"status":"solver_failed","stages":stages}
                 return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
@@ -542,6 +918,22 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
                 results[str(cfg)]={"status":"inconsistent_build","stages":stages}
                 return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
                         "warning":"OpenFOAM build changed during the case set; later stages were not run"}
+            if executable=="checkMesh":
+                diagnostics=stages[-1]["mesh_quality_diagnostics"]
+                if (diagnostics["parse_status"]!="complete"
+                        or diagnostics["mesh_result"]!="mesh_ok"
+                        or diagnostics["reported_check_failures"]):
+                    case_status=("checkmesh_failed" if (
+                        diagnostics["mesh_result"]=="checks_failed"
+                        or diagnostics["reported_check_failures"]
+                    )
+                                 else "checkmesh_diagnostics_incomplete")
+                    results[str(cfg)]={"status":case_status,"stages":stages}
+                    return {"status":"incomplete","cases":results,
+                            "boundary_audits":boundary_audits,
+                            "solver_release":"OpenFOAM Foundation v10",
+                            "solver_build":expected_build,
+                            "warning":"checkMesh output was not a complete Mesh OK report; no project-specific quality thresholds were applied"}
         results[str(cfg)]={"status":"executed_requires_convergence_review","stages":stages}
     return {"status":"executed_requires_convergence_review","cases":results,
             "boundary_audits":boundary_audits,

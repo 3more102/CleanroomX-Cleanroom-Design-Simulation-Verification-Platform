@@ -137,23 +137,24 @@ def test_complete_native_row_can_score_with_pass_evidence_and_no_remaining_gap()
     validate(rows, inventory)
 
 
-def test_run_54_evidence_is_partial_and_keeps_parity_scope():
+def test_runner_and_simplefoam_evidence_remain_partial():
     rows = {row["id"]: row for row in load(MATRIX)}
     simple_foam = rows["OF10-SOLVER-simpleFoam"]
     runner = rows["OF10-EXTERNAL-RUNNER"]
-    report = "docs/OPENFOAM_V10_RUN_38675919475_TRIAGE.md"
+    residual_report = "docs/OPENFOAM_V10_RUN_38776224839_RESIDUAL_TREND.md"
+    runner_report = "docs/OPENFOAM_V10_RUN_38675919475_TRIAGE.md"
 
     assert simple_foam["integration_status"] == "partial"
-    assert "Run 54" in simple_foam["test_evidence"]
+    assert "Run 66" in simple_foam["test_evidence"]
     assert "synthetic" in simple_foam["test_evidence"]
-    assert "no project flux-balance criterion is set" in simple_foam["test_evidence"]
-    assert report in simple_foam["test_evidence"]
+    assert "above the generated residualControl settings" in simple_foam["test_evidence"]
+    assert residual_report in simple_foam["test_evidence"]
 
     assert runner["integration_status"] == "partial"
     assert runner["cleanroom_status"] == "partial"
     assert "Run 54" in runner["test_evidence"]
     assert "synthetic" in runner["test_evidence"]
-    assert report in runner["test_evidence"]
+    assert runner_report in runner["test_evidence"]
 
     result = subprocess.run(
         [sys.executable, str(SCORER), "--format", "json"],
@@ -238,6 +239,60 @@ def test_run_66_checkmesh_quality_diagnostics_are_partial_and_keep_counts_zero()
     assert "No project mesh-quality criteria" in report_text
     assert "Mesh OK." in report_text
 
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_66_residual_history_does_not_claim_convergence_or_validation():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38776224839_RESIDUAL_TREND.md"
+    triage = rows["OF10-LOG-TRIAGE"]
+    acceptance = rows["CRX-NUMERICAL-CONVERGENCE"]
+
+    assert triage["integration_status"] == "partial"
+    assert acceptance["integration_status"] == "blocked"
+    assert report in triage["test_evidence"]
+    assert report in acceptance["test_evidence"]
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "Every case remains above the generated residual screen" in report_text
+    assert "scientific validation remains `BLOCKED`" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_67_execution_report_stays_synthetic_and_is_linked():
+    report = "docs/OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md"
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    summary_text = (ROOT / "docs" / "CFD_GRID_CONVERGENCE.md").read_text(encoding="utf-8")
+
+    assert "OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md" in summary_text
+    assert "4e8725c04924f947a60623ba5c36993decba51fe6bf0cf21e4f5b923ffb8411f" in report_text
+    assert "synthetic rectangular cases" in report_text
+    assert "No GCI result or" in report_text
+    assert "scientific validation remain" in report_text and "blocked" in report_text.lower()
+
+    rows = {row["id"]: row for row in load(MATRIX)}
+    assert rows["OF10-SOLVER-simpleFoam"]["integration_status"] == "partial"
+    assert rows["CRX-NUMERICAL-CONVERGENCE"]["integration_status"] == "blocked"
     result = subprocess.run(
         [sys.executable, str(SCORER), "--format", "json"],
         cwd=ROOT,

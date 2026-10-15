@@ -73,7 +73,10 @@ jobs:
           import sys
           from pathlib import Path
 
-          from cleanroomx.cfd_openfoam import _foundation_v10_banner
+          from cleanroomx.cfd_openfoam import (
+              _foundation_v10_banner,
+              parse_openfoam_checkmesh_log,
+          )
           from cleanroomx.cfd_vtk import (
               audit_openfoam_vtk_boundary_patch,
               audit_openfoam_vtk_pressure,
@@ -212,6 +215,9 @@ jobs:
                       "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
                       "openfoam": banner,
                   }
+                  if command == "checkMesh":
+                      diagnostics = parse_openfoam_checkmesh_log(log_text, stage["log_sha256"])
+                      stage["mesh_quality_diagnostics"] = diagnostics
                   if problem is None and returncode != 0:
                       problem = "COMMAND_RETURNED_NONZERO"
                   if problem is None and not banner["is_foundation_v10"]:
@@ -221,8 +227,14 @@ jobs:
                           build = banner["build"]
                       elif banner["build"] != build:
                           problem = "OPENFOAM_BUILD_CHANGED_DURING_RUN"
-                  if problem is None and command == "checkMesh" and "Mesh OK." not in log_text:
-                      problem = "CHECKMESH_MESH_OK_MARKER_MISSING"
+                  if problem is None and command == "checkMesh":
+                      if diagnostics["parse_status"] != "complete":
+                          problem = "CHECKMESH_DIAGNOSTICS_INCOMPLETE"
+                      elif (
+                          diagnostics["mesh_result"] != "mesh_ok"
+                          or diagnostics["reported_check_failures"]
+                      ):
+                          problem = "CHECKMESH_MESH_CHECK_FAILED"
                   if problem:
                       stage["problem"] = problem
                   case_stages.append(stage)

@@ -42,6 +42,21 @@ per-case solver and VTK digests, and the residual/flux screens. Its output
 remains diagnostic: U/p residual screening did not pass, and no project
 flow-balance criterion or independent physical measurements are available.
 
+The [run 66 residual-history report](OPENFOAM_V10_RUN_38776224839_RESIDUAL_TREND.md)
+records all nine cases' terminal residual-to-setting multiples and compares
+early/late log medians. Every case remains above the generated residual screen;
+the analysis is descriptive and does not diagnose a physical cause.
+
+The [run 67 execution report](OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md)
+records the later exact-head workflow receipt and per-case hashes. It confirms
+execution and field-serialization evidence for synthetic inputs only; residual
+and physical-validation gates remain open.
+
+The runner now records a structured, raw-log-hash-bound `checkMesh` summary
+and stops before `simpleFoam` when required Foundation v10 records are missing,
+ambiguous, non-finite, or report a failed check. It applies no project mesh
+acceptance thresholds; see [the diagnostic receipt guide](OPENFOAM_CHECKMESH_DIAGNOSTICS.md).
+
 This verifies solver execution and VTK ingestion for that synthetic run only.
 It does not make the residual or flux screens pass, establish mesh independence,
 or change scientific validation from `BLOCKED`. The workflow does not yet

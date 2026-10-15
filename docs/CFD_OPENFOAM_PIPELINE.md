@@ -60,8 +60,14 @@ Install OpenFOAM Foundation v10 on Linux/WSL and source its `etc/bashrc` so
 `checkMesh`, and `simpleFoam` on PATH. The runner checks those environment
 markers, then verifies each executable's log banner identifies
 `https://openfoam.org`, Version 10, and one consistent build. It records the
-resolved executable paths and build identifier. Other OpenFOAM distributions
-and releases are rejected by this v10 case runner. Then opt in:
+resolved executable paths and build identifier. For `checkMesh`, it also
+records a hash-bound structured diagnostic summary of mesh counts, cell types,
+bounding box, areas, volumes, and the geometric checks printed by OpenFOAM.
+The summary copies the tool's reported result but sets project acceptance to
+`not_assessed_no_project_criteria`; it never applies invented quality limits.
+The runner stops before `simpleFoam` if the Foundation v10 report is incomplete
+or `checkMesh` reports failure. Other OpenFOAM distributions and releases are
+rejected by this v10 case runner. Then opt in:
 
     cleanroomx-cfd-pipeline run ./cfd_cases --timeout-seconds 3600
 
@@ -72,6 +78,10 @@ return code is **not CFD convergence**: inspect residuals, continuity,
 boundary flux balance, turbulence/Reynolds applicability, mesh quality and
 grid independence. Other OpenFOAM versions may require solver template
 changes: v11+ Foundation uses foamRun solver modules.
+
+See [OpenFOAM checkMesh diagnostics](OPENFOAM_CHECKMESH_DIAGNOSTICS.md) for the
+receipt schema, parser behavior, and the distinction between reported
+`checkMesh` checks and project-defined mesh acceptance.
 
 The GitHub nine-case Foundation v10 workflow additionally requires
 `foamToVTK`. After each successful `simpleFoam` run, it exports the latest

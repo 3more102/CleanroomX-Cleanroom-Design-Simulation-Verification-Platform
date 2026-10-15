@@ -1,13 +1,15 @@
 """SYNTHETIC regression fixtures; not proof of real CFD physics validation."""
+import hashlib
 import json
 import math
 import re
+from pathlib import Path
 from types import SimpleNamespace
 import pytest
 
 from cleanroomx.cfd_openfoam import (
     SCHEMA, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
-    run_openfoam_cases, validate_openfoam_spec,
+    parse_openfoam_checkmesh_log, run_openfoam_cases, validate_openfoam_spec,
 )
 from cleanroomx.cfd_vtk import (
     audit_openfoam_vtk_boundary_patch,
@@ -142,6 +144,95 @@ def test_runner_requires_foundation_v10_environment(tmp_path,monkeypatch):
     with pytest.raises(RuntimeError,match="OpenFOAM Foundation v10"):
         run_openfoam_cases(tmp_path/"cases")
 
+def test_foundation_v10_checkmesh_log_is_hash_bound_and_diagnostic_only():
+    raw=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes()
+    digest=hashlib.sha256(raw).hexdigest()
+    report=parse_openfoam_checkmesh_log(raw.decode("utf-8"),digest)
+
+    assert digest=="4233a532e90d079c4ee3df31ecaa12fdddf41da67d630ad87aa6f04bfc97a478"
+    assert report["schema_version"]=="cleanroomx.openfoam-checkmesh-diagnostics.v1"
+    assert report["parse_status"]=="complete"
+    assert report["source_log_sha256"]==digest
+    assert report["interpretation"]=="diagnostic_only"
+    assert report["project_acceptance"]=="not_assessed_no_project_criteria"
+    assert report["mesh_result"]=="mesh_ok"
+    assert report["counts"]["points"]==343
+    assert report["counts"]["faces"]==756
+    assert report["counts"]["internal_faces"]==540
+    assert report["counts"]["cells"]==216
+    assert report["counts"]["regions"]==1
+    assert report["geometry"]["domain_bounding_box"]==[[0.,0.,0.],[3.,2.,2.]]
+    assert report["geometry"]["face_area_range_m2"]==pytest.approx([.1111111109,.166666667])
+    assert report["geometry"]["cell_volume_range_m3"]==pytest.approx(
+        [.05555555544,.05555555578,12.]
+    )
+    assert report["reported_checks"]["boundary_definition"]=="ok"
+    assert report["reported_checks"]["non_orthogonality"]=="ok"
+    assert report["reported_checks"]["patch_topology"]=="ok"
+    assert report["reported_checks"]["face_pyramids"]=="ok"
+    assert report["reported_checks"]["coupled_point_location"]=="ok"
+    assert len(report["patch_topology"])==3
+    assert report["reported_check_failures"]==[]
+
+    crlf_text=raw.decode("utf-8").replace("\n","\r\n")
+    crlf_report=parse_openfoam_checkmesh_log(
+        crlf_text,hashlib.sha256(crlf_text.encode("utf-8")).hexdigest()
+    )
+    assert crlf_report["parse_status"]=="complete"
+    assert crlf_report["mesh_result"]=="mesh_ok"
+
+def test_checkmesh_parser_preserves_ambiguous_invalid_and_failed_diagnostics():
+    raw=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes()
+    text=raw.decode("utf-8")
+
+    duplicated_text=text.replace("    cells:            216", "    cells:            216\n    cells:            216", 1)
+    duplicated=parse_openfoam_checkmesh_log(
+        duplicated_text,hashlib.sha256(duplicated_text.encode("utf-8")).hexdigest()
+    )
+    assert duplicated["parse_status"]=="ambiguous"
+    assert "cells" in duplicated["ambiguous_fields"]
+
+    nonfinite_text=text.replace("Max aspect ratio = 1.500000002", "Max aspect ratio = nan", 1)
+    nonfinite=parse_openfoam_checkmesh_log(
+        nonfinite_text,hashlib.sha256(nonfinite_text.encode("utf-8")).hexdigest()
+    )
+    assert nonfinite["parse_status"]=="incomplete"
+    assert "max_aspect_ratio" in nonfinite["invalid_fields"]
+
+    failed_text=text.replace("Mesh OK.", "Failed 2 mesh checks.", 1)
+    failed=parse_openfoam_checkmesh_log(
+        failed_text,hashlib.sha256(failed_text.encode("utf-8")).hexdigest()
+    )
+    assert failed["parse_status"]=="complete"
+    assert failed["mesh_result"]=="checks_failed"
+    assert failed["failed_check_count"]==2
+    assert failed["project_acceptance"]=="not_assessed_no_project_criteria"
+
+    contradictory_text=text.replace("Face vertices OK.", "Face vertices Failed.", 1)
+    contradictory=parse_openfoam_checkmesh_log(
+        contradictory_text,hashlib.sha256(contradictory_text.encode("utf-8")).hexdigest()
+    )
+    assert contradictory["parse_status"]=="ambiguous"
+    assert contradictory["mesh_result"]=="unknown"
+    assert "mesh_result_consistency" in contradictory["ambiguous_fields"]
+    assert "face_vertices" in contradictory["reported_check_failures"]
+
+    patch_header=next(
+        line for line in text.splitlines(keepends=True)
+        if line.strip().startswith("Patch ") and "Surface topology" in line
+    )
+    missing_header_text=text.replace(patch_header,"",1)
+    missing_header=parse_openfoam_checkmesh_log(
+        missing_header_text,hashlib.sha256(missing_header_text.encode("utf-8")).hexdigest()
+    )
+    assert missing_header["parse_status"]=="incomplete"
+    assert "patch_topology_header" in missing_header["missing_fields"]
+
+    with pytest.raises(ValueError,match="SHA-256"):
+        parse_openfoam_checkmesh_log(text,"not-a-digest")
+    with pytest.raises(ValueError,match="does not match"):
+        parse_openfoam_checkmesh_log(text,hashlib.sha256(b"different text").hexdigest())
+
 def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")
     monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
@@ -152,8 +243,10 @@ def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
             "     \\\\/     M anipulation  | Version:  10\n"
             "Build  : 10-c4cf895ad8fa\n")
 
+    checkmesh_log=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes().decode("utf-8").replace("\n","\r\n")
+
     def fake_run(command,*,cwd,stdout,stderr,timeout,check):
-        stdout.write(banner)
+        stdout.write(checkmesh_log if command[0].endswith("checkMesh") else banner)
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
@@ -167,6 +260,65 @@ def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
         for case in result["cases"].values()
         for stage in case["stages"]
     )
+    checkmesh_stages=[stage for case in result["cases"].values()
+                      for stage in case["stages"] if stage["program"]=="checkMesh"]
+    assert len(checkmesh_stages)==3
+    assert all(stage["mesh_quality_diagnostics"]["parse_status"]=="complete"
+               for stage in checkmesh_stages)
+    assert all(stage["mesh_quality_diagnostics"]["mesh_result"]=="mesh_ok"
+               for stage in checkmesh_stages)
+    assert all(stage["mesh_quality_diagnostics"]["source_log_sha256"]==stage["log_sha256"]
+               for stage in checkmesh_stages)
+
+def test_runner_rejects_failed_checkmesh_status_even_with_mesh_ok_marker(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","10")
+    banner=("  \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox\n"
+            "  \\\\    /   O peration     | Website:  https://openfoam.org\n"
+            "     \\\\/     M anipulation  | Version:  10\n"
+            "Build  : 10-c4cf895ad8fa\n")
+    raw=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes()
+    failed_log=raw.decode("utf-8").replace("Face vertices OK.","Face vertices Failed.",1)
+
+    def fake_run(command,*,cwd,stdout,stderr,timeout,check):
+        stdout.write(failed_log if command[0].endswith("checkMesh") else banner)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
+    result=run_openfoam_cases(tmp_path/"cases")
+    assert result["status"]=="incomplete"
+    assert result["cases"]["1"]["status"]=="checkmesh_failed"
+    stage=result["cases"]["1"]["stages"][-1]
+    assert stage["mesh_quality_diagnostics"]["mesh_result"]=="unknown"
+    assert stage["mesh_quality_diagnostics"]["parse_status"]=="ambiguous"
+    assert "face_vertices" in stage["mesh_quality_diagnostics"]["reported_check_failures"]
+
+def test_runner_stops_before_solver_when_checkmesh_reports_failed_checks(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","10")
+    fixture=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_text()
+    failed_log=fixture.replace("Mesh OK.","Failed 2 mesh checks.",1)
+    calls=[]
+
+    def fake_run(command,*,cwd,stdout,stderr,timeout,check):
+        name=Path(command[0]).name
+        calls.append(name)
+        stdout.write(failed_log if name=="checkMesh" else fixture)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
+    result=run_openfoam_cases(tmp_path/"cases")
+
+    assert result["status"]=="incomplete"
+    assert result["cases"]["1"]["status"]=="checkmesh_failed"
+    diagnostic=result["cases"]["1"]["stages"][-1]["mesh_quality_diagnostics"]
+    assert diagnostic["mesh_result"]=="checks_failed"
+    assert diagnostic["failed_check_count"]==2
+    assert calls==["blockMesh","checkMesh"]
 
 def test_tampered_case_fails_closed(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")

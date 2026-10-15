@@ -166,3 +166,29 @@ def test_run_54_evidence_is_partial_and_keeps_parity_scope():
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["integration_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_56_vtk_export_evidence_is_partial_and_keeps_parity_scope():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38680418943_VTK_EXPORT.md"
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 56" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11948056355" in row["test_evidence"]
+        assert "6ecfea97466c9cb618273e5dcad6ef0a6675e4c1597590e4a603b388f73ca5e4" in row["test_evidence"]
+        assert row["remaining_gap"] != "none"
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["tracks"]["integration_status"]["complete"] == 0
+    assert report["tracks"]["native_status"]["complete"] == 0
+    assert report["tracks"]["cleanroom_status"]["complete"] == 0

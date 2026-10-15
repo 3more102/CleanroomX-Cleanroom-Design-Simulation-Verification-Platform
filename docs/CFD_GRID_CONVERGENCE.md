@@ -255,10 +255,12 @@ nonlinear or physical convergence, independent executions, mass balance,
 mesh independence, model suitability, or cleanroom performance. It does not
 run OpenFOAM.
 
-For an actual Foundation v10 nine-case execution using the synthetic example,
-see the [run triage report](OPENFOAM_V10_RUN_38666633298_TRIAGE.md). It records
-the solver-input hashes, execution results, residual screen, and remaining
-validation limits for that specific run.
+For the latest actual Foundation v10 nine-case synthetic execution, see the
+[run 56 VTK export report](OPENFOAM_V10_RUN_38680418943_VTK_EXPORT.md). It records
+all nine final-time VTK hashes and cell counts, the artifact digest, residual
+and flux-screen outcomes, and the remaining validation limits. The original
+receipt, solver logs, VTK files, and triage JSON are in the linked GitHub
+Actions artifact.
 
 ## References
 

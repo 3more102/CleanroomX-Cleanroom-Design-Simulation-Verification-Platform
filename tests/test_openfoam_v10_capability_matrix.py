@@ -304,3 +304,33 @@ def test_run_67_execution_report_stays_synthetic_and_is_linked():
     assert report_json["tracks"]["integration_status"]["complete"] == 0
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_70_surface_flux_parity_is_partial_and_keeps_completion_counts_zero():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38780408294_PHI_CHECKMESH_EVIDENCE.md"
+    foam_to_vtk = rows["OF10-UTILITY-foamToVTK"]
+
+    assert foam_to_vtk["integration_status"] == "partial"
+    assert "run 70" in foam_to_vtk["test_evidence"].lower()
+    assert "148,716 faces" in foam_to_vtk["test_evidence"]
+    assert "446,148" in foam_to_vtk["test_evidence"]
+    assert report in foam_to_vtk["test_evidence"]
+    assert "other field types" in foam_to_vtk["remaining_gap"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "scientific validation `BLOCKED`" in report_text
+    assert "DIAGNOSTIC_ONLY" in report_text
+    assert "no project flow-balance acceptance criterion is set" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

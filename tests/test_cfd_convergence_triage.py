@@ -634,12 +634,12 @@ def _write_grid_family(root, *, velocity_tolerance="1e-6", pressure_tolerance="1
             case = root / f"configuration_{configuration}" / level
             case.mkdir(parents=True)
             controls = (
-                "SIMPLE: Convergence criteria found\\n"
-                f"    U: tolerance {velocity_tolerance}\\n"
-                f"    p: tolerance {pressure_tolerance}\\n"
+                "SIMPLE: Convergence criteria found\n"
+                f"    U: tolerance {velocity_tolerance}\n"
+                f"    p: tolerance {pressure_tolerance}\n"
             )
             (case / "simpleFoam.log").write_text(
-                controls + _complete_step(str(case_index)) + "End\\n"
+                controls + _complete_step(str(case_index)) + "End\n"
             )
 
 
@@ -693,7 +693,7 @@ def test_grid_family_unexpected_log_fails_closed(tmp_path):
     _write_grid_family(root)
     extra = root / "unexpected" / "simpleFoam.log"
     extra.parent.mkdir()
-    extra.write_text(_complete_step("20") + "End\\n")
+    extra.write_text(_complete_step("20") + "End\n")
     report = diagnose_grid_family(root)
     assert report["status"] == "INCOMPLETE_OR_INVALID"
     assert report["unexpected_simpleFoam_logs"] == ["unexpected/simpleFoam.log"]

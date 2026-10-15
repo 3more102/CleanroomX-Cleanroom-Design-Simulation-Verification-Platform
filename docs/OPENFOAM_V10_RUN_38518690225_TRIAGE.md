@@ -78,6 +78,14 @@ reductions in other cases) does not point to one log-derived root cause. The
 fixed end point explains why these runs stopped at 600 steps, but not why the
 residual levels differ across configurations and grids.
 
+A separate, closed-unmerged diagnostic PR [#1304](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/1304)
+records a same-model run extended to 5,000 iterations with the same residual
+thresholds. Its report says all nine cases still exceeded both thresholds;
+configuration 1 coarse was effectively unchanged, and configurations 2 and 3
+were unchanged or worse. That is evidence that raising the iteration cap alone
+did not pass the screen. Treat this as a prior numerical diagnostic record,
+not physical validation or an accepted change to this branch.
+
 ## Interpretation and next work
 
 The current model inputs describe a synthetic, steady, isothermal, laminar

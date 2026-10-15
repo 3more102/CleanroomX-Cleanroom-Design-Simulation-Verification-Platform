@@ -216,6 +216,11 @@ nonlinear or physical convergence, independent executions, mass balance,
 mesh independence, model suitability, or cleanroom performance. It does not
 run OpenFOAM.
 
+For an actual Foundation v10 nine-case execution using the synthetic example,
+see the [run triage report](OPENFOAM_V10_RUN_38666633298_TRIAGE.md). It records
+the solver-input hashes, execution results, residual screen, and remaining
+validation limits for that specific run.
+
 ## References
 
 - NASA Glenn Research Center, *Examining Spatial (Grid) Convergence*:

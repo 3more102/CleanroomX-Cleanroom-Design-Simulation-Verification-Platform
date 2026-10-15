@@ -192,7 +192,7 @@ def test_poly_mesh_volume_audit_rejects_negative_point_index(tmp_path):
     case, mesh, log = two_cell_case(tmp_path / "case")
     faces = mesh / "faces"
     original = faces.read_text(encoding="ascii")
-    corrupted = re.sub(r"(?<!\\d)1(?!\\d)", "-1", original)
+    corrupted = re.sub(r"(?<!\d)1(?!\d)", "-1", original)
     assert corrupted != original
     faces.write_text(corrupted, encoding="ascii")
     digest = hashlib.sha256(log.read_bytes()).hexdigest()

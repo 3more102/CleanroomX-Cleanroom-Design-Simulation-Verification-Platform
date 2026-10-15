@@ -8,7 +8,7 @@ import pytest
 
 import cleanroomx.cfd_convergence_triage as triage
 
-from cleanroomx.cfd_convergence_triage import diagnose_log, main
+from cleanroomx.cfd_convergence_triage import diagnose_grid_family, diagnose_log, grid_family_main, main
 
 
 def test_complete_log_is_diagnostic_only(tmp_path):
@@ -623,3 +623,101 @@ def test_cli_reports_mutating_log_without_crashing(tmp_path, monkeypatch, capsys
     assert report["status"] == "INCOMPLETE_OR_INVALID"
     assert report["scientific_validation"] == "BLOCKED"
     assert any("log changed during diagnostic read" in p for p in report["problems"])
+
+
+
+def _write_grid_family(root, *, velocity_tolerance="1e-6", pressure_tolerance="1e-5"):
+    case_index = 0
+    for configuration in (1, 2, 3):
+        for level in ("coarse", "medium", "fine"):
+            case_index += 1
+            case = root / f"configuration_{configuration}" / level
+            case.mkdir(parents=True)
+            controls = (
+                "SIMPLE: Convergence criteria found\n"
+                f"    U: tolerance {velocity_tolerance}\n"
+                f"    p: tolerance {pressure_tolerance}\n"
+            )
+            (case / "simpleFoam.log").write_text(
+                controls + _complete_step(str(case_index)) + "End\n"
+            )
+
+
+def test_grid_family_reports_nine_cases_and_separates_residual_screen(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    report = diagnose_grid_family(root)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["scientific_validation"] == "BLOCKED"
+    assert report["case_count_expected"] == report["case_count_present"] == 9
+    assert report["configured_residual_screen"]["status"] == "NOT_BELOW_TOLERANCE"
+    assert len(report["cases"]) == 9
+    assert all(case["status"] == "DIAGNOSTIC_ONLY" for case in report["cases"].values())
+
+
+def test_grid_family_small_residuals_do_not_unlock_scientific_validation(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root, velocity_tolerance="1.0", pressure_tolerance="1.0")
+    report = diagnose_grid_family(root)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["configured_residual_screen"]["status"] == "BELOW_TOLERANCE"
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_grid_family_missing_case_fails_closed(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    (root / "configuration_2" / "medium" / "simpleFoam.log").unlink()
+    report = diagnose_grid_family(root)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["case_count_expected"] == 9
+    assert report["case_count_present"] == 8
+    assert "MISSING_OR_UNREADABLE_CASE_LOGS" in report["problems"]
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_grid_family_identical_logs_fail_closed(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    source = root / "configuration_1" / "coarse" / "simpleFoam.log"
+    duplicate = root / "configuration_3" / "fine" / "simpleFoam.log"
+    duplicate.write_bytes(source.read_bytes())
+    report = diagnose_grid_family(root)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["duplicate_log_case_groups"]
+    assert "DUPLICATE_LOG_BYTES" in report["cases"]["configuration_1/coarse"]["problems"]
+
+
+def test_grid_family_unexpected_log_fails_closed(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    extra = root / "unexpected" / "simpleFoam.log"
+    extra.parent.mkdir()
+    extra.write_text(_complete_step("20") + "End\n")
+    report = diagnose_grid_family(root)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert report["unexpected_simpleFoam_logs"] == ["unexpected/simpleFoam.log"]
+
+
+def test_grid_family_rejects_symlinked_root(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    alias = tmp_path / "family-link"
+    alias.symlink_to(root, target_is_directory=True)
+    report = diagnose_grid_family(alias)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"
+    assert "GRID_FAMILY_DIRECTORY_MISSING_OR_SYMLINKED" in report["problems"]
+
+
+def test_grid_family_cli_exit_code_means_complete_diagnostic_only(tmp_path, capsys):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    assert grid_family_main([str(root)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["scientific_validation"] == "BLOCKED"
+
+    (root / "configuration_1" / "fine" / "simpleFoam.log").unlink()
+    assert grid_family_main([str(root)]) == 3
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "INCOMPLETE_OR_INVALID"

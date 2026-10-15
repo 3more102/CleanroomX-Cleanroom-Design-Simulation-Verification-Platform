@@ -301,6 +301,162 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
     }
 
 
+
+_GRID_LEVELS = ("coarse", "medium", "fine")
+_GRID_RESIDUAL_FIELDS = ("U", "p")
+
+
+def diagnose_grid_family(directory: str | Path, *,
+                         fields: tuple[str, ...] = ("Ux", "Uy", "Uz", "p"),
+                         window: int = 5) -> dict:
+    """Read-only diagnostic matrix for the exact 3-configuration x 3-grid family.
+
+    A complete report means all nine expected logs were distinct and
+    structurally parseable. It does not mean the configured residual screen
+    passed, and never advances scientific validation beyond BLOCKED.
+    """
+    if type(window) is not int or window < 1 or window > 10000:
+        raise ValueError("window must be between 1 and 10000")
+    fields = tuple(fields)
+    if not fields or len(fields) > 32 or len(set(fields)) != len(fields) or any(
+        not re.fullmatch(r"[A-Za-z][\w.]*", field) for field in fields
+    ):
+        raise ValueError("fields must contain 1-32 distinct valid solver field names")
+
+    candidate = Path(directory)
+    raw_candidate = candidate if candidate.is_absolute() else Path.cwd() / candidate
+    root = None
+    root_problem = None
+    try:
+        if any(component.is_symlink() for component in (raw_candidate, *raw_candidate.parents)):
+            root_problem = "GRID_FAMILY_DIRECTORY_MISSING_OR_SYMLINKED"
+        elif not raw_candidate.is_dir():
+            root_problem = "GRID_FAMILY_DIRECTORY_MISSING_OR_SYMLINKED"
+        else:
+            root = raw_candidate.resolve(strict=True)
+    except OSError:
+        root_problem = "GRID_FAMILY_DIRECTORY_MISSING_OR_UNREADABLE"
+
+    expected = {}
+    for configuration in (1, 2, 3):
+        for level in _GRID_LEVELS:
+            case_id = f"configuration_{configuration}/{level}"
+            expected[case_id] = f"{case_id}/simpleFoam.log"
+
+    found_paths = set()
+    if root is not None:
+        try:
+            found_paths = {
+                path.relative_to(root).as_posix()
+                for path in root.rglob("simpleFoam.log")
+            }
+        except OSError:
+            root_problem = "GRID_FAMILY_DIRECTORY_UNREADABLE"
+            root = None
+
+    expected_paths = set(expected.values())
+    unexpected_paths = sorted(found_paths - expected_paths)
+    cases = {}
+    present = 0
+    for case_id, relative_log in expected.items():
+        path = (root / relative_log) if root is not None else raw_candidate / relative_log
+        if path.is_file() or path.is_symlink():
+            present += 1
+            try:
+                report = diagnose_log(path, fields=fields, window=window)
+            except (OSError, UnicodeError, ValueError) as exc:
+                report = {
+                    "status": "INCOMPLETE_OR_INVALID",
+                    "scientific_validation": "BLOCKED",
+                    "problems": [str(exc)],
+                }
+        else:
+            report = {
+                "status": "INCOMPLETE_OR_INVALID",
+                "scientific_validation": "BLOCKED",
+                "problems": ["MISSING_CASE_LOG"],
+            }
+        cases[case_id] = {"log_path": relative_log, **report}
+
+    by_digest: dict[str, list[str]] = {}
+    for case_id, report in cases.items():
+        digest = report.get("source_sha256")
+        if digest is not None:
+            by_digest.setdefault(digest, []).append(case_id)
+    duplicate_groups = []
+    for case_ids in by_digest.values():
+        if len(case_ids) > 1:
+            duplicate_groups.append(case_ids)
+            for case_id in case_ids:
+                report = cases[case_id]
+                report["status"] = "INCOMPLETE_OR_INVALID"
+                report.setdefault("problems", []).append("DUPLICATE_LOG_BYTES")
+                report["duplicate_log_cases"] = [other for other in case_ids if other != case_id]
+
+    problems = []
+    if root_problem:
+        problems.append(root_problem)
+    if present != len(expected):
+        problems.append("MISSING_OR_UNREADABLE_CASE_LOGS")
+    if unexpected_paths:
+        problems.append("UNEXPECTED_SIMPLEFOAM_LOG_PATHS")
+    if duplicate_groups:
+        problems.append("DUPLICATE_LOG_BYTES")
+
+    complete = (
+        root is not None
+        and not problems
+        and all(item["status"] == "DIAGNOSTIC_ONLY" for item in cases.values())
+    )
+
+    residual_states = []
+    if complete:
+        for report in cases.values():
+            control_fields = report.get("terminal_residual_control_screen", {}).get("fields", {})
+            for field in _GRID_RESIDUAL_FIELDS:
+                item = control_fields.get(field)
+                residual_states.append(item.get("status") if item else "UNKNOWN")
+    if not complete or any(state == "UNKNOWN" for state in residual_states):
+        residual_status = "UNKNOWN"
+    elif any(state == "NOT_BELOW_TOLERANCE" for state in residual_states):
+        residual_status = "NOT_BELOW_TOLERANCE"
+    elif residual_states and all(state == "BELOW_TOLERANCE" for state in residual_states):
+        residual_status = "BELOW_TOLERANCE"
+    else:
+        residual_status = "UNKNOWN"
+
+    return {
+        "status": "DIAGNOSTIC_ONLY" if complete else "INCOMPLETE_OR_INVALID",
+        "scientific_validation": "BLOCKED",
+        "case_count_expected": len(expected),
+        "case_count_present": present,
+        "cases": cases,
+        "unexpected_simpleFoam_logs": unexpected_paths,
+        "duplicate_log_case_groups": duplicate_groups,
+        "configured_residual_screen": {
+            "status": residual_status,
+            "required_fields": list(_GRID_RESIDUAL_FIELDS),
+            "note": "This is the logged Foundation residualControl screen only; it is not nonlinear or physical convergence.",
+        },
+        "problems": problems,
+        "note": "A complete diagnostic report is not proof of independent execution, mass balance, mesh independence, model validity, or cleanroom performance.",
+    }
+
+
+def grid_family_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Read-only triage of all nine logs in a 3x3 OpenFOAM grid family")
+    parser.add_argument("directory", help="Grid-family directory containing configuration_1..3/{coarse,medium,fine}")
+    parser.add_argument("--fields", nargs="+", default=["Ux", "Uy", "Uz", "p"])
+    parser.add_argument("--window", type=int, default=5)
+    args = parser.parse_args(argv)
+    try:
+        report = diagnose_grid_family(args.directory, fields=tuple(args.fields), window=args.window)
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(json.dumps(report, indent=2, allow_nan=False, sort_keys=True))
+    return 0 if report["status"] == "DIAGNOSTIC_ONLY" else 3
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("logs", nargs="+")
@@ -361,3 +517,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -8,7 +8,13 @@ import pytest
 
 import cleanroomx.cfd_convergence_triage as triage
 
-from cleanroomx.cfd_convergence_triage import diagnose_grid_family, diagnose_log, grid_family_main, main
+from cleanroomx.cfd_convergence_triage import (
+    audit_grid_family_inputs,
+    diagnose_grid_family,
+    diagnose_log,
+    grid_family_main,
+    main,
+)
 
 
 def test_complete_log_is_diagnostic_only(tmp_path):
@@ -641,6 +647,65 @@ def _write_grid_family(root, *, velocity_tolerance="1e-6", pressure_tolerance="1
             (case / "simpleFoam.log").write_text(
                 controls + _complete_step(str(case_index)) + "End\n"
             )
+            dictionaries = {
+                "0/U": f"// configuration {configuration}\ninletVelocity {configuration};\n",
+                "0/p": "internalField uniform 0;\n",
+                "constant/physicalProperties": "nu 1e-5;\n",
+                "constant/momentumTransport": "simulationType laminar;\n",
+                "system/controlDict": "application simpleFoam;\n",
+                "system/fvSchemes": "div(phi,U) Gauss upwind;\n",
+                "system/fvSolution": "solver p solver GAMG;\n",
+            }
+            for relative, content in dictionaries.items():
+                path = case / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            mesh = case / "system" / "blockMeshDict"
+            mesh.write_text(f"// {configuration} {level}\nblocks (1 1 1);\n")
+
+
+def test_grid_family_input_screen_hashes_conditions_and_mesh_separately(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    report = diagnose_grid_family(root)
+    screen = report["solver_input_fingerprint_screen"]
+    assert screen["status"] == "BYTE_IDENTICAL_ACROSS_GRID_LEVELS"
+    assert screen["mesh_input_hashed_separately"] == "system/blockMeshDict"
+    assert len(screen["condition_inputs_compared"]) == 7
+    for configuration in ("configuration_1", "configuration_2", "configuration_3"):
+        config = screen["configurations"][configuration]
+        assert config["status"] == "BYTE_IDENTICAL_ACROSS_GRID_LEVELS"
+        assert config["condition_fingerprint_sha256"]
+        assert len({level["mesh_dictionary_sha256"] for level in config["levels"].values()}) == 3
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_grid_family_condition_mismatch_does_not_change_log_status(tmp_path, capsys):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    changed = root / "configuration_2" / "fine" / "0" / "U"
+    changed.write_text("// changed only on fine grid\ninletVelocity 99;\n")
+    report = diagnose_grid_family(root)
+    screen = report["solver_input_fingerprint_screen"]
+    assert screen["status"] == "DIFFERENT_ACROSS_GRID_LEVELS"
+    assert screen["configurations"]["configuration_2"]["differing_condition_files"] == ["0/U"]
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["scientific_validation"] == "BLOCKED"
+    assert grid_family_main([str(root)]) == 0
+    cli_report = json.loads(capsys.readouterr().out)
+    assert cli_report["status"] == "DIAGNOSTIC_ONLY"
+    assert cli_report["solver_input_fingerprint_screen"]["status"] == "DIFFERENT_ACROSS_GRID_LEVELS"
+
+
+def test_grid_family_missing_condition_input_is_separate_from_log_status(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    (root / "configuration_1" / "fine" / "system" / "fvSolution").unlink()
+    report = diagnose_grid_family(root)
+    assert report["solver_input_fingerprint_screen"]["status"] == "INCOMPLETE_OR_UNREADABLE"
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["scientific_validation"] == "BLOCKED"
 
 
 def test_grid_family_reports_nine_cases_and_separates_residual_screen(tmp_path):

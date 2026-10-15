@@ -186,6 +186,25 @@ per-case JSON report. Missing, malformed, byte-identical, or unexpected
 `simpleFoam.log` files fail closed. The optional fields and recent-sample
 window have the same limits as the single-log diagnostic.
 
+The family report also includes `solver_input_fingerprint_screen`. It hashes
+the bytes of seven declared solver-condition dictionaries in every case:
+`0/U`, `0/p`, `constant/physicalProperties`,
+`constant/momentumTransport`, `system/controlDict`, `system/fvSchemes`, and
+`system/fvSolution`. It compares those hashes across coarse/medium/fine within
+each configuration. `system/blockMeshDict` is hashed separately because grid
+geometry inputs are expected to vary. Missing, unreadable, symlinked, changed
+during reading, or over-16-MiB input files are reported as
+`INCOMPLETE_OR_UNREADABLE`; a condition dictionary mismatch is reported as
+`DIFFERENT_ACROSS_GRID_LEVELS`.
+
+This is a byte-consistency screen for the declared files. Matching hashes do
+not prove boundary-condition correctness, actual patch areas or flow rates,
+geometry equivalence, independent execution, mesh independence, physical
+convergence, or model validity. The input screen does not alter the top-level
+log status or CLI exit code: exit code 0 still means only that all nine logs
+were structurally parseable and distinct by byte digest. Review both screens
+separately before using a family for a numerical comparison.
+
 Exit code 0 means all nine logs were structurally parseable and distinct by
 byte digest. It does **not** mean the configured residual screen passed.
 `configured_residual_screen` separately reports whether each case's logged

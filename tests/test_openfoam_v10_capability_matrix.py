@@ -220,3 +220,32 @@ def test_run_63_vtk_patch_parity_evidence_is_partial_and_keeps_counts_zero():
     assert report_json["tracks"]["integration_status"]["complete"] == 0
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_66_checkmesh_quality_diagnostics_are_partial_and_keep_counts_zero():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38776224839_CHECKMESH_QUALITY.md"
+    for capability_id in ("OF10-MESH-QUALITY", "OF10-UTILITY-checkMesh"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 66" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11993812155" in row["test_evidence"]
+        assert "project" in row["remaining_gap"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "No project mesh-quality criteria" in report_text
+    assert "Mesh OK." in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

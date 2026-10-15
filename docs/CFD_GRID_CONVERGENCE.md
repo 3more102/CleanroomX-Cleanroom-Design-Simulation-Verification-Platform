@@ -30,6 +30,12 @@ The [run 63 report](OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md)
 records the patch mapping method, all 13,608 compared boundary faces, and the
 independent artifact recheck.
 
+The [run 66 checkMesh report](OPENFOAM_V10_RUN_38776224839_CHECKMESH_QUALITY.md)
+records topology and geometric quality diagnostics from the nine archived
+Foundation v10 logs. These regular synthetic meshes have no project-defined
+quality acceptance thresholds and do not establish suitability for a physical
+cleanroom geometry.
+
 This verifies solver execution and VTK ingestion for that synthetic run only.
 It does not make the residual or flux screens pass, establish mesh independence,
 or change scientific validation from `BLOCKED`. The workflow does not yet

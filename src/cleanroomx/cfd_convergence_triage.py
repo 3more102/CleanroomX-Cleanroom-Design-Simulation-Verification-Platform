@@ -304,6 +304,140 @@ def diagnose_log(path: str | Path, *, fields: tuple[str, ...] = ("Ux", "Uy", "Uz
 
 _GRID_LEVELS = ("coarse", "medium", "fine")
 _GRID_RESIDUAL_FIELDS = ("U", "p")
+_GRID_CONDITION_INPUTS = (
+    "0/U",
+    "0/p",
+    "constant/physicalProperties",
+    "constant/momentumTransport",
+    "system/controlDict",
+    "system/fvSchemes",
+    "system/fvSolution",
+)
+_GRID_MESH_INPUT = "system/blockMeshDict"
+_MAX_GRID_DICTIONARY_BYTES = 16 * 1024 * 1024
+
+
+def _sha256_grid_input(path: Path) -> str:
+    """Hash one bounded, stable, non-symlinked grid-family input file."""
+    if any(component.is_symlink() for component in (path, *path.parents)):
+        raise ValueError("missing or symlinked grid input")
+    if not path.is_file():
+        raise ValueError("missing or non-file grid input")
+    before = path.stat()
+    if before.st_size > _MAX_GRID_DICTIONARY_BYTES:
+        raise ValueError("grid input exceeds 16 MiB diagnostic limit")
+    with path.open("rb") as stream:
+        raw = stream.read(_MAX_GRID_DICTIONARY_BYTES + 1)
+    if len(raw) > _MAX_GRID_DICTIONARY_BYTES:
+        raise ValueError("grid input exceeds 16 MiB diagnostic limit")
+    after = path.stat()
+    fingerprint = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    if fingerprint(before) != fingerprint(after) or any(
+        component.is_symlink() for component in (path, *path.parents)
+    ):
+        raise ValueError("grid input changed during diagnostic read")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def audit_grid_family_inputs(directory: str | Path) -> dict:
+    """Compare solver-condition dictionary bytes across each 3-grid family.
+
+    The seven declared condition inputs are compared byte-for-byte within a
+    configuration. ``blockMeshDict`` is hashed separately and is not expected
+    to match across grid levels. This is a static input-consistency screen,
+    not a check of physical correctness or mesh equivalence.
+    """
+    candidate = Path(directory)
+    raw_candidate = candidate if candidate.is_absolute() else Path.cwd() / candidate
+    root = None
+    root_problem = None
+    try:
+        if any(component.is_symlink() for component in (raw_candidate, *raw_candidate.parents)):
+            root_problem = "GRID_FAMILY_DIRECTORY_MISSING_OR_SYMLINKED"
+        elif not raw_candidate.is_dir():
+            root_problem = "GRID_FAMILY_DIRECTORY_MISSING_OR_SYMLINKED"
+        else:
+            root = raw_candidate.resolve(strict=True)
+    except OSError:
+        root_problem = "GRID_FAMILY_DIRECTORY_MISSING_OR_UNREADABLE"
+
+    configurations = {}
+    for configuration in (1, 2, 3):
+        config_id = f"configuration_{configuration}"
+        levels = {}
+        config_errors = [root_problem] if root_problem else []
+        for level in _GRID_LEVELS:
+            case_id = f"{config_id}/{level}"
+            hashes = {}
+            errors = []
+            for relative in _GRID_CONDITION_INPUTS:
+                try:
+                    if root is None:
+                        raise ValueError(root_problem or "grid family directory unavailable")
+                    hashes[relative] = _sha256_grid_input(root / case_id / relative)
+                except (OSError, ValueError) as exc:
+                    errors.append({"path": relative, "problem": str(exc)})
+            mesh_hash = None
+            try:
+                if root is None:
+                    raise ValueError(root_problem or "grid family directory unavailable")
+                mesh_hash = _sha256_grid_input(root / case_id / _GRID_MESH_INPUT)
+            except (OSError, ValueError) as exc:
+                errors.append({"path": _GRID_MESH_INPUT, "problem": str(exc)})
+            if errors:
+                config_errors.append(f"{case_id}: incomplete or unreadable input files")
+            levels[level] = {
+                "condition_files_sha256": hashes,
+                "mesh_dictionary_sha256": mesh_hash,
+                "errors": errors,
+            }
+
+        complete = all(
+            len(record["condition_files_sha256"]) == len(_GRID_CONDITION_INPUTS)
+            and record["mesh_dictionary_sha256"] is not None
+            and not record["errors"]
+            for record in levels.values()
+        )
+        differing = []
+        if complete:
+            for relative in _GRID_CONDITION_INPUTS:
+                digests = {record["condition_files_sha256"][relative] for record in levels.values()}
+                if len(digests) > 1:
+                    differing.append(relative)
+        if not complete:
+            status = "INCOMPLETE_OR_UNREADABLE"
+        elif differing:
+            status = "DIFFERENT_ACROSS_GRID_LEVELS"
+        else:
+            status = "BYTE_IDENTICAL_ACROSS_GRID_LEVELS"
+        fingerprint_sha256 = None
+        if complete and not differing:
+            common = {relative: levels["coarse"]["condition_files_sha256"][relative]
+                      for relative in _GRID_CONDITION_INPUTS}
+            canonical = json.dumps(common, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            fingerprint_sha256 = hashlib.sha256(canonical).hexdigest()
+        configurations[config_id] = {
+            "status": status,
+            "differing_condition_files": differing,
+            "condition_fingerprint_sha256": fingerprint_sha256,
+            "levels": levels,
+            "errors": config_errors,
+        }
+
+    statuses = [record["status"] for record in configurations.values()]
+    if any(status == "INCOMPLETE_OR_UNREADABLE" for status in statuses):
+        overall_status = "INCOMPLETE_OR_UNREADABLE"
+    elif any(status == "DIFFERENT_ACROSS_GRID_LEVELS" for status in statuses):
+        overall_status = "DIFFERENT_ACROSS_GRID_LEVELS"
+    else:
+        overall_status = "BYTE_IDENTICAL_ACROSS_GRID_LEVELS"
+    return {
+        "status": overall_status,
+        "condition_inputs_compared": list(_GRID_CONDITION_INPUTS),
+        "mesh_input_hashed_separately": _GRID_MESH_INPUT,
+        "configurations": configurations,
+        "note": "Byte identity of these solver inputs does not prove correct boundary conditions, actual patch areas or flow rates, geometry equivalence, independent executions, mesh independence, physical convergence, or model validity.",
+    }
 
 
 def diagnose_grid_family(directory: str | Path, *,
@@ -428,6 +562,7 @@ def diagnose_grid_family(directory: str | Path, *,
     return {
         "status": "DIAGNOSTIC_ONLY" if complete else "INCOMPLETE_OR_INVALID",
         "scientific_validation": "BLOCKED",
+        "solver_input_fingerprint_screen": audit_grid_family_inputs(raw_candidate),
         "case_count_expected": len(expected),
         "case_count_present": present,
         "cases": cases,

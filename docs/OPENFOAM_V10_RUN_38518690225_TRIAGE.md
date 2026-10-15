@@ -22,6 +22,24 @@ physical validation `not_performed`. Each `simpleFoam` log has 600 time
 steps and a terminal `End`. This is the 600-step artifact. It is distinct
 from the separate 5,000-iteration diagnostic discussed in PR #1304.
 
+## Solver-input consistency screen
+
+The 72 manifest-listed inputs were also compared directly across grid levels.
+Within each of the three configurations, these seven non-mesh dictionaries
+were byte-identical for coarse, medium, and fine: `0/U`, `0/p`,
+`constant/physicalProperties`, `constant/momentumTransport`,
+`system/controlDict`, `system/fvSchemes`, and `system/fvSolution`.
+`system/blockMeshDict` differed by grid level and is treated separately as a
+mesh-generation input. This narrows the observed input drift for the declared
+files; it does not verify the intended conditions, patch areas, flow rates,
+geometric equivalence, or actual solver execution settings.
+
+The inlet velocity recorded in `0/U` also differs between configurations:
+configuration 1 uses `-0.225 m/s`, while configurations 2 and 3 use
+`-0.1125 m/s`. That difference is not classified as an error by this static
+screen. Review it against the actual inlet patch areas and specified supply
+flows before comparing the configurations.
+
 ## Terminal logged residual screen
 
 For each case, the velocity ratio is the largest of the terminal logged

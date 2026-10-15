@@ -76,4 +76,6 @@ solver and model settings, then rerun the cases and compare converged quantities
 of interest on all three grids. No VTK fields or mesh-convergence result were
 produced in this run, so it does not support a GCI estimate or a
 CleanroomX/OpenFOAM compatibility percentage. Physical validation still
-requires comparison with measured cleanroom data and uncertainty.
+requires comparison with measured cleanroom data and uncertainty. The saved
+[next-step prompt](NEXT_OPENFOAM_VALIDATION_PROMPT.md) carries these limits
+into the next engineering pass.

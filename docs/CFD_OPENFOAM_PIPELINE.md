@@ -96,6 +96,9 @@ ASCII precision. This tolerance describes field serialization only; it is not
 a CFD solver acceptance threshold and provides no convergence or physical
 validation evidence.
 
+The independently rechecked run 58 archive and per-case native/VTK hashes are
+recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).
+
 ## Import actual CFD results (VTK/VTU)
 
 Export solved fields with your OpenFOAM installation's foamToVTK utility,

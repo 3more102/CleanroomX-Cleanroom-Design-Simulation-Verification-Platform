@@ -54,6 +54,10 @@ _FOAM_INTERNAL_VECTOR_FIELD = re.compile(
     r"\binternalField\s+nonuniform\s+List\s*<\s*vector\s*>\s*(\d+)\s*\((.*?)\)\s*;",
     re.DOTALL,
 )
+_FOAM_INTERNAL_SCALAR_FIELD = re.compile(
+    rf"\binternalField\s+nonuniform\s+List\s*<\s*scalar\s*>\s*(\d+)\s*\((.*?)\)\s*;",
+    re.DOTALL,
+)
 MAX_OPENFOAM_FIELD_BYTES = 64 * 1024 * 1024
 # The current Foundation v10 run artifacts write legacy VTK FIELD values with
 # six significant decimal digits unless a different writer precision is used.
@@ -104,6 +108,49 @@ def _read_native_openfoam_velocity(path):
         if not all(math.isfinite(component) for component in vector):
             raise ValueError("Native OpenFOAM U contains a non-finite velocity")
         values.append(vector)
+    return values, hashlib.sha256(raw).hexdigest()
+
+
+def _read_native_openfoam_pressure(path):
+    """Read an ASCII volScalarField p's kinematic-pressure internalField."""
+    source = Path(path)
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("Native OpenFOAM p must be a regular, non-symlink file")
+    before = source.stat()
+    if before.st_size > MAX_OPENFOAM_FIELD_BYTES:
+        raise ValueError("Native OpenFOAM p exceeds the bounded field size")
+    raw = source.read_bytes()
+    if len(raw) != before.st_size:
+        raise ValueError("Native OpenFOAM p changed while being read")
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Native OpenFOAM p must be an ASCII field") from exc
+    stable = source.stat()
+    if (stable.st_mtime_ns, stable.st_size) != (before.st_mtime_ns, before.st_size):
+        raise ValueError("Native OpenFOAM p changed during ingestion")
+
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+    text = re.sub(r"//[^\r\n]*", " ", text)
+    if not re.search(r"\bclass\s+volScalarField\s*;", text):
+        raise ValueError("Native OpenFOAM p is not a volScalarField")
+    if not re.search(r"\bobject\s+p\s*;", text):
+        raise ValueError("Native OpenFOAM field object is not p")
+    if not re.search(r"\bdimensions\s+\[\s*0\s+2\s+-2\s+0\s+0\s+0\s+0\s*\]\s*;", text):
+        raise ValueError("Native OpenFOAM p must have kinematic-pressure dimensions")
+    matches = list(_FOAM_INTERNAL_SCALAR_FIELD.finditer(text))
+    if len(matches) != 1:
+        raise ValueError("Native OpenFOAM p must contain exactly one nonuniform scalar internalField")
+    match = matches[0]
+    count = int(match.group(1))
+    if not 0 < count <= MAX_VTK_CELLS:
+        raise ValueError("Native OpenFOAM p has an invalid or unsupported cell count")
+    tokens = re.findall(_FOAM_NUMBER, match.group(2))
+    if len(tokens) != count or re.sub(_FOAM_NUMBER, "", match.group(2)).strip():
+        raise ValueError("Native OpenFOAM p scalar list does not match its declared count")
+    values = [float(token) for token in tokens]
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("Native OpenFOAM p contains a non-finite pressure")
     return values, hashlib.sha256(raw).hexdigest()
 
 
@@ -245,6 +292,94 @@ def audit_openfoam_vtk_velocity(native_u_path, vtk_path, *, ascii_precision=OPEN
         "max_relative_error_native_to_vtk": maximum_relative_error,
         "max_float32_reference_residual_m_s": maximum_float32_residual,
         "max_allowed_native_to_vtk_error_m_s": maximum_allowed_output_error,
+        "tolerance_basis": "two IEEE-754 binary32 round-to-nearest bounds (field cast and VTK reader) plus half-unit in the last place for the configured ASCII significant-digit precision",
+    }
+
+
+def audit_openfoam_vtk_pressure(native_p_path, vtk_path, *, ascii_precision=OPENFOAM_VTK_ASCII_PRECISION):
+    """Compare native kinematic-pressure cell p to foamToVTK p by cellID."""
+    if type(ascii_precision) is not int or ascii_precision < 6 or ascii_precision > 17:
+        raise ValueError("ASCII precision must be an integer from 6 through 17 significant digits")
+    native_values, native_sha = _read_native_openfoam_pressure(native_p_path)
+    source = Path(vtk_path)
+    if not source.is_file() or source.is_symlink():
+        raise ValueError("foamToVTK dataset must be a regular, non-symlink file")
+    before = source.stat()
+    if before.st_size > MAX_VTK_BYTES:
+        raise ValueError("VTK file exceeds bounded input limit")
+    with source.open("rb") as stream:
+        source_sha = hashlib.file_digest(stream, "sha256").hexdigest()
+    grid = _read_vtk(source, require_cell_velocity=True)
+    after = source.stat()
+    if (after.st_mtime_ns, after.st_size) != (before.st_mtime_ns, before.st_size):
+        raise ValueError("VTK file changed during field-parity ingestion")
+    with source.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != source_sha:
+            raise ValueError("VTK file content changed during field-parity ingestion")
+
+    cell_data = grid.GetCellData()
+    cell_ids = cell_data.GetArray("cellID")
+    pressure = cell_data.GetArray("p")
+    count = len(native_values)
+    if grid.GetNumberOfCells() != count:
+        raise ValueError("Native OpenFOAM and VTK cell counts differ")
+    if cell_ids is None or cell_ids.GetNumberOfComponents() != 1:
+        raise ValueError("foamToVTK dataset must contain scalar cellID cell data")
+    if pressure is None or pressure.GetNumberOfComponents() != 1:
+        raise ValueError("foamToVTK dataset must contain scalar cell-data p")
+    if pressure.GetDataTypeAsString() != "float":
+        raise ValueError("Field-parity tolerance requires the foamToVTK float32 p representation")
+
+    mapped = {}
+    for vtk_index in range(count):
+        raw_id = float(cell_ids.GetTuple1(vtk_index))
+        if not math.isfinite(raw_id) or not raw_id.is_integer():
+            raise ValueError("foamToVTK cellID contains a non-integer value")
+        cell_id = int(raw_id)
+        if not 0 <= cell_id < count or cell_id in mapped:
+            raise ValueError("foamToVTK cellID is not a unique in-range native cell index")
+        mapped[cell_id] = vtk_index
+    if set(mapped) != set(range(count)):
+        raise ValueError("foamToVTK cellID does not cover every native cell exactly once")
+
+    maximum_absolute_error = 0.0
+    maximum_relative_error = 0.0
+    maximum_float32_residual = 0.0
+    maximum_allowed_output_error = 0.0
+    for native_id, vtk_index in mapped.items():
+        native_value = native_values[native_id]
+        vtk_value = float(pressure.GetTuple1(vtk_index))
+        if not math.isfinite(vtk_value):
+            raise ValueError("foamToVTK p contains a non-finite pressure")
+        expected_float32, conversion_bound = _float32_rounding_bound(native_value)
+        serialization_bound = _ascii_rounding_bound(expected_float32, ascii_precision)
+        reader_rounding_bound = conversion_bound + serialization_bound
+        allowed = conversion_bound + reader_rounding_bound
+        float32_residual = abs(vtk_value - expected_float32)
+        if float32_residual > reader_rounding_bound + 4.0 * math.ulp(expected_float32):
+            raise ValueError("foamToVTK p differs from the native field beyond its ASCII precision")
+        error = abs(vtk_value - native_value)
+        maximum_absolute_error = max(maximum_absolute_error, error)
+        if native_value != 0.0:
+            maximum_relative_error = max(maximum_relative_error, error / abs(native_value))
+        maximum_float32_residual = max(maximum_float32_residual, float32_residual)
+        maximum_allowed_output_error = max(maximum_allowed_output_error, allowed)
+
+    return {
+        "status": "PASS",
+        "field": "p",
+        "dimensions": "[0 2 -2 0 0 0 0]",
+        "cell_id_mapping": "complete_unique_permutation_of_native_cell_indices",
+        "cell_count": count,
+        "compared_scalar_values": count,
+        "native_field_sha256": native_sha,
+        "vtk_sha256": source_sha,
+        "vtk_scalar_type": pressure.GetDataTypeAsString(),
+        "ascii_significant_digits": ascii_precision,
+        "max_absolute_error_native_to_vtk_m2_s2": maximum_absolute_error,
+        "max_relative_error_native_to_vtk": maximum_relative_error,
+        "max_float32_reference_residual_m2_s2": maximum_float32_residual,
+        "max_allowed_native_to_vtk_error_m2_s2": maximum_allowed_output_error,
         "tolerance_basis": "two IEEE-754 binary32 round-to-nearest bounds (field cast and VTK reader) plus half-unit in the last place for the configured ASCII significant-digit precision",
     }
 

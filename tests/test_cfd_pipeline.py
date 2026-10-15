@@ -9,6 +9,7 @@ from cleanroomx.cfd_openfoam import (
     run_openfoam_cases, validate_openfoam_spec,
 )
 from cleanroomx.cfd_vtk import (
+    audit_openfoam_vtk_pressure,
     audit_openfoam_vtk_velocity,
     import_vtk_case,
     populate_study_from_vtk,
@@ -196,11 +197,13 @@ def openfoam_velocity_fixture(path):
     )),encoding="ascii")
 
 def legacy_vtk_velocity_fixture(
-    path, *, cell_ids=(1, 0), perturb=0.0, include_ids=True, point_velocity=False
+    path, *, cell_ids=(1, 0), perturb=0.0, pressure_perturb=0.0,
+    include_ids=True, point_velocity=False
 ):
     vtk=pytest.importorskip("vtk")
     native=((1.234567891,-0.25,0.000001234567),
             (-3.14159265,0.00000001,0.125000001))
+    native_pressure=(0.123456789, -2.5)
     grid=vtk.vtkUnstructuredGrid()
     points=vtk.vtkPoints()
     for cell_index in range(2):
@@ -218,6 +221,8 @@ def legacy_vtk_velocity_fixture(
     velocity=vtk.vtkFloatArray()
     velocity.SetName("U")
     velocity.SetNumberOfComponents(3)
+    pressure=vtk.vtkFloatArray()
+    pressure.SetName("p")
     ids=vtk.vtkIntArray()
     ids.SetName("cellID")
     for cell_id in cell_ids:
@@ -225,6 +230,7 @@ def legacy_vtk_velocity_fixture(
         if perturb:
             vector[0]+=perturb
         velocity.InsertNextTuple3(*vector)
+        pressure.InsertNextValue(native_pressure[cell_id]+pressure_perturb)
         ids.InsertNextValue(cell_id)
     if point_velocity:
         point_u=vtk.vtkFloatArray()
@@ -235,6 +241,7 @@ def legacy_vtk_velocity_fixture(
         grid.GetPointData().AddArray(point_u)
     else:
         grid.GetCellData().AddArray(velocity)
+    grid.GetCellData().AddArray(pressure)
     if include_ids:
         grid.GetCellData().AddArray(ids)
     writer=vtk.vtkUnstructuredGridWriter()
@@ -287,6 +294,60 @@ def test_openfoam_vtk_velocity_parity_rejects_field_mismatch(tmp_path):
     legacy_vtk_velocity_fixture(exported,perturb=0.01)
     with pytest.raises(ValueError,match="differs from the native field"):
         audit_openfoam_vtk_velocity(native,exported)
+
+def openfoam_pressure_fixture(path):
+    path.write_text("\n".join((
+        "FoamFile",
+        "{",
+        "    format ascii;",
+        "    class volScalarField;",
+        '    location "150";',
+        "    object p;",
+        "}",
+        "dimensions [0 2 -2 0 0 0 0];",
+        "internalField nonuniform List<scalar>",
+        "2",
+        "(",
+        "0.123456789",
+        "-2.5",
+        ");",
+        "boundaryField {}",
+        "",
+    )), encoding="ascii")
+
+def test_openfoam_vtk_pressure_parity_uses_cell_ids_and_float32_tolerance(tmp_path):
+    native=tmp_path/"150"/"p"
+    native.parent.mkdir()
+    openfoam_pressure_fixture(native)
+    exported=tmp_path/"case_150.vtk"
+    legacy_vtk_velocity_fixture(exported,cell_ids=(1,0))
+
+    report=audit_openfoam_vtk_pressure(native,exported)
+
+    assert report["status"]=="PASS"
+    assert report["field"]=="p"
+    assert report["dimensions"]=="[0 2 -2 0 0 0 0]"
+    assert report["cell_id_mapping"]=="complete_unique_permutation_of_native_cell_indices"
+    assert report["cell_count"]==2
+    assert report["compared_scalar_values"]==2
+    assert report["vtk_scalar_type"]=="float"
+    assert report["max_absolute_error_native_to_vtk_m2_s2"]>0
+    assert report["max_absolute_error_native_to_vtk_m2_s2"] <= report["max_allowed_native_to_vtk_error_m2_s2"]
+
+def test_openfoam_vtk_pressure_parity_rejects_wrong_dimensions_and_mismatch(tmp_path):
+    native=tmp_path/"150"/"p"
+    native.parent.mkdir()
+    openfoam_pressure_fixture(native)
+    exported=tmp_path/"case_150.vtk"
+    legacy_vtk_velocity_fixture(exported,pressure_perturb=0.01)
+    with pytest.raises(ValueError,match="differs from the native field"):
+        audit_openfoam_vtk_pressure(native,exported)
+
+    native.write_text(native.read_text(encoding="ascii").replace(
+        "dimensions [0 2 -2 0 0 0 0];", "dimensions [0 1 -1 0 0 0 0];"
+    ), encoding="ascii")
+    with pytest.raises(ValueError,match="kinematic-pressure dimensions"):
+        audit_openfoam_vtk_pressure(native,exported)
 
 def test_actual_vtk_field_import_and_pareto(tmp_path):
     sources={}

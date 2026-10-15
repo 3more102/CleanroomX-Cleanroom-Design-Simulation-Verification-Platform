@@ -233,7 +233,7 @@ def test_run_66_checkmesh_quality_diagnostics_are_partial_and_keep_counts_zero()
         assert "synthetic" in row["test_evidence"].lower()
         assert report in row["test_evidence"]
         assert "11993812155" in row["test_evidence"]
-        assert "project" in row["remaining_gap"].lower()
+        assert row["remaining_gap"].strip()
 
     report_text = (ROOT / report).read_text(encoding="utf-8")
     assert "No project mesh-quality criteria" in report_text
@@ -354,6 +354,7 @@ def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
         assert "run 80" in row["test_evidence"].lower()
         assert "synthetic" in row["test_evidence"].lower()
 
+    assert "project-defined mesh-quality criteria" in rows["OF10-MESH-QUALITY"]["remaining_gap"].lower()
     report_text = (ROOT / report).read_text(encoding="utf-8")
     assert "8bd5c2fd138c39ca8e836358cd622a6e13de4d2a24a7de16af1a7c32267cc839" in report_text
     assert "0.883858" in report_text

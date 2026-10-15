@@ -45,7 +45,7 @@ Attach measured supply/extract flows, pressure differentials, ACH and particle/t
 
 ## 5. Gate and sign-off
 
-- Software CI (Python 3.11/3.12/3.13, Windows, native BIM, CFD VTK and Required CI Gate): **UNVERIFIED FOR EXACT PR HEAD**
+- Software CI (Python 3.11/3.12/3.13, Windows, native BIM, CFD VTK and Required CI Gate): baseline PR head `c3a4fb0597437c8a2a7d63043caa1e34bf42071a` passed the CI and CFD VTK workflows on 2026-10-14; each subsequent commit requires exact-head verification.
 - Nine-case real OpenFOAM execution: **NOT PERFORMED**
 - Evidence integrity and independent custody: **NOT VERIFIED**
 - Three-grid convergence: **NOT VERIFIED**

@@ -190,6 +190,44 @@ Tampered or malformed evidence returns `evidence_integrity_failed` (exit 3).
 Regardless of integrity, `engineering_review` remains `BLOCKED` and
 `physical_validation` remains `not_performed`.
 
+## ProofGraph export
+
+Export the local execution receipt into a canonical ProofGraph document:
+
+```bash
+cleanroomx-cfd-pipeline grid-proofgraph ./cfd_mesh_family \
+  --output ../cfd_grid_qualification.proofgraph.json
+```
+
+To include three-grid VTK/log screens, pass one reviewed study specification
+per configuration:
+
+```bash
+cleanroomx-cfd-pipeline grid-proofgraph ./cfd_mesh_family \
+  --grid-study ./studies/configuration_1.json \
+  --grid-study ./studies/configuration_2.json \
+  --grid-study ./studies/configuration_3.json \
+  --output ../cfd_grid_qualification.proofgraph.json
+```
+
+The command preserves SHA-256 identities for the manifest, receipt, recorded
+stage logs, generated mesh-digest maps, study specifications, VTK fields and
+solver logs. It emits separate findings for execution-record integrity, each
+configuration's grid screen and independent measured-data correlation. A
+complete locally consistent execution receipt can pass only that bounded
+integrity check. A GCI result eligible for engineering review is recorded as
+`warning`, and measured-data correlation remains `unknown` without a separate
+measurement and review record. The verification run metadata keeps
+`engineering_review: BLOCKED`, `physical_validation: not_available` and
+`certification: not_claimed`.
+
+The JSON file is a standalone ProofGraph evidence artifact for dossier review;
+this export does not change project design data or supply missing physical
+measurements. Write it outside the generated case family so the evidence tree
+remains available for later verification. Hash matching records local byte
+consistency and does not prove solver identity, independent run custody, model
+validity or certification.
+
 **Trust boundary:** The receipt is unsigned and its SHA-256 hashes can be
 consistently rewritten by someone who controls all evidence files. Hash
 agreement does not attest executable identity, prove independent solver

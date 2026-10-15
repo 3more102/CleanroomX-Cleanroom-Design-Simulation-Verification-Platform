@@ -11,6 +11,8 @@ from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from .cfd_grid_runner import run_grid_family
 from .cfd_grid_receipt import verify_grid_run_evidence
+from .cfd_grid_runner import INPUTS as GRID_INPUTS, STAGES as GRID_STAGES
+from .proofgraph_cfd import proofgraph_from_cfd_grid_family
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -62,6 +64,11 @@ def build_parser():
     execute_grid.add_argument("--timeout-seconds",type=int,default=3600)
     grid_verify=sub.add_parser("grid-verify",help="Check existing nine-case receipt/log integrity without OpenFOAM")
     grid_verify.add_argument("directory")
+    grid_graph=sub.add_parser("grid-proofgraph",help="Export CFD receipts and optional grid screens as a ProofGraph")
+    grid_graph.add_argument("directory",help="Generated nine-case family directory")
+    grid_graph.add_argument("--grid-study",action="append",default=[],metavar="SPEC",
+                            help="Three-grid VTK/log study JSON; repeat once per configuration")
+    grid_graph.add_argument("--output",help="ProofGraph JSON path outside the case family")
     verify_grid=sub.add_parser("grid-audit",help="VTK/log grounded three-grid Richardson and GCI screening")
     verify_grid.add_argument("spec")
     verify_grid.add_argument("--output")
@@ -86,6 +93,41 @@ def main():
         report=verify_grid_run_evidence(args.directory)
         print(dumps_strict_json(report))
         return 0 if report["status"]=="execution_logs_integrity_verified_requires_scientific_review" else 3
+    if args.command=="grid-proofgraph":
+        graph=proofgraph_from_cfd_grid_family(
+            args.directory,grid_study_specs=args.grid_study
+        )
+        payload=dumps_strict_json(graph.to_dict(),sort_keys=True)
+        if args.output:
+            family=Path(args.directory).expanduser().resolve(strict=True)
+            output=Path(args.output).expanduser().resolve(strict=False)
+            if output.is_relative_to(family):
+                print("cleanroomx-cfd-pipeline: error: ProofGraph output must be outside the CFD grid family",
+                      file=sys.stderr)
+                return 1
+            protected=[family/"manifest.json",family/"grid_run_evidence.json"]
+            for configuration in (1,2,3):
+                for level in ("coarse","medium","fine"):
+                    case=family/f"configuration_{configuration}"/level
+                    protected.extend(case/name for name in GRID_INPUTS)
+                    protected.extend(case/f"{stage}.log" for stage in GRID_STAGES)
+            for spec_path in args.grid_study:
+                spec_file=Path(spec_path).expanduser().resolve(strict=True)
+                protected.append(spec_file)
+                spec=load_cli_input(load_strict_json,spec_file)
+                for run in spec.get("runs",[]) if type(spec) is dict else []:
+                    if type(run) is dict:
+                        for key in ("vtk_file","solver_log"):
+                            if type(run.get(key)) is str:
+                                protected.append(spec_file.parent/run[key])
+            if not publish_cli_output(
+                "cleanroomx-cfd-pipeline",args.output,payload,
+                protected_inputs=protected,
+            ):
+                return 1
+        else:
+            print(payload)
+        return 0
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(report))

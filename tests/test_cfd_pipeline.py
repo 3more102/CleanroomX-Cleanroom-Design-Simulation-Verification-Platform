@@ -9,6 +9,7 @@ from cleanroomx.cfd_openfoam import (
     run_openfoam_cases, validate_openfoam_spec,
 )
 from cleanroomx.cfd_vtk import (
+    audit_openfoam_vtk_boundary_patch,
     audit_openfoam_vtk_pressure,
     audit_openfoam_vtk_velocity,
     import_vtk_case,
@@ -348,6 +349,129 @@ def test_openfoam_vtk_pressure_parity_rejects_wrong_dimensions_and_mismatch(tmp_
     ), encoding="ascii")
     with pytest.raises(ValueError,match="kinematic-pressure dimensions"):
         audit_openfoam_vtk_pressure(native,exported)
+
+def openfoam_patch_fixture(case_dir):
+    mesh=case_dir/"constant"/"polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh/"points").write_text("\n".join((
+        "FoamFile { format ascii; class vectorField; object points; }",
+        "6", "(", "(0 0 0)", "(1 0 0)", "(0 1 0)",
+        "(0 0 1)", "(2 0 0)", "(2 1 0)", ");", "",
+    )),encoding="ascii")
+    (mesh/"faces").write_text("\n".join((
+        "FoamFile { format ascii; class faceList; object faces; }",
+        "2", "(", "3(0 1 2)", "3(1 4 5)", ");", "",
+    )),encoding="ascii")
+    (mesh/"owner").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object owner; }",
+        "2", "(", "0", "1", ");", "",
+    )),encoding="ascii")
+    (mesh/"boundary").write_text("\n".join((
+        "FoamFile { format ascii; class polyBoundaryMesh; object boundary; }",
+        "1", "(", "outlet", "{", "type patch;", "nFaces 2;", "startFace 0;", "}", ");", "",
+    )),encoding="ascii")
+    time_dir=case_dir/"150"
+    time_dir.mkdir()
+    (time_dir/"U").write_text("\n".join((
+        "FoamFile { format ascii; class volVectorField; object U; }",
+        "dimensions [0 1 -1 0 0 0 0];",
+        "internalField nonuniform List<vector> 2 ((0 0 0) (0 0 0));",
+        "boundaryField { outlet { type fixedValue;",
+        "value nonuniform List<vector> 2 ((1.234567891 0 0) (2.34567891 3.45678912 0)); } }", "",
+    )),encoding="ascii")
+    (time_dir/"p").write_text("\n".join((
+        "FoamFile { format ascii; class volScalarField; object p; }",
+        "dimensions [0 2 -2 0 0 0 0];",
+        "internalField nonuniform List<scalar> 2 (4.123456789 5.123456789);",
+        "boundaryField { outlet { type zeroGradient; } }", "",
+    )),encoding="ascii")
+    return mesh,time_dir
+
+def legacy_vtk_patch_fixture(path, *, reverse=True, perturb_velocity=0.0,
+                             patch_id=0, shift_geometry=0.0):
+    vtk=pytest.importorskip("vtk")
+    native_points=((0,0,0),(1,0,0),(0,1,0),(0,0,1),(2,0,0),(2,1,0))
+    native_faces=((0,1,2),(1,4,5))
+    native_velocity=((1.234567891,0,0),(2.34567891,3.45678912,0))
+    native_pressure=(4.123456789,5.123456789)
+    poly=vtk.vtkPolyData()
+    points=vtk.vtkPoints()
+    point_order=(5,4,2,1,0)
+    point_ids={}
+    for native_id in point_order:
+        x,y,z=native_points[native_id]
+        point_ids[native_id]=points.InsertNextPoint(x+shift_geometry,y,z)
+    poly.SetPoints(points)
+    polys=vtk.vtkCellArray()
+    order=(1,0) if reverse else (0,1)
+    velocity=vtk.vtkFloatArray()
+    velocity.SetName("U")
+    velocity.SetNumberOfComponents(3)
+    pressure=vtk.vtkFloatArray()
+    pressure.SetName("p")
+    patch_ids=vtk.vtkFloatArray()
+    patch_ids.SetName("patchID")
+    for face_index in order:
+        face=native_faces[face_index]
+        cell=vtk.vtkPolygon()
+        cell.GetPointIds().SetNumberOfIds(len(face))
+        # Reversing the vertex order keeps an equivalent polygon while
+        # ensuring neither point nor face array order is treated as identity.
+        for local_index,native_point_id in enumerate(reversed(face)):
+            cell.GetPointIds().SetId(local_index,point_ids[native_point_id])
+        polys.InsertNextCell(cell)
+        vector=list(native_velocity[face_index])
+        vector[0]+=perturb_velocity
+        velocity.InsertNextTuple3(*vector)
+        pressure.InsertNextValue(native_pressure[face_index])
+        patch_ids.InsertNextValue(patch_id)
+    poly.SetPolys(polys)
+    poly.GetCellData().AddArray(velocity)
+    poly.GetCellData().AddArray(pressure)
+    poly.GetCellData().AddArray(patch_ids)
+    writer=vtk.vtkPolyDataWriter()
+    writer.SetFileName(str(path))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(poly)
+    assert writer.Write()==1
+
+def test_openfoam_vtk_boundary_patch_parity_maps_faces_by_geometry(tmp_path):
+    case=tmp_path/"case"
+    mesh,time_dir=openfoam_patch_fixture(case)
+    exported=tmp_path/"outlet_150.vtk"
+    legacy_vtk_patch_fixture(exported,reverse=True)
+
+    report=audit_openfoam_vtk_boundary_patch(
+        time_dir/"U",time_dir/"p",mesh,exported,"outlet"
+    )
+
+    assert report["status"]=="PASS"
+    assert report["patch_id"]==0
+    assert report["native_face_count"]==report["vtk_face_count"]==2
+    assert report["face_mapping"]=="complete_unique_geometry_signature_at_ascii_precision"
+    assert report["native_u_boundary_type"]=="fixedValue"
+    assert report["native_p_boundary_type"]=="zeroGradient"
+    assert report["compared_velocity_components"]==6
+    assert report["compared_pressure_values"]==2
+    assert 0 < report["max_absolute_velocity_error_m_s"] <= report["max_allowed_velocity_error_m_s"]
+    assert report["max_absolute_pressure_error_m2_s2"] <= report["max_allowed_pressure_error_m2_s2"]
+
+def test_openfoam_vtk_boundary_patch_parity_rejects_wrong_geometry_id_and_values(tmp_path):
+    case=tmp_path/"case"
+    mesh,time_dir=openfoam_patch_fixture(case)
+    exported=tmp_path/"outlet_150.vtk"
+
+    legacy_vtk_patch_fixture(exported,shift_geometry=0.1)
+    with pytest.raises(ValueError,match="face geometry"):
+        audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
+
+    legacy_vtk_patch_fixture(exported,patch_id=1)
+    with pytest.raises(ValueError,match="patchID"):
+        audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
+
+    legacy_vtk_patch_fixture(exported,perturb_velocity=0.1)
+    with pytest.raises(ValueError,match="patch U differs"):
+        audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
 
 def test_actual_vtk_field_import_and_pareto(tmp_path):
     sources={}

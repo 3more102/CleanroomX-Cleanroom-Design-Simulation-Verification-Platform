@@ -383,6 +383,424 @@ def audit_openfoam_vtk_pressure(native_p_path, vtk_path, *, ascii_precision=OPEN
         "tolerance_basis": "two IEEE-754 binary32 round-to-nearest bounds (field cast and VTK reader) plus half-unit in the last place for the configured ASCII significant-digit precision",
     }
 
+
+def _read_stable_ascii_file(path, description, *, root=None):
+    source = Path(path)
+    if source.is_symlink() or not source.is_file():
+        raise ValueError(f"{description} must be a regular, non-symlink file")
+    if root is not None:
+        resolved_root = Path(root).resolve(strict=True)
+        resolved_source = source.resolve(strict=True)
+        if not resolved_source.is_relative_to(resolved_root):
+            raise ValueError(f"{description} escaped its input directory")
+    before = source.stat()
+    if before.st_size > MAX_OPENFOAM_FIELD_BYTES:
+        raise ValueError(f"{description} exceeds the bounded input size")
+    raw = source.read_bytes()
+    if len(raw) != before.st_size:
+        raise ValueError(f"{description} changed while being read")
+    after = source.stat()
+    if (after.st_mtime_ns, after.st_size) != (before.st_mtime_ns, before.st_size):
+        raise ValueError(f"{description} changed during ingestion")
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{description} must be an ASCII file") from exc
+    return text, hashlib.sha256(raw).hexdigest()
+
+
+def _strip_foam_comments(text):
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+    return re.sub(r"//[^\r\n]*", " ", text)
+
+
+def _extract_foam_braced_block(text, name, description):
+    matches = list(re.finditer(rf"\b{re.escape(name)}\s*\{{", text))
+    if len(matches) != 1:
+        raise ValueError(f"{description} must contain exactly one {name} dictionary")
+    start = text.find("{", matches[0].start())
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1:index]
+    raise ValueError(f"{description} contains an unterminated {name} dictionary")
+
+
+def _extract_foam_counted_list(text, description):
+    match = re.search(r"\b(\d+)\s*\(", text)
+    if match is None:
+        raise ValueError(f"{description} is missing its counted list")
+    count = int(match.group(1))
+    start = text.find("(", match.start())
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "(":
+            depth += 1
+        elif text[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return count, text[start + 1:index]
+    raise ValueError(f"{description} contains an unterminated counted list")
+
+
+def _read_openfoam_mesh_points(path, mesh_root):
+    text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh points", root=mesh_root)
+    clean = _strip_foam_comments(text)
+    count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh points")
+    matches = list(_FOAM_VECTOR.finditer(body))
+    if len(matches) != count or _FOAM_VECTOR.sub("", body).strip():
+        raise ValueError("OpenFOAM mesh point list does not match its declared count")
+    points = [tuple(float(component) for component in match.groups()) for match in matches]
+    if not all(math.isfinite(component) for point in points for component in point):
+        raise ValueError("OpenFOAM mesh points contain a non-finite coordinate")
+    return points, digest
+
+
+def _read_openfoam_mesh_faces(path, point_count, mesh_root):
+    text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh faces", root=mesh_root)
+    clean = _strip_foam_comments(text)
+    count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh faces")
+    matches = list(re.finditer(r"(\d+)\s*\(([^()]*)\)", body))
+    if len(matches) != count:
+        raise ValueError("OpenFOAM mesh face list does not match its declared count")
+    faces = []
+    for match in matches:
+        face_count = int(match.group(1))
+        point_ids = [int(token) for token in re.findall(r"\d+", match.group(2))]
+        if (
+            len(point_ids) != face_count
+            or face_count < 3
+            or len(set(point_ids)) != face_count
+            or any(point_id < 0 or point_id >= point_count for point_id in point_ids)
+        ):
+            raise ValueError("OpenFOAM mesh contains an invalid face")
+        faces.append(point_ids)
+    if re.sub(r"\d+\s*\([^()]*\)", "", body).strip():
+        raise ValueError("OpenFOAM mesh face list contains unexpected data")
+    return faces, digest
+
+
+def _read_openfoam_mesh_owners(path, face_count, mesh_root):
+    text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh owners", root=mesh_root)
+    clean = _strip_foam_comments(text)
+    count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh owners")
+    tokens = re.findall(r"\d+", body)
+    if count != face_count or len(tokens) != count or re.sub(r"\d+", "", body).strip():
+        raise ValueError("OpenFOAM mesh owner list does not match its declared face count")
+    return [int(token) for token in tokens], digest
+
+
+def _read_openfoam_boundary_patches(path, face_count, mesh_root):
+    text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh boundary", root=mesh_root)
+    clean = _strip_foam_comments(text)
+    declared_count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh boundary")
+    matches = list(re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\{([^{}]*)\}", body))
+    if len(matches) != declared_count:
+        raise ValueError("OpenFOAM boundary patch count does not match its declaration")
+    patches = []
+    names = set()
+    for patch_index, match in enumerate(matches):
+        name, patch_text = match.groups()
+        if name in names:
+            raise ValueError("OpenFOAM boundary contains duplicate patch names")
+        names.add(name)
+        face_counts = re.findall(r"\bnFaces\s+(\d+)\s*;", patch_text)
+        starts = re.findall(r"\bstartFace\s+(\d+)\s*;", patch_text)
+        if len(face_counts) != 1 or len(starts) != 1:
+            raise ValueError("OpenFOAM boundary patch must declare one startFace and nFaces")
+        start_face, patch_face_count = int(starts[0]), int(face_counts[0])
+        if (
+            patch_face_count <= 0
+            or start_face < 0
+            or start_face + patch_face_count > face_count
+        ):
+            raise ValueError("OpenFOAM boundary patch face range is invalid")
+        patches.append({
+            "name": name,
+            "patch_id": patch_index,
+            "start_face": start_face,
+            "face_count": patch_face_count,
+        })
+    ordered_ranges = sorted((item["start_face"], item["start_face"] + item["face_count"]) for item in patches)
+    if not ordered_ranges or ordered_ranges[0][0] + sum(end - start for start, end in ordered_ranges) != face_count:
+        raise ValueError("OpenFOAM boundary patches do not cover every mesh face exactly once")
+    cursor = ordered_ranges[0][0]
+    for start, end in ordered_ranges:
+        if start != cursor:
+            raise ValueError("OpenFOAM boundary patch face ranges overlap or contain gaps")
+        cursor = end
+    return patches, digest
+
+
+def _foam_patch_expected_values(text, field_name, patch_name, components, internal_values, owners, face_ids):
+    clean = _strip_foam_comments(text)
+    expected_class = "volVectorField" if components == 3 else "volScalarField"
+    if not re.search(rf"\bclass\s+{expected_class}\s*;", clean):
+        raise ValueError(f"Native OpenFOAM {field_name} is not a {expected_class}")
+    if not re.search(rf"\bobject\s+{re.escape(field_name)}\s*;", clean):
+        raise ValueError(f"Native OpenFOAM field object is not {field_name}")
+    boundary = _extract_foam_braced_block(clean, "boundaryField", f"Native OpenFOAM {field_name}")
+    patch_text = _extract_foam_braced_block(boundary, patch_name, f"Native OpenFOAM {field_name} boundary")
+    types = re.findall(r"\btype\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", patch_text)
+    if len(types) != 1:
+        raise ValueError(f"Native OpenFOAM {field_name} patch must declare exactly one boundary type")
+    boundary_type = types[0]
+    if boundary_type == "zeroGradient":
+        values = []
+        for face_id in face_ids:
+            if not 0 <= face_id < len(owners) or not 0 <= owners[face_id] < len(internal_values):
+                raise ValueError("OpenFOAM boundary owner is outside the native internal field")
+            values.append(internal_values[owners[face_id]])
+        return values, boundary_type
+    if boundary_type == "noSlip" and components == 3:
+        return [(0.0, 0.0, 0.0)] * len(face_ids), boundary_type
+
+    uniform = re.findall(r"\bvalue\s+uniform\s+([^;]+);", patch_text)
+    nonuniform = re.findall(
+        r"\bvalue\s+nonuniform\s+List\s*<\s*(vector|scalar)\s*>\s*(\d+)\s*\((.*?)\)\s*;",
+        patch_text,
+        flags=re.DOTALL,
+    )
+    if len(uniform) == 1 and not nonuniform:
+        token = uniform[0].strip()
+        if components == 3:
+            match = _FOAM_VECTOR.fullmatch(token)
+            if match is None:
+                raise ValueError(f"Native OpenFOAM {field_name} uniform patch value is not a vector")
+            one_value = tuple(float(component) for component in match.groups())
+        else:
+            if re.fullmatch(_FOAM_NUMBER, token) is None:
+                raise ValueError(f"Native OpenFOAM {field_name} uniform patch value is not a scalar")
+            one_value = float(token)
+        values = [one_value] * len(face_ids)
+    elif not uniform and len(nonuniform) == 1:
+        value_type, declared_count, value_body = nonuniform[0]
+        expected_type = "vector" if components == 3 else "scalar"
+        if value_type != expected_type or int(declared_count) != len(face_ids):
+            raise ValueError(f"Native OpenFOAM {field_name} patch value count or type is invalid")
+        if components == 3:
+            matches = list(_FOAM_VECTOR.finditer(value_body))
+            if len(matches) != len(face_ids) or _FOAM_VECTOR.sub("", value_body).strip():
+                raise ValueError(f"Native OpenFOAM {field_name} patch vectors do not match their declared count")
+            values = [tuple(float(value) for value in match.groups()) for match in matches]
+        else:
+            tokens = re.findall(_FOAM_NUMBER, value_body)
+            if len(tokens) != len(face_ids) or re.sub(_FOAM_NUMBER, "", value_body).strip():
+                raise ValueError(f"Native OpenFOAM {field_name} patch scalars do not match their declared count")
+            values = [float(token) for token in tokens]
+    else:
+        raise ValueError(
+            f"Native OpenFOAM {field_name} patch type {boundary_type} lacks a supported explicit value"
+        )
+    scalars = (component for value in values for component in value) if components == 3 else iter(values)
+    if not all(math.isfinite(value) for value in scalars):
+        raise ValueError(f"Native OpenFOAM {field_name} patch values contain non-finite values")
+    return values, boundary_type
+
+
+def _patch_face_signature(coordinates, precision):
+    formatted = []
+    for coordinate in coordinates:
+        point = []
+        for component in coordinate:
+            value = float(component)
+            if not math.isfinite(value):
+                raise ValueError("VTK or OpenFOAM patch geometry contains a non-finite coordinate")
+            point.append("0" if value == 0.0 else format(value, f".{precision}g"))
+        formatted.append(tuple(point))
+    return tuple(sorted(formatted))
+
+
+def audit_openfoam_vtk_boundary_patch(
+    native_u_path,
+    native_p_path,
+    poly_mesh_directory,
+    vtk_patch_path,
+    patch_name,
+    *,
+    ascii_precision=OPENFOAM_VTK_ASCII_PRECISION,
+):
+    """Audit one foamToVTK boundary patch against native v10 U and p faces.
+
+    Patch-face correspondence is established from the serialized face geometry,
+    not from the VTK cell-array position. The audit supports explicit uniform or
+    nonuniform patch values, zeroGradient fields, and noSlip velocity.
+    """
+    if type(ascii_precision) is not int or not 6 <= ascii_precision <= 17:
+        raise ValueError("ASCII precision must be an integer from 6 through 17 significant digits")
+    if not isinstance(patch_name, str) or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", patch_name) is None:
+        raise ValueError("OpenFOAM patch name must be a simple word")
+    mesh_root = Path(poly_mesh_directory)
+    if mesh_root.is_symlink() or not mesh_root.is_dir():
+        raise ValueError("OpenFOAM polyMesh directory must be a regular, non-symlink directory")
+
+    points, points_sha = _read_openfoam_mesh_points(mesh_root / "points", mesh_root)
+    faces, faces_sha = _read_openfoam_mesh_faces(mesh_root / "faces", len(points), mesh_root)
+    owners, owners_sha = _read_openfoam_mesh_owners(mesh_root / "owner", len(faces), mesh_root)
+    patches, boundary_sha = _read_openfoam_boundary_patches(mesh_root / "boundary", len(faces), mesh_root)
+    matching_patches = [patch for patch in patches if patch["name"] == patch_name]
+    if len(matching_patches) != 1:
+        raise ValueError("Requested OpenFOAM patch is missing or ambiguous")
+    patch = matching_patches[0]
+    face_ids = list(range(patch["start_face"], patch["start_face"] + patch["face_count"]))
+
+    native_u, native_u_sha = _read_native_openfoam_velocity(native_u_path)
+    native_p, native_p_sha = _read_native_openfoam_pressure(native_p_path)
+    u_text, checked_u_sha = _read_stable_ascii_file(native_u_path, "Native OpenFOAM U")
+    p_text, checked_p_sha = _read_stable_ascii_file(native_p_path, "Native OpenFOAM p")
+    if native_u_sha != checked_u_sha or native_p_sha != checked_p_sha:
+        raise ValueError("Native OpenFOAM field changed during patch-parity ingestion")
+    expected_u, u_boundary_type = _foam_patch_expected_values(
+        u_text, "U", patch_name, 3, native_u, owners, face_ids
+    )
+    expected_p, p_boundary_type = _foam_patch_expected_values(
+        p_text, "p", patch_name, 1, native_p, owners, face_ids
+    )
+
+    source = Path(vtk_patch_path)
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("foamToVTK patch must be a regular, non-symlink file")
+    before = source.stat()
+    if before.st_size > MAX_VTK_BYTES:
+        raise ValueError("VTK patch file exceeds bounded input limit")
+    with source.open("rb") as stream:
+        source_sha = hashlib.file_digest(stream, "sha256").hexdigest()
+    try:
+        import vtk
+    except ImportError as exc:
+        raise RuntimeError("pip install vtk to read VTK patch surface data") from exc
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(str(source))
+    reader.Update()
+    dataset = reader.GetOutput()
+    after = source.stat()
+    if (after.st_mtime_ns, after.st_size) != (before.st_mtime_ns, before.st_size):
+        raise ValueError("VTK patch file changed during field-parity ingestion")
+    with source.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != source_sha:
+            raise ValueError("VTK patch content changed during field-parity ingestion")
+    count = patch["face_count"]
+    if dataset is None or dataset.GetNumberOfCells() != count:
+        raise ValueError("Native OpenFOAM and VTK patch face counts differ")
+
+    cell_data = dataset.GetCellData()
+    patch_ids = cell_data.GetArray("patchID")
+    velocity = cell_data.GetArray("U")
+    pressure = cell_data.GetArray("p")
+    if patch_ids is None or patch_ids.GetNumberOfComponents() != 1:
+        raise ValueError("foamToVTK patch must contain scalar patchID cell data")
+    if velocity is None or velocity.GetNumberOfComponents() != 3:
+        raise ValueError("foamToVTK patch must contain three-component cell-data U")
+    if pressure is None or pressure.GetNumberOfComponents() != 1:
+        raise ValueError("foamToVTK patch must contain scalar cell-data p")
+    if velocity.GetDataTypeAsString() != "float" or pressure.GetDataTypeAsString() != "float":
+        raise ValueError("Patch parity tolerance requires foamToVTK float32 U and p representations")
+
+    native_faces = {}
+    for face_id in face_ids:
+        native_signature = _patch_face_signature(
+            (points[point_id] for point_id in faces[face_id]), ascii_precision
+        )
+        if native_signature in native_faces:
+            raise ValueError("OpenFOAM patch contains ambiguous duplicate face geometry")
+        native_faces[native_signature] = face_id
+    mapped = {}
+    for vtk_index in range(count):
+        vtk_cell = dataset.GetCell(vtk_index)
+        if vtk_cell is None or vtk_cell.GetNumberOfPoints() < 3:
+            raise ValueError("foamToVTK patch contains a non-polygon cell")
+        vtk_signature = _patch_face_signature(
+            (dataset.GetPoint(vtk_cell.GetPointId(point_index))
+             for point_index in range(vtk_cell.GetNumberOfPoints())),
+            ascii_precision,
+        )
+        face_id = native_faces.pop(vtk_signature, None)
+        if face_id is None:
+            raise ValueError("foamToVTK patch face geometry does not match the native boundary")
+        mapped[vtk_index] = face_id
+        patch_id = float(patch_ids.GetTuple1(vtk_index))
+        if not math.isfinite(patch_id) or not patch_id.is_integer() or int(patch_id) != patch["patch_id"]:
+            raise ValueError("foamToVTK patchID does not match the native boundary patch index")
+    if native_faces:
+        raise ValueError("foamToVTK patch does not cover every native boundary face")
+
+    maximum_u_error = maximum_p_error = 0.0
+    maximum_u_allowed = maximum_p_allowed = 0.0
+    maximum_u_float32_residual = maximum_p_float32_residual = 0.0
+    maximum_u_relative = maximum_p_relative = 0.0
+    for vtk_index, face_id in mapped.items():
+        local_index = face_id - patch["start_face"]
+        vtk_u = tuple(float(value) for value in velocity.GetTuple3(vtk_index))
+        vtk_p = float(pressure.GetTuple1(vtk_index))
+        native_vector = expected_u[local_index]
+        native_scalar = expected_p[local_index]
+        if not all(math.isfinite(value) for value in vtk_u) or not math.isfinite(vtk_p):
+            raise ValueError("foamToVTK patch U or p contains a non-finite value")
+        for native_value, vtk_value in zip(native_vector, vtk_u):
+            expected_float32, conversion_bound = _float32_rounding_bound(native_value)
+            serialization_bound = _ascii_rounding_bound(expected_float32, ascii_precision)
+            reader_bound = conversion_bound + serialization_bound
+            allowed = conversion_bound + reader_bound
+            residual = abs(vtk_value - expected_float32)
+            if residual > reader_bound + 4.0 * math.ulp(expected_float32):
+                raise ValueError("foamToVTK patch U differs from the native boundary value beyond ASCII precision")
+            error = abs(vtk_value - native_value)
+            maximum_u_error = max(maximum_u_error, error)
+            maximum_u_allowed = max(maximum_u_allowed, allowed)
+            maximum_u_float32_residual = max(maximum_u_float32_residual, residual)
+            if native_value != 0.0:
+                maximum_u_relative = max(maximum_u_relative, error / abs(native_value))
+        expected_float32, conversion_bound = _float32_rounding_bound(native_scalar)
+        serialization_bound = _ascii_rounding_bound(expected_float32, ascii_precision)
+        reader_bound = conversion_bound + serialization_bound
+        allowed = conversion_bound + reader_bound
+        residual = abs(vtk_p - expected_float32)
+        if residual > reader_bound + 4.0 * math.ulp(expected_float32):
+            raise ValueError("foamToVTK patch p differs from the native boundary value beyond ASCII precision")
+        error = abs(vtk_p - native_scalar)
+        maximum_p_error = max(maximum_p_error, error)
+        maximum_p_allowed = max(maximum_p_allowed, allowed)
+        maximum_p_float32_residual = max(maximum_p_float32_residual, residual)
+        if native_scalar != 0.0:
+            maximum_p_relative = max(maximum_p_relative, error / abs(native_scalar))
+
+    mesh_hashes = {
+        "points": points_sha,
+        "faces": faces_sha,
+        "owner": owners_sha,
+        "boundary": boundary_sha,
+    }
+    return {
+        "status": "PASS",
+        "patch": patch_name,
+        "patch_id": patch["patch_id"],
+        "native_face_count": count,
+        "vtk_face_count": dataset.GetNumberOfCells(),
+        "face_mapping": "complete_unique_geometry_signature_at_ascii_precision",
+        "compared_velocity_components": count * 3,
+        "compared_pressure_values": count,
+        "native_u_boundary_type": u_boundary_type,
+        "native_p_boundary_type": p_boundary_type,
+        "native_mesh_sha256": mesh_hashes,
+        "native_u_sha256": native_u_sha,
+        "native_p_sha256": native_p_sha,
+        "vtk_sha256": source_sha,
+        "ascii_significant_digits": ascii_precision,
+        "max_absolute_velocity_error_m_s": maximum_u_error,
+        "max_allowed_velocity_error_m_s": maximum_u_allowed,
+        "max_float32_velocity_residual_m_s": maximum_u_float32_residual,
+        "max_relative_velocity_error": maximum_u_relative,
+        "max_absolute_pressure_error_m2_s2": maximum_p_error,
+        "max_allowed_pressure_error_m2_s2": maximum_p_allowed,
+        "max_float32_pressure_residual_m2_s2": maximum_p_float32_residual,
+        "max_relative_pressure_error": maximum_p_relative,
+        "tolerance_basis": "two IEEE-754 binary32 round-to-nearest bounds (field cast and VTK reader) plus half-unit in the last place for the configured ASCII significant-digit precision",
+    }
+
 def import_vtk_case(path,*,contaminant_array="T",recirculation_array="recirculating"):
     source=Path(path)
     if not source.is_file(): raise FileNotFoundError(source)

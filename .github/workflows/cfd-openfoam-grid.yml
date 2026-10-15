@@ -74,6 +74,7 @@ jobs:
 
           from cleanroomx.cfd_openfoam import _foundation_v10_banner
           from cleanroomx.cfd_vtk import (
+              audit_openfoam_vtk_boundary_patch,
               audit_openfoam_vtk_pressure,
               audit_openfoam_vtk_velocity,
               import_vtk_case,
@@ -350,6 +351,32 @@ jobs:
                                       }
                                       stage["pressure_field_parity"] = pressure_parity
                                       case_record["vtk_pressure_parity"] = pressure_parity
+                              patch_parity_records = []
+                              if problem is None:
+                                  poly_mesh_dir = case_dir / "constant" / "polyMesh"
+                                  for patch_name in ("inlet", "outlet", "walls"):
+                                      patch_path = vtk_dir / patch_name / f"{patch_name}_{time_name}.vtk"
+                                      if patch_path.is_symlink() or not patch_path.is_file():
+                                          problem = "VTK_BOUNDARY_PATCH_DATASET_MISSING_OR_INVALID"
+                                          break
+                                      resolved_patch = patch_path.resolve(strict=True)
+                                      if not resolved_patch.is_relative_to(case_dir.resolve(strict=True)):
+                                          problem = "VTK_BOUNDARY_PATCH_ESCAPED_CASE_DIRECTORY"
+                                          break
+                                      patch_parity = audit_openfoam_vtk_boundary_patch(
+                                          native_u_path,
+                                          native_p_path,
+                                          poly_mesh_dir,
+                                          resolved_patch,
+                                          patch_name,
+                                      )
+                                      patch_parity["path"] = resolved_patch.relative_to(root).as_posix()
+                                      patch_parity_records.append(patch_parity)
+                                  if problem is None and len(patch_parity_records) != 3:
+                                      problem = "VTK_BOUNDARY_PATCH_PARITY_COUNT_NOT_THREE"
+                                  elif problem is None:
+                                      stage["patch_field_parity"] = patch_parity_records
+                                      case_record["vtk_patch_parity"] = patch_parity_records
                               stage["vtk_dataset"] = {
                                   "path": vtk_path.relative_to(root).as_posix(),
                                   "sha256": imported["source_sha256"],
@@ -360,6 +387,10 @@ jobs:
                                   "pressure_field": "p",
                                   "pressure_dimensions": "[0 2 -2 0 0 0 0]",
                                   "pressure_field_parity_status": stage.get("pressure_field_parity", {}).get("status"),
+                                  "patch_dataset_count": len(patch_parity_records),
+                                  "patch_field_parity_status": (
+                                      "PASS" if len(patch_parity_records) == 3 else "NOT_RUN"
+                                  ),
                                   "max_absolute_field_error_m_s": stage.get("field_parity", {}).get(
                                       "max_absolute_error_native_to_vtk_m_s"
                                   ),
@@ -398,6 +429,7 @@ jobs:
           from pathlib import Path, PurePosixPath
 
           from cleanroomx.cfd_vtk import (
+              audit_openfoam_vtk_boundary_patch,
               audit_openfoam_vtk_pressure,
               audit_openfoam_vtk_velocity,
               import_vtk_case,
@@ -423,6 +455,7 @@ jobs:
               f"solver_build={receipt.get('solver_build')}",
               "status=EXECUTION_EVIDENCE_ONLY; scientific_validation=BLOCKED",
           ]
+          total_patch_faces = 0
           for case_id in sorted(expected_cases):
               case = cases[case_id]
               stages = case.get("stages")
@@ -470,6 +503,8 @@ jobs:
                   or dataset.get("pressure_field") != "p"
                   or dataset.get("pressure_dimensions") != "[0 2 -2 0 0 0 0]"
                   or dataset.get("pressure_field_parity_status") != "PASS"
+                  or dataset.get("patch_dataset_count") != 3
+                  or dataset.get("patch_field_parity_status") != "PASS"
               ):
                   raise SystemExit("VTK field or mesh does not match bound inputs: " + case_id)
               parity = case.get("vtk_field_parity")
@@ -599,6 +634,64 @@ jobs:
                   f"max_relative_error={pressure_parity.get('max_relative_error_native_to_vtk')} "
                   f"native_p_sha256={native_pressure_sha}"
               )
+              patch_parity_records = case.get("vtk_patch_parity")
+              expected_patch_names = ["inlet", "outlet", "walls"]
+              if (
+                  not isinstance(patch_parity_records, list)
+                  or len(patch_parity_records) != len(expected_patch_names)
+                  or patch_parity_records != export_stage.get("patch_field_parity")
+                  or [record.get("patch") for record in patch_parity_records]
+                  != expected_patch_names
+              ):
+                  raise SystemExit("Native-to-VTK boundary patch parity receipt is missing or incomplete: " + case_id)
+              mesh_dir = root.joinpath(*case_parts, "constant", "polyMesh")
+              for record, patch_name in zip(patch_parity_records, expected_patch_names):
+                  patch_relative = PurePosixPath(record.get("path", ""))
+                  expected_patch_path = case_parts + ("VTK", patch_name, f"{patch_name}_{native_relative.parts[-2]}.vtk")
+                  if (
+                      patch_relative.is_absolute()
+                      or any(part in ("", ".", "..") for part in patch_relative.parts)
+                      or patch_relative.parts != expected_patch_path
+                      or record.get("status") != "PASS"
+                      or record.get("patch_id") != expected_patch_names.index(patch_name)
+                  ):
+                      raise SystemExit("Unsafe or incomplete VTK patch record: " + case_id + "/" + patch_name)
+                  patch_path = root.joinpath(*patch_relative.parts)
+                  if patch_path.is_symlink() or not patch_path.is_file():
+                      raise SystemExit("VTK patch output is missing or symbolic: " + case_id + "/" + patch_name)
+                  resolved_patch = patch_path.resolve(strict=True)
+                  if not resolved_patch.is_relative_to(root):
+                      raise SystemExit("VTK patch output escaped the generated family: " + case_id + "/" + patch_name)
+                  actual_patch_sha = hashlib.sha256(resolved_patch.read_bytes()).hexdigest()
+                  if actual_patch_sha != record.get("vtk_sha256"):
+                      raise SystemExit("VTK patch digest differs from receipt: " + case_id + "/" + patch_name)
+                  recomputed_patch = audit_openfoam_vtk_boundary_patch(
+                      native_resolved,
+                      native_pressure_resolved,
+                      mesh_dir,
+                      resolved_patch,
+                      patch_name,
+                  )
+                  recomputed_patch["path"] = patch_relative.as_posix()
+                  if recomputed_patch != record:
+                      raise SystemExit("Native-to-VTK boundary patch parity did not reproduce: " + case_id + "/" + patch_name)
+                  total_patch_faces += recomputed_patch["native_face_count"]
+                  lines.append(
+                      f"{case_id}/{patch_name}: faces={recomputed_patch['native_face_count']} "
+                      f"U_components={recomputed_patch['compared_velocity_components']} "
+                      f"p_values={recomputed_patch['compared_pressure_values']} parity=PASS "
+                      f"max_abs_U_m_s={recomputed_patch['max_absolute_velocity_error_m_s']:.12g}/"
+                      f"{recomputed_patch['max_allowed_velocity_error_m_s']:.12g} "
+                      f"max_abs_p_m2_s2={recomputed_patch['max_absolute_pressure_error_m2_s2']:.12g}/"
+                      f"{recomputed_patch['max_allowed_pressure_error_m2_s2']:.12g} "
+                      f"vtk_sha256={actual_patch_sha}"
+                  )
+          if total_patch_faces <= 0:
+              raise SystemExit("No native-to-VTK boundary patch faces were audited")
+          lines.append(
+              f"PATCH_TOTALS: datasets=27 faces={total_patch_faces} "
+              f"U_components={total_patch_faces * 3} p_values={total_patch_faces}"
+          )
           Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 

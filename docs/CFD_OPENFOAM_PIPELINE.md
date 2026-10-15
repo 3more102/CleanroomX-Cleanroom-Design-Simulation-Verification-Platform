@@ -79,6 +79,23 @@ This workflow export is a reproducibility and ingestion check; it is not part
 of the standalone `run` command and does not establish CFD convergence,
 mesh independence, or physical validation.
 
+The nine-case v10 workflow also compares the exported cell velocity with the
+native final-time OpenFOAM `U` field. It uses the `cellID` cell-data array
+written by Foundation v10 `foamToVTK`: the upstream
+[`internalWriter::writeCellIDs` implementation](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK/internalWriter.C)
+emits the original mesh cell index for every cell. CleanroomX requires a
+complete, unique ID mapping and compares all three velocity components by that
+ID; it does not infer cell correspondence from VTK array order. The audit
+requires cell-data `U`, so it cannot silently substitute point-to-cell
+interpolation.
+
+Foundation v10's legacy VTK output declares this `U` array as `float`.
+The parity receipt reports the measured component errors and bounds them using
+binary32 rounding plus half a last decimal place at the workflow's six-digit
+ASCII precision. This tolerance describes field serialization only; it is not
+a CFD solver acceptance threshold and provides no convergence or physical
+validation evidence.
+
 ## Import actual CFD results (VTK/VTU)
 
 Export solved fields with your OpenFOAM installation's foamToVTK utility,

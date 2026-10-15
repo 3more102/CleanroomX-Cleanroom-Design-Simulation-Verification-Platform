@@ -8,7 +8,11 @@ from cleanroomx.cfd_openfoam import (
     SCHEMA, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
     run_openfoam_cases, validate_openfoam_spec,
 )
-from cleanroomx.cfd_vtk import import_vtk_case, populate_study_from_vtk
+from cleanroomx.cfd_vtk import (
+    audit_openfoam_vtk_velocity,
+    import_vtk_case,
+    populate_study_from_vtk,
+)
 
 def spec():
     return {"schema_version":SCHEMA,"name":"synthetic test input",
@@ -170,6 +174,119 @@ def vtk_fixture(path, concentration=1., recirc=0., speed=.2):
     writer=vtk.vtkXMLUnstructuredGridWriter()
     writer.SetFileName(str(path));writer.SetInputData(grid)
     assert writer.Write()==1
+
+def openfoam_velocity_fixture(path):
+    path.write_text("\n".join((
+        "FoamFile",
+        "{",
+        "    format ascii;",
+        "    class volVectorField;",
+        '    location "150";',
+        "    object U;",
+        "}",
+        "dimensions [0 1 -1 0 0 0 0];",
+        "internalField nonuniform List<vector>",
+        "2",
+        "(",
+        "(1.234567891 -0.25 0.000001234567)",
+        "(-3.14159265 0.00000001 0.125000001)",
+        ");",
+        "boundaryField {}",
+        "",
+    )),encoding="ascii")
+
+def legacy_vtk_velocity_fixture(
+    path, *, cell_ids=(1, 0), perturb=0.0, include_ids=True, point_velocity=False
+):
+    vtk=pytest.importorskip("vtk")
+    native=((1.234567891,-0.25,0.000001234567),
+            (-3.14159265,0.00000001,0.125000001))
+    grid=vtk.vtkUnstructuredGrid()
+    points=vtk.vtkPoints()
+    for cell_index in range(2):
+        offset=2.0*cell_index
+        coordinates=((offset,0,0),(offset+1,0,0),(offset+1,1,0),(offset,1,0),
+                     (offset,0,1),(offset+1,0,1),(offset+1,1,1),(offset,1,1))
+        start=points.GetNumberOfPoints()
+        for point in coordinates:
+            points.InsertNextPoint(*point)
+        cell=vtk.vtkHexahedron()
+        for local_index in range(8):
+            cell.GetPointIds().SetId(local_index,start+local_index)
+        grid.InsertNextCell(cell.GetCellType(),cell.GetPointIds())
+    grid.SetPoints(points)
+    velocity=vtk.vtkFloatArray()
+    velocity.SetName("U")
+    velocity.SetNumberOfComponents(3)
+    ids=vtk.vtkIntArray()
+    ids.SetName("cellID")
+    for cell_id in cell_ids:
+        vector=list(native[cell_id])
+        if perturb:
+            vector[0]+=perturb
+        velocity.InsertNextTuple3(*vector)
+        ids.InsertNextValue(cell_id)
+    if point_velocity:
+        point_u=vtk.vtkFloatArray()
+        point_u.SetName("U")
+        point_u.SetNumberOfComponents(3)
+        for _ in range(points.GetNumberOfPoints()):
+            point_u.InsertNextTuple3(0,0,0)
+        grid.GetPointData().AddArray(point_u)
+    else:
+        grid.GetCellData().AddArray(velocity)
+    if include_ids:
+        grid.GetCellData().AddArray(ids)
+    writer=vtk.vtkUnstructuredGridWriter()
+    writer.SetFileName(str(path))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(grid)
+    assert writer.Write()==1
+
+def test_openfoam_vtk_velocity_parity_uses_cell_ids_and_float32_tolerance(tmp_path):
+    native=tmp_path/"150"/"U"
+    native.parent.mkdir()
+    openfoam_velocity_fixture(native)
+    exported=tmp_path/"case_150.vtk"
+    legacy_vtk_velocity_fixture(exported,cell_ids=(1,0))
+
+    report=audit_openfoam_vtk_velocity(native,exported)
+
+    assert report["status"]=="PASS"
+    assert report["cell_id_mapping"]=="complete_unique_permutation_of_native_cell_indices"
+    assert report["cell_count"]==2
+    assert report["compared_velocity_components"]==6
+    assert report["vtk_velocity_scalar_type"]=="float"
+    assert report["max_absolute_error_native_to_vtk_m_s"]>0
+    assert report["max_absolute_error_native_to_vtk_m_s"] <= report["max_allowed_native_to_vtk_error_m_s"]
+
+def test_openfoam_vtk_velocity_parity_rejects_missing_or_duplicate_cell_ids(tmp_path):
+    native=tmp_path/"150"/"U"
+    native.parent.mkdir()
+    openfoam_velocity_fixture(native)
+    missing=tmp_path/"missing_ids.vtk"
+    legacy_vtk_velocity_fixture(missing,include_ids=False)
+    with pytest.raises(ValueError,match="cellID"):
+        audit_openfoam_vtk_velocity(native,missing)
+
+    duplicate=tmp_path/"duplicate_ids.vtk"
+    legacy_vtk_velocity_fixture(duplicate,cell_ids=(0,0))
+    with pytest.raises(ValueError,match="unique in-range"):
+        audit_openfoam_vtk_velocity(native,duplicate)
+
+    point_only=tmp_path/"point_only_U.vtk"
+    legacy_vtk_velocity_fixture(point_only,point_velocity=True)
+    with pytest.raises(ValueError,match="cell-data U"):
+        audit_openfoam_vtk_velocity(native,point_only)
+
+def test_openfoam_vtk_velocity_parity_rejects_field_mismatch(tmp_path):
+    native=tmp_path/"150"/"U"
+    native.parent.mkdir()
+    openfoam_velocity_fixture(native)
+    exported=tmp_path/"mismatch.vtk"
+    legacy_vtk_velocity_fixture(exported,perturb=0.01)
+    with pytest.raises(ValueError,match="differs from the native field"):
+        audit_openfoam_vtk_velocity(native,exported)
 
 def test_actual_vtk_field_import_and_pareto(tmp_path):
     sources={}

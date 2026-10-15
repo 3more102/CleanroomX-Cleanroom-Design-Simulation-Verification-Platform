@@ -73,7 +73,7 @@ jobs:
           from pathlib import Path
 
           from cleanroomx.cfd_openfoam import _foundation_v10_banner
-          from cleanroomx.cfd_vtk import import_vtk_case
+          from cleanroomx.cfd_vtk import audit_openfoam_vtk_velocity, import_vtk_case
 
           root = Path(sys.argv[1]).resolve(strict=True)
           if os.environ.get("WM_PROJECT") != "OpenFOAM" or os.environ.get("WM_PROJECT_VERSION") != "10":
@@ -294,12 +294,43 @@ jobs:
                           elif imported["mesh_cells"] != expected_cells:
                               problem = "VTK_CELL_COUNT_DIFFERS_FROM_BOUND_INPUTS"
                           else:
+                              time_name = vtk_path.stem.rsplit("_", 1)[-1]
+                              try:
+                                  numeric_time = float(time_name)
+                              except ValueError:
+                                  numeric_time = float("nan")
+                              native_u_path = case_dir / time_name / "U"
+                              if (
+                                  not math.isfinite(numeric_time)
+                                  or numeric_time < 0
+                                  or native_u_path.is_symlink()
+                                  or not native_u_path.is_file()
+                                  or not native_u_path.resolve(strict=True).is_relative_to(
+                                      case_dir.resolve(strict=True)
+                                  )
+                              ):
+                                  problem = "NATIVE_FINAL_TIME_U_FIELD_MISSING_OR_UNSAFE"
+                              else:
+                                  field_parity = audit_openfoam_vtk_velocity(native_u_path, vtk_path)
+                                  if field_parity["status"] != "PASS":
+                                      problem = "NATIVE_VTK_VELOCITY_PARITY_NOT_PASSED"
+                                  else:
+                                      stage["native_velocity_field"] = {
+                                          "path": native_u_path.relative_to(root).as_posix(),
+                                          "sha256": field_parity["native_field_sha256"],
+                                      }
+                                      stage["field_parity"] = field_parity
+                                      case_record["vtk_field_parity"] = field_parity
                               stage["vtk_dataset"] = {
                                   "path": vtk_path.relative_to(root).as_posix(),
                                   "sha256": imported["source_sha256"],
                                   "mesh_cells": imported["mesh_cells"],
                                   "velocity_field": "U",
                                   "velocity_components": 3,
+                                  "field_parity_status": stage.get("field_parity", {}).get("status"),
+                                  "max_absolute_field_error_m_s": stage.get("field_parity", {}).get(
+                                      "max_absolute_error_native_to_vtk_m_s"
+                                  ),
                               }
                   except Exception as exc:
                       problem = f"VTK_IMPORT_FAILED: {type(exc).__name__}: {exc}"
@@ -327,10 +358,11 @@ jobs:
           python - "$family" "$RUNNER_TEMP/simpleFoam-vtk-export-summary.txt" <<'PY'
           import hashlib
           import json
+          import math
           import sys
           from pathlib import Path, PurePosixPath
 
-          from cleanroomx.cfd_vtk import import_vtk_case
+          from cleanroomx.cfd_vtk import audit_openfoam_vtk_velocity, import_vtk_case
 
           root = Path(sys.argv[1]).resolve(strict=True)
           manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
@@ -395,11 +427,74 @@ jobs:
                   or imported["mesh_cells"] != dataset.get("mesh_cells")
                   or dataset.get("velocity_field") != "U"
                   or dataset.get("velocity_components") != 3
+                  or dataset.get("field_parity_status") != "PASS"
               ):
                   raise SystemExit("VTK field or mesh does not match bound inputs: " + case_id)
+              parity = case.get("vtk_field_parity")
+              if (
+                  not isinstance(parity, dict)
+                  or parity != export_stage.get("field_parity")
+                  or parity.get("status") != "PASS"
+                  or parity.get("vtk_sha256") != actual_sha
+                  or parity.get("cell_count") != expected_cells
+                  or parity.get("compared_velocity_components") != expected_cells * 3
+                  or parity.get("cell_id_mapping")
+                  != "complete_unique_permutation_of_native_cell_indices"
+              ):
+                  raise SystemExit("Native-to-VTK velocity parity receipt is missing or incomplete: " + case_id)
+              native_record = export_stage.get("native_velocity_field")
+              native_relative = PurePosixPath(
+                  native_record.get("path", "") if isinstance(native_record, dict) else ""
+              )
+              if (
+                  native_relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in native_relative.parts)
+                  or native_relative.parts[:len(case_parts)] != case_parts
+                  or len(native_relative.parts) != len(case_parts) + 2
+                  or native_relative.parts[-1] != "U"
+                  or native_relative.parts[-2]
+                  != relative.stem.rsplit("_", 1)[-1]
+              ):
+                  raise SystemExit("Unsafe native OpenFOAM U path in receipt: " + case_id)
+              try:
+                  native_time = float(native_relative.parts[-2])
+              except ValueError:
+                  native_time = float("nan")
+              if not math.isfinite(native_time) or native_time < 0:
+                  raise SystemExit("Native OpenFOAM U time does not match final VTK time: " + case_id)
+              native_path = root.joinpath(*native_relative.parts)
+              if native_path.is_symlink() or not native_path.is_file():
+                  raise SystemExit("Native OpenFOAM U output is missing or symbolic: " + case_id)
+              native_resolved = native_path.resolve(strict=True)
+              if not native_resolved.is_relative_to(root):
+                  raise SystemExit("Native OpenFOAM U escaped the generated family: " + case_id)
+              native_sha = hashlib.sha256(native_resolved.read_bytes()).hexdigest()
+              if (
+                  native_record.get("sha256") != native_sha
+                  or parity.get("native_field_sha256") != native_sha
+              ):
+                  raise SystemExit("Native OpenFOAM U digest differs from parity receipt: " + case_id)
+              recomputed_parity = audit_openfoam_vtk_velocity(native_resolved, resolved)
+              if recomputed_parity != parity:
+                  raise SystemExit("Native-to-VTK velocity parity did not reproduce from the uploaded files: " + case_id)
+              maximum_error = parity.get("max_absolute_error_native_to_vtk_m_s")
+              allowed_error = parity.get("max_allowed_native_to_vtk_error_m_s")
+              if (
+                  type(maximum_error) not in (int, float)
+                  or type(allowed_error) not in (int, float)
+                  or not math.isfinite(maximum_error)
+                  or not math.isfinite(allowed_error)
+                  or maximum_error < 0
+                  or allowed_error < maximum_error
+              ):
+                  raise SystemExit("Native-to-VTK velocity errors exceed the recorded float32/ASCII tolerance: " + case_id)
               lines.append(
                   f"{case_id}: cells={imported['mesh_cells']} "
-                  f"U=3-component-cell-field sha256={actual_sha}"
+                  f"U=3-component-cell-field field_parity=PASS "
+                  f"max_abs_error_m_s={maximum_error:.12g} "
+                  f"max_allowed_m_s={allowed_error:.12g} "
+                  f"max_relative_error={parity.get('max_relative_error_native_to_vtk')} "
+                  f"native_U_sha256={native_sha} vtk_sha256={actual_sha}"
               )
           Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY

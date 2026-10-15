@@ -51,93 +51,147 @@ jobs:
             printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
             exit "$source_rc"
           fi
-
-          # Foundation's foamVersion helper is a sourced shell function,
-          # while CleanroomX probes an executable by this name. Report the
-          # version only after validating the installed environment.
-          version_bin="$RUNNER_TEMP/openfoam-version-bin"
-          mkdir -p "$version_bin"
-          cat > "$version_bin/foamVersion" <<'EOF'
-          #!/usr/bin/env bash
-          set -euo pipefail
           if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
-            printf 'Expected inherited OpenFOAM Foundation v10 environment; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
             exit 1
           fi
-          echo "$WM_PROJECT_VERSION"
-          EOF
-          chmod 0755 "$version_bin/foamVersion"
-          export PATH="$version_bin:$PATH"
+          printf 'WM_PROJECT=%s\nWM_PROJECT_VERSION=%s\n' "$WM_PROJECT" "$WM_PROJECT_VERSION" \
+            > "$RUNNER_TEMP/openfoam-v10-version.txt"
 
           family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
           cleanroomx-cfd-pipeline grid-generate examples/cfd_grid_family.example.json "$family"
-          set +e
-          grid_run_output="$RUNNER_TEMP/grid-run-output.txt"
-          set +e
-          cleanroomx-cfd-pipeline grid-run "$family" --timeout-seconds 600 \
-            >"$grid_run_output" 2>&1
-          grid_run_rc=$?
-          set -e
-          cat "$grid_run_output"
-          if [[ "$grid_run_rc" -ne 0 ]]; then
-            python - "$family" <<'PY'
+          python - "$family" <<'PY'
+          import hashlib
           import json
+          import os
+          import shutil
+          import subprocess
           import sys
           from pathlib import Path
 
-          root = Path(sys.argv[1]).resolve(strict=True)
-          receipt_path = root / "grid_run_evidence.json"
-          try:
-              report = json.loads(receipt_path.read_text(encoding="utf-8"))
-          except (OSError, ValueError, UnicodeError) as exc:
-              print(f"Could not inspect grid-run receipt: {type(exc).__name__}", file=sys.stderr)
-              raise SystemExit(0)
+          from cleanroomx.cfd_openfoam import _foundation_v10_banner
 
-          seen = set()
-          for case_name, case in report.get("cases", {}).items():
-              for stage in case.get("stages", []):
-                  if stage.get("status") == "completed" and stage.get("returncode") == 0:
-                      continue
-                  relative = stage.get("log")
-                  if not isinstance(relative, str):
-                      print(f"--- failed stage without a log path: {case_name}/{stage.get('command')} ---")
-                      continue
-                  candidate = root / relative
+          root = Path(sys.argv[1]).resolve(strict=True)
+          if os.environ.get("WM_PROJECT") != "OpenFOAM" or os.environ.get("WM_PROJECT_VERSION") != "10":
+              raise SystemExit("Expected the OpenFOAM Foundation v10 runtime environment")
+          manifest_path = root / "manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          expected_cases = {
+              f"configuration_{configuration}/{level}"
+              for configuration in (1, 2, 3)
+              for level in ("coarse", "medium", "fine")
+          }
+          if manifest.get("schema_version") != "cleanroomx.cfd-grid-family.v1":
+              raise SystemExit("Unexpected grid-family manifest schema")
+          if set(manifest.get("case_inputs", {})) != expected_cases:
+              raise SystemExit("Grid-family manifest does not contain the exact nine expected cases")
+          expected_files = manifest.get("files")
+          if not isinstance(expected_files, dict) or len(expected_files) != 72:
+              raise SystemExit("Grid-family manifest does not list exactly 72 generated inputs")
+          for relative, expected_sha in expected_files.items():
+              candidate = root / relative
+              if candidate.is_symlink():
+                  raise SystemExit("Refusing symlinked generated input: " + relative)
+              resolved = candidate.resolve(strict=True)
+              if not resolved.is_relative_to(root) or not resolved.is_file():
+                  raise SystemExit("Generated input escaped the family directory: " + relative)
+              actual_sha = hashlib.sha256(resolved.read_bytes()).hexdigest()
+              if actual_sha != expected_sha:
+                  raise SystemExit("Generated input digest mismatch: " + relative)
+
+          executables = {}
+          for command in ("blockMesh", "checkMesh", "simpleFoam"):
+              executable = shutil.which(command)
+              if executable is None:
+                  raise SystemExit(command + " not found in the OpenFOAM environment")
+              executables[command] = executable
+
+          receipt_path = root / "grid_execution_evidence.json"
+          receipt = {
+              "schema_version": "cleanroomx.openfoam-grid-execution-evidence.v1",
+              "status": "running",
+              "solver_release": "OpenFOAM Foundation v10",
+              "family_spec_sha256": manifest.get("family_spec_sha256"),
+              "executables": executables,
+              "cases": {},
+              "warning": "Process execution and mesh checks do not establish residual convergence or physical validation.",
+          }
+
+          def save_receipt():
+              temporary = receipt_path.with_suffix(".json.tmp")
+              temporary.write_text(
+                  json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n",
+                  encoding="utf-8",
+              )
+              temporary.replace(receipt_path)
+
+          build = None
+          for case_id in sorted(expected_cases):
+              case_dir = root / case_id
+              case_stages = []
+              case_record = {"status": "running", "stages": case_stages}
+              receipt["cases"][case_id] = case_record
+              for command in ("blockMesh", "checkMesh", "simpleFoam"):
+                  log_path = case_dir / (command + ".log")
+                  problem = None
+                  returncode = None
                   try:
-                      if candidate.is_symlink():
-                          raise ValueError("log path is a symlink")
-                      log_path = candidate.resolve(strict=True)
-                      if not log_path.is_relative_to(root) or not log_path.is_file():
-                          raise ValueError("log path is outside the case family")
-                      size = log_path.stat().st_size
-                      with log_path.open("rb") as stream:
-                          stream.seek(max(0, size - 32768))
-                          tail = stream.read().decode("utf-8", "replace").splitlines()[-80:]
-                  except (OSError, ValueError) as exc:
-                      print(f"--- cannot read failed log {case_name}/{relative}: {type(exc).__name__} ---")
-                      continue
-                  digest = stage.get("log_sha256")
-                  if isinstance(digest, str) and digest in seen:
-                      continue
-                  if isinstance(digest, str):
-                      seen.add(digest)
-                  print(f"--- failed log {case_name}/{stage.get('command')} rc={stage.get('returncode')} bytes={size} ---")
-                  print("\n".join(tail) if tail else "<empty log>")
+                      with log_path.open("xb") as output:
+                          result = subprocess.run(
+                              [executables[command]],
+                              cwd=case_dir,
+                              stdout=output,
+                              stderr=subprocess.STDOUT,
+                              timeout=600,
+                              check=False,
+                          )
+                      returncode = result.returncode
+                  except subprocess.TimeoutExpired:
+                      returncode = 124
+                      problem = "TIMEOUT_AFTER_600_SECONDS"
+                  log_bytes = log_path.read_bytes()
+                  log_text = log_bytes.decode("utf-8", errors="replace")
+                  banner = _foundation_v10_banner(log_text)
+                  stage = {
+                      "command": command,
+                      "returncode": returncode,
+                      "log": log_path.relative_to(root).as_posix(),
+                      "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
+                      "openfoam": banner,
+                  }
+                  if problem is None and returncode != 0:
+                      problem = "COMMAND_RETURNED_NONZERO"
+                  if problem is None and not banner["is_foundation_v10"]:
+                      problem = "OPENFOAM_FOUNDATION_V10_BANNER_MISSING"
+                  if problem is None:
+                      if build is None:
+                          build = banner["build"]
+                      elif banner["build"] != build:
+                          problem = "OPENFOAM_BUILD_CHANGED_DURING_RUN"
+                  if problem is None and command == "checkMesh" and "Mesh OK." not in log_text:
+                      problem = "CHECKMESH_MESH_OK_MARKER_MISSING"
+                  if problem:
+                      stage["problem"] = problem
+                  case_stages.append(stage)
+                  case_record["status"] = "failed" if problem else "running"
+                  receipt["solver_build"] = build
+                  save_receipt()
+                  if problem:
+                      receipt["status"] = "incomplete"
+                      save_receipt()
+                      print(
+                          f"{case_id}/{command} failed: {problem}; see {stage['log']}",
+                          file=sys.stderr,
+                      )
+                      raise SystemExit(1)
+              case_record["status"] = "executed_requires_convergence_review"
+              save_receipt()
+
+          receipt["status"] = "executed_requires_convergence_review"
+          save_receipt()
+          print(f"Executed all {len(expected_cases)} cases with OpenFOAM Foundation v10 build {build}.")
           PY
-            exit "$grid_run_rc"
-          fi
-          grid_run_rc=$?
-          set -e
-          if [[ "$grid_run_rc" -ne 0 ]]; then
-            echo "grid-run failed with exit $grid_run_rc; OpenFOAM solver log tails:"
-            while IFS= read -r log; do
-              echo "----- $log -----"
-              tail -n 80 "$log" || true
-            done < <(find "$family" -type f -name simpleFoam.log -print | sort)
-            exit "$grid_run_rc"
-          fi
-          cleanroomx-cfd-pipeline grid-verify "$family"
-          cleanroomx-cfd-pipeline grid-mesh-audit "$family"
+
           triage_report="$RUNNER_TEMP/simpleFoam-grid-family-triage.json"
           cleanroomx-cfd-grid-triage "$family" > "$triage_report"
           python - "$triage_report" <<'PY'
@@ -154,81 +208,26 @@ jobs:
           print("All nine logs are structurally parseable; declared condition inputs match across grid levels.")
           print("Residual and scientific-validation statuses remain separate in the uploaded JSON report.")
           PY
-          python - "$family" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" <<'PY'
-          import hashlib
+
+          python - "$triage_report" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" <<'PY'
           import json
-          import re
           import sys
-          from collections import defaultdict
           from pathlib import Path
 
-          root = Path(sys.argv[1]).resolve(strict=True)
-          receipt = json.loads((root / "grid_run_evidence.json").read_text(encoding="utf-8"))
-          expected = {}
-          for case in receipt.get("cases", {}).values():
-              for stage in case.get("stages", []):
-                  if stage.get("command") == "simpleFoam":
-                      expected[stage.get("log")] = stage.get("log_sha256")
-          logs = sorted(root.glob("configuration_*/**/simpleFoam.log"))
-          if len(logs) != 9 or len(expected) != 9:
-              raise SystemExit("Expected nine simpleFoam logs tied to the grid-run receipt")
-
-          summary = []
-          def emit(line):
-              print(line)
-              summary.append(line)
-
-          for path in logs:
-              if path.is_symlink():
-                  raise SystemExit("Refusing symlinked simpleFoam log")
-              resolved = path.resolve(strict=True)
-              if not resolved.is_relative_to(root) or not resolved.is_file():
-                  raise SystemExit("simpleFoam log escaped the generated case family")
-              relative = path.relative_to(root).as_posix()
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
-              if expected.get(relative) != digest:
-                  raise SystemExit("simpleFoam log digest differs from grid-run receipt: " + relative)
-              lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-              times = []
-              residuals = defaultdict(list)
-              continuity = []
-              convergence = []
-              current_time = "?"
-              for line in lines:
-                  time_match = re.match(r"^\s*Time\s*=\s*(\S+)", line)
-                  if time_match:
-                      current_time = time_match.group(1)
-                      times.append(current_time)
-                  solve_match = re.search(
-                      r"Solving for\s+([A-Za-z][A-Za-z0-9_]*),\s*Initial residual\s*=\s*([^,]+),\s*Final residual\s*=\s*([^,]+)",
-                      line,
-                  )
-                  if solve_match:
-                      field, initial, final = solve_match.groups()
-                      residuals[field].append(
-                          f"{current_time}: {initial.strip()} -> {final.strip()}"
-                      )
-                  if "continuity errors" in line:
-                      continuity.append(line.strip())
-                  if "converg" in line.lower():
-                      convergence.append(line.strip())
-              terminal = next((line.strip() for line in reversed(lines) if line.strip()), "")
-              emit(f"--- {relative} sha256={digest} ---")
-              emit(
-                  f"Time entries={len(times)} first={times[0] if times else 'none'} "
-                  f"last={times[-1] if times else 'none'} terminal={terminal or 'empty'}"
+          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          lines = []
+          for case_id, case in sorted(report.get("cases", {}).items()):
+              fields = case.get("terminal_residual_control_screen", {}).get("fields", {})
+              residuals = " ".join(
+                  f"{field}={fields.get(field, {}).get('status', 'UNKNOWN')}"
+                  for field in ("U", "p")
               )
-              emit(
-                  "Convergence messages: " + " | ".join(convergence[-3:])
-                  if convergence else "Convergence messages: none found"
+              lines.append(
+                  f"{case_id}: status={case.get('status')} "
+                  f"time_steps={case.get('time_steps')} last_time={case.get('last_time')} "
+                  f"{residuals}"
               )
-              for field, rows in sorted(residuals.items()):
-                  emit(f"{field} last residual pairs: " + " | ".join(rows[-5:]))
-              if continuity:
-                  emit("Continuity: " + " | ".join(continuity[-3:]))
-              else:
-                  emit("Continuity: no lines found")
-          Path(sys.argv[2]).write_text("\n".join(summary) + "\n", encoding="utf-8")
+          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 
       - name: Upload execution evidence

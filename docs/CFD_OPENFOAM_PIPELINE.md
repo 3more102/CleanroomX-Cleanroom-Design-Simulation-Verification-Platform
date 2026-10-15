@@ -70,6 +70,15 @@ boundary flux balance, turbulence/Reynolds applicability, mesh quality and
 grid independence. Other OpenFOAM versions may require solver template
 changes: v11+ Foundation uses foamRun solver modules.
 
+The GitHub nine-case Foundation v10 workflow additionally requires
+`foamToVTK`. After each successful `simpleFoam` run, it exports the latest
+cell velocity field with ASCII polyhedral output, imports the resulting VTK,
+and binds its hash and cell count to the generated-input manifest. It then
+reopens and verifies all nine outputs before uploading the evidence artifact.
+This workflow export is a reproducibility and ingestion check; it is not part
+of the standalone `run` command and does not establish CFD convergence,
+mesh independence, or physical validation.
+
 ## Import actual CFD results (VTK/VTU)
 
 Export solved fields with your OpenFOAM installation's foamToVTK utility,

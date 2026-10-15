@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/cfd-openfoam-grid.yml"
       - "docs/CFD_GRID_EXECUTION_EVIDENCE.md"
+      - "docs/CFD_GRID_CONVERGENCE.md"
+      - "docs/CFD_OPENFOAM_PIPELINE.md"
       - "examples/cfd_grid_family.example.json"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
@@ -71,6 +73,7 @@ jobs:
           from pathlib import Path
 
           from cleanroomx.cfd_openfoam import _foundation_v10_banner
+          from cleanroomx.cfd_vtk import import_vtk_case
 
           root = Path(sys.argv[1]).resolve(strict=True)
           if os.environ.get("WM_PROJECT") != "OpenFOAM" or os.environ.get("WM_PROJECT_VERSION") != "10":
@@ -143,7 +146,7 @@ jobs:
                   raise SystemExit("Generated input digest mismatch: " + relative)
 
           executables = {}
-          for command in ("blockMesh", "checkMesh", "simpleFoam"):
+          for command in ("blockMesh", "checkMesh", "simpleFoam", "foamToVTK"):
               executable = shutil.which(command)
               if executable is None:
                   raise SystemExit(command + " not found in the OpenFOAM environment")
@@ -227,12 +230,178 @@ jobs:
                           file=sys.stderr,
                       )
                       raise SystemExit(1)
-              case_record["status"] = "executed_requires_convergence_review"
+              command = "foamToVTK"
+              arguments = [
+                  "-latestTime", "-fields", "( U )", "-ascii", "-poly",
+                  "-noPointValues",
+              ]
+              log_path = case_dir / (command + ".log")
+              problem = None
+              returncode = None
+              try:
+                  with log_path.open("xb") as output:
+                      result = subprocess.run(
+                          [executables[command], *arguments],
+                          cwd=case_dir,
+                          stdout=output,
+                          stderr=subprocess.STDOUT,
+                          timeout=600,
+                          check=False,
+                      )
+                  returncode = result.returncode
+              except subprocess.TimeoutExpired:
+                  returncode = 124
+                  problem = "TIMEOUT_AFTER_600_SECONDS"
+              log_bytes = log_path.read_bytes()
+              log_text = log_bytes.decode("utf-8", errors="replace")
+              banner = _foundation_v10_banner(log_text)
+              stage = {
+                  "command": command,
+                  "arguments": arguments,
+                  "returncode": returncode,
+                  "log": log_path.relative_to(root).as_posix(),
+                  "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
+                  "openfoam": banner,
+              }
+              if problem is None and returncode != 0:
+                  problem = "COMMAND_RETURNED_NONZERO"
+              if problem is None and not banner["is_foundation_v10"]:
+                  problem = "OPENFOAM_FOUNDATION_V10_BANNER_MISSING"
+              if problem is None and banner["build"] != build:
+                  problem = "OPENFOAM_BUILD_CHANGED_DURING_RUN"
+
+              vtk_dir = case_dir / "VTK"
+              if problem is None and (vtk_dir.is_symlink() or not vtk_dir.is_dir()):
+                  problem = "VTK_OUTPUT_DIRECTORY_MISSING_OR_INVALID"
+              candidates = []
+              if problem is None:
+                  candidates = sorted(
+                      path for path in vtk_dir.glob(case_dir.name + "_*.vtk")
+                      if path.is_file() and not path.is_symlink()
+                  )
+                  if len(candidates) != 1:
+                      problem = "VTK_INTERNAL_DATASET_COUNT_NOT_ONE"
+              if problem is None:
+                  try:
+                      vtk_path = candidates[0].resolve(strict=True)
+                      if not vtk_path.is_relative_to(case_dir.resolve(strict=True)):
+                          problem = "VTK_DATASET_ESCAPED_CASE_DIRECTORY"
+                      else:
+                          imported = import_vtk_case(vtk_path)
+                          expected_cells = manifest["case_inputs"][case_id].get("mesh_cells")
+                          if type(expected_cells) is not int or expected_cells <= 0:
+                              problem = "EXPECTED_MESH_CELL_COUNT_INVALID"
+                          elif imported["mesh_cells"] != expected_cells:
+                              problem = "VTK_CELL_COUNT_DIFFERS_FROM_BOUND_INPUTS"
+                          else:
+                              stage["vtk_dataset"] = {
+                                  "path": vtk_path.relative_to(root).as_posix(),
+                                  "sha256": imported["source_sha256"],
+                                  "mesh_cells": imported["mesh_cells"],
+                                  "velocity_field": "U",
+                                  "velocity_components": 3,
+                              }
+                  except Exception as exc:
+                      problem = f"VTK_IMPORT_FAILED: {type(exc).__name__}: {exc}"
+              if problem:
+                  stage["problem"] = problem
+              case_stages.append(stage)
+              case_record["vtk_export"] = stage.get("vtk_dataset")
+              case_record["status"] = "failed" if problem else "executed_requires_convergence_review"
+              receipt["solver_build"] = build
               save_receipt()
+              if problem:
+                  receipt["status"] = "incomplete"
+                  save_receipt()
+                  print(
+                      f"{case_id}/{command} failed: {problem}; see {stage['log']}",
+                      file=sys.stderr,
+                  )
+                  raise SystemExit(1)
 
           receipt["status"] = "executed_requires_convergence_review"
           save_receipt()
           print(f"Executed all {len(expected_cases)} cases with OpenFOAM Foundation v10 build {build}.")
+          PY
+
+          python - "$family" "$RUNNER_TEMP/simpleFoam-vtk-export-summary.txt" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path, PurePosixPath
+
+          from cleanroomx.cfd_vtk import import_vtk_case
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          receipt = json.loads((root / "grid_execution_evidence.json").read_text(encoding="utf-8"))
+          expected_cases = {
+              f"configuration_{configuration}/{level}"
+              for configuration in (1, 2, 3)
+              for level in ("coarse", "medium", "fine")
+          }
+          if receipt.get("schema_version") != "cleanroomx.openfoam-grid-execution-evidence.v1":
+              raise SystemExit("Unexpected OpenFOAM execution receipt schema")
+          if receipt.get("status") != "executed_requires_convergence_review":
+              raise SystemExit("OpenFOAM execution receipt is not complete")
+          cases = receipt.get("cases")
+          if not isinstance(cases, dict) or set(cases) != expected_cases:
+              raise SystemExit("Receipt does not contain the exact nine expected cases")
+          lines = [
+              "OpenFOAM Foundation v10 final-time VTK export integrity",
+              f"solver_build={receipt.get('solver_build')}",
+              "status=EXECUTION_EVIDENCE_ONLY; scientific_validation=BLOCKED",
+          ]
+          for case_id in sorted(expected_cases):
+              case = cases[case_id]
+              stages = case.get("stages")
+              commands = [stage.get("command") for stage in stages] if isinstance(stages, list) else []
+              if commands != ["blockMesh", "checkMesh", "simpleFoam", "foamToVTK"]:
+                  raise SystemExit("Unexpected or incomplete command stages: " + case_id)
+              if any(stage.get("returncode") != 0 for stage in stages):
+                  raise SystemExit("Nonzero command stage in receipt: " + case_id)
+              if case.get("status") != "executed_requires_convergence_review":
+                  raise SystemExit("Case is not complete: " + case_id)
+              dataset = case.get("vtk_export")
+              export_stage = stages[-1]
+              if not isinstance(dataset, dict) or dataset != export_stage.get("vtk_dataset"):
+                  raise SystemExit("VTK export is missing or differs from the command stage: " + case_id)
+              relative = PurePosixPath(dataset.get("path", ""))
+              case_parts = PurePosixPath(case_id).parts
+              if (
+                  relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in relative.parts)
+                  or relative.parts[:len(case_parts)] != case_parts
+                  or relative.parts[len(case_parts):len(case_parts) + 1] != ("VTK",)
+                  or relative.suffix.lower() != ".vtk"
+              ):
+                  raise SystemExit("Unsafe or unexpected VTK path in receipt: " + case_id)
+              vtk_path = root.joinpath(*relative.parts)
+              if vtk_path.is_symlink() or not vtk_path.is_file():
+                  raise SystemExit("VTK output is missing or symbolic: " + case_id)
+              resolved = vtk_path.resolve(strict=True)
+              if not resolved.is_relative_to(root):
+                  raise SystemExit("VTK output escaped the generated family: " + case_id)
+              actual_sha = hashlib.sha256(resolved.read_bytes()).hexdigest()
+              if actual_sha != dataset.get("sha256"):
+                  raise SystemExit("VTK output digest differs from receipt: " + case_id)
+              imported = import_vtk_case(resolved)
+              expected_cells = manifest["case_inputs"][case_id].get("mesh_cells")
+              if (
+                  type(expected_cells) is not int
+                  or expected_cells <= 0
+                  or imported["source_sha256"] != actual_sha
+                  or imported["mesh_cells"] != expected_cells
+                  or imported["mesh_cells"] != dataset.get("mesh_cells")
+                  or dataset.get("velocity_field") != "U"
+                  or dataset.get("velocity_components") != 3
+              ):
+                  raise SystemExit("VTK field or mesh does not match bound inputs: " + case_id)
+              lines.append(
+                  f"{case_id}: cells={imported['mesh_cells']} "
+                  f"U=3-component-cell-field sha256={actual_sha}"
+              )
+          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 
           triage_report="$RUNNER_TEMP/simpleFoam-grid-family-triage.json"
@@ -301,6 +470,7 @@ jobs:
             ${{ runner.temp }}/openfoam-v10-version.txt
             ${{ runner.temp }}/simpleFoam-residual-summary.txt
             ${{ runner.temp }}/simpleFoam-flux-summary.txt
+            ${{ runner.temp }}/simpleFoam-vtk-export-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
           if-no-files-found: warn
           retention-days: 14

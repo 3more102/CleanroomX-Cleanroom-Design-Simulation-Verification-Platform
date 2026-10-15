@@ -15,6 +15,20 @@ levels alone do not independently prove asymptotic convergence.
 The uploaded NANENG 523 document provides no numerical mesh convergence
 results; this feature does not invent them.
 
+The reproducible GitHub Foundation v10 workflow now executes all nine
+synthetic cases with `blockMesh`, `checkMesh`, `simpleFoam`, and
+`foamToVTK`. For each case it exports final-time cell velocity `U`, imports
+the VTK through CleanroomX, checks its cell count against the generated-input
+manifest, and records a source SHA-256 in the execution receipt. A post-run
+integrity pass reopens all nine files and verifies their paths, hashes, cell
+counts, and three-component velocity field before uploading a summary.
+
+This verifies solver execution and VTK ingestion for that synthetic run only.
+It does not make the residual or flux screens pass, establish mesh independence,
+or change scientific validation from `BLOCKED`. The workflow does not yet
+compute GCI automatically; use the existing GCI analysis only after the
+convergence and physical-input gates below are met.
+
 ## Generate three mesh levels
 
 Use a clearly synthetic sample (replace every physical parameter before

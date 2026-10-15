@@ -12,5 +12,7 @@ Use this prompt for the next CleanroomX/OpenFOAM engineering pass:
 >
 > After any justified change, run `blockMesh`, `checkMesh`, and `simpleFoam` on coarse, medium, and fine meshes for all three configurations. Preserve complete logs and input hashes. Review residual histories, continuity and inlet/outlet flux balance, and stable quantities of interest. Export the required cell fields from the actual solver runs and use the existing three-grid VTK/GCI screening only when all grids have comparable, converged inputs and quantities. Compare eligible results against measured cleanroom data with uncertainty before changing `scientific_validation` from `BLOCKED`.
 >
+> Inspect the separate final-time `solver_flux_balance_screen` in the triage JSON. It reads signed `phi` face fluxes and reports net inlet/outlet flow, reverse flow, wall flux, and relative boundary imbalance. Treat `MEASURED_DIAGNOSTIC_ONLY` as a measurement, not an acceptance result. Do not invent a flow-balance threshold; record it as unassessed until the project supplies a justified criterion.
+>
 > Report execution success separately from solver convergence, mesh-independence evidence, physical validation, and any CleanroomX/OpenFOAM compatibility percentage. Provide a concise evidence-backed report, update issue #1296 and the relevant repository docs, run the applicable tests and actual Foundation v10 workflow, and save the result on a reviewable GitHub branch/PR. Leave the PR unmerged.
 

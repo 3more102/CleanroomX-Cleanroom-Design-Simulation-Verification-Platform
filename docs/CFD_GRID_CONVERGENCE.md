@@ -80,6 +80,24 @@ computed when the finest-grid QoI is zero. The selected GCI threshold,
 admissible order, and log residual criteria are **project inputs**, not
 inferred regulatory thresholds.
 
+## Review the final solver volume flux
+
+When each case contains a `phi` field at the last time reported in its
+`simpleFoam.log`, `cleanroomx-cfd-grid-triage FAMILY` also reads the signed
+patch fluxes and the `nFaces` counts from `constant/polyMesh/boundary`. The
+Foundation v10 incompressible solver constructs `phi` from `fvc::flux(U)` in
+its pinned [`createPhi.H`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/src/finiteVolume/cfdTools/incompressible/createPhi.H).
+The report records net inlet inflow, net outlet outflow, reverse flow on
+either patch, wall flux, total boundary flux, and relative flux imbalance.
+
+This result is `MEASURED_DIAGNOSTIC_ONLY`. CleanroomX does not supply an
+acceptance threshold: the report says `NO_PROJECT_ACCEPTANCE_CRITERION` until
+the engineering project defines one. The screen is separate from residual
+status and does not establish nonlinear convergence, mesh independence,
+physical validity, or cleanroom performance. Missing, malformed, or
+unreadable final-time fields remain unavailable without changing the log
+triage status.
+
 ## Calculations and interpretation
 
 For a common 3D domain volume V, with cell counts N and effective

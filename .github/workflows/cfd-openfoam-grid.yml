@@ -248,29 +248,47 @@ jobs:
           screen = report.get("solver_input_fingerprint_screen", {})
           if screen.get("status") != "BYTE_IDENTICAL_ACROSS_GRID_LEVELS":
               raise SystemExit("Declared solver-condition dictionaries differ or are incomplete")
+          flux_screen = report.get("solver_flux_balance_screen", {})
+          if (
+              flux_screen.get("status") != "MEASURED_DIAGNOSTIC_ONLY"
+              or flux_screen.get("case_count_measured") != 9
+              or flux_screen.get("acceptance_criterion") != "NOT_SET"
+          ):
+              raise SystemExit("Final-time phi fluxes are missing, incomplete, or assigned an unsupported acceptance criterion")
           print("All nine logs are structurally parseable; declared condition inputs match across grid levels.")
-          print("Residual and scientific-validation statuses remain separate in the uploaded JSON report.")
+          print("Final-time inlet/outlet phi fluxes were measured for all nine cases; no project balance criterion is set.")
+          print("Residual, flux-balance, and scientific-validation statuses remain separate in the uploaded JSON report.")
           PY
 
-          python - "$triage_report" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" <<'PY'
+          python - "$triage_report" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" "$RUNNER_TEMP/simpleFoam-flux-summary.txt" <<'PY'
           import json
           import sys
           from pathlib import Path
 
           report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          lines = []
+          residual_lines = []
+          flux_lines = []
           for case_id, case in sorted(report.get("cases", {}).items()):
               fields = case.get("terminal_residual_control_screen", {}).get("fields", {})
               residuals = " ".join(
                   f"{field}={fields.get(field, {}).get('status', 'UNKNOWN')}"
                   for field in ("U", "p")
               )
-              lines.append(
+              flux = case.get("solver_flux_screen", {})
+              residual_lines.append(
                   f"{case_id}: status={case.get('status')} "
                   f"time_steps={case.get('time_steps')} last_time={case.get('last_time')} "
                   f"{residuals}"
               )
-          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+              flux_lines.append(
+                  f"{case_id}: status={flux.get('status')} "
+                  f"inlet_in={flux.get('inlet', {}).get('net_inward_m3_s')} m3/s "
+                  f"outlet_out={flux.get('outlet', {}).get('net_outward_m3_s')} m3/s "
+                  f"imbalance={flux.get('relative_flux_imbalance_percent')}% "
+                  f"criterion={flux.get('flow_balance_assessment')}"
+              )
+          Path(sys.argv[2]).write_text("\n".join(residual_lines) + "\n", encoding="utf-8")
+          Path(sys.argv[3]).write_text("\n".join(flux_lines) + "\n", encoding="utf-8")
           PY
 
       - name: Upload execution evidence
@@ -282,6 +300,7 @@ jobs:
             ${{ runner.temp }}/cleanroomx-cfd-grid-family
             ${{ runner.temp }}/openfoam-v10-version.txt
             ${{ runner.temp }}/simpleFoam-residual-summary.txt
+            ${{ runner.temp }}/simpleFoam-flux-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
           if-no-files-found: warn
           retention-days: 14

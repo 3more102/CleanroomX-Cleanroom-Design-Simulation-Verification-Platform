@@ -491,10 +491,16 @@ def _read_openfoam_mesh_owners(path, face_count, mesh_root):
     text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh owners", root=mesh_root)
     clean = _strip_foam_comments(text)
     count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh owners")
-    tokens = re.findall(r"\d+", body)
-    if count != face_count or len(tokens) != count or re.sub(r"\d+", "", body).strip():
+    tokens = re.findall(r"[+-]?\d+", body)
+    owners = [int(token) for token in tokens]
+    if (
+        count != face_count
+        or len(tokens) != count
+        or re.sub(r"[+-]?\d+", "", body).strip()
+        or any(owner < 0 for owner in owners)
+    ):
         raise ValueError("OpenFOAM mesh owner list does not match its declared face count")
-    return [int(token) for token in tokens], digest
+    return owners, digest
 
 
 def _read_openfoam_mesh_neighbours(path, face_count, mesh_root):

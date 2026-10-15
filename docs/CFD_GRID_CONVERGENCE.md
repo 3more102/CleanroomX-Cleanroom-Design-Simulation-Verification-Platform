@@ -47,15 +47,22 @@ records all nine cases' terminal residual-to-setting multiples and compares
 early/late log medians. Every case remains above the generated residual screen;
 the analysis is descriptive and does not diagnose a physical cause.
 
-The [run 67 execution report](OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md)
-records the later exact-head workflow receipt and per-case hashes. It confirms
-execution and field-serialization evidence for synthetic inputs only; residual
-and physical-validation gates remain open.
-
 The runner now records a structured, raw-log-hash-bound `checkMesh` summary
 and stops before `simpleFoam` when required Foundation v10 records are missing,
 ambiguous, non-finite, or report a failed check. It applies no project mesh
 acceptance thresholds; see [the diagnostic receipt guide](OPENFOAM_CHECKMESH_DIAGNOSTICS.md).
+The Foundation v10 workflow also receipt-binds each `checkMesh.log` digest,
+reconstructs every cell volume from the ASCII `polyMesh` points, faces, owner,
+and neighbour lists, and compares cell counts, minimum/maximum/total volumes,
+the reconstructed bounding-box volume, and manifest-derived room volume. The
+uploaded `poly_mesh_volume_audit.json` records the five mesh-file hashes and
+the comparison tolerances. CheckMesh rounding bounds come from the longest
+numeric precision present in its volume summary; floating-point bounds cover
+the reconstruction arithmetic using `128 × binary64 epsilon ×
+max(1, |value|)`. These are serialization and arithmetic tolerances only, not
+CFD acceptance thresholds. The audit checks consistency of the synthetic mesh
+evidence; it does not establish mesh quality, numerical convergence, or
+physical suitability.
 
 This verifies solver execution and VTK ingestion for that synthetic run only.
 It does not make the residual or flux screens pass, establish mesh independence,

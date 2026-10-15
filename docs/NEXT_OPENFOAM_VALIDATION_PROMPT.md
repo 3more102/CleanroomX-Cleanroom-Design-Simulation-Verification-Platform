@@ -1,8 +1,10 @@
-# Next-step prompt: proceed when physical case data exist
+# Next-step prompt: continue CFD evidence work
 
 Use this prompt for the next CleanroomX/OpenFOAM engineering pass:
 
-> Continue on open PR #1311 and issue #1296. First inspect the [run 63 native-to-VTK patch-parity report](OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md), exact-head checks, and archived dictionaries, native fields, `phi`, solver logs, VTK files, and triage JSON.
+> Continue on open PR #1311 and issue #1296. The current change adds a receipt-bound checkMesh/polyMesh volume audit. First inspect exact-head CI, CFD VTK Regression, and Foundation v10 workflow status. If the new workflow run completed, independently recheck the uploaded `poly_mesh_volume_audit.json` against its manifest, execution receipt, `checkMesh.log` files, and five raw `polyMesh` files for every case. Record the run ID, commit SHA, all nine case counts, reported/reconstructed/room/bounding-box totals, and recorded serialization/numerical bounds. Fix any mismatches before selecting further work. The local recheck of run 66 exercised the new code on its archived files, but that is not exact-head workflow evidence.
+
+> The prior native-to-VTK work is documented in the [run 63 report](OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md). The [run 66 checkMesh report](OPENFOAM_V10_RUN_38776224839_CHECKMESH_QUALITY.md) records the prior topology and geometry diagnostics.
 >
 > Native-to-VTK checks cover final-time U and kinematic-pressure p in the internal-cell datasets for nine synthetic cases: 47,304 cells, 141,912 velocity components, and 47,304 pressure values matched by explicit `cellID` mapping. Run 63 additionally checks 27 inlet/outlet/walls patch datasets: 13,608 faces, 40,824 U components, and 13,608 p values mapped by serialized face geometry. Both audits pass only their recorded float32/ASCII serialization bounds. Do not repeat these checks unless fixing a concrete regression, or expand them to other solver releases, field types, patch-condition families, regions, time-selection behavior, or physical models without evidence.
 >

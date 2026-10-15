@@ -79,6 +79,7 @@ jobs:
           )
           from cleanroomx.cfd_vtk import (
               audit_openfoam_vtk_boundary_patch,
+              audit_openfoam_checkmesh_poly_mesh_volume,
               audit_openfoam_vtk_pressure,
               audit_openfoam_vtk_surface_flux,
               audit_openfoam_vtk_velocity,
@@ -235,6 +236,35 @@ jobs:
                           or diagnostics["reported_check_failures"]
                       ):
                           problem = "CHECKMESH_MESH_CHECK_FAILED"
+                  if problem is None and command == "checkMesh" and "Mesh OK." not in log_text:
+                      problem = "CHECKMESH_MESH_OK_MARKER_MISSING"
+                  if problem is None and command == "checkMesh":
+                      try:
+                          case_input = manifest["case_inputs"][case_id]
+                          expected_cells = case_input.get("mesh_cells")
+                          nominal_cell_volume = case_input.get("mesh", {}).get(
+                              "nominal_cell_volume_m3"
+                          )
+                          if (
+                              type(expected_cells) is not int
+                              or type(nominal_cell_volume) not in (int, float)
+                              or not math.isfinite(nominal_cell_volume)
+                              or nominal_cell_volume <= 0
+                          ):
+                              raise ValueError("Bound room-volume metadata is missing or invalid")
+                          volume_audit = audit_openfoam_checkmesh_poly_mesh_volume(
+                              case_dir,
+                              expected_cell_count=expected_cells,
+                              expected_nominal_cell_volume_m3=nominal_cell_volume,
+                              checkmesh_log_sha256=stage["log_sha256"],
+                          )
+                          stage["poly_mesh_volume_audit"] = volume_audit
+                          case_record["poly_mesh_volume_audit"] = volume_audit
+                      except Exception as exc:
+                          problem = (
+                              f"CHECKMESH_POLYMESH_VOLUME_AUDIT_FAILED: "
+                              f"{type(exc).__name__}: {exc}"
+                          )
                   if problem:
                       stage["problem"] = problem
                   case_stages.append(stage)
@@ -480,7 +510,9 @@ jobs:
           print(f"Executed all {len(expected_cases)} cases with OpenFOAM Foundation v10 build {build}.")
           PY
 
-          python - "$family" "$RUNNER_TEMP/simpleFoam-vtk-export-summary.txt" <<'PY'
+          python - "$family" \
+            "$RUNNER_TEMP/simpleFoam-vtk-export-summary.txt" \
+            "$RUNNER_TEMP/simpleFoam-mesh-volume-summary.txt" <<'PY'
           import hashlib
           import json
           import math
@@ -488,6 +520,7 @@ jobs:
           from pathlib import Path, PurePosixPath
 
           from cleanroomx.cfd_vtk import (
+              audit_openfoam_checkmesh_poly_mesh_volume,
               audit_openfoam_vtk_boundary_patch,
               audit_openfoam_vtk_pressure,
               audit_openfoam_vtk_surface_flux,
@@ -515,6 +548,12 @@ jobs:
               f"solver_build={receipt.get('solver_build')}",
               "status=EXECUTION_EVIDENCE_ONLY; scientific_validation=BLOCKED",
           ]
+          volume_lines = [
+              "OpenFOAM Foundation v10 checkMesh/polyMesh volume integrity",
+              f"solver_build={receipt.get('solver_build')}",
+              "status=MESH_DATA_INTEGRITY_ONLY; scientific_validation=BLOCKED",
+          ]
+          volume_cases = {}
           total_patch_faces = 0
           total_surface_flux_faces = 0
           for case_id in sorted(expected_cases):
@@ -527,12 +566,47 @@ jobs:
                   raise SystemExit("Nonzero command stage in receipt: " + case_id)
               if case.get("status") != "executed_requires_convergence_review":
                   raise SystemExit("Case is not complete: " + case_id)
+              case_parts = PurePosixPath(case_id).parts
+              checkmesh_stage = stages[1]
+              recorded_volume_audit = case.get("poly_mesh_volume_audit")
+              if (
+                  checkmesh_stage.get("log") != f"{case_id}/checkMesh.log"
+                  or not isinstance(recorded_volume_audit, dict)
+                  or recorded_volume_audit != checkmesh_stage.get("poly_mesh_volume_audit")
+              ):
+                  raise SystemExit("checkMesh volume audit is missing or not receipt-bound: " + case_id)
+              case_input = manifest["case_inputs"].get(case_id, {})
+              expected_cells_for_volume = case_input.get("mesh_cells")
+              nominal_cell_volume = case_input.get("mesh", {}).get("nominal_cell_volume_m3")
+              if (
+                  type(expected_cells_for_volume) is not int
+                  or type(nominal_cell_volume) not in (int, float)
+                  or not math.isfinite(nominal_cell_volume)
+                  or nominal_cell_volume <= 0
+              ):
+                  raise SystemExit("Room-volume metadata is missing or invalid: " + case_id)
+              recomputed_volume_audit = audit_openfoam_checkmesh_poly_mesh_volume(
+                  root.joinpath(*case_parts),
+                  expected_cell_count=expected_cells_for_volume,
+                  expected_nominal_cell_volume_m3=nominal_cell_volume,
+                  checkmesh_log_sha256=checkmesh_stage.get("log_sha256"),
+              )
+              if recomputed_volume_audit != recorded_volume_audit:
+                  raise SystemExit("checkMesh/polyMesh volume audit did not reproduce: " + case_id)
+              volume_cases[case_id] = recomputed_volume_audit
+              volume_lines.append(
+                  f"{case_id}: cells={recomputed_volume_audit['cell_count']} "
+                  f"checkMesh_total_m3={recomputed_volume_audit['checkmesh']['total_volume_m3']:.12g} "
+                  f"polyMesh_sum_m3={recomputed_volume_audit['poly_mesh']['total_cell_volume_m3']:.12g} "
+                  f"room_bound_m3={recomputed_volume_audit['room_bound']['volume_m3']:.12g} "
+                  f"bounding_box_m3={recomputed_volume_audit['poly_mesh']['bounding_box_volume_m3']:.12g} "
+                  "status=PASS"
+              )
               dataset = case.get("vtk_export")
               export_stage = stages[-1]
               if not isinstance(dataset, dict) or dataset != export_stage.get("vtk_dataset"):
                   raise SystemExit("VTK export is missing or differs from the command stage: " + case_id)
               relative = PurePosixPath(dataset.get("path", ""))
-              case_parts = PurePosixPath(case_id).parts
               if (
                   relative.is_absolute()
                   or any(part in ("", ".", "..") for part in relative.parts)
@@ -840,6 +914,8 @@ jobs:
                   )
           if total_patch_faces <= 0:
               raise SystemExit("No native-to-VTK boundary patch faces were audited")
+          if set(volume_cases) != expected_cases:
+              raise SystemExit("PolyMesh volume audit does not contain exactly nine cases")
           lines.append(
               f"PATCH_TOTALS: datasets=27 faces={total_patch_faces} "
               f"U_components={total_patch_faces * 3} p_values={total_patch_faces}"
@@ -851,6 +927,24 @@ jobs:
               f"phi_vector_components={total_surface_flux_faces * 3}"
           )
           Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          volume_report = {
+              "schema_version": "cleanroomx.openfoam-poly-mesh-volume-audit.v1",
+              "status": "PASS",
+              "evidence_scope": "synthetic mesh data integrity only",
+              "scientific_validation": "BLOCKED",
+              "family_manifest_sha256": hashlib.sha256(
+                  (root / "manifest.json").read_bytes()
+              ).hexdigest(),
+              "execution_receipt_sha256": hashlib.sha256(
+                  (root / "grid_execution_evidence.json").read_bytes()
+              ).hexdigest(),
+              "cases": volume_cases,
+          }
+          (root / "poly_mesh_volume_audit.json").write_text(
+              json.dumps(volume_report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+              encoding="utf-8",
+          )
+          Path(sys.argv[3]).write_text("\n".join(volume_lines) + "\n", encoding="utf-8")
           PY
 
           triage_report="$RUNNER_TEMP/simpleFoam-grid-family-triage.json"
@@ -920,6 +1014,7 @@ jobs:
             ${{ runner.temp }}/simpleFoam-residual-summary.txt
             ${{ runner.temp }}/simpleFoam-flux-summary.txt
             ${{ runner.temp }}/simpleFoam-vtk-export-summary.txt
+            ${{ runner.temp }}/simpleFoam-mesh-volume-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
           if-no-files-found: warn
           retention-days: 14

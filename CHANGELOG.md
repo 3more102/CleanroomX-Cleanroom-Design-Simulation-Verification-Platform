@@ -6,6 +6,11 @@
 - Records reproducible 36-field diagnostics of the archived synthetic Foundation v10 runs 67 and 68, preserving the failed terminal residual screens and blocked scientific-validation status.
 - Does not alter OpenFOAM cases, solver settings, tolerances, acceptance criteria, or engineering verdicts.
 
+## Unreleased Release 3 — checkMesh/polyMesh volume cross-check — 2026-10-15
+
+- Reconstructs every cell volume from Foundation v10 ASCII `polyMesh` data and compares cell counts, min/max/total volumes, bounding-box volume, and manifest-derived room volume against the hash-bound `checkMesh` receipt.
+- Records all five mesh-file hashes and representation-based tolerances in the uploaded audit artifact; this is synthetic mesh-data integrity evidence only and does not change the blocked scientific-validation status.
+
 ## Unreleased Release 3 — Foundation v10 surface-flux VTK audit — 2026-10-15
 
 - Extends the opt-in nine-case Foundation v10 workflow to export native `phi` surface fluxes through pinned `foamToVTK -surfaceFields` support and independently recheck the resulting face-normal vectors against native face geometry and values.

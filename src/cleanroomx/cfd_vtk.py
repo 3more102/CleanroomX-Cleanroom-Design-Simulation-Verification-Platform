@@ -8,6 +8,7 @@ import hashlib
 import math
 import re
 import struct
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from .cfd_study import validate_study, analyze_cfd_study
 
@@ -471,11 +472,12 @@ def _read_openfoam_mesh_faces(path, point_count, mesh_root):
     faces = []
     for match in matches:
         face_count = int(match.group(1))
-        point_ids = [int(token) for token in re.findall(r"\d+", match.group(2))]
+        point_ids = [int(token) for token in re.findall(r"[+-]?\d+", match.group(2))]
         if (
             len(point_ids) != face_count
             or face_count < 3
             or len(set(point_ids)) != face_count
+            or any(point_id < 0 for point_id in point_ids)
             or any(point_id < 0 or point_id >= point_count for point_id in point_ids)
         ):
             raise ValueError("OpenFOAM mesh contains an invalid face")
@@ -489,8 +491,13 @@ def _read_openfoam_mesh_owners(path, face_count, mesh_root):
     text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh owners", root=mesh_root)
     clean = _strip_foam_comments(text)
     count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh owners")
-    tokens = re.findall(r"\d+", body)
-    if count != face_count or len(tokens) != count or re.sub(r"\d+", "", body).strip():
+    tokens = re.findall(r"[+-]?\d+", body)
+    if (
+        count != face_count
+        or len(tokens) != count
+        or re.sub(r"[+-]?\d+", "", body).strip()
+        or any(int(token) < 0 for token in tokens)
+    ):
         raise ValueError("OpenFOAM mesh owner list does not match its declared face count")
     return [int(token) for token in tokens], digest
 
@@ -684,6 +691,308 @@ def _openfoam_face_centres_and_normals(points, faces):
         centres.append(centre)
         normals.append(normal)
     return centres, normals
+def _read_openfoam_mesh_neighbours(path, face_count_or_root, mesh_root=None):
+    # Surface-field audits only need the list and historically pass the root
+    # as the second argument. The volume audit also bounds it against faces.
+    if mesh_root is None:
+        face_count = None
+        mesh_root = face_count_or_root
+    else:
+        face_count = face_count_or_root
+    text, digest = _read_stable_ascii_file(path, "OpenFOAM mesh neighbours", root=mesh_root)
+    clean = _strip_foam_comments(text)
+    count, body = _extract_foam_counted_list(clean, "OpenFOAM mesh neighbours")
+    tokens = re.findall(r"[+-]?\d+", body)
+    if (
+        count > MAX_OPENFOAM_FACES
+        or count != len(tokens)
+        or (face_count is not None and count > face_count)
+        or re.sub(r"[+-]?\d+", "", body).strip()
+    ):
+        raise ValueError("OpenFOAM mesh neighbour list has an invalid face count")
+    neighbours = [int(token) for token in tokens]
+    if any(cell_id < 0 for cell_id in neighbours):
+        raise ValueError("OpenFOAM mesh neighbour list contains a negative cell index")
+    return neighbours, digest
+
+
+def _cell_polyhedron_volume(points, oriented_faces):
+    point_ids = sorted({point_id for face in oriented_faces for point_id in face})
+    if len(oriented_faces) < 4 or len(point_ids) < 4:
+        raise ValueError("OpenFOAM mesh cell has an incomplete polyhedron")
+
+    # A local reference keeps the signed tetrahedron sum well-conditioned for
+    # rooms whose origin is far from (0, 0, 0).
+    reference = tuple(
+        math.fsum(points[point_id][axis] for point_id in point_ids) / len(point_ids)
+        for axis in range(3)
+    )
+    terms = []
+    edge_uses = {}
+    for face in oriented_faces:
+        for start, end in zip(face, face[1:] + face[:1]):
+            key = (min(start, end), max(start, end))
+            count, direction = edge_uses.get(key, (0, 0))
+            edge_uses[key] = (count + 1, direction + (1 if start < end else -1))
+
+        origin = tuple(points[face[0]][axis] - reference[axis] for axis in range(3))
+        for index in range(1, len(face) - 1):
+            first = tuple(points[face[index]][axis] - reference[axis] for axis in range(3))
+            second = tuple(points[face[index + 1]][axis] - reference[axis] for axis in range(3))
+            cross = (
+                first[1] * second[2] - first[2] * second[1],
+                first[2] * second[0] - first[0] * second[2],
+                first[0] * second[1] - first[1] * second[0],
+            )
+            terms.append(sum(origin[axis] * cross[axis] for axis in range(3)))
+
+    if any(count != 2 or direction != 0 for count, direction in edge_uses.values()):
+        raise ValueError("OpenFOAM mesh cell faces do not form a closed oriented shell")
+    volume = math.fsum(terms) / 6.0
+    if not math.isfinite(volume) or volume <= 0:
+        raise ValueError("OpenFOAM mesh cell has a non-positive or invalid volume")
+    return volume
+
+
+def _decimal_significant_digits(token):
+    mantissa = re.split(r"[eE]", token, maxsplit=1)[0].lstrip("+-")
+    digits = mantissa.replace(".", "").lstrip("0")
+    return max(1, len(digits))
+
+
+def _decimal_half_step(token, significant_digits):
+    try:
+        value = Decimal(token)
+    except InvalidOperation as exc:
+        raise ValueError("checkMesh volume summary contains an invalid number") from exc
+    if not value.is_finite() or value <= 0:
+        raise ValueError("checkMesh volume summary must contain finite positive values")
+    quantum = Decimal(1).scaleb(value.adjusted() - significant_digits + 1)
+    return float(quantum / Decimal(2))
+
+
+def _binary64_roundoff_bound(*values):
+    scale = max(1.0, *(abs(value) for value in values))
+    return 128.0 * math.ulp(1.0) * scale
+
+
+def _parse_checkmesh_volume_summary(log_text):
+    number = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+    summary_pattern = re.compile(
+        rf"(?m)^\s*Min volume\s*=\s*(?P<minimum>{number})\.\s*"
+        rf"Max volume\s*=\s*(?P<maximum>{number})\.\s*"
+        rf"Total volume\s*=\s*(?P<total>{number})\.\s*Cell volumes OK\.\s*$"
+    )
+    summaries = list(summary_pattern.finditer(log_text))
+    cell_counts = re.findall(r"(?m)^\s*cells:\s*(\d+)\s*$", log_text)
+    if len(summaries) != 1 or len(cell_counts) != 1 or log_text.count("Mesh OK.") != 1:
+        raise ValueError("checkMesh log must have one complete volume summary and Mesh OK marker")
+    summary = summaries[0]
+    tokens = {name: summary.group(name) for name in ("minimum", "maximum", "total")}
+    try:
+        reported = {name: float(Decimal(token)) for name, token in tokens.items()}
+    except (InvalidOperation, OverflowError) as exc:
+        raise ValueError("checkMesh volume summary contains an invalid number") from exc
+    cells = int(cell_counts[0])
+    precision = max(_decimal_significant_digits(token) for token in tokens.values())
+    rounding_bounds = {
+        name: _decimal_half_step(token, precision) for name, token in tokens.items()
+    }
+    lower_total = cells * max(0.0, reported["minimum"] - rounding_bounds["minimum"])
+    upper_total = cells * (reported["maximum"] + rounding_bounds["maximum"])
+    arithmetic_bound = _binary64_roundoff_bound(lower_total, upper_total, reported["total"])
+    if (
+        cells <= 0
+        or not all(math.isfinite(value) and value > 0 for value in reported.values())
+        or reported["minimum"] > reported["maximum"]
+        or reported["total"] < lower_total - rounding_bounds["total"] - arithmetic_bound
+        or reported["total"] > upper_total + rounding_bounds["total"] + arithmetic_bound
+    ):
+        raise ValueError("checkMesh volume summary has inconsistent cell volumes")
+    return {
+        "cell_count": cells,
+        "tokens": tokens,
+        "volumes_m3": reported,
+        "inferred_significant_digits": precision,
+    }
+
+
+def audit_openfoam_checkmesh_poly_mesh_volume(
+    case_directory,
+    *,
+    expected_cell_count,
+    expected_nominal_cell_volume_m3,
+    checkmesh_log_sha256,
+):
+    """Cross-check receipt-bound checkMesh volumes against raw polyMesh geometry.
+
+    The volume reconstruction uses OpenFOAM points, faces, owner and neighbour
+    lists directly. It is a mesh-integrity check for generated synthetic cases;
+    it is not a mesh-quality acceptance rule or physical validation.
+    """
+    if type(expected_cell_count) is not int or not 0 < expected_cell_count <= MAX_VTK_CELLS:
+        raise ValueError("Expected mesh cell count is invalid")
+    if type(expected_nominal_cell_volume_m3) not in (int, float):
+        raise ValueError("Expected nominal cell volume must be numeric")
+    expected_nominal_cell_volume_m3 = float(expected_nominal_cell_volume_m3)
+    if (
+        not math.isfinite(expected_nominal_cell_volume_m3)
+        or expected_nominal_cell_volume_m3 <= 0
+    ):
+        raise ValueError("Expected nominal cell volume must be finite and positive")
+    expected_room_volume_m3 = expected_cell_count * expected_nominal_cell_volume_m3
+    if not isinstance(checkmesh_log_sha256, str) or re.fullmatch(r"[0-9a-f]{64}", checkmesh_log_sha256) is None:
+        raise ValueError("checkMesh receipt digest is invalid")
+
+    case_root = Path(case_directory)
+    if case_root.is_symlink() or not case_root.is_dir():
+        raise ValueError("OpenFOAM case directory must be regular and non-symbolic")
+    case_root = case_root.resolve(strict=True)
+    log_text, log_sha256 = _read_stable_ascii_file(
+        case_root / "checkMesh.log", "OpenFOAM checkMesh log", root=case_root
+    )
+    if log_sha256 != checkmesh_log_sha256:
+        raise ValueError("checkMesh log digest differs from its execution receipt")
+
+    checkmesh_summary = _parse_checkmesh_volume_summary(log_text)
+    tokens = checkmesh_summary["tokens"]
+    reported = checkmesh_summary["volumes_m3"]
+    reported_cells = checkmesh_summary["cell_count"]
+    if (
+        reported_cells != expected_cell_count
+        or not all(math.isfinite(value) and value > 0 for value in reported.values())
+        or reported["minimum"] > reported["maximum"]
+    ):
+        raise ValueError("checkMesh summary is inconsistent with expected mesh dimensions")
+
+    mesh_root = case_root / "constant" / "polyMesh"
+    if (case_root / "constant").is_symlink() or mesh_root.is_symlink() or not mesh_root.is_dir():
+        raise ValueError("OpenFOAM polyMesh directory must be regular and non-symbolic")
+    points, points_sha = _read_openfoam_mesh_points(mesh_root / "points", mesh_root)
+    faces, faces_sha = _read_openfoam_mesh_faces(mesh_root / "faces", len(points), mesh_root)
+    owners, owners_sha = _read_openfoam_mesh_owners(mesh_root / "owner", len(faces), mesh_root)
+    neighbours, neighbours_sha = _read_openfoam_mesh_neighbours(
+        mesh_root / "neighbour", len(faces), mesh_root
+    )
+    patches, boundary_sha = _read_openfoam_boundary_patches(
+        mesh_root / "boundary", len(faces), mesh_root
+    )
+    if not points or len(owners) != len(faces) or not neighbours:
+        raise ValueError("OpenFOAM polyMesh is incomplete or has no internal faces")
+    if not patches or min(patch["start_face"] for patch in patches) != len(neighbours):
+        raise ValueError("OpenFOAM internal and boundary face ranges do not match neighbour count")
+
+    cell_ids = owners + neighbours
+    if any(cell_id < 0 for cell_id in cell_ids):
+        raise ValueError("OpenFOAM polyMesh contains a negative cell index")
+    cell_count = max(cell_ids) + 1
+    if cell_count != expected_cell_count or set(cell_ids) != set(range(cell_count)):
+        raise ValueError("OpenFOAM polyMesh cell addressing is incomplete or differs from inputs")
+
+    cell_faces = [[] for _ in range(cell_count)]
+    for face_id, face in enumerate(faces):
+        owner = owners[face_id]
+        cell_faces[owner].append(face)
+        if face_id < len(neighbours):
+            neighbour = neighbours[face_id]
+            if neighbour == owner or neighbour >= cell_count:
+                raise ValueError("OpenFOAM polyMesh has invalid internal face ownership")
+            cell_faces[neighbour].append(list(reversed(face)))
+    volumes = [_cell_polyhedron_volume(points, oriented_faces) for oriented_faces in cell_faces]
+    total_volume = math.fsum(volumes)
+    lower = [min(point[axis] for point in points) for axis in range(3)]
+    upper = [max(point[axis] for point in points) for axis in range(3)]
+    extents = [high - low for low, high in zip(lower, upper)]
+    if any(not math.isfinite(extent) or extent <= 0 for extent in extents):
+        raise ValueError("OpenFOAM polyMesh has an invalid bounding box")
+    bounding_box_volume = math.prod(extents)
+
+    precision = checkmesh_summary["inferred_significant_digits"]
+    serialization_bounds = {
+        name: _decimal_half_step(token, precision) for name, token in tokens.items()
+    }
+    comparisons = {
+        "minimum_cell_volume_m3": {
+            "difference": abs(reported["minimum"] - min(volumes)),
+            "allowed_difference": serialization_bounds["minimum"]
+            + _binary64_roundoff_bound(reported["minimum"], min(volumes)),
+        },
+        "maximum_cell_volume_m3": {
+            "difference": abs(reported["maximum"] - max(volumes)),
+            "allowed_difference": serialization_bounds["maximum"]
+            + _binary64_roundoff_bound(reported["maximum"], max(volumes)),
+        },
+        "total_volume_m3": {
+            "difference": abs(reported["total"] - total_volume),
+            "allowed_difference": serialization_bounds["total"]
+            + _binary64_roundoff_bound(reported["total"], total_volume),
+        },
+    }
+    room_tolerance = _binary64_roundoff_bound(
+        expected_room_volume_m3, total_volume, bounding_box_volume
+    )
+    comparisons["poly_mesh_total_to_room_volume_m3"] = {
+        "difference": abs(total_volume - expected_room_volume_m3),
+        "allowed_difference": room_tolerance,
+    }
+    comparisons["poly_mesh_total_to_bounding_box_volume_m3"] = {
+        "difference": abs(total_volume - bounding_box_volume),
+        "allowed_difference": room_tolerance,
+    }
+    comparisons["checkmesh_total_to_room_volume_m3"] = {
+        "difference": abs(reported["total"] - expected_room_volume_m3),
+        "allowed_difference": serialization_bounds["total"] + room_tolerance,
+    }
+    if any(row["difference"] > row["allowed_difference"] for row in comparisons.values()):
+        raise ValueError("checkMesh, polyMesh and room-bound volumes do not agree")
+
+    return {
+        "schema_version": "cleanroomx.openfoam-poly-mesh-volume-audit.v1",
+        "status": "PASS",
+        "qualification_status": "DIAGNOSTIC_ONLY",
+        "scientific_validation": "BLOCKED",
+        "cell_count": cell_count,
+        "checkmesh_log_sha256": log_sha256,
+        "checkmesh": {
+            "minimum_cell_volume_m3": reported["minimum"],
+            "maximum_cell_volume_m3": reported["maximum"],
+            "total_volume_m3": reported["total"],
+            "reported_cell_count": reported_cells,
+            "printed_volume_tokens": tokens,
+        },
+        "poly_mesh": {
+            "point_count": len(points),
+            "face_count": len(faces),
+            "internal_face_count": len(neighbours),
+            "boundary_patch_count": len(patches),
+            "minimum_cell_volume_m3": min(volumes),
+            "maximum_cell_volume_m3": max(volumes),
+            "total_cell_volume_m3": total_volume,
+            "bounding_box_extents_m": extents,
+            "bounding_box_volume_m3": bounding_box_volume,
+            "files_sha256": {
+                "points": points_sha,
+                "faces": faces_sha,
+                "owner": owners_sha,
+                "neighbour": neighbours_sha,
+                "boundary": boundary_sha,
+            },
+        },
+        "room_bound": {
+            "cell_count": expected_cell_count,
+            "nominal_cell_volume_m3": expected_nominal_cell_volume_m3,
+            "volume_m3": expected_room_volume_m3,
+        },
+        "comparisons": comparisons,
+        "checkmesh_inferred_significant_digits": precision,
+        "tolerance_basis": (
+            "checkMesh decimal serialization half-step inferred from the longest numeric "
+            "lexeme in its Min/Max/Total volume record, plus 128 * binary64 epsilon * "
+            "max(1, abs(value)); room-bound comparisons use the same scaled bound. "
+            "These are data-representation tolerances, "
+            "not CFD or physical acceptance thresholds."
+        ),
+    }
 
 
 def _foam_patch_expected_values(text, field_name, patch_name, components, internal_values, owners, face_ids):

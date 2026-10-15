@@ -1,5 +1,6 @@
 """Synthetic mesh-integrity tests; these do not qualify CFD physics."""
 import hashlib
+import re
 
 import pytest
 
@@ -180,6 +181,23 @@ def test_poly_mesh_volume_audit_rejects_negative_owner_id(tmp_path):
     )
     digest = hashlib.sha256(log.read_bytes()).hexdigest()
     with pytest.raises(ValueError, match="owner list"):
+        audit_openfoam_checkmesh_poly_mesh_volume(
+            case,
+            expected_cell_count=2,
+            expected_nominal_cell_volume_m3=1.0,
+            checkmesh_log_sha256=digest,
+        )
+
+def test_poly_mesh_volume_audit_rejects_negative_point_index(tmp_path):
+    case, mesh, log = two_cell_case(tmp_path / "case")
+    faces = mesh / "faces"
+    original = faces.read_text(encoding="ascii")
+    corrupted = re.sub(r"(?<!\\d)1(?!\\d)", "-1", original)
+    assert corrupted != original
+    faces.write_text(corrupted, encoding="ascii")
+    digest = hashlib.sha256(log.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="invalid face"):
         audit_openfoam_checkmesh_poly_mesh_volume(
             case,
             expected_cell_count=2,

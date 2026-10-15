@@ -472,12 +472,13 @@ def _read_openfoam_mesh_faces(path, point_count, mesh_root):
     faces = []
     for match in matches:
         face_count = int(match.group(1))
-        point_ids = [int(token) for token in re.findall(r"\d+", match.group(2))]
+        point_ids = [int(token) for token in re.findall(r"[+-]?\d+", match.group(2))]
         if (
             len(point_ids) != face_count
             or face_count < 3
             or len(set(point_ids)) != face_count
-            or any(point_id < 0 or point_id >= point_count for point_id in point_ids)
+            or any(point_id < 0 for point_id in point_ids)
+            or any(point_id >= point_count for point_id in point_ids)
         ):
             raise ValueError("OpenFOAM mesh contains an invalid face")
         faces.append(point_ids)

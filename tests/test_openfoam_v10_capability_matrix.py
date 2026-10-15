@@ -346,7 +346,7 @@ def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
         assert "run 80" in row["test_evidence"].lower()
         assert report in row["test_evidence"]
         assert "11995514437" in row["test_evidence"]
-        assert "project" in row["remaining_gap"].lower()
+        assert row["remaining_gap"].strip()
 
     for capability_id in ("OF10-PHYSICAL-PROPERTIES", "OF10-MOMENTUM-TRANSPORT"):
         row = rows[capability_id]
@@ -355,6 +355,8 @@ def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
         assert "synthetic" in row["test_evidence"].lower()
 
     assert "project-defined mesh-quality criteria" in rows["OF10-MESH-QUALITY"]["remaining_gap"].lower()
+    assert "project-defined quality criteria" in rows["OF10-UTILITY-checkMesh"]["remaining_gap"].lower()
+    assert "physical geometry review" in rows["OF10-MESH-DESCRIPTION"]["remaining_gap"].lower()
     report_text = (ROOT / report).read_text(encoding="utf-8")
     assert "8bd5c2fd138c39ca8e836358cd622a6e13de4d2a24a7de16af1a7c32267cc839" in report_text
     assert "0.883858" in report_text

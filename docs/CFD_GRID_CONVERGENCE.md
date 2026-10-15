@@ -17,11 +17,18 @@ results; this feature does not invent them.
 
 The reproducible GitHub Foundation v10 workflow now executes all nine
 synthetic cases with `blockMesh`, `checkMesh`, `simpleFoam`, and
-`foamToVTK`. For each case it exports final-time cell velocity `U`, imports
-the VTK through CleanroomX, checks its cell count against the generated-input
-manifest, and records a source SHA-256 in the execution receipt. A post-run
-integrity pass reopens all nine files and verifies their paths, hashes, cell
-counts, and three-component velocity field before uploading a summary.
+`foamToVTK`. For each case it exports final-time cell velocity `U` and
+kinematic-pressure `p`, imports the internal-cell VTK through CleanroomX,
+checks its cell count against the generated-input manifest, and records source
+hashes in the execution receipt. It also audits the separate inlet, outlet,
+and wall patch surfaces against the native mesh faces and final-time U/p
+boundary fields. A post-run integrity pass reopens all nine internal datasets
+and all 27 patch datasets, then rechecks their paths, hashes, field counts,
+and serialized values before uploading a summary.
+
+The [run 63 report](OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md)
+records the patch mapping method, all 13,608 compared boundary faces, and the
+independent artifact recheck.
 
 This verifies solver execution and VTK ingestion for that synthetic run only.
 It does not make the residual or flux screens pass, establish mesh independence,

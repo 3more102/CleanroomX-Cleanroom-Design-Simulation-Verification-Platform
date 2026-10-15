@@ -104,6 +104,16 @@ Run 61 extends that check to native final-time `U` and `p`; its artifact,
 per-case errors, and independent digest checks are recorded in [the run 61
 U/p parity report](OPENFOAM_V10_RUN_38768856636_NATIVE_U_P_VTK_PARITY.md).
 
+Run 63 also checks the separate `inlet`, `outlet`, and `walls` patch surfaces.
+It maps VTK faces to native boundary faces by serialized point geometry, checks
+`patchID` and full face coverage, and compares patch U/p against native
+boundary-field values. The workflow covers 27 patch datasets, 13,608 faces,
+40,824 velocity components, and 13,608 pressure values; the independent
+artifact recheck and per-patch errors are in [the run 63 patch-parity report](OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md).
+This verifies only the current synthetic single-region family and its present
+boundary-condition types; it does not add patch surfaces to volume-weighted
+cleanroom metrics.
+
 ## Import actual CFD results (VTK/VTU)
 
 Export solved fields with your OpenFOAM installation's foamToVTK utility,

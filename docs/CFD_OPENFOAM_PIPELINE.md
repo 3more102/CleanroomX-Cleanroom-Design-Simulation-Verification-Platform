@@ -124,6 +124,18 @@ the float32/ASCII bounds. This checks the v10 export representation for the
 synthetic mesh family; it does not set a flow-balance criterion or establish
 solver convergence or physical validity.
 
+The Foundation v10 integration workflow also makes a separate explicit-time
+export using `foamToVTK -time 100 -useTimeName`. It requires the utility log to
+show exactly the requested `100` time, then compares the exported internal U/p,
+inlet/outlet/walls U/p, and surface `phi` datasets with the native fields in
+that same time directory. The sidecar receipt binds the command log, source
+fields, and all selected-time VTK files by SHA-256. This covers one exact time
+from the synthetic three-output case and the current field and patch family;
+it does not establish broad time-range support, solver convergence, or physical
+validation. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
+registers the time-selector options, iterates the selected time directories,
+and uses `-useTimeName` to name each dataset from the solver time name.
+
 The independently rechecked run 58 U archive and per-case native/VTK hashes
 are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).
 Run 61 extends that check to native final-time `U` and `p`; its artifact,

@@ -8,6 +8,7 @@ on:
       - "tests/test_cfd_convergence_triage.py"
       - "tests/test_cfd_scalar_audit.py"
       - "tests/test_cfd_grid_study.py"
+      - "tests/test_cfd_vtk_time_selection.py"
       - "tests/test_cfd_study.py"
       - "tests/test_openfoam_v10_capability_matrix.py"
       - "docs/OPENFOAM_FOUNDATION_V10_PARITY.md"
@@ -21,6 +22,7 @@ on:
       - "src/cleanroomx/cfd_*.py"
       - "tests/test_cfd_pipeline.py"
       - "tests/test_cfd_convergence_triage.py"
+      - "tests/test_cfd_vtk_time_selection.py"
       - "tests/test_cfd_study.py"
       - "tests/test_openfoam_v10_capability_matrix.py"
       - "docs/OPENFOAM_FOUNDATION_V10_PARITY.md"
@@ -50,4 +52,4 @@ jobs:
       - name: Verify Foundation v10 capability matrix and score
         run: python scripts/openfoam_v10_parity_score.py
       - name: CFD focused regression with real VTK fixtures
-        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py tests/test_cfd_convergence_triage.py tests/test_openfoam_v10_capability_matrix.py -ra
+        run: python -m pytest -q tests/test_cfd_study.py tests/test_cfd_pipeline.py tests/test_cfd_scalar_audit.py tests/test_cfd_grid_study.py tests/test_cfd_vtk_time_selection.py tests/test_cfd_convergence_triage.py tests/test_openfoam_v10_capability_matrix.py -ra

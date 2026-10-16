@@ -324,11 +324,15 @@ class OpenFOAMWorkspace(ttk.Frame):
         ).pack(fill="x", padx=10, pady=(2, 7))
 
         output_frame = ttk.LabelFrame(
-            self, text="Command output and evidence preview", padding=5
+            self,
+            text="Command output and evidence preview",
+            padding=5,
+            height=130,
         )
         self._output_frame = output_frame
+        output_frame.pack_propagate(False)
         output_frame.pack(
-            side="bottom", fill="both", expand=True, padx=10, pady=(2, 10)
+            side="bottom", fill="both", expand=False, padx=10, pady=(2, 10)
         )
         self.output = tk.Text(
             output_frame,

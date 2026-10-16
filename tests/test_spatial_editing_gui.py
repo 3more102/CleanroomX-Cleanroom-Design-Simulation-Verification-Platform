@@ -1082,6 +1082,11 @@ def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
     assert workspace._apply_properties_button.winfo_ismapped()
     assert workspace._inspector_sync_label.winfo_ismapped()
 
+    canvas.yview_moveto(1)
+    workspace._focus_property("x_m")
+    app.root.update()
+    assert canvas.yview()[0] < 0.9
+
     canvas.yview_moveto(0)
     workspace._property_entries["height_m"].event_generate(
         "<MouseWheel>", delta=-120

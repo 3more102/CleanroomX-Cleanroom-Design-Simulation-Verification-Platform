@@ -235,6 +235,25 @@ runs or validate scientific/physical results. Preserve immutable external
 copies and trusted timestamps/signatures where chain-of-custody is required.
 
 
+## Live ProofGraph synchronization
+
+Use `grid-sync` to keep a standalone CleanroomX ProofGraph export refreshed while
+OpenFOAM runs or its evidence is updated:
+
+```bash
+cleanroomx-cfd-pipeline grid-sync ./cfd_mesh_family \
+  --output ../cfd_grid_qualification.proofgraph.json \
+  --interval-seconds 2
+```
+
+The command watches the case family and any supplied study specifications,
+VTK files and solver logs. It rebuilds the ProofGraph after detected changes,
+checks that the watched inputs stayed stable while they were read, and publishes
+the JSON atomically outside the case family. Use `--once` for a single refresh,
+or stop continuous syncing with Ctrl+C. The output retains the same integrity,
+engineering-review and physical-validation limits described above. This refreshes
+the evidence index; raw OpenFOAM fields and logs remain in their source paths.
+
 ## Concurrent execution reservation (2026-10-09)
 
 After validating the OpenFOAM executable version and before launching any stage, `grid-run` atomically creates the directory `.grid_run_reserved` inside the generated family. A second invocation cannot create that directory and is rejected without running a solver. This is a local filesystem coordination safeguard, **not** a distributed lock or an authenticated run identifier. The reservation is deliberately retained after success, failure or interruption; existing stage logs and the receipt remain the authoritative execution evidence. Do **not** delete the reservation to force an implicit restart. Instead archive and independently verify the entire original family, then generate a fresh family in a new directory for a new run attempt. The runner does not yet provide automatic recovery or cryptographically authenticated custody. No physical or numerical approval follows from a reservation or an exit-code-zero receipt.

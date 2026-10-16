@@ -10,6 +10,7 @@ from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from .cfd_grid_runner import run_grid_family
+from .cfd_grid_sync import run_grid_sync
 from .cfd_grid_receipt import verify_grid_run_evidence
 from .cfd_grid_runner import INPUTS as GRID_INPUTS, STAGES as GRID_STAGES
 from .proofgraph_cfd import proofgraph_from_cfd_grid_family
@@ -62,6 +63,14 @@ def build_parser():
     execute_grid=sub.add_parser("grid-run",help="Opt-in: execute nine OpenFOAM v10 grid cases and record stage receipts")
     execute_grid.add_argument("directory")
     execute_grid.add_argument("--timeout-seconds",type=int,default=3600)
+    grid_sync=sub.add_parser("grid-sync",help="Live-refresh a ProofGraph from OpenFOAM evidence")
+    grid_sync.add_argument("directory",help="Generated nine-case OpenFOAM family")
+    grid_sync.add_argument("--grid-study",action="append",default=[],metavar="SPEC",
+                           help="Three-grid VTK/log study; repeat once per configuration")
+    grid_sync.add_argument("--output",required=True,help="ProofGraph JSON path outside the case family")
+    grid_sync.add_argument("--interval-seconds",type=float,default=2.0,
+                           help="Polling interval for evidence changes (default: 2 seconds)")
+    grid_sync.add_argument("--once",action="store_true",help="Publish one current snapshot and exit")
     grid_verify=sub.add_parser("grid-verify",help="Check existing nine-case receipt/log integrity without OpenFOAM")
     grid_verify.add_argument("directory")
     grid_graph=sub.add_parser("grid-proofgraph",help="Export CFD receipts and optional grid screens as a ProofGraph")
@@ -89,6 +98,11 @@ def main():
         report=run_grid_family(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(report))
         return 0 if report["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="grid-sync":
+        return run_grid_sync(
+            args.directory,args.output,grid_studies=args.grid_study,
+            interval_seconds=args.interval_seconds,once=args.once,
+        )
     if args.command=="grid-verify":
         report=verify_grid_run_evidence(args.directory)
         print(dumps_strict_json(report))

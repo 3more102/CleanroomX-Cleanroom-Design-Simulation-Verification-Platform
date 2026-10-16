@@ -1093,6 +1093,8 @@ def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
 
 def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
     workspace = app.openfoam_workspace
+    app.root.minsize(800, 300)
+    app.root.geometry("900x420")
     app.notebook.select(workspace)
     app.root.update()
 
@@ -1106,6 +1108,7 @@ def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
     assert region is not None
     assert region[3] > canvas.winfo_height()
     assert workspace.output.winfo_ismapped()
+    assert workspace._output_frame.winfo_height() >= 100
 
     canvas.yview_moveto(0)
     workspace.sync_vtk_button.event_generate("<MouseWheel>", delta=-120)

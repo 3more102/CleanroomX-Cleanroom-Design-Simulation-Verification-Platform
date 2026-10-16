@@ -3730,42 +3730,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         try:
             canvas.update_idletasks()
             region = canvas.bbox("all")
-            window = canvas.bbox(self._inspector_window)
-            if region is None or window is None:
+            if region is None:
                 return
 
-            region_top = int(region[1])
-            region_bottom = int(region[3])
-            region_height = region_bottom - region_top
+            region_height = int(region[3] - region[1])
             viewport_height = int(canvas.winfo_height())
             if region_height <= viewport_height or viewport_height <= 0:
                 return
 
-            content_y = int(window[1])
-            child: tk.Widget = entry
-            while child is not self._inspector_content:
-                content_y += int(child.winfo_y())
-                parent = child.master
-                if parent is None:
-                    return
-                child = parent
-
-            entry_top = content_y
+            canvas_top = int(canvas.winfo_rooty())
+            canvas_bottom = canvas_top + viewport_height
+            entry_top = int(entry.winfo_rooty())
             entry_bottom = entry_top + int(entry.winfo_height())
-            current_top = region_top + int(canvas.yview()[0] * region_height)
-            current_bottom = current_top + viewport_height
-            if entry_top < current_top:
-                target_top = entry_top
-            elif entry_bottom > current_bottom:
-                target_top = entry_bottom - viewport_height
+            margin = min(3, max(0, (viewport_height - entry.winfo_height()) // 2))
+            if entry_top < canvas_top:
+                scroll_delta = entry_top - canvas_top - margin
+            elif entry_bottom > canvas_bottom:
+                scroll_delta = entry_bottom - canvas_bottom + margin
             else:
                 return
 
-            target_top = min(
-                max(region_top, target_top),
-                max(region_top, region_bottom - viewport_height),
+            current_offset = int(canvas.yview()[0] * region_height)
+            max_offset = max(0, region_height - viewport_height)
+            target_offset = min(
+                max(0, current_offset + scroll_delta),
+                max_offset,
             )
-            canvas.yview_moveto((target_top - region_top) / region_height)
+            canvas.yview_moveto(target_offset / region_height)
+            canvas.update_idletasks()
         except tk.TclError:
             return
 

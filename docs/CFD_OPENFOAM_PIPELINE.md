@@ -299,8 +299,9 @@ Run 90 applied this audit to all nine generated cases. Its 54 internal-field, pa
 For a single fixed-mesh run with several selected VTK snapshots, use the
 [selected-time field analysis](CFD_TIME_STABILITY.md) and
 `cleanroomx-cfd-pipeline time-audit`. It reports volume-weighted field
-distributions and change across the selected solver-time labels, then checks
-an explicitly project-defined range screen alongside the solver-log screen.
+distributions and consecutive same-mesh cell-field changes across the selected
+solver-time labels, then checks explicit project limits for mean range, field
+change, and room-volume error alongside the solver-log screen.
 This is a separate diagnostic from grid-audit: it can identify a changing
 quantity of interest but does not qualify the flow or make GCI a validation
 result. The exact-head synthetic integration workflow is configured to select

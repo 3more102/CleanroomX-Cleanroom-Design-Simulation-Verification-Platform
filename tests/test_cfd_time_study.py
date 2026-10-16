@@ -13,6 +13,7 @@ import cleanroomx.cfd_time_study as time_study_module
 from cleanroomx.cfd_pipeline_cli import main
 from cleanroomx.cfd_time_study import (
     SCHEMA,
+    _pairwise_field_change,
     _weighted_quantile,
     analyze_vtk_time_study,
     render_time_study_plot,
@@ -97,6 +98,7 @@ def _spec(times=("50", "75", "100"), *, quantity="velocity_mean_m_s"):
             "minimum_samples": 3,
             "max_relative_range": 0.04,
             "max_relative_volume_error": 0.001,
+            "max_relative_field_change": 0.04,
         },
         "samples": [
             {"solver_time_name": value, "vtk_file": f"sample-{index}.vtu"}
@@ -137,6 +139,12 @@ def test_fixed_mesh_series_reports_distribution_trend_and_threshold_screen(tmp_p
     assert summary["relative_range_over_mean_absolute_value"] == pytest.approx(0.03 / 1.0166666667)
     assert summary["linear_trend_slope_per_solver_time_unit"] == pytest.approx(0.0006)
     assert summary["screening_status"] == "WITHIN_PROJECT_RANGE_SCREEN"
+    field_change = report["field_change_analysis"]
+    assert field_change["pair_count"] == 2
+    assert field_change["maximum_symmetric_relative_l2_change"] == pytest.approx(
+        0.02 / 1.01
+    )
+    assert field_change["screening_status"] == "WITHIN_PROJECT_FIELD_CHANGE_SCREEN"
     assert report["blockers"] == []
 
 
@@ -185,6 +193,45 @@ def test_distinct_mesh_geometry_blocks_review_but_keeps_metrics(tmp_path):
     assert any("identical point-and-cell mesh" in value for value in report["blockers"])
 
 
+def test_field_change_screen_catches_redistribution_hidden_by_constant_mean(tmp_path):
+    pytest.importorskip("vtk")
+    _write_log(tmp_path / "solver.log")
+    spec = _spec()
+    spec["room_volume_m3"] = 2.0
+    spec["criteria"]["max_relative_range"] = 0.0
+    spec["criteria"]["max_relative_field_change"] = 0.1
+    for index, velocities in enumerate(([1.0, 3.0], [3.0, 1.0], [1.0, 3.0])):
+        _write_vtu(
+            tmp_path / f"sample-{index}.vtu",
+            velocities,
+            contaminant=[1.0, 1.0],
+        )
+
+    report = analyze_vtk_time_study(spec, base_directory=tmp_path)
+
+    assert report["series_analysis"]["relative_range_over_mean_absolute_value"] == 0.0
+    assert report["series_analysis"]["screening_status"] == "WITHIN_PROJECT_RANGE_SCREEN"
+    assert report["field_change_analysis"]["maximum_symmetric_relative_l2_change"] == pytest.approx(
+        2.0 / math.sqrt(5.0)
+    )
+    assert report["field_change_analysis"]["screening_status"] == "ABOVE_PROJECT_FIELD_CHANGE_SCREEN"
+    assert "Cell-field change exceeds the project-defined screen" in report["blockers"]
+    assert report["engineering_review"] == "BLOCKED"
+
+
+def test_missing_project_field_change_limit_keeps_review_blocked(tmp_path):
+    pytest.importorskip("vtk")
+    _fixture_files(tmp_path)
+    spec = _spec()
+    spec["criteria"]["max_relative_field_change"] = None
+
+    report = analyze_vtk_time_study(spec, base_directory=tmp_path)
+
+    assert report["field_change_analysis"]["screening_status"] == "NO_PROJECT_FIELD_CHANGE_CRITERION"
+    assert report["engineering_review"] == "BLOCKED"
+    assert "No project-defined maximum relative field change was supplied" in report["blockers"]
+
+
 def test_failed_solver_log_screen_does_not_hide_field_analysis(tmp_path):
     pytest.importorskip("vtk")
     _fixture_files(tmp_path, log_initial="1e-2")
@@ -223,6 +270,14 @@ def test_time_study_rejects_invalid_user_defined_range_criteria(bad_limit):
     data = _spec()
     data["criteria"]["max_relative_range"] = bad_limit
     with pytest.raises(ValueError, match="max_relative_range"):
+        validate_time_study(data)
+
+
+@pytest.mark.parametrize("bad_limit", [True, -0.1, 2.001, math.inf])
+def test_time_study_rejects_invalid_user_defined_field_change_criteria(bad_limit):
+    data = _spec()
+    data["criteria"]["max_relative_field_change"] = bad_limit
+    with pytest.raises(ValueError, match="max_relative_field_change"):
         validate_time_study(data)
 
 
@@ -345,3 +400,26 @@ def test_time_study_plot_cli_adds_plot_provenance_and_guards_inputs(tmp_path, mo
 
 def test_weighted_quantile_uses_cell_volume():
     assert _weighted_quantile([(1.0, 9.0), (3.0, 1.0)], 0.5) == 1.0
+
+
+def test_symmetric_field_change_handles_zero_fields_without_division_by_zero():
+    zero_cells = [{"volume_m3": 1.0, "velocity_m_s": [0.0, 0.0, 0.0]}]
+    unchanged = _pairwise_field_change(
+        zero_cells,
+        zero_cells,
+        quantity="velocity_mean_m_s",
+        previous_time_name="0",
+        current_time_name="1",
+    )
+    activated = _pairwise_field_change(
+        zero_cells,
+        [{"volume_m3": 1.0, "velocity_m_s": [1.0, 0.0, 0.0]}],
+        quantity="velocity_mean_m_s",
+        previous_time_name="0",
+        current_time_name="1",
+    )
+
+    assert unchanged["volume_weighted_rms_absolute_change"] == 0.0
+    assert unchanged["symmetric_relative_l2_change"] == 0.0
+    assert activated["volume_weighted_rms_absolute_change"] == 1.0
+    assert activated["symmetric_relative_l2_change"] == 2.0

@@ -82,6 +82,7 @@ def validate_time_study(data: dict) -> dict:
 
     criteria = _mapping(data["criteria"], {
         "minimum_samples", "max_relative_range", "max_relative_volume_error",
+        "max_relative_field_change",
     }, "criteria")
     minimum = criteria["minimum_samples"]
     if type(minimum) is not int or not 3 <= minimum <= MAX_SAMPLES:
@@ -94,6 +95,13 @@ def validate_time_study(data: dict) -> dict:
         volume_limit = _number(volume_limit, "max_relative_volume_error", nonnegative=True)
         if volume_limit > 1:
             raise ValueError("max_relative_volume_error must be <= 1")
+    field_change_limit = criteria["max_relative_field_change"]
+    if field_change_limit is not None:
+        field_change_limit = _number(
+            field_change_limit, "max_relative_field_change", nonnegative=True
+        )
+        if field_change_limit > 2:
+            raise ValueError("max_relative_field_change must be <= 2")
 
     audit = _mapping(data["log_audit"], {
         "fields", "window", "max_initial_residual", "max_final_residual",
@@ -288,6 +296,133 @@ def _series_summary(rows: list[dict], criteria: dict) -> dict:
     }
 
 
+def _cell_field_components(cell: dict, quantity: str) -> tuple[float, ...]:
+    if quantity == "velocity_mean_m_s":
+        return tuple(cell["velocity_m_s"])
+    return (cell["contaminant_concentration"],)
+
+
+def _pairwise_field_change(
+    previous_cells: list[dict],
+    current_cells: list[dict],
+    *,
+    quantity: str,
+    previous_time_name: str,
+    current_time_name: str,
+) -> dict:
+    """Compare consecutive cell fields using volume-weighted symmetric L2 change."""
+    if len(previous_cells) != len(current_cells) or not current_cells:
+        raise ValueError("Identical mesh fingerprints produced incompatible cell counts")
+    volumes = []
+    previous_values = []
+    current_values = []
+    scale = 0.0
+    for index, (previous, current) in enumerate(zip(previous_cells, current_cells)):
+        volume = current["volume_m3"]
+        if previous["volume_m3"] != volume:
+            raise ValueError(
+                f"Identical mesh fingerprints produced different cell volumes at cell {index}"
+            )
+        old = _cell_field_components(previous, quantity)
+        new = _cell_field_components(current, quantity)
+        if len(old) != len(new) or not all(math.isfinite(value) for value in old + new):
+            raise ValueError("Selected VTK time fields have incompatible or non-finite components")
+        volumes.append(volume)
+        previous_values.append(old)
+        current_values.append(new)
+        scale = max(scale, *(abs(value) for value in old + new))
+
+    total_volume = math.fsum(volumes)
+    if not math.isfinite(total_volume) or total_volume <= 0:
+        raise ValueError("Selected VTK time fields have invalid total cell volume")
+
+    if scale == 0:
+        previous_rms = current_rms = difference_rms = 0.0
+    else:
+        previous_rms = math.sqrt(math.fsum(
+            (volume / total_volume)
+            * math.fsum((value / scale) ** 2 for value in values)
+            for volume, values in zip(volumes, previous_values)
+        ))
+        current_rms = math.sqrt(math.fsum(
+            (volume / total_volume)
+            * math.fsum((value / scale) ** 2 for value in values)
+            for volume, values in zip(volumes, current_values)
+        ))
+        difference_rms = math.sqrt(math.fsum(
+            (volume / total_volume)
+            * math.fsum(
+                ((new - old) / scale) ** 2
+                for old, new in zip(previous, current)
+            )
+            for volume, previous, current in zip(
+                volumes, previous_values, current_values
+            )
+        ))
+
+    absolute_change = scale * difference_rms
+    reference_rms = scale * (previous_rms + current_rms) / 2.0
+    if not math.isfinite(absolute_change) or not math.isfinite(reference_rms):
+        raise ValueError("Selected VTK time-field change exceeds finite numeric range")
+    relative_change = (
+        difference_rms / ((previous_rms + current_rms) / 2.0)
+        if previous_rms + current_rms > 0 else 0.0
+    )
+    if not math.isfinite(relative_change):
+        raise ValueError("Selected VTK time-field relative change is non-finite")
+    return {
+        "previous_solver_time_name": previous_time_name,
+        "solver_time_name": current_time_name,
+        "cell_count": len(current_cells),
+        "total_cell_volume_m3": total_volume,
+        "volume_weighted_rms_absolute_change": absolute_change,
+        "symmetric_relative_l2_change": relative_change,
+    }
+
+
+def _field_change_summary(
+    pairwise_changes: list[dict], *, same_mesh: bool, criteria: dict, quantity: str
+) -> dict:
+    limit = criteria["max_relative_field_change"]
+    comparable = [
+        pair for pair in pairwise_changes if pair["status"] == "COMPARABLE"
+    ]
+    maximum_pair = max(
+        comparable,
+        key=lambda pair: pair["symmetric_relative_l2_change"],
+        default=None,
+    )
+    maximum = (
+        maximum_pair["symmetric_relative_l2_change"]
+        if maximum_pair is not None else None
+    )
+    if not same_mesh:
+        status = "MESH_MISMATCH"
+    elif len(pairwise_changes) < 1:
+        status = "INSUFFICIENT_SELECTED_TIMES"
+    elif limit is None:
+        status = "NO_PROJECT_FIELD_CHANGE_CRITERION"
+    elif maximum is None:
+        status = "NO_COMPARABLE_FIELD_PAIRS"
+    elif maximum <= limit:
+        status = "WITHIN_PROJECT_FIELD_CHANGE_SCREEN"
+    else:
+        status = "ABOVE_PROJECT_FIELD_CHANGE_SCREEN"
+    return {
+        "comparison": (
+            "Consecutive selected outputs; volume-weighted symmetric relative L2 "
+            f"change of the full {quantity} cell field"
+        ),
+        "pair_count": len(pairwise_changes),
+        "comparable_pair_count": len(comparable),
+        "pairwise_changes": pairwise_changes,
+        "maximum_symmetric_relative_l2_change": maximum,
+        "maximum_change_pair": maximum_pair,
+        "project_max_relative_field_change": limit,
+        "screening_status": status,
+    }
+
+
 def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> dict:
     """Summarize fixed-mesh field distributions and temporal QoI variation."""
     validate_time_study(data)
@@ -299,6 +434,10 @@ def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> d
     geometry_hashes = set()
     resolved_vtk_paths = set()
     total_vtk_bytes = 0
+    pairwise_changes = []
+    previous_cells = None
+    previous_geometry_hash = None
+    previous_time_name = None
     for sample in data["samples"]:
         vtk_path = _resolve_input(base, sample["vtk_file"], "VTK sample")
         if vtk_path in resolved_vtk_paths:
@@ -324,6 +463,24 @@ def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> d
             raise ValueError("Selected VTK sample has a non-finite room-volume error")
         geometry_hash = imported["mesh_geometry_sha256"]
         geometry_hashes.add(geometry_hash)
+        if previous_cells is not None:
+            if previous_geometry_hash != geometry_hash:
+                pairwise_changes.append({
+                    "previous_solver_time_name": previous_time_name,
+                    "solver_time_name": sample["solver_time_name"],
+                    "status": "MESH_MISMATCH",
+                })
+            else:
+                pairwise_changes.append({
+                    "status": "COMPARABLE",
+                    **_pairwise_field_change(
+                        previous_cells,
+                        imported["cells"],
+                        quantity=data["quantity"],
+                        previous_time_name=previous_time_name,
+                        current_time_name=sample["solver_time_name"],
+                    ),
+                })
         rows.append({
             "solver_time_name": sample["solver_time_name"],
             "solver_time_value": float(sample["solver_time_name"]),
@@ -332,8 +489,12 @@ def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> d
             "relative_room_volume_error": volume_error,
             "field_summary": field_summary,
         })
+        previous_cells = imported["cells"]
+        previous_geometry_hash = geometry_hash
+        previous_time_name = sample["solver_time_name"]
 
-    if len(geometry_hashes) != 1:
+    same_mesh = len(geometry_hashes) == 1
+    if not same_mesh:
         blockers.append("Selected VTK samples do not share an identical point-and-cell mesh")
     volume_limit = data["criteria"]["max_relative_volume_error"]
     if volume_limit is None:
@@ -352,6 +513,18 @@ def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> d
             blockers.append("Temporal quantity range exceeds the project-defined screen")
         elif range_status == "UNDEFINED_RELATIVE_SCALE":
             blockers.append("Temporal relative range cannot be computed for the selected quantity scale")
+    field_change = _field_change_summary(
+        pairwise_changes,
+        same_mesh=same_mesh,
+        criteria=data["criteria"],
+        quantity=data["quantity"],
+    )
+    if field_change["screening_status"] == "NO_PROJECT_FIELD_CHANGE_CRITERION":
+        blockers.append("No project-defined maximum relative field change was supplied")
+    elif field_change["screening_status"] == "ABOVE_PROJECT_FIELD_CHANGE_SCREEN":
+        blockers.append("Cell-field change exceeds the project-defined screen")
+    elif field_change["screening_status"] == "NO_COMPARABLE_FIELD_PAIRS":
+        blockers.append("No comparable same-mesh selected-time field pairs are available")
     if log_screen["status"] != "numerically_screened":
         blockers.append("Solver-log residual screen did not pass")
 
@@ -371,8 +544,9 @@ def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> d
         "vtk_source_bytes": total_vtk_bytes,
         "solver_log_screen": log_screen,
         "samples": rows,
-        "all_mesh_geometry_identical": len(geometry_hashes) == 1,
+        "all_mesh_geometry_identical": same_mesh,
         "series_analysis": _series_summary(rows, data["criteria"]),
+        "field_change_analysis": field_change,
         "criteria": dict(data["criteria"]),
         "engineering_review": "READY_FOR_ENGINEERING_REVIEW" if not blockers else "BLOCKED",
         "blockers": blockers,

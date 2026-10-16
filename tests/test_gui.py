@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -1175,6 +1176,39 @@ def test_bundled_demo_results_produce_actual_computed_plot():
         assert len(series["x"]) >= 2
     assert gui_module.build_parser().parse_args(["--demo-results"]).demo_results
     json.dumps(run.to_dict(), allow_nan=False)
+
+
+
+def test_open_demo_plot_analysis_selects_plot_and_starts_run():
+    plot_tab = object()
+    events = []
+    project = SimpleNamespace(
+        analyses=[SimpleNamespace(kind="fan_operating_point", id="fan-demo")],
+        active_analysis_id=None,
+    )
+    app = SimpleNamespace(
+        project=project,
+        notebook=SimpleNamespace(select=lambda tab: events.append(("tab", tab))),
+        plot_canvas=SimpleNamespace(master=plot_tab),
+        workspace_status_var=SimpleNamespace(
+            set=lambda value: events.append(("status", value))
+        ),
+        _refresh_analysis_list=lambda **kwargs: events.append(("refresh", kwargs)),
+        _update_title=lambda: events.append(("title", None)),
+        run_current=lambda: events.append(("run", None)),
+    )
+    app.select_demo_plot_analysis = lambda: CleanroomXApp.select_demo_plot_analysis(app)
+
+    CleanroomXApp.open_demo_plot_analysis(app)
+
+    assert project.active_analysis_id == "fan-demo"
+    assert ("refresh", {"select_id": "fan-demo"}) in events
+    assert ("tab", plot_tab) in events
+    assert (
+        "status",
+        "Workspace: Plot — calculating example fan/system curves",
+    ) in events
+    assert events[-1] == ("run", None)
 
 
 def test_demo_plot_selection_fails_without_numerical_example():

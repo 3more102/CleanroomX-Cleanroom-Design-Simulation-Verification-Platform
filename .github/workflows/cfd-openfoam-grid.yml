@@ -1166,7 +1166,7 @@ jobs:
 
       - name: Run and synchronize a real passive-tracer case
         run: |
-          set -euo pipefail
+          set -eo pipefail
           source /opt/openfoam10/etc/bashrc
           python scripts/openfoam_v10_scalar_sync_smoke.py \
             "$RUNNER_TEMP/cleanroomx-cfd-grid-family" \

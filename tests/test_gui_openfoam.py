@@ -10,6 +10,7 @@ import pytest
 
 from cleanroomx import gui_openfoam
 from cleanroomx.gui_openfoam import (
+    OpenFOAMWorkspace,
     build_openfoam_generate_command,
     build_openfoam_run_command,
     build_openfoam_sync_vtk_command,
@@ -180,4 +181,22 @@ def test_windows_force_stop_uses_taskkill_tree(monkeypatch) -> None:
 
     assert calls[0][0] == ["taskkill", "/PID", "4321", "/T", "/F"]
     assert calls[0][1].get("shell", False) is False
+
+
+def test_case_verification_summary_keeps_validation_limit_clear() -> None:
+    summary = OpenFOAMWorkspace._format_case_verification(
+        {
+            "files_checked": 24,
+            "files_expected": 24,
+            "boundary_audits_passed": 3,
+            "total_bytes_checked": 2048,
+            "manifest_sha256": "a" * 64,
+        }
+    )
+
+    assert "Case-input hashes: MATCH local manifest" in summary
+    assert "Generated inputs: 24/24" in summary
+    assert "Boundary-input consistency: 3/3 configurations passed" in summary
+    assert "Manifest trust: local file; not digitally signed" in summary
+    assert "Scientific validation: BLOCKED" in summary
 

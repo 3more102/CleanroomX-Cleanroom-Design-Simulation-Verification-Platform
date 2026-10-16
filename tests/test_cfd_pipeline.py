@@ -10,6 +10,7 @@ import pytest
 from cleanroomx.cfd_openfoam import (
     SCHEMA, _hex_exterior_face_signatures, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
     parse_openfoam_checkmesh_log, run_openfoam_cases, validate_openfoam_spec,
+    verify_openfoam_case_bundle,
 )
 from cleanroomx.cfd_vtk import (
     audit_openfoam_vtk_boundary_patch,
@@ -62,6 +63,60 @@ def test_mesh_and_flow_generation(tmp_path):
         export_openfoam_cases(s,tmp_path/"cases")
     copy=export_openfoam_cases(s,tmp_path/"other")
     assert copy==manifest
+
+
+def test_case_bundle_preflight_verifies_all_inputs_and_boundary_audits(tmp_path):
+    case_directory = tmp_path / "cases"
+    export_openfoam_cases(spec(), case_directory)
+
+    report = verify_openfoam_case_bundle(case_directory)
+
+    assert report["status"] == "verified_against_local_manifest"
+    assert report["interpretation"] == "input_integrity_and_boundary_consistency_only"
+    assert report["files_checked"] == report["files_expected"] == 24
+    assert len(report["files"]) == 24
+    assert all(item["verified"] for item in report["files"])
+    assert report["boundary_audits_passed"] == 3
+    assert set(report["boundary_audits"]) == {"1", "2", "3"}
+    assert report["scientific_validation"] == "BLOCKED"
+    assert report["boundary_audits"]["1"]["flow_balance_status"] == "not_measured"
+
+
+def test_case_bundle_preflight_rejects_tampered_file(tmp_path):
+    case_directory = tmp_path / "cases"
+    export_openfoam_cases(spec(), case_directory)
+    target = case_directory / "configuration_2" / "0" / "U"
+    target.write_text(target.read_text() + "\n// changed\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Tampered generated solver file: configuration_2/0/U"):
+        verify_openfoam_case_bundle(case_directory)
+
+
+def test_case_bundle_preflight_rejects_symbolic_link_inputs(tmp_path):
+    case_directory = tmp_path / "cases"
+    export_openfoam_cases(spec(), case_directory)
+    target = case_directory / "configuration_1" / "0" / "U"
+    external = tmp_path / "external-U"
+    target.rename(external)
+    try:
+        target.symlink_to(external)
+    except OSError as error:
+        pytest.skip(f"file symlinks are unavailable: {error}")
+
+    with pytest.raises(ValueError, match="Symbolic links are not allowed"):
+        verify_openfoam_case_bundle(case_directory)
+
+
+def test_case_bundle_preflight_rechecks_boundary_metadata(tmp_path):
+    case_directory = tmp_path / "cases"
+    manifest = export_openfoam_cases(spec(), case_directory)
+    manifest["evidence"]["3"]["boundary_audit"]["flow_balance_status"] = "passed"
+    (case_directory / "manifest.json").write_text(
+        json.dumps(manifest, sort_keys=True, indent=2), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="Boundary audit metadata mismatch for configuration 3"):
+        verify_openfoam_case_bundle(case_directory)
 
 @pytest.mark.parametrize("configuration",[1,2,3])
 def test_boundary_audit_rejects_outward_inlet_velocity(configuration):

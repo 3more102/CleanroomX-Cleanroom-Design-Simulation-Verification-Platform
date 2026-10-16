@@ -1146,3 +1146,43 @@ def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
     workspace.sync_vtk_button.event_generate("<MouseWheel>", delta=-120)
     app.root.update()
     assert canvas.yview()[0] > 0
+
+
+def test_openfoam_case_preflight_is_background_and_preserves_project(app, monkeypatch, tmp_path):
+    workspace = app.openfoam_workspace
+    app.notebook.select(workspace)
+    workspace.case_directory_var.set(str(tmp_path / "cases"))
+    project_before = copy.deepcopy(app.project.to_dict())
+    report = {
+        "files_checked": 24,
+        "files_expected": 24,
+        "boundary_audits_passed": 3,
+        "total_bytes_checked": 2048,
+        "manifest_sha256": "b" * 64,
+    }
+    monkeypatch.setattr(
+        "cleanroomx.gui_openfoam.verify_openfoam_case_bundle",
+        lambda directory: report,
+    )
+
+    class ImmediateThread:
+        def __init__(self, *, target, args, **_kwargs):
+            self.target = target
+            self.args = args
+
+        def start(self):
+            self.target(*self.args)
+
+    monkeypatch.setattr("cleanroomx.gui_openfoam.threading.Thread", ImmediateThread)
+    workspace._verify_case_bundle()
+
+    assert workspace.verify_button.instate(["disabled"])
+    assert workspace.stop_button.instate(["disabled"])
+    workspace._drain_events()
+    app.root.update()
+
+    assert not workspace.verify_button.instate(["disabled"])
+    assert workspace.stop_button.instate(["disabled"])
+    assert "Generated inputs: 24/24" in workspace.output.get("1.0", "end")
+    assert "Scientific validation: BLOCKED" in workspace.output.get("1.0", "end")
+    assert app.project.to_dict() == project_before

@@ -114,7 +114,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(10, 8),
     )
     style.configure(
         "TLabelframe.Label",
@@ -129,7 +128,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         bordercolor=palette["border"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(10, 6),
+        padding=(8, 5),
         focuscolor=palette["accent"],
     )
     style.map(
@@ -172,7 +171,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         insertcolor=palette["text"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(7, 5),
+        padding=(5, 3),
     )
     style.map(
         "TEntry",
@@ -221,7 +220,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         "TNotebook.Tab",
         background=palette["surface_alt"],
         foreground=palette["muted"],
-        padding=(13, 7),
+        padding=(13, 6),
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9),
     )
@@ -243,7 +242,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         fieldbackground=palette["tree"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        rowheight=26,
+        rowheight=24,
     )
     style.map(
         "Treeview",
@@ -256,7 +255,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         foreground=palette["text"],
         bordercolor=palette["border"],
         font=("TkDefaultFont", 9, "bold"),
-        padding=(8, 5),
+        padding=(6, 3),
     )
     style.map(
         "Treeview.Heading",
@@ -349,7 +348,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.Toolbar.TFrame",
         background=palette["surface"],
-        padding=(5, 4),
+        padding=(4, 3),
     )
     style.configure(
         "CX.Topbar.TFrame",
@@ -387,7 +386,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
     style.configure(
         "CX.PanelHeader.TFrame",
         background=palette["surface_alt"],
-        padding=(8, 5),
+        padding=(6, 4),
     )
     style.configure(
         "CX.PanelHeader.TLabel",
@@ -400,7 +399,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         background=palette["surface_alt"],
         foreground=palette["text"],
         bordercolor=palette["border"],
-        padding=(7, 4),
+        padding=(6, 3),
     )
     style.map(
         "CX.Compact.TButton",
@@ -421,7 +420,7 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
             bordercolor=palette[f"{stage}_surface"],
             lightcolor=palette[f"{stage}_surface"],
             darkcolor=palette[f"{stage}_surface"],
-            padding=(9, 5),
+            padding=(7, 4),
             font=("TkDefaultFont", 9, "bold"),
         )
         style.map(

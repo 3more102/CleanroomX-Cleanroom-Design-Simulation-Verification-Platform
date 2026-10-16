@@ -2417,7 +2417,7 @@ class CleanroomXApp:
             style="CX.Topbar.TFrame",
             padding=(10, 5, 10, 4),
         )
-        topbar.pack(fill="x", padx=10, pady=(8, 3))
+        topbar.pack(fill="x", padx=10, pady=(2, 2))
         ttk.Label(
             topbar,
             text="CLEANROOMX",
@@ -2565,7 +2565,7 @@ class CleanroomXApp:
         workflowbar = ttk.Frame(
             self.root,
             style="CX.Toolbar.TFrame",
-            padding=(10, 4),
+            padding=(10, 3),
         )
         self.workflowbar = workflowbar
         workflowbar.pack(fill="x", padx=10, pady=(0, 4))

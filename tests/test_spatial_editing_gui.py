@@ -621,21 +621,21 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
 
     assert app.theme_var.get() == "dark"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-    assert app.spatial_workspace._inspector_canvas.cget("background") == "#14191f"
-    assert app.openfoam_workspace._workflow_canvas.cget("background") == "#14191f"
-    assert app.openfoam_workspace.output.cget("background") == "#11161c"
-    assert app.plot_canvas.cget("background") == "#131920"
-    assert app.input_text.cget("background") == "#11161c"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#18242d"
+    assert app.spatial_workspace.canvas_3d.cget("background") == "#0d141a"
+    assert app.spatial_workspace._inspector_canvas.cget("background") == "#101820"
+    assert app.openfoam_workspace._workflow_canvas.cget("background") == "#101820"
+    assert app.openfoam_workspace.output.cget("background") == "#121b22"
+    assert app.plot_canvas.cget("background") == "#111b22"
+    assert app.input_text.cget("background") == "#121b22"
     assert app.project.to_dict() == project_before
 
     app.toggle_theme()
     app.root.update()
     assert app.theme_var.get() == "light"
-    assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
-    assert app.spatial_workspace._inspector_canvas.cget("background") == "#e9edf2"
-    assert app.openfoam_workspace._workflow_canvas.cget("background") == "#e9edf2"
+    assert app.spatial_workspace.canvas_2d.cget("background") == "#fafcfd"
+    assert app.spatial_workspace._inspector_canvas.cget("background") == "#edf2f5"
+    assert app.openfoam_workspace._workflow_canvas.cget("background") == "#edf2f5"
     assert app.project.to_dict() == project_before
 
 
@@ -669,9 +669,9 @@ def test_theme_persists_with_ui_layout_across_restart(tmp_path):
     root2.update()
     try:
         assert second.theme_var.get() == "dark"
-        assert second.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
-        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
-        assert second.plot_canvas.cget("background") == "#131920"
+        assert second.spatial_workspace.canvas_2d.cget("background") == "#18242d"
+        assert second.spatial_workspace.canvas_3d.cget("background") == "#0d141a"
+        assert second.plot_canvas.cget("background") == "#111b22"
     finally:
         second._autosave_manager.shutdown(wait=False)
         root2.destroy()

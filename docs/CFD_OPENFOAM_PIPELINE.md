@@ -137,6 +137,15 @@ validation. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/Open
 registers comma-separated time ranges, iterates the selected time directories,
 and uses `-useTimeName` to name each dataset from the solver time name.
 
+Foundation v10 run 94 completed this `50,100` audit for all nine synthetic
+cases. Its [multi-time report](OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md)
+records 18 case-time pairs and 108 passing internal, patch, and surface-flux
+parity records. Independent replay matched all 72 generated-input hashes, 36
+baseline stage-log hashes, the manifest and execution-receipt hashes, and all
+153 selected-time file records. The artifact SHA-256 is
+`fa5b85af0e8ed2470101747540f22808032ba1959c0f41548551b62a24f060a3`.
+The results remain `DIAGNOSTIC_ONLY`; scientific validation remains `BLOCKED`.
+
 Run 90 applied this audit to all nine generated cases. Its 54 internal-field, patch, and surface-flux parity records passed, including 13,608 patch faces. The [run 90 report](OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md) records the independent artifact-digest and file-hash replay. Residual and flow-balance screens remain diagnostic; scientific validation remains BLOCKED.
 
 The independently rechecked run 58 U archive and per-case native/VTK hashes

@@ -428,7 +428,8 @@ def test_run_90_explicit_time_vtk_evidence_stays_partial():
         assert report in row["test_evidence"]
         assert all(term in row["test_evidence"].lower() for term in evidence)
         assert row["remaining_gap"].strip()
-        assert "multiple-time selection remains unverified" in row["remaining_gap"].lower()
+        assert "explicit time selection at 50 and 100 is verified" in row["remaining_gap"].lower()
+        assert "arbitrary time ranges" in row["remaining_gap"].lower()
 
     report_text = (ROOT / report).read_text(encoding="utf-8")
     assert "14,874,702 bytes" in report_text
@@ -439,6 +440,47 @@ def test_run_90_explicit_time_vtk_evidence_stays_partial():
     assert "36 baseline stage-log hashes" in report_text
     assert "All 18 terminal `U`/`p` residual screens remain `NOT_BELOW_TOLERANCE`" in report_text
     assert "scientific_validation` `BLOCKED`" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_94_multi_time_vtk_evidence_stays_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md"
+    evidence = (
+        "run 94",
+        "12033234866",
+        "fa5b85af0e8ed2470101747540f22808032ba1959c0f41548551b62a24f060a3",
+        "50,100",
+        "18 case-time pairs",
+        "153 selected-time file records",
+    )
+
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert report in row["test_evidence"]
+        assert all(term in row["test_evidence"].lower() for term in evidence)
+        assert "arbitrary time ranges" in row["remaining_gap"].lower()
+        assert "time-zero inclusion" in row["remaining_gap"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "17,817,800 bytes" in report_text
+    assert "all 72 generated-input hashes" in report_text.lower()
+    assert "all 36 baseline stage-log hashes" in report_text.lower()
+    assert "all 153 selected-time records" in report_text.lower()
+    assert "108 parity records passed" in report_text
+    assert "scientific_validation: BLOCKED" in report_text
 
     result = subprocess.run(
         [sys.executable, str(SCORER), "--format", "json"],

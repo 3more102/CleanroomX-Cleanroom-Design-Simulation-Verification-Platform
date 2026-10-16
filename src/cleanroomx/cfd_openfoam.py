@@ -543,12 +543,14 @@ def verify_openfoam_case_bundle(directory):
         # a file inside the selected case bundle.
         current = root
         components = Path(relative).parts
+        checked_components = []
         for index, component in enumerate(components):
             current = current / component
             try:
                 info = current.lstat()
             except OSError as error:
                 raise ValueError(f"Missing generated solver file: {relative}") from error
+            checked_components.append((current, info))
             if stat.S_ISLNK(info.st_mode):
                 raise ValueError(
                     f"Symbolic links are not allowed in case inputs: {relative}"
@@ -591,6 +593,27 @@ def verify_openfoam_case_bundle(directory):
             total_bytes += metadata.st_size
             if total_bytes > MAX_CASE_INPUT_TOTAL_BYTES:
                 raise ValueError("Case bundle exceeds the total input size limit")
+
+        # Revalidate the exact path components after opening and hashing. A
+        # directory replaced with a symlink during the read must not be able
+        # to redirect this preflight to an external, hash-matching file.
+        for checked_path, checked_info in checked_components:
+            try:
+                current_info = checked_path.lstat()
+            except OSError as error:
+                raise ValueError(
+                    f"Case input path changed during preflight: {relative}"
+                ) from error
+            same_identity = (
+                current_info.st_dev == checked_info.st_dev
+                and current_info.st_ino == checked_info.st_ino
+                and stat.S_IFMT(current_info.st_mode)
+                == stat.S_IFMT(checked_info.st_mode)
+            )
+            if stat.S_ISLNK(current_info.st_mode) or not same_identity:
+                raise ValueError(
+                    f"Case input path changed during preflight: {relative}"
+                )
         file_records.append(
             {
                 "path": relative,

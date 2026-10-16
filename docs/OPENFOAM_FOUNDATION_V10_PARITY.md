@@ -226,11 +226,15 @@ python -m py_compile src/cleanroomx/cfd_openfoam.py scripts/openfoam_v10_parity_
   passed
 ```
 
-These are focused module tests, not a full-repository regression. Required CI
-on the rebased PR head remains pending. The runner tests use mocked process
-output; they verify release screening and receipt logic only. No local
-OpenFOAM executable was available, so this software test does not establish a
-real solve.
+These are focused module tests. The same code commit
+`124f5b42d9e5966d2e02c72b98738e5b2ce645ef` subsequently passed Required CI
+[run 4844](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38872145402):
+the full suite reported 2,382 passed and 84 skipped on Python 3.11, 3.12,
+and 3.13; native BIM, doctor/wheel, and Windows launcher jobs also passed.
+CFD VTK Regression [run 508](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38872145528)
+passed as well. The runner tests use mocked process output; they verify
+release screening and receipt logic only. No local OpenFOAM executable was
+available, so these software checks do not establish a real solve.
 
 ## Reproduce the score
 

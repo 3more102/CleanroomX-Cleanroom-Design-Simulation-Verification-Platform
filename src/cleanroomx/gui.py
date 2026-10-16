@@ -3139,6 +3139,10 @@ class CleanroomXApp:
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
 
+        openfoam_workspace = getattr(self, "openfoam_workspace", None)
+        if openfoam_workspace is not None:
+            openfoam_workspace.apply_theme(self.theme_var.get())
+
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
             self._apply_menu_theme(menubar)

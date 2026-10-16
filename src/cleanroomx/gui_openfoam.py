@@ -274,7 +274,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.output = tk.Text(
             output_frame,
             wrap="word",
-            height=12,
+            height=5,
             state="disabled",
             font=("TkFixedFont", 9),
         )

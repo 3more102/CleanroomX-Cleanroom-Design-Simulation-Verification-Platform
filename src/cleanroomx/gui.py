@@ -7530,7 +7530,7 @@ def main(argv: list[str] | None = None) -> int:
                     raise RuntimeError("demo-results did not produce a computed plot")
             root.update_idletasks()
             root.update()
-            if args.demo or args.demo_results:
+            if args.demo:
                 layout = app.spatial_workspace.layout
                 if len(layout.get("rooms", [])) < 3:
                     raise RuntimeError("packaged demo spatial layout did not load")

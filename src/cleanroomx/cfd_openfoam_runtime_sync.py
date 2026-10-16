@@ -459,7 +459,9 @@ def _validate_vtk_snapshot(
     if analysis_import.get("mesh_cells") != cell_count:
         raise ValueError("CleanroomX analysis importer reported an inconsistent cell count")
     if contaminant_field is not None and not analysis_import.get("has_contaminant_field"):
-        raise ValueError(f"Configured contaminant field {contaminant_field!r} is missing from imported VTK cell data")
+        raise ValueError(
+            f"Configured contaminant field {contaminant_field!r} is missing from imported VTK cell data"
+        )
     return {
         "cell_count": cell_count,
         "fields": summaries,
@@ -896,12 +898,16 @@ class OpenFOAMResultSynchronizer:
             raise ValueError("OpenFOAM field set changed after the settle window")
         before_records = {name: _stable_file_record(path, max_bytes=self.max_field_bytes) for name, path in native_paths.items()}
 
-        numeric_fields = [name for name in self.allowed_fields if name in native_paths]
+        selected_fields = [name for name in self.allowed_fields if name in native_paths]
+        if "phi" in native_paths:
+            # foamToVTK applies -fields to surfaceScalarFields too. Including
+            # -surfaceFields alone does not select phi for export.
+            selected_fields.append("phi")
         arguments = [
             self.foam_to_vtk,
             "-time", time_name,
             "-useTimeName",
-            "-fields", "( " + " ".join(numeric_fields) + " )",
+            "-fields", "( " + " ".join(selected_fields) + " )",
             "-ascii",
             "-poly",
             "-noPointValues",
@@ -967,7 +973,16 @@ class OpenFOAMResultSynchronizer:
             if "phi" in native_paths:
                 surface_dataset = vtk_root / "surfaceFields" / f"surfaceFields_{time_name}.vtk"
                 if surface_dataset.is_symlink() or not surface_dataset.is_file():
-                    raise ValueError("foamToVTK omitted the requested surface flux phi dataset")
+                    available = sorted(
+                        path.relative_to(vtk_root).as_posix()
+                        for path in vtk_root.rglob("*")
+                        if path.is_file() and not path.is_symlink()
+                    )[:20]
+                    log_tail = " | ".join(log_text.splitlines()[-8:])[:500]
+                    raise ValueError(
+                        "foamToVTK omitted the requested surface flux phi dataset; "
+                        f"available={available!r}; log_tail={log_tail!r}"
+                    )
                 surface_flux_parity = audit_openfoam_vtk_surface_flux(
                     native_paths["phi"],
                     self.case_directory / "constant" / "polyMesh",

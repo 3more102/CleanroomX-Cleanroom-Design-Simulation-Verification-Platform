@@ -100,6 +100,10 @@ def _write_vtk(path: Path, *, temperature: bool) -> None:
 
 
 def _configured_sync(tmp_path, case: Path, monkeypatch, *, output: Path | None = None, **kwargs):
+    pytest.importorskip(
+        "vtk",
+        reason="OpenFOAM runtime synchronization tests require the optional CFD VTK dependency",
+    )
     executable = tmp_path / "foamToVTK"
     executable.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
     executable.chmod(0o755)
@@ -130,6 +134,13 @@ def _fake_foam_to_vtk(monkeypatch, *, expected_temperature=True, calls=None):
             vtk_dir / f"{cwd.name}_{time_name}.vtk",
             temperature=expected_temperature,
         )
+        selected_fields = command[command.index("-fields") + 1]
+        if "phi" in selected_fields and "-surfaceFields" in command:
+            surface_dir = vtk_dir / "surfaceFields"
+            surface_dir.mkdir()
+            (surface_dir / f"surfaceFields_{time_name}.vtk").write_text(
+                "surface flux fixture\n", encoding="ascii"
+            )
         return SimpleNamespace(
             returncode=0,
             stdout=(FOUNDATION_BANNER + f"Time: {time_name}\nEnd\n").encode(),
@@ -164,6 +175,35 @@ def test_sync_waits_for_stable_result_and_imports_real_vtk_fields_once(tmp_path,
     assert all((tmp_path / "sync" / asset["path"]).is_file() for asset in record["assets"])
     assert synchronizer.poll_once()["imported_times"] == []
     assert len(calls) == 1
+
+
+def test_sync_selects_phi_for_surface_field_export(tmp_path, monkeypatch):
+    case = _case(tmp_path, temperature=False)
+    (case / "100" / "phi").write_text(
+        "FoamFile { class surfaceScalarField; object phi; }\n"
+        "dimensions [0 3 -1 0 0 0 0];\n",
+        encoding="ascii",
+    )
+    calls = _fake_foam_to_vtk(monkeypatch, expected_temperature=False)
+    monkeypatch.setattr(
+        cfd_sync,
+        "audit_openfoam_vtk_surface_flux",
+        lambda *_args: {"status": "PASS", "field": "phi"},
+    )
+    synchronizer = _configured_sync(tmp_path, case, monkeypatch, optional_fields=())
+
+    synchronizer.poll_once()
+    result = synchronizer.poll_once()
+
+    assert result["imported_times"] == ["100"]
+    fields_argument = calls[0][calls[0].index("-fields") + 1]
+    assert "phi" in fields_argument
+    assert "-surfaceFields" in calls[0]
+    record = json.loads(
+        (tmp_path / "sync" / "sync_manifest.json").read_text(encoding="utf-8")
+    )["records"]["100"]
+    assert record["fields"]["phi"]["units"] == "m^3/s"
+    assert record["surface_phi_parity"]["status"] == "PASS"
 
 
 def test_sync_resume_reuses_hash_bound_record_without_duplicate_export(tmp_path, monkeypatch):

@@ -134,10 +134,20 @@ Spatial and engineering data remain deliberately separated.
 
 ### Windows — repository checkout
 
-From PowerShell:
+From PowerShell, run this on a laptop without a checkout. It clones CleanroomX
+to your user folder and launches the computed graph:
 
 ```powershell
-cd C:\CleanroomX
+$repoPath = Join-Path $env:USERPROFILE 'CleanroomX'
+if (Test-Path $repoPath) {
+    if (-not (Test-Path (Join-Path $repoPath '.git'))) {
+        throw 'The CleanroomX folder exists but is not a Git checkout. Choose another path or move it first.'
+    }
+} else {
+    git clone https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform.git $repoPath
+    if ($LASTEXITCODE -ne 0) { throw 'Git clone failed.' }
+}
+Set-Location $repoPath
 .\start-cleanroomx.ps1
 ```
 

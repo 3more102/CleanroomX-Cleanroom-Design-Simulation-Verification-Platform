@@ -1093,8 +1093,8 @@ def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
 
 def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
     app.root.minsize(800, 300)
-    app.root.geometry("900x420")
-    app.set_focus_workspace(True)
+    app.root.geometry("1200x900")
+    app.root.update()
     workspace = app.spatial_workspace
     room = workspace.layout["rooms"][0]
     project_before = copy.deepcopy(app.project.to_dict())

@@ -1159,6 +1159,32 @@ def test_bundled_demo_project_is_self_contained_and_active_analysis_runs():
     json.dumps(run.to_dict(), allow_nan=False)
 
 
+def test_bundled_demo_results_produce_actual_computed_plot():
+    path = gui_module.bundled_demo_project_path()
+    project = load_project_document(path)
+    analysis_id = gui_module.demo_plot_analysis_id(project)
+    analysis = project.analysis_by_id(analysis_id)
+
+    assert analysis.kind == "fan_operating_point"
+    run = run_analysis(analysis.kind, analysis.input, base_dir=path.parent)
+    assert run.result
+    assert run.plot is not None
+    assert len(run.plot["series"]) >= 2
+    for series in run.plot["series"]:
+        assert len(series["x"]) == len(series["y"])
+        assert len(series["x"]) >= 2
+    assert gui_module.build_parser().parse_args(["--demo-results"]).demo_results
+    json.dumps(run.to_dict(), allow_nan=False)
+
+
+def test_demo_plot_selection_fails_without_numerical_example():
+    project = ProjectDocument(
+        name="No fan", analyses=[], active_analysis_id=None
+    )
+    with pytest.raises(ValueError, match="fan/system operating-point"):
+        gui_module.demo_plot_analysis_id(project)
+
+
 def test_gui_demo_project_round_trips_and_active_analysis_runs():
     path = ROOT / "examples" / "gui_demo.cleanroomx.json"
     project = load_project_document(path)

@@ -1108,7 +1108,17 @@ def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
     canvas.pack_configure(fill="x", expand=False)
     canvas.configure(height=85)
     app.root.update_idletasks()
-    assert canvas.winfo_height() >= 80
+    app.root.update()
+    assert canvas.winfo_height() >= 80, (
+        "Inspector viewport was not allocated: "
+        f"root={app.root.winfo_width()}x{app.root.winfo_height()}, "
+        f"workspace={workspace.winfo_width()}x{workspace.winfo_height()}, "
+        f"body={workspace._body.winfo_width()}x{workspace._body.winfo_height()}, "
+        f"inspector={workspace._inspector_frame.winfo_width()}x"
+        f"{workspace._inspector_frame.winfo_height()}, "
+        f"property_view={canvas.master.winfo_width()}x"
+        f"{canvas.master.winfo_height()}, canvas={canvas.winfo_height()}"
+    )
     canvas.yview_moveto(0)
     app.root.update()
 

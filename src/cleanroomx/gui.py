@@ -84,6 +84,7 @@ from .gui_theme import configure_ttk_theme, normalize_theme_name
 from .runtime_diagnostics import install_tk_exception_handler
 from .gui_windowing import fit_window_to_display
 from .gui_proofgraph import ProofGraphViewer
+from .gui_openfoam import OpenFOAMWorkspace
 from .gui_start import StartCenter
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -2799,6 +2800,16 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.proofgraph_viewer, text="ProofGraph")
+
+        self.openfoam_workspace = OpenFOAMWorkspace(
+            self.notebook,
+            on_proofgraph_loaded=lambda document: (
+                self.proofgraph_viewer.set_documents([document]),
+                self.notebook.select(self.proofgraph_viewer),
+            ),
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.openfoam_workspace, text="OpenFOAM")
 
         output_host = ttk.Frame(self.workspace_panes, padding=(0, 5, 0, 0))
         self.output_panel = output_host

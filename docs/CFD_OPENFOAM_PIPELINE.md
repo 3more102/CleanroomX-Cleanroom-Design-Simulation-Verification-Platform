@@ -363,6 +363,14 @@ does not promote the samples to CFD validation evidence.
 
 For the exact-head Foundation v10 run that exercised solver execution, incremental synchronization, multi-time field parity, and this visualization, see the [run 38889697945 evidence report](OPENFOAM_V10_RUN_38889697945_RUNTIME_SYNC_VISUALIZATION_EVIDENCE.md).
 
+The latest pinned Foundation v10 workflow, [run 38905424325](OPENFOAM_V10_RUN_38905424325_END_TO_END_EVIDENCE.md),
+re-executed the nine-case airflow family, incremental native-field and VTK
+synchronization, a real passive-tracer `scalarTransportFoam` case, and sampled
+velocity visualization. Its artifact was independently checked by digest,
+asset hashes, and native-to-VTK parity. The run verifies the reproducible
+execution and ingestion path only; all residual screens remain outside the
+documented tolerances and scientific validation remains blocked.
+
 The later exact-head run 38894717248 repeated the nine-case Foundation v10
 execution, multi-time export, incremental VTK synchronization, and visualization.
 Its artifact digest, case counts, synchronization records, residual and flux

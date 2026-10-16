@@ -71,8 +71,10 @@ or contamination source/sink balance.
 - OpenFOAM is not bundled with CleanroomX. The pinned CI workflow separately
   installs OpenFOAM Foundation v10 and executes the synthetic nine-case
   `simpleFoam` family plus a synthetic `scalarTransportFoam` tracer case with
-  live U/T synchronization. Treat this as configured workflow coverage until
-  the exact workflow run and uploaded artifact report a successful execution.
+  live U/T synchronization. [Run 38905424325](OPENFOAM_V10_RUN_38905424325_END_TO_END_EVIDENCE.md)
+  completed successfully and its artifact was independently replayed. This
+  verifies execution and field synchronization for the synthetic workflow;
+  numerical and physical validation remain blocked as described in that report.
 - One grid cell is selected per source point; mesh refinements change source
   localization. Grid convergence and source-cell sensitivity are required.
 - The steady laminar, incompressible flow assumption can be unsuitable for

@@ -14,6 +14,8 @@ on:
       - "scripts/openfoam_v10_scalar_sync_smoke.py"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
+      - "tests/test_cfd_openfoam_runtime_sync.py"
+      - "tests/test_cfd_scalar_audit.py"
   workflow_dispatch:
 
 permissions:

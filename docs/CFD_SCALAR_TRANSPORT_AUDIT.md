@@ -38,7 +38,7 @@ Run each airflow configuration and inspect flow residuals and mass balance.
 
 Prepare and run a scalar case from each **completed airflow** case:
 
-    cleanroomx-cfd-pipeline scalar-prepare ./cfd_cases/configuration_1/coarse examples/cfd_scalar_spec.example.json ./scalar_1
+    cleanroomx-cfd-pipeline scalar-prepare ./cfd_cases/configuration_1 examples/cfd_scalar_spec.example.json ./scalar_1
     cleanroomx-cfd-pipeline scalar-run ./scalar_1 \
       --sync-results ./scalar_1_sync \
       --field-map-file examples/cfd_scalar_field_map.example.json

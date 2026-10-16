@@ -28,13 +28,25 @@ Open the self-contained demonstration project shipped inside the installed packa
 cleanroomx-gui --demo
 ```
 
+Open a *calculated* example and its graph automatically:
+
+```bash
+cleanroomx-gui --demo-results
+```
+
+This selects the bundled fan/system operating-point case, executes the actual
+numerical backend in a worker thread, and opens the **Plot** tab. The graph
+comes from solved example inputs (fan/system curves and the operating point),
+not fabricated display data. It is not OpenFOAM CFD, independent measured
+evidence, or cleanroom performance validation.
+
 On Windows, a repository checkout can launch the current source tree without relying on the console-script PATH:
 
 ```powershell
 .\start-cleanroomx.ps1
 ```
 
-The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo`, which exposes the synchronized **Design 2D + 3D** workspace. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer. Both launchers validate the selected interpreter before importing CleanroomX: Python must be 3.11 or newer and Tkinter must be available. Unsupported runtimes fail immediately with an actionable startup message instead of entering the GUI import path.
+The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo-results`, which opens the calculated fan/system graph. Pass `--demo` explicitly to open the synchronized **Design 2D + 3D** workspace instead. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer. Both launchers validate the selected interpreter before importing CleanroomX: Python must be 3.11 or newer and Tkinter must be available. Unsupported runtimes fail immediately with an actionable startup message instead of entering the GUI import path.
 
 Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
 

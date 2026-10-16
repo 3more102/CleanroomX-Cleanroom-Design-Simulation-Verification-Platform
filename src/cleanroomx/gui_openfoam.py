@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
@@ -226,10 +227,10 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.specification_var = tk.StringVar()
         self.case_directory_var = tk.StringVar()
         self.result_directory_var = tk.StringVar()
-        self.simulation_id_var = tk.StringVar(value="cleanroomx-openfoam-run")
+        self.simulation_id_var = tk.StringVar(value=f"cleanroomx-openfoam-{uuid.uuid4().hex[:10]}")
         self.vtk_source_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
-        self.vtk_simulation_id_var = tk.StringVar(value="cleanroomx-vtk-import")
+        self.vtk_simulation_id_var = tk.StringVar(value=f"cleanroomx-vtk-{uuid.uuid4().hex[:10]}")
         self._build()
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.after(120, self._drain_events)
@@ -258,7 +259,7 @@ class OpenFOAMWorkspace(ttk.Frame):
                 "measurements and review are supplied."
             ),
             wraplength=980,
-            style="CX.Warning.TLabel",
+            style="CX.Section.TLabel",
         ).pack(fill="x", padx=10, pady=(2, 7))
 
         settings = ttk.LabelFrame(self, text="Case bundle", padding=8)
@@ -472,11 +473,14 @@ class OpenFOAMWorkspace(ttk.Frame):
 
     def _sync_vtk(self) -> None:
         result_directory = self.result_directory_var.get().strip()
+        manifest = self.manifest_var.get().strip()
+        if not manifest and self.case_directory_var.get().strip():
+            manifest = str(Path(self.case_directory_var.get().strip()) / "manifest.json")
         try:
             command = build_openfoam_sync_vtk_command(
                 self.vtk_source_var.get().strip(),
                 result_directory,
-                self.manifest_var.get().strip(),
+                manifest,
                 self.vtk_simulation_id_var.get().strip(),
             )
         except ValueError as exc:

@@ -273,6 +273,24 @@ def _publish_run_manifest(path, payload, *, create=False):
         temporary.unlink(missing_ok=True)
 
 
+def _foundation_v10_banner(log_text):
+    """Extract and identify the Foundation v10 banner from an OpenFOAM log."""
+    version = re.search(r"^.*\bVersion:\s*(\S+)\s*$", log_text, re.MULTILINE)
+    website = re.search(r"Website:\s*(https://\S+)", log_text)
+    build = re.search(r"^Build\s*:\s*(\S+)\s*$", log_text, re.MULTILINE)
+    info = {
+        "version": version.group(1) if version else None,
+        "website": website.group(1) if website else None,
+        "build": build.group(1) if build else None,
+    }
+    info["is_foundation_v10"] = (
+        info["version"] == "10"
+        and info["website"] == "https://openfoam.org"
+        and bool(info["build"])
+    )
+    return info
+
+
 def run_openfoam_cases(directory,*,timeout_seconds=3600,openfoam_version=None):
     """Run a matching Foundation release and preserve execution provenance.
 
@@ -358,6 +376,7 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600,openfoam_version=None):
         "python_version": sys.version.split()[0],
         "platform": {"os_name": os.name, "sys_platform": sys.platform},
         "executables": executables,
+        "foundation_build": None,
         "version_probe": {
             "command": probe_command,
             "returncode": probe.returncode,
@@ -370,6 +389,19 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600,openfoam_version=None):
     _publish_run_manifest(run_manifest_path, run_record, create=True)
 
     results={}
+    expected_build=None
+
+    def fail_case(cfg, stages, stage, case_status):
+        results[str(cfg)]={"status":case_status,"stages":stages}
+        run_record["cases"] = results
+        run_record["status"] = "incomplete"
+        run_record["failure"] = {"configuration": cfg, "stage": stage}
+        run_record["completed_utc"] = _utc_timestamp()
+        _publish_run_manifest(run_manifest_path, run_record)
+        return {"status":"incomplete","cases":results,
+                "run_manifest":str(run_manifest_path.relative_to(root)),
+                "warning":"Review command logs, release identity, build consistency and physical validity"}
+
     for cfg in (1,2,3):
         stages=[]
         workdir=root/f"configuration_{cfg}"
@@ -397,17 +429,24 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600,openfoam_version=None):
             }
             if error is not None:
                 stage["error"] = error
+            identity_failure=None
+            if release == "OpenFOAM Foundation 10":
+                banner=_foundation_v10_banner(log_bytes.decode("utf-8",errors="replace"))
+                stage["openfoam"]=banner
+                if returncode == 0:
+                    if not banner["is_foundation_v10"]:
+                        stage["error"] = "stage log does not identify OpenFOAM Foundation v10"
+                        identity_failure="unsupported_release"
+                    elif expected_build is None:
+                        expected_build=banner["build"]
+                        run_record["foundation_build"]=expected_build
+                    elif banner["build"] != expected_build:
+                        stage["error"] = f"stage build {banner['build']} differs from {expected_build}"
+                        identity_failure="inconsistent_build"
             stages.append(stage)
-            if returncode != 0:
-                results[str(cfg)]={"status":"solver_failed" if error is None else "execution_error","stages":stages}
-                run_record["cases"] = results
-                run_record["status"] = "incomplete"
-                run_record["failure"] = {"configuration": cfg, "stage": stage}
-                run_record["completed_utc"] = _utc_timestamp()
-                _publish_run_manifest(run_manifest_path, run_record)
-                return {"status":"incomplete","cases":results,
-                        "run_manifest":str(run_manifest_path.relative_to(root)),
-                        "warning":"Check command logs, residuals and physical validity; execution is not validation"}
+            if returncode != 0 or identity_failure:
+                case_status=identity_failure or ("solver_failed" if error is None else "execution_error")
+                return fail_case(cfg,stages,stage,case_status)
         results[str(cfg)]={"status":"executed_requires_convergence_review","stages":stages}
         run_record["cases"] = results
         _publish_run_manifest(run_manifest_path, run_record)
@@ -415,5 +454,8 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600,openfoam_version=None):
     run_record["completed_utc"] = _utc_timestamp()
     _publish_run_manifest(run_manifest_path, run_record)
     return {"status":"executed_requires_convergence_review","cases":results,
+            "solver_release":release,
+            "solver_build":expected_build,
+            "executables":executables,
             "run_manifest":str(run_manifest_path.relative_to(root)),
             "warning":"Review residuals, mass conservation, mesh sensitivity and physical validity"}

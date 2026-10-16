@@ -37,12 +37,14 @@ symbol-by-symbol API parity; a full runtime-registry inventory remains work.
 ## Status and scoring rules
 
 For each track, the score is `complete rows / rows with status other than na`.
-`complete` requires implementation and passing evidence for the capability
-at that track's scope. `partial`, `blocked`, and `unsupported` remain in the
-denominator and do not count in the numerator. `na` means the row does not
-belong to that track and is excluded. The scoring script rejects missing
-fields, invalid states, duplicate IDs, non-HTTPS references, and
-synthetic-only evidence marked complete.
+`complete` requires an implementation path, `test_evidence` beginning with
+`PASS:`, and `remaining_gap` set to `none`. A complete integration row must use this exact
+structured evidence form: `PASS: OpenFOAM Foundation v10; non-synthetic run; run_manifest=<HTTPS URL>; manifest_sha256=<64 hex characters>`. This prevents a negated prose sentence from qualifying because it contains matching
+substrings. Complete cleanroom rows still require measured evidence and
+uncertainty. `partial`, `blocked`, and `unsupported` remain in the denominator and do not count in the numerator.
+`na` means the row does not belong to that track and is excluded. The scoring
+script rejects missing fields, invalid states, duplicate IDs, non-HTTPS
+references, and incomplete or synthetic-only evidence marked complete.
 
 - **Native solver capability parity** counts documented solver applications,
   solver-model/source components, and numerical/physical solver capabilities
@@ -186,6 +188,20 @@ remains open. The local environment used for this review has no `blockMesh`,
 No actual Foundation v10 solver run was produced here. The existing generated
 cases, logs, and grids are not substituted for measured solver evidence.
 
+A separate GitHub Actions run [38518690225](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38518690225)
+did execute Foundation v10 build `10-c4cf895ad8fa` on nine **synthetic**
+layout/grid fixtures: each `blockMesh`, `checkMesh`, and `simpleFoam` stage
+returned 0, and all nine `checkMesh` logs reported `Mesh OK.` The solver logs
+contain 600 time entries each, but the receipts remain
+`executed_requires_convergence_review`. This is genuine target-binary smoke
+execution on synthetic inputs, not an engineering run or convergence result;
+it closes none of the issue #1296 validation gates and is not credited as a
+real cleanroom case. All 27 stage logs report `https://openfoam.org`, Version
+10, and the same build identifier. The artifact was produced from branch
+`codex/cfd-refinement-stable-patches-20261014` at
+`4ba3b627c1e129d7f653c943106629ea6783868e`, not by the release-screening
+runner changed in this proposal.
+
 The gates remain blocked until the repository contains reproducible real v10
 runs for all three layouts at coarse/medium/fine resolution; command, release,
 environment, boundary-condition, input/output digest, and log evidence;
@@ -194,6 +210,31 @@ three-grid mesh-independence analysis; model-assumption review; and
 independent cleanroom airflow/pressure/particle measurements with uncertainty
 and quantified comparison. Until then the workflow status remains blocked or
 partial and no scientific validation claim is made.
+
+## Verification snapshot
+
+Focused local verification used CPython 3.12.14 on the pre-push rebase
+snapshot, retaining the Foundation v14 parent changes while adding v10
+stage-level identity checks.
+
+```text
+python scripts/openfoam_v10_parity_score.py --format json
+  validated 723 unique rows and the pinned source inventory; scores: 0/192 native, 0/717 integration, 0/21 cleanroom
+python -m pytest -q tests/test_cfd_pipeline.py tests/test_openfoam_v10_capability_matrix.py
+  32 passed in 1.22s
+python -m py_compile src/cleanroomx/cfd_openfoam.py scripts/openfoam_v10_parity_score.py
+  passed
+```
+
+These are focused module tests. The same code commit
+`124f5b42d9e5966d2e02c72b98738e5b2ce645ef` subsequently passed Required CI
+[run 4844](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38872145402):
+the full suite reported 2,382 passed and 84 skipped on Python 3.11, 3.12,
+and 3.13; native BIM, doctor/wheel, and Windows launcher jobs also passed.
+CFD VTK Regression [run 508](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38872145528)
+passed as well. The runner tests use mocked process output; they verify
+release screening and receipt logic only. No local OpenFOAM executable was
+available, so these software checks do not establish a real solve.
 
 ## Reproduce the score
 

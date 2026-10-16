@@ -124,16 +124,17 @@ the float32/ASCII bounds. This checks the v10 export representation for the
 synthetic mesh family; it does not set a flow-balance criterion or establish
 solver convergence or physical validity.
 
-The Foundation v10 integration workflow also makes a separate explicit-time
-export using `foamToVTK -time 100 -useTimeName`. It requires the utility log to
-show exactly the requested `100` time, then compares the exported internal U/p,
-inlet/outlet/walls U/p, and surface `phi` datasets with the native fields in
-that same time directory. The sidecar receipt binds the command log, source
-fields, and all selected-time VTK files by SHA-256. This covers one exact time
-from the synthetic three-output case and the current field and patch family;
-it does not establish broad time-range support, solver convergence, or physical
+The Foundation v10 integration workflow makes a separate multi-time export
+using `foamToVTK -time 50,100 -useTimeName`. It requires the utility log to
+show exactly the requested `50` and `100` times in order, then compares the
+exported internal U/p, inlet/outlet/walls U/p, and surface `phi` datasets with
+the native fields in each matching time directory. The v2 sidecar receipt
+binds the command log, source fields, and every selected-time VTK file by
+SHA-256. The selected times avoid the baseline latest-time output at `150` and
+cover two exact times from the synthetic three-output case. This does not
+establish arbitrary time-range support, solver convergence, or physical
 validation. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
-registers the time-selector options, iterates the selected time directories,
+registers comma-separated time ranges, iterates the selected time directories,
 and uses `-useTimeName` to name each dataset from the solver time name.
 
 Run 90 applied this audit to all nine generated cases. Its 54 internal-field, patch, and surface-flux parity records passed, including 13,608 patch faces. The [run 90 report](OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md) records the independent artifact-digest and file-hash replay. Residual and flow-balance screens remain diagnostic; scientific validation remains BLOCKED.

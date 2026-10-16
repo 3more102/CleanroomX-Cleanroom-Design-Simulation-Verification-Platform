@@ -1001,7 +1001,7 @@ jobs:
           Path(sys.argv[3]).write_text("\n".join(flux_lines) + "\n", encoding="utf-8")
           PY
 
-      - name: Audit explicit-time foamToVTK selection
+      - name: Audit multi-time foamToVTK selection
         run: |
           set -eo pipefail
           set +e
@@ -1017,7 +1017,7 @@ jobs:
             exit 1
           fi
           python -m cleanroomx.cfd_vtk_time_selection \
-            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" --time 100
+            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" --times 50,100
 
       - name: Upload execution evidence
         if: always()

@@ -1,7 +1,7 @@
-"""Audit one explicit OpenFOAM Foundation v10 foamToVTK time selection.
+"""Audit multiple explicit OpenFOAM Foundation v10 foamToVTK time selections.
 
-The audit proves only that the requested solver time was exported and that its
-synthetic U, p, phi, and supported boundary-patch datasets reproduce the
+The audit proves only that the requested solver times were exported and that
+their synthetic U, p, phi, and supported boundary-patch datasets reproduce the
 corresponding native files. It does not assess CFD convergence or physical
 validity.
 """
@@ -29,7 +29,7 @@ from .cfd_vtk import (
 )
 
 
-SCHEMA = "cleanroomx.openfoam-vtk-time-selection-evidence.v1"
+SCHEMA = "cleanroomx.openfoam-vtk-time-selection-evidence.v2"
 PATCH_NAMES = ("inlet", "outlet", "walls")
 CASE_IDS = tuple(
     f"configuration_{configuration}/{level}"
@@ -39,21 +39,50 @@ CASE_IDS = tuple(
 _TIME_LINE = re.compile(r"^Time:\s*(\S+)\s*$", re.MULTILINE)
 
 
-def parse_foam_to_vtk_time_log(log_text: str, expected_time: str) -> list[str]:
-    """Require one exact selected time and a clean terminal ``End`` record."""
+def _validated_selected_times(value: str | tuple[str, ...] | list[str]) -> list[str]:
+    """Parse a nonempty, strictly increasing comma-separated time selection."""
+    if type(value) is str:
+        requested = value.split(",")
+    elif type(value) in (tuple, list):
+        requested = list(value)
+    else:
+        raise ValueError("Selected times must be a comma-separated string or a list of names")
+    if not requested:
+        raise ValueError("At least one finite numeric OpenFOAM time name is required")
+
+    selected: list[str] = []
+    numeric: list[float] = []
+    for item in requested:
+        if type(item) is not str:
+            raise ValueError("Every selected OpenFOAM time name must be text")
+        name = item.strip()
+        if re.fullmatch(r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", name) is None:
+            raise ValueError("Selected times must be finite numeric OpenFOAM time names")
+        number = float(name)
+        if not math.isfinite(number):
+            raise ValueError("Selected times must be finite numeric OpenFOAM time names")
+        if numeric and number <= numeric[-1]:
+            raise ValueError("Selected times must be unique and strictly increasing")
+        if number in numeric:
+            raise ValueError("Selected times must be unique and strictly increasing")
+        selected.append(name)
+        numeric.append(number)
+    return selected
+
+
+def parse_foam_to_vtk_time_log(
+    log_text: str,
+    expected_times: str | tuple[str, ...] | list[str],
+) -> list[str]:
+    """Require the exact ordered time set and one clean terminal ``End``."""
     if type(log_text) is not str:
         raise ValueError("foamToVTK log must be text")
-    if not isinstance(expected_time, str) or re.fullmatch(
-        r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", expected_time
-    ) is None:
-        raise ValueError("Expected time must be one finite numeric OpenFOAM time name")
-    if not math.isfinite(float(expected_time)):
-        raise ValueError("Expected time must be finite")
+    expected = _validated_selected_times(expected_times)
 
     selected = _TIME_LINE.findall(log_text)
-    if selected != [expected_time]:
+    if selected != expected:
         raise ValueError(
-            f"foamToVTK selected times {selected!r}; expected exactly [{expected_time!r}]"
+            f"foamToVTK selected times {selected!r}; expected exactly {expected!r}"
         )
     terminal_lines = [line.strip() for line in log_text.splitlines() if line.strip()]
     if terminal_lines.count("End") != 1 or not terminal_lines or terminal_lines[-1] != "End":
@@ -156,17 +185,16 @@ def _atomic_json(path: Path, document: dict) -> None:
 def audit_openfoam_vtk_time_selection(
     family_root: str | Path,
     *,
-    selected_time: str = "100",
+    selected_times: str | tuple[str, ...] | list[str] = ("50", "100"),
 ) -> dict:
-    """Run and verify an explicit single-time export for the nine-case family."""
+    """Run and verify one explicit multi-time export for the nine-case family."""
     candidate_root = Path(family_root)
     if candidate_root.is_symlink() or not candidate_root.is_dir():
         raise ValueError("Evidence family must be a regular, non-symlink directory")
     root = candidate_root.resolve(strict=True)
-    if not isinstance(selected_time, str) or re.fullmatch(
-        r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", selected_time
-    ) is None or not math.isfinite(float(selected_time)):
-        raise ValueError("Selected time must be one finite numeric time name")
+    selected_times = _validated_selected_times(selected_times)
+    time_argument = ",".join(selected_times)
+    log_suffix = "-".join(name.replace("+", "p") for name in selected_times)
 
     if os.environ.get("WM_PROJECT") != "OpenFOAM" or os.environ.get("WM_PROJECT_VERSION") != "10":
         raise RuntimeError("Expected an OpenFOAM Foundation v10 runtime environment")
@@ -209,8 +237,8 @@ def audit_openfoam_vtk_time_selection(
         "scientific_validation": "BLOCKED",
         "solver_release": "OpenFOAM Foundation v10",
         "solver_build": solver_build,
-        "selected_time": selected_time,
-        "selection_options": ["-time", selected_time, "-useTimeName"],
+        "selected_times": selected_times,
+        "selection_options": ["-time", time_argument, "-useTimeName"],
         "manifest_sha256": manifest_sha,
         "execution_receipt_sha256": receipt_sha,
         "cases": {},
@@ -242,30 +270,43 @@ def audit_openfoam_vtk_time_selection(
             if type(expected_cells) is not int or expected_cells <= 0:
                 raise ValueError("Manifest mesh-cell count is invalid")
 
-            time_dir = case_dir / selected_time
-            if time_dir.is_symlink() or not time_dir.is_dir():
-                raise ValueError(f"Requested solver time directory {selected_time!r} is missing")
-            native_paths = {field: time_dir / field for field in ("U", "p", "phi")}
-            native_before = {field: _sha256_file(path, root) for field, path in native_paths.items()}
-
             vtk_dir = case_dir / "VTK"
             if vtk_dir.is_symlink() or not vtk_dir.is_dir():
                 raise ValueError("Baseline VTK output directory is missing or symbolic")
-            internal_path = vtk_dir / f"{case_dir.name}_{selected_time}.vtk"
-            patch_paths = {
-                patch: vtk_dir / patch / f"{patch}_{selected_time}.vtk"
-                for patch in PATCH_NAMES
-            }
-            surface_path = vtk_dir / "surfaceFields" / f"surfaceFields_{selected_time}.vtk"
-            selected_outputs = [internal_path, *patch_paths.values(), surface_path]
-            if any(path.exists() or path.is_symlink() for path in selected_outputs):
-                raise FileExistsError("Explicit-time VTK outputs already exist; refusing to overwrite")
+            native_paths_by_time: dict[str, dict[str, Path]] = {}
+            native_before_by_time: dict[str, dict[str, dict]] = {}
+            output_paths_by_time: dict[str, dict] = {}
+            for selected_time in selected_times:
+                time_dir = case_dir / selected_time
+                if time_dir.is_symlink() or not time_dir.is_dir():
+                    raise ValueError(f"Requested solver time directory {selected_time!r} is missing")
+                native_paths = {field: time_dir / field for field in ("U", "p", "phi")}
+                native_paths_by_time[selected_time] = native_paths
+                native_before_by_time[selected_time] = {
+                    field: _sha256_file(path, root) for field, path in native_paths.items()
+                }
+                internal_path = vtk_dir / f"{case_dir.name}_{selected_time}.vtk"
+                patch_paths = {
+                    patch: vtk_dir / patch / f"{patch}_{selected_time}.vtk"
+                    for patch in PATCH_NAMES
+                }
+                surface_path = vtk_dir / "surfaceFields" / f"surfaceFields_{selected_time}.vtk"
+                selected_outputs = [internal_path, *patch_paths.values(), surface_path]
+                if any(path.exists() or path.is_symlink() for path in selected_outputs):
+                    raise FileExistsError(
+                        f"Explicit-time VTK outputs for {selected_time!r} already exist; refusing to overwrite"
+                    )
+                output_paths_by_time[selected_time] = {
+                    "internal": internal_path,
+                    "patches": patch_paths,
+                    "surface_phi": surface_path,
+                }
 
-            log_path = case_dir / f"foamToVTK-time-{selected_time}.log"
+            log_path = case_dir / f"foamToVTK-times-{log_suffix}.log"
             if log_path.exists() or log_path.is_symlink():
                 raise FileExistsError("Explicit-time foamToVTK log already exists")
             arguments = [
-                "-time", selected_time,
+                "-time", time_argument,
                 "-useTimeName",
                 "-fields", "( U p phi )",
                 "-surfaceFields",
@@ -299,51 +340,81 @@ def audit_openfoam_vtk_time_selection(
             banner = _foundation_v10_banner(log_text)
             if not banner.get("is_foundation_v10") or banner.get("build") != solver_build:
                 raise ValueError("Explicit-time export did not report the bound Foundation v10 build")
-            selected_log_times = parse_foam_to_vtk_time_log(log_text, selected_time)
+            selected_log_times = parse_foam_to_vtk_time_log(log_text, selected_times)
 
-            output_records = {
-                "internal": _sha256_file(internal_path, root),
-                "surface_phi": _sha256_file(surface_path, root),
-                "patches": {
-                    patch: _sha256_file(path, root)
-                    for patch, path in patch_paths.items()
-                },
-            }
-            for field, path in native_paths.items():
-                if _sha256_file(path, root) != native_before[field]:
-                    raise ValueError(f"Native {field} field changed during VTK export")
+            time_records: dict[str, dict] = {}
+            for selected_time in selected_times:
+                native_paths = native_paths_by_time[selected_time]
+                native_before = native_before_by_time[selected_time]
+                time_outputs = output_paths_by_time[selected_time]
+                internal_path = time_outputs["internal"]
+                patch_paths = time_outputs["patches"]
+                surface_path = time_outputs["surface_phi"]
+                output_records = {
+                    "internal": _sha256_file(internal_path, root),
+                    "surface_phi": _sha256_file(surface_path, root),
+                    "patches": {
+                        patch: _sha256_file(path, root)
+                        for patch, path in patch_paths.items()
+                    },
+                }
+                for field, path in native_paths.items():
+                    if _sha256_file(path, root) != native_before[field]:
+                        raise ValueError(
+                            f"Native {field} field at time {selected_time!r} changed during VTK export"
+                        )
 
-            imported = import_vtk_case(internal_path)
-            if imported.get("mesh_cells") != expected_cells:
-                raise ValueError("Explicit-time VTK cell count differs from generated inputs")
-            velocity = audit_openfoam_vtk_velocity(native_paths["U"], internal_path)
-            pressure = audit_openfoam_vtk_pressure(native_paths["p"], internal_path)
-            if velocity.get("status") != "PASS" or pressure.get("status") != "PASS":
-                raise ValueError("Explicit-time internal U/p parity did not pass")
-            if velocity.get("cell_count") != expected_cells or pressure.get("cell_count") != expected_cells:
-                raise ValueError("Explicit-time internal U/p parity did not cover every cell")
+                imported = import_vtk_case(internal_path)
+                if imported.get("mesh_cells") != expected_cells:
+                    raise ValueError(
+                        f"Explicit-time VTK cell count differs from generated inputs at {selected_time!r}"
+                    )
+                velocity = audit_openfoam_vtk_velocity(native_paths["U"], internal_path)
+                pressure = audit_openfoam_vtk_pressure(native_paths["p"], internal_path)
+                if velocity.get("status") != "PASS" or pressure.get("status") != "PASS":
+                    raise ValueError(f"Explicit-time internal U/p parity did not pass at {selected_time!r}")
+                if velocity.get("cell_count") != expected_cells or pressure.get("cell_count") != expected_cells:
+                    raise ValueError(
+                        f"Explicit-time internal U/p parity did not cover every cell at {selected_time!r}"
+                    )
 
-            patch_parity = {}
-            for patch, path in patch_paths.items():
-                parity = audit_openfoam_vtk_boundary_patch(
-                    native_paths["U"],
-                    native_paths["p"],
+                patch_parity = {}
+                for patch, path in patch_paths.items():
+                    parity = audit_openfoam_vtk_boundary_patch(
+                        native_paths["U"],
+                        native_paths["p"],
+                        case_dir / "constant" / "polyMesh",
+                        path,
+                        patch,
+                    )
+                    if parity.get("status") != "PASS":
+                        raise ValueError(
+                            f"Explicit-time {patch} patch parity did not pass at {selected_time!r}"
+                        )
+                    patch_parity[patch] = parity
+                total_patch_faces = _verified_patch_face_count(patch_parity)
+
+                surface_flux = audit_openfoam_vtk_surface_flux(
+                    native_paths["phi"],
                     case_dir / "constant" / "polyMesh",
-                    path,
-                    patch,
+                    surface_path,
                 )
-                if parity.get("status") != "PASS":
-                    raise ValueError(f"Explicit-time {patch} patch parity did not pass")
-                patch_parity[patch] = parity
-            total_patch_faces = _verified_patch_face_count(patch_parity)
+                if surface_flux.get("status") != "PASS":
+                    raise ValueError(f"Explicit-time surface phi parity did not pass at {selected_time!r}")
 
-            surface_flux = audit_openfoam_vtk_surface_flux(
-                native_paths["phi"],
-                case_dir / "constant" / "polyMesh",
-                surface_path,
-            )
-            if surface_flux.get("status") != "PASS":
-                raise ValueError("Explicit-time surface phi parity did not pass")
+                time_records[selected_time] = {
+                    "native_fields": native_before,
+                    "datasets": output_records,
+                    "internal_cell_count": expected_cells,
+                    "velocity_components_compared": velocity.get("compared_velocity_components"),
+                    "pressure_values_compared": pressure.get("compared_scalar_values"),
+                    "patch_face_count": total_patch_faces,
+                    "patch_parity": patch_parity,
+                    "surface_flux_face_count": surface_flux.get("face_count"),
+                    "surface_flux_components_compared": surface_flux.get("compared_flux_vector_components"),
+                    "field_parity": {"U": velocity, "p": pressure},
+                    "surface_flux_parity": surface_flux,
+                }
 
             report["cases"][case_id] = {
                 "selected_log_times": selected_log_times,
@@ -351,17 +422,7 @@ def audit_openfoam_vtk_time_selection(
                 "command": ["foamToVTK", *arguments],
                 "openfoam": banner,
                 "log": log_record,
-                "native_fields": native_before,
-                "datasets": output_records,
-                "internal_cell_count": expected_cells,
-                "velocity_components_compared": velocity.get("compared_velocity_components"),
-                "pressure_values_compared": pressure.get("compared_scalar_values"),
-                "patch_face_count": total_patch_faces,
-                "patch_parity": patch_parity,
-                "surface_flux_face_count": surface_flux.get("face_count"),
-                "surface_flux_components_compared": surface_flux.get("compared_flux_vector_components"),
-                "field_parity": {"U": velocity, "p": pressure},
-                "surface_flux_parity": surface_flux,
+                "times": time_records,
                 "status": "DIAGNOSTIC_ONLY",
             }
             _atomic_json(report_path, report)
@@ -386,18 +447,24 @@ def audit_openfoam_vtk_time_selection(
         raise ValueError("Baseline execution receipt changed during time-selection audit")
 
     report["status"] = "selection_and_serialization_diagnostics_passed"
+    all_time_records = [
+        time_record
+        for case in report["cases"].values()
+        for time_record in case["times"].values()
+    ]
     report["summary"] = {
         "cases": len(report["cases"]),
-        "selected_time_per_case": selected_time,
-        "internal_cell_datasets": len(report["cases"]),
-        "patch_datasets": sum(len(row["datasets"]["patches"]) for row in report["cases"].values()),
-        "surface_phi_datasets": len(report["cases"]),
-        "internal_cells_compared": sum(row["internal_cell_count"] for row in report["cases"].values()),
-        "velocity_components_compared": sum(row["velocity_components_compared"] for row in report["cases"].values()),
-        "pressure_values_compared": sum(row["pressure_values_compared"] for row in report["cases"].values()),
-        "patch_faces_compared": sum(row["patch_face_count"] for row in report["cases"].values()),
-        "surface_flux_faces_compared": sum(row["surface_flux_face_count"] for row in report["cases"].values()),
-        "surface_flux_components_compared": sum(row["surface_flux_components_compared"] for row in report["cases"].values()),
+        "selected_times_per_case": selected_times,
+        "selected_time_count_per_case": len(selected_times),
+        "internal_cell_datasets": len(all_time_records),
+        "patch_datasets": sum(len(row["datasets"]["patches"]) for case in report["cases"].values() for row in case["times"].values()),
+        "surface_phi_datasets": len(all_time_records),
+        "internal_cells_compared": sum(row["internal_cell_count"] for row in all_time_records),
+        "velocity_components_compared": sum(row["velocity_components_compared"] for row in all_time_records),
+        "pressure_values_compared": sum(row["pressure_values_compared"] for row in all_time_records),
+        "patch_faces_compared": sum(row["patch_face_count"] for row in all_time_records),
+        "surface_flux_faces_compared": sum(row["surface_flux_face_count"] for row in all_time_records),
+        "surface_flux_components_compared": sum(row["surface_flux_components_compared"] for row in all_time_records),
     }
     _atomic_json(report_path, report)
     return report
@@ -405,22 +472,28 @@ def audit_openfoam_vtk_time_selection(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Export and verify one exact-time OpenFOAM v10 foamToVTK selection."
+        description="Export and verify exact-time OpenFOAM v10 foamToVTK selections."
     )
     parser.add_argument("family_root", type=Path)
-    parser.add_argument("--time", dest="selected_time", default="100")
+    parser.add_argument(
+        "--times",
+        "--time",
+        dest="selected_times",
+        default="50,100",
+        help="Comma-separated, strictly increasing OpenFOAM time names",
+    )
     args = parser.parse_args(argv)
     try:
         report = audit_openfoam_vtk_time_selection(
             args.family_root,
-            selected_time=args.selected_time,
+            selected_times=args.selected_times,
         )
     except Exception as exc:
         print(f"OpenFOAM VTK time-selection audit failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     summary = report["summary"]
     print(
-        f"OpenFOAM v10 explicit-time export passed: time={report['selected_time']}; "
+        f"OpenFOAM v10 explicit-time export passed: times={','.join(report['selected_times'])}; "
         f"cases={summary['cases']}; U_components={summary['velocity_components_compared']}; "
         f"p_values={summary['pressure_values_compared']}; "
         f"patch_faces={summary['patch_faces_compared']}; "

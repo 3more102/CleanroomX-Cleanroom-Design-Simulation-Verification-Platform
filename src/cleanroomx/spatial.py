@@ -1987,14 +1987,6 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self.apply_properties,
         )
         self._apply_properties_button.pack(anchor="e", pady=(2, 6))
-        ttk.Separator(inspector_footer, orient="horizontal").pack(fill="x", pady=5)
-        self._inspector_sync_label = ttk.Label(
-            inspector_footer,
-            textvariable=self._sync_var,
-            wraplength=260,
-        )
-        self._inspector_sync_label.pack(fill="x", pady=(3, 0))
-
         property_view = ttk.Frame(inspector)
         property_view.pack(fill="both", expand=True)
         self._inspector_canvas = tk.Canvas(
@@ -2082,6 +2074,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
+        ttk.Separator(self._inspector_content, orient="horizontal").pack(
+            fill="x", pady=5
+        )
+        self._inspector_sync_label = ttk.Label(
+            self._inspector_content,
+            textvariable=self._sync_var,
+            wraplength=260,
+        )
+        self._inspector_sync_label.pack(fill="x", pady=(3, 6))
         self._apply_workspace_mode()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
@@ -3719,29 +3720,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.show_inspector()
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
-            row = self._property_rows.get(key)
-            if row is not None and row.winfo_ismapped():
-                self._inspector_canvas.update_idletasks()
-                viewport_top = self._inspector_canvas.canvasy(0)
-                viewport_height = self._inspector_canvas.winfo_height()
-                content_height = max(1, self._inspector_content.winfo_height())
-                row_top = (
-                    row.winfo_rooty()
-                    - self._inspector_canvas.winfo_rooty()
-                    + viewport_top
-                )
-                row_bottom = row_top + row.winfo_height()
-                viewport_bottom = viewport_top + viewport_height
-                if row_top < viewport_top:
-                    target_top = row_top
-                elif row_bottom > viewport_bottom:
-                    target_top = row_bottom - viewport_height
-                else:
-                    target_top = None
-                if target_top is not None:
-                    self._inspector_canvas.yview_moveto(
-                        max(0.0, min(1.0, target_top / content_height))
-                    )
             entry.focus_set()
             entry.selection_range(0, "end")
 

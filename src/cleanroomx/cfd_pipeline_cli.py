@@ -16,6 +16,7 @@ from .cfd_openfoam_runtime_sync import (
     hash_case_configuration,
 )
 from .cfd_time_study import analyze_vtk_time_study, validate_time_study
+from .cfd_time_plot import render_time_study_svg
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -136,6 +137,7 @@ def build_parser():
     time_study=sub.add_parser("time-audit",help="Summarize selected VTK fields across one fixed-mesh run")
     time_study.add_argument("spec")
     time_study.add_argument("--output")
+    time_study.add_argument("--plot-output", help="Write a self-contained SVG of the selected-time field trend")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -246,15 +248,22 @@ def main():
         base=Path(args.spec).resolve().parent
         report=analyze_vtk_time_study(spec,base_directory=base)
         payload=dumps_strict_json(report)
+        plot_payload=render_time_study_svg(report) if args.plot_output else None
+        study_inputs=(args.spec,str(base/spec["solver_log"]),*tuple(
+            str(base/sample["vtk_file"]) for sample in spec["samples"]
+        ))
         if args.output:
-            protected=(args.spec,str(base/spec["solver_log"]),*(
-                str(base/sample["vtk_file"]) for sample in spec["samples"]
-            ))
+            protected=study_inputs+((args.plot_output,) if args.plot_output else ())
             if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
                                       protected_inputs=protected):
                 return 1
         else:
             print(payload)
+        if args.plot_output and not publish_cli_output(
+            "cleanroomx-cfd-pipeline",args.plot_output,plot_payload,
+            protected_inputs=study_inputs+((args.output,) if args.output else ()),
+        ):
+            return 1
         return 0 if report["engineering_review"]=="READY_FOR_ENGINEERING_REVIEW" else 3
     if args.command=="scalar-prepare":
         result=prepare_scalar_case(args.flow_case,load_cli_input(load_strict_json,args.spec),

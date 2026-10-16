@@ -47,7 +47,16 @@ log. Set these fields from the actual case and project:
 Run the analysis and save its report:
 
     cleanroomx-cfd-pipeline time-audit cfd_time_study.json \
-      --output cfd_time_analysis.json
+      --output cfd_time_analysis.json \
+      --plot-output cfd_time_analysis.svg
+
+`--plot-output` is optional. It writes a self-contained SVG showing the
+volume-weighted mean at each selected output, a shaded within-snapshot spatial
+p05–p95 band, and a descriptive linear trend. The x-axis retains the supplied
+OpenFOAM time-directory labels and explicitly does not treat them as seconds.
+The band describes spatial field variation; it is not an uncertainty interval.
+SVG and JSON destinations are atomically written and protected from the study
+specification, selected VTK files, solver log, and each other.
 
 The CLI returns 0 only when the configured temporal and volume screens,
 same-mesh check, and solver-log screen are all ready for engineering review.

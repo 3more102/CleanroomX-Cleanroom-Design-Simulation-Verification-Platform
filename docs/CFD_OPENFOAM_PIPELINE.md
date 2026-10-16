@@ -303,7 +303,10 @@ distributions and change across the selected solver-time labels, then checks
 an explicitly project-defined range screen alongside the solver-log screen.
 This is a separate diagnostic from grid-audit: it can identify a changing
 quantity of interest but does not qualify the flow or make GCI a validation
-result. The synthetic integration workflow now provides three selected
+result. Add `--plot-output cfd_time_analysis.svg` to write a standalone SVG
+with the mean trend and the within-snapshot spatial p05–p95 band. The chart
+retains the OpenFOAM labels without treating them as physical seconds. The
+synthetic integration workflow now provides three selected
 snapshots (`30`, `60`, `90`) on one mesh. A temporal review still requires
 project-defined range and volume criteria plus an explicitly configured solver
 log screen; missing criteria keep the report blocked.

@@ -5,11 +5,13 @@ import json
 import math
 from pathlib import Path
 import sys
+from xml.etree import ElementTree
 
 import pytest
 
 import cleanroomx.cfd_time_study as time_study_module
 from cleanroomx.cfd_pipeline_cli import main
+from cleanroomx.cfd_time_plot import render_time_study_svg
 from cleanroomx.cfd_time_study import (
     SCHEMA,
     _weighted_quantile,
@@ -281,6 +283,58 @@ def test_cli_writes_report_without_overwriting_any_study_input(tmp_path, monkeyp
     ])
     assert main() == 1
     assert study_path.read_bytes() == original
+
+
+def test_time_study_svg_plot_shows_mean_spatial_band_and_label_semantics(tmp_path):
+    pytest.importorskip("vtk")
+    _write_log(tmp_path / "solver.log")
+    for index, offset in enumerate((0.0, 0.1, 0.2)):
+        _write_vtu(
+            tmp_path / f"sample-{index}.vtu",
+            [0.8 + offset, 1.2 + offset],
+        )
+    report = analyze_vtk_time_study(_spec(), base_directory=tmp_path)
+    assert report["samples"][0]["field_summary"]["volume_weighted_p05"] < report["samples"][0]["field_summary"]["volume_weighted_p95"]
+
+    svg = render_time_study_svg(report)
+
+    assert svg.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
+    assert ElementTree.fromstring(svg).tag.endswith("svg")
+    assert "Selected-time CFD field analysis" in svg
+    assert "volume-weighted mean" in svg
+    assert "spatial p05–p95" in svg
+    assert "not interpreted as seconds" in svg
+    assert "Scientific validation: BLOCKED" in svg
+    for sample in report["samples"]:
+        assert f'>{sample["solver_time_name"]}</text>' in svg
+
+
+def test_cli_writes_svg_plot_and_protects_vtk_inputs(tmp_path, monkeypatch):
+    pytest.importorskip("vtk")
+    spec = _spec()
+    _fixture_files(tmp_path)
+    study_path = tmp_path / "study.json"
+    study_path.write_text(json.dumps(spec), encoding="utf-8")
+    report_path = tmp_path / "analysis.json"
+    plot_path = tmp_path / "analysis.svg"
+    monkeypatch.setattr(sys, "argv", [
+        "cleanroomx-cfd-pipeline", "time-audit", str(study_path),
+        "--output", str(report_path), "--plot-output", str(plot_path),
+    ])
+
+    assert main() == 0
+    assert json.loads(report_path.read_text(encoding="utf-8"))["status"] == "DIAGNOSTIC_ONLY"
+    svg = plot_path.read_text(encoding="utf-8")
+    assert "<svg " in svg and "spatial p05–p95" in svg
+
+    input_path = tmp_path / "sample-0.vtu"
+    original = input_path.read_bytes()
+    monkeypatch.setattr(sys, "argv", [
+        "cleanroomx-cfd-pipeline", "time-audit", str(study_path),
+        "--plot-output", str(input_path),
+    ])
+    assert main() == 1
+    assert input_path.read_bytes() == original
 
 
 def test_weighted_quantile_uses_cell_volume():

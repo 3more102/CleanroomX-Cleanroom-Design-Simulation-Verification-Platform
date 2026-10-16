@@ -17,6 +17,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from .cfd_openfoam import verify_openfoam_case_bundle
 from .gui_theme import theme_palette
 from .strict_json import load_strict_json_snapshot
 
@@ -337,7 +338,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.output = tk.Text(
             output_frame,
             wrap="word",
-            height=5,
+            height=3,
             state="disabled",
             font=("TkFixedFont", 9),
         )
@@ -421,6 +422,12 @@ class OpenFOAMWorkspace(ttk.Frame):
             command=self._generate,
         )
         self.generate_button.pack(side="left", padx=(0, 4))
+        self.verify_button = ttk.Button(
+            actions,
+            text="Verify case inputs",
+            command=self._verify_case_bundle,
+        )
+        self.verify_button.pack(side="left", padx=4)
         self.run_button = ttk.Button(
             actions,
             text="Run Foundation v10…",
@@ -501,6 +508,7 @@ class OpenFOAMWorkspace(ttk.Frame):
 
         self._action_buttons = (
             self.generate_button,
+            self.verify_button,
             self.run_button,
             self.sync_vtk_button,
             self.preview_button,
@@ -594,6 +602,35 @@ class OpenFOAMWorkspace(ttk.Frame):
             messagebox.showerror("OpenFOAM case generation", str(exc), parent=self)
             return
         self._start_command("Generate OpenFOAM cases", command)
+
+    def _verify_case_bundle(self) -> None:
+        directory = self.case_directory_var.get().strip()
+        if not directory:
+            messagebox.showerror(
+                "Verify OpenFOAM case inputs",
+                "Choose a generated case directory first.",
+                parent=self,
+            )
+            return
+        if self._busy:
+            return
+        self._append(f"Verify generated case inputs\nDirectory: {directory}\n")
+        self._set_busy(True)
+        self._status_setter("Verifying OpenFOAM case inputs")
+        threading.Thread(
+            target=self._verify_case_bundle_worker,
+            args=(directory,),
+            name="cleanroomx-openfoam-case-preflight",
+            daemon=True,
+        ).start()
+
+    def _verify_case_bundle_worker(self, directory: str) -> None:
+        try:
+            report = verify_openfoam_case_bundle(directory)
+        except Exception as exc:
+            self._events.put(("case_verification_failed", str(exc)))
+        else:
+            self._events.put(("case_verification_finished", report))
 
     def _run(self) -> None:
         result_directory = self.result_directory_var.get().strip()
@@ -701,13 +738,39 @@ class OpenFOAMWorkspace(ttk.Frame):
                 else:
                     self._append(f"\nProcess exited with status {value}.\n")
                     self._status_setter(f"OpenFOAM command failed with status {value}")
+            elif kind == "case_verification_finished":
+                self._set_busy(False)
+                self._append(self._format_case_verification(value))
+                self._status_setter(
+                    "Case inputs verified; scientific validation remains blocked"
+                )
+            elif kind == "case_verification_failed":
+                self._set_busy(False)
+                self._append(f"\nCase input verification failed: {value}\n")
+                self._status_setter("OpenFOAM case input verification failed")
         self.after(120, self._drain_events)
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         for button in self._action_buttons:
             button.configure(state="disabled" if busy else "normal")
-        self.stop_button.configure(state="normal" if busy else "disabled")
+        self.stop_button.configure(
+            state="normal" if busy and self._process is not None else "disabled"
+        )
+
+    @staticmethod
+    def _format_case_verification(report: dict[str, Any]) -> str:
+        return (
+            "\nCase-input hashes: MATCH local manifest\n"
+            f"Generated inputs: {report['files_checked']}/{report['files_expected']}\n"
+            "Boundary-input consistency: "
+            f"{report['boundary_audits_passed']}/3 configurations passed\n"
+            f"Bytes checked: {report['total_bytes_checked']}\n"
+            f"Manifest SHA-256: {report['manifest_sha256']}\n"
+            "Manifest trust: local file; not digitally signed\n"
+            "Scientific validation: BLOCKED "
+            "(solver convergence and measured-data validation were not assessed)\n"
+        )
 
     def _stop(self) -> None:
         process = self._process

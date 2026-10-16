@@ -9,9 +9,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 from statistics import fmean
+import tempfile
 
 from .cfd_audit import audit_openfoam_log
 from .cfd_vtk import MAX_VTK_BYTES, import_vtk_case
@@ -381,4 +383,147 @@ def analyze_vtk_time_study(data: dict, *, base_directory: str | Path = ".") -> d
             "physical-time stationarity, mesh independence, model validity, measurement agreement, "
             "cleanroom performance, or certification."
         ),
+    }
+
+
+def render_time_study_plot(
+    report: dict,
+    output: str | Path,
+    *,
+    protected_inputs: tuple[str | Path, ...] = (),
+) -> dict:
+    """Render the measured per-snapshot mean and p05–p95 band to a new PNG.
+
+    This is a visualization of the report's imported VTK values. It does not
+    infer physical time or change the report's diagnostic/blocked status.
+    Existing files are never replaced.
+    """
+    if type(report) is not dict or report.get("schema_version") != SCHEMA:
+        raise ValueError("Plot input must be a CleanroomX CFD time-study report")
+    if report.get("status") != "DIAGNOSTIC_ONLY" or report.get("scientific_validation") != "BLOCKED":
+        raise ValueError("Time-study plots must retain diagnostic-only blocked status")
+    quantity = report.get("quantity")
+    unit = report.get("unit")
+    study_name = report.get("study_name")
+    if type(quantity) is not str or type(unit) is not str or type(study_name) is not str:
+        raise ValueError("Time-study report is missing plot labels")
+    samples = report.get("samples")
+    if type(samples) is not list or not 2 <= len(samples) <= MAX_SAMPLES:
+        raise ValueError("Time-study report must contain 2..100 selected samples")
+
+    labels: list[str] = []
+    means: list[float] = []
+    lower: list[float] = []
+    upper: list[float] = []
+    previous_time = None
+    for index, sample in enumerate(samples):
+        if type(sample) is not dict or type(sample.get("solver_time_name")) is not str:
+            raise ValueError(f"Time-study sample {index} has no solver-time label")
+        time_value = _number(sample.get("solver_time_value"), f"samples[{index}].solver_time_value")
+        if previous_time is not None and time_value <= previous_time:
+            raise ValueError("Time-study plot labels must be strictly increasing")
+        previous_time = time_value
+        summary = sample.get("field_summary")
+        if type(summary) is not dict:
+            raise ValueError(f"Time-study sample {index} has no field summary")
+        mean = _number(summary.get("volume_weighted_mean"), "volume_weighted_mean")
+        p05 = _number(summary.get("volume_weighted_p05"), "volume_weighted_p05")
+        p95 = _number(summary.get("volume_weighted_p95"), "volume_weighted_p95")
+        if p05 > p95:
+            raise ValueError("Time-study percentile band is reversed")
+        labels.append(sample["solver_time_name"])
+        means.append(mean)
+        lower.append(p05)
+        upper.append(p95)
+
+    destination = Path(output).expanduser()
+    if destination.suffix.lower() != ".png":
+        raise ValueError("Time-study plot output must use the .png extension")
+    if not destination.is_absolute():
+        destination = Path.cwd() / destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    for ancestor in reversed((destination.parent, *destination.parent.parents)):
+        if ancestor.is_symlink():
+            raise ValueError("Time-study plot output path cannot contain symbolic links")
+    if destination.is_symlink():
+        raise ValueError("Time-study plot output cannot be a symbolic link")
+    destination = destination.parent.resolve(strict=True) / destination.name
+    for source in protected_inputs:
+        protected = Path(source).expanduser()
+        try:
+            if destination == protected.resolve(strict=False):
+                raise ValueError("Time-study plot output must be distinct from its input files")
+        except (OSError, RuntimeError) as exc:
+            raise ValueError(f"Could not verify protected input path: {protected}") from exc
+    if destination.exists():
+        raise FileExistsError("Refusing to replace an existing time-study plot")
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ValueError("Time-study plots require the optional matplotlib dependency") from exc
+
+    indices = list(range(len(samples)))
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    figure = None
+    try:
+        figure, axis = plt.subplots(figsize=(10, 5.5))
+        axis.fill_between(
+            indices, lower, upper, alpha=0.2, color="#268c87",
+            label="Volume-weighted p05–p95",
+        )
+        axis.plot(
+            indices, means, color="#155b78", marker="o", linewidth=2,
+            markersize=4, label="Volume-weighted mean",
+        )
+        tick_step = max(1, math.ceil(len(indices) / 15))
+        ticks = list(range(0, len(indices), tick_step))
+        if ticks[-1] != len(indices) - 1:
+            ticks.append(len(indices) - 1)
+        axis.set_xticks(ticks, [labels[index] for index in ticks])
+        axis.set_xlabel("Selected OpenFOAM solver-time label (not physical seconds)")
+        display_quantity = {
+            "velocity_mean_m_s": "Volume-weighted mean velocity",
+            "contaminant_mean": "Volume-weighted mean contaminant concentration",
+        }.get(quantity, quantity.replace("_", " "))
+        axis.set_ylabel(f"{display_quantity} ({unit})")
+        axis.set_title(study_name)
+        axis.grid(True, alpha=0.25)
+        axis.legend(loc="best")
+        summary = report.get("series_analysis", {})
+        range_status = summary.get("screening_status", "UNAVAILABLE") if type(summary) is dict else "UNAVAILABLE"
+        figure.tight_layout(rect=(0, 0.1, 1, 0.96))
+        figure.text(
+            0.5, 0.025,
+            f"Range screen: {range_status} | Engineering review: {report.get('engineering_review', 'BLOCKED')} | "
+            "Scientific validation: BLOCKED",
+            ha="center", va="top", fontsize=8,
+        )
+        figure.savefig(temporary, format="png", dpi=160)
+        with temporary.open("rb") as stream:
+            os.fsync(stream.fileno())
+        # Linking makes publication atomic and fails if a competing writer has
+        # created the destination since the preflight check.
+        os.link(temporary, destination)
+    finally:
+        if figure is not None:
+            plt.close(figure)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+    return {
+        "path": str(destination),
+        "format": "png",
+        "sample_count": len(samples),
+        "series": "volume_weighted_mean_with_p05_p95_band",
+        "solver_time_semantics": "selected OpenFOAM labels; not physical seconds",
+        "scientific_validation": "BLOCKED",
     }

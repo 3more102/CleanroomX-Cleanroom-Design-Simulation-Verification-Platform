@@ -303,10 +303,14 @@ distributions and change across the selected solver-time labels, then checks
 an explicitly project-defined range screen alongside the solver-log screen.
 This is a separate diagnostic from grid-audit: it can identify a changing
 quantity of interest but does not qualify the flow or make GCI a validation
-result. The synthetic integration workflow now provides three selected
-snapshots (`30`, `60`, `90`) on one mesh. A temporal review still requires
+result. The exact-head synthetic integration workflow is configured to select
+solver labels `30`, `60`, and `90` from its five-output series, leaving the
+baseline latest-time output at `150` untouched. Add `--plot cfd_time_analysis.png`
+to write a data-derived mean and p05–p95 time-series chart alongside the JSON
+report. A temporal review still requires
 project-defined range and volume criteria plus an explicitly configured solver
-log screen; missing criteria keep the report blocked.
+log screen; missing criteria keep the report blocked. The completed run 160
+captured `50`, `100`, and `150` but did not run `time-audit` against those data.
 
 The independently rechecked run 58 U archive and per-case native/VTK hashes
 are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).

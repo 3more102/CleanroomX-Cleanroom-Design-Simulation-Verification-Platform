@@ -15,7 +15,11 @@ from .cfd_openfoam_runtime_sync import (
     OpenFOAMResultSynchronizer,
     hash_case_configuration,
 )
-from .cfd_time_study import analyze_vtk_time_study, validate_time_study
+from .cfd_time_study import (
+    analyze_vtk_time_study,
+    render_time_study_plot,
+    validate_time_study,
+)
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -136,6 +140,7 @@ def build_parser():
     time_study=sub.add_parser("time-audit",help="Summarize selected VTK fields across one fixed-mesh run")
     time_study.add_argument("spec")
     time_study.add_argument("--output")
+    time_study.add_argument("--plot", help="Optional PNG of the measured time series and p05–p95 band")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -245,6 +250,19 @@ def main():
         validate_time_study(spec)
         base=Path(args.spec).resolve().parent
         report=analyze_vtk_time_study(spec,base_directory=base)
+        if args.plot:
+            plot_inputs=[
+                args.spec,
+                str(base/spec["solver_log"]),
+                *(str(base/sample["vtk_file"]) for sample in spec["samples"]),
+            ]
+            if args.output:
+                plot_inputs.append(args.output)
+            plot_metadata=render_time_study_plot(
+                report,args.plot,protected_inputs=tuple(plot_inputs)
+            )
+            report["plot"]=plot_metadata
+            print(f"Time-study plot written to {plot_metadata['path']}",file=sys.stderr)
         payload=dumps_strict_json(report)
         if args.output:
             protected=(args.spec,str(base/spec["solver_log"]),*(

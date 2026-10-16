@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+import struct
 import sys
 
 import pytest
@@ -14,6 +15,7 @@ from cleanroomx.cfd_time_study import (
     SCHEMA,
     _weighted_quantile,
     analyze_vtk_time_study,
+    render_time_study_plot,
     validate_time_study,
 )
 
@@ -281,6 +283,64 @@ def test_cli_writes_report_without_overwriting_any_study_input(tmp_path, monkeyp
     ])
     assert main() == 1
     assert study_path.read_bytes() == original
+
+
+def test_time_study_plot_renders_actual_report_and_never_replaces_existing_png(tmp_path):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    _fixture_files(tmp_path)
+    report = analyze_vtk_time_study(_spec(), base_directory=tmp_path)
+    plot = tmp_path / "analysis.png"
+
+    result = render_time_study_plot(report, plot)
+
+    content = plot.read_bytes()
+    assert content.startswith(b"\x89PNG\r\n\x1a\n")
+    width, height = struct.unpack(">II", content[16:24])
+    assert (width, height) == (1600, 880)
+    assert result == {
+        "path": str(plot.resolve()),
+        "format": "png",
+        "sample_count": 3,
+        "series": "volume_weighted_mean_with_p05_p95_band",
+        "solver_time_semantics": "selected OpenFOAM labels; not physical seconds",
+        "scientific_validation": "BLOCKED",
+    }
+    original = plot.read_bytes()
+    with pytest.raises(FileExistsError, match="Refusing to replace"):
+        render_time_study_plot(report, plot)
+    assert plot.read_bytes() == original
+    with pytest.raises(ValueError, match="distinct from its input"):
+        render_time_study_plot(report, tmp_path / "study-input.png", protected_inputs=(tmp_path / "study-input.png",))
+
+
+def test_time_study_plot_cli_adds_plot_provenance_and_guards_inputs(tmp_path, monkeypatch):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    spec = _spec()
+    _fixture_files(tmp_path)
+    study_path = tmp_path / "study.json"
+    study_path.write_text(json.dumps(spec), encoding="utf-8")
+    output = tmp_path / "analysis.json"
+    plot = tmp_path / "analysis.png"
+    monkeypatch.setattr(sys, "argv", [
+        "cleanroomx-cfd-pipeline", "time-audit", str(study_path),
+        "--output", str(output), "--plot", str(plot),
+    ])
+
+    assert main() == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["plot"]["path"] == str(plot.resolve())
+    assert report["plot"]["sample_count"] == 3
+    assert plot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    original_spec = study_path.read_bytes()
+    monkeypatch.setattr(sys, "argv", [
+        "cleanroomx-cfd-pipeline", "time-audit", str(study_path),
+        "--plot", str(study_path),
+    ])
+    assert main() == 1
+    assert study_path.read_bytes() == original_spec
 
 
 def test_weighted_quantile_uses_cell_volume():

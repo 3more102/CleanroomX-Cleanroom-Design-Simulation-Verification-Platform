@@ -11,14 +11,20 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import uuid
 
 from .cfd_study import CONFIGURATIONS
+from .persistence import stable_file_sha256, stable_file_snapshot
+from .strict_json import load_strict_json_snapshot
 
 SCHEMA = "cleanroomx.openfoam.v1"
 MAX_CELLS = 20_000
 FOUNDATION_RELEASE = "10"
+MAX_CASE_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_CASE_INPUT_BYTES = 8 * 1024 * 1024
+MAX_CASE_INPUT_TOTAL_BYTES = 64 * 1024 * 1024
 
 def _number(x, name):
     if type(x) not in (int, float) or not math.isfinite(x) or x <= 0:
@@ -457,6 +463,179 @@ def export_openfoam_cases(spec,directory):
         shutil.rmtree(root)
         raise
     return manifest
+
+
+def verify_openfoam_case_bundle(directory):
+    """Verify generated case-input hashes and boundary consistency, read-only.
+
+    This is an input-integrity preflight only. It does not execute OpenFOAM,
+    assess solver convergence, establish grid independence, or validate the
+    model against measured cleanroom data.
+    """
+    candidate = Path(directory).expanduser()
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("Case bundle must be a regular directory")
+    root = candidate.resolve(strict=True)
+    manifest_path = root / "manifest.json"
+    try:
+        manifest_info = manifest_path.lstat()
+    except OSError as error:
+        raise ValueError("Case bundle manifest is missing or unreadable") from error
+    if stat.S_ISLNK(manifest_info.st_mode) or not stat.S_ISREG(manifest_info.st_mode):
+        raise ValueError("Case bundle manifest must be a regular file")
+    snapshot = load_strict_json_snapshot(
+        manifest_path, max_bytes=MAX_CASE_MANIFEST_BYTES
+    )
+    manifest = snapshot.value
+    if type(manifest) is not dict or set(manifest) != {
+        "schema_version", "spec_sha256", "evidence", "files"
+    }:
+        raise ValueError("Case bundle manifest has an unsupported structure")
+    if manifest.get("schema_version") != SCHEMA:
+        raise ValueError("Case bundle manifest uses an unsupported schema")
+    if type(manifest.get("spec_sha256")) is not str or not re.fullmatch(
+        r"[0-9a-f]{64}", manifest["spec_sha256"]
+    ):
+        raise ValueError("Case bundle manifest has an invalid specification digest")
+
+    case_inputs = (
+        "system/blockMeshDict",
+        "system/controlDict",
+        "system/fvSchemes",
+        "system/fvSolution",
+        "constant/physicalProperties",
+        "constant/momentumTransport",
+        "0/U",
+        "0/p",
+    )
+    expected_files = {
+        f"configuration_{configuration}/{relative}"
+        for configuration in (1, 2, 3)
+        for relative in case_inputs
+    }
+    files = manifest.get("files")
+    if type(files) is not dict or set(files) != expected_files:
+        raise ValueError("Case bundle must bind the exact 24 generated input files")
+    evidence = manifest.get("evidence")
+    if type(evidence) is not dict or set(evidence) != {"1", "2", "3"}:
+        raise ValueError(
+            "Case bundle must contain metadata for all three configurations"
+        )
+
+    file_records = []
+    total_bytes = 0
+    boundary_text: dict[str, dict[str, str]] = {"1": {}, "2": {}, "3": {}}
+    boundary_files = {
+        f"configuration_{configuration}/{relative}"
+        for configuration in (1, 2, 3)
+        for relative in ("system/blockMeshDict", "0/U", "0/p")
+    }
+    for relative in sorted(expected_files):
+        expected_sha = files[relative]
+        if type(expected_sha) is not str or not re.fullmatch(
+            r"[0-9a-f]{64}", expected_sha
+        ):
+            raise ValueError(f"Case manifest has an invalid SHA-256 for {relative}")
+        path = root.joinpath(*Path(relative).parts)
+
+        # Check every component without following links. The manifest is an
+        # untrusted input, and even a correctly hashed external target is not
+        # a file inside the selected case bundle.
+        current = root
+        components = Path(relative).parts
+        for index, component in enumerate(components):
+            current = current / component
+            try:
+                info = current.lstat()
+            except OSError as error:
+                raise ValueError(f"Missing generated solver file: {relative}") from error
+            if stat.S_ISLNK(info.st_mode):
+                raise ValueError(
+                    f"Symbolic links are not allowed in case inputs: {relative}"
+                )
+            if index < len(components) - 1:
+                if not stat.S_ISDIR(info.st_mode):
+                    raise ValueError(f"Invalid case input directory: {relative}")
+            elif not stat.S_ISREG(info.st_mode):
+                raise ValueError(f"Generated solver input must be a regular file: {relative}")
+            elif info.st_size > MAX_CASE_INPUT_BYTES:
+                raise ValueError(f"Generated solver input exceeds the size limit: {relative}")
+
+        configuration = relative.split("/", 1)[0].removeprefix("configuration_")
+        case_relative = relative.split("/", 1)[1]
+        if relative in boundary_files:
+            try:
+                with stable_file_snapshot(
+                    path,
+                    max_bytes=MAX_CASE_INPUT_BYTES,
+                    suffix=path.suffix,
+                ) as (stable_path, metadata, observed_sha):
+                    if observed_sha != expected_sha:
+                        raise ValueError(f"Tampered generated solver file: {relative}")
+                    total_bytes += metadata.st_size
+                    if total_bytes > MAX_CASE_INPUT_TOTAL_BYTES:
+                        raise ValueError("Case bundle exceeds the total input size limit")
+                    boundary_text[configuration][case_relative] = stable_path.read_text(
+                        encoding="utf-8"
+                    )
+            except UnicodeDecodeError as error:
+                raise ValueError(
+                    f"Generated solver input is not valid UTF-8: {relative}"
+                ) from error
+        else:
+            metadata, observed_sha = stable_file_sha256(
+                path, max_bytes=MAX_CASE_INPUT_BYTES
+            )
+            if observed_sha != expected_sha:
+                raise ValueError(f"Tampered generated solver file: {relative}")
+            total_bytes += metadata.st_size
+            if total_bytes > MAX_CASE_INPUT_TOTAL_BYTES:
+                raise ValueError("Case bundle exceeds the total input size limit")
+        file_records.append(
+            {
+                "path": relative,
+                "size_bytes": metadata.st_size,
+                "sha256": observed_sha,
+                "verified": True,
+            }
+        )
+
+    boundary_audits = {}
+    for configuration in (1, 2, 3):
+        key = str(configuration)
+        metadata = evidence[key]
+        if type(metadata) is not dict:
+            raise ValueError(
+                f"Case bundle metadata for configuration {configuration} is invalid"
+            )
+        audit = audit_openfoam_boundary_inputs(boundary_text[key], metadata)
+        if metadata.get("boundary_audit") != audit:
+            raise ValueError(
+                f"Boundary audit metadata mismatch for configuration {configuration}"
+            )
+        boundary_audits[key] = audit
+
+    return {
+        "schema_version": "cleanroomx.openfoam-case-input-verification.v1",
+        "status": "verified_against_local_manifest",
+        "interpretation": "input_integrity_and_boundary_consistency_only",
+        "manifest_authentication": "not_signed",
+        "manifest_sha256": hashlib.sha256(snapshot.raw_bytes).hexdigest(),
+        "spec_sha256": manifest["spec_sha256"],
+        "files_checked": len(file_records),
+        "files_expected": len(expected_files),
+        "total_bytes_checked": total_bytes,
+        "files": file_records,
+        "boundary_audits_passed": len(boundary_audits),
+        "boundary_audits": boundary_audits,
+        "scientific_validation": "BLOCKED",
+        "limitations": [
+            "Input digests are compared with the local manifest, which is not digitally signed.",
+            "No solver was executed by this preflight.",
+            "Solver convergence, grid independence, and physical validation were not assessed.",
+            "Measured cleanroom data and independent scientific review are still required.",
+        ],
+    }
 
 def _foundation_v10_banner(log_text):
     """Extract and identify the Foundation banner from an OpenFOAM log."""

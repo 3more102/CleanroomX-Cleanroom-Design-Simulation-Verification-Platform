@@ -28,11 +28,17 @@ the scan after the configured stability interval when the initial scan reports
 pending files. On compact displays, the workflow controls scroll independently
 from the command output so the output remains visible.
 
-**Preview result evidence** reads known manifest files and displays selected
-status fields and the raw-file SHA-256. It is a viewer, not an independent
-integrity audit. **Load ProofGraph JSON** sends an existing persisted graph to
-the application's ProofGraph viewer; the desktop tab does not generate that
-graph from the CFD artifacts.
+**Verify case inputs** performs a read-only preflight over the generated bundle:
+it checks the exact 24 manifest-bound input files, verifies their SHA-256
+digests, rejects linked or oversized inputs, and reruns the boundary-geometry
+and inlet-flow consistency audit for all three configurations. Hashes are
+compared with the bundle's local unsigned manifest. The result does not run
+OpenFOAM or establish solver convergence, grid independence, or physical
+validation. **Preview result evidence** remains a viewer for selected fields
+and raw-file SHA-256 values.
+**Load ProofGraph JSON** sends an existing persisted graph to the application's
+ProofGraph viewer; the desktop tab does not generate that graph from CFD
+artifacts.
 
 The tab is a software workflow integration. It does not yet derive OpenFOAM
 boundary geometry from the active CAD/IFC project or attach solver snapshots

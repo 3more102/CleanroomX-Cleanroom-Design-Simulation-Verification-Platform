@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — OpenFOAM case-input GUI preflight — 2026-10-16
+
+- Adds a read-only desktop action that checks all 24 generated case-input hashes against the local unsigned manifest and recomputes the three boundary-geometry/inlet-flow consistency audits before a solver run.
+- Runs the preflight off the Tk event loop, bounds manifest and input sizes, rejects symbolic-link inputs, and reports the local-manifest trust boundary explicitly.
+- Keeps solver execution, convergence, grid independence, and physical cleanroom validation outside this preflight; scientific validation remains blocked.
+
 ## Unreleased Release 3 — strict OpenFOAM block vertex indices — 2026-10-16
 
 - Parses all eight `blockMeshDict` hex vertex references as signed integer tokens and rejects negative or out-of-range references before deriving exterior-face topology.

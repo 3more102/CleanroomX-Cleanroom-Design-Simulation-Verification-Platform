@@ -25,7 +25,8 @@ For an existing `foamToVTK` export, select its VTK directory, the generated
 case bundle's `manifest.json`, a result directory, and a simulation ID, then
 choose **Sync VTK once**. The command uses the normal stability checks. Repeat
 the scan after the configured stability interval when the initial scan reports
-pending files.
+pending files. On compact displays, the workflow controls scroll independently
+from the command output so the output remains visible.
 
 **Preview result evidence** reads known manifest files and displays selected
 status fields and the raw-file SHA-256. It is a viewer, not an independent

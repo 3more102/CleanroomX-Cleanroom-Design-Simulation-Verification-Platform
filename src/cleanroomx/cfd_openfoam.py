@@ -16,8 +16,12 @@ import subprocess
 import uuid
 
 from .cfd_study import CONFIGURATIONS
-from .persistence import stable_file_sha256, stable_file_snapshot
-from .strict_json import load_strict_json_snapshot
+from .persistence import (
+    _stable_file_path_matches_opened,
+    stable_file_sha256,
+    stable_file_snapshot,
+)
+from .strict_json import strict_json_loads
 
 SCHEMA = "cleanroomx.openfoam.v1"
 MAX_CELLS = 20_000
@@ -25,6 +29,106 @@ FOUNDATION_RELEASE = "10"
 MAX_CASE_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_CASE_INPUT_BYTES = 8 * 1024 * 1024
 MAX_CASE_INPUT_TOTAL_BYTES = 64 * 1024 * 1024
+
+
+def _case_bundle_component_identity(metadata):
+    """Return a path identity that detects replacement without following links."""
+    file_type = stat.S_IFMT(metadata.st_mode)
+    device = getattr(metadata, "st_dev", 0)
+    inode = getattr(metadata, "st_ino", 0)
+    if inode:
+        return (device, inode, file_type)
+    return (
+        file_type,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+        getattr(metadata, "st_birthtime_ns", None),
+    )
+
+
+def _case_bundle_same_path_identity(before, after):
+    """Compare lstat records and use file-index identity where it is available."""
+    if not _stable_file_path_matches_opened(before, after):
+        return False
+    before_inode = getattr(before, "st_ino", 0)
+    after_inode = getattr(after, "st_ino", 0)
+    if before_inode and after_inode:
+        return before.st_dev == after.st_dev and before_inode == after_inode
+    return True
+
+
+def _case_bundle_path_chain(root, relative, max_bytes):
+    """Check each bundle path component with lstat and retain its identity."""
+    current = root
+    chain = []
+    for index, component in enumerate((None, *Path(relative).parts)):
+        if component is not None:
+            current = current / component
+        try:
+            metadata = current.lstat()
+        except OSError as error:
+            raise ValueError(f"Missing generated solver file: {relative}") from error
+        if stat.S_ISLNK(metadata.st_mode):
+            if component is None:
+                raise ValueError("Case bundle must be a regular directory")
+            raise ValueError(
+                f"Symbolic links are not allowed in case inputs: {relative}"
+            )
+        is_final = index == len(Path(relative).parts)
+        if is_final:
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError(
+                    f"Generated solver input must be a regular file: {relative}"
+                )
+            if metadata.st_size > max_bytes:
+                raise ValueError(
+                    f"Generated solver input exceeds the size limit: {relative}"
+                )
+        elif not stat.S_ISDIR(metadata.st_mode):
+            if component is None:
+                raise ValueError("Case bundle must be a regular directory")
+            raise ValueError(f"Invalid case input directory: {relative}")
+        chain.append((current, metadata))
+    return chain
+
+
+def _read_case_bundle_file(
+    root, relative, *, max_bytes, expected_root_identity, capture
+):
+    """Read and hash one bounded file, binding its open handle to the checked tree.
+
+    The stable-file reader binds the opened descriptor to its live path. The
+    pre- and post-read lstat walks reject symlinks and bind every component to
+    the checked path, including when a replaced directory is restored before
+    the second walk.
+    """
+    before_chain = _case_bundle_path_chain(root, relative, max_bytes)
+    if _case_bundle_component_identity(before_chain[0][1]) != expected_root_identity:
+        raise ValueError("Case bundle directory changed during verification")
+    path = before_chain[-1][0]
+    if capture:
+        with stable_file_snapshot(path, max_bytes=max_bytes, suffix=path.suffix) as (
+            stable_path,
+            metadata,
+            digest,
+        ):
+            content = stable_path.read_bytes()
+    else:
+        metadata, digest = stable_file_sha256(path, max_bytes=max_bytes)
+        content = None
+
+    if not _case_bundle_same_path_identity(before_chain[-1][1], metadata):
+        raise ValueError(f"Case input path changed during verification: {relative}")
+    after_chain = _case_bundle_path_chain(root, relative, max_bytes)
+    if len(before_chain) != len(after_chain) or any(
+        not _case_bundle_same_path_identity(before[1], after[1])
+        for before, after in zip(before_chain, after_chain)
+    ):
+        raise ValueError(f"Case input path changed during verification: {relative}")
+    if _case_bundle_component_identity(after_chain[0][1]) != expected_root_identity:
+        raise ValueError("Case bundle directory changed during verification")
+    return metadata, digest, content
 
 def _number(x, name):
     if type(x) not in (int, float) or not math.isfinite(x) or x <= 0:
@@ -476,17 +580,25 @@ def verify_openfoam_case_bundle(directory):
     if candidate.is_symlink() or not candidate.is_dir():
         raise ValueError("Case bundle must be a regular directory")
     root = candidate.resolve(strict=True)
-    manifest_path = root / "manifest.json"
     try:
-        manifest_info = manifest_path.lstat()
+        root_info = root.lstat()
     except OSError as error:
-        raise ValueError("Case bundle manifest is missing or unreadable") from error
-    if stat.S_ISLNK(manifest_info.st_mode) or not stat.S_ISREG(manifest_info.st_mode):
-        raise ValueError("Case bundle manifest must be a regular file")
-    snapshot = load_strict_json_snapshot(
-        manifest_path, max_bytes=MAX_CASE_MANIFEST_BYTES
+        raise ValueError("Case bundle directory is missing or unreadable") from error
+    if stat.S_ISLNK(root_info.st_mode) or not stat.S_ISDIR(root_info.st_mode):
+        raise ValueError("Case bundle must be a regular directory")
+    root_identity = _case_bundle_component_identity(root_info)
+    _, manifest_sha256, manifest_bytes = _read_case_bundle_file(
+        root,
+        "manifest.json",
+        max_bytes=MAX_CASE_MANIFEST_BYTES,
+        expected_root_identity=root_identity,
+        capture=True,
     )
-    manifest = snapshot.value
+    try:
+        manifest_text = manifest_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("Case bundle manifest is not valid UTF-8") from error
+    manifest = strict_json_loads(manifest_text)
     if type(manifest) is not dict or set(manifest) != {
         "schema_version", "spec_sha256", "evidence", "files"
     }:
@@ -536,61 +648,27 @@ def verify_openfoam_case_bundle(directory):
             r"[0-9a-f]{64}", expected_sha
         ):
             raise ValueError(f"Case manifest has an invalid SHA-256 for {relative}")
-        path = root.joinpath(*Path(relative).parts)
-
-        # Check every component without following links. The manifest is an
-        # untrusted input, and even a correctly hashed external target is not
-        # a file inside the selected case bundle.
-        current = root
-        components = Path(relative).parts
-        for index, component in enumerate(components):
-            current = current / component
-            try:
-                info = current.lstat()
-            except OSError as error:
-                raise ValueError(f"Missing generated solver file: {relative}") from error
-            if stat.S_ISLNK(info.st_mode):
-                raise ValueError(
-                    f"Symbolic links are not allowed in case inputs: {relative}"
-                )
-            if index < len(components) - 1:
-                if not stat.S_ISDIR(info.st_mode):
-                    raise ValueError(f"Invalid case input directory: {relative}")
-            elif not stat.S_ISREG(info.st_mode):
-                raise ValueError(f"Generated solver input must be a regular file: {relative}")
-            elif info.st_size > MAX_CASE_INPUT_BYTES:
-                raise ValueError(f"Generated solver input exceeds the size limit: {relative}")
-
         configuration = relative.split("/", 1)[0].removeprefix("configuration_")
         case_relative = relative.split("/", 1)[1]
-        if relative in boundary_files:
+        metadata, observed_sha, content = _read_case_bundle_file(
+            root,
+            relative,
+            max_bytes=MAX_CASE_INPUT_BYTES,
+            expected_root_identity=root_identity,
+            capture=relative in boundary_files,
+        )
+        if observed_sha != expected_sha:
+            raise ValueError(f"Tampered generated solver file: {relative}")
+        total_bytes += metadata.st_size
+        if total_bytes > MAX_CASE_INPUT_TOTAL_BYTES:
+            raise ValueError("Case bundle exceeds the total input size limit")
+        if content is not None:
             try:
-                with stable_file_snapshot(
-                    path,
-                    max_bytes=MAX_CASE_INPUT_BYTES,
-                    suffix=path.suffix,
-                ) as (stable_path, metadata, observed_sha):
-                    if observed_sha != expected_sha:
-                        raise ValueError(f"Tampered generated solver file: {relative}")
-                    total_bytes += metadata.st_size
-                    if total_bytes > MAX_CASE_INPUT_TOTAL_BYTES:
-                        raise ValueError("Case bundle exceeds the total input size limit")
-                    boundary_text[configuration][case_relative] = stable_path.read_text(
-                        encoding="utf-8"
-                    )
+                boundary_text[configuration][case_relative] = content.decode("utf-8")
             except UnicodeDecodeError as error:
                 raise ValueError(
                     f"Generated solver input is not valid UTF-8: {relative}"
                 ) from error
-        else:
-            metadata, observed_sha = stable_file_sha256(
-                path, max_bytes=MAX_CASE_INPUT_BYTES
-            )
-            if observed_sha != expected_sha:
-                raise ValueError(f"Tampered generated solver file: {relative}")
-            total_bytes += metadata.st_size
-            if total_bytes > MAX_CASE_INPUT_TOTAL_BYTES:
-                raise ValueError("Case bundle exceeds the total input size limit")
         file_records.append(
             {
                 "path": relative,
@@ -620,7 +698,7 @@ def verify_openfoam_case_bundle(directory):
         "status": "verified_against_local_manifest",
         "interpretation": "input_integrity_and_boundary_consistency_only",
         "manifest_authentication": "not_signed",
-        "manifest_sha256": hashlib.sha256(snapshot.raw_bytes).hexdigest(),
+        "manifest_sha256": manifest_sha256,
         "spec_sha256": manifest["spec_sha256"],
         "files_checked": len(file_records),
         "files_expected": len(expected_files),

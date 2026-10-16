@@ -603,6 +603,49 @@ def test_sync_command_runner_keeps_solver_log_and_drains_final_snapshot(tmp_path
     assert manifest["errors"][0]["status"] == "recovered_after_retry"
 
 
+def test_sync_command_runner_marks_timeout(tmp_path, monkeypatch):
+    case = _case(tmp_path, temperature=False)
+    synchronizer = _configured_sync(tmp_path, case, monkeypatch, optional_fields=())
+    processes = []
+
+    class FakeProcess:
+        def __init__(self, command, *, cwd, stdout, stderr):
+            assert command == ["simpleFoam"]
+            assert cwd == case
+            assert stderr is cfd_sync.subprocess.STDOUT
+            self.terminated = False
+            processes.append(self)
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, **_kwargs):
+            return 0
+
+        def kill(self):
+            raise AssertionError("process should exit after terminate")
+
+    clock = iter((0.0, 60.0))
+    monkeypatch.setattr(synchronizer, "poll_once", lambda: None)
+    monkeypatch.setattr(cfd_sync.subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(cfd_sync.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(cfd_sync.time, "sleep", lambda _seconds: None)
+    log_path = case / "simpleFoam.log"
+
+    returncode = cfd_sync.run_solver_with_sync(
+        ["simpleFoam"], cwd=case, log_path=log_path,
+        timeout_seconds=60, synchronizer=synchronizer,
+    )
+
+    assert returncode == 124
+    assert synchronizer._solver_timed_out is True
+    assert processes[0].terminated is True
+    assert log_path.is_file()
+
+
 def test_sync_watcher_classifies_fatal_log_as_incomplete(tmp_path, monkeypatch):
     case = _case(tmp_path, temperature=False)
     synchronizer = _configured_sync(tmp_path, case, monkeypatch, optional_fields=())

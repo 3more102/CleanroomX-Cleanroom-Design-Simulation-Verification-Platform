@@ -107,7 +107,12 @@ rejected by this v10 case runner. Then opt in:
 
 The runner checks input hashes, recomputes the boundary audit from the bound
 case files, returns those audit records with its execution receipt, uses no
-shell and records solver logs. A zero
+shell and records solver logs. Every run copies the 24 hash-verified inputs
+through stable snapshots into a unique
+`execution_runs/attempt-<id>/configuration_<n>` workspace. Solver outputs and
+logs stay in that attempt directory, preserving the generated case bundle and
+allowing a fresh retry after a timeout or failed run. Attempt folders are kept
+for review and can be removed when no longer needed. A zero
 return code is **not CFD convergence**: inspect residuals, continuity,
 boundary flux balance, turbulence/Reynolds applicability, mesh quality and
 grid independence. Other OpenFOAM versions may require solver template

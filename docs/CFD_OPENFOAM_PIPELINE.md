@@ -135,15 +135,17 @@ synthetic mesh family; it does not set a flow-balance criterion or establish
 solver convergence or physical validity.
 
 The Foundation v10 integration workflow makes a separate multi-time export
-using `foamToVTK -time 30,60,90 -useTimeName`. The synthetic case writes at
-30-step intervals through iteration 150; the separate export checks the first
-three selected outputs and avoids overwriting the baseline latest-time output
-at `150`. It requires the utility log to show exactly `30`, `60`, and `90` in
-order, then compares the exported internal U/p, inlet/outlet/walls U/p, and
+using `foamToVTK -time 30,60,90,120 -useTimeName`. The synthetic case writes
+at 30-step intervals through iteration 150; the separate export checks the
+first four outputs and avoids overwriting the baseline latest-time output at
+`150`. It requires the utility log to show exactly `30`, `60`, `90`, and `120`
+in order, then compares the exported internal U/p, inlet/outlet/walls U/p, and
 surface `phi` datasets with the native fields in each matching time directory.
-The v2 sidecar receipt binds the command log, source fields, and every
-selected-time VTK file by SHA-256. These are execution and serialization
-diagnostics, not solver-convergence or physical-validation evidence. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
+The workflow synchronizes those four selected outputs and the separate
+baseline `150` output. The v2 sidecar receipt binds the command log, source
+fields, and every selected-time VTK file by SHA-256. These are execution and
+serialization diagnostics, not solver-convergence or physical-validation
+evidence. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
 registers comma-separated time ranges, iterates the selected time directories,
 and uses `-useTimeName` to name each dataset from the solver time name.
 
@@ -305,8 +307,10 @@ change, and room-volume error alongside the solver-log screen.
 This is a separate diagnostic from grid-audit: it can identify a changing
 quantity of interest but does not qualify the flow or make GCI a validation
 result. The exact-head synthetic integration workflow is configured to select
-solver labels `30`, `60`, and `90` from its five-output series, leaving the
-baseline latest-time output at `150` untouched. Add `--plot cfd_time_analysis.png`
+solver labels `30`, `60`, `90`, and `120` from its five-output series, leaving
+the baseline latest-time output at `150` untouched. It verifies synchronization
+of all five labels; the workflow does not yet invoke `time-audit` against these
+outputs. Add `--plot cfd_time_analysis.png`
 to write a data-derived chart of the mean, p05–p95 distribution, and consecutive
 same-mesh field change alongside the JSON report. A temporal review still requires
 project-defined range and volume criteria plus an explicitly configured solver

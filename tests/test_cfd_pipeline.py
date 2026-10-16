@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from cleanroomx.cfd_openfoam import (
-    SCHEMA, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
+    SCHEMA, _hex_exterior_face_signatures, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
     parse_openfoam_checkmesh_log, run_openfoam_cases, validate_openfoam_spec,
 )
 from cleanroomx.cfd_vtk import (
@@ -115,6 +115,11 @@ def test_patch_topology_is_closed():
         assert len(faces)==2*(nx*ny+nx*nz+ny*nz)
         assert len(faces)==len(set(faces))
         assert p["inlet"] and p["outlet"]
+
+def test_hex_topology_rejects_negative_vertex_indices():
+    block="hex (-8 1 2 3 4 5 6 7) (1 1 1) simpleGrading (1 1 1)"
+    with pytest.raises(ValueError,match="invalid vertex indices"):
+        _hex_exterior_face_signatures(block,10)
 
 @pytest.mark.parametrize("field,value",[
     ("schema_version","bogus"),("mesh_cells",[80,80,80]),

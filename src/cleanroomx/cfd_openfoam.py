@@ -170,8 +170,11 @@ def _hex_exterior_face_signatures(block_text, vertex_count):
         raise ValueError("blockMeshDict must contain only supported generated hex blocks")
     face_uses={}
     for match in matches:
-        ids=tuple(int(value) for value in re.findall(r"\d+",match.group(1)))
-        if len(ids)!=8 or len(set(ids))!=8 or any(index>=vertex_count for index in ids):
+        raw_ids=match.group(1).split()
+        if len(raw_ids)!=8 or any(not re.fullmatch(r"[+-]?\d+",value) for value in raw_ids):
+            raise ValueError("blockMeshDict hex block has invalid vertex indices")
+        ids=tuple(int(value) for value in raw_ids)
+        if len(set(ids))!=8 or any(index<0 or index>=vertex_count for index in ids):
             raise ValueError("blockMeshDict hex block has invalid vertex indices")
         a,b,c,d,e,f,g,h=ids
         for face in ((a,d,c,b),(e,f,g,h),(a,e,h,d),(b,c,g,f),(a,b,f,e),(d,h,g,c)):

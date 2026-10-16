@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased Release 3 — strict OpenFOAM block vertex indices — 2026-10-16
+
+- Parses all eight `blockMeshDict` hex vertex references as signed integer tokens and rejects negative or out-of-range references before deriving exterior-face topology.
+- Adds a regression for a negative index that would otherwise lose its sign during digit extraction; OpenFOAM cases and scientific-validation status are unchanged.
+
 ## Unreleased Release 3 — bounded OpenFOAM residual-trend diagnostics — 2026-10-15
 
 - Adds bounded first-window versus tail-window median initial-residual summaries to the read-only single-log and nine-case triage commands. Short logs use disjoint reduced windows; trend ratios remain descriptive and never satisfy convergence or validation criteria.

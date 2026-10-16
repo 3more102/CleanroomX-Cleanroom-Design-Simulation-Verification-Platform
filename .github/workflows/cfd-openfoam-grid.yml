@@ -9,6 +9,9 @@ on:
       - "docs/CFD_OPENFOAM_PIPELINE.md"
       - "examples/cfd_grid_family.example.json"
       - "examples/cfd_openfoam_field_map.example.json"
+      - "examples/cfd_scalar_spec.example.json"
+      - "examples/cfd_scalar_field_map.example.json"
+      - "scripts/openfoam_v10_scalar_sync_smoke.py"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
   workflow_dispatch:
@@ -1161,6 +1164,16 @@ jobs:
           Path(sys.argv[3]).write_text("\n".join(flux_lines) + "\n", encoding="utf-8")
           PY
 
+      - name: Run and synchronize a real passive-tracer case
+        run: |
+          set -euo pipefail
+          source /opt/openfoam10/etc/bashrc
+          python scripts/openfoam_v10_scalar_sync_smoke.py \
+            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" \
+            "$RUNNER_TEMP/cleanroomx-openfoam-scalar-sync" \
+            examples/cfd_scalar_spec.example.json \
+            examples/cfd_scalar_field_map.example.json
+
       - name: Audit multi-time foamToVTK selection
         run: |
           set -eo pipefail
@@ -1405,6 +1418,7 @@ jobs:
             ${{ runner.temp }}/simpleFoam-mesh-volume-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
             ${{ runner.temp }}/cleanroomx-openfoam-runtime-sync
+            ${{ runner.temp }}/cleanroomx-openfoam-scalar-sync
             ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
             ${{ runner.temp }}/cleanroomx-openfoam-visualization
           if-no-files-found: warn

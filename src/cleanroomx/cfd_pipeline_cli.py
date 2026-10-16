@@ -88,7 +88,10 @@ def build_parser():
     case_sync.add_argument("--max-output-mib",type=int,default=2048)
     case_sync.add_argument("--max-retries",type=int,default=3)
     case_sync.add_argument("--optional-fields",nargs="*",default=list(DEFAULT_OPTIONAL_FIELDS))
+    case_sync.add_argument("--required-fields",nargs="+",choices=("U","p","T"),default=["U","p"])
     case_sync.add_argument("--contaminant-field")
+    case_sync.add_argument("--field-map-file",
+                           help="Explicit semantic and unit mapping for additional OpenFOAM fields")
     plot=sub.add_parser("plot",help="3-panel sampled-cell cross-section PNG")
     for cfg in (1,2,3): plot.add_argument(f"--case-{cfg}",required=True)
     plot.add_argument("--field",choices=("speed","temperature","contaminant","scalar"),default="speed")
@@ -105,6 +108,16 @@ def build_parser():
     scalar_runner=sub.add_parser("scalar-run",help="Run external scalarTransportFoam")
     scalar_runner.add_argument("directory")
     scalar_runner.add_argument("--timeout-seconds",type=int,default=3600)
+    scalar_runner.add_argument("--sync-results",metavar="DIRECTORY",
+                               help="Incrementally import stable scalarTransportFoam U/T writes")
+    scalar_runner.add_argument("--simulation-id",
+                               help="Stable synchronization ID; defaults to the case configuration hash")
+    scalar_runner.add_argument("--expected-build",
+                               help="Require this OpenFOAM Foundation v10 build identity")
+    scalar_runner.add_argument("--sync-poll-interval-seconds",type=float,default=1.0)
+    scalar_runner.add_argument("--sync-settle-polls",type=int,default=2)
+    scalar_runner.add_argument("--field-map-file",
+                               help="Explicit semantic/units mapping for scalar fields such as normalized T")
     audit=sub.add_parser("audit-log",help="Apply explicitly supplied numerical residual criteria")
     audit.add_argument("log")
     audit.add_argument("--fields",required=True,nargs="+")
@@ -192,7 +205,9 @@ def main():
             max_output_bytes=args.max_output_mib*1024*1024,
             max_retries=args.max_retries,
             optional_fields=args.optional_fields,
+            required_fields=tuple(args.required_fields),
             contaminant_field=args.contaminant_field,
+            field_map=load_cli_input(load_strict_json,args.field_map_file) if args.field_map_file else None,
         )
         result=synchronizer.watch(
             solver_log=solver_log,
@@ -227,7 +242,38 @@ def main():
         print(dumps_strict_json(result))
         return 0
     if args.command=="scalar-run":
-        result=run_scalar_case(args.directory,timeout_seconds=args.timeout_seconds)
+        synchronizer=None
+        if args.sync_results:
+            case=Path(args.directory).resolve(strict=True)
+            configuration_hash=hash_case_configuration(case)
+            simulation_id=args.simulation_id or f"scalar-{configuration_hash[:24]}"
+            field_map=(load_cli_input(load_strict_json,args.field_map_file)
+                       if args.field_map_file else None)
+            synchronizer=OpenFOAMResultSynchronizer(
+                case,
+                args.sync_results,
+                simulation_id=simulation_id,
+                case_id=case.name,
+                configuration_hash=configuration_hash,
+                expected_build=args.expected_build,
+                poll_interval_seconds=args.sync_poll_interval_seconds,
+                settle_polls=args.sync_settle_polls,
+                timeout_seconds=min(args.timeout_seconds,3600),
+                required_fields=("U","T"),
+                optional_fields=(),
+                field_map=field_map,
+            )
+        elif (
+            args.field_map_file
+            or args.simulation_id
+            or args.expected_build
+            or args.sync_poll_interval_seconds != 1.0
+            or args.sync_settle_polls != 2
+        ):
+            raise ValueError("scalar synchronization options require --sync-results")
+        result=run_scalar_case(
+            args.directory,timeout_seconds=args.timeout_seconds,synchronizer=synchronizer
+        )
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_residual_and_field_validation" else 2
     if args.command=="audit-log":

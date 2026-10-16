@@ -39,7 +39,9 @@ Run each airflow configuration and inspect flow residuals and mass balance.
 Prepare and run a scalar case from each **completed airflow** case:
 
     cleanroomx-cfd-pipeline scalar-prepare ./cfd_cases/configuration_1 examples/cfd_scalar_spec.example.json ./scalar_1
-    cleanroomx-cfd-pipeline scalar-run ./scalar_1
+cleanroomx-cfd-pipeline scalar-run ./scalar_1 \
+  --sync-results ./scalar_1_sync \
+  --field-map-file examples/cfd_scalar_field_map.example.json
 
 Repeat for configurations 2 and 3 with separate output directories. This
 does **not** automatically assert convergence or equal physical boundary
@@ -68,9 +70,9 @@ or contamination source/sink balance.
 
 - OpenFOAM is not bundled with CleanroomX. The pinned CI workflow separately
   installs OpenFOAM Foundation v10 and executes the synthetic nine-case
-  `simpleFoam` family. `scalarTransportFoam` execution is not yet covered by
-  that real-solver workflow; its current checks cover case generation,
-  mocked execution and numerical-log parsing.
+  `simpleFoam` family plus a synthetic `scalarTransportFoam` tracer case with
+  live U/T synchronization. Treat this as configured workflow coverage until
+  the exact workflow run and uploaded artifact report a successful execution.
 - One grid cell is selected per source point; mesh refinements change source
   localization. Grid convergence and source-cell sensitivity are required.
 - The steady laminar, incompressible flow assumption can be unsuitable for

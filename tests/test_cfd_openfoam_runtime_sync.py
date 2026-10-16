@@ -358,6 +358,120 @@ def test_dimensionless_scalar_transport_t_is_not_classified_as_temperature(
     assert record["native_vtk_parity"]["T"]["status"] == "PASS"
 
 
+def test_u_only_scalar_solver_sync_maps_dimensionless_tracer_explicitly(
+    tmp_path, monkeypatch
+):
+    case = _case(tmp_path, temperature=False)
+    (case / "100" / "p").unlink()
+    (case / "100" / "T").write_text(
+        _field("T", "volScalarField", "0 0 0 0 0 0 0", "0.25"),
+        encoding="ascii",
+    )
+    calls = _fake_foam_to_vtk(
+        monkeypatch, expected_temperature=False, expected_generic_t_scalar=True
+    )
+    field_map = {
+        "schema_version": "cleanroomx.cfd-vtk-field-map.v1",
+        "fields": {"T": {"semantic": "normalized_tracer", "units": "1"}},
+    }
+    synchronizer = _configured_sync(
+        tmp_path,
+        case,
+        monkeypatch,
+        required_fields=("U",),
+        optional_fields=("T",),
+        field_map=field_map,
+    )
+
+    synchronizer.poll_once()
+    result = synchronizer.poll_once()
+
+    manifest = json.loads((tmp_path / "sync" / "sync_manifest.json").read_text())
+    record = manifest["records"]["100"]
+    assert result["imported_times"] == ["100"]
+    assert manifest["required_fields"] == ["U"]
+    assert manifest["field_map"] == field_map
+    assert "p" not in record["fields"]
+    assert record["fields"]["T"]["dimensions"] == "[0 0 0 0 0 0 0]"
+    assert record["native_vtk_parity"]["U"]["status"] == "PASS"
+    assert record["native_vtk_parity"]["T"]["status"] == "PASS"
+    assert record["cleanroomx_analysis_import"]["has_temperature_field"] is False
+    assert record["cleanroomx_analysis_import"]["has_contaminant_field"] is False
+    assert record["cleanroomx_analysis_import"]["field_data_names"] == ["normalized_tracer"]
+    assert len(calls) == 1
+
+
+def test_scalar_sync_waits_for_both_u_and_t_before_export(tmp_path, monkeypatch):
+    case = _case(tmp_path, temperature=False)
+    calls = _fake_foam_to_vtk(
+        monkeypatch, expected_temperature=False, expected_generic_t_scalar=True
+    )
+    field_map = {
+        "schema_version": "cleanroomx.cfd-vtk-field-map.v1",
+        "fields": {"T": {"semantic": "normalized_tracer", "units": "1"}},
+    }
+    synchronizer = _configured_sync(
+        tmp_path,
+        case,
+        monkeypatch,
+        required_fields=("U", "T"),
+        optional_fields=(),
+        field_map=field_map,
+    )
+    assert synchronizer.poll_once()["imported_times"] == []
+    assert synchronizer.poll_once()["imported_times"] == []
+    assert calls == []
+
+    (case / "100" / "T").write_text(
+        _field("T", "volScalarField", "0 0 0 0 0 0 0", "0.25"),
+        encoding="ascii",
+    )
+    synchronizer.poll_once()
+    result = synchronizer.poll_once()
+    assert result["imported_times"] == ["100"]
+    assert len(calls) == 1
+
+
+def test_u_only_sync_rejects_field_map_for_unselected_source_field(
+    tmp_path, monkeypatch
+):
+    case = _case(tmp_path, temperature=False)
+    field_map = {
+        "schema_version": "cleanroomx.cfd-vtk-field-map.v1",
+        "fields": {"T": {"semantic": "normalized_tracer", "units": "1"}},
+    }
+    with pytest.raises(ValueError, match="selected as required or optional"):
+        _configured_sync(
+            tmp_path,
+            case,
+            monkeypatch,
+            required_fields=("U",),
+            optional_fields=(),
+            field_map=field_map,
+        )
+
+
+def test_kelvin_temperature_cannot_receive_a_second_field_map_semantic(
+    tmp_path, monkeypatch
+):
+    case = _case(tmp_path, temperature=True)
+    _fake_foam_to_vtk(monkeypatch, expected_temperature=True)
+    field_map = {
+        "schema_version": "cleanroomx.cfd-vtk-field-map.v1",
+        "fields": {"T": {"semantic": "normalized_tracer", "units": "1"}},
+    }
+    synchronizer = _configured_sync(
+        tmp_path, case, monkeypatch, optional_fields=("T",), field_map=field_map
+    )
+
+    synchronizer.poll_once()
+    synchronizer.poll_once()
+
+    manifest = json.loads((tmp_path / "sync" / "sync_manifest.json").read_text())
+    assert manifest["records"] == {}
+    assert "Kelvin T cannot also be assigned" in manifest["errors"][-1]["message"]
+
+
 def test_explicitly_selected_dimensionless_t_is_not_also_classified_as_temperature(
     tmp_path, monkeypatch
 ):

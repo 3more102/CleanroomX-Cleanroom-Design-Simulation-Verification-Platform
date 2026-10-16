@@ -32,6 +32,7 @@ from .cfd_vtk import (
     audit_openfoam_vtk_surface_flux,
     audit_openfoam_vtk_velocity,
     import_vtk_case,
+    validate_vtk_field_map,
 )
 from .cfd_vtk_time_selection import parse_foam_to_vtk_time_log
 
@@ -427,6 +428,7 @@ def _validate_vtk_snapshot(
     internal_vtk: Path,
     *,
     contaminant_field: str | None,
+    field_map: dict[str, Any] | None,
 ) -> dict[str, Any]:
     grid = _read_vtk(internal_vtk, require_cell_velocity=True)
     cell_count = grid.GetNumberOfCells()
@@ -463,8 +465,12 @@ def _validate_vtk_snapshot(
         }
 
     velocity_parity = audit_openfoam_vtk_velocity(native_paths["U"], internal_vtk)
-    pressure_parity = audit_openfoam_vtk_pressure(native_paths["p"], internal_vtk)
-    if velocity_parity.get("status") != "PASS" or pressure_parity.get("status") != "PASS":
+    pressure_parity = None
+    if "p" in native_paths:
+        pressure_parity = audit_openfoam_vtk_pressure(native_paths["p"], internal_vtk)
+    if velocity_parity.get("status") != "PASS" or (
+        pressure_parity is not None and pressure_parity.get("status") != "PASS"
+    ):
         raise ValueError("Native OpenFOAM U/p fields did not reproduce in the VTK cell dataset")
     optional_parity = {}
     for name, field_metadata in metadata.items():
@@ -476,11 +482,17 @@ def _validate_vtk_snapshot(
     has_temperature = (
         metadata.get("T", {}).get("dimensions") == "[0 0 0 1 0 0 0]"
     )
+    mapped_names = set(field_map["fields"]) if field_map is not None else set()
+    if contaminant_field is not None and contaminant_field in mapped_names:
+        raise ValueError("A field cannot be mapped both as contaminant and as a generic field")
+    if has_temperature and "T" in mapped_names:
+        raise ValueError("Kelvin T cannot also be assigned a generic field-map semantic")
     analysis_import = import_vtk_case(
         internal_vtk,
         contaminant_array=contaminant_field,
         temperature_array="T" if has_temperature else None,
         temperature_units="K" if has_temperature else None,
+        field_map=field_map,
     )
     if analysis_import.get("mesh_cells") != cell_count:
         raise ValueError("CleanroomX analysis importer reported an inconsistent cell count")
@@ -491,7 +503,11 @@ def _validate_vtk_snapshot(
     return {
         "cell_count": cell_count,
         "fields": summaries,
-        "native_vtk_parity": {"U": velocity_parity, "p": pressure_parity, **optional_parity},
+        "native_vtk_parity": {
+            "U": velocity_parity,
+            **({"p": pressure_parity} if pressure_parity is not None else {}),
+            **optional_parity,
+        },
         "cleanroomx_analysis_import": {
             "status": "PASS",
             "function": "cleanroomx.cfd_vtk.import_vtk_case",
@@ -501,6 +517,10 @@ def _validate_vtk_snapshot(
             "contaminant_field": contaminant_field if analysis_import["has_contaminant_field"] else None,
             "has_temperature_field": analysis_import["has_temperature_field"],
             "temperature_field": analysis_import["temperature_field"],
+            "field_data_names": sorted(analysis_import.get("field_data", {})),
+            "unavailable_field_names": sorted(
+                item["semantic"] for item in analysis_import.get("unavailable_fields", [])
+            ),
         },
     }
 
@@ -519,6 +539,7 @@ class OpenFOAMResultSynchronizer:
         required_fields: tuple[str, ...] | list[str] = ("U", "p"),
         optional_fields: tuple[str, ...] | list[str] = DEFAULT_OPTIONAL_FIELDS,
         contaminant_field: str | None = None,
+        field_map: dict[str, Any] | None = None,
         expected_build: str | None = None,
         poll_interval_seconds: float = 1.0,
         settle_polls: int = 2,
@@ -550,8 +571,8 @@ class OpenFOAMResultSynchronizer:
         optional = tuple(optional_fields)
         if contaminant_field is not None and contaminant_field not in optional:
             optional = (*optional, contaminant_field)
-        if required != ("U", "p"):
-            raise ValueError("Foundation v10 synchronization requires U and p as the primary fields")
+        if required not in (("U", "p"), ("U",), ("U", "T")):
+            raise ValueError("Foundation v10 synchronization requires U, with p or T optional as a primary field")
         if len(set(optional)) != len(optional) or any(
             type(name) is not str or _FIELD_NAME.fullmatch(name) is None for name in optional
         ):
@@ -564,6 +585,15 @@ class OpenFOAMResultSynchronizer:
             type(contaminant_field) is not str or _FIELD_NAME.fullmatch(contaminant_field) is None
         ):
             raise ValueError("contaminant_field must be a safe OpenFOAM field name")
+        normalized_field_map = validate_vtk_field_map(field_map) if field_map is not None else None
+        if normalized_field_map is not None:
+            unmapped_source_fields = set(normalized_field_map["fields"]) - set((*required, *optional))
+            if unmapped_source_fields:
+                raise ValueError(
+                    "field_map arrays must be selected as required or optional OpenFOAM fields"
+                )
+            if contaminant_field in normalized_field_map["fields"]:
+                raise ValueError("A field cannot be mapped both as contaminant and as a generic field")
 
         case_candidate = Path(case_directory)
         if case_candidate.is_symlink() or not case_candidate.is_dir():
@@ -607,6 +637,7 @@ class OpenFOAMResultSynchronizer:
         self.optional_fields = optional
         self.allowed_fields = (*required, *optional)
         self.contaminant_field = contaminant_field
+        self.field_map = normalized_field_map
         self.expected_build = expected_build
         self.poll_interval_seconds = float(poll_interval_seconds)
         self.settle_polls = settle_polls
@@ -653,6 +684,7 @@ class OpenFOAMResultSynchronizer:
             "required_fields": list(self.required_fields),
             "optional_fields": list(self.optional_fields),
             "contaminant_field": self.contaminant_field,
+            "field_map": self.field_map,
             "poll_interval_seconds": self.poll_interval_seconds,
             "settle_polls": self.settle_polls,
             "created_at_utc": _utc_now(),
@@ -684,6 +716,7 @@ class OpenFOAMResultSynchronizer:
             or manifest.get("required_fields") != list(self.required_fields)
             or manifest.get("optional_fields") != list(self.optional_fields)
             or manifest.get("contaminant_field") != self.contaminant_field
+            or manifest.get("field_map") != self.field_map
             or manifest.get("scientific_validation") != "BLOCKED"
             or type(manifest.get("records")) is not dict
             or type(manifest.get("errors")) is not list
@@ -996,6 +1029,7 @@ class OpenFOAMResultSynchronizer:
                 {name: value for name, value in fields.items() if name != "phi"},
                 internal_dataset,
                 contaminant_field=self.contaminant_field,
+                field_map=self.field_map,
             )
             surface_flux_parity = None
             if "phi" in native_paths:

@@ -9,6 +9,7 @@ from cleanroomx.cfd_scalar import (
     validate_scalar_spec,
 )
 from cleanroomx.cfd_audit import audit_openfoam_log
+from cleanroomx.cfd_pipeline_cli import build_parser
 
 
 def scalar_spec():
@@ -134,6 +135,44 @@ def test_runner_mock_preserves_log_and_source_hashes(tmp_path,monkeypatch):
     assert report["status"]=="executed_requires_residual_and_field_validation"
     assert report["source_velocity_sha256"]==manifest["source_velocity_sha256"]
     assert (root/"scalarTransportFoam.log").exists()
+
+
+def test_runner_can_incrementally_synchronize_scalar_solver_outputs(tmp_path,monkeypatch):
+    flow=synthetic_finished_flow(tmp_path)
+    root=tmp_path/"scalar"
+    manifest=prepare_scalar_case(flow,scalar_spec(),root)
+    monkeypatch.setattr("cleanroomx.cfd_scalar.shutil.which",lambda name:"/fake/scalarTransportFoam")
+    class FakeSynchronizer:
+        case_directory=root.resolve()
+        def finish(self,*,solver_returncode,solver_log):
+            assert solver_returncode==0
+            assert solver_log.read_text(encoding="utf-8")=="End\n"
+            return {"status":"results_synced","record_count":2,"scientific_validation":"BLOCKED"}
+    def mocked_run(command,**kwargs):
+        assert command==["/fake/scalarTransportFoam"]
+        assert kwargs["cwd"]==root.resolve()
+        kwargs["log_path"].write_text("End\n",encoding="utf-8")
+        return 0
+    monkeypatch.setattr(
+        "cleanroomx.cfd_openfoam_runtime_sync.run_solver_with_sync",mocked_run
+    )
+
+    report=run_scalar_case(root,synchronizer=FakeSynchronizer())
+
+    assert report["status"]=="executed_requires_residual_and_field_validation"
+    assert report["source_velocity_sha256"]==manifest["source_velocity_sha256"]
+    assert report["result_synchronization"]["record_count"]==2
+
+
+def test_scalar_run_cli_exposes_live_result_synchronization():
+    args=build_parser().parse_args([
+        "scalar-run","./scalar_case","--sync-results","./scalar_results",
+        "--field-map-file","examples/cfd_scalar_field_map.example.json",
+        "--simulation-id","scalar-demo",
+    ])
+    assert args.sync_results=="./scalar_results"
+    assert args.field_map_file=="examples/cfd_scalar_field_map.example.json"
+    assert args.simulation_id=="scalar-demo"
 
 
 def test_audit_positive_numerical_screen(tmp_path):

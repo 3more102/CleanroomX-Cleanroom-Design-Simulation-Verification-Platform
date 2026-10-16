@@ -219,14 +219,17 @@ It monitors the three generated cases. A positive numeric time is eligible
 after the configured settle polls see the same selected field set, file
 identity, size, and modification time. The exporter works in an isolated
 temporary case view, waits for `foamToVTK` to finish, checks that source fields
-did not change during export, verifies U/p cell IDs and values against native
-fields, and atomically publishes VTK assets, a receipt, and a resumable
+did not change during export, verifies U and any available p cell values
+against native fields, and atomically publishes VTK assets, a receipt, and a resumable
 manifest. It never replaces an accepted time after the source changes.
 
-This direct path currently requires Foundation v10, ASCII native fields U
-and kinematic-pressure p, and legacy ASCII VTK output. It also imports any
-configured optional volume fields present (T, k, epsilon, omega, nut by
-default), and surface flux phi when present. Standard optional fields are
+This direct path requires Foundation v10 and legacy ASCII VTK output. The
+airflow mode requires ASCII native fields U and kinematic-pressure p. A
+scalar-transport run requires both U and T because `scalarTransportFoam` does
+not produce p; the watcher does not publish a scalar time until both files are
+stable. Both modes import
+configured optional volume fields (T, k, epsilon, omega, nut by default), and
+surface flux phi when present. Standard optional fields are
 checked against their OpenFOAM dimensions: k, epsilon, omega, and nut must use
 their standard turbulence dimensions. T is treated as temperature only when
 its native dimensions are kelvin. Foundation v10 `scalarTransportFoam` also
@@ -257,6 +260,16 @@ inspect the solver process return code. `run --sync-results` records the real
 return code and reports `results_synced` only when the process exits zero, the
 log ends in `End`, and no unrecovered synchronization errors remain. Re-run
 `sync-case` with the same case, ID, and output store after an interruption.
+For a separate `scalarTransportFoam` case, `scalar-run --sync-results` runs the
+solver under that watcher. Use `--field-map-file` to assign explicit meaning
+and units to its dimensionless `T`; the example map records `normalized_tracer`
+with units `1`, without labeling it temperature or physical concentration.
+For a separately launched scalar solver, use:
+
+    cleanroomx-cfd-pipeline sync-case ./scalar_case ./scalar_sync \
+      --required-fields U T --optional-fields \
+      --field-map-file examples/cfd_scalar_field_map.example.json \
+      --solver-log scalarTransportFoam.log
 
 Defaults are 256 MiB per field, 512 MiB per time snapshot, 2 GiB total output,
 three retries per failed snapshot, and a 600-second `foamToVTK` timeout. The
@@ -264,6 +277,13 @@ integrated runner accepts `--sync-max-field-mib`,
 `--sync-max-snapshot-mib`, `--sync-max-output-mib`, `--sync-max-retries`, and
 `--sync-timeout-seconds`; `sync-case` has the corresponding `--max-*` options.
 The polling interval is configurable from 0.1 to 60 seconds.
+
+For a dimensionless passive tracer, the example
+[`cfd_scalar_field_map.example.json`](../examples/cfd_scalar_field_map.example.json)
+maps `T` to `normalized_tracer` (unit `1`). The scalar watcher records native
+dimensions and native-to-VTK parity at each stable solver write. Physical
+contaminant limits, measured source strengths, and concentration units must be
+supplied separately before contaminant acceptance analysis.
 
 Foundation v10 run 94 completed this `50,100` audit for all nine synthetic
 cases. Its [multi-time report](OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md)

@@ -79,6 +79,36 @@ passes.
   field parity each test a different software or numerical property. None
   independently validates the cleanroom physics.
 
+### Evidence-gated three-grid audit
+
+I also ran `cleanroomx-cfd-pipeline grid-audit` on each configuration using
+the run 125 artifact's actual final-time cell-velocity VTK files and matching
+`simpleFoam` logs. The VTK QoI is volume-weighted mean speed; the imported
+cell volumes sum to 12.0 m³ for every level. The study inputs and unedited CLI
+results are preserved under
+[`docs/evidence/openfoam-run-38905424325/`](evidence/openfoam-run-38905424325/).
+The input studies reference files inside the linked run artifact and record
+the corresponding VTK and log SHA-256 values in each result.
+
+| Configuration | Fine / medium / coarse mean speed (m/s) | Observed order | Fine-grid GCI | Audit result |
+| --- | --- | --- | --- | --- |
+| 1 | 0.07902352 / 0.07038684 / 0.06400471 | Not available | Not available | `indeterminate_or_failed` |
+| 2 | 0.03134407 / 0.03549246 / 0.03833825 | Not available | Not available | `indeterminate_or_failed` |
+| 3 | 0.02893993 / 0.03162543 / 0.03314556 | Not available | Not available | `indeterminate_or_failed` |
+
+All three audits exited with code 3, which is the CLI's ineligible/indeterminate
+result. Each reports failed solver residual screening on all three levels and
+no positive three-grid power-law order for this QoI; therefore no Richardson
+estimate or GCI was produced. The study JSON copies the distributed example
+criteria to make the diagnostic run reproducible. Those sample limits are not
+project-approved acceptance criteria and this run does not treat them as such.
+The condition fingerprint in each study is computed from each layout and flow
+descriptor plus SHA-256 digests of the shared non-mesh solver inputs
+(`0/U`, `0/p`, physical properties, momentum transport, `controlDict`,
+`fvSchemes`, and `fvSolution`). The archived per-grid mesh/input manifests
+remain the provenance for geometry and boundary audits; a matching fingerprint
+alone is not proof of physically equivalent conditions.
+
 This run does not provide measured-room correlation, validated diffuser/fan/
 filter or perforated-floor models, a validated turbulence or buoyancy model,
 particle-transport physics, measured contaminant source data, temperature-field

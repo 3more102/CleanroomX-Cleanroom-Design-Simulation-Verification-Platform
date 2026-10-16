@@ -1096,6 +1096,7 @@ def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
     app.root.geometry("900x420")
     app.set_focus_workspace(True)
     workspace = app.spatial_workspace
+    workspace.show_inspector()
     app.notebook.select(workspace)
     app.root.update()
     room = workspace.layout["rooms"][0]

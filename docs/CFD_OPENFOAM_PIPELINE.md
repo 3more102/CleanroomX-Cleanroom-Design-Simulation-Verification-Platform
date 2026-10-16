@@ -318,6 +318,10 @@ synchronization, and VTK parity evidence. The plot step reads the synchronized
 files directly and checks that each configuration contributes samples; it
 does not promote the samples to CFD validation evidence.
 
+See the [Foundation v10 runtime-sync evidence report](OPENFOAM_V10_RUN_38888517187_RUNTIME_SYNC_EVIDENCE.md)
+for the exact-head solver, field-parity, synchronization, visualization, and
+validation-limit records.
+
 ## Engineering follow-on gates
 
 A full physically validated CFD system needs real CAD/IFC boundary geometry,

@@ -27,6 +27,12 @@ For every synchronized record, CleanroomX imported velocity `U` in m/s and kinem
 
 The evidence includes 162 hash-checked synchronized assets: five VTK datasets and one `foamToVTK` log for each of the 27 time records. The separate incremental VTK synchronization report contains 27 accepted snapshots across the nine cases; independent replay matched each source VTK hash and CleanroomX snapshot hash. Its explicit field map imported pressure as kinematic pressure. Four turbulence fields were reported unavailable because the laminar cases did not produce them. No contaminant field was configured or produced, and the receipts report it as absent rather than substituting another field.
 
+## Visualization follow-up on the current PR head
+
+Commit `8927704de1d04ac105d43d71852bd516b597a514` adds a workflow step that reads the final-time VTK datasets directly from the runtime-sync store for configurations 1–3. [Foundation v10 run 106](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38889697945) completed successfully with the plot and report included in [artifact 12041675906](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38889697945/artifacts/12041675906). The artifact is 32,587,064 bytes with SHA-256 `8148c9ad6e1c8fdee150825648e45e76254c6ae7fcaf10aa57a98d38691284aa`; independent replay matched the digest and ZIP CRC.
+
+The uploaded PNG is 102,669 bytes. Its JSON report records 72 sampled cell centers for each of the three configurations in a 0.5 m slab at y = 1.0 m, with speed values spanning 0.003429–0.222541 m/s. The report status is `sampled_cells_visualized_not_cfd_validation`; these samples are neither interpolated contours nor validation evidence.
+
 ## Numerical diagnostics and limits
 
 All nine meshes passed the documented integrity checks, but this does not establish grid convergence. The logged final U and p residual screens are `NOT_BELOW_TOLERANCE` for all nine cases. Measured final inlet/outlet flux imbalance ranges from 0.005341% to 0.187145%; CleanroomX defines no project acceptance threshold for that quantity.
@@ -37,11 +43,12 @@ The solver logs also record `ExecutionTime` for 150 simpleFoam iterations per ca
 
 ## Automated tests
 
-- Exact-head full test suite on this workspace: **2,497 passed, 81 skipped** in 133.92 seconds.
-- Focused synchronization and time-selection tests: **60 passed** in 0.81 seconds.
-- [Required CI Gate run 4855](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38888517179): passed. Python 3.11, 3.12, and 3.13 each report 2,497 passed and 81 skipped. Windows launcher, native BIM, wheel, and required-gate jobs passed.
-- [CFD VTK Regression run 527](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38888517121): passed.
-- [Foundation v10 run 104](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38888517187): passed with the evidence counts above.
+- Local full test suite at code commit `96e3868`: **2,497 passed, 81 skipped** in 133.92 seconds.
+- Focused synchronization and time-selection tests at `96e3868`: **60 passed** in 0.81 seconds.
+- [Required CI Gate run 4857](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38889697903) on commit `8927704`: passed. Python 3.11, 3.12, and 3.13 each report 2,497 passed and 81 skipped; Windows launcher, native BIM, wheel, and required-gate jobs passed.
+- [CFD VTK Regression run 529](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38889697882) on commit `8927704`: passed.
+- [Foundation v10 run 106](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38889697945) on commit `8927704`: passed, including runtime synchronization and visualization.
+- [Foundation v10 run 104](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38888517187) on code commit `96e3868`: passed with the detailed field and mesh evidence above.
 
 The local environment did not have OpenFOAM executables on PATH; actual solver evidence comes from the pinned Foundation v10 workflow, not from mocks or local tests.
 

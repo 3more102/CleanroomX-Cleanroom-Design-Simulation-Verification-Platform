@@ -295,7 +295,9 @@ class OpenFOAMWorkspace(ttk.Frame):
             "<Configure>", self._resize_workflow_content, add="+"
         )
 
-        settings = ttk.LabelFrame(self._workflow_content, text="Case bundle", padding=8)
+        settings = ttk.LabelFrame(
+            self._workflow_content, text="Case bundle", padding=8
+        )
         settings.pack(fill="x", pady=4)
         self._path_row(
             settings,

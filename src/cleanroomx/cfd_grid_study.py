@@ -15,7 +15,7 @@ import re
 from .cfd_audit import audit_openfoam_log
 from .cfd_vtk import import_vtk_case
 
-SCHEMA = "cleanroomx.cfd-grid-study.v1"
+SCHEMA = "cleanroomx.cfd-grid-study.v2"
 LEVELS = ("fine", "medium", "coarse")
 QUANTITIES = {"velocity_mean_m_s": "m/s", "contaminant_mean": None}
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
@@ -45,7 +45,7 @@ def _nonempty(value, name):
 
 def validate_grid_spec(data):
     _mapping(data, {"schema_version", "name", "configuration",
-                    "room_volume_m3", "quantity", "unit", "criteria",
+                    "room_volume_m3", "quantity", "unit", "contaminant_array", "criteria",
                     "log_audit", "runs"}, "grid study")
     if data["schema_version"] != SCHEMA:
         raise ValueError("Unsupported CFD grid-study schema")
@@ -59,6 +59,10 @@ def validate_grid_spec(data):
     _nonempty(data["unit"], "unit")
     if QUANTITIES[quantity] is not None and data["unit"] != QUANTITIES[quantity]:
         raise ValueError("Velocity mean must have unit m/s")
+    if quantity == "contaminant_mean":
+        _nonempty(data["contaminant_array"], "contaminant_array")
+    elif data["contaminant_array"] is not None:
+        raise ValueError("contaminant_array is only allowed for contaminant_mean")
     criteria = _mapping(data["criteria"], {
         "min_refinement_ratio", "max_relative_volume_error",
         "min_observed_order", "max_observed_order", "max_fine_gci_percent",
@@ -229,7 +233,12 @@ def analyze_vtk_grid_study(data, *, base_directory="."):
         run=indexed[level]
         vtk_path=_resolve_study_input(base,run["vtk_file"],f"{level} VTK file")
         log_path=_resolve_study_input(base,run["solver_log"],f"{level} solver log")
-        imported=import_vtk_case(vtk_path)
+        imported=import_vtk_case(
+            vtk_path,
+            contaminant_array=(
+                data["contaminant_array"] if data["quantity"] == "contaminant_mean" else None
+            ),
+        )
         cell_count=math.prod(run["mesh_cells"])
         if imported["mesh_cells"]!=cell_count:
             blockers.append(f"{level}: VTK cell count does not match specified grid")

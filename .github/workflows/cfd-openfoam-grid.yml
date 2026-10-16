@@ -5,9 +5,17 @@ on:
     paths:
       - ".github/workflows/cfd-openfoam-grid.yml"
       - "docs/CFD_GRID_EXECUTION_EVIDENCE.md"
+      - "docs/CFD_GRID_CONVERGENCE.md"
+      - "docs/CFD_OPENFOAM_PIPELINE.md"
       - "examples/cfd_grid_family.example.json"
+      - "examples/cfd_openfoam_field_map.example.json"
+      - "examples/cfd_scalar_spec.example.json"
+      - "examples/cfd_scalar_field_map.example.json"
+      - "scripts/openfoam_v10_scalar_sync_smoke.py"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
+      - "tests/test_cfd_openfoam_runtime_sync.py"
+      - "tests/test_cfd_scalar_audit.py"
   workflow_dispatch:
 
 permissions:
@@ -63,19 +71,38 @@ jobs:
           python - "$family" <<'PY'
           import hashlib
           import json
+          import math
           import os
+          import re
           import shutil
           import subprocess
           import sys
           from pathlib import Path
 
-          from cleanroomx.cfd_openfoam import _foundation_v10_banner
+          from cleanroomx.cfd_openfoam import (
+              _foundation_v10_banner,
+              parse_openfoam_checkmesh_log,
+          )
+          from cleanroomx.cfd_openfoam_runtime_sync import (
+              OpenFOAMResultSynchronizer,
+              run_solver_with_sync,
+          )
+          from cleanroomx.cfd_vtk import (
+              audit_openfoam_vtk_boundary_patch,
+              audit_openfoam_checkmesh_poly_mesh_volume,
+              audit_openfoam_vtk_pressure,
+              audit_openfoam_vtk_surface_flux,
+              audit_openfoam_vtk_velocity,
+              import_vtk_case,
+          )
 
           root = Path(sys.argv[1]).resolve(strict=True)
           if os.environ.get("WM_PROJECT") != "OpenFOAM" or os.environ.get("WM_PROJECT_VERSION") != "10":
               raise SystemExit("Expected the OpenFOAM Foundation v10 runtime environment")
           manifest_path = root / "manifest.json"
           manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          runtime_sync_root = Path(os.environ["RUNNER_TEMP"]) / "cleanroomx-openfoam-runtime-sync"
+          runtime_simulation_id = "grid-" + manifest["family_spec_sha256"][:24]
           expected_cases = {
               f"configuration_{configuration}/{level}"
               for configuration in (1, 2, 3)
@@ -88,6 +115,48 @@ jobs:
           expected_files = manifest.get("files")
           if not isinstance(expected_files, dict) or len(expected_files) != 72:
               raise SystemExit("Grid-family manifest does not list exactly 72 generated inputs")
+          case_input_paths = (
+              "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
+              "system/fvSolution", "constant/physicalProperties",
+              "constant/momentumTransport", "0/U", "0/p",
+          )
+          expected_file_paths = {
+              f"{case_id}/{relative}"
+              for case_id in expected_cases
+              for relative in case_input_paths
+          }
+          if set(expected_files) != expected_file_paths:
+              raise SystemExit("Grid-family manifest does not bind the exact inputs used by all nine cases")
+          for case_id in sorted(expected_cases):
+              case = manifest["case_inputs"][case_id]
+              audit = case.get("boundary_audit") if isinstance(case, dict) else None
+              if not isinstance(audit, dict):
+                  raise SystemExit("Missing generated boundary audit: " + case_id)
+              if audit.get("schema_version") != "cleanroomx.openfoam-boundary-audit.v1":
+                  raise SystemExit("Unexpected boundary-audit schema: " + case_id)
+              if audit.get("status") != "input_geometry_and_inlet_flow_consistent":
+                  raise SystemExit("Generated boundary input audit failed: " + case_id)
+              if audit.get("flow_balance_status") != "not_measured":
+                  raise SystemExit("Boundary audit must not claim solver flux balance: " + case_id)
+              if audit.get("scientific_validation") != "BLOCKED":
+                  raise SystemExit("Boundary audit must preserve blocked scientific validation: " + case_id)
+              inlet = audit.get("inlet", {})
+              actual_flow = inlet.get("prescribed_inward_volume_flow_m3_s")
+              requested_flow = inlet.get("requested_volume_flow_m3_s")
+              if (
+                  type(actual_flow) not in (int, float)
+                  or type(requested_flow) not in (int, float)
+                  or not math.isfinite(actual_flow)
+                  or not math.isfinite(requested_flow)
+                  or requested_flow <= 0
+                  or abs(actual_flow - requested_flow) > max(1e-12, abs(requested_flow) * 1e-9)
+              ):
+                  raise SystemExit("Inlet area/normal/velocity does not reproduce requested flow: " + case_id)
+              outlet = audit.get("outlet", {})
+              if outlet.get("actual_solver_volume_flow_m3_s") is not None:
+                  raise SystemExit("Input audit must not fabricate outlet solver flux: " + case_id)
+          print("Generated blockMesh faces, boundary normals, and prescribed inlet flow passed for all nine cases.")
+          print("Outlet solver flux and physical validation remain unmeasured/blocked.")
           for relative, expected_sha in expected_files.items():
               candidate = root / relative
               if candidate.is_symlink():
@@ -100,7 +169,7 @@ jobs:
                   raise SystemExit("Generated input digest mismatch: " + relative)
 
           executables = {}
-          for command in ("blockMesh", "checkMesh", "simpleFoam"):
+          for command in ("blockMesh", "checkMesh", "simpleFoam", "foamToVTK"):
               executable = shutil.which(command)
               if executable is None:
                   raise SystemExit(command + " not found in the OpenFOAM environment")
@@ -135,17 +204,60 @@ jobs:
                   log_path = case_dir / (command + ".log")
                   problem = None
                   returncode = None
+                  sync_report = None
                   try:
-                      with log_path.open("xb") as output:
-                          result = subprocess.run(
+                      if command == "simpleFoam":
+                          case_input_hashes = {
+                              relative: expected_files[f"{case_id}/{relative}"]
+                              for relative in case_input_paths
+                          }
+                          configuration_hash = hashlib.sha256(
+                              json.dumps(
+                                  case_input_hashes,
+                                  sort_keys=True,
+                                  separators=(",", ":"),
+                                  allow_nan=False,
+                              ).encode("utf-8")
+                          ).hexdigest()
+                          synchronizer = OpenFOAMResultSynchronizer(
+                              case_dir,
+                              runtime_sync_root / runtime_simulation_id / case_id,
+                              simulation_id=runtime_simulation_id,
+                              case_id=case_id,
+                              configuration_hash=configuration_hash,
+                              expected_build=build,
+                              poll_interval_seconds=0.25,
+                              settle_polls=2,
+                              timeout_seconds=600,
+                              optional_fields=("T", "k", "epsilon", "omega", "nut"),
+                          )
+                          returncode = run_solver_with_sync(
                               [executables[command]],
                               cwd=case_dir,
-                              stdout=output,
-                              stderr=subprocess.STDOUT,
-                              timeout=600,
-                              check=False,
+                              log_path=log_path,
+                              timeout_seconds=600,
+                              synchronizer=synchronizer,
                           )
-                      returncode = result.returncode
+                          sync_report = synchronizer.finish(
+                              solver_returncode=returncode,
+                              solver_log=log_path,
+                          )
+                          sync_report["manifest"] = Path(sync_report["manifest"]).relative_to(
+                              Path(os.environ["RUNNER_TEMP"])
+                          ).as_posix()
+                          if sync_report.get("status") != "results_synced":
+                              problem = "RESULT_SYNCHRONIZATION_INCOMPLETE"
+                      else:
+                          with log_path.open("xb") as output:
+                              result = subprocess.run(
+                                  [executables[command]],
+                                  cwd=case_dir,
+                                  stdout=output,
+                                  stderr=subprocess.STDOUT,
+                                  timeout=600,
+                                  check=False,
+                              )
+                          returncode = result.returncode
                   except subprocess.TimeoutExpired:
                       returncode = 124
                       problem = "TIMEOUT_AFTER_600_SECONDS"
@@ -159,6 +271,12 @@ jobs:
                       "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
                       "openfoam": banner,
                   }
+                  if sync_report is not None:
+                      stage["result_synchronization"] = sync_report
+                      case_record["result_synchronization"] = sync_report
+                  if command == "checkMesh":
+                      diagnostics = parse_openfoam_checkmesh_log(log_text, stage["log_sha256"])
+                      stage["mesh_quality_diagnostics"] = diagnostics
                   if problem is None and returncode != 0:
                       problem = "COMMAND_RETURNED_NONZERO"
                   if problem is None and not banner["is_foundation_v10"]:
@@ -168,8 +286,41 @@ jobs:
                           build = banner["build"]
                       elif banner["build"] != build:
                           problem = "OPENFOAM_BUILD_CHANGED_DURING_RUN"
-                  if problem is None and command == "checkMesh" and "Mesh OK." not in log_text:
-                      problem = "CHECKMESH_MESH_OK_MARKER_MISSING"
+                  if problem is None and command == "checkMesh":
+                      if diagnostics["parse_status"] != "complete":
+                          problem = "CHECKMESH_DIAGNOSTICS_INCOMPLETE"
+                      elif (
+                          diagnostics["mesh_result"] != "mesh_ok"
+                          or diagnostics["reported_check_failures"]
+                      ):
+                          problem = "CHECKMESH_MESH_CHECK_FAILED"
+                  if problem is None and command == "checkMesh":
+                      try:
+                          case_input = manifest["case_inputs"][case_id]
+                          expected_cells = case_input.get("mesh_cells")
+                          nominal_cell_volume = case_input.get("mesh", {}).get(
+                              "nominal_cell_volume_m3"
+                          )
+                          if (
+                              type(expected_cells) is not int
+                              or type(nominal_cell_volume) not in (int, float)
+                              or not math.isfinite(nominal_cell_volume)
+                              or nominal_cell_volume <= 0
+                          ):
+                              raise ValueError("Bound room-volume metadata is missing or invalid")
+                          volume_audit = audit_openfoam_checkmesh_poly_mesh_volume(
+                              case_dir,
+                              expected_cell_count=expected_cells,
+                              expected_nominal_cell_volume_m3=nominal_cell_volume,
+                              checkmesh_log_sha256=stage["log_sha256"],
+                          )
+                          stage["poly_mesh_volume_audit"] = volume_audit
+                          case_record["poly_mesh_volume_audit"] = volume_audit
+                      except Exception as exc:
+                          problem = (
+                              f"CHECKMESH_POLYMESH_VOLUME_AUDIT_FAILED: "
+                              f"{type(exc).__name__}: {exc}"
+                          )
                   if problem:
                       stage["problem"] = problem
                   case_stages.append(stage)
@@ -184,12 +335,779 @@ jobs:
                           file=sys.stderr,
                       )
                       raise SystemExit(1)
-              case_record["status"] = "executed_requires_convergence_review"
+              command = "foamToVTK"
+              arguments = [
+                  "-latestTime", "-fields", "( U p phi )", "-surfaceFields", "-ascii", "-poly",
+                  "-noPointValues",
+              ]
+              log_path = case_dir / (command + ".log")
+              problem = None
+              returncode = None
+              try:
+                  with log_path.open("xb") as output:
+                      result = subprocess.run(
+                          [executables[command], *arguments],
+                          cwd=case_dir,
+                          stdout=output,
+                          stderr=subprocess.STDOUT,
+                          timeout=600,
+                          check=False,
+                      )
+                  returncode = result.returncode
+              except subprocess.TimeoutExpired:
+                  returncode = 124
+                  problem = "TIMEOUT_AFTER_600_SECONDS"
+              log_bytes = log_path.read_bytes()
+              log_text = log_bytes.decode("utf-8", errors="replace")
+              banner = _foundation_v10_banner(log_text)
+              stage = {
+                  "command": command,
+                  "arguments": arguments,
+                  "returncode": returncode,
+                  "log": log_path.relative_to(root).as_posix(),
+                  "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
+                  "openfoam": banner,
+              }
+              if problem is None and returncode != 0:
+                  problem = "COMMAND_RETURNED_NONZERO"
+              if problem is None and not banner["is_foundation_v10"]:
+                  problem = "OPENFOAM_FOUNDATION_V10_BANNER_MISSING"
+              if problem is None and banner["build"] != build:
+                  problem = "OPENFOAM_BUILD_CHANGED_DURING_RUN"
+              if problem is None and re.search(r"surfScalarFields\s*:\s*phi\b", log_text) is None:
+                  problem = "VTK_SURFACE_SCALAR_PHI_MISSING"
+
+              vtk_dir = case_dir / "VTK"
+              if problem is None and (vtk_dir.is_symlink() or not vtk_dir.is_dir()):
+                  problem = "VTK_OUTPUT_DIRECTORY_MISSING_OR_INVALID"
+              candidates = []
+              if problem is None:
+                  candidates = sorted(
+                      path for path in vtk_dir.glob(case_dir.name + "_*.vtk")
+                      if path.is_file() and not path.is_symlink()
+                  )
+                  if len(candidates) != 1:
+                      problem = "VTK_INTERNAL_DATASET_COUNT_NOT_ONE"
+              if problem is None:
+                  try:
+                      vtk_path = candidates[0].resolve(strict=True)
+                      if not vtk_path.is_relative_to(case_dir.resolve(strict=True)):
+                          problem = "VTK_DATASET_ESCAPED_CASE_DIRECTORY"
+                      else:
+                          imported = import_vtk_case(vtk_path)
+                          expected_cells = manifest["case_inputs"][case_id].get("mesh_cells")
+                          if type(expected_cells) is not int or expected_cells <= 0:
+                              problem = "EXPECTED_MESH_CELL_COUNT_INVALID"
+                          elif imported["mesh_cells"] != expected_cells:
+                              problem = "VTK_CELL_COUNT_DIFFERS_FROM_BOUND_INPUTS"
+                          else:
+                              time_name = vtk_path.stem.rsplit("_", 1)[-1]
+                              try:
+                                  numeric_time = float(time_name)
+                              except ValueError:
+                                  numeric_time = float("nan")
+                              native_u_path = case_dir / time_name / "U"
+                              if (
+                                  not math.isfinite(numeric_time)
+                                  or numeric_time < 0
+                                  or native_u_path.is_symlink()
+                                  or not native_u_path.is_file()
+                                  or not native_u_path.resolve(strict=True).is_relative_to(
+                                      case_dir.resolve(strict=True)
+                                  )
+                              ):
+                                  problem = "NATIVE_FINAL_TIME_U_FIELD_MISSING_OR_UNSAFE"
+                              else:
+                                  field_parity = audit_openfoam_vtk_velocity(native_u_path, vtk_path)
+                                  if field_parity["status"] != "PASS":
+                                      problem = "NATIVE_VTK_VELOCITY_PARITY_NOT_PASSED"
+                                  else:
+                                      stage["native_velocity_field"] = {
+                                          "path": native_u_path.relative_to(root).as_posix(),
+                                          "sha256": field_parity["native_field_sha256"],
+                                      }
+                                      stage["field_parity"] = field_parity
+                                      case_record["vtk_field_parity"] = field_parity
+                              native_p_path = case_dir / time_name / "p"
+                              if (
+                                  problem is None
+                                  and (
+                                      not math.isfinite(numeric_time)
+                                      or numeric_time < 0
+                                      or native_p_path.is_symlink()
+                                      or not native_p_path.is_file()
+                                      or not native_p_path.resolve(strict=True).is_relative_to(
+                                          case_dir.resolve(strict=True)
+                                      )
+                                  )
+                              ):
+                                  problem = "NATIVE_FINAL_TIME_P_FIELD_MISSING_OR_UNSAFE"
+                              elif problem is None:
+                                  pressure_parity = audit_openfoam_vtk_pressure(native_p_path, vtk_path)
+                                  if pressure_parity["status"] != "PASS":
+                                      problem = "NATIVE_VTK_PRESSURE_PARITY_NOT_PASSED"
+                                  else:
+                                      stage["native_pressure_field"] = {
+                                          "path": native_p_path.relative_to(root).as_posix(),
+                                          "sha256": pressure_parity["native_field_sha256"],
+                                      }
+                                      stage["pressure_field_parity"] = pressure_parity
+                                      case_record["vtk_pressure_parity"] = pressure_parity
+                              native_phi_path = case_dir / time_name / "phi"
+                              surface_vtk_path = vtk_dir / "surfaceFields" / f"surfaceFields_{time_name}.vtk"
+                              if problem is None and (
+                                  not math.isfinite(numeric_time)
+                                  or numeric_time < 0
+                                  or native_phi_path.is_symlink()
+                                  or not native_phi_path.is_file()
+                                  or not native_phi_path.resolve(strict=True).is_relative_to(
+                                      case_dir.resolve(strict=True)
+                                  )
+                              ):
+                                  problem = "NATIVE_FINAL_TIME_PHI_FIELD_MISSING_OR_UNSAFE"
+                              elif problem is None and (
+                                  surface_vtk_path.is_symlink() or not surface_vtk_path.is_file()
+                              ):
+                                  problem = "VTK_SURFACE_FIELD_DATASET_MISSING_OR_INVALID"
+                              elif problem is None:
+                                  resolved_surface_vtk = surface_vtk_path.resolve(strict=True)
+                                  if not resolved_surface_vtk.is_relative_to(case_dir.resolve(strict=True)):
+                                      problem = "VTK_SURFACE_FIELD_ESCAPED_CASE_DIRECTORY"
+                                  else:
+                                      surface_flux_parity = audit_openfoam_vtk_surface_flux(
+                                          native_phi_path,
+                                          case_dir / "constant" / "polyMesh",
+                                          resolved_surface_vtk,
+                                      )
+                                      if surface_flux_parity["status"] != "PASS":
+                                          problem = "NATIVE_VTK_SURFACE_FLUX_PARITY_NOT_PASSED"
+                                      else:
+                                          surface_flux_dataset = {
+                                              "path": resolved_surface_vtk.relative_to(root).as_posix(),
+                                              "sha256": surface_flux_parity["vtk_sha256"],
+                                              "field": "phi",
+                                              "face_count": surface_flux_parity["face_count"],
+                                          }
+                                          stage["native_surface_flux_field"] = {
+                                              "path": native_phi_path.relative_to(root).as_posix(),
+                                              "sha256": surface_flux_parity["native_field_sha256"],
+                                          }
+                                          stage["vtk_surface_flux_dataset"] = surface_flux_dataset
+                                          stage["surface_flux_field_parity"] = surface_flux_parity
+                                          case_record["vtk_surface_flux_dataset"] = surface_flux_dataset
+                                          case_record["vtk_surface_flux_parity"] = surface_flux_parity
+                              patch_parity_records = []
+                              if problem is None:
+                                  poly_mesh_dir = case_dir / "constant" / "polyMesh"
+                                  for patch_name in ("inlet", "outlet", "walls"):
+                                      patch_path = vtk_dir / patch_name / f"{patch_name}_{time_name}.vtk"
+                                      if patch_path.is_symlink() or not patch_path.is_file():
+                                          problem = "VTK_BOUNDARY_PATCH_DATASET_MISSING_OR_INVALID"
+                                          break
+                                      resolved_patch = patch_path.resolve(strict=True)
+                                      if not resolved_patch.is_relative_to(case_dir.resolve(strict=True)):
+                                          problem = "VTK_BOUNDARY_PATCH_ESCAPED_CASE_DIRECTORY"
+                                          break
+                                      patch_parity = audit_openfoam_vtk_boundary_patch(
+                                          native_u_path,
+                                          native_p_path,
+                                          poly_mesh_dir,
+                                          resolved_patch,
+                                          patch_name,
+                                      )
+                                      patch_parity["path"] = resolved_patch.relative_to(root).as_posix()
+                                      patch_parity_records.append(patch_parity)
+                                  if problem is None and len(patch_parity_records) != 3:
+                                      problem = "VTK_BOUNDARY_PATCH_PARITY_COUNT_NOT_THREE"
+                                  elif problem is None:
+                                      stage["patch_field_parity"] = patch_parity_records
+                                      case_record["vtk_patch_parity"] = patch_parity_records
+                              stage["vtk_dataset"] = {
+                                  "path": vtk_path.relative_to(root).as_posix(),
+                                  "sha256": imported["source_sha256"],
+                                  "mesh_cells": imported["mesh_cells"],
+                                  "velocity_field": "U",
+                                  "velocity_components": 3,
+                                  "field_parity_status": stage.get("field_parity", {}).get("status"),
+                                  "pressure_field": "p",
+                                  "pressure_dimensions": "[0 2 -2 0 0 0 0]",
+                                  "pressure_field_parity_status": stage.get("pressure_field_parity", {}).get("status"),
+                                  "patch_dataset_count": len(patch_parity_records),
+                                  "patch_field_parity_status": (
+                                      "PASS" if len(patch_parity_records) == 3 else "NOT_RUN"
+                                  ),
+                                  "max_absolute_field_error_m_s": stage.get("field_parity", {}).get(
+                                      "max_absolute_error_native_to_vtk_m_s"
+                                  ),
+                                  "max_absolute_pressure_error_m2_s2": stage.get("pressure_field_parity", {}).get(
+                                      "max_absolute_error_native_to_vtk_m2_s2"
+                                  ),
+                              }
+                  except Exception as exc:
+                      problem = f"VTK_IMPORT_FAILED: {type(exc).__name__}: {exc}"
+              if problem:
+                  stage["problem"] = problem
+              case_stages.append(stage)
+              case_record["vtk_export"] = stage.get("vtk_dataset")
+              case_record["status"] = "failed" if problem else "executed_requires_convergence_review"
+              receipt["solver_build"] = build
               save_receipt()
+              if problem:
+                  receipt["status"] = "incomplete"
+                  save_receipt()
+                  print(
+                      f"{case_id}/{command} failed: {problem}; see {stage['log']}",
+                      file=sys.stderr,
+                  )
+                  raise SystemExit(1)
 
           receipt["status"] = "executed_requires_convergence_review"
           save_receipt()
           print(f"Executed all {len(expected_cases)} cases with OpenFOAM Foundation v10 build {build}.")
+          PY
+
+          python - "$family" \
+            "$RUNNER_TEMP/simpleFoam-vtk-export-summary.txt" \
+            "$RUNNER_TEMP/simpleFoam-mesh-volume-summary.txt" <<'PY'
+          import hashlib
+          import json
+          import math
+          import os
+          import sys
+          from pathlib import Path, PurePosixPath
+
+          from cleanroomx.cfd_vtk import (
+              audit_openfoam_checkmesh_poly_mesh_volume,
+              audit_openfoam_vtk_boundary_patch,
+              audit_openfoam_vtk_pressure,
+              audit_openfoam_vtk_surface_flux,
+              audit_openfoam_vtk_velocity,
+              import_vtk_case,
+          )
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          receipt = json.loads((root / "grid_execution_evidence.json").read_text(encoding="utf-8"))
+          runtime_sync_root = Path(os.environ["RUNNER_TEMP"]) / "cleanroomx-openfoam-runtime-sync"
+          sync_case_input_paths = (
+              "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
+              "system/fvSolution", "constant/physicalProperties",
+              "constant/momentumTransport", "0/U", "0/p",
+          )
+          expected_cases = {
+              f"configuration_{configuration}/{level}"
+              for configuration in (1, 2, 3)
+              for level in ("coarse", "medium", "fine")
+          }
+          if receipt.get("schema_version") != "cleanroomx.openfoam-grid-execution-evidence.v1":
+              raise SystemExit("Unexpected OpenFOAM execution receipt schema")
+          if receipt.get("status") != "executed_requires_convergence_review":
+              raise SystemExit("OpenFOAM execution receipt is not complete")
+          cases = receipt.get("cases")
+          if not isinstance(cases, dict) or set(cases) != expected_cases:
+              raise SystemExit("Receipt does not contain the exact nine expected cases")
+          lines = [
+              "OpenFOAM Foundation v10 final-time VTK export integrity",
+              f"solver_build={receipt.get('solver_build')}",
+              "status=EXECUTION_EVIDENCE_ONLY; scientific_validation=BLOCKED",
+          ]
+          volume_lines = [
+              "OpenFOAM Foundation v10 checkMesh/polyMesh volume integrity",
+              f"solver_build={receipt.get('solver_build')}",
+              "status=MESH_DATA_INTEGRITY_ONLY; scientific_validation=BLOCKED",
+          ]
+          volume_cases = {}
+          total_patch_faces = 0
+          total_surface_flux_faces = 0
+          for case_id in sorted(expected_cases):
+              case = cases[case_id]
+              stages = case.get("stages")
+              commands = [stage.get("command") for stage in stages] if isinstance(stages, list) else []
+              if commands != ["blockMesh", "checkMesh", "simpleFoam", "foamToVTK"]:
+                  raise SystemExit("Unexpected or incomplete command stages: " + case_id)
+              if any(stage.get("returncode") != 0 for stage in stages):
+                  raise SystemExit("Nonzero command stage in receipt: " + case_id)
+              if case.get("status") != "executed_requires_convergence_review":
+                  raise SystemExit("Case is not complete: " + case_id)
+              synchronization = case.get("result_synchronization")
+              if (
+                  not isinstance(synchronization, dict)
+                  or synchronization.get("status") != "results_synced"
+                  or synchronization.get("scientific_validation") != "BLOCKED"
+                  or type(synchronization.get("record_count")) is not int
+                  or synchronization["record_count"] <= 0
+              ):
+                  raise SystemExit("Incremental result synchronization is incomplete: " + case_id)
+              sync_relative = PurePosixPath(synchronization.get("manifest", ""))
+              if sync_relative.is_absolute() or any(
+                  part in ("", ".", "..") for part in sync_relative.parts
+              ):
+                  raise SystemExit("Unsafe result-synchronization manifest path: " + case_id)
+              sync_manifest_path = Path(os.environ["RUNNER_TEMP"]).joinpath(*sync_relative.parts)
+              if sync_manifest_path.is_symlink() or not sync_manifest_path.is_file():
+                  raise SystemExit("Result-synchronization manifest is missing: " + case_id)
+              sync_manifest_path = sync_manifest_path.resolve(strict=True)
+              if not sync_manifest_path.is_relative_to(Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)):
+                  raise SystemExit("Result-synchronization manifest escaped RUNNER_TEMP: " + case_id)
+              if not sync_manifest_path.is_relative_to(runtime_sync_root.resolve(strict=True)):
+                  raise SystemExit("Result-synchronization manifest escaped its dedicated store: " + case_id)
+              sync_manifest_bytes = sync_manifest_path.read_bytes()
+              if hashlib.sha256(sync_manifest_bytes).hexdigest() != synchronization.get("manifest_sha256"):
+                  raise SystemExit("Result-synchronization manifest hash mismatch: " + case_id)
+              sync_document = json.loads(sync_manifest_bytes.decode("utf-8"))
+              expected_configuration_hash = hashlib.sha256(
+                  json.dumps(
+                      {
+                          relative: manifest["files"][f"{case_id}/{relative}"]
+                          for relative in sync_case_input_paths
+                      },
+                      sort_keys=True,
+                      separators=(",", ":"),
+                      allow_nan=False,
+                  ).encode("utf-8")
+              ).hexdigest()
+              if (
+                  sync_document.get("schema_version") != "cleanroomx.openfoam-result-sync.v2"
+                  or sync_document.get("status") != "results_synced"
+                  or sync_document.get("simulation_id") != synchronization.get("simulation_id")
+                  or sync_document.get("case_id") != case_id
+                  or sync_document.get("configuration_hash") != expected_configuration_hash
+                  or sync_document.get("configuration_hash") != synchronization.get("configuration_hash")
+                  or sync_document.get("scientific_validation") != "BLOCKED"
+                  or len(sync_document.get("records", {})) != synchronization["record_count"]
+              ):
+                  raise SystemExit("Result-synchronization manifest metadata mismatch: " + case_id)
+              for time_name, synced in sync_document["records"].items():
+                  field_parity = synced.get("native_vtk_parity", {})
+                  field_metadata = synced.get("fields", {})
+                  if (
+                      synced.get("import_status") != "PASS_DIAGNOSTIC_ONLY"
+                      or synced.get("scientific_validation") != "BLOCKED"
+                      or not isinstance(field_parity, dict)
+                      or not field_parity
+                      or any(value.get("status") != "PASS" for value in field_parity.values())
+                      or field_metadata.get("U", {}).get("units") != "m/s"
+                      or field_metadata.get("p", {}).get("units") != "m^2/s^2 (kinematic pressure)"
+                      or (
+                          synced.get("surface_phi_parity") is not None
+                          and synced["surface_phi_parity"].get("status") != "PASS"
+                      )
+                  ):
+                      raise SystemExit("Synchronized field parity or units are incomplete: " + case_id + "/" + time_name)
+                  for asset in synced.get("assets", []):
+                      asset_relative = PurePosixPath(asset.get("path", ""))
+                      if asset_relative.is_absolute() or any(
+                          part in ("", ".", "..") for part in asset_relative.parts
+                      ):
+                          raise SystemExit("Unsafe synchronized dataset path: " + case_id + "/" + time_name)
+                      asset_path = sync_manifest_path.parent.joinpath(*asset_relative.parts)
+                      if asset_path.is_symlink() or not asset_path.is_file():
+                          raise SystemExit("Synchronized dataset is missing: " + case_id + "/" + time_name)
+                      asset_path = asset_path.resolve(strict=True)
+                      if not asset_path.is_relative_to(sync_manifest_path.parent.resolve(strict=True)):
+                          raise SystemExit("Synchronized dataset escaped its result directory: " + case_id)
+                      asset_bytes = asset_path.read_bytes()
+                      if (
+                          len(asset_bytes) != asset.get("size_bytes")
+                          or hashlib.sha256(asset_bytes).hexdigest() != asset.get("sha256")
+                      ):
+                          raise SystemExit("Synchronized dataset hash mismatch: " + case_id + "/" + time_name)
+                  synced_receipt = synced.get("receipt")
+                  receipt_relative = (
+                      PurePosixPath(synced_receipt.get("path", ""))
+                      if isinstance(synced_receipt, dict) else PurePosixPath("")
+                  )
+                  if receipt_relative.is_absolute() or any(
+                      part in ("", ".", "..") for part in receipt_relative.parts
+                  ):
+                      raise SystemExit("Unsafe synchronized receipt path: " + case_id + "/" + time_name)
+                  synced_receipt_path = sync_manifest_path.parent.joinpath(*receipt_relative.parts)
+                  if (
+                      synced_receipt_path.is_symlink()
+                      or not synced_receipt_path.is_file()
+                      or hashlib.sha256(synced_receipt_path.read_bytes()).hexdigest()
+                      != synced_receipt.get("sha256")
+                  ):
+                      raise SystemExit("Synchronized receipt hash mismatch: " + case_id + "/" + time_name)
+              dataset = case.get("vtk_export")
+              export_stage = stages[-1]
+              if not isinstance(dataset, dict) or dataset != export_stage.get("vtk_dataset"):
+                  raise SystemExit("VTK export is missing or differs from the command stage: " + case_id)
+              relative = PurePosixPath(dataset.get("path", ""))
+              case_parts = PurePosixPath(case_id).parts
+              checkmesh_stage = stages[1]
+              recorded_volume_audit = case.get("poly_mesh_volume_audit")
+              if (
+                  checkmesh_stage.get("log") != f"{case_id}/checkMesh.log"
+                  or not isinstance(recorded_volume_audit, dict)
+                  or recorded_volume_audit != checkmesh_stage.get("poly_mesh_volume_audit")
+              ):
+                  raise SystemExit("checkMesh volume audit is missing or not receipt-bound: " + case_id)
+              case_input = manifest["case_inputs"].get(case_id, {})
+              expected_cells_for_volume = case_input.get("mesh_cells")
+              nominal_cell_volume = case_input.get("mesh", {}).get("nominal_cell_volume_m3")
+              if (
+                  type(expected_cells_for_volume) is not int
+                  or type(nominal_cell_volume) not in (int, float)
+                  or not math.isfinite(nominal_cell_volume)
+                  or nominal_cell_volume <= 0
+              ):
+                  raise SystemExit("Room-volume metadata is missing or invalid: " + case_id)
+              recomputed_volume_audit = audit_openfoam_checkmesh_poly_mesh_volume(
+                  root.joinpath(*case_parts),
+                  expected_cell_count=expected_cells_for_volume,
+                  expected_nominal_cell_volume_m3=nominal_cell_volume,
+                  checkmesh_log_sha256=checkmesh_stage.get("log_sha256"),
+              )
+              if recomputed_volume_audit != recorded_volume_audit:
+                  raise SystemExit("checkMesh/polyMesh volume audit did not reproduce: " + case_id)
+              volume_cases[case_id] = recomputed_volume_audit
+              volume_lines.append(
+                  f"{case_id}: cells={recomputed_volume_audit['cell_count']} "
+                  f"checkMesh_total_m3={recomputed_volume_audit['checkmesh']['total_volume_m3']:.12g} "
+                  f"polyMesh_sum_m3={recomputed_volume_audit['poly_mesh']['total_cell_volume_m3']:.12g} "
+                  f"room_bound_m3={recomputed_volume_audit['room_bound']['volume_m3']:.12g} "
+                  f"bounding_box_m3={recomputed_volume_audit['poly_mesh']['bounding_box_volume_m3']:.12g} "
+                  "status=PASS"
+              )
+              if (
+                  relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in relative.parts)
+                  or relative.parts[:len(case_parts)] != case_parts
+                  or relative.parts[len(case_parts):len(case_parts) + 1] != ("VTK",)
+                  or relative.suffix.lower() != ".vtk"
+              ):
+                  raise SystemExit("Unsafe or unexpected VTK path in receipt: " + case_id)
+              vtk_path = root.joinpath(*relative.parts)
+              if vtk_path.is_symlink() or not vtk_path.is_file():
+                  raise SystemExit("VTK output is missing or symbolic: " + case_id)
+              resolved = vtk_path.resolve(strict=True)
+              if not resolved.is_relative_to(root):
+                  raise SystemExit("VTK output escaped the generated family: " + case_id)
+              actual_sha = hashlib.sha256(resolved.read_bytes()).hexdigest()
+              if actual_sha != dataset.get("sha256"):
+                  raise SystemExit("VTK output digest differs from receipt: " + case_id)
+              imported = import_vtk_case(resolved)
+              expected_cells = manifest["case_inputs"][case_id].get("mesh_cells")
+              if (
+                  type(expected_cells) is not int
+                  or expected_cells <= 0
+                  or imported["source_sha256"] != actual_sha
+                  or imported["mesh_cells"] != expected_cells
+                  or imported["mesh_cells"] != dataset.get("mesh_cells")
+                  or dataset.get("velocity_field") != "U"
+                  or dataset.get("velocity_components") != 3
+                  or dataset.get("field_parity_status") != "PASS"
+                  or dataset.get("pressure_field") != "p"
+                  or dataset.get("pressure_dimensions") != "[0 2 -2 0 0 0 0]"
+                  or dataset.get("pressure_field_parity_status") != "PASS"
+                  or dataset.get("patch_dataset_count") != 3
+                  or dataset.get("patch_field_parity_status") != "PASS"
+              ):
+                  raise SystemExit("VTK field or mesh does not match bound inputs: " + case_id)
+              parity = case.get("vtk_field_parity")
+              if (
+                  not isinstance(parity, dict)
+                  or parity != export_stage.get("field_parity")
+                  or parity.get("status") != "PASS"
+                  or parity.get("vtk_sha256") != actual_sha
+                  or parity.get("cell_count") != expected_cells
+                  or parity.get("compared_velocity_components") != expected_cells * 3
+                  or parity.get("cell_id_mapping")
+                  != "complete_unique_permutation_of_native_cell_indices"
+              ):
+                  raise SystemExit("Native-to-VTK velocity parity receipt is missing or incomplete: " + case_id)
+              native_record = export_stage.get("native_velocity_field")
+              native_relative = PurePosixPath(
+                  native_record.get("path", "") if isinstance(native_record, dict) else ""
+              )
+              if (
+                  native_relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in native_relative.parts)
+                  or native_relative.parts[:len(case_parts)] != case_parts
+                  or len(native_relative.parts) != len(case_parts) + 2
+                  or native_relative.parts[-1] != "U"
+                  or native_relative.parts[-2]
+                  != relative.stem.rsplit("_", 1)[-1]
+              ):
+                  raise SystemExit("Unsafe native OpenFOAM U path in receipt: " + case_id)
+              try:
+                  native_time = float(native_relative.parts[-2])
+              except ValueError:
+                  native_time = float("nan")
+              if not math.isfinite(native_time) or native_time < 0:
+                  raise SystemExit("Native OpenFOAM U time does not match final VTK time: " + case_id)
+              native_path = root.joinpath(*native_relative.parts)
+              if native_path.is_symlink() or not native_path.is_file():
+                  raise SystemExit("Native OpenFOAM U output is missing or symbolic: " + case_id)
+              native_resolved = native_path.resolve(strict=True)
+              if not native_resolved.is_relative_to(root):
+                  raise SystemExit("Native OpenFOAM U escaped the generated family: " + case_id)
+              native_sha = hashlib.sha256(native_resolved.read_bytes()).hexdigest()
+              if (
+                  native_record.get("sha256") != native_sha
+                  or parity.get("native_field_sha256") != native_sha
+              ):
+                  raise SystemExit("Native OpenFOAM U digest differs from parity receipt: " + case_id)
+              recomputed_parity = audit_openfoam_vtk_velocity(native_resolved, resolved)
+              if recomputed_parity != parity:
+                  raise SystemExit("Native-to-VTK velocity parity did not reproduce from the uploaded files: " + case_id)
+              maximum_error = parity.get("max_absolute_error_native_to_vtk_m_s")
+              allowed_error = parity.get("max_allowed_native_to_vtk_error_m_s")
+              if (
+                  type(maximum_error) not in (int, float)
+                  or type(allowed_error) not in (int, float)
+                  or not math.isfinite(maximum_error)
+                  or not math.isfinite(allowed_error)
+                  or maximum_error < 0
+                  or allowed_error < maximum_error
+              ):
+                  raise SystemExit("Native-to-VTK velocity errors exceed the recorded float32/ASCII tolerance: " + case_id)
+              lines.append(
+                  f"{case_id}: cells={imported['mesh_cells']} "
+                  f"U=3-component-cell-field field_parity=PASS "
+                  f"max_abs_error_m_s={maximum_error:.12g} "
+                  f"max_allowed_m_s={allowed_error:.12g} "
+                  f"max_relative_error={parity.get('max_relative_error_native_to_vtk')} "
+                  f"native_U_sha256={native_sha} vtk_sha256={actual_sha}"
+              )
+              pressure_parity = case.get("vtk_pressure_parity")
+              if (
+                  not isinstance(pressure_parity, dict)
+                  or pressure_parity != export_stage.get("pressure_field_parity")
+                  or pressure_parity.get("status") != "PASS"
+                  or pressure_parity.get("field") != "p"
+                  or pressure_parity.get("dimensions") != "[0 2 -2 0 0 0 0]"
+                  or pressure_parity.get("vtk_sha256") != actual_sha
+                  or pressure_parity.get("cell_count") != expected_cells
+                  or pressure_parity.get("compared_scalar_values") != expected_cells
+                  or pressure_parity.get("cell_id_mapping")
+                  != "complete_unique_permutation_of_native_cell_indices"
+              ):
+                  raise SystemExit("Native-to-VTK pressure parity receipt is missing or incomplete: " + case_id)
+              native_pressure_record = export_stage.get("native_pressure_field")
+              native_pressure_relative = PurePosixPath(
+                  native_pressure_record.get("path", "")
+                  if isinstance(native_pressure_record, dict) else ""
+              )
+              if (
+                  native_pressure_relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in native_pressure_relative.parts)
+                  or native_pressure_relative.parts[:len(case_parts)] != case_parts
+                  or len(native_pressure_relative.parts) != len(case_parts) + 2
+                  or native_pressure_relative.parts[-1] != "p"
+                  or native_pressure_relative.parts[-2] != relative.stem.rsplit("_", 1)[-1]
+              ):
+                  raise SystemExit("Unsafe native OpenFOAM p path in receipt: " + case_id)
+              native_pressure_path = root.joinpath(*native_pressure_relative.parts)
+              if native_pressure_path.is_symlink() or not native_pressure_path.is_file():
+                  raise SystemExit("Native OpenFOAM p output is missing or symbolic: " + case_id)
+              native_pressure_resolved = native_pressure_path.resolve(strict=True)
+              if not native_pressure_resolved.is_relative_to(root):
+                  raise SystemExit("Native OpenFOAM p escaped the generated family: " + case_id)
+              native_pressure_sha = hashlib.sha256(native_pressure_resolved.read_bytes()).hexdigest()
+              if (
+                  native_pressure_record.get("sha256") != native_pressure_sha
+                  or pressure_parity.get("native_field_sha256") != native_pressure_sha
+              ):
+                  raise SystemExit("Native OpenFOAM p digest differs from parity receipt: " + case_id)
+              recomputed_pressure_parity = audit_openfoam_vtk_pressure(native_pressure_resolved, resolved)
+              if recomputed_pressure_parity != pressure_parity:
+                  raise SystemExit("Native-to-VTK pressure parity did not reproduce from uploaded files: " + case_id)
+              maximum_pressure_error = pressure_parity.get("max_absolute_error_native_to_vtk_m2_s2")
+              allowed_pressure_error = pressure_parity.get("max_allowed_native_to_vtk_error_m2_s2")
+              if (
+                  type(maximum_pressure_error) not in (int, float)
+                  or type(allowed_pressure_error) not in (int, float)
+                  or not math.isfinite(maximum_pressure_error)
+                  or not math.isfinite(allowed_pressure_error)
+                  or maximum_pressure_error < 0
+                  or allowed_pressure_error < maximum_pressure_error
+              ):
+                  raise SystemExit("Native-to-VTK pressure errors exceed the recorded float32/ASCII tolerance: " + case_id)
+              lines.append(
+                  f"{case_id}: p=kinematic-pressure-cell-field field_parity=PASS "
+                  f"max_abs_error_m2_s2={maximum_pressure_error:.12g} "
+                  f"max_allowed_m2_s2={allowed_pressure_error:.12g} "
+                  f"max_relative_error={pressure_parity.get('max_relative_error_native_to_vtk')} "
+                  f"native_p_sha256={native_pressure_sha}"
+              )
+              surface_flux_dataset = case.get("vtk_surface_flux_dataset")
+              surface_flux_parity = case.get("vtk_surface_flux_parity")
+              if (
+                  not isinstance(surface_flux_dataset, dict)
+                  or surface_flux_dataset != export_stage.get("vtk_surface_flux_dataset")
+                  or surface_flux_dataset.get("field") != "phi"
+                  or type(surface_flux_dataset.get("face_count")) is not int
+                  or surface_flux_dataset.get("face_count") <= 0
+                  or not isinstance(surface_flux_parity, dict)
+                  or surface_flux_parity != export_stage.get("surface_flux_field_parity")
+                  or surface_flux_parity.get("status") != "PASS"
+                  or surface_flux_parity.get("field") != "phi"
+                  or surface_flux_parity.get("dimensions") != "[0 3 -1 0 0 0 0]"
+                  or surface_flux_parity.get("face_count") != surface_flux_dataset.get("face_count")
+                  or surface_flux_parity.get("compared_flux_vector_components")
+                  != surface_flux_dataset.get("face_count") * 3
+              ):
+                  raise SystemExit("Native-to-VTK surface-flux parity receipt is missing or incomplete: " + case_id)
+              surface_relative = PurePosixPath(surface_flux_dataset.get("path", ""))
+              expected_surface_path = case_parts + (
+                  "VTK", "surfaceFields", f"surfaceFields_{native_relative.parts[-2]}.vtk"
+              )
+              if (
+                  surface_relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in surface_relative.parts)
+                  or surface_relative.parts != expected_surface_path
+              ):
+                  raise SystemExit("Unsafe VTK surface-field path in receipt: " + case_id)
+              surface_path = root.joinpath(*surface_relative.parts)
+              if surface_path.is_symlink() or not surface_path.is_file():
+                  raise SystemExit("VTK surface-field output is missing or symbolic: " + case_id)
+              resolved_surface_path = surface_path.resolve(strict=True)
+              if not resolved_surface_path.is_relative_to(root):
+                  raise SystemExit("VTK surface-field output escaped the generated family: " + case_id)
+              surface_sha = hashlib.sha256(resolved_surface_path.read_bytes()).hexdigest()
+              if (
+                  surface_flux_dataset.get("sha256") != surface_sha
+                  or surface_flux_parity.get("vtk_sha256") != surface_sha
+              ):
+                  raise SystemExit("VTK surface-field digest differs from its receipt: " + case_id)
+              native_phi_record = export_stage.get("native_surface_flux_field")
+              native_phi_relative = PurePosixPath(
+                  native_phi_record.get("path", "") if isinstance(native_phi_record, dict) else ""
+              )
+              if (
+                  native_phi_relative.is_absolute()
+                  or any(part in ("", ".", "..") for part in native_phi_relative.parts)
+                  or native_phi_relative.parts != case_parts + (native_relative.parts[-2], "phi")
+              ):
+                  raise SystemExit("Unsafe native OpenFOAM phi path in receipt: " + case_id)
+              native_phi_path = root.joinpath(*native_phi_relative.parts)
+              if native_phi_path.is_symlink() or not native_phi_path.is_file():
+                  raise SystemExit("Native OpenFOAM phi output is missing or symbolic: " + case_id)
+              resolved_native_phi_path = native_phi_path.resolve(strict=True)
+              if not resolved_native_phi_path.is_relative_to(root):
+                  raise SystemExit("Native OpenFOAM phi escaped the generated family: " + case_id)
+              native_phi_sha = hashlib.sha256(resolved_native_phi_path.read_bytes()).hexdigest()
+              if (
+                  native_phi_record.get("sha256") != native_phi_sha
+                  or surface_flux_parity.get("native_field_sha256") != native_phi_sha
+              ):
+                  raise SystemExit("Native OpenFOAM phi digest differs from its parity receipt: " + case_id)
+              recomputed_surface_parity = audit_openfoam_vtk_surface_flux(
+                  resolved_native_phi_path,
+                  root.joinpath(*case_parts, "constant", "polyMesh"),
+                  resolved_surface_path,
+              )
+              if recomputed_surface_parity != surface_flux_parity:
+                  raise SystemExit("Native-to-VTK surface-flux parity did not reproduce from uploaded files: " + case_id)
+              max_flux_error = surface_flux_parity.get("max_absolute_flux_error_m3_s")
+              max_flux_allowed = surface_flux_parity.get("max_allowed_flux_error_m3_s")
+              if (
+                  type(max_flux_error) not in (int, float)
+                  or type(max_flux_allowed) not in (int, float)
+                  or not math.isfinite(max_flux_error)
+                  or not math.isfinite(max_flux_allowed)
+                  or max_flux_error < 0
+                  or max_flux_allowed < max_flux_error
+              ):
+                  raise SystemExit("Native-to-VTK phi errors exceed the recorded float32/ASCII tolerance: " + case_id)
+              total_surface_flux_faces += surface_flux_parity["face_count"]
+              lines.append(
+                  f"{case_id}: phi=surface-face-flux-vector parity=PASS "
+                  f"faces={surface_flux_parity['face_count']} "
+                  f"components={surface_flux_parity['compared_flux_vector_components']} "
+                  f"max_abs_error_m3_s={max_flux_error:.12g} "
+                  f"max_allowed_m3_s={max_flux_allowed:.12g} "
+                  f"centre_error_m={surface_flux_parity['max_face_centre_error_m']:.12g}/"
+                  f"{surface_flux_parity['max_allowed_face_centre_error_m']:.12g} "
+                  f"native_phi_sha256={native_phi_sha} vtk_sha256={surface_sha}"
+              )
+              patch_parity_records = case.get("vtk_patch_parity")
+              expected_patch_names = ["inlet", "outlet", "walls"]
+              if (
+                  not isinstance(patch_parity_records, list)
+                  or len(patch_parity_records) != len(expected_patch_names)
+                  or patch_parity_records != export_stage.get("patch_field_parity")
+                  or [record.get("patch") for record in patch_parity_records]
+                  != expected_patch_names
+              ):
+                  raise SystemExit("Native-to-VTK boundary patch parity receipt is missing or incomplete: " + case_id)
+              mesh_dir = root.joinpath(*case_parts, "constant", "polyMesh")
+              for record, patch_name in zip(patch_parity_records, expected_patch_names):
+                  patch_relative = PurePosixPath(record.get("path", ""))
+                  expected_patch_path = case_parts + ("VTK", patch_name, f"{patch_name}_{native_relative.parts[-2]}.vtk")
+                  if (
+                      patch_relative.is_absolute()
+                      or any(part in ("", ".", "..") for part in patch_relative.parts)
+                      or patch_relative.parts != expected_patch_path
+                      or record.get("status") != "PASS"
+                      or record.get("patch_id") != expected_patch_names.index(patch_name)
+                  ):
+                      raise SystemExit("Unsafe or incomplete VTK patch record: " + case_id + "/" + patch_name)
+                  patch_path = root.joinpath(*patch_relative.parts)
+                  if patch_path.is_symlink() or not patch_path.is_file():
+                      raise SystemExit("VTK patch output is missing or symbolic: " + case_id + "/" + patch_name)
+                  resolved_patch = patch_path.resolve(strict=True)
+                  if not resolved_patch.is_relative_to(root):
+                      raise SystemExit("VTK patch output escaped the generated family: " + case_id + "/" + patch_name)
+                  actual_patch_sha = hashlib.sha256(resolved_patch.read_bytes()).hexdigest()
+                  if actual_patch_sha != record.get("vtk_sha256"):
+                      raise SystemExit("VTK patch digest differs from receipt: " + case_id + "/" + patch_name)
+                  recomputed_patch = audit_openfoam_vtk_boundary_patch(
+                      native_resolved,
+                      native_pressure_resolved,
+                      mesh_dir,
+                      resolved_patch,
+                      patch_name,
+                  )
+                  recomputed_patch["path"] = patch_relative.as_posix()
+                  if recomputed_patch != record:
+                      raise SystemExit("Native-to-VTK boundary patch parity did not reproduce: " + case_id + "/" + patch_name)
+                  total_patch_faces += recomputed_patch["native_face_count"]
+                  lines.append(
+                      f"{case_id}/{patch_name}: faces={recomputed_patch['native_face_count']} "
+                      f"U_components={recomputed_patch['compared_velocity_components']} "
+                      f"p_values={recomputed_patch['compared_pressure_values']} parity=PASS "
+                      f"max_abs_U_m_s={recomputed_patch['max_absolute_velocity_error_m_s']:.12g}/"
+                      f"{recomputed_patch['max_allowed_velocity_error_m_s']:.12g} "
+                      f"max_abs_p_m2_s2={recomputed_patch['max_absolute_pressure_error_m2_s2']:.12g}/"
+                      f"{recomputed_patch['max_allowed_pressure_error_m2_s2']:.12g} "
+                      f"vtk_sha256={actual_patch_sha}"
+                  )
+          if total_patch_faces <= 0:
+              raise SystemExit("No native-to-VTK boundary patch faces were audited")
+          lines.append(
+              f"PATCH_TOTALS: datasets=27 faces={total_patch_faces} "
+              f"U_components={total_patch_faces * 3} p_values={total_patch_faces}"
+          )
+          if total_surface_flux_faces <= 0:
+              raise SystemExit("No native-to-VTK surface-flux faces were audited")
+          lines.append(
+              f"SURFACE_FLUX_TOTALS: datasets=9 faces={total_surface_flux_faces} "
+              f"phi_vector_components={total_surface_flux_faces * 3}"
+          )
+          if set(volume_cases) != expected_cases:
+              raise SystemExit("PolyMesh volume audit does not contain exactly nine cases")
+          volume_report = {
+              "schema_version": "cleanroomx.openfoam-poly-mesh-volume-audit.v1",
+              "status": "PASS",
+              "evidence_scope": "synthetic mesh data integrity only",
+              "scientific_validation": "BLOCKED",
+              "family_manifest_sha256": hashlib.sha256(
+                  (root / "manifest.json").read_bytes()
+              ).hexdigest(),
+              "execution_receipt_sha256": hashlib.sha256(
+                  (root / "grid_execution_evidence.json").read_bytes()
+              ).hexdigest(),
+              "cases": volume_cases,
+          }
+          (root / "poly_mesh_volume_audit.json").write_text(
+              json.dumps(volume_report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+              encoding="utf-8",
+          )
+          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          Path(sys.argv[3]).write_text("\n".join(volume_lines) + "\n", encoding="utf-8")
           PY
 
           triage_report="$RUNNER_TEMP/simpleFoam-grid-family-triage.json"
@@ -205,29 +1123,299 @@ jobs:
           screen = report.get("solver_input_fingerprint_screen", {})
           if screen.get("status") != "BYTE_IDENTICAL_ACROSS_GRID_LEVELS":
               raise SystemExit("Declared solver-condition dictionaries differ or are incomplete")
+          flux_screen = report.get("solver_flux_balance_screen", {})
+          if (
+              flux_screen.get("status") != "MEASURED_DIAGNOSTIC_ONLY"
+              or flux_screen.get("case_count_measured") != 9
+              or flux_screen.get("acceptance_criterion") != "NOT_SET"
+          ):
+              raise SystemExit("Final-time phi fluxes are missing, incomplete, or assigned an unsupported acceptance criterion")
           print("All nine logs are structurally parseable; declared condition inputs match across grid levels.")
-          print("Residual and scientific-validation statuses remain separate in the uploaded JSON report.")
+          print("Final-time inlet/outlet phi fluxes were measured for all nine cases; no project balance criterion is set.")
+          print("Residual, flux-balance, and scientific-validation statuses remain separate in the uploaded JSON report.")
           PY
 
-          python - "$triage_report" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" <<'PY'
+          python - "$triage_report" "$RUNNER_TEMP/simpleFoam-residual-summary.txt" "$RUNNER_TEMP/simpleFoam-flux-summary.txt" <<'PY'
           import json
           import sys
           from pathlib import Path
 
           report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          lines = []
+          residual_lines = []
+          flux_lines = []
           for case_id, case in sorted(report.get("cases", {}).items()):
               fields = case.get("terminal_residual_control_screen", {}).get("fields", {})
               residuals = " ".join(
                   f"{field}={fields.get(field, {}).get('status', 'UNKNOWN')}"
                   for field in ("U", "p")
               )
-              lines.append(
+              flux = case.get("solver_flux_screen", {})
+              residual_lines.append(
                   f"{case_id}: status={case.get('status')} "
                   f"time_steps={case.get('time_steps')} last_time={case.get('last_time')} "
                   f"{residuals}"
               )
-          Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+              flux_lines.append(
+                  f"{case_id}: status={flux.get('status')} "
+                  f"inlet_in={flux.get('inlet', {}).get('net_inward_m3_s')} m3/s "
+                  f"outlet_out={flux.get('outlet', {}).get('net_outward_m3_s')} m3/s "
+                  f"imbalance={flux.get('relative_flux_imbalance_percent')}% "
+                  f"criterion={flux.get('flow_balance_assessment')}"
+              )
+          Path(sys.argv[2]).write_text("\n".join(residual_lines) + "\n", encoding="utf-8")
+          Path(sys.argv[3]).write_text("\n".join(flux_lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Run and synchronize a real passive-tracer case
+        run: |
+          set -eo pipefail
+          set +e
+          source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            exit 1
+          fi
+          python scripts/openfoam_v10_scalar_sync_smoke.py \
+            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" \
+            "$RUNNER_TEMP/cleanroomx-openfoam-scalar-sync" \
+            examples/cfd_scalar_spec.example.json \
+            examples/cfd_scalar_field_map.example.json
+
+      - name: Audit multi-time foamToVTK selection
+        run: |
+          set -eo pipefail
+          set +e
+          source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            exit 1
+          fi
+          python -m cleanroomx.cfd_vtk_time_selection \
+            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" --times 50,100
+
+      - name: Incrementally synchronize real OpenFOAM VTK results
+        run: |
+          set -euo pipefail
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          sync_root="$RUNNER_TEMP/cleanroomx-cfd-vtk-sync"
+          mkdir -p "$sync_root"
+          case_count=0
+          for case_dir in "$family"/configuration_*/*; do
+            [[ -d "$case_dir/VTK" ]] || continue
+            case_id="${case_dir#"$family"/}"
+            safe_case_id="${case_id//\//-}"
+            simulation_id="${GITHUB_RUN_ID}-${safe_case_id}"
+            result_dir="$sync_root/$simulation_id"
+            for scan in 1 2; do
+              cleanroomx-cfd-pipeline sync-vtk \
+                "$case_dir/VTK" "$result_dir" \
+                --simulation-id "$simulation_id" \
+                --configuration-file "$family/manifest.json" \
+                --field-map-file examples/cfd_openfoam_field_map.example.json \
+                --stable-scans 2 --stable-seconds 0 --once \
+                > "$sync_root/${safe_case_id}.scan-${scan}.json"
+            done
+            python - "$result_dir/sync-state.json" "$family/manifest.json" \
+              examples/cfd_openfoam_field_map.example.json \
+              "$result_dir" "$case_dir/VTK" "$sync_root/${safe_case_id}.verified.json" \
+              "$case_id" "$simulation_id" <<'PY'
+          import hashlib
+          import json
+          import math
+          import sys
+          from pathlib import Path
+
+          state_path = Path(sys.argv[1])
+          manifest_path = Path(sys.argv[2])
+          field_map_path = Path(sys.argv[3])
+          result_root = Path(sys.argv[4])
+          vtk_root = Path(sys.argv[5])
+          report_path = Path(sys.argv[6])
+          case_id = sys.argv[7]
+          simulation_id = sys.argv[8]
+          manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+          field_map = json.loads(field_map_path.read_text(encoding="utf-8"))
+          field_map_sha = hashlib.sha256(json.dumps(
+              field_map, sort_keys=True, separators=(",", ":"), allow_nan=False
+          ).encode("utf-8")).hexdigest()
+          state = json.loads(state_path.read_text(encoding="utf-8"))
+          if state.get("schema_version") != "cleanroomx.openfoam-vtk-sync.v3":
+              raise SystemExit("Unexpected synchronization state schema")
+          if (
+              state.get("simulation_id") != simulation_id
+              or state.get("configuration_sha256") != manifest_sha
+              or state.get("field_map_sha256") != field_map_sha
+          ):
+              raise SystemExit("Synchronization state provenance does not match this case and generated family")
+          records = state.get("records", {})
+          imported = [item for item in records.values() if item.get("status") == "imported"]
+          if len(imported) != 3 or {item.get("solver_time") for item in imported} != {"50", "100", "150"}:
+              raise SystemExit("Expected exactly three synchronized solver times: 50, 100, and 150")
+          if len(records) != 3:
+              raise SystemExit("Unexpected pending, duplicate, or rejected VTK records")
+          snapshots = []
+          for item in imported:
+              source = vtk_root / item["relative_path"]
+              snapshot_path = result_root / item["snapshot_relative_path"]
+              source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+              snapshot_bytes = snapshot_path.read_bytes()
+              if source_sha != item.get("source_sha256"):
+                  raise SystemExit("Synchronized source VTK hash differs from the accepted record")
+              if hashlib.sha256(snapshot_bytes).hexdigest() != item.get("snapshot_sha256"):
+                  raise SystemExit("Synchronized snapshot hash differs from the accepted record")
+              snapshot = json.loads(snapshot_bytes)
+              if (
+                  snapshot.get("simulation_id") != simulation_id
+                  or snapshot.get("configuration_sha256") != manifest_sha
+                  or snapshot.get("field_map_sha256") != field_map_sha
+                  or snapshot.get("source_sha256") != source_sha
+                  or snapshot.get("solver_time") != item.get("solver_time")
+                  or snapshot.get("scientific_validation") != "BLOCKED"
+              ):
+                  raise SystemExit("Snapshot time, configuration, content, or validation status is inconsistent")
+              fields = snapshot.get("fields", {})
+              fields_sha = hashlib.sha256(json.dumps(
+                  fields, sort_keys=True, separators=(",", ":"), allow_nan=False
+              ).encode("utf-8")).hexdigest()
+              if fields_sha != snapshot.get("fields_sha256") or fields.get("mesh_cells") != item.get("mesh_cells"):
+                  raise SystemExit("Imported VTK field payload hash or mesh-cell count is inconsistent")
+              field_data = fields.get("field_data", {})
+              pressure = field_data.get("kinematic_pressure")
+              if (
+                  fields.get("field_map_schema") != "cleanroomx.cfd-vtk-field-map.v1"
+                  or not isinstance(pressure, dict)
+                  or pressure.get("array_name") != "p"
+                  or pressure.get("units") != "m^2/s^2"
+                  or pressure.get("units_source") != "explicit_caller_field_map"
+                  or pressure.get("components") != 1
+                  or not isinstance(pressure.get("values"), list)
+                  or len(pressure.get("values", [])) != fields.get("mesh_cells")
+                  or item.get("field_data_names") != ["kinematic_pressure"]
+                  or set(item.get("unavailable_field_names", [])) != {
+                      "turbulent_kinetic_energy", "turbulent_dissipation_rate",
+                      "specific_dissipation_rate", "turbulent_kinematic_viscosity",
+                  }
+              ):
+                  raise SystemExit("Mapped pressure or unavailable turbulence-field provenance is inconsistent")
+              if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in pressure["values"]):
+                  raise SystemExit("Mapped pressure includes a non-finite value")
+              snapshots.append({
+                  "solver_time": item["solver_time"],
+                  "source_relative_path": item["relative_path"],
+                  "source_sha256": source_sha,
+                  "snapshot_relative_path": item["snapshot_relative_path"],
+                  "snapshot_sha256": hashlib.sha256(snapshot_bytes).hexdigest(),
+                  "mesh_cells": item["mesh_cells"],
+                  "mapped_fields": sorted(field_data),
+                  "unavailable_fields": sorted(item.get("unavailable_field_names", [])),
+                  "pressure_units": pressure["units"],
+                  "scientific_validation": "BLOCKED",
+              })
+          report = {
+              "schema_version": "cleanroomx.openfoam-vtk-sync-run.v1",
+              "status": "PASS_DATA_INGESTION_DIAGNOSTIC_ONLY",
+              "case_id": case_id,
+              "simulation_id": simulation_id,
+              "configuration_sha256": manifest_sha,
+              "field_map_sha256": field_map_sha,
+              "synchronized_snapshot_count": len(snapshots),
+              "snapshots": sorted(snapshots, key=lambda item: int(item["solver_time"])),
+              "scientific_validation": "BLOCKED",
+          }
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+          PY
+            case_count=$((case_count + 1))
+          done
+          [[ "$case_count" -eq 9 ]]
+          python - "$sync_root" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          reports = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(root.glob("*.verified.json"))]
+          if len(reports) != 9 or any(item.get("status") != "PASS_DATA_INGESTION_DIAGNOSTIC_ONLY" for item in reports):
+              raise SystemExit("Expected nine verified VTK synchronization records")
+          result = {
+              "schema_version": "cleanroomx.openfoam-vtk-sync-run-family.v1",
+              "status": "PASS_DATA_INGESTION_DIAGNOSTIC_ONLY",
+              "case_count": len(reports),
+              "snapshot_count": sum(item["synchronized_snapshot_count"] for item in reports),
+              "cases": reports,
+              "scientific_validation": "BLOCKED",
+          }
+          (root / "openfoam-vtk-sync-report.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Render synchronized OpenFOAM airflow comparison
+        run: |
+          set -euo pipefail
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          simulation_id="$(python - "$family/manifest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print("grid-" + manifest["family_spec_sha256"][:24])
+          PY
+          )"
+          sync_root="$RUNNER_TEMP/cleanroomx-openfoam-runtime-sync/$simulation_id"
+          visualization_root="$RUNNER_TEMP/cleanroomx-openfoam-visualization"
+          mkdir -p "$visualization_root"
+          cleanroomx-cfd-pipeline plot \
+            --case-1 "$sync_root/configuration_1/coarse/results/time_150/VTK/coarse_150.vtk" \
+            --case-2 "$sync_root/configuration_2/coarse/results/time_150/VTK/coarse_150.vtk" \
+            --case-3 "$sync_root/configuration_3/coarse/results/time_150/VTK/coarse_150.vtk" \
+            --field speed --axis y --position-m 1.0 --slab-thickness-m 0.5 \
+            --output "$visualization_root/airflow-speed-cross-section.png" \
+            > "$visualization_root/airflow-speed-cross-section.json"
+          python - "$visualization_root" <<'PY'
+          import json
+          import math
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          image = root / "airflow-speed-cross-section.png"
+          report_path = root / "airflow-speed-cross-section.json"
+          if image.is_symlink() or not image.is_file() or image.stat().st_size < 5000:
+              raise SystemExit("Synchronized airflow visualization is missing or incomplete")
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          counts = report.get("sample_count")
+          value_range = report.get("range")
+          if (
+              report.get("status") != "sampled_cells_visualized_not_cfd_validation"
+              or report.get("field") != "speed"
+              or report.get("units") != "m/s"
+              or report.get("axis") != "y"
+              or report.get("position_m") != 1.0
+              or report.get("slab_thickness_m") != 0.5
+              or not isinstance(counts, dict)
+              or set(counts) != {"1", "2", "3"}
+              or any(type(counts[key]) is not int or counts[key] <= 0 for key in counts)
+              or not isinstance(value_range, list)
+              or len(value_range) != 2
+              or any(type(value) not in (int, float) or not math.isfinite(value) for value in value_range)
+              or value_range[0] > value_range[1]
+          ):
+              raise SystemExit("Synchronized airflow visualization report is incomplete or malformed")
+          print(json.dumps({"image_bytes": image.stat().st_size, **report}, sort_keys=True))
           PY
 
       - name: Upload execution evidence
@@ -239,6 +1427,13 @@ jobs:
             ${{ runner.temp }}/cleanroomx-cfd-grid-family
             ${{ runner.temp }}/openfoam-v10-version.txt
             ${{ runner.temp }}/simpleFoam-residual-summary.txt
+            ${{ runner.temp }}/simpleFoam-flux-summary.txt
+            ${{ runner.temp }}/simpleFoam-vtk-export-summary.txt
+            ${{ runner.temp }}/simpleFoam-mesh-volume-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
+            ${{ runner.temp }}/cleanroomx-openfoam-runtime-sync
+            ${{ runner.temp }}/cleanroomx-openfoam-scalar-sync
+            ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
+            ${{ runner.temp }}/cleanroomx-openfoam-visualization
           if-no-files-found: warn
           retention-days: 14

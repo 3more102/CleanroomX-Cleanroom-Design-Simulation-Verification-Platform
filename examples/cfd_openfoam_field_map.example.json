@@ -1,0 +1,25 @@
+{
+  "schema_version": "cleanroomx.cfd-vtk-field-map.v1",
+  "fields": {
+    "p": {
+      "semantic": "kinematic_pressure",
+      "units": "m^2/s^2"
+    },
+    "k": {
+      "semantic": "turbulent_kinetic_energy",
+      "units": "m^2/s^2"
+    },
+    "epsilon": {
+      "semantic": "turbulent_dissipation_rate",
+      "units": "m^2/s^3"
+    },
+    "omega": {
+      "semantic": "specific_dissipation_rate",
+      "units": "s^-1"
+    },
+    "nut": {
+      "semantic": "turbulent_kinematic_viscosity",
+      "units": "m^2/s"
+    }
+  }
+}

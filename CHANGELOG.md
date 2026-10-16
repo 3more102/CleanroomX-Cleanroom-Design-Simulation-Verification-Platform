@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased Release 3 — strict OpenFOAM block vertex indices — 2026-10-16
+
+- Parses all eight `blockMeshDict` hex vertex references as signed integer tokens and rejects negative or out-of-range references before deriving exterior-face topology.
+- Adds a regression for a negative index that would otherwise lose its sign during digit extraction; OpenFOAM cases and scientific-validation status are unchanged.
+
+## Unreleased Release 3 — bounded OpenFOAM residual-trend diagnostics — 2026-10-15
+
+- Adds bounded first-window versus tail-window median initial-residual summaries to the read-only single-log and nine-case triage commands. Short logs use disjoint reduced windows; trend ratios remain descriptive and never satisfy convergence or validation criteria.
+- Records reproducible 36-field diagnostics of the archived synthetic Foundation v10 runs 67 and 68, preserving the failed terminal residual screens and blocked scientific-validation status.
+- Does not alter OpenFOAM cases, solver settings, tolerances, acceptance criteria, or engineering verdicts.
+
+## Unreleased Release 3 — checkMesh/polyMesh volume cross-check — 2026-10-15
+
+- Reconstructs every cell volume from Foundation v10 ASCII `polyMesh` data and compares cell counts, min/max/total volumes, bounding-box volume, and manifest-derived room volume against the hash-bound `checkMesh` receipt.
+- Records all five mesh-file hashes and representation-based tolerances in the uploaded audit artifact; this is synthetic mesh-data integrity evidence only and does not change the blocked scientific-validation status.
+
+## Unreleased Release 3 — Foundation v10 surface-flux VTK audit — 2026-10-15
+
+- Extends the opt-in nine-case Foundation v10 workflow to export native `phi` surface fluxes through pinned `foamToVTK -surfaceFields` support and independently recheck the resulting face-normal vectors against native face geometry and values.
+- Adds bounded parsing for native surface-scalar fields and polyMesh face geometry, with explicit face-centre ordering, float32/ASCII serialization bounds, file hashes, synthetic regressions, and diagnostic-only evidence; no flow-balance threshold, convergence verdict, or scientific-acceptance status changes.
+
+## Unreleased Release 3 — hash-bound OpenFOAM checkMesh diagnostics — 2026-10-15
+
+- Adds a strict Foundation v10 parser for mesh counts, cell types, bounding box, face areas, cell volumes, and reported geometric checks; each receipt binds the parsed values to the raw log SHA-256.
+- Records incomplete, ambiguous, non-finite, and tool-reported failure states explicitly, and stops before `simpleFoam` when `checkMesh` evidence is incomplete or reports failed checks.
+- Labels the summary diagnostic-only and leaves project acceptance unevaluated because no project-specific mesh criteria or verified physical geometry are available.
+- Adds a regression fixture copied from archived run 66 evidence; it does not create a real-case result or change the CFD scientific-validation status.
+
 ## Unreleased Release 3 — external dependency fingerprint runtime boundaries — 2026-10-04
 
 - Narrows every application-layer stable dependency fingerprint boundary so only expected I/O/validation failures are converted into fail-closed dependency-state or private-snapshot errors.

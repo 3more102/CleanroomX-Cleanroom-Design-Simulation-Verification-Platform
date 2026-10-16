@@ -1,14 +1,24 @@
 """SYNTHETIC regression fixtures; not proof of real CFD physics validation."""
+import hashlib
 import json
 import math
+import re
+from pathlib import Path
 from types import SimpleNamespace
 import pytest
 
 from cleanroomx.cfd_openfoam import (
-    SCHEMA, _layout, build_openfoam_files, export_openfoam_cases,
-    run_openfoam_cases, validate_openfoam_spec,
+    SCHEMA, _hex_exterior_face_signatures, _layout, audit_openfoam_boundary_inputs, build_openfoam_files, export_openfoam_cases,
+    parse_openfoam_checkmesh_log, run_openfoam_cases, validate_openfoam_spec,
 )
-from cleanroomx.cfd_vtk import import_vtk_case, populate_study_from_vtk
+from cleanroomx.cfd_vtk import (
+    audit_openfoam_vtk_boundary_patch,
+    audit_openfoam_vtk_pressure,
+    audit_openfoam_vtk_surface_flux,
+    audit_openfoam_vtk_velocity,
+    import_vtk_case,
+    populate_study_from_vtk,
+)
 
 def spec():
     return {"schema_version":SCHEMA,"name":"synthetic test input",
@@ -26,6 +36,14 @@ def test_mesh_and_flow_generation(tmp_path):
         assert meta["mesh_cells"]==216
         assert meta["mesh"]["outlet_face_count"]>0
         assert meta["inlet_normal_speed_m_s"]*meta["mesh"]["inlet_area_m2"]==pytest.approx(0.15)
+        audit=meta["boundary_audit"]
+        assert audit["status"]=="input_geometry_and_inlet_flow_consistent"
+        assert audit["inlet"]["outward_normal_area_m2"]=={"+z":audit["inlet"]["area_m2"]}
+        assert audit["inlet"]["prescribed_inward_volume_flow_m3_s"]==pytest.approx(0.15)
+        assert set(audit["outlet"]["outward_normal_area_m2"])==({"-z"} if cfg==3 else {"+x","-x"})
+        assert audit["outlet"]["actual_solver_volume_flow_m3_s"] is None
+        assert audit["flow_balance_status"]=="not_measured"
+        assert audit["scientific_validation"]=="BLOCKED"
         f=tmp_path/"cases"/f"configuration_{cfg}"
         assert "hex (" in (f/"system/blockMeshDict").read_text()
         assert "pressureInletOutletVelocity" in (f/"0/U").read_text()
@@ -45,6 +63,50 @@ def test_mesh_and_flow_generation(tmp_path):
     copy=export_openfoam_cases(s,tmp_path/"other")
     assert copy==manifest
 
+@pytest.mark.parametrize("configuration",[1,2,3])
+def test_boundary_audit_rejects_outward_inlet_velocity(configuration):
+    files,metadata=build_openfoam_files(spec(),configuration)
+    tampered=dict(files)
+    tampered["0/U"]=tampered["0/U"].replace("(0 0 -","(0 0 +",1)
+    with pytest.raises(ValueError,match="does not point into"):
+        audit_openfoam_boundary_inputs(tampered,metadata)
+
+def test_boundary_audit_rejects_blockmesh_geometry_changed_after_metadata():
+    files,metadata=build_openfoam_files(spec(),3)
+    tampered=dict(files)
+    tampered["system/blockMeshDict"]=tampered["system/blockMeshDict"].replace(
+        "(0 0 0)","(0.1 0 0)",1
+    )
+    with pytest.raises(ValueError,match="geometry disagrees"):
+        audit_openfoam_boundary_inputs(tampered,metadata)
+
+@pytest.mark.parametrize(("mutation","message"),[
+    ("duplicate","duplicated across patches"),
+    ("omit","cover every exterior hex face"),
+])
+def test_boundary_audit_rejects_duplicate_or_missing_exterior_faces(mutation,message):
+    files,metadata=build_openfoam_files(spec(),1)
+    tampered=dict(files)
+    mesh=tampered["system/blockMeshDict"]
+    match=re.search(
+        r"(?ms)(^\s*inlet\s*\{.*?^\s*faces\s*\(\s*)(.*?)(^\s*\);\s*\})",mesh
+    )
+    assert match is not None
+    face_lines=list(re.finditer(
+        r"(?m)^\s*(\(\s*\d+\s+\d+\s+\d+\s+\d+\s*\))\s*$",match.group(2)
+    ))
+    assert len(face_lines)>=2
+    body=match.group(2)
+    if mutation=="duplicate":
+        first,second=face_lines[0],face_lines[1]
+        body=body[:second.start(1)]+first.group(1)+body[second.end(1):]
+    else:
+        last=face_lines[-1]
+        body=body[:last.start()]+body[last.end():]
+    tampered["system/blockMeshDict"]=mesh[:match.start(2)]+body+mesh[match.end(2):]
+    with pytest.raises(ValueError,match=message):
+        audit_openfoam_boundary_inputs(tampered,metadata)
+
 def test_patch_topology_is_closed():
     nx=ny=nz=6
     for cfg in (1,2,3):
@@ -53,6 +115,11 @@ def test_patch_topology_is_closed():
         assert len(faces)==2*(nx*ny+nx*nz+ny*nz)
         assert len(faces)==len(set(faces))
         assert p["inlet"] and p["outlet"]
+
+def test_hex_topology_rejects_negative_vertex_indices():
+    block="hex (-8 1 2 3 4 5 6 7) (1 1 1) simpleGrading (1 1 1)"
+    with pytest.raises(ValueError,match="invalid vertex indices"):
+        _hex_exterior_face_signatures(block,10)
 
 @pytest.mark.parametrize("field,value",[
     ("schema_version","bogus"),("mesh_cells",[80,80,80]),
@@ -82,6 +149,95 @@ def test_runner_requires_foundation_v10_environment(tmp_path,monkeypatch):
     with pytest.raises(RuntimeError,match="OpenFOAM Foundation v10"):
         run_openfoam_cases(tmp_path/"cases")
 
+def test_foundation_v10_checkmesh_log_is_hash_bound_and_diagnostic_only():
+    raw=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes()
+    digest=hashlib.sha256(raw).hexdigest()
+    report=parse_openfoam_checkmesh_log(raw.decode("utf-8"),digest)
+
+    assert digest=="4233a532e90d079c4ee3df31ecaa12fdddf41da67d630ad87aa6f04bfc97a478"
+    assert report["schema_version"]=="cleanroomx.openfoam-checkmesh-diagnostics.v1"
+    assert report["parse_status"]=="complete"
+    assert report["source_log_sha256"]==digest
+    assert report["interpretation"]=="diagnostic_only"
+    assert report["project_acceptance"]=="not_assessed_no_project_criteria"
+    assert report["mesh_result"]=="mesh_ok"
+    assert report["counts"]["points"]==343
+    assert report["counts"]["faces"]==756
+    assert report["counts"]["internal_faces"]==540
+    assert report["counts"]["cells"]==216
+    assert report["counts"]["regions"]==1
+    assert report["geometry"]["domain_bounding_box"]==[[0.,0.,0.],[3.,2.,2.]]
+    assert report["geometry"]["face_area_range_m2"]==pytest.approx([.1111111109,.166666667])
+    assert report["geometry"]["cell_volume_range_m3"]==pytest.approx(
+        [.05555555544,.05555555578,12.]
+    )
+    assert report["reported_checks"]["boundary_definition"]=="ok"
+    assert report["reported_checks"]["non_orthogonality"]=="ok"
+    assert report["reported_checks"]["patch_topology"]=="ok"
+    assert report["reported_checks"]["face_pyramids"]=="ok"
+    assert report["reported_checks"]["coupled_point_location"]=="ok"
+    assert len(report["patch_topology"])==3
+    assert report["reported_check_failures"]==[]
+
+    crlf_text=raw.decode("utf-8").replace("\n","\r\n")
+    crlf_report=parse_openfoam_checkmesh_log(
+        crlf_text,hashlib.sha256(crlf_text.encode("utf-8")).hexdigest()
+    )
+    assert crlf_report["parse_status"]=="complete"
+    assert crlf_report["mesh_result"]=="mesh_ok"
+
+def test_checkmesh_parser_preserves_ambiguous_invalid_and_failed_diagnostics():
+    raw=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes()
+    text=raw.decode("utf-8")
+
+    duplicated_text=text.replace("    cells:            216", "    cells:            216\n    cells:            216", 1)
+    duplicated=parse_openfoam_checkmesh_log(
+        duplicated_text,hashlib.sha256(duplicated_text.encode("utf-8")).hexdigest()
+    )
+    assert duplicated["parse_status"]=="ambiguous"
+    assert "cells" in duplicated["ambiguous_fields"]
+
+    nonfinite_text=text.replace("Max aspect ratio = 1.500000002", "Max aspect ratio = nan", 1)
+    nonfinite=parse_openfoam_checkmesh_log(
+        nonfinite_text,hashlib.sha256(nonfinite_text.encode("utf-8")).hexdigest()
+    )
+    assert nonfinite["parse_status"]=="incomplete"
+    assert "max_aspect_ratio" in nonfinite["invalid_fields"]
+
+    failed_text=text.replace("Mesh OK.", "Failed 2 mesh checks.", 1)
+    failed=parse_openfoam_checkmesh_log(
+        failed_text,hashlib.sha256(failed_text.encode("utf-8")).hexdigest()
+    )
+    assert failed["parse_status"]=="complete"
+    assert failed["mesh_result"]=="checks_failed"
+    assert failed["failed_check_count"]==2
+    assert failed["project_acceptance"]=="not_assessed_no_project_criteria"
+
+    contradictory_text=text.replace("Face vertices OK.", "Face vertices Failed.", 1)
+    contradictory=parse_openfoam_checkmesh_log(
+        contradictory_text,hashlib.sha256(contradictory_text.encode("utf-8")).hexdigest()
+    )
+    assert contradictory["parse_status"]=="ambiguous"
+    assert contradictory["mesh_result"]=="unknown"
+    assert "mesh_result_consistency" in contradictory["ambiguous_fields"]
+    assert "face_vertices" in contradictory["reported_check_failures"]
+
+    patch_header=next(
+        line for line in text.splitlines(keepends=True)
+        if line.strip().startswith("Patch ") and "Surface topology" in line
+    )
+    missing_header_text=text.replace(patch_header,"",1)
+    missing_header=parse_openfoam_checkmesh_log(
+        missing_header_text,hashlib.sha256(missing_header_text.encode("utf-8")).hexdigest()
+    )
+    assert missing_header["parse_status"]=="incomplete"
+    assert "patch_topology_header" in missing_header["missing_fields"]
+
+    with pytest.raises(ValueError,match="SHA-256"):
+        parse_openfoam_checkmesh_log(text,"not-a-digest")
+    with pytest.raises(ValueError,match="does not match"):
+        parse_openfoam_checkmesh_log(text,hashlib.sha256(b"different text").hexdigest())
+
 def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")
     monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
@@ -92,8 +248,10 @@ def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
             "     \\\\/     M anipulation  | Version:  10\n"
             "Build  : 10-c4cf895ad8fa\n")
 
+    checkmesh_log=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes().decode("utf-8").replace("\n","\r\n")
+
     def fake_run(command,*,cwd,stdout,stderr,timeout,check):
-        stdout.write(banner)
+        stdout.write(checkmesh_log if command[0].endswith("checkMesh") else banner)
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
@@ -101,11 +259,71 @@ def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
     assert result["status"]=="executed_requires_convergence_review"
     assert result["solver_release"]=="OpenFOAM Foundation v10"
     assert result["solver_build"]=="10-c4cf895ad8fa"
+    assert set(result["boundary_audits"])=={"1","2","3"}
     assert all(
         stage["openfoam"]["is_foundation_v10"]
         for case in result["cases"].values()
         for stage in case["stages"]
     )
+    checkmesh_stages=[stage for case in result["cases"].values()
+                      for stage in case["stages"] if stage["program"]=="checkMesh"]
+    assert len(checkmesh_stages)==3
+    assert all(stage["mesh_quality_diagnostics"]["parse_status"]=="complete"
+               for stage in checkmesh_stages)
+    assert all(stage["mesh_quality_diagnostics"]["mesh_result"]=="mesh_ok"
+               for stage in checkmesh_stages)
+    assert all(stage["mesh_quality_diagnostics"]["source_log_sha256"]==stage["log_sha256"]
+               for stage in checkmesh_stages)
+
+def test_runner_rejects_failed_checkmesh_status_even_with_mesh_ok_marker(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","10")
+    banner=("  \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox\n"
+            "  \\\\    /   O peration     | Website:  https://openfoam.org\n"
+            "     \\\\/     M anipulation  | Version:  10\n"
+            "Build  : 10-c4cf895ad8fa\n")
+    raw=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_bytes()
+    failed_log=raw.decode("utf-8").replace("Face vertices OK.","Face vertices Failed.",1)
+
+    def fake_run(command,*,cwd,stdout,stderr,timeout,check):
+        stdout.write(failed_log if command[0].endswith("checkMesh") else banner)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
+    result=run_openfoam_cases(tmp_path/"cases")
+    assert result["status"]=="incomplete"
+    assert result["cases"]["1"]["status"]=="checkmesh_failed"
+    stage=result["cases"]["1"]["stages"][-1]
+    assert stage["mesh_quality_diagnostics"]["mesh_result"]=="unknown"
+    assert stage["mesh_quality_diagnostics"]["parse_status"]=="ambiguous"
+    assert "face_vertices" in stage["mesh_quality_diagnostics"]["reported_check_failures"]
+
+def test_runner_stops_before_solver_when_checkmesh_reports_failed_checks(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","10")
+    fixture=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_text()
+    failed_log=fixture.replace("Mesh OK.","Failed 2 mesh checks.",1)
+    calls=[]
+
+    def fake_run(command,*,cwd,stdout,stderr,timeout,check):
+        name=Path(command[0]).name
+        calls.append(name)
+        stdout.write(failed_log if name=="checkMesh" else fixture)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
+    result=run_openfoam_cases(tmp_path/"cases")
+
+    assert result["status"]=="incomplete"
+    assert result["cases"]["1"]["status"]=="checkmesh_failed"
+    diagnostic=result["cases"]["1"]["stages"][-1]["mesh_quality_diagnostics"]
+    assert diagnostic["mesh_result"]=="checks_failed"
+    assert diagnostic["failed_check_count"]==2
+    assert calls==["blockMesh","checkMesh"]
 
 def test_tampered_case_fails_closed(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")
@@ -115,7 +333,20 @@ def test_tampered_case_fails_closed(tmp_path,monkeypatch):
     with pytest.raises(ValueError,match="Tampered"):
         run_openfoam_cases(tmp_path/"cases")
 
-def vtk_fixture(path, concentration=1., recirc=0., speed=.2):
+def test_tampered_boundary_audit_manifest_fails_before_solver_launch(tmp_path,monkeypatch):
+    export_openfoam_cases(spec(),tmp_path/"cases")
+    manifest_path=tmp_path/"cases/manifest.json"
+    manifest=json.loads(manifest_path.read_text())
+    manifest["evidence"]["1"]["boundary_audit"]["inlet"]["area_m2"]+=1
+    manifest_path.write_text(json.dumps(manifest))
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    with pytest.raises(ValueError,match="Boundary audit metadata mismatch"):
+        run_openfoam_cases(tmp_path/"cases")
+
+def vtk_fixture(
+    path, concentration=1., recirc=0., speed=.2, temperature_k=None,
+    turbulent_kinetic_energy=None,
+):
     vtk=pytest.importorskip("vtk")
     points=vtk.vtkPoints()
     for p in ((0,0,0),(1,0,0),(1,1,0),(0,1,0),
@@ -131,16 +362,476 @@ def vtk_fixture(path, concentration=1., recirc=0., speed=.2):
     t=vtk.vtkDoubleArray();t.SetName("T");t.InsertNextValue(concentration)
     r=vtk.vtkDoubleArray();r.SetName("recirculating");r.InsertNextValue(recirc)
     for arr in (u,t,r):grid.GetCellData().AddArray(arr)
+    if temperature_k is not None:
+        temperature=vtk.vtkDoubleArray();temperature.SetName("temperatureK")
+        temperature.InsertNextValue(temperature_k)
+        grid.GetCellData().AddArray(temperature)
+    if turbulent_kinetic_energy is not None:
+        kinetic=vtk.vtkDoubleArray();kinetic.SetName("k")
+        kinetic.InsertNextValue(turbulent_kinetic_energy)
+        grid.GetCellData().AddArray(kinetic)
     writer=vtk.vtkXMLUnstructuredGridWriter()
     writer.SetFileName(str(path));writer.SetInputData(grid)
     assert writer.Write()==1
+
+def openfoam_velocity_fixture(path):
+    path.write_text("\n".join((
+        "FoamFile",
+        "{",
+        "    format ascii;",
+        "    class volVectorField;",
+        '    location "150";',
+        "    object U;",
+        "}",
+        "dimensions [0 1 -1 0 0 0 0];",
+        "internalField nonuniform List<vector>",
+        "2",
+        "(",
+        "(1.234567891 -0.25 0.000001234567)",
+        "(-3.14159265 0.00000001 0.125000001)",
+        ");",
+        "boundaryField {}",
+        "",
+    )),encoding="ascii")
+
+def legacy_vtk_velocity_fixture(
+    path, *, cell_ids=(1, 0), perturb=0.0, pressure_perturb=0.0,
+    include_ids=True, point_velocity=False
+):
+    vtk=pytest.importorskip("vtk")
+    native=((1.234567891,-0.25,0.000001234567),
+            (-3.14159265,0.00000001,0.125000001))
+    native_pressure=(0.123456789, -2.5)
+    grid=vtk.vtkUnstructuredGrid()
+    points=vtk.vtkPoints()
+    for cell_index in range(2):
+        offset=2.0*cell_index
+        coordinates=((offset,0,0),(offset+1,0,0),(offset+1,1,0),(offset,1,0),
+                     (offset,0,1),(offset+1,0,1),(offset+1,1,1),(offset,1,1))
+        start=points.GetNumberOfPoints()
+        for point in coordinates:
+            points.InsertNextPoint(*point)
+        cell=vtk.vtkHexahedron()
+        for local_index in range(8):
+            cell.GetPointIds().SetId(local_index,start+local_index)
+        grid.InsertNextCell(cell.GetCellType(),cell.GetPointIds())
+    grid.SetPoints(points)
+    velocity=vtk.vtkFloatArray()
+    velocity.SetName("U")
+    velocity.SetNumberOfComponents(3)
+    pressure=vtk.vtkFloatArray()
+    pressure.SetName("p")
+    ids=vtk.vtkIntArray()
+    ids.SetName("cellID")
+    for cell_id in cell_ids:
+        vector=list(native[cell_id])
+        if perturb:
+            vector[0]+=perturb
+        velocity.InsertNextTuple3(*vector)
+        pressure.InsertNextValue(native_pressure[cell_id]+pressure_perturb)
+        ids.InsertNextValue(cell_id)
+    if point_velocity:
+        point_u=vtk.vtkFloatArray()
+        point_u.SetName("U")
+        point_u.SetNumberOfComponents(3)
+        for _ in range(points.GetNumberOfPoints()):
+            point_u.InsertNextTuple3(0,0,0)
+        grid.GetPointData().AddArray(point_u)
+    else:
+        grid.GetCellData().AddArray(velocity)
+    grid.GetCellData().AddArray(pressure)
+    if include_ids:
+        grid.GetCellData().AddArray(ids)
+    writer=vtk.vtkUnstructuredGridWriter()
+    writer.SetFileName(str(path))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(grid)
+    assert writer.Write()==1
+
+def test_openfoam_vtk_velocity_parity_uses_cell_ids_and_float32_tolerance(tmp_path):
+    native=tmp_path/"150"/"U"
+    native.parent.mkdir()
+    openfoam_velocity_fixture(native)
+    exported=tmp_path/"case_150.vtk"
+    legacy_vtk_velocity_fixture(exported,cell_ids=(1,0))
+
+    report=audit_openfoam_vtk_velocity(native,exported)
+
+    assert report["status"]=="PASS"
+    assert report["cell_id_mapping"]=="complete_unique_permutation_of_native_cell_indices"
+    assert report["cell_count"]==2
+    assert report["compared_velocity_components"]==6
+    assert report["vtk_velocity_scalar_type"]=="float"
+    assert report["max_absolute_error_native_to_vtk_m_s"]>0
+    assert report["max_absolute_error_native_to_vtk_m_s"] <= report["max_allowed_native_to_vtk_error_m_s"]
+
+def test_openfoam_vtk_velocity_parity_rejects_missing_or_duplicate_cell_ids(tmp_path):
+    native=tmp_path/"150"/"U"
+    native.parent.mkdir()
+    openfoam_velocity_fixture(native)
+    missing=tmp_path/"missing_ids.vtk"
+    legacy_vtk_velocity_fixture(missing,include_ids=False)
+    with pytest.raises(ValueError,match="cellID"):
+        audit_openfoam_vtk_velocity(native,missing)
+
+    duplicate=tmp_path/"duplicate_ids.vtk"
+    legacy_vtk_velocity_fixture(duplicate,cell_ids=(0,0))
+    with pytest.raises(ValueError,match="unique in-range"):
+        audit_openfoam_vtk_velocity(native,duplicate)
+
+    point_only=tmp_path/"point_only_U.vtk"
+    legacy_vtk_velocity_fixture(point_only,point_velocity=True)
+    with pytest.raises(ValueError,match="cell-data U"):
+        audit_openfoam_vtk_velocity(native,point_only)
+
+def test_openfoam_vtk_velocity_parity_rejects_field_mismatch(tmp_path):
+    native=tmp_path/"150"/"U"
+    native.parent.mkdir()
+    openfoam_velocity_fixture(native)
+    exported=tmp_path/"mismatch.vtk"
+    legacy_vtk_velocity_fixture(exported,perturb=0.01)
+    with pytest.raises(ValueError,match="differs from the native field"):
+        audit_openfoam_vtk_velocity(native,exported)
+
+def openfoam_pressure_fixture(path):
+    path.write_text("\n".join((
+        "FoamFile",
+        "{",
+        "    format ascii;",
+        "    class volScalarField;",
+        '    location "150";',
+        "    object p;",
+        "}",
+        "dimensions [0 2 -2 0 0 0 0];",
+        "internalField nonuniform List<scalar>",
+        "2",
+        "(",
+        "0.123456789",
+        "-2.5",
+        ");",
+        "boundaryField {}",
+        "",
+    )), encoding="ascii")
+
+def test_openfoam_vtk_pressure_parity_uses_cell_ids_and_float32_tolerance(tmp_path):
+    native=tmp_path/"150"/"p"
+    native.parent.mkdir()
+    openfoam_pressure_fixture(native)
+    exported=tmp_path/"case_150.vtk"
+    legacy_vtk_velocity_fixture(exported,cell_ids=(1,0))
+
+    report=audit_openfoam_vtk_pressure(native,exported)
+
+    assert report["status"]=="PASS"
+    assert report["field"]=="p"
+    assert report["dimensions"]=="[0 2 -2 0 0 0 0]"
+    assert report["cell_id_mapping"]=="complete_unique_permutation_of_native_cell_indices"
+    assert report["cell_count"]==2
+    assert report["compared_scalar_values"]==2
+    assert report["vtk_scalar_type"]=="float"
+    assert report["max_absolute_error_native_to_vtk_m2_s2"]>0
+    assert report["max_absolute_error_native_to_vtk_m2_s2"] <= report["max_allowed_native_to_vtk_error_m2_s2"]
+
+def test_openfoam_vtk_pressure_parity_rejects_wrong_dimensions_and_mismatch(tmp_path):
+    native=tmp_path/"150"/"p"
+    native.parent.mkdir()
+    openfoam_pressure_fixture(native)
+    exported=tmp_path/"case_150.vtk"
+    legacy_vtk_velocity_fixture(exported,pressure_perturb=0.01)
+    with pytest.raises(ValueError,match="differs from the native field"):
+        audit_openfoam_vtk_pressure(native,exported)
+
+    native.write_text(native.read_text(encoding="ascii").replace(
+        "dimensions [0 2 -2 0 0 0 0];", "dimensions [0 1 -1 0 0 0 0];"
+    ), encoding="ascii")
+    with pytest.raises(ValueError,match="kinematic-pressure dimensions"):
+        audit_openfoam_vtk_pressure(native,exported)
+
+def openfoam_patch_fixture(case_dir):
+    mesh=case_dir/"constant"/"polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh/"points").write_text("\n".join((
+        "FoamFile { format ascii; class vectorField; object points; }",
+        "6", "(", "(0 0 0)", "(1 0 0)", "(0 1 0)",
+        "(0 0 1)", "(2 0 0)", "(2 1 0)", ");", "",
+    )),encoding="ascii")
+    (mesh/"faces").write_text("\n".join((
+        "FoamFile { format ascii; class faceList; object faces; }",
+        "2", "(", "3(0 1 2)", "3(1 4 5)", ");", "",
+    )),encoding="ascii")
+    (mesh/"owner").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object owner; }",
+        "2", "(", "0", "1", ");", "",
+    )),encoding="ascii")
+    (mesh/"neighbour").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object neighbour; }",
+        "0", "(", ");", "",
+    )),encoding="ascii")
+    (mesh/"boundary").write_text("\n".join((
+        "FoamFile { format ascii; class polyBoundaryMesh; object boundary; }",
+        "1", "(", "outlet", "{", "type patch;", "nFaces 2;", "startFace 0;", "}", ");", "",
+    )),encoding="ascii")
+    time_dir=case_dir/"150"
+    time_dir.mkdir()
+    (time_dir/"U").write_text("\n".join((
+        "FoamFile { format ascii; class volVectorField; object U; }",
+        "dimensions [0 1 -1 0 0 0 0];",
+        "internalField nonuniform List<vector> 2 ((0 0 0) (0 0 0));",
+        "boundaryField { outlet { type fixedValue;",
+        "value nonuniform List<vector> 2 ((1.234567891 0 0) (2.34567891 3.45678912 0)); } }", "",
+    )),encoding="ascii")
+    (time_dir/"p").write_text("\n".join((
+        "FoamFile { format ascii; class volScalarField; object p; }",
+        "dimensions [0 2 -2 0 0 0 0];",
+        "internalField nonuniform List<scalar> 2 (4.123456789 5.123456789);",
+        "boundaryField { outlet { type zeroGradient; } }", "",
+    )),encoding="ascii")
+    return mesh,time_dir
+
+def legacy_vtk_patch_fixture(path, *, reverse=True, perturb_velocity=0.0,
+                             patch_id=0, shift_geometry=0.0):
+    vtk=pytest.importorskip("vtk")
+    native_points=((0,0,0),(1,0,0),(0,1,0),(0,0,1),(2,0,0),(2,1,0))
+    native_faces=((0,1,2),(1,4,5))
+    native_velocity=((1.234567891,0,0),(2.34567891,3.45678912,0))
+    native_pressure=(4.123456789,5.123456789)
+    poly=vtk.vtkPolyData()
+    points=vtk.vtkPoints()
+    point_order=(5,4,2,1,0)
+    point_ids={}
+    for native_id in point_order:
+        x,y,z=native_points[native_id]
+        point_ids[native_id]=points.InsertNextPoint(x+shift_geometry,y,z)
+    poly.SetPoints(points)
+    polys=vtk.vtkCellArray()
+    order=(1,0) if reverse else (0,1)
+    velocity=vtk.vtkFloatArray()
+    velocity.SetName("U")
+    velocity.SetNumberOfComponents(3)
+    pressure=vtk.vtkFloatArray()
+    pressure.SetName("p")
+    patch_ids=vtk.vtkFloatArray()
+    patch_ids.SetName("patchID")
+    for face_index in order:
+        face=native_faces[face_index]
+        cell=vtk.vtkPolygon()
+        cell.GetPointIds().SetNumberOfIds(len(face))
+        # Reversing the vertex order keeps an equivalent polygon while
+        # ensuring neither point nor face array order is treated as identity.
+        for local_index,native_point_id in enumerate(reversed(face)):
+            cell.GetPointIds().SetId(local_index,point_ids[native_point_id])
+        polys.InsertNextCell(cell)
+        vector=list(native_velocity[face_index])
+        vector[0]+=perturb_velocity
+        velocity.InsertNextTuple3(*vector)
+        pressure.InsertNextValue(native_pressure[face_index])
+        patch_ids.InsertNextValue(patch_id)
+    poly.SetPolys(polys)
+    poly.GetCellData().AddArray(velocity)
+    poly.GetCellData().AddArray(pressure)
+    poly.GetCellData().AddArray(patch_ids)
+    writer=vtk.vtkPolyDataWriter()
+    writer.SetFileName(str(path))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(poly)
+    assert writer.Write()==1
+
+def test_openfoam_vtk_boundary_patch_parity_maps_faces_by_geometry(tmp_path):
+    case=tmp_path/"case"
+    mesh,time_dir=openfoam_patch_fixture(case)
+    exported=tmp_path/"outlet_150.vtk"
+    legacy_vtk_patch_fixture(exported,reverse=True)
+
+    report=audit_openfoam_vtk_boundary_patch(
+        time_dir/"U",time_dir/"p",mesh,exported,"outlet"
+    )
+
+    assert report["status"]=="PASS"
+    assert report["patch_id"]==0
+    assert report["native_face_count"]==report["vtk_face_count"]==2
+    assert report["face_mapping"]=="complete_unique_geometry_signature_at_ascii_precision"
+    assert report["native_u_boundary_type"]=="fixedValue"
+    assert report["native_p_boundary_type"]=="zeroGradient"
+    assert report["compared_velocity_components"]==6
+    assert report["compared_pressure_values"]==2
+    assert 0 < report["max_absolute_velocity_error_m_s"] <= report["max_allowed_velocity_error_m_s"]
+    assert report["max_absolute_pressure_error_m2_s2"] <= report["max_allowed_pressure_error_m2_s2"]
+
+def test_openfoam_vtk_boundary_patch_parity_rejects_wrong_geometry_id_and_values(tmp_path):
+    case=tmp_path/"case"
+    mesh,time_dir=openfoam_patch_fixture(case)
+    exported=tmp_path/"outlet_150.vtk"
+
+    legacy_vtk_patch_fixture(exported,shift_geometry=0.1)
+    with pytest.raises(ValueError,match="face geometry"):
+        audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
+
+    legacy_vtk_patch_fixture(exported,patch_id=1)
+    with pytest.raises(ValueError,match="patchID"):
+        audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
+
+    legacy_vtk_patch_fixture(exported,perturb_velocity=0.1)
+    with pytest.raises(ValueError,match="patch U differs"):
+        audit_openfoam_vtk_boundary_patch(time_dir/"U",time_dir/"p",mesh,exported,"outlet")
+
+def openfoam_surface_flux_fixture(case_dir, *, uniform_boundary=False, wrong_dimensions=False):
+    mesh, time_dir = openfoam_patch_fixture(case_dir)
+    dimensions = "[0 1 -1 0 0 0 0]" if wrong_dimensions else "[0 3 -1 0 0 0 0]"
+    values = "uniform 0;" if uniform_boundary else (
+        "nonuniform List<scalar> 2 (1.234567891 -2.5);"
+    )
+    (time_dir/"phi").write_text("\n".join((
+        "FoamFile { format ascii; class surfaceScalarField; object phi; }",
+        f"dimensions {dimensions};",
+        "internalField nonuniform List<scalar> 0 ();",
+        f"boundaryField {{ outlet {{ type calculated; value {values} }} }}",
+        "",
+    )), encoding="ascii")
+    return mesh, time_dir
+
+def legacy_vtk_surface_flux_fixture(
+    path, *, reverse=False, perturb=0.0, include_phi=True, centres=None, vectors=None
+):
+    vtk = pytest.importorskip("vtk")
+    centres = centres or ((1/3, 1/3, 0), (5/3, 1/3, 0))
+    vectors = vectors or ((0, 0, 1.234567891), (0, 0, -2.5))
+    if reverse:
+        centres = tuple(reversed(centres))
+        vectors = tuple(reversed(vectors))
+    poly = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    for centre in centres:
+        points.InsertNextPoint(*centre)
+    poly.SetPoints(points)
+    if include_phi:
+        flux = vtk.vtkFloatArray()
+        flux.SetName("phi")
+        flux.SetNumberOfComponents(3)
+        for vector in vectors:
+            flux.InsertNextTuple3(vector[0], vector[1], vector[2] + perturb)
+        poly.GetPointData().AddArray(flux)
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(str(path))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(poly)
+    assert writer.Write() == 1
+
+def test_openfoam_vtk_surface_flux_parity_maps_internal_then_boundary_faces(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case)
+    (mesh/"faces").write_text("\n".join((
+        "FoamFile { format ascii; class faceList; object faces; }",
+        "3", "(", "3(0 1 2)", "3(1 4 5)", "3(0 2 3)", ");", "",
+    )), encoding="ascii")
+    (mesh/"owner").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object owner; }",
+        "3", "(", "0", "0", "1", ");", "",
+    )), encoding="ascii")
+    (mesh/"neighbour").write_text("\n".join((
+        "FoamFile { format ascii; class labelList; object neighbour; }",
+        "1", "(", "1", ");", "",
+    )), encoding="ascii")
+    (mesh/"boundary").write_text("\n".join((
+        "FoamFile { format ascii; class polyBoundaryMesh; object boundary; }",
+        "1", "(", "outlet", "{", "type patch;", "nFaces 2;", "startFace 1;", "}", ");", "",
+    )), encoding="ascii")
+    (time_dir/"phi").write_text("\n".join((
+        "FoamFile { format ascii; class surfaceScalarField; object phi; }",
+        "dimensions [0 3 -1 0 0 0 0];",
+        "internalField nonuniform List<scalar> 1 (0.123456789);",
+        "boundaryField { outlet { type calculated; value nonuniform List<scalar> 2 (1.234567891 -2.5); } }",
+        "",
+    )), encoding="ascii")
+    exported = tmp_path/"surfaceFields_150.vtk"
+    legacy_vtk_surface_flux_fixture(
+        exported,
+        centres=((1/3, 1/3, 0), (5/3, 1/3, 0), (0, 1/3, 1/3)),
+        vectors=((0, 0, 0.123456789), (0, 0, 1.234567891), (-2.5, 0, 0)),
+    )
+
+    report = audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    assert report["internal_face_count"] == 1
+    assert report["boundary_face_count"] == 2
+    assert report["face_count"] == 3
+    assert report["compared_flux_vector_components"] == 9
+    assert report["status"] == "PASS"
+
+def test_openfoam_vtk_surface_flux_parity_uses_mesh_face_order_and_rounding_bounds(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case)
+    exported = tmp_path/"surfaceFields_150.vtk"
+    legacy_vtk_surface_flux_fixture(exported)
+
+    report = audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    assert report["status"] == "PASS"
+    assert report["field"] == "phi"
+    assert report["dimensions"] == "[0 3 -1 0 0 0 0]"
+    assert report["field_representation"] == "phi_times_oriented_unit_face_normal"
+    assert report["face_mapping"] == "native_polyMesh_face_index_verified_by_serialized_face_centres"
+    assert report["face_count"] == 2
+    assert report["internal_face_count"] == 0
+    assert report["boundary_face_count"] == 2
+    assert report["compared_flux_vector_components"] == 6
+    assert report["boundary_field_types"] == {"outlet": "calculated"}
+    assert report["vtk_phi_scalar_type"] == "float"
+    assert report["max_absolute_flux_error_m3_s"] > 0
+    assert report["max_absolute_flux_error_m3_s"] <= report["max_allowed_flux_error_m3_s"]
+    assert report["max_face_centre_error_m"] <= report["max_allowed_face_centre_error_m"]
+
+def test_openfoam_vtk_surface_flux_parity_rejects_wrong_order_values_and_dimensions(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case)
+    exported = tmp_path/"surfaceFields_150.vtk"
+
+    legacy_vtk_surface_flux_fixture(exported, reverse=True)
+    with pytest.raises(ValueError, match="face centre"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    legacy_vtk_surface_flux_fixture(exported, perturb=0.1)
+    with pytest.raises(ValueError, match="phi differs"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    legacy_vtk_surface_flux_fixture(exported, include_phi=False)
+    with pytest.raises(ValueError, match="phi vectors"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+    (time_dir/"phi").write_text((time_dir/"phi").read_text(encoding="ascii").replace(
+        "dimensions [0 3 -1 0 0 0 0];", "dimensions [0 1 -1 0 0 0 0];"
+    ), encoding="ascii")
+    with pytest.raises(ValueError, match="volume-flux dimensions"):
+        audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+
+def test_openfoam_vtk_surface_flux_parity_accepts_uniform_zero_wall_flux(tmp_path):
+    case = tmp_path/"case"
+    mesh, time_dir = openfoam_surface_flux_fixture(case, uniform_boundary=True)
+    exported = tmp_path/"surfaceFields_150.vtk"
+    legacy_vtk_surface_flux_fixture(exported)
+    vtk = pytest.importorskip("vtk")
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(str(exported))
+    reader.Update()
+    values = reader.GetOutput().GetPointData().GetArray("phi")
+    values.SetTuple3(0, 0, 0, 0)
+    values.SetTuple3(1, 0, 0, 0)
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(str(exported))
+    writer.SetFileTypeToASCII()
+    writer.SetInputData(reader.GetOutput())
+    assert writer.Write() == 1
+
+    report = audit_openfoam_vtk_surface_flux(time_dir/"phi", mesh, exported)
+    assert report["status"] == "PASS"
+    assert report["boundary_field_types"] == {"outlet": "calculated"}
+    assert report["max_absolute_flux_error_m3_s"] == 0
 
 def test_actual_vtk_field_import_and_pareto(tmp_path):
     sources={}
     for cfg in (1,2,3):
         path=tmp_path/f"case{cfg}.vtu"
         vtk_fixture(path,concentration=0 if cfg==3 else 10,
-                    recirc=0 if cfg==3 else 1)
+                    recirc=0 if cfg==3 else 1,turbulent_kinetic_energy=float(cfg))
         sources[cfg]=path
     study={"schema_version":"cleanroomx.cfd-study.v1","name":"synthetic VTK smoke",
            "room":{"length_m":1,"width_m":1,"height_m":1},
@@ -150,14 +841,108 @@ def test_actual_vtk_field_import_and_pareto(tmp_path):
            "cases":[{"configuration":i,"source_location_m":[.5,.5,.5],
                      "inlet_flow_m3_s":1,"outlet_flow_m3_s":1,"cells":[]}
                      for i in (1,2,3)]}
-    result=populate_study_from_vtk(study,sources,solver_name="synthetic VTK")
+    result=populate_study_from_vtk(
+        study,sources,solver_name="synthetic VTK",contaminant_array="T",
+        field_map={
+            "schema_version":"cleanroomx.cfd-vtk-field-map.v1",
+            "fields":{"k":{"semantic":"turbulent_kinetic_energy","units":"m^2/s^2"}},
+        },
+    )
     assert result["analysis"]["comparison_status"]=="comparable"
     assert result["analysis"]["unique_pareto_dominant_configuration"]==3
     assert result["analysis"]["cases"][2]["metrics"]["sampled_volume_m3"]==pytest.approx(1)
     assert all(not case["cells"] for case in study["cases"])
     assert result["import_manifest"]["1"]["source_sha256"]
+    turbulence=result["analysis"]["cases"][0]["fields"]["turbulent_kinetic_energy"]
+    assert turbulence["units"]=="m^2/s^2"
+    assert turbulence["summary"]["mean"]==pytest.approx([1])
+    assert turbulence["summary"]["mean_weighting"]=="cell_volume"
     with pytest.raises(ValueError,match="overwrite"):
         populate_study_from_vtk(result["study"],sources,solver_name="synthetic VTK")
+
+def test_vtk_temperature_is_explicit_and_analyzed_separately_from_contaminant(tmp_path):
+    sources={}
+    for cfg,temperature in ((1,293.15),(2,294.15),(3,295.15)):
+        path=tmp_path/f"temperature-{cfg}.vtu"
+        vtk_fixture(path,concentration=12.0,temperature_k=temperature)
+        sources[cfg]=path
+    study={"schema_version":"cleanroomx.cfd-study.v1","name":"temperature import",
+           "room":{"length_m":1,"width_m":1,"height_m":1},
+           "analysis":{"max_unrepresented_volume_fraction":0,
+                       "max_flow_imbalance_fraction":0},
+           "cases":[{"configuration":i,"cells":[]} for i in (1,2,3)]}
+
+    result=populate_study_from_vtk(
+        study,sources,solver_name="synthetic temperature",
+        temperature_array="temperatureK",temperature_units="K",
+    )
+
+    first=result["study"]["cases"][0]["cells"][0]
+    assert first["temperature_K"]==pytest.approx(293.15)
+    assert "contaminant_concentration" not in first
+    assert result["import_manifest"]["1"]["has_contaminant_field"] is False
+    assert result["import_manifest"]["1"]["temperature_field"] == {
+        "array_name":"temperatureK","units":"K",
+        "units_source":"explicit_caller_declaration",
+    }
+    metrics=result["analysis"]["cases"][0]["metrics"]
+    assert metrics["temperature_mean_K"]==pytest.approx(293.15)
+    assert metrics["temperature_min_K"]==pytest.approx(293.15)
+    assert metrics["temperature_max_K"]==pytest.approx(293.15)
+    assert metrics["temperature_coverage_fraction"]==pytest.approx(1)
+    assert metrics["temperature_status"]=="complete"
+
+def test_vtk_temperature_requires_kelvin_declaration(tmp_path):
+    from cleanroomx.cfd_vtk import import_vtk_case
+    path=tmp_path/"temperature.vtu"
+    vtk_fixture(path,temperature_k=293.15)
+    with pytest.raises(ValueError,match="explicit temperature_units='K'"):
+        import_vtk_case(path,temperature_array="temperatureK")
+    with pytest.raises(ValueError,match="Configured temperature array 'missing' is missing"):
+        import_vtk_case(path,temperature_array="missing",temperature_units="K")
+    with pytest.raises(ValueError,match="Configured contaminant array 'missing' is missing"):
+        import_vtk_case(path,contaminant_array="missing")
+    with pytest.raises(ValueError,match="cannot be both"):
+        import_vtk_case(
+            path,contaminant_array="T",temperature_array="T",temperature_units="K"
+        )
+
+def test_vtk_field_map_reports_volume_weighted_means(tmp_path):
+    vtk=pytest.importorskip("vtk")
+    path=tmp_path/"unequal-cell-volumes.vtu"
+    points=vtk.vtkPoints()
+    hexahedra=(
+        ((0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)),
+        ((1,0,0),(3,0,0),(3,1,0),(1,1,0),(1,0,1),(3,0,1),(3,1,1),(1,1,1)),
+    )
+    grid=vtk.vtkUnstructuredGrid()
+    for vertices in hexahedra:
+        first=points.GetNumberOfPoints()
+        for point in vertices:
+            points.InsertNextPoint(*point)
+        cell=vtk.vtkHexahedron()
+        for index in range(8):
+            cell.GetPointIds().SetId(index,first+index)
+        grid.InsertNextCell(cell.GetCellType(),cell.GetPointIds())
+    grid.SetPoints(points)
+    velocity=vtk.vtkDoubleArray();velocity.SetName("U");velocity.SetNumberOfComponents(3)
+    velocity.InsertNextTuple3(0,0,1);velocity.InsertNextTuple3(0,0,1)
+    kinetic_energy=vtk.vtkDoubleArray();kinetic_energy.SetName("k")
+    kinetic_energy.InsertNextValue(1);kinetic_energy.InsertNextValue(3)
+    grid.GetCellData().AddArray(velocity);grid.GetCellData().AddArray(kinetic_energy)
+    writer=vtk.vtkXMLUnstructuredGridWriter()
+    writer.SetFileName(str(path));writer.SetInputData(grid)
+    assert writer.Write()==1
+
+    imported=import_vtk_case(path,field_map={
+        "schema_version":"cleanroomx.cfd-vtk-field-map.v1",
+        "fields":{"k":{"semantic":"turbulent_kinetic_energy","units":"m^2/s^2"}},
+    })
+
+    summary=imported["field_data"]["turbulent_kinetic_energy"]["summary"]
+    assert [cell["volume_m3"] for cell in imported["cells"]]==pytest.approx([1,2])
+    assert summary["mean"]==pytest.approx([7/3])
+    assert summary["mean_weighting"]=="cell_volume"
 
 def test_vtk_png_sampled_cross_section(tmp_path):
     from cleanroomx.cfd_visualization import render_cfd_cross_section
@@ -165,11 +950,19 @@ def test_vtk_png_sampled_cross_section(tmp_path):
     sources={}
     for cfg in (1,2,3):
         f=tmp_path/f"plot{cfg}.vtu"
-        vtk_fixture(f,speed=cfg*.2)
+        vtk_fixture(f,speed=cfg*.2,temperature_k=290+cfg)
         sources[cfg]=f
     target=tmp_path/"actual-vtk-data.png"
     info=render_cfd_cross_section(sources,target,axis="y",position_m=.5,slab_thickness_m=.2)
     assert target.stat().st_size>5000
     assert info["sample_count"]=={"1":1,"2":1,"3":1}
+    assert info["units"]=="m/s"
+    temperature_target=tmp_path/"temperature.png"
+    temperature_info=render_cfd_cross_section(
+        sources,temperature_target,axis="y",position_m=.5,slab_thickness_m=.2,
+        field="temperature",array_name="temperatureK",units="K",
+    )
+    assert temperature_target.stat().st_size>5000
+    assert temperature_info["range"]==pytest.approx([291,293])
     with pytest.raises(FileExistsError):
         render_cfd_cross_section(sources,target,axis="y",position_m=.5,slab_thickness_m=.2)

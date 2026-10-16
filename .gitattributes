@@ -1,0 +1,2 @@
+# Keep the archived solver log byte-exact so its provenance hash remains valid.
+tests/fixtures/openfoam_foundation_v10_checkmesh.log -text -diff -whitespace

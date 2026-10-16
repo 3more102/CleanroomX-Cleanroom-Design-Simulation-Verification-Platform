@@ -124,7 +124,7 @@ relaxationFactors
         "system/fvSolution": _header("dictionary","fvSolution",solution,"system"),
         "constant/physicalProperties":_header(
             "dictionary","physicalProperties",
-            f"DT [0 2 -1 0 0 0 0] {diffusivity};", "constant"
+            f"DT DT [0 2 -1 0 0 0 0] {diffusivity};", "constant"
         ),
         "constant/fvModels": _header("dictionary","fvModels",fvmodels,"constant"),
     }
@@ -243,7 +243,7 @@ def _verify_manifest(root:Path):
     return manifest
 
 
-def run_scalar_case(directory,*,timeout_seconds=3600):
+def run_scalar_case(directory,*,timeout_seconds=3600,synchronizer=None):
     if type(timeout_seconds) is not int or not 60<=timeout_seconds<=86400:
         raise ValueError("timeout_seconds must be integer [60,86400]")
     root=Path(directory).resolve(strict=True)
@@ -251,14 +251,32 @@ def run_scalar_case(directory,*,timeout_seconds=3600):
     executable=shutil.which("scalarTransportFoam")
     if not executable: raise RuntimeError("scalarTransportFoam (OpenFOAM Foundation v10) not found")
     log=root/"scalarTransportFoam.log"
-    with log.open("x",encoding="utf-8") as out:
-        result=subprocess.run([executable],cwd=root,stdout=out,stderr=subprocess.STDOUT,
-                              check=False,timeout=timeout_seconds)
-    return {
-        "status":"executed_requires_residual_and_field_validation" if result.returncode==0 else "solver_failed",
-        "exit_code":result.returncode,
+    if synchronizer is not None:
+        if getattr(synchronizer,"case_directory",None)!=root:
+            raise ValueError("Scalar synchronizer must monitor this exact case directory")
+        from .cfd_openfoam_runtime_sync import run_solver_with_sync
+        returncode=run_solver_with_sync(
+            [executable],cwd=root,log_path=log,timeout_seconds=timeout_seconds,
+            synchronizer=synchronizer,
+        )
+        sync_report=synchronizer.finish(solver_returncode=returncode,solver_log=log)
+    else:
+        with log.open("x",encoding="utf-8") as out:
+            result=subprocess.run([executable],cwd=root,stdout=out,stderr=subprocess.STDOUT,
+                                  check=False,timeout=timeout_seconds)
+        returncode=result.returncode
+        sync_report=None
+    status="executed_requires_residual_and_field_validation" if returncode==0 else "solver_failed"
+    if returncode==0 and sync_report is not None and sync_report.get("status")!="results_synced":
+        status="execution_succeeded_synchronization_incomplete"
+    report={
+        "status":status,
+        "exit_code":returncode,
         "log_sha256":_hash_bytes(log),
         "input_manifest_sha256":_hash_bytes(root/"manifest.json"),
         "source_velocity_sha256":manifest["source_velocity_sha256"],
         "warning":"Numerical execution does not establish convergence, mixing, particles or certification",
     }
+    if sync_report is not None:
+        report["result_synchronization"]=sync_report
+    return report

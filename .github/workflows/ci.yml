@@ -26,7 +26,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
-      - run: pip install -e .[dev]
+      - name: Install checkout with CFD test dependencies
+        run: pip install -e ".[dev,cfd]"
       - name: Run spatial design focused regressions
         run: >-
           python -m pytest -q

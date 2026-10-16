@@ -1,0 +1,79 @@
+{
+  "schema_version": "cleanroomx.cfd-grid-study.v2",
+  "study_name": "run-38905424325 configuration 1 synthetic airflow diagnostic",
+  "configuration": 1,
+  "quantity": "velocity_mean_m_s",
+  "unit": "m/s",
+  "declared_conditions_sha256": "bd2dfc28b8330cb4172640524fad889e477d6ee37eb542363767fb3d72bd900c",
+  "input_spec_sha256": "d664cc07b29ae11f590846cd43c81d3b133ee2ed8071d50df4525a99f02f2772",
+  "grids": [
+    {
+      "level": "fine",
+      "mesh_cells": [
+        24,
+        24,
+        24
+      ],
+      "reported_cell_count": 13824,
+      "characteristic_h_m": 0.095392853546111,
+      "sampled_volume_m3": 12.0,
+      "relative_volume_error": 0.0,
+      "value": 0.07902351998076361,
+      "run_id": "38905424325-configuration-1-fine",
+      "vtk_sha256": "02faa11ca08560aa6d8074d1804154aace018d5118b57bb815badf2fbf7a84a0",
+      "log_sha256": "987c6d4e94518eca4ca25ea02f07372b3d993bdc6108afe15e439f2e973ae45d",
+      "log_screening_status": "incomplete_or_failed"
+    },
+    {
+      "level": "medium",
+      "mesh_cells": [
+        12,
+        12,
+        12
+      ],
+      "reported_cell_count": 1728,
+      "characteristic_h_m": 0.19078570709222198,
+      "sampled_volume_m3": 12.0,
+      "relative_volume_error": 0.0,
+      "value": 0.07038684375871312,
+      "run_id": "38905424325-configuration-1-medium",
+      "vtk_sha256": "651942d759d11f0df0782258b024001563f0f675d799711cb23bebc2bd163414",
+      "log_sha256": "26906622da9caf6a7c46e44fa4e70417d2ffbfcbb0800f43b5aac7ef34fd4a03",
+      "log_screening_status": "incomplete_or_failed"
+    },
+    {
+      "level": "coarse",
+      "mesh_cells": [
+        6,
+        6,
+        6
+      ],
+      "reported_cell_count": 216,
+      "characteristic_h_m": 0.38157141418444396,
+      "sampled_volume_m3": 12.0,
+      "relative_volume_error": 0.0,
+      "value": 0.064004708686957,
+      "run_id": "38905424325-configuration-1-coarse",
+      "vtk_sha256": "9891175457c1a3e1a6a8771e5951b351374dc0714dd2c27235557c0d9834fb39",
+      "log_sha256": "f5666c7aa6541579e5881780d93460148e487a7b8ca806b55be613098526ef03",
+      "log_screening_status": "incomplete_or_failed"
+    }
+  ],
+  "observed_order": null,
+  "richardson_zero_spacing_estimate": null,
+  "fine_grid_gci_percent": null,
+  "refinement_ratios": {
+    "medium_over_fine": 1.9999999999999998,
+    "coarse_over_medium": 2.0
+  },
+  "screening_status": "indeterminate_or_failed",
+  "status": "indeterminate_or_failed",
+  "blockers": [
+    "fine: solver residual audit did not pass",
+    "medium: solver residual audit did not pass",
+    "coarse: solver residual audit did not pass",
+    "No positive three-grid monotonic observed order; oscillation, stagnation or divergence",
+    "Relative fine-grid GCI unavailable (e.g. fine-grid value is zero)"
+  ],
+  "engineering_boundary": "GCI screens grid sensitivity of one selected quantity; it does not prove asymptotic range, correct physics, calibrated contamination, mesh independence, measurements or certification"
+}

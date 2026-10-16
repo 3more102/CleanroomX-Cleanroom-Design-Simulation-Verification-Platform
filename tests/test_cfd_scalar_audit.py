@@ -1,6 +1,7 @@
 """Synthetic and mocked integration tests; no OpenFOAM physical run is claimed."""
 import json
 import math
+import runpy
 import pytest
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from cleanroomx.cfd_scalar import (
     validate_scalar_spec,
 )
 from cleanroomx.cfd_audit import audit_openfoam_log
+from cleanroomx.cfd_pipeline_cli import build_parser
 
 
 def scalar_spec():
@@ -48,7 +50,7 @@ def test_validate_scalar_spec_and_v10_dictionary():
     assert "volumeMode absolute;" in files["constant/fvModels"]
     assert "source" not in files["0/T"]  # scalar is sourced by fvModels, not unverified wall BC
     assert "div(phi,T)" in files["system/fvSchemes"]
-    assert "DT [0 2 -1 0 0 0 0]" in files["constant/physicalProperties"]
+    assert "DT DT [0 2 -1 0 0 0 0]" in files["constant/physicalProperties"]
 
 
 @pytest.mark.parametrize("field,value",[
@@ -136,6 +138,44 @@ def test_runner_mock_preserves_log_and_source_hashes(tmp_path,monkeypatch):
     assert (root/"scalarTransportFoam.log").exists()
 
 
+def test_runner_can_incrementally_synchronize_scalar_solver_outputs(tmp_path,monkeypatch):
+    flow=synthetic_finished_flow(tmp_path)
+    root=tmp_path/"scalar"
+    manifest=prepare_scalar_case(flow,scalar_spec(),root)
+    monkeypatch.setattr("cleanroomx.cfd_scalar.shutil.which",lambda name:"/fake/scalarTransportFoam")
+    class FakeSynchronizer:
+        case_directory=root.resolve()
+        def finish(self,*,solver_returncode,solver_log):
+            assert solver_returncode==0
+            assert solver_log.read_text(encoding="utf-8")=="End\n"
+            return {"status":"results_synced","record_count":2,"scientific_validation":"BLOCKED"}
+    def mocked_run(command,**kwargs):
+        assert command==["/fake/scalarTransportFoam"]
+        assert kwargs["cwd"]==root.resolve()
+        kwargs["log_path"].write_text("End\n",encoding="utf-8")
+        return 0
+    monkeypatch.setattr(
+        "cleanroomx.cfd_openfoam_runtime_sync.run_solver_with_sync",mocked_run
+    )
+
+    report=run_scalar_case(root,synchronizer=FakeSynchronizer())
+
+    assert report["status"]=="executed_requires_residual_and_field_validation"
+    assert report["source_velocity_sha256"]==manifest["source_velocity_sha256"]
+    assert report["result_synchronization"]["record_count"]==2
+
+
+def test_scalar_run_cli_exposes_live_result_synchronization():
+    args=build_parser().parse_args([
+        "scalar-run","./scalar_case","--sync-results","./scalar_results",
+        "--field-map-file","examples/cfd_scalar_field_map.example.json",
+        "--simulation-id","scalar-demo",
+    ])
+    assert args.sync_results=="./scalar_results"
+    assert args.field_map_file=="examples/cfd_scalar_field_map.example.json"
+    assert args.simulation_id=="scalar-demo"
+
+
 def test_audit_positive_numerical_screen(tmp_path):
     log=tmp_path/"simpleFoam.log"
     entries=[]
@@ -198,3 +238,64 @@ def test_log_symlinks_not_accepted(tmp_path):
     with pytest.raises(ValueError,match="symlink"):
         audit_openfoam_log(alias,fields=["T"],max_initial_residual=1e-4,
                           max_final_residual=1e-7)
+
+
+def test_scalar_smoke_accepts_runtime_sync_import_status():
+    module = runpy.run_path(
+        str(Path(__file__).parents[1] / "scripts" / "openfoam_v10_scalar_sync_smoke.py")
+    )
+    record = {
+        "import_status": "PASS_DIAGNOSTIC_ONLY",
+        "scientific_validation": "BLOCKED",
+        "fields": {
+            "T": {"dimensions": "[0 0 0 0 0 0 0]"},
+            "U": {"units": "m/s"},
+        },
+        "native_vtk_parity": {"U": {"status": "PASS"}, "T": {"status": "PASS"}},
+        "cleanroomx_analysis_import": {
+            "field_data_names": ["normalized_tracer"],
+            "has_temperature_field": False,
+        },
+    }
+
+    assert module["_scalar_record_is_valid"](record)
+    record["import_status"] = "imported"
+    assert not module["_scalar_record_is_valid"](record)
+
+
+def test_scalar_smoke_failure_evidence_keeps_solver_error_and_blocked_status(tmp_path):
+    module = runpy.run_path(
+        str(Path(__file__).parents[1] / "scripts" / "openfoam_v10_scalar_sync_smoke.py")
+    )
+    summarize = module["_scalar_failure_diagnostics"]
+    case_root = Path("/runner/temp/scalar")
+    log_text = (
+        "--> FOAM FATAL IO ERROR:\n"
+        "wrong token type - expected word, found on line 10 punctuation token '['\n"
+        "file: /runner/temp/scalar/constant/physicalProperties/DT at line 10.\n"
+        "FOAM exiting\n"
+    )
+    report = summarize(
+        {
+            "status": "solver_failed",
+            "exit_code": 1,
+            "log_sha256": "a" * 64,
+            "result_synchronization": {
+                "status": "no_results_available",
+                "errors": ["sync " + "x" * 800],
+            },
+        },
+        log_text,
+        case_root,
+    )
+
+    assert report["status"] == "execution_failure_diagnostic_only"
+    assert report["failure_stage"] == "solver"
+    assert report["solver_exit_code"] == 1
+    assert report["result_synchronization_status"] == "no_results_available"
+    assert report["result_synchronization_errors"] == ["sync " + "x" * 495]
+    assert report["scientific_validation"] == "BLOCKED"
+    assert any("FOAM FATAL IO ERROR" in line for line in report["solver_diagnostic_excerpt"])
+    assert any("physicalProperties/DT" in line for line in report["solver_diagnostic_excerpt"])
+    assert all("/runner/temp/scalar" not in line for line in report["solver_diagnostic_excerpt"])
+    assert all(len(line) <= 500 for line in report["solver_diagnostic_excerpt"])

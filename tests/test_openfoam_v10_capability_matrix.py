@@ -135,3 +135,361 @@ def test_complete_native_row_can_score_with_pass_evidence_and_no_remaining_gap()
     from scripts.openfoam_v10_parity_score import validate
 
     validate(rows, inventory)
+
+
+def test_runner_and_simplefoam_evidence_remain_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    simple_foam = rows["OF10-SOLVER-simpleFoam"]
+    runner = rows["OF10-EXTERNAL-RUNNER"]
+    residual_report = "docs/OPENFOAM_V10_RUN_38776224839_RESIDUAL_TREND.md"
+    runner_report = "docs/OPENFOAM_V10_RUN_38675919475_TRIAGE.md"
+
+    assert simple_foam["integration_status"] == "partial"
+    assert "Run 66" in simple_foam["test_evidence"]
+    assert "synthetic" in simple_foam["test_evidence"]
+    assert "above the generated residualControl settings" in simple_foam["test_evidence"]
+    assert residual_report in simple_foam["test_evidence"]
+
+    assert runner["integration_status"] == "partial"
+    assert runner["cleanroom_status"] == "partial"
+    assert "Run 54" in runner["test_evidence"]
+    assert "synthetic" in runner["test_evidence"]
+    assert runner_report in runner["test_evidence"]
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_61_vtk_field_parity_evidence_is_partial_and_keeps_parity_scope():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38768856636_NATIVE_U_P_VTK_PARITY.md"
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 61" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11989364311" in row["test_evidence"]
+        assert "fd348a923c6f46b8d656700c029bfdce13187a8eeb7d2f5a6926581a02bd05ba" in row["test_evidence"]
+        assert "47,304" in row["test_evidence"]
+        assert row["remaining_gap"] != "none"
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["tracks"]["integration_status"]["complete"] == 0
+    assert report["tracks"]["native_status"]["complete"] == 0
+    assert report["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_63_vtk_patch_parity_evidence_is_partial_and_keeps_counts_zero():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md"
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 63" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11992892011" in row["test_evidence"]
+        assert "d40b603f871758be1dc4b05f6c78eeb4302e96f4ec6fd0af841b618c688e54c9" in row["test_evidence"]
+        assert "13,608" in row["test_evidence"]
+        assert row["remaining_gap"] != "none"
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_66_checkmesh_quality_diagnostics_are_partial_and_keep_counts_zero():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38776224839_CHECKMESH_QUALITY.md"
+    for capability_id in ("OF10-MESH-QUALITY", "OF10-UTILITY-checkMesh"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 66" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11993812155" in row["test_evidence"]
+        assert row["remaining_gap"].strip()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "No project mesh-quality criteria" in report_text
+    assert "Mesh OK." in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_66_residual_history_does_not_claim_convergence_or_validation():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38776224839_RESIDUAL_TREND.md"
+    triage = rows["OF10-LOG-TRIAGE"]
+    acceptance = rows["CRX-NUMERICAL-CONVERGENCE"]
+
+    assert triage["integration_status"] == "partial"
+    assert acceptance["integration_status"] == "blocked"
+    assert report in triage["test_evidence"]
+    assert report in acceptance["test_evidence"]
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "Every case remains above the generated residual screen" in report_text
+    assert "scientific validation remains `BLOCKED`" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_67_execution_report_stays_synthetic_and_is_linked():
+    report = "docs/OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md"
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    summary_text = (ROOT / "docs" / "CFD_GRID_CONVERGENCE.md").read_text(encoding="utf-8")
+
+    assert "OPENFOAM_V10_RUN_38777678904_GRID_EVIDENCE.md" in summary_text
+    assert "4e8725c04924f947a60623ba5c36993decba51fe6bf0cf21e4f5b923ffb8411f" in report_text
+    assert "synthetic rectangular cases" in report_text
+    assert "No GCI result or" in report_text
+    assert "scientific validation remain" in report_text and "blocked" in report_text.lower()
+
+    rows = {row["id"]: row for row in load(MATRIX)}
+    assert rows["OF10-SOLVER-simpleFoam"]["integration_status"] == "partial"
+    assert rows["CRX-NUMERICAL-CONVERGENCE"]["integration_status"] == "blocked"
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_70_surface_flux_parity_is_partial_and_keeps_completion_counts_zero():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38780408294_PHI_CHECKMESH_EVIDENCE.md"
+    foam_to_vtk = rows["OF10-UTILITY-foamToVTK"]
+
+    assert foam_to_vtk["integration_status"] == "partial"
+    assert "run 70" in foam_to_vtk["test_evidence"].lower()
+    assert "148,716 faces" in foam_to_vtk["test_evidence"]
+    assert "446,148" in foam_to_vtk["test_evidence"]
+    assert report in foam_to_vtk["test_evidence"]
+    assert "other field types" in foam_to_vtk["remaining_gap"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "scientific validation `BLOCKED`" in report_text
+    assert "DIAGNOSTIC_ONLY" in report_text
+    assert "no project flow-balance acceptance criterion is set" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38782861576_POLYMESH_VOLUME_AUDIT.md"
+
+    for capability_id in ("OF10-UTILITY-checkMesh", "OF10-MESH-QUALITY", "OF10-MESH-DESCRIPTION"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 80" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11995514437" in row["test_evidence"]
+        assert row["remaining_gap"].strip()
+
+    for capability_id in ("OF10-PHYSICAL-PROPERTIES", "OF10-MOMENTUM-TRANSPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 80" in row["test_evidence"].lower()
+        assert "synthetic" in row["test_evidence"].lower()
+
+    assert "project-defined mesh-quality criteria" in rows["OF10-MESH-QUALITY"]["remaining_gap"].lower()
+    assert "project-defined quality criteria" in rows["OF10-UTILITY-checkMesh"]["remaining_gap"].lower()
+    assert "physical geometry review" in rows["OF10-MESH-DESCRIPTION"]["remaining_gap"].lower()
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "8bd5c2fd138c39ca8e836358cd622a6e13de4d2a24a7de16af1a7c32267cc839" in report_text
+    assert "0.883858" in report_text
+    assert "12.0 / 12.0 / 12.0 / 12.0" in report_text
+    assert "scientific validation remains `BLOCKED`" in report_text
+    assert "not mesh-quality or CFD acceptance thresholds" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_86_checkmesh_diagnostics_are_hash_replayed_and_stay_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38784313293_CHECKMESH_DIAGNOSTICS.md"
+
+    for capability_id in ("OF10-UTILITY-checkMesh", "OF10-MESH-QUALITY", "OF10-MESH-DESCRIPTION"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 86" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11997282424" in row["test_evidence"]
+        assert row["remaining_gap"].strip()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "3186b0e870c9842fc74401ae65fa1cfc6fe33823d942b2df32d5beba61ba9667" in report_text
+    assert "all 72 input hashes" in report_text
+    assert "all 36 log hashes" in report_text
+    assert "All nine reports were complete" in report_text
+    assert "No project mesh-quality limits were defined or applied" in report_text
+    assert "scientific validation BLOCKED" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_90_explicit_time_vtk_evidence_stays_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md"
+    evidence = (
+        "run 90",
+        "12032302330",
+        "6c703c5c1843a4eea865b51115fba2eb857efae1b43d58ba59a97908e1bb4783",
+        "13,608",
+        "100",
+        "81 selected-time file records",
+    )
+
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert report in row["test_evidence"]
+        assert all(term in row["test_evidence"].lower() for term in evidence)
+        assert row["remaining_gap"].strip()
+        assert "explicit time selection at 50 and 100 is verified" in row["remaining_gap"].lower()
+        assert "arbitrary time ranges" in row["remaining_gap"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "14,874,702 bytes" in report_text
+    assert "81 selected-time file records" in report_text
+    assert "patch_faces_compared` is 13,608" in report_text
+    assert "54 passing parity records" in report_text
+    assert "72 generated-input hashes" in report_text
+    assert "36 baseline stage-log hashes" in report_text
+    assert "All 18 terminal `U`/`p` residual screens remain `NOT_BELOW_TOLERANCE`" in report_text
+    assert "scientific_validation` `BLOCKED`" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_94_multi_time_vtk_evidence_stays_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md"
+    evidence = (
+        "run 94",
+        "12033234866",
+        "fa5b85af0e8ed2470101747540f22808032ba1959c0f41548551b62a24f060a3",
+        "50,100",
+        "18 case-time pairs",
+        "153 selected-time file records",
+    )
+
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert report in row["test_evidence"]
+        assert all(term in row["test_evidence"].lower() for term in evidence)
+        assert "arbitrary time ranges" in row["remaining_gap"].lower()
+        assert "time-zero inclusion" in row["remaining_gap"].lower()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "17,817,800 bytes" in report_text
+    assert "all 72 generated-input hashes" in report_text.lower()
+    assert "all 36 baseline stage-log hashes" in report_text.lower()
+    assert "all 153 selected-time records" in report_text.lower()
+    assert "108 parity records passed" in report_text
+    assert "scientific_validation: BLOCKED" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

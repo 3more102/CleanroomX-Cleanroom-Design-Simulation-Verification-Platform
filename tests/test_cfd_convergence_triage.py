@@ -11,6 +11,7 @@ import cleanroomx.cfd_convergence_triage as triage
 from cleanroomx.cfd_convergence_triage import (
     audit_grid_family_inputs,
     diagnose_grid_family,
+    diagnose_grid_flux,
     diagnose_log,
     grid_family_main,
     main,
@@ -494,6 +495,142 @@ def test_recent_window_retains_counts_across_many_steps(tmp_path):
         assert info["samples"] == 250
         assert info["recent_initial"] == [0.01] * 3
         assert info["recent_final"] == [0.0001] * 3
+    trend = result["residual_trend"]
+    assert trend["status"] == "DESCRIPTIVE_ONLY"
+    assert trend["window_samples_requested"] == 50
+    assert trend["fields"]["p"]["window_samples"] == 50
+    assert trend["fields"]["p"]["tail_to_initial_median_ratio"] == 1.0
+
+
+def test_residual_trend_compares_first_and_tail_medians(tmp_path):
+    log = tmp_path / "trending.log"
+    values = [0.8, 0.4, 0.2, 0.1, 0.05, 0.025]
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 1e-8, No Iterations 2\n"
+            "time step continuity errors : sum local = 1e-8, "
+            "global = 1e-8, cumulative = 1e-8\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    report = diagnose_log(log, fields=("p",), window=2, trend_window=3)
+    trend = report["residual_trend"]
+    pressure = trend["fields"]["p"]
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert trend["status"] == "DESCRIPTIVE_ONLY"
+    assert pressure["status"] == "COMPUTED"
+    assert pressure["sample_count"] == 6
+    assert pressure["window_samples"] == 3
+    assert pressure["initial_window_median"] == 0.4
+    assert pressure["tail_window_median"] == 0.05
+    assert pressure["tail_to_initial_median_ratio"] == pytest.approx(0.125)
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+@pytest.mark.parametrize(
+    ("values", "trend_window", "expected_status"),
+    [
+        ([0.0], 10, "INSUFFICIENT_SAMPLES"),
+        ([0.0, 0.0], 1, "ZERO_INITIAL_MEDIAN"),
+    ],
+)
+def test_residual_trend_does_not_divide_insufficient_or_zero_baselines(
+    tmp_path, values, trend_window, expected_status
+):
+    log = tmp_path / "edge_trend.log"
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 0, No Iterations 1\n"
+            "time step continuity errors : sum local = 0, "
+            "global = 0, cumulative = 0\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    trend = diagnose_log(log, fields=("p",), trend_window=trend_window)["residual_trend"]
+    assert trend["fields"]["p"]["status"] == expected_status
+    assert trend["fields"]["p"]["tail_to_initial_median_ratio"] is None
+
+
+def test_residual_trend_short_log_uses_disjoint_reduced_windows(tmp_path):
+    log = tmp_path / "short_trend.log"
+    values = [0.8, 0.4, 0.2, 0.1, 0.05, 0.025]
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 1e-8, No Iterations 2\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    pressure = diagnose_log(log, fields=("p",), trend_window=50)["residual_trend"]["fields"]["p"]
+    assert pressure["status"] == "COMPUTED"
+    assert pressure["window_samples"] == 3
+    assert pressure["initial_window_median"] == 0.4
+    assert pressure["tail_window_median"] == 0.05
+    assert pressure["tail_to_initial_median_ratio"] == pytest.approx(0.125)
+
+
+def test_residual_trend_nonfinite_ratio_is_json_safe(tmp_path):
+    log = tmp_path / "extreme_trend.log"
+    values = [5e-324, 5e-324, 1e308, 1e308]
+    records = []
+    for index, value in enumerate(values, start=1):
+        records.append(
+            f"Time = {index}\n"
+            f"GAMG: Solving for p, Initial residual = {value}, "
+            "Final residual = 0, No Iterations 1\n"
+        )
+    log.write_text("".join(records) + "End\n")
+
+    report = diagnose_log(log, fields=("p",), trend_window=1)
+    pressure = report["residual_trend"]["fields"]["p"]
+    assert pressure["status"] == "NONFINITE_RATIO"
+    assert pressure["initial_window_median"] == 5e-324
+    assert pressure["tail_window_median"] == 1e308
+    assert pressure["tail_to_initial_median_ratio"] is None
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize("trend_window", [0, 10001, True, 1.0])
+def test_residual_trend_window_requires_bounded_exact_integer(tmp_path, trend_window):
+    log = tmp_path / "trend_window.log"
+    log.write_text(_complete_step("1") + "End\n")
+    with pytest.raises(ValueError, match="trend_window"):
+        diagnose_log(log, trend_window=trend_window)
+
+
+def test_grid_family_residual_trend_window_is_reported_and_configurable(
+    tmp_path, capsys
+):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    report = diagnose_grid_family(root, trend_window=17)
+    trend = report["cases"]["configuration_1/coarse"]["residual_trend"]
+    assert trend["window_samples_requested"] == 17
+    assert trend["fields"]["p"]["status"] == "INSUFFICIENT_SAMPLES"
+
+    assert grid_family_main([str(root), "--trend-window", "23"]) == 0
+    cli_report = json.loads(capsys.readouterr().out)
+    cli_trend = cli_report["cases"]["configuration_1/coarse"]["residual_trend"]
+    assert cli_trend["window_samples_requested"] == 23
+
+
+def test_single_log_cli_accepts_trend_window(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "solver.log"
+    log.write_text(_complete_step("1") + _complete_step("2") + "End\n")
+    monkeypatch.setattr(
+        "sys.argv", ["cfd_convergence_triage", str(log), "--trend-window", "7"]
+    )
+    assert main() == 0
+    report = json.loads(capsys.readouterr().out)[str(log)]
+    assert report["residual_trend"]["window_samples_requested"] == 7
 
 
 def test_bounded_read_catches_growth_after_stat(tmp_path, monkeypatch):
@@ -664,6 +801,33 @@ def _write_grid_family(root, *, velocity_tolerance="1e-6", pressure_tolerance="1
             mesh.write_text(f"// {configuration} {level}\nblocks (1 1 1);\n")
 
 
+def _write_grid_flux_outputs(root, *, outlet_values=(0.21, -0.01)):
+    case_index = 0
+    for configuration in (1, 2, 3):
+        for level in ("coarse", "medium", "fine"):
+            case_index += 1
+            case = root / f"configuration_{configuration}" / level
+            mesh = case / "constant/polyMesh/boundary"
+            mesh.parent.mkdir(parents=True)
+            mesh.write_text(
+                "3\n(\n"
+                "inlet\n{\n type patch;\n nFaces 2;\n startFace 0;\n}\n"
+                "outlet\n{\n type patch;\n nFaces 2;\n startFace 2;\n}\n"
+                "walls\n{\n type wall;\n nFaces 1;\n startFace 4;\n}\n"
+                ")\n"
+            )
+            phi = case / str(case_index) / "phi"
+            phi.parent.mkdir()
+            phi.write_text(
+                "dimensions [0 3 -1 0 0 0 0];\n"
+                "boundaryField\n{\n"
+                "    inlet\n    {\n        type calculated;\n        value nonuniform List<scalar> 2(-0.1 -0.1);\n    }\n"
+                f"    outlet\n    {{\n        type calculated;\n        value nonuniform List<scalar> 2({outlet_values[0]} {outlet_values[1]});\n    }}\n"
+                "    walls\n    {\n        type calculated;\n        value uniform 0;\n    }\n"
+                "}\n"
+            )
+
+
 def test_grid_family_input_screen_hashes_conditions_and_mesh_separately(tmp_path):
     root = tmp_path / "family"
     _write_grid_family(root)
@@ -718,6 +882,53 @@ def test_grid_family_reports_nine_cases_and_separates_residual_screen(tmp_path):
     assert report["configured_residual_screen"]["status"] == "NOT_BELOW_TOLERANCE"
     assert len(report["cases"]) == 9
     assert all(case["status"] == "DIAGNOSTIC_ONLY" for case in report["cases"].values())
+
+
+def test_grid_family_measures_final_phi_flux_without_inventing_acceptance(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    _write_grid_flux_outputs(root)
+    report = diagnose_grid_family(root)
+    flux = report["cases"]["configuration_1/coarse"]["solver_flux_screen"]
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["configured_residual_screen"]["status"] == "NOT_BELOW_TOLERANCE"
+    assert report["solver_flux_balance_screen"]["status"] == "MEASURED_DIAGNOSTIC_ONLY"
+    assert report["solver_flux_balance_screen"]["case_count_measured"] == 9
+    assert report["solver_flux_balance_screen"]["acceptance_criterion"] == "NOT_SET"
+    assert flux["status"] == "MEASURED_DIAGNOSTIC_ONLY"
+    assert flux["inlet"]["net_inward_m3_s"] == pytest.approx(0.2)
+    assert flux["outlet"]["net_outward_m3_s"] == pytest.approx(0.2)
+    assert flux["outlet"]["gross_outward_m3_s"] == pytest.approx(0.21)
+    assert flux["outlet"]["reverse_inward_m3_s"] == pytest.approx(0.01)
+    assert flux["relative_flux_imbalance_percent"] == pytest.approx(0)
+    assert flux["flow_balance_assessment"] == "NO_PROJECT_ACCEPTANCE_CRITERION"
+    assert flux["scientific_validation"] == "BLOCKED"
+
+
+def test_missing_final_phi_is_separate_from_complete_solver_log_status(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    _write_grid_flux_outputs(root)
+    (root / "configuration_1" / "coarse" / "1" / "phi").unlink()
+    report = diagnose_grid_family(root)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["solver_flux_balance_screen"]["status"] == "PARTIAL_OR_UNAVAILABLE"
+    assert report["cases"]["configuration_1/coarse"]["solver_flux_screen"]["status"] == "UNAVAILABLE"
+    assert report["scientific_validation"] == "BLOCKED"
+
+
+def test_malformed_phi_face_count_fails_closed_without_changing_log_status(tmp_path):
+    root = tmp_path / "family"
+    _write_grid_family(root)
+    _write_grid_flux_outputs(root)
+    phi = root / "configuration_1" / "coarse" / "1" / "phi"
+    phi.write_text(phi.read_text().replace("2(-0.1 -0.1)", "2(-0.1 -0.1 -0.1)"))
+    report = diagnose_grid_family(root)
+    assert report["status"] == "DIAGNOSTIC_ONLY"
+    assert report["solver_flux_balance_screen"]["status"] == "PARTIAL_OR_UNAVAILABLE"
+    screen = report["cases"]["configuration_1/coarse"]["solver_flux_screen"]
+    assert screen["status"] == "UNAVAILABLE"
+    assert any("face-value count" in problem for problem in screen["problems"])
 
 
 def test_grid_family_small_residuals_do_not_unlock_scientific_validation(tmp_path):

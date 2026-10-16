@@ -1,0 +1,68 @@
+{
+  "schema_version": "cleanroomx.cfd-grid-study.v2",
+  "name": "run-38905424325 configuration 2 synthetic airflow diagnostic",
+  "configuration": 2,
+  "room_volume_m3": 12.0,
+  "quantity": "velocity_mean_m_s",
+  "unit": "m/s",
+  "contaminant_array": null,
+  "criteria": {
+    "min_refinement_ratio": 1.1,
+    "max_relative_volume_error": 0.001,
+    "min_observed_order": 0.5,
+    "max_observed_order": 6,
+    "max_fine_gci_percent": 5,
+    "safety_factor": 1.25,
+    "max_axis_ratio_spread": 0.05
+  },
+  "log_audit": {
+    "fields": [
+      "Ux",
+      "Uy",
+      "Uz",
+      "p"
+    ],
+    "window": 3,
+    "max_initial_residual": 1e-05,
+    "max_final_residual": 1e-07,
+    "max_global_continuity": 1e-06
+  },
+  "runs": [
+    {
+      "level": "fine",
+      "mesh_cells": [
+        24,
+        24,
+        24
+      ],
+      "vtk_file": "configuration_2/fine/VTK/fine_150.vtk",
+      "solver_log": "configuration_2/fine/simpleFoam.log",
+      "run_id": "38905424325-configuration-2-fine",
+      "conditions_sha256": "5b01960d1ec54f08055c9f92c09239c3ed4a024e1c19ba058d3a36e293e4610c"
+    },
+    {
+      "level": "medium",
+      "mesh_cells": [
+        12,
+        12,
+        12
+      ],
+      "vtk_file": "configuration_2/medium/VTK/medium_150.vtk",
+      "solver_log": "configuration_2/medium/simpleFoam.log",
+      "run_id": "38905424325-configuration-2-medium",
+      "conditions_sha256": "5b01960d1ec54f08055c9f92c09239c3ed4a024e1c19ba058d3a36e293e4610c"
+    },
+    {
+      "level": "coarse",
+      "mesh_cells": [
+        6,
+        6,
+        6
+      ],
+      "vtk_file": "configuration_2/coarse/VTK/coarse_150.vtk",
+      "solver_log": "configuration_2/coarse/simpleFoam.log",
+      "run_id": "38905424325-configuration-2-coarse",
+      "conditions_sha256": "5b01960d1ec54f08055c9f92c09239c3ed4a024e1c19ba058d3a36e293e4610c"
+    }
+  ]
+}

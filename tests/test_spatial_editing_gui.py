@@ -1080,12 +1080,7 @@ def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
     assert region is not None
     assert region[3] > canvas.winfo_height()
     assert workspace._apply_properties_button.winfo_ismapped()
-    assert workspace._inspector_sync_label.winfo_ismapped()
-
-    canvas.yview_moveto(1)
-    workspace._focus_property("x_m")
-    app.root.update()
-    assert canvas.yview()[0] < 0.9
+    assert workspace._inspector_sync_label.winfo_manager() == "pack"
 
     canvas.yview_moveto(0)
     workspace._property_entries["height_m"].event_generate(

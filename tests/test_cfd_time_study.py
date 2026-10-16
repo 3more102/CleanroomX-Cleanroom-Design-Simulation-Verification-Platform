@@ -293,7 +293,10 @@ def test_time_study_svg_plot_shows_mean_spatial_band_and_label_semantics(tmp_pat
             tmp_path / f"sample-{index}.vtu",
             [0.8 + offset, 1.2 + offset],
         )
-    report = analyze_vtk_time_study(_spec(), base_directory=tmp_path)
+    spec = _spec()
+    spec["room_volume_m3"] = 2.0
+    report = analyze_vtk_time_study(spec, base_directory=tmp_path)
+    assert report["samples"][0]["relative_room_volume_error"] == 0.0
     assert report["samples"][0]["field_summary"]["volume_weighted_p05"] < report["samples"][0]["field_summary"]["volume_weighted_p95"]
 
     svg = render_time_study_svg(report)

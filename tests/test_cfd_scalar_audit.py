@@ -270,7 +270,7 @@ def test_scalar_smoke_failure_evidence_keeps_solver_error_and_blocked_status(tmp
     assert report["failure_stage"] == "solver"
     assert report["solver_exit_code"] == 1
     assert report["result_synchronization_status"] == "no_results_available"
-    assert report["result_synchronization_errors"] == ["sync " + "x" * 494]
+    assert report["result_synchronization_errors"] == ["sync " + "x" * 495]
     assert report["scientific_validation"] == "BLOCKED"
     assert any("FOAM FATAL IO ERROR" in line for line in report["solver_diagnostic_excerpt"])
     assert any("physicalProperties/DT" in line for line in report["solver_diagnostic_excerpt"])

@@ -227,12 +227,14 @@ This direct path currently requires Foundation v10, ASCII native fields U
 and kinematic-pressure p, and legacy ASCII VTK output. It also imports any
 configured optional volume fields present (T, k, epsilon, omega, nut by
 default), and surface flux phi when present. Standard optional fields are
-checked against their OpenFOAM dimensions: T must be kelvin, and k, epsilon,
-omega, and nut must use their standard turbulence dimensions. A valid T field
-is analyzed as temperature, not contamination. Set `--contaminant-field NAME`
-only for a separately configured concentration field with verified units; T
-cannot be relabelled as contamination. No solver output is synthesized when
-no new time is written. Records report
+checked against their OpenFOAM dimensions: k, epsilon, omega, and nut must use
+their standard turbulence dimensions. T is treated as temperature only when
+its native dimensions are kelvin. Foundation v10 `scalarTransportFoam` also
+uses `T` for passive scalars, including dimensionless tracers; non-kelvin T is
+retained with its native dimensions and is not mapped as temperature. Set
+`--contaminant-field NAME` only when that field has verified concentration
+semantics and units. A dimensionless tracer is not a physical concentration.
+No solver output is synthesized when no new time is written. Records report
 `DIAGNOSTIC_ONLY`; solver convergence, physical validation, and cleanroom
 qualification remain blocked.
 
@@ -340,6 +342,12 @@ files directly and checks that each configuration contributes samples; it
 does not promote the samples to CFD validation evidence.
 
 For the exact-head Foundation v10 run that exercised solver execution, incremental synchronization, multi-time field parity, and this visualization, see the [run 38889697945 evidence report](OPENFOAM_V10_RUN_38889697945_RUNTIME_SYNC_VISUALIZATION_EVIDENCE.md).
+
+The later exact-head run 38894717248 repeated the nine-case Foundation v10
+execution, multi-time export, incremental VTK synchronization, and visualization.
+Its artifact digest, case counts, synchronization records, residual and flux
+screens, and scientific limits are recorded in the [run 38894717248 evidence
+report](OPENFOAM_V10_RUN_38894717248_EXECUTION_SYNC_EVIDENCE.md).
 
 See the [Foundation v10 runtime-sync evidence report](OPENFOAM_V10_RUN_38888517187_RUNTIME_SYNC_EVIDENCE.md)
 for the exact-head solver, field-parity, synchronization, visualization, and

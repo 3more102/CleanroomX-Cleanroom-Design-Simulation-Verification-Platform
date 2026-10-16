@@ -68,7 +68,10 @@ def _case(
     return case
 
 
-def _write_vtk(path: Path, *, temperature: bool, contaminant: bool = False) -> None:
+def _write_vtk(
+    path: Path, *, temperature: bool, contaminant: bool = False,
+    generic_t_scalar: bool = False,
+) -> None:
     vtk = pytest.importorskip("vtk")
     points = vtk.vtkPoints()
     for point in (
@@ -95,10 +98,10 @@ def _write_vtk(path: Path, *, temperature: bool, contaminant: bool = False) -> N
     cell_ids.InsertNextValue(0)
     for array in (velocity, pressure, cell_ids):
         grid.GetCellData().AddArray(array)
-    if temperature:
+    if temperature or generic_t_scalar:
         temperature_array = vtk.vtkFloatArray()
         temperature_array.SetName("T")
-        temperature_array.InsertNextValue(293.15)
+        temperature_array.InsertNextValue(293.15 if temperature else 0.25)
         grid.GetCellData().AddArray(temperature_array)
     if contaminant:
         concentration = vtk.vtkFloatArray()
@@ -136,7 +139,8 @@ def _configured_sync(tmp_path, case: Path, monkeypatch, *, output: Path | None =
 
 
 def _fake_foam_to_vtk(
-    monkeypatch, *, expected_temperature=True, expected_contaminant=False, calls=None
+    monkeypatch, *, expected_temperature=True, expected_contaminant=False,
+    expected_generic_t_scalar=False, calls=None
 ):
     calls = calls if calls is not None else []
 
@@ -149,6 +153,7 @@ def _fake_foam_to_vtk(
             vtk_dir / f"{cwd.name}_{time_name}.vtk",
             temperature=expected_temperature,
             contaminant=expected_contaminant,
+            generic_t_scalar=expected_generic_t_scalar,
         )
         selected_fields = command[command.index("-fields") + 1]
         if "phi" in selected_fields and "-surfaceFields" in command:
@@ -325,29 +330,59 @@ def test_sync_records_incomplete_field_and_never_accepts_it(tmp_path, monkeypatc
     assert "kinematic-pressure dimensions" in manifest["errors"][0]["message"]
 
 
-def test_sync_rejects_a_misdimensioned_temperature_instead_of_labeling_it_kelvin(
+def test_dimensionless_scalar_transport_t_is_not_classified_as_temperature(
     tmp_path, monkeypatch
 ):
-    case = _case(tmp_path)
-    temperature = case / "100" / "T"
-    temperature.write_text(
-        _field("T", "volScalarField", "0 -3 0 0 0 0 0", "12.0"),
+    case = _case(tmp_path, temperature=False)
+    (case / "100" / "T").write_text(
+        _field("T", "volScalarField", "0 0 0 0 0 0 0", "0.25"),
         encoding="ascii",
     )
-    calls = _fake_foam_to_vtk(monkeypatch)
-    synchronizer = _configured_sync(tmp_path, case, monkeypatch)
-
-    for _ in range(6):
-        synchronizer.poll_once()
-    report = synchronizer.finish(solver_returncode=1)
-
-    assert report["status"] == "no_results_available"
-    assert not calls
-    manifest = json.loads((tmp_path / "sync" / "sync_manifest.json").read_text())
-    assert all(
-        "dimensions for temperature in kelvin" in error["message"]
-        for error in manifest["errors"]
+    _fake_foam_to_vtk(
+        monkeypatch, expected_temperature=False, expected_generic_t_scalar=True
     )
+    synchronizer = _configured_sync(tmp_path, case, monkeypatch)
+    synchronizer.poll_once()
+    synchronizer.poll_once()
+    solver_log = case / "scalarTransportFoam.log"
+    solver_log.write_text("End\n", encoding="ascii")
+    report = synchronizer.finish(solver_returncode=0, solver_log=solver_log)
+
+    assert report["status"] == "results_synced"
+    record = json.loads(
+        (tmp_path / "sync" / "sync_manifest.json").read_text()
+    )["records"]["100"]
+    assert record["fields"]["T"]["units"] == "OpenFOAM dimensions [0 0 0 0 0 0 0]"
+    assert record["cleanroomx_analysis_import"]["has_temperature_field"] is False
+    assert record["cleanroomx_analysis_import"]["has_contaminant_field"] is False
+    assert record["native_vtk_parity"]["T"]["status"] == "PASS"
+
+
+def test_explicitly_selected_dimensionless_t_is_not_also_classified_as_temperature(
+    tmp_path, monkeypatch
+):
+    case = _case(tmp_path, temperature=False)
+    (case / "100" / "T").write_text(
+        _field("T", "volScalarField", "0 0 0 0 0 0 0", "0.25"),
+        encoding="ascii",
+    )
+    _fake_foam_to_vtk(
+        monkeypatch, expected_temperature=False, expected_generic_t_scalar=True
+    )
+    synchronizer = _configured_sync(tmp_path, case, monkeypatch, contaminant_field="T")
+    synchronizer.poll_once()
+    synchronizer.poll_once()
+    solver_log = case / "scalarTransportFoam.log"
+    solver_log.write_text("End\n", encoding="ascii")
+    report = synchronizer.finish(solver_returncode=0, solver_log=solver_log)
+
+    assert report["status"] == "results_synced"
+    record = json.loads(
+        (tmp_path / "sync" / "sync_manifest.json").read_text()
+    )["records"]["100"]
+    assert record["cleanroomx_analysis_import"]["has_temperature_field"] is False
+    assert record["cleanroomx_analysis_import"]["has_contaminant_field"] is True
+    assert record["cleanroomx_analysis_import"]["contaminant_field"] == "T"
 
 
 @pytest.mark.parametrize(

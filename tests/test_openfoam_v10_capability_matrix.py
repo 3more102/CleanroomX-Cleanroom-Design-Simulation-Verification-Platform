@@ -408,3 +408,36 @@ def test_run_86_checkmesh_diagnostics_are_hash_replayed_and_stay_partial():
     assert report_json["tracks"]["integration_status"]["complete"] == 0
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+def test_run_90_explicit_time_vtk_evidence_stays_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md"
+
+    for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 90" in row["test_evidence"].lower()
+        assert "time 100" in row["test_evidence"].lower()
+        assert "13,608 patch faces" in row["test_evidence"]
+        assert report in row["test_evidence"]
+        assert "12032302330" in row["test_evidence"]
+        assert row["remaining_gap"].strip()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "6c703c5c1843a4eea865b51115fba2eb857efae1b43d58ba59a97908e1bb4783" in report_text
+    assert "54 passing parity results" in report_text
+    assert "13,608 faces" in report_text
+    assert "scientific validation stays BLOCKED" in report_text
+    assert "NOT_BELOW_TOLERANCE" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

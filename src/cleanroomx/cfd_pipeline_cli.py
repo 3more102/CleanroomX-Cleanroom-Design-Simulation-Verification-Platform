@@ -37,7 +37,10 @@ def build_parser():
     sync.add_argument("--simulation-id",required=True)
     sync.add_argument("--configuration-file",required=True,
                       help="Configuration/manifest file whose raw SHA-256 binds this run")
-    sync.add_argument("--contaminant-array",default="T")
+    sync.add_argument("--field-map-file",
+                      help="Optional JSON map that assigns units and meanings to VTK cell arrays")
+    sync.add_argument("--contaminant-array",
+                      help="Explicitly identify a VTK scalar as contaminant concentration")
     sync.add_argument("--interval-seconds",type=float,default=2.0)
     sync.add_argument("--stable-scans",type=int,default=2)
     sync.add_argument("--stable-seconds",type=float,default=2.0)
@@ -92,6 +95,7 @@ def main():
         options={
             "simulation_id":args.simulation_id,
             "configuration_file":args.configuration_file,
+            "field_map":load_cli_input(load_strict_json,args.field_map_file) if args.field_map_file else None,
             "stable_scans":args.stable_scans,
             "stable_seconds":args.stable_seconds,
             "max_files":args.max_files,

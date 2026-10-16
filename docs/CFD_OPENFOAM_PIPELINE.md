@@ -164,18 +164,33 @@ one scan and exits. A newly discovered file needs another scan after the
 default two-second stability window; use `--stable-seconds` and
 `--stable-scans` to configure that gate.
 
-The watcher refuses a changed configuration in an existing result store,
-rejects conflicting exports for the same case and solver time, preserves an
-accepted snapshot if its source is later modified, and enforces file-count,
+The watcher refuses a changed configuration or field map in an existing result
+store, rejects conflicting exports for the same case and solver time, preserves
+an accepted snapshot if its source is later modified, and enforces file-count,
 scan-entry, source-byte, and output-record limits. Stable size/mtime observations
 are a write-completion screen, not a guarantee from the solver; the importer
 must also parse the dataset and the source hash must remain unchanged throughout
 ingestion. The producing process should finish each `foamToVTK` write before
-the watcher accepts it. The current CleanroomX VTK importer maps `U` to velocity
-and an optional configured scalar (default array name `T`) to contaminant
-concentration. It does not yet map pressure, temperature, or turbulence fields
-through this snapshot schema. Solver convergence and physical validation remain
-separate gates.
+the watcher accepts it.
+
+Every result always maps cell-data `U` to velocity in m/s. VTK exports do not
+carry OpenFOAM field dimensions, so optional arrays require explicit semantic
+and unit declarations through `--field-map-file`; those declarations and their
+SHA-256 are recorded with each snapshot. The example
+[`cfd_openfoam_field_map.example.json`](../examples/cfd_openfoam_field_map.example.json)
+maps `p` to kinematic pressure (m^2/s^2) and defines optional turbulence
+fields. An absent mapped array is recorded as unavailable; a malformed or
+non-finite array is rejected. Array names alone do not identify physical
+meaning: `T` is not automatically treated as temperature or contaminant
+concentration. Use `--contaminant-array` only when the selected scalar has
+known concentration semantics. Field mapping preserves the exported values;
+it does not convert kinematic pressure to Pa without a supplied density or
+convert other fields between units. Solver convergence and physical validation
+remain separate gates.
+
+This mapping change uses synchronization-state and snapshot schema v2. Existing
+v1 stores are refused rather than silently resumed under different field
+semantics; start a new output store to import with the explicit map.
 
 Foundation v10 run 94 completed this `50,100` audit for all nine synthetic
 cases. Its [multi-time report](OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md)

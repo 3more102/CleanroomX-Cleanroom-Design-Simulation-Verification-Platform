@@ -20,10 +20,10 @@ import stat
 import time
 from typing import Callable
 
-from .cfd_vtk import MAX_VTK_BYTES, import_vtk_case
+from .cfd_vtk import MAX_VTK_BYTES, import_vtk_case, validate_vtk_field_map
 
-STATE_SCHEMA = "cleanroomx.openfoam-vtk-sync.v1"
-SNAPSHOT_SCHEMA = "cleanroomx.openfoam-vtk-result.v1"
+STATE_SCHEMA = "cleanroomx.openfoam-vtk-sync.v2"
+SNAPSHOT_SCHEMA = "cleanroomx.openfoam-vtk-result.v2"
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _TIME_NAME = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]{1,3})?\Z")
 _MAX_STATE_BYTES = 64 * 1024 * 1024
@@ -208,7 +208,15 @@ def _atomic_json(path: Path, value: dict, *, max_bytes: int, replace: bool) -> t
     return hashlib.sha256(encoded).hexdigest(), len(encoded)
 
 
-def _read_state(path: Path, *, simulation_id: str, configuration_hash: str, source_root: Path, output_root: Path) -> dict:
+def _read_state(
+    path: Path,
+    *,
+    simulation_id: str,
+    configuration_hash: str,
+    field_map_hash: str | None,
+    source_root: Path,
+    output_root: Path,
+) -> dict:
     if path.is_symlink():
         raise SyncError("Synchronization state cannot be a symbolic link")
     if not path.exists():
@@ -216,6 +224,7 @@ def _read_state(path: Path, *, simulation_id: str, configuration_hash: str, sour
             "schema_version": STATE_SCHEMA,
             "simulation_id": simulation_id,
             "configuration_sha256": configuration_hash,
+            "field_map_sha256": field_map_hash,
             "source_root": str(source_root),
             "output_root": str(output_root),
             "created_at": _utc_now(),
@@ -232,6 +241,7 @@ def _read_state(path: Path, *, simulation_id: str, configuration_hash: str, sour
         "schema_version": STATE_SCHEMA,
         "simulation_id": simulation_id,
         "configuration_sha256": configuration_hash,
+        "field_map_sha256": field_map_hash,
         "source_root": str(source_root),
         "output_root": str(output_root),
     }
@@ -297,7 +307,8 @@ def synchronize_openfoam_vtk_once(
     max_total_bytes: int = 2 * 1024 * 1024 * 1024,
     max_record_bytes: int = 128 * 1024 * 1024,
     max_scan_entries: int = 100_000,
-    contaminant_array: str = "T",
+    contaminant_array: str | None = None,
+    field_map: dict | None = None,
 ) -> dict:
     """Import new, stable internal VTK time datasets into an atomic result store.
 
@@ -320,8 +331,17 @@ def synchronize_openfoam_vtk_once(
     ):
         if type(value) is not int or not lower <= value <= upper:
             raise SyncError(f"{name} must be an integer from {lower} through {upper}")
-    if not isinstance(contaminant_array, str) or not contaminant_array or len(contaminant_array) > 128:
-        raise SyncError("contaminant_array must be a nonempty field name of at most 128 characters")
+    if contaminant_array is not None and (
+        type(contaminant_array) is not str or not contaminant_array or len(contaminant_array) > 128
+    ):
+        raise SyncError("contaminant_array must be null or a field name of at most 128 characters")
+    normalized_field_map = validate_vtk_field_map(field_map) if field_map is not None else None
+    field_map_hash = (
+        hashlib.sha256(json.dumps(
+            normalized_field_map, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")).hexdigest()
+        if normalized_field_map is not None else None
+    )
 
     source_input = Path(source_directory)
     output_input = Path(output_directory)
@@ -342,6 +362,7 @@ def synchronize_openfoam_vtk_once(
         state_path,
         simulation_id=simulation_id,
         configuration_hash=configuration_hash,
+        field_map_hash=field_map_hash,
         source_root=source_root,
         output_root=output_root,
     )
@@ -450,7 +471,11 @@ def synchronize_openfoam_vtk_once(
 
         try:
             before_hash, before_stat = _stable_sha256(item["path"], max_bytes=max_file_bytes)
-            imported = import_vtk_case(item["path"], contaminant_array=contaminant_array)
+            imported = import_vtk_case(
+                item["path"],
+                contaminant_array=contaminant_array,
+                field_map=normalized_field_map,
+            )
             after_hash, after_stat = _stable_sha256(item["path"], max_bytes=max_file_bytes)
             if before_hash != after_hash or imported["source_sha256"] != after_hash:
                 raise SyncError("VTK dataset changed during import")
@@ -462,6 +487,7 @@ def synchronize_openfoam_vtk_once(
                 "schema_version": SNAPSHOT_SCHEMA,
                 "simulation_id": simulation_id,
                 "configuration_sha256": configuration_hash,
+                "field_map_sha256": field_map_hash,
                 "case_id": item["case_id"],
                 "solver_time": item["solver_time"],
                 "source_relative_path": relative,
@@ -483,7 +509,7 @@ def synchronize_openfoam_vtk_once(
                 except (OSError, UnicodeError, json.JSONDecodeError) as exc:
                     raise SyncError("Existing snapshot is corrupted; refusing to overwrite it") from exc
                 if any(existing.get(key) != snapshot.get(key) for key in (
-                    "schema_version", "simulation_id", "configuration_sha256", "source_relative_path",
+                    "schema_version", "simulation_id", "configuration_sha256", "field_map_sha256", "source_relative_path",
                     "source_sha256", "fields_sha256",
                 )):
                     raise SyncError("Existing snapshot provenance conflicts with the source; refusing to overwrite it")
@@ -503,6 +529,10 @@ def synchronize_openfoam_vtk_once(
                 "mesh_cells": imported["mesh_cells"],
                 "has_contaminant_field": imported["has_contaminant_field"],
                 "has_recirculation_labels": imported["has_recirculation_labels"],
+                "field_data_names": sorted(imported.get("field_data", {})),
+                "unavailable_field_names": sorted(
+                    item["semantic"] for item in imported.get("unavailable_fields", [])
+                ),
                 "snapshot_relative_path": snapshot_path.relative_to(output_root).as_posix(),
                 "snapshot_sha256": snapshot_digest,
                 "snapshot_size_bytes": snapshot_size,
@@ -527,6 +557,7 @@ def synchronize_openfoam_vtk_once(
         "schema_version": STATE_SCHEMA,
         "simulation_id": simulation_id,
         "configuration_sha256": configuration_hash,
+        "field_map_sha256": field_map_hash,
         "scan_time": state["updated_at"],
         "discovered_results": len(exports),
         "counts": counts,
@@ -534,6 +565,7 @@ def synchronize_openfoam_vtk_once(
             {key: value[key] for key in (
                 "relative_path", "solver_time", "status", "source_sha256", "snapshot_relative_path",
                 "mesh_cells", "imported_at",
+                "field_data_names", "unavailable_field_names",
             ) if key in value}
             for value in records.values() if value.get("status") == "imported"
         ],

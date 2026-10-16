@@ -8,6 +8,7 @@ on:
       - "docs/CFD_GRID_CONVERGENCE.md"
       - "docs/CFD_OPENFOAM_PIPELINE.md"
       - "examples/cfd_grid_family.example.json"
+      - "examples/cfd_openfoam_field_map.example.json"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
   workflow_dispatch:
@@ -1037,10 +1038,12 @@ jobs:
                 "$case_dir/VTK" "$result_dir" \
                 --simulation-id "$simulation_id" \
                 --configuration-file "$family/manifest.json" \
+                --field-map-file examples/cfd_openfoam_field_map.example.json \
                 --stable-scans 2 --stable-seconds 0 --once \
                 > "$sync_root/${safe_case_id}.scan-${scan}.json"
             done
             python - "$result_dir/sync-state.json" "$family/manifest.json" \
+              examples/cfd_openfoam_field_map.example.json \
               "$result_dir" "$case_dir/VTK" "$sync_root/${safe_case_id}.verified.json" \
               "$case_id" "$simulation_id" <<'PY'
           import hashlib
@@ -1050,16 +1053,25 @@ jobs:
 
           state_path = Path(sys.argv[1])
           manifest_path = Path(sys.argv[2])
-          result_root = Path(sys.argv[3])
-          vtk_root = Path(sys.argv[4])
-          report_path = Path(sys.argv[5])
-          case_id = sys.argv[6]
-          simulation_id = sys.argv[7]
+          field_map_path = Path(sys.argv[3])
+          result_root = Path(sys.argv[4])
+          vtk_root = Path(sys.argv[5])
+          report_path = Path(sys.argv[6])
+          case_id = sys.argv[7]
+          simulation_id = sys.argv[8]
           manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+          field_map = json.loads(field_map_path.read_text(encoding="utf-8"))
+          field_map_sha = hashlib.sha256(json.dumps(
+              field_map, sort_keys=True, separators=(",", ":"), allow_nan=False
+          ).encode("utf-8")).hexdigest()
           state = json.loads(state_path.read_text(encoding="utf-8"))
-          if state.get("schema_version") != "cleanroomx.openfoam-vtk-sync.v1":
+          if state.get("schema_version") != "cleanroomx.openfoam-vtk-sync.v2":
               raise SystemExit("Unexpected synchronization state schema")
-          if state.get("simulation_id") != simulation_id or state.get("configuration_sha256") != manifest_sha:
+          if (
+              state.get("simulation_id") != simulation_id
+              or state.get("configuration_sha256") != manifest_sha
+              or state.get("field_map_sha256") != field_map_sha
+          ):
               raise SystemExit("Synchronization state provenance does not match this case and generated family")
           records = state.get("records", {})
           imported = [item for item in records.values() if item.get("status") == "imported"]
@@ -1081,6 +1093,7 @@ jobs:
               if (
                   snapshot.get("simulation_id") != simulation_id
                   or snapshot.get("configuration_sha256") != manifest_sha
+                  or snapshot.get("field_map_sha256") != field_map_sha
                   or snapshot.get("source_sha256") != source_sha
                   or snapshot.get("solver_time") != item.get("solver_time")
                   or snapshot.get("scientific_validation") != "BLOCKED"
@@ -1092,6 +1105,26 @@ jobs:
               ).encode("utf-8")).hexdigest()
               if fields_sha != snapshot.get("fields_sha256") or fields.get("mesh_cells") != item.get("mesh_cells"):
                   raise SystemExit("Imported VTK field payload hash or mesh-cell count is inconsistent")
+              field_data = fields.get("field_data", {})
+              pressure = field_data.get("kinematic_pressure")
+              if (
+                  fields.get("field_map_schema") != "cleanroomx.cfd-vtk-field-map.v1"
+                  or not isinstance(pressure, dict)
+                  or pressure.get("array_name") != "p"
+                  or pressure.get("units") != "m^2/s^2"
+                  or pressure.get("units_source") != "explicit_caller_field_map"
+                  or pressure.get("components") != 1
+                  or not isinstance(pressure.get("values"), list)
+                  or len(pressure.get("values", [])) != fields.get("mesh_cells")
+                  or item.get("field_data_names") != ["kinematic_pressure"]
+                  or set(item.get("unavailable_field_names", [])) != {
+                      "turbulent_kinetic_energy", "turbulent_dissipation_rate",
+                      "specific_dissipation_rate", "turbulent_kinematic_viscosity",
+                  }
+              ):
+                  raise SystemExit("Mapped pressure or unavailable turbulence-field provenance is inconsistent")
+              if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in pressure["values"]):
+                  raise SystemExit("Mapped pressure includes a non-finite value")
               snapshots.append({
                   "solver_time": item["solver_time"],
                   "source_relative_path": item["relative_path"],
@@ -1099,6 +1132,9 @@ jobs:
                   "snapshot_relative_path": item["snapshot_relative_path"],
                   "snapshot_sha256": hashlib.sha256(snapshot_bytes).hexdigest(),
                   "mesh_cells": item["mesh_cells"],
+                  "mapped_fields": sorted(field_data),
+                  "unavailable_fields": sorted(item.get("unavailable_field_names", [])),
+                  "pressure_units": pressure["units"],
                   "scientific_validation": "BLOCKED",
               })
           report = {
@@ -1107,6 +1143,7 @@ jobs:
               "case_id": case_id,
               "simulation_id": simulation_id,
               "configuration_sha256": manifest_sha,
+              "field_map_sha256": field_map_sha,
               "synchronized_snapshot_count": len(snapshots),
               "snapshots": sorted(snapshots, key=lambda item: int(item["solver_time"])),
               "scientific_validation": "BLOCKED",

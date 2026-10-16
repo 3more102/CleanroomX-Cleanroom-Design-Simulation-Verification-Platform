@@ -61,6 +61,7 @@ _FOAM_INTERNAL_SCALAR_FIELD = re.compile(
 )
 MAX_OPENFOAM_FIELD_BYTES = 64 * 1024 * 1024
 MAX_OPENFOAM_FACES = 600_000
+VTK_FIELD_MAP_SCHEMA = "cleanroomx.cfd-vtk-field-map.v1"
 # The current Foundation v10 run artifacts write legacy VTK FIELD values with
 # six significant decimal digits unless a different writer precision is used.
 OPENFOAM_VTK_ASCII_PRECISION = 6
@@ -1648,7 +1649,43 @@ def audit_openfoam_vtk_boundary_patch(
     }
 
 
-def import_vtk_case(path,*,contaminant_array="T",recirculation_array="recirculating"):
+def validate_vtk_field_map(field_map):
+    """Validate explicit semantics/units for extra VTK cell arrays.
+
+    VTK arrays do not preserve OpenFOAM dimension declarations. The caller
+    supplies semantic labels and units; CleanroomX never infers them from an
+    array name.
+    """
+    if type(field_map) is not dict or set(field_map) != {"schema_version", "fields"}:
+        raise ValueError("field_map must contain schema_version and fields")
+    if field_map.get("schema_version") != VTK_FIELD_MAP_SCHEMA:
+        raise ValueError(f"field_map schema_version must equal {VTK_FIELD_MAP_SCHEMA}")
+    fields = field_map.get("fields")
+    if type(fields) is not dict or len(fields) > 12:
+        raise ValueError("field_map.fields must be an object with at most twelve arrays")
+    normalized = {}
+    semantics = set()
+    for array_name, definition in fields.items():
+        if type(array_name) is not str or not array_name.strip() or len(array_name) > 128:
+            raise ValueError("field_map array names must be nonempty text of at most 128 characters")
+        if type(definition) is not dict or set(definition) != {"semantic", "units"}:
+            raise ValueError(f"field_map entry {array_name!r} must contain semantic and units")
+        semantic = definition.get("semantic")
+        units = definition.get("units")
+        if type(semantic) is not str or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", semantic):
+            raise ValueError(f"field_map entry {array_name!r} has an invalid semantic identifier")
+        if semantic in semantics:
+            raise ValueError("field_map semantic identifiers must be unique")
+        if type(units) is not str or not units.strip() or len(units) > 64:
+            raise ValueError(f"field_map entry {array_name!r} needs explicit units")
+        semantics.add(semantic)
+        normalized[array_name] = {"semantic": semantic, "units": units.strip()}
+    return {"schema_version": VTK_FIELD_MAP_SCHEMA, "fields": normalized}
+
+
+def import_vtk_case(
+    path,*,contaminant_array="T",recirculation_array="recirculating",field_map=None
+):
     source=Path(path)
     if not source.is_file(): raise FileNotFoundError(source)
     before=source.stat()
@@ -1663,17 +1700,64 @@ def import_vtk_case(path,*,contaminant_array="T",recirculation_array="recirculat
         if hashlib.file_digest(fp,"sha256").hexdigest()!=source_sha:
             raise ValueError("VTK file content changed while parsing")
     arrays=grid.GetCellData()
+    cell_count = grid.GetNumberOfCells()
     u=arrays.GetArray("U")
     volumes=arrays.GetArray("CleanroomXVolume")
-    if u is None or u.GetNumberOfComponents()!=3:
+    if cell_count <= 0:
+        raise ValueError("VTK requires at least one volume cell")
+    if u is None or u.GetNumberOfComponents()!=3 or u.GetNumberOfTuples()!=cell_count:
         raise ValueError("VTK requires three-component U cell velocity in m/s")
-    if volumes is None: raise ValueError("Cannot compute VTK cell volumes")
-    c=arrays.GetArray(contaminant_array)
-    mask=arrays.GetArray(recirculation_array)
-    if c is not None and c.GetNumberOfComponents()!=1:
+    if volumes is None or volumes.GetNumberOfTuples()!=cell_count:
+        raise ValueError("Cannot compute VTK cell volumes")
+    c=arrays.GetArray(contaminant_array) if contaminant_array is not None else None
+    mask=arrays.GetArray(recirculation_array) if recirculation_array is not None else None
+    if c is not None and (c.GetNumberOfComponents()!=1 or c.GetNumberOfTuples()!=cell_count):
         raise ValueError("Contaminant field must be scalar")
-    if mask is not None and mask.GetNumberOfComponents()!=1:
+    if mask is not None and (mask.GetNumberOfComponents()!=1 or mask.GetNumberOfTuples()!=cell_count):
         raise ValueError("Recirculation mask must be scalar")
+    map_data = validate_vtk_field_map(field_map) if field_map is not None else None
+    imported_fields = {}
+    unavailable_fields = []
+    if map_data is not None:
+        for array_name, definition in map_data["fields"].items():
+            array = arrays.GetArray(array_name)
+            if array is None:
+                unavailable_fields.append({
+                    "array_name": array_name,
+                    **definition,
+                    "reason": "not_present_in_vtk_cell_data",
+                })
+                continue
+            components = array.GetNumberOfComponents()
+            if components not in (1, 3) or array.GetNumberOfTuples() != grid.GetNumberOfCells():
+                raise ValueError(
+                    f"Mapped VTK array {array_name!r} must have one or three components per cell"
+                )
+            tuples = []
+            columns = [[] for _ in range(components)]
+            for index in range(grid.GetNumberOfCells()):
+                value = tuple(float(x) for x in array.GetTuple(index))
+                if len(value) != components or not all(math.isfinite(x) for x in value):
+                    raise ValueError(f"Mapped VTK array {array_name!r} has invalid value at cell {index}")
+                tuples.append(value[0] if components == 1 else list(value))
+                for component, number in enumerate(value):
+                    columns[component].append(number)
+            try:
+                summary = {
+                    "minimum": [min(column) for column in columns],
+                    "maximum": [max(column) for column in columns],
+                    "mean": [math.fsum(column) / len(column) for column in columns],
+                }
+            except OverflowError as exc:
+                raise ValueError(f"Mapped VTK array {array_name!r} has an overflowing summary") from exc
+            imported_fields[definition["semantic"]] = {
+                "array_name": array_name,
+                "units": definition["units"],
+                "units_source": "explicit_caller_field_map",
+                "components": components,
+                "values": tuples,
+                "summary": summary,
+            }
     cells=[]
     for i in range(grid.GetNumberOfCells()):
         volume=float(volumes.GetTuple1(i))
@@ -1694,8 +1778,13 @@ def import_vtk_case(path,*,contaminant_array="T",recirculation_array="recirculat
                 raise ValueError(f"Cell {i}: recirculating must be exactly 0 or 1")
             cell["recirculating"]=bool(value)
         cells.append(cell)
-    return {"cells":cells,"source_sha256":source_sha,"mesh_cells":len(cells),
+    result={"cells":cells,"source_sha256":source_sha,"mesh_cells":len(cells),
             "has_contaminant_field":c is not None,"has_recirculation_labels":mask is not None}
+    if map_data is not None:
+        result["field_map_schema"] = map_data["schema_version"]
+        result["field_data"] = imported_fields
+        result["unavailable_fields"] = unavailable_fields
+    return result
 
 def populate_study_from_vtk(study,sources,*,solver_name,contaminant_array="T"):
     if type(solver_name) is not str or not solver_name.strip():

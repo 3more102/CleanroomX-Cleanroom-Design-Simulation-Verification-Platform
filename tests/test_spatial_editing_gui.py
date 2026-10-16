@@ -1105,7 +1105,12 @@ def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
     canvas.pack_configure(fill="x", expand=False)
     canvas.configure(height=85)
     app.root.update_idletasks()
-    assert canvas.winfo_height() >= 80
+    app.root.update()
+    assert canvas.winfo_height() >= 80, (
+        f"inspector viewport {canvas.winfo_width()}x{canvas.winfo_height()} "
+        f"at root {app.root.winfo_width()}x{app.root.winfo_height()}; "
+        f"workspace {workspace.winfo_width()}x{workspace.winfo_height()}"
+    )
     canvas.yview_moveto(0)
     app.root.update()
 

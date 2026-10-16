@@ -662,7 +662,7 @@ jobs:
                   ).encode("utf-8")
               ).hexdigest()
               if (
-                  sync_document.get("schema_version") != "cleanroomx.openfoam-result-sync.v1"
+                  sync_document.get("schema_version") != "cleanroomx.openfoam-result-sync.v2"
                   or sync_document.get("status") != "results_synced"
                   or sync_document.get("simulation_id") != synchronization.get("simulation_id")
                   or sync_document.get("case_id") != case_id
@@ -1225,7 +1225,7 @@ jobs:
               field_map, sort_keys=True, separators=(",", ":"), allow_nan=False
           ).encode("utf-8")).hexdigest()
           state = json.loads(state_path.read_text(encoding="utf-8"))
-          if state.get("schema_version") != "cleanroomx.openfoam-vtk-sync.v2":
+          if state.get("schema_version") != "cleanroomx.openfoam-vtk-sync.v3":
               raise SystemExit("Unexpected synchronization state schema")
           if (
               state.get("simulation_id") != simulation_id

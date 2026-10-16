@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import queue
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -21,7 +23,63 @@ from .strict_json import load_strict_json_snapshot
 
 _MAX_PREVIEW_BYTES = 2_000_000
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_SYNC_SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _EVIDENCE_NAMES = ("manifest.json", "sync-state.json", "sync_manifest.json")
+
+
+def _process_group_launch_options(*, windows: bool | None = None) -> dict[str, Any]:
+    """Start the CLI in a process group that includes solver children."""
+    use_windows = os.name == "nt" if windows is None else windows
+    if use_windows:
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _kill_windows_process_tree(process: subprocess.Popen[str]) -> None:
+    """Use the Windows taskkill tree option for the CLI and its descendants."""
+    try:
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        if process.poll() is None:
+            process.kill()
+
+
+def _signal_process_tree(
+    process: subprocess.Popen[str],
+    *,
+    force: bool = False,
+    windows: bool | None = None,
+) -> None:
+    """Stop the OpenFOAM CLI and solver processes it started."""
+    use_windows = os.name == "nt" if windows is None else windows
+    if use_windows:
+        if force:
+            _kill_windows_process_tree(process)
+            return
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        except (AttributeError, OSError, ValueError):
+            _kill_windows_process_tree(process)
+        return
+
+    try:
+        os.killpg(
+            process.pid,
+            signal.SIGKILL if force else signal.SIGTERM,
+        )
+    except ProcessLookupError:
+        return
+    except OSError:
+        if process.poll() is None:
+            (process.kill if force else process.terminate)()
 
 
 def build_openfoam_generate_command(
@@ -95,8 +153,8 @@ def build_openfoam_sync_vtk_command(
         raise ValueError(
             "Choose the VTK source, result directory, case manifest, and simulation ID"
         )
-    if _SIMULATION_ID.fullmatch(simulation_id) is None:
-        raise ValueError("Simulation ID contains unsupported characters")
+    if _SYNC_SIMULATION_ID.fullmatch(simulation_id) is None:
+        raise ValueError("Simulation ID must be 1-64 safe ASCII filename characters")
     return [
         python_executable,
         "-m",
@@ -224,6 +282,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._process: subprocess.Popen[str] | None = None
         self._busy = False
         self._destroyed = False
+        self._stop_requested = False
         self._theme_palette = theme_palette("light")
 
         self.specification_var = tk.StringVar()
@@ -587,6 +646,7 @@ class OpenFOAMWorkspace(ttk.Frame):
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
+                **_process_group_launch_options(),
             )
         except OSError as exc:
             messagebox.showerror(label, f"Could not start command: {exc}", parent=self)
@@ -594,6 +654,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             return
 
         self._process = process
+        self._stop_requested = False
         self._set_busy(True)
         threading.Thread(
             target=self._read_process,
@@ -623,7 +684,11 @@ class OpenFOAMWorkspace(ttk.Frame):
             elif kind == "finished":
                 self._process = None
                 self._set_busy(False)
-                if value == 0:
+                if self._stop_requested:
+                    self._stop_requested = False
+                    self._append("\nOpenFOAM command and child solvers stopped.\n")
+                    self._status_setter("OpenFOAM command stopped")
+                elif value == 0:
                     self._append(
                         "\nProcess exited successfully. Review the command evidence; "
                         "this does not establish CFD convergence or validation.\n"
@@ -650,14 +715,16 @@ class OpenFOAMWorkspace(ttk.Frame):
             parent=self,
         ):
             return
-        process.terminate()
+        self._stop_requested = True
+        _signal_process_tree(process)
         self.stop_button.configure(state="disabled")
+        self._status_setter("Stopping OpenFOAM command and child solvers")
         self.after(5000, lambda: self._kill_if_running(process))
 
     @staticmethod
     def _kill_if_running(process: subprocess.Popen[str]) -> None:
         if process.poll() is None:
-            process.kill()
+            _signal_process_tree(process, force=True)
 
     def _preview_evidence(self) -> None:
         directory = self.result_directory_var.get().strip()
@@ -724,5 +791,5 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._destroyed = True
         process = self._process
         if process is not None and process.poll() is None:
-            process.terminate()
+            _signal_process_tree(process, force=True)
 

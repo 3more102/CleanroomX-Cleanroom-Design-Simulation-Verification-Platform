@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import signal
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
+from cleanroomx import gui_openfoam
 from cleanroomx.gui_openfoam import (
     build_openfoam_generate_command,
     build_openfoam_run_command,
@@ -100,4 +104,80 @@ def test_evidence_preview_rejects_a_symlink_directory(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="regular directory"):
         read_openfoam_evidence_preview(link)
+
+def test_sync_vtk_command_rejects_ids_longer_than_backend_limit() -> None:
+    with pytest.raises(ValueError, match="1-64 safe ASCII"):
+        build_openfoam_sync_vtk_command(
+            "/tmp/VTK output",
+            "/tmp/imported results",
+            "/tmp/case bundle/manifest.json",
+            "v" * 65,
+        )
+
+    command = build_openfoam_sync_vtk_command(
+        "/tmp/VTK output",
+        "/tmp/imported results",
+        "/tmp/case bundle/manifest.json",
+        "v" * 64,
+    )
+    assert command[-5] == "--simulation-id"
+    assert command[-4] == "v" * 64
+
+
+def test_process_group_launch_options_isolate_solver_children(monkeypatch) -> None:
+    monkeypatch.setattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+
+    assert gui_openfoam._process_group_launch_options(windows=False) == {
+        "start_new_session": True
+    }
+    assert gui_openfoam._process_group_launch_options(windows=True) == {
+        "creationflags": 512
+    }
+
+
+@pytest.mark.parametrize(
+    ("force", "expected_signal"),
+    ((False, signal.SIGTERM), (True, signal.SIGKILL)),
+)
+def test_posix_process_stop_signals_the_openfoam_process_group(
+    monkeypatch, force, expected_signal
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        gui_openfoam.os,
+        "killpg",
+        lambda process_group, received_signal: calls.append(
+            (process_group, received_signal)
+        ),
+    )
+    process = SimpleNamespace(pid=4321)
+
+    gui_openfoam._signal_process_tree(process, force=force, windows=False)
+
+    assert calls == [(4321, expected_signal)]
+
+
+def test_windows_graceful_process_stop_uses_console_group_signal(monkeypatch) -> None:
+    monkeypatch.setattr(gui_openfoam.signal, "CTRL_BREAK_EVENT", 999, raising=False)
+    received = []
+    process = SimpleNamespace(pid=4321, send_signal=received.append)
+
+    gui_openfoam._signal_process_tree(process, windows=True)
+
+    assert received == [999]
+
+
+def test_windows_force_stop_uses_taskkill_tree(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        gui_openfoam.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+    process = SimpleNamespace(pid=4321, poll=lambda: 0, kill=lambda: None)
+
+    gui_openfoam._signal_process_tree(process, force=True, windows=True)
+
+    assert calls[0][0] == ["taskkill", "/PID", "4321", "/T", "/F"]
+    assert calls[0][1].get("shell", False) is False
 

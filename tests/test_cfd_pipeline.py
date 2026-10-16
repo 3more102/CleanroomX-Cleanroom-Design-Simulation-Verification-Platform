@@ -107,6 +107,44 @@ def test_case_bundle_preflight_rejects_symbolic_link_inputs(tmp_path):
         verify_openfoam_case_bundle(case_directory)
 
 
+def test_case_bundle_preflight_rejects_symlink_swap_during_input_open(
+    tmp_path, monkeypatch
+):
+    case_directory = tmp_path / "cases"
+    export_openfoam_cases(spec(), case_directory)
+    target = case_directory / "configuration_1" / "0" / "U"
+    original_directory = target.parent
+    saved_directory = original_directory.with_name("0-original")
+    external_directory = tmp_path / "external-inputs"
+    external_directory.mkdir()
+    (external_directory / target.name).write_bytes(target.read_bytes())
+    original_open = Path.open
+    swapped = False
+
+    def swap_directory_before_open(path, *args, **kwargs):
+        nonlocal swapped
+        if path == target and not swapped:
+            original_directory.rename(saved_directory)
+            original_directory.symlink_to(external_directory, target_is_directory=True)
+            swapped = True
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", swap_directory_before_open)
+    try:
+        with pytest.raises(
+            ValueError,
+            match="Case input path changed|Symbolic links are not allowed",
+        ):
+            verify_openfoam_case_bundle(case_directory)
+        assert swapped
+    finally:
+        monkeypatch.setattr(Path, "open", original_open)
+        if original_directory.is_symlink():
+            original_directory.unlink()
+        if saved_directory.exists():
+            saved_directory.rename(original_directory)
+
+
 def test_case_bundle_preflight_rechecks_boundary_metadata(tmp_path):
     case_directory = tmp_path / "cases"
     manifest = export_openfoam_cases(spec(), case_directory)

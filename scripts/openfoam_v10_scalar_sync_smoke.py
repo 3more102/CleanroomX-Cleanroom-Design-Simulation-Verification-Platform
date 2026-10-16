@@ -73,6 +73,25 @@ def _scalar_failure_diagnostics(solver_report: dict, log_text: str, case_directo
     }
 
 
+def _scalar_record_is_valid(record: dict) -> bool:
+    fields = record.get("fields") or {}
+    parity = record.get("native_vtk_parity") or {}
+    analysis_import = record.get("cleanroomx_analysis_import") or {}
+    return all(
+        (
+            record.get("import_status") == "PASS_DIAGNOSTIC_ONLY",
+            record.get("scientific_validation") == "BLOCKED",
+            fields.get("T", {}).get("dimensions") == "[0 0 0 0 0 0 0]",
+            fields.get("U", {}).get("units") == "m/s",
+            parity.get("U", {}).get("status") == "PASS",
+            parity.get("T", {}).get("status") == "PASS",
+            "p" not in fields,
+            analysis_import.get("field_data_names") == ["normalized_tracer"],
+            analysis_import.get("has_temperature_field") is False,
+        )
+    )
+
+
 def main() -> None:
     family = Path(sys.argv[1]).resolve(strict=True)
     output = Path(sys.argv[2]).resolve(strict=False)
@@ -170,7 +189,7 @@ def main() -> None:
         raise SystemExit("Not every completed scalarTransportFoam output time was synchronized")
     for time_name, record in records.items():
         if (
-            record.get("status") != "imported"
+            record.get("import_status") != "PASS_DIAGNOSTIC_ONLY"
             or record.get("scientific_validation") != "BLOCKED"
             or record.get("fields", {}).get("T", {}).get("dimensions") != "[0 0 0 0 0 0 0]"
             or record.get("fields", {}).get("U", {}).get("units") != "m/s"

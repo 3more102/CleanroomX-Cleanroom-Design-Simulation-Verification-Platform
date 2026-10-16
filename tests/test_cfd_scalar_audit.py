@@ -240,6 +240,29 @@ def test_log_symlinks_not_accepted(tmp_path):
                           max_final_residual=1e-7)
 
 
+def test_scalar_smoke_accepts_runtime_sync_import_status():
+    module = runpy.run_path(
+        str(Path(__file__).parents[1] / "scripts" / "openfoam_v10_scalar_sync_smoke.py")
+    )
+    record = {
+        "import_status": "PASS_DIAGNOSTIC_ONLY",
+        "scientific_validation": "BLOCKED",
+        "fields": {
+            "T": {"dimensions": "[0 0 0 0 0 0 0]"},
+            "U": {"units": "m/s"},
+        },
+        "native_vtk_parity": {"U": {"status": "PASS"}, "T": {"status": "PASS"}},
+        "cleanroomx_analysis_import": {
+            "field_data_names": ["normalized_tracer"],
+            "has_temperature_field": False,
+        },
+    }
+
+    assert module["_scalar_record_is_valid"](record)
+    record["import_status"] = "imported"
+    assert not module["_scalar_record_is_valid"](record)
+
+
 def test_scalar_smoke_failure_evidence_keeps_solver_error_and_blocked_status(tmp_path):
     module = runpy.run_path(
         str(Path(__file__).parents[1] / "scripts" / "openfoam_v10_scalar_sync_smoke.py")

@@ -141,6 +141,12 @@ cd C:\CleanroomX
 .\start-cleanroomx.ps1
 ```
 
+The launchers open a computed **fan/system operating-point example graph** by
+default. It is based on bundled, explicitly illustrative engineering inputs,
+not a validated CFD field or physical cleanroom measurement. Use
+`.\start-cleanroomx.ps1 --demo` to open the synchronized 2D/3D design demo
+instead.
+
 CMD is also supported:
 
 ```cmd
@@ -167,6 +173,13 @@ Open the packaged demonstration:
 
 ```bash
 cleanroomx-gui --demo
+```
+
+To run the example fan/system calculation and display the computed graph at
+startup:
+
+```bash
+cleanroomx-gui --demo-results
 ```
 
 Headless readiness check:

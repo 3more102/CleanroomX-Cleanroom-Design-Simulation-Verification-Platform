@@ -3937,6 +3937,20 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Open failed", str(exc), parent=self.root)
 
+    def select_demo_plot_analysis(self) -> None:
+        """Select the demo's real backend fan/system calculation without running it."""
+        analysis_id = demo_plot_analysis_id(self.project)
+        self.project.active_analysis_id = analysis_id
+        self._refresh_analysis_list(select_id=analysis_id)
+        self._update_title()
+
+    def open_demo_plot_analysis(self) -> None:
+        """Run the example fan/system analysis and show its computed plot."""
+        self.select_demo_plot_analysis()
+        self.notebook.select(self.plot_canvas.master)
+        self.workspace_status_var.set("Workspace: Plot — calculating example fan/system curves")
+        self.run_current()
+
     def _open_bundled_demo_from_start(self) -> None:
         if self._running:
             messagebox.showwarning(
@@ -3949,6 +3963,7 @@ class CleanroomXApp:
             return
         try:
             self.load_project_path(bundled_demo_project_path())
+            self.open_demo_plot_analysis()
         except Exception as exc:
             messagebox.showerror("Open example failed", str(exc), parent=self.root)
 
@@ -7385,6 +7400,14 @@ class CleanroomXApp:
         self.root.destroy()
 
 
+def demo_plot_analysis_id(project: ProjectDocument) -> str:
+    """Find the demonstrator backed by an actual numerical fan/system solver."""
+    for analysis in project.analyses:
+        if analysis.kind == "fan_operating_point":
+            return analysis.id
+    raise ValueError("The demo has no fan/system operating-point analysis with a plot")
+
+
 def bundled_demo_project_path() -> Path:
     """Return the self-contained demonstration project shipped in the package."""
     path = Path(__file__).resolve().parent / "demo" / "gui_demo.cleanroomx.json"
@@ -7403,6 +7426,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--demo",
         action="store_true",
         help="Open the self-contained demonstration project bundled with CleanroomX",
+    )
+    parser.add_argument(
+        "--demo-results",
+        action="store_true",
+        help="Open the bundled fan/system demonstration, run its backend analysis, and display its computed graph",
     )
     parser.add_argument(
         "--check",
@@ -7429,8 +7457,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.demo and args.project:
-        parser.error("project path and --demo cannot be used together")
+    if args.demo and args.demo_results:
+        parser.error("--demo and --demo-results cannot be used together")
+    if (args.demo or args.demo_results) and args.project:
+        parser.error("project path and demo mode cannot be used together")
     if args.autosave_interval_seconds < 0:
         parser.error("--autosave-interval-seconds must be zero or greater")
     if args.check:
@@ -7438,7 +7468,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     registry = validate_application_registry()
-    project_path = bundled_demo_project_path() if args.demo else args.project
+    project_path = bundled_demo_project_path() if (args.demo or args.demo_results) else args.project
 
     root = tk.Tk()
     app = CleanroomXApp(
@@ -7479,6 +7509,11 @@ def main(argv: list[str] | None = None) -> int:
     if project_path and not recovered_at_startup:
         try:
             app.load_project_path(project_path)
+            if args.demo_results:
+                if args.smoke:
+                    app.select_demo_plot_analysis()
+                else:
+                    app.open_demo_plot_analysis()
         except Exception as exc:
             if args.smoke:
                 root.destroy()
@@ -7491,9 +7526,11 @@ def main(argv: list[str] | None = None) -> int:
             if project_path and app.project.analyses:
                 run = app.smoke_run_active()
                 json.dumps(run.to_dict(), allow_nan=False)
+                if args.demo_results and run.plot is None:
+                    raise RuntimeError("demo-results did not produce a computed plot")
             root.update_idletasks()
             root.update()
-            if args.demo:
+            if args.demo or args.demo_results:
                 layout = app.spatial_workspace.layout
                 if len(layout.get("rooms", [])) < 3:
                     raise RuntimeError("packaged demo spatial layout did not load")

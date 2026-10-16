@@ -135,15 +135,17 @@ synthetic mesh family; it does not set a flow-balance criterion or establish
 solver convergence or physical validity.
 
 The Foundation v10 integration workflow makes a separate multi-time export
-using `foamToVTK -time 50,100 -useTimeName`. It requires the utility log to
-show exactly the requested `50` and `100` times in order, then compares the
-exported internal U/p, inlet/outlet/walls U/p, and surface `phi` datasets with
-the native fields in each matching time directory. The v2 sidecar receipt
-binds the command log, source fields, and every selected-time VTK file by
-SHA-256. The selected times avoid the baseline latest-time output at `150` and
-cover two exact times from the synthetic three-output case. This does not
-establish arbitrary time-range support, solver convergence, or physical
-validation. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
+using `foamToVTK -time 30,60,90,120 -useTimeName`. The synthetic case writes
+at 30-step intervals through iteration 150; the separate export checks the
+first four outputs and avoids overwriting the baseline latest-time output at
+`150`. It requires the utility log to show exactly `30`, `60`, `90`, and `120`
+in order, then compares the exported internal U/p, inlet/outlet/walls U/p, and
+surface `phi` datasets with the native fields in each matching time directory.
+The workflow synchronizes those four selected outputs and the separate
+baseline `150` output. The v2 sidecar receipt binds the command log, source
+fields, and every selected-time VTK file by SHA-256. These are execution and
+serialization diagnostics, not solver-convergence or physical-validation
+evidence. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/applications/utilities/postProcessing/dataConversion/foamToVTK/foamToVTK.C)
 registers comma-separated time ranges, iterates the selected time directories,
 and uses `-useTimeName` to name each dataset from the solver time name.
 
@@ -295,6 +297,25 @@ baseline stage-log hashes, the manifest and execution-receipt hashes, and all
 The results remain `DIAGNOSTIC_ONLY`; scientific validation remains `BLOCKED`.
 
 Run 90 applied this audit to all nine generated cases. Its 54 internal-field, patch, and surface-flux parity records passed, including 13,608 patch faces. The [run 90 report](OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md) records the independent artifact-digest and file-hash replay. Residual and flow-balance screens remain diagnostic; scientific validation remains BLOCKED.
+
+For a single fixed-mesh run with several selected VTK snapshots, use the
+[selected-time field analysis](CFD_TIME_STABILITY.md) and
+`cleanroomx-cfd-pipeline time-audit`. It reports volume-weighted field
+distributions and consecutive same-mesh cell-field changes across the selected
+solver-time labels, then checks explicit project limits for mean range, field
+change, and room-volume error alongside the solver-log screen.
+This is a separate diagnostic from grid-audit: it can identify a changing
+quantity of interest but does not qualify the flow or make GCI a validation
+result. The exact-head synthetic integration workflow is configured to select
+solver labels `30`, `60`, `90`, and `120` from its five-output series, leaving
+the baseline latest-time output at `150` untouched. It verifies synchronization
+of all five labels; the workflow does not yet invoke `time-audit` against these
+outputs. Add `--plot cfd_time_analysis.png`
+to write a data-derived chart of the mean, p05–p95 distribution, and consecutive
+same-mesh field change alongside the JSON report. A temporal review still requires
+project-defined range and volume criteria plus an explicitly configured solver
+log screen; missing criteria keep the report blocked. The completed run 160
+captured `50`, `100`, and `150` but did not run `time-audit` against those data.
 
 The independently rechecked run 58 U archive and per-case native/VTK hashes
 are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).

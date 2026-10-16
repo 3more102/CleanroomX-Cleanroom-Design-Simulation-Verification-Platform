@@ -93,6 +93,10 @@ See [OpenFOAM checkMesh diagnostics](OPENFOAM_CHECKMESH_DIAGNOSTICS.md) for the
 receipt schema, parser behavior, and the distinction between reported
 `checkMesh` checks and project-defined mesh acceptance.
 
+For the exact-head Foundation v10 run with incremental native-field
+synchronization, parity counts, artifact digest, test results, and numerical
+limits, see the [run 104 evidence report](OPENFOAM_V10_RUN_38888517187_RUNTIME_SYNC_EVIDENCE.md).
+
 The GitHub nine-case Foundation v10 workflow additionally requires
 `foamToVTK`. After each successful `simpleFoam` run, it exports the latest
 cell velocity `U`, kinematic-pressure `p`, and surface flux `phi` with ASCII

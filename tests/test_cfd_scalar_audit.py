@@ -49,7 +49,7 @@ def test_validate_scalar_spec_and_v10_dictionary():
     assert "volumeMode absolute;" in files["constant/fvModels"]
     assert "source" not in files["0/T"]  # scalar is sourced by fvModels, not unverified wall BC
     assert "div(phi,T)" in files["system/fvSchemes"]
-    assert "DT [0 2 -1 0 0 0 0]" in files["constant/physicalProperties"]
+    assert "DT DT [0 2 -1 0 0 0 0]" in files["constant/physicalProperties"]
 
 
 @pytest.mark.parametrize("field,value",[

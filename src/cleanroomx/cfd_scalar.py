@@ -124,7 +124,7 @@ relaxationFactors
         "system/fvSolution": _header("dictionary","fvSolution",solution,"system"),
         "constant/physicalProperties":_header(
             "dictionary","physicalProperties",
-            f"DT [0 2 -1 0 0 0 0] {diffusivity};", "constant"
+            f"DT DT [0 2 -1 0 0 0 0] {diffusivity};", "constant"
         ),
         "constant/fvModels": _header("dictionary","fvModels",fvmodels,"constant"),
     }

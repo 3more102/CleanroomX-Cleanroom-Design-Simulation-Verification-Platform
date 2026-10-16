@@ -1259,36 +1259,69 @@ jobs:
               or state.get("field_map_sha256") != field_map_sha
           ):
               raise SystemExit("Synchronization state provenance does not match this case and generated family")
-          family_spec = json.loads(
-              Path("examples/cfd_grid_family.example.json").read_text(encoding="utf-8")
-          )
-          base_case = family_spec.get("base_case", {})
-          max_iterations = base_case.get("max_iterations")
-          output_interval = base_case.get("output_interval")
+          control_dict = (vtk_root.parent / "system" / "controlDict").read_text(encoding="utf-8")
+          end_time_lines = [
+              line.split()
+              for line in control_dict.splitlines()
+              if line.strip().startswith("endTime ")
+          ]
           if (
-              type(max_iterations) is not int
-              or type(output_interval) is not int
-              or max_iterations <= 0
-              or output_interval <= 0
-              or output_interval > max_iterations
+              len(end_time_lines) != 1
+              or len(end_time_lines[0]) != 2
+              or end_time_lines[0][0] != "endTime"
+              or not end_time_lines[0][1].endswith(";")
           ):
-              raise SystemExit("Invalid grid-family iteration or output interval")
-          expected_times = {
-              str(step)
-              for step in range(output_interval, max_iterations + 1, output_interval)
-          }
-          if max_iterations % output_interval:
-              expected_times.add(str(max_iterations))
+              raise SystemExit("Case controlDict has no unique numeric endTime")
+          try:
+              configured_end_time = float(end_time_lines[0][1][:-1])
+          except ValueError as error:
+              raise SystemExit("Case controlDict endTime is not numeric") from error
+          if not math.isfinite(configured_end_time) or configured_end_time < 0:
+              raise SystemExit("Case controlDict endTime is invalid")
+
+          vtk_sources = sorted(vtk_root.glob("*.vtk"))
+          if not vtk_sources:
+              raise SystemExit("No top-level VTK datasets are available to synchronize")
+          expected_sources = {}
+          expected_times = set()
+          for source in vtk_sources:
+              if source.is_symlink() or not source.is_file():
+                  raise SystemExit("Top-level VTK dataset is missing or symbolic: " + source.name)
+              try:
+                  source_time = float(source.stem.rsplit("_", 1)[-1])
+              except ValueError as error:
+                  raise SystemExit("Top-level VTK dataset has no numeric time: " + source.name) from error
+              if not math.isfinite(source_time) or source_time < 0 or source_time in expected_times:
+                  raise SystemExit("Top-level VTK dataset has an invalid or duplicate time: " + source.name)
+              expected_sources[source.name] = source_time
+              expected_times.add(source_time)
+          if configured_end_time not in expected_times:
+              raise SystemExit("Top-level VTK datasets omit the case controlDict endTime")
 
           records = state.get("records", {})
           imported = [item for item in records.values() if item.get("status") == "imported"]
-          imported_times = {item.get("solver_time") for item in imported}
-          if len(imported) != len(expected_times) or imported_times != expected_times:
+          imported_sources = {}
+          for item in imported:
+              relative_path = item.get("relative_path")
+              try:
+                  solver_time = float(item.get("solver_time"))
+              except (TypeError, ValueError) as error:
+                  raise SystemExit("Imported VTK record has no numeric solver time") from error
+              if (
+                  not isinstance(relative_path, str)
+                  or "/" in relative_path
+                  or "\\" in relative_path
+                  or relative_path in imported_sources
+                  or not math.isfinite(solver_time)
+              ):
+                  raise SystemExit("Imported VTK records contain an invalid source path or time")
+              imported_sources[relative_path] = solver_time
+          if len(imported) != len(expected_sources) or imported_sources != expected_sources:
               raise SystemExit(
-                  f"Expected {len(expected_times)} synchronized solver times from the grid specification; "
-                  f"received {len(imported_times)} unique times"
+                  f"Expected synchronization of all {len(expected_sources)} top-level VTK datasets; "
+                  f"received {len(imported_sources)} unique source files"
               )
-          if len(records) != len(expected_times):
+          if len(records) != len(expected_sources):
               raise SystemExit("Unexpected pending, duplicate, or rejected VTK records")
           snapshots = []
           for item in imported:

@@ -136,6 +136,8 @@ validation. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/Open
 registers the time-selector options, iterates the selected time directories,
 and uses `-useTimeName` to name each dataset from the solver time name.
 
+Run 90 applied this audit to all nine generated cases. Its 54 internal-field, patch, and surface-flux parity records passed, including 13,608 patch faces. The [run 90 report](OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md) records the independent artifact-digest and file-hash replay. Residual and flow-balance screens remain diagnostic; scientific validation remains BLOCKED.
+
 The independently rechecked run 58 U archive and per-case native/VTK hashes
 are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).
 Run 61 extends that check to native final-time `U` and `p`; its artifact,

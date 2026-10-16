@@ -318,6 +318,8 @@ synchronization, and VTK parity evidence. The plot step reads the synchronized
 files directly and checks that each configuration contributes samples; it
 does not promote the samples to CFD validation evidence.
 
+For the exact-head Foundation v10 run that exercised solver execution, incremental synchronization, multi-time field parity, and this visualization, see the [run 38889697945 evidence report](OPENFOAM_V10_RUN_38889697945_RUNTIME_SYNC_VISUALIZATION_EVIDENCE.md).
+
 See the [Foundation v10 runtime-sync evidence report](OPENFOAM_V10_RUN_38888517187_RUNTIME_SYNC_EVIDENCE.md)
 for the exact-head solver, field-parity, synchronization, visualization, and
 validation-limit records.

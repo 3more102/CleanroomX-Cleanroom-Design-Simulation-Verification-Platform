@@ -1144,13 +1144,13 @@ def test_openfoam_case_preflight_is_background_and_preserves_project(app, monkey
     monkeypatch.setattr("cleanroomx.gui_openfoam.threading.Thread", ImmediateThread)
     workspace._verify_case_bundle()
 
-    assert workspace.verify_button["state"] == "disabled"
-    assert workspace.stop_button["state"] == "disabled"
+    assert workspace.verify_button.instate(["disabled"])
+    assert workspace.stop_button.instate(["disabled"])
     workspace._drain_events()
     app.root.update()
 
-    assert workspace.verify_button["state"] == "normal"
-    assert workspace.stop_button["state"] == "disabled"
+    assert not workspace.verify_button.instate(["disabled"])
+    assert workspace.stop_button.instate(["disabled"])
     assert "Generated inputs: 24/24" in workspace.output.get("1.0", "end")
     assert "Scientific validation: BLOCKED" in workspace.output.get("1.0", "end")
     assert app.project.to_dict() == project_before

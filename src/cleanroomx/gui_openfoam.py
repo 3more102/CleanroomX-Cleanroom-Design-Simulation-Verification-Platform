@@ -328,7 +328,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self,
             text="Command output and evidence preview",
             padding=5,
-            height=130,
+            height=110,
         )
         self._output_frame = output_frame
         output_frame.pack_propagate(False)
@@ -338,7 +338,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.output = tk.Text(
             output_frame,
             wrap="word",
-            height=5,
+            height=3,
             state="disabled",
             font=("TkFixedFont", 9),
         )

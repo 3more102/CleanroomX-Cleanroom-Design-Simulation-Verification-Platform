@@ -1048,6 +1048,7 @@ jobs:
               "$case_id" "$simulation_id" <<'PY'
           import hashlib
           import json
+          import math
           import sys
           from pathlib import Path
 

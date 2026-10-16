@@ -237,10 +237,21 @@ def test_watch_cli_quiet_unchanged_emits_only_new_scan_state(monkeypatch, capsys
     )
 
     assert cfd_pipeline_cli.main() == 0
-    output = capsys.readouterr().out.splitlines()
-    assert len(output) == 2
-    assert '"pending":1' in output[0]
-    assert '"relative_path":"100/case.vtk"' in output[1]
+    output = capsys.readouterr().out
+    decoder = json.JSONDecoder()
+    emitted = []
+    offset = 0
+    while offset < len(output):
+        while offset < len(output) and output[offset].isspace():
+            offset += 1
+        if offset == len(output):
+            break
+        report, offset = decoder.raw_decode(output, offset)
+        emitted.append(report)
+
+    assert len(emitted) == 2
+    assert emitted[0]["counts"] == {"pending": 1}
+    assert emitted[1]["imported"][0]["relative_path"] == "100/case.vtk"
 
 
 @pytest.mark.parametrize("field_map", [

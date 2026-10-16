@@ -202,11 +202,18 @@ def run_grid_sync(
         raise ValueError("interval_seconds must be a finite number in [0.25, 3600]")
     studies = tuple(grid_studies)
     last_signature: str | None = None
+    last_payload_digest: str | None = None
     last_error_signature: str | None = None
     while True:
         try:
             signature = watch_signature(family, studies)
-            if signature != last_signature:
+            output_matches = (
+                last_payload_digest is not None
+                and _payload_digest(Path(output).expanduser()) == last_payload_digest
+            )
+            if signature != last_signature or (
+                last_payload_digest is not None and not output_matches
+            ):
                 try:
                     result = sync_grid_proofgraph_once(
                         family, output, grid_studies=studies,
@@ -223,6 +230,7 @@ def run_grid_sync(
                     else:
                         print(json.dumps(result, sort_keys=True))
                         last_signature = signature
+                        last_payload_digest = result.get("sha256")
                         last_error_signature = None
                 except (OSError, ValueError) as exc:
                     if signature != last_error_signature:

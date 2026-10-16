@@ -142,6 +142,37 @@ def test_run_grid_sync_once_writes_export_and_returns_success(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["status"] == "synced"
 
 
+def test_live_sync_restores_export_if_it_is_removed(tmp_path, monkeypatch):
+    import cleanroomx.cfd_grid_sync as sync
+
+    family = tmp_path / "family"
+    family.mkdir()
+    (family / "manifest.json").write_text("{}", encoding="utf-8")
+    output = tmp_path / "proofgraph.json"
+    calls = []
+    waits = 0
+
+    def sleep(_interval):
+        nonlocal waits
+        waits += 1
+        if waits == 1:
+            output.unlink()
+        else:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(sync.time, "sleep", sleep)
+    code = run_grid_sync(
+        family,
+        output,
+        graph_factory=_graph_factory(),
+        publisher=_publisher(calls),
+    )
+
+    assert code == 130
+    assert len(calls) == 2
+    assert output.is_file()
+
+
 @pytest.mark.parametrize("interval", [True, 0, 0.01, float("inf"), "2"])
 def test_sync_rejects_invalid_poll_interval(tmp_path, interval):
     family = tmp_path / "family"

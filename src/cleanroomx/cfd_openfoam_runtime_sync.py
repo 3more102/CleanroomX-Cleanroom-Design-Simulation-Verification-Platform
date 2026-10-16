@@ -549,6 +549,7 @@ class OpenFOAMResultSynchronizer:
         max_output_bytes: int = MAX_OUTPUT_BYTES,
         max_retries: int = 3,
     ) -> None:
+        self._solver_timed_out = False
         if type(simulation_id) is not str or _SIMULATION_ID.fullmatch(simulation_id) is None:
             raise ValueError("simulation_id must be a safe 1..128 character identifier")
         self.configuration_hash = _safe_hash(configuration_hash, "configuration_hash")
@@ -1369,6 +1370,7 @@ def run_solver_with_sync(
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
+                    synchronizer._solver_timed_out = True
                     returncode = 124
                     break
                 now = time.monotonic()

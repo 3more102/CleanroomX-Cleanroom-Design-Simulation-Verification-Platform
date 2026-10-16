@@ -1109,14 +1109,48 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600,sync_results_directory=N
             import vtk  # noqa: F401
         except ImportError as error:
             raise RuntimeError("pip install vtk to synchronize OpenFOAM result fields") from error
+    execution_root=root/"execution_runs"
+    if execution_root.is_symlink():
+        raise ValueError("Execution workspace must not be a symbolic link")
+    execution_root.mkdir(mode=0o700,exist_ok=True)
+    if not execution_root.resolve(strict=True).is_relative_to(root):
+        raise ValueError("Execution workspace must remain inside the case bundle")
+    execution_id=uuid.uuid4().hex
+    attempt_root=execution_root/f"attempt-{execution_id}"
+    attempt_root.mkdir(mode=0o700,exist_ok=False)
+    case_workdirs={}
+    total_snapshot_bytes=0
+    try:
+        for cfg in (1,2,3):
+            workdir=attempt_root/f"configuration_{cfg}"
+            workdir.mkdir()
+            for relative in case_inputs:
+                manifest_path=f"configuration_{cfg}/{relative}"
+                source=root/manifest_path
+                destination=workdir/relative
+                destination.parent.mkdir(parents=True,exist_ok=True)
+                with stable_file_snapshot(
+                    source,max_bytes=MAX_CASE_INPUT_BYTES,suffix=source.suffix
+                ) as (stable_source,metadata,observed_sha):
+                    if observed_sha!=manifest["files"][manifest_path]:
+                        raise ValueError(f"Tampered generated solver file: {manifest_path}")
+                    total_snapshot_bytes+=metadata.st_size
+                    if total_snapshot_bytes>MAX_CASE_INPUT_TOTAL_BYTES:
+                        raise ValueError("Case bundle exceeds the total input size limit")
+                    shutil.copyfile(stable_source,destination)
+            case_workdirs[str(cfg)]=workdir
+    except BaseException:
+        shutil.rmtree(attempt_root)
+        raise
     results={}
     synchronization={}
     expected_build=None
     for cfg in (1,2,3):
         stages=[]
-        workdir=root/f"configuration_{cfg}"
+        workdir=case_workdirs[str(cfg)]
         for executable in ("blockMesh","checkMesh","simpleFoam"):
             log=workdir/f"{executable}.log"
+            timed_out=False
             if executable=="simpleFoam" and sync_root is not None:
                 from .cfd_openfoam_runtime_sync import OpenFOAMResultSynchronizer, run_solver_with_sync
                 sync_root.mkdir(parents=True,exist_ok=True)
@@ -1143,29 +1177,40 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600,sync_results_directory=N
                     [executables[executable]],cwd=workdir,log_path=log,
                     timeout_seconds=timeout_seconds,synchronizer=synchronizer,
                 )
+                timed_out=getattr(synchronizer,"_solver_timed_out",False)
                 result=subprocess.CompletedProcess([executables[executable]],returncode)
                 sync_report=synchronizer.finish(solver_returncode=returncode,solver_log=log)
                 synchronization[str(cfg)]=sync_report
             else:
-                with log.open("x",encoding="utf-8") as output:
-                    result=subprocess.run([executables[executable]],cwd=workdir,stdout=output,
-                                          stderr=subprocess.STDOUT,timeout=timeout_seconds,check=False)
+                try:
+                    with log.open("x",encoding="utf-8") as output:
+                        result=subprocess.run([executables[executable]],cwd=workdir,stdout=output,
+                                              stderr=subprocess.STDOUT,timeout=timeout_seconds,check=False)
+                except subprocess.TimeoutExpired:
+                    timed_out=True
+                    result=subprocess.CompletedProcess([executables[executable]],124)
             log_bytes=log.read_bytes()
             log_text=log_bytes.decode("utf-8",errors="replace")
             banner=_foundation_v10_banner(log_text)
-            stages.append({"program":executable,"returncode":result.returncode,
-                           "log":str(log.relative_to(root)),
-                           "log_sha256":hashlib.sha256(log_bytes).hexdigest(),
-                           "openfoam":banner})
+            stage={"program":executable,"returncode":result.returncode,
+                   "log":str(log.relative_to(root)),
+                   "log_sha256":hashlib.sha256(log_bytes).hexdigest(),
+                   "openfoam":banner}
+            if timed_out:
+                stage["timed_out"]=True
+            stages.append(stage)
             if executable=="checkMesh":
                 stages[-1]["mesh_quality_diagnostics"] = parse_openfoam_checkmesh_log(
                     log_text,
                     stages[-1]["log_sha256"],
                 )
             if result.returncode:
-                results[str(cfg)]={"status":"solver_failed","stages":stages}
+                case_status="timed_out" if timed_out else "solver_failed"
+                results[str(cfg)]={"status":case_status,"stages":stages}
+                warning=("OpenFOAM stage timed out; inspect the preserved attempt log before retrying"
+                         if timed_out else "Check logs and convergence; execution is not validation")
                 response={"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
-                          "warning":"Check logs and convergence; execution is not validation"}
+                          "warning":warning}
                 if sync_root is not None:
                     response.update({"simulation_id":simulation_id,"result_synchronization":synchronization})
                 return response

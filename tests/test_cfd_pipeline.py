@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 import re
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
@@ -329,6 +330,61 @@ def test_runner_records_and_checks_foundation_v10_banners(tmp_path,monkeypatch):
                for stage in checkmesh_stages)
     assert all(stage["mesh_quality_diagnostics"]["source_log_sha256"]==stage["log_sha256"]
                for stage in checkmesh_stages)
+
+def test_runner_retries_in_fresh_workspace_after_timeout(tmp_path,monkeypatch):
+    cases=tmp_path/"cases"
+    export_openfoam_cases(spec(),cases)
+    manifest=json.loads((cases/"manifest.json").read_text())
+    original_hashes={
+        relative:hashlib.sha256((cases/relative).read_bytes()).hexdigest()
+        for relative in manifest["files"]
+    }
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.shutil.which",lambda name:f"/fake/{name}")
+    monkeypatch.setenv("WM_PROJECT","OpenFOAM")
+    monkeypatch.setenv("WM_PROJECT_VERSION","10")
+    banner=chr(10).join((
+        "OpenFOAM: The Open Source CFD Toolbox",
+        "Website: https://openfoam.org",
+        "Version: 10",
+        "Build : 10-c4cf895ad8fa",
+        "",
+    ))
+    checkmesh_log=(Path(__file__).parent/"fixtures"/"openfoam_foundation_v10_checkmesh.log").read_text()
+    calls=[]
+
+    def fake_run(command,*,cwd,stdout,stderr,timeout,check):
+        name=Path(command[0]).name
+        calls.append(name)
+        if len(calls)==1:
+            stdout.write("partial blockMesh output before timeout"+chr(10))
+            raise subprocess.TimeoutExpired(command,timeout)
+        stdout.write(checkmesh_log if name=="checkMesh" else banner)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cleanroomx.cfd_openfoam.subprocess.run",fake_run)
+    interrupted=run_openfoam_cases(cases,timeout_seconds=60)
+
+    assert interrupted["status"]=="incomplete"
+    assert interrupted["cases"]["1"]["status"]=="timed_out"
+    timeout_stage=interrupted["cases"]["1"]["stages"][0]
+    assert timeout_stage["timed_out"] is True
+    first_log=cases/timeout_stage["log"]
+    assert "partial blockMesh output" in first_log.read_text()
+    assert calls==["blockMesh"]
+    assert all(hashlib.sha256((cases/path).read_bytes()).hexdigest()==digest
+               for path,digest in original_hashes.items())
+
+    retried=run_openfoam_cases(cases,timeout_seconds=60)
+
+    assert retried["status"]=="executed_requires_convergence_review"
+    second_log=cases/retried["cases"]["1"]["stages"][0]["log"]
+    assert second_log!=first_log
+    assert "execution_runs/attempt-" in str(first_log.relative_to(cases))
+    assert "execution_runs/attempt-" in str(second_log.relative_to(cases))
+    assert not list((cases/"configuration_1").glob("*.log"))
+    assert all(hashlib.sha256((cases/path).read_bytes()).hexdigest()==digest
+               for path,digest in original_hashes.items())
+
 
 def test_runner_rejects_failed_checkmesh_status_even_with_mesh_ok_marker(tmp_path,monkeypatch):
     export_openfoam_cases(spec(),tmp_path/"cases")

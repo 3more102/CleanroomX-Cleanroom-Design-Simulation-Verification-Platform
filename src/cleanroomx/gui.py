@@ -3143,6 +3143,10 @@ class CleanroomXApp:
         if openfoam_workspace is not None:
             openfoam_workspace.apply_theme(self.theme_var.get())
 
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(self.theme_var.get(), redraw=redraw)
+
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
             self._apply_menu_theme(menubar)

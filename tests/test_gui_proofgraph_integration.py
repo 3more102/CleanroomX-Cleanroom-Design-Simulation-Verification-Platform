@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+from cleanroomx.gui_theme import theme_palette
 from cleanroomx.proofgraph_models import (
     CalculationEvidence,
     ComplianceCheck,
@@ -221,3 +222,28 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     app.root.update()
     assert app.proofgraph_viewer.search_var.get() == ""
     assert app.proofgraph_viewer.filter_var.get() == "All"
+
+
+def test_proofgraph_native_surfaces_follow_light_and_dark_themes(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    viewer = app.proofgraph_viewer
+    viewer.set_documents([_room_graph(room["id"])])
+    app.root.update()
+
+    node = viewer._nodes_by_key["requirement:REQ-GUI-PRESSURE"]
+    light_fill = viewer._node_fill(node)
+    assert viewer.canvas.cget("background") == theme_palette("light")["canvas_2d"]
+
+    app.set_theme("dark", persist=False)
+    app.root.update()
+
+    dark = theme_palette("dark")
+    assert viewer.canvas.cget("background") == dark["canvas_2d"]
+    assert viewer.canvas.cget("highlightbackground") == dark["border"]
+    assert viewer.detail.cget("background") == dark["field"]
+    assert viewer.detail.cget("foreground") == dark["field_text"]
+    assert viewer._node_fill(node) != light_fill
+
+    app.set_theme("light", persist=False)
+    app.root.update()
+    assert viewer.canvas.cget("background") == theme_palette("light")["canvas_2d"]

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import queue
 import signal
 import subprocess
+import tkinter as tk
 from types import SimpleNamespace
 
 import pytest
@@ -73,6 +76,83 @@ def test_sync_vtk_command_is_a_single_scan_and_preserves_source_paths() -> None:
     assert command[0] == "/python"
     assert command[4:6] == ["/tmp/VTK output", "/tmp/imported results"]
     assert command[-1] == "--once"
+
+
+def test_process_event_queue_drops_old_output_and_preserves_completion() -> None:
+    events: queue.Queue[tuple[str, object]] = queue.Queue(maxsize=2)
+    dropped = []
+
+    for line in ("one", "two", "three"):
+        gui_openfoam._enqueue_process_event(
+            events,
+            ("output", line),
+            on_output_dropped=lambda: dropped.append(True),
+        )
+    gui_openfoam._enqueue_process_event(
+        events,
+        ("finished", 0),
+        on_output_dropped=lambda: dropped.append(True),
+    )
+
+    assert list(events.queue) == [("output", "three"), ("finished", 0)]
+    assert len(dropped) == 2
+
+
+def test_output_trim_plan_keeps_one_notice_and_bounds_retained_text() -> None:
+    limit = 512
+    current_chars = limit + 32
+
+    remove_chars, add_notice = gui_openfoam._output_trim_plan(
+        current_chars,
+        already_trimmed=False,
+        max_chars=limit,
+        notice_chars=48,
+    )
+    assert add_notice is True
+    assert current_chars + 48 - remove_chars == limit
+
+    remove_chars, add_notice = gui_openfoam._output_trim_plan(
+        limit + 12,
+        already_trimmed=True,
+        max_chars=limit,
+        notice_chars=48,
+    )
+    assert add_notice is False
+    assert remove_chars == 12
+
+
+def test_openfoam_output_log_is_bounded_and_can_be_cleared_or_copied():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    statuses = []
+    workspace = gui_openfoam.OpenFOAMWorkspace(
+        root,
+        status_setter=statuses.append,
+    )
+    try:
+        workspace._append("x" * (gui_openfoam._MAX_OUTPUT_CHARS + 500))
+        retained = workspace.output.get("1.0", "end-1c")
+        assert len(retained) == gui_openfoam._MAX_OUTPUT_CHARS
+        assert retained.startswith(gui_openfoam._OUTPUT_TRIM_NOTICE)
+        assert retained.endswith("x" * 500)
+        assert workspace._output_truncated is True
+
+        workspace.clear_output()
+        assert workspace.output.get("1.0", "end-1c") == ""
+        assert workspace._output_chars == 0
+        assert workspace._output_truncated is False
+
+        workspace._append("retained command log")
+        workspace.copy_output()
+        assert root.clipboard_get() == "retained command log"
+        assert statuses[-1].startswith("Copied 20 characters")
+    finally:
+        root.destroy()
 
 
 def test_evidence_preview_reports_digest_and_diagnostic_status(tmp_path) -> None:

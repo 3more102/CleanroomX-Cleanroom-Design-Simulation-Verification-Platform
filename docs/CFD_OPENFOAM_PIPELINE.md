@@ -26,7 +26,10 @@ case bundle's `manifest.json`, a result directory, and a simulation ID, then
 choose **Sync VTK once**. The command uses the normal stability checks. Repeat
 the scan after the configured stability interval when the initial scan reports
 pending files. On compact displays, the workflow controls scroll independently
-from the command output so the output remains visible.
+from the command output so the output remains visible. The output pane keeps the
+latest 250,000 characters, batches reader updates, and reports when older lines
+were skipped to keep the interface responsive. **Copy** copies the retained
+output; **Clear** clears the visible pane without stopping a running command.
 
 **Preview result evidence** reads known manifest files and displays selected
 status fields and the raw-file SHA-256. It is a viewer, not an independent

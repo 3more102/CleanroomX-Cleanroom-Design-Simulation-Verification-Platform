@@ -22,9 +22,58 @@ from .strict_json import load_strict_json_snapshot
 
 
 _MAX_PREVIEW_BYTES = 2_000_000
+_MAX_OUTPUT_CHARS = 250_000
+_MAX_OUTPUT_EVENTS = 2_048
+_MAX_EVENTS_PER_POLL = 256
+_OUTPUT_TRIM_NOTICE = (
+    "Earlier command output trimmed; showing the most recent "
+    f"{_MAX_OUTPUT_CHARS:,} characters.\n"
+)
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _SYNC_SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _EVIDENCE_NAMES = ("manifest.json", "sync-state.json", "sync_manifest.json")
+
+
+def _enqueue_process_event(
+    events: queue.Queue[tuple[str, Any]],
+    event: tuple[str, Any],
+    *,
+    on_output_dropped: Callable[[], None] | None = None,
+) -> None:
+    """Enqueue reader events without letting a slow Tk loop grow memory forever."""
+    while True:
+        try:
+            events.put_nowait(event)
+            return
+        except queue.Full:
+            try:
+                removed = events.get_nowait()
+            except queue.Empty:
+                continue
+            if removed[0] == "output":
+                if on_output_dropped is not None:
+                    on_output_dropped()
+                continue
+
+            # The reader is the only producer. A terminal event is queued after all
+            # output, so keep it if a consumer races with the bounded queue.
+            events.put_nowait(removed)
+            return
+
+
+def _output_trim_plan(
+    current_chars: int,
+    *,
+    already_trimmed: bool,
+    max_chars: int = _MAX_OUTPUT_CHARS,
+    notice_chars: int = len(_OUTPUT_TRIM_NOTICE),
+) -> tuple[int, bool]:
+    """Return the oldest body length to delete and whether to add a notice."""
+    if current_chars <= max_chars:
+        return 0, False
+    add_notice = not already_trimmed
+    over_limit = current_chars + (notice_chars if add_notice else 0) - max_chars
+    return max(0, over_limit), add_notice
 
 
 def _process_group_launch_options(*, windows: bool | None = None) -> dict[str, Any]:
@@ -278,7 +327,13 @@ class OpenFOAMWorkspace(ttk.Frame):
         super().__init__(master)
         self._on_proofgraph_loaded = on_proofgraph_loaded
         self._status_setter = status_setter or (lambda _message: None)
-        self._events: queue.Queue[tuple[str, Any]] = queue.Queue()
+        self._events: queue.Queue[tuple[str, Any]] = queue.Queue(
+            maxsize=_MAX_OUTPUT_EVENTS
+        )
+        self._output_drop_lock = threading.Lock()
+        self._dropped_output_lines = 0
+        self._output_chars = 0
+        self._output_truncated = False
         self._process: subprocess.Popen[str] | None = None
         self._busy = False
         self._destroyed = False
@@ -341,12 +396,28 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="disabled",
             font=("TkFixedFont", 9),
         )
+        output_controls = ttk.Frame(output_frame)
+        self.copy_output_button = ttk.Button(
+            output_controls,
+            text="Copy",
+            width=7,
+            command=self.copy_output,
+        )
+        self.copy_output_button.pack(fill="x", pady=(0, 3))
+        self.clear_output_button = ttk.Button(
+            output_controls,
+            text="Clear",
+            width=7,
+            command=self.clear_output,
+        )
+        self.clear_output_button.pack(fill="x")
         scroll = ttk.Scrollbar(
             output_frame, orient="vertical", command=self.output.yview
         )
         self.output.configure(yscrollcommand=scroll.set)
         self.output.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
+        output_controls.pack(side="right", fill="y", padx=(4, 0))
 
         workflow_view = ttk.Frame(self)
         workflow_view.pack(fill="both", expand=True, padx=10, pady=(0, 2))
@@ -672,35 +743,65 @@ class OpenFOAMWorkspace(ttk.Frame):
         stream = process.stdout
         if stream is not None:
             for line in stream:
-                self._events.put(("output", line))
-        self._events.put(("finished", process.wait()))
+                self._enqueue_output(line)
+        self._enqueue_finished(process.wait())
+
+    def _record_dropped_output(self) -> None:
+        with self._output_drop_lock:
+            self._dropped_output_lines += 1
+
+    def _enqueue_event(self, event: tuple[str, Any]) -> None:
+        _enqueue_process_event(
+            self._events,
+            event,
+            on_output_dropped=self._record_dropped_output,
+        )
+
+    def _enqueue_output(self, value: str) -> None:
+        self._enqueue_event(("output", value))
+
+    def _enqueue_finished(self, return_code: int) -> None:
+        self._enqueue_event(("finished", return_code))
 
     def _drain_events(self) -> None:
         if self._destroyed:
             return
-        while True:
+        visible_output: list[str] = []
+        for _ in range(_MAX_EVENTS_PER_POLL):
             try:
                 kind, value = self._events.get_nowait()
             except queue.Empty:
                 break
             if kind == "output":
-                self._append(value)
+                visible_output.append(value)
             elif kind == "finished":
                 self._process = None
                 self._set_busy(False)
                 if self._stop_requested:
                     self._stop_requested = False
-                    self._append("\nOpenFOAM command and child solvers stopped.\n")
+                    visible_output.append(
+                        "\nOpenFOAM command and child solvers stopped.\n"
+                    )
                     self._status_setter("OpenFOAM command stopped")
                 elif value == 0:
-                    self._append(
+                    visible_output.append(
                         "\nProcess exited successfully. Review the command evidence; "
                         "this does not establish CFD convergence or validation.\n"
                     )
                     self._status_setter("OpenFOAM command finished; scientific validation remains blocked")
                 else:
-                    self._append(f"\nProcess exited with status {value}.\n")
+                    visible_output.append(f"\nProcess exited with status {value}.\n")
                     self._status_setter(f"OpenFOAM command failed with status {value}")
+        if visible_output:
+            self._append("".join(visible_output))
+        with self._output_drop_lock:
+            dropped_lines = self._dropped_output_lines
+            self._dropped_output_lines = 0
+        if dropped_lines:
+            self._append(
+                f"\n[{dropped_lines:,} older command output lines were skipped "
+                "to keep the workbench responsive.]\n"
+            )
         self.after(120, self._drain_events)
 
     def _set_busy(self, busy: bool) -> None:
@@ -786,8 +887,48 @@ class OpenFOAMWorkspace(ttk.Frame):
             return
         self.output.configure(state="normal")
         self.output.insert("end", value)
+        self._output_chars += len(value)
+        remove_chars, add_notice = _output_trim_plan(
+            self._output_chars,
+            already_trimmed=self._output_truncated,
+            max_chars=_MAX_OUTPUT_CHARS,
+        )
+        if remove_chars:
+            if add_notice:
+                self.output.insert("1.0", _OUTPUT_TRIM_NOTICE)
+                self._output_chars += len(_OUTPUT_TRIM_NOTICE)
+                self._output_truncated = True
+            marker_length = len(_OUTPUT_TRIM_NOTICE) if self._output_truncated else 0
+            delete_start = f"1.0+{marker_length}c"
+            delete_end = f"1.0+{marker_length + remove_chars}c"
+            self.output.delete(delete_start, delete_end)
+            self._output_chars -= remove_chars
         self.output.see("end")
         self.output.configure(state="disabled")
+
+    def clear_output(self) -> None:
+        """Clear the visible command log without interrupting a running process."""
+        self.output.configure(state="normal")
+        self.output.delete("1.0", "end")
+        self.output.configure(state="disabled")
+        self._output_chars = 0
+        self._output_truncated = False
+        self._status_setter("OpenFOAM output cleared; any running command continues")
+
+    def copy_output(self) -> None:
+        """Copy the currently retained command output to the system clipboard."""
+        if self._destroyed:
+            return
+        try:
+            text = self.output.get("1.0", "end-1c")
+            self.clipboard_clear()
+            self.clipboard_append(text)
+        except tk.TclError as exc:
+            self._status_setter(f"Could not copy OpenFOAM output: {exc}")
+            return
+        self._status_setter(
+            f"Copied {len(text):,} characters of retained OpenFOAM output"
+        )
 
     def _on_destroy(self, event: tk.Event) -> None:
         if event.widget is not self:

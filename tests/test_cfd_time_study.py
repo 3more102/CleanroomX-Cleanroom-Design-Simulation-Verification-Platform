@@ -375,6 +375,43 @@ def test_time_study_plot_renders_actual_report_and_never_replaces_existing_png(t
         )
 
 
+def test_time_study_plot_rejects_symlinked_parent_before_creating_directories(tmp_path):
+    target = tmp_path / "plot-target"
+    target.mkdir()
+    linked = tmp_path / "linked-target"
+    try:
+        linked.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("This runner cannot create symbolic links")
+
+    report = {
+        "schema_version": SCHEMA,
+        "status": "DIAGNOSTIC_ONLY",
+        "scientific_validation": "BLOCKED",
+        "quantity": "velocity_mean_m_s",
+        "unit": "m/s",
+        "study_name": "Symlink output regression",
+        "samples": [
+            {
+                "solver_time_name": label,
+                "solver_time_value": float(label),
+                "field_summary": {
+                    "volume_weighted_mean": 1.0,
+                    "volume_weighted_p05": 0.8,
+                    "volume_weighted_p95": 1.2,
+                },
+            }
+            for label in ("30", "60")
+        ],
+    }
+    output = linked / "new" / "analysis.png"
+
+    with pytest.raises(ValueError, match="symbolic links"):
+        render_time_study_plot(report, output)
+
+    assert not (target / "new").exists()
+
+
 def test_time_study_plot_cli_adds_plot_provenance_and_guards_inputs(tmp_path, monkeypatch):
     pytest.importorskip("vtk")
     pytest.importorskip("matplotlib")

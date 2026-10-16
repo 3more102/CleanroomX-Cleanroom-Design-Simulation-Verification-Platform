@@ -657,12 +657,17 @@ def render_time_study_plot(
         raise ValueError("Time-study plot output must use the .png extension")
     if not destination.is_absolute():
         destination = Path.cwd() / destination
+    def reject_symlinked_output_path() -> None:
+        for ancestor in reversed((destination.parent, *destination.parent.parents)):
+            if ancestor.is_symlink():
+                raise ValueError("Time-study plot output path cannot contain symbolic links")
+        if destination.is_symlink():
+            raise ValueError("Time-study plot output cannot be a symbolic link")
+
+    # Check before mkdir so a symlinked parent cannot create directories elsewhere.
+    reject_symlinked_output_path()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    for ancestor in reversed((destination.parent, *destination.parent.parents)):
-        if ancestor.is_symlink():
-            raise ValueError("Time-study plot output path cannot contain symbolic links")
-    if destination.is_symlink():
-        raise ValueError("Time-study plot output cannot be a symbolic link")
+    reject_symlinked_output_path()
     destination = destination.parent.resolve(strict=True) / destination.name
     for source in protected_inputs:
         protected = Path(source).expanduser()

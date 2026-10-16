@@ -2064,7 +2064,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(self._inspector_content, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(
+                self._inspector_content, text=group_name, padding=(8, 6)
+            )
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)

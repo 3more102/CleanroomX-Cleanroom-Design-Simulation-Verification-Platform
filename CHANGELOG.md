@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — refined industrial GUI theme — 2026-10-16
+
+- Refines the light and dark workstation palettes around slate surfaces and a teal primary action, with distinct Design, Analyze, Verify, Evidence, and Release accents.
+- Gives the guided workflow clearer stage colors, a more legible active tab, calmer panel chrome, roomier table controls, and a compact status strip.
+- Changes presentation only; project data, solver execution, verification rules, and results are unchanged.
+
 ## Unreleased Release 3 — OpenFOAM case-input GUI preflight — 2026-10-16
 
 - Adds a read-only desktop action that checks all 24 generated case-input hashes against the local unsigned manifest and recomputes the three boundary-geometry/inlet-flow consistency audits before a solver run.

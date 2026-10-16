@@ -1,6 +1,7 @@
 """Synthetic and mocked integration tests; no OpenFOAM physical run is claimed."""
 import json
 import math
+import runpy
 import pytest
 from pathlib import Path
 
@@ -237,3 +238,39 @@ def test_log_symlinks_not_accepted(tmp_path):
     with pytest.raises(ValueError,match="symlink"):
         audit_openfoam_log(alias,fields=["T"],max_initial_residual=1e-4,
                           max_final_residual=1e-7)
+
+
+def test_scalar_smoke_failure_evidence_keeps_solver_error_and_blocked_status(tmp_path):
+    module = runpy.run_path(
+        str(Path(__file__).parents[1] / "scripts" / "openfoam_v10_scalar_sync_smoke.py")
+    )
+    summarize = module["_scalar_failure_diagnostics"]
+    case_root = Path("/runner/temp/scalar")
+    log_text = (
+        "--> FOAM FATAL IO ERROR:\\n"
+        "wrong token type - expected word, found on line 10 punctuation token '['\\n"
+        "file: /runner/temp/scalar/constant/physicalProperties/DT at line 10.\\n"
+        "FOAM exiting\\n"
+    )
+    report = summarize(
+        {
+            "status": "solver_failed",
+            "exit_code": 1,
+            "log_sha256": "a" * 64,
+            "result_synchronization": {
+                "status": "no_results_available",
+                "errors": [],
+            },
+        },
+        log_text,
+        case_root,
+    )
+
+    assert report["status"] == "execution_failure_diagnostic_only"
+    assert report["failure_stage"] == "solver"
+    assert report["solver_exit_code"] == 1
+    assert report["result_synchronization_status"] == "no_results_available"
+    assert report["scientific_validation"] == "BLOCKED"
+    assert any("FOAM FATAL IO ERROR" in line for line in report["solver_diagnostic_excerpt"])
+    assert any("physicalProperties/DT" in line for line in report["solver_diagnostic_excerpt"])
+    assert all("/runner/temp/scalar" not in line for line in report["solver_diagnostic_excerpt"])

@@ -160,6 +160,21 @@ cleanroomx-pressure-network examples/pressure_network_demo.json --format json
 The same workflow is registered in the desktop application as
 **Room pressure network** under **Networks**.
 
+### Two-room 5 Pa door demo
+
+After installing the project with `python -m pip install -e .`, run this from the repository root:
+
+```bash
+cleanroomx-pressure-network examples/two_room_door_5pa_demo.json --format json
+```
+
+The synthetic example should report about 5 Pa between Cleanroom and Airlock,
+about 360 m³/h flowing from Cleanroom to Airlock, and one passed pressure
+target. The path is named as an upper-level door opening to identify the demo
+scenario. The pressure-network model treats it as one aggregate path; it does
+not resolve door height, vertical airflow distribution, or local flow fields.
+These values are test inputs, not measured design data or CFD results.
+
 ## Engineering boundary
 
 This is a steady-state, well-mixed multizone pressure-network model. It is not CFD

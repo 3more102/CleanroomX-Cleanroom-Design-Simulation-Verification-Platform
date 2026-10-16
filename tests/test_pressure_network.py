@@ -1,4 +1,6 @@
+import json
 import math
+from pathlib import Path
 
 import pytest
 
@@ -164,6 +166,35 @@ def test_nonlinear_two_room_cascade_converges() -> None:
     )
     assert result["target_summary"]["failed"] == 0
 
+
+
+def test_two_room_door_demo_solves_at_nominal_five_pa() -> None:
+    demo_path = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "two_room_door_5pa_demo.json"
+    )
+    network = pressure_network_from_dict(
+        json.loads(demo_path.read_text(encoding="utf-8"))
+    )
+
+    result = solve_room_pressure_network(network)
+    nodes = {item["name"]: item for item in result["nodes"]}
+    door = result["paths"][0]
+
+    assert len(nodes) == 2
+    assert door["name"] == "Upper-level Cleanroom-to-Airlock door opening"
+    assert door["kind"] == "door"
+    assert door["flow_direction"] == "Cleanroom -> Airlock"
+    assert door["pressure_difference_pa"] == pytest.approx(5.0, abs=1e-5)
+    assert door["airflow_m3_h"] == pytest.approx(360.0, abs=1e-5)
+    pressure_difference = (
+        nodes["Cleanroom"]["pressure_pa"]
+        - nodes["Airlock"]["pressure_pa"]
+    )
+    assert pressure_difference == pytest.approx(5.0, abs=1e-5)
+    assert result["target_summary"]["passed"] == 1
+    assert result["status"] == "solved"
 
 def test_orifice_model_matches_explicit_injection() -> None:
     network = RoomPressureNetwork(

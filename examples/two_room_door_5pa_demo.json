@@ -1,0 +1,33 @@
+{
+  "name": "Two-room door pressure difference (5 Pa)",
+  "nodes": [
+    {
+      "name": "Cleanroom",
+      "supply_m3_h": 360.0
+    },
+    {
+      "name": "Airlock",
+      "fixed_pressure_pa": 0.0
+    }
+  ],
+  "paths": [
+    {
+      "name": "Upper-level Cleanroom-to-Airlock door opening",
+      "start_node": "Cleanroom",
+      "end_node": "Airlock",
+      "kind": "door",
+      "model": "power_law",
+      "coefficient_m3_s_pa_n": 0.03512930009892055,
+      "exponent": 0.65
+    }
+  ],
+  "targets": [
+    {
+      "name": "Cleanroom above Airlock by nominal 5 Pa",
+      "high_node": "Cleanroom",
+      "low_node": "Airlock",
+      "minimum_delta_pa": 4.99,
+      "maximum_delta_pa": 5.01
+    }
+  ]
+}

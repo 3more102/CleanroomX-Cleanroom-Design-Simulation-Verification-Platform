@@ -19,17 +19,28 @@ three-case workflow. Select a specification JSON and a new output directory to
 generate the case bundle. The **Run Foundation v10** action requires an explicit
 confirmation and launches the bundled CLI with the current Python interpreter.
 Set an optional result directory to synchronize stable native fields during
-the run; the supplied simulation ID groups the imported snapshots.
+the run; the supplied simulation ID groups the imported snapshots. For an
+already-running or separately launched OpenFOAM job, select its `foamToVTK`
+output root and use **Start live sync**. CleanroomX scans at the configured
+interval (0.5 seconds by default), waits for each VTK dataset to remain stable,
+then saves newly imported time snapshots in the selected result store. The
+watcher runs until **Stop** is selected and resumes from its saved state when
+restarted with the same simulation ID and result directory. Unchanged scan
+reports are suppressed, so the command console shows imports and status changes
+instead of a line for every poll.
 
 For an existing `foamToVTK` export, select its VTK directory, the generated
-case bundle's `manifest.json`, a result directory, and a simulation ID, then
-choose **Sync VTK once**. The command uses the normal stability checks. Repeat
-the scan after the configured stability interval when the initial scan reports
-pending files. On compact displays, the workflow controls scroll independently
-from the command output so the output remains visible. The output pane keeps the
-latest 250,000 characters, batches reader updates, and reports when older lines
-were skipped to keep the interface responsive. **Copy** copies the retained
-output; **Clear** clears the visible pane without stopping a running command.
+case bundle's `manifest.json`, a result directory, and a simulation ID. Use
+**Sync VTK once** for a single scan or **Start live sync** to keep importing
+new stable time snapshots as OpenFOAM exports them. An optional field-map JSON
+assigns explicit meanings and units to additional VTK arrays. The watcher
+imports stable datasets exposed by `foamToVTK`; it does not mirror arbitrary
+OpenFOAM dictionaries, mesh files, binaries, or unconfigured arrays. On compact
+displays, the workflow controls scroll independently from the command output so
+the output remains visible. The output pane keeps the latest 250,000 characters,
+batches reader updates, and reports when older lines were skipped to keep the
+interface responsive. **Copy** copies the retained output; **Clear** clears the
+visible pane without stopping a running command.
 
 **Preview result evidence** reads known manifest files and displays selected
 status fields and the raw-file SHA-256. It is a viewer, not an independent
@@ -429,3 +440,4 @@ https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda6
 https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/etc/bashrc
 https://doc.cfd.direct/openfoam/user-guide-v10/turbulence
 https://cpp.openfoam.org/v10/scalarTransportFoam_8C_source.html
+

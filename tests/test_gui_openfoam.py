@@ -78,6 +78,40 @@ def test_sync_vtk_command_is_a_single_scan_and_preserves_source_paths() -> None:
     assert command[-1] == "--once"
 
 
+def test_live_vtk_command_watches_and_keeps_extra_field_map_path_intact() -> None:
+    command = build_openfoam_sync_vtk_command(
+        "/tmp/VTK output",
+        "/tmp/imported results",
+        "/tmp/case bundle/manifest.json",
+        "vtk-run-01",
+        field_map_file="/tmp/maps with spaces.json",
+        once=False,
+        interval_seconds=0.25,
+        python_executable="/python",
+    )
+
+    assert command[0] == "/python"
+    assert command[4:6] == ["/tmp/VTK output", "/tmp/imported results"]
+    assert "--once" not in command
+    assert command[command.index("--field-map-file") + 1] == "/tmp/maps with spaces.json"
+    assert command[command.index("--interval-seconds") + 1] == "0.25"
+    assert command[command.index("--stable-seconds") + 1] == "0.5"
+    assert "--quiet-unchanged" in command
+
+
+@pytest.mark.parametrize("interval", [0, 0.099, 3600.1, float("nan"), float("inf")])
+def test_live_vtk_command_rejects_invalid_scan_intervals(interval) -> None:
+    with pytest.raises(ValueError, match="Scan interval"):
+        build_openfoam_sync_vtk_command(
+            "/tmp/VTK output",
+            "/tmp/imported results",
+            "/tmp/case bundle/manifest.json",
+            "vtk-run-01",
+            once=False,
+            interval_seconds=interval,
+        )
+
+
 def test_process_event_queue_drops_old_output_and_preserves_completion() -> None:
     events: queue.Queue[tuple[str, object]] = queue.Queue(maxsize=2)
     dropped = []
@@ -260,4 +294,5 @@ def test_windows_force_stop_uses_taskkill_tree(monkeypatch) -> None:
 
     assert calls[0][0] == ["taskkill", "/PID", "4321", "/T", "/F"]
     assert calls[0][1].get("shell", False) is False
+
 

@@ -72,6 +72,8 @@ def build_parser():
     sync.add_argument("--max-record-bytes",type=int,default=128*1024*1024)
     sync.add_argument("--max-scan-entries",type=int,default=100000)
     sync.add_argument("--once",action="store_true",help="Run one scan and exit; repeat to satisfy the stability window")
+    sync.add_argument("--quiet-unchanged",action="store_true",
+                      help="In watch mode, print only when imported results or scan counts change")
     case_sync=sub.add_parser("sync-case",help="Watch a live Foundation v10 case and import stable native fields")
     case_sync.add_argument("case_directory")
     case_sync.add_argument("output_directory")
@@ -174,11 +176,23 @@ def main():
             report=synchronize_openfoam_vtk_once(args.source_directory,args.output_directory,**options)
             print(dumps_strict_json(report))
             return 0
+        last_signature=None
+        def emit_scan(report):
+            nonlocal last_signature
+            imported=tuple(sorted(
+                (item.get("relative_path"),item.get("source_sha256"),item.get("status"))
+                for item in report.get("imported",[]) if isinstance(item,dict)
+            ))
+            counts=tuple(sorted(report.get("counts",{}).items()))
+            signature=(report.get("discovered_results"),counts,imported)
+            if not args.quiet_unchanged or signature!=last_signature:
+                print(dumps_strict_json(report),flush=True)
+            last_signature=signature
         try:
             watch_openfoam_vtk(
                 args.source_directory,args.output_directory,
                 interval_seconds=args.interval_seconds,
-                on_scan=lambda report: print(dumps_strict_json(report),flush=True),
+                on_scan=emit_scan,
                 **options,
             )
         except KeyboardInterrupt:
@@ -310,3 +324,4 @@ def main():
 
 if __name__=="__main__":
     sys.exit(main())
+

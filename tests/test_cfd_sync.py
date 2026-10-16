@@ -5,6 +5,7 @@ import shutil
 import pytest
 
 from cleanroomx.cfd_sync import SyncError, synchronize_openfoam_vtk_once
+from cleanroomx import cfd_pipeline_cli
 from cleanroomx.cfd_pipeline_cli import build_parser
 
 
@@ -203,6 +204,45 @@ def test_sync_cli_does_not_assume_vtk_array_t_is_contaminant():
     assert args.contaminant_array is None
 
 
+def test_watch_cli_quiet_unchanged_emits_only_new_scan_state(monkeypatch, capsys):
+    reports = [
+        {"scan_time": "1", "discovered_results": 1, "counts": {"pending": 1}, "imported": []},
+        {"scan_time": "2", "discovered_results": 1, "counts": {"pending": 1}, "imported": []},
+        {
+            "scan_time": "3",
+            "discovered_results": 1,
+            "counts": {"imported": 1},
+            "imported": [{"relative_path": "100/case.vtk", "source_sha256": "a" * 64, "status": "imported"}],
+        },
+    ]
+
+    def fake_watch(_source, _output, *, on_scan, **_options):
+        for report in reports:
+            on_scan(report)
+
+    monkeypatch.setattr(cfd_pipeline_cli, "watch_openfoam_vtk", fake_watch)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cleanroomx-cfd-pipeline",
+            "sync-vtk",
+            "/tmp/VTK",
+            "/tmp/results",
+            "--simulation-id",
+            "live-1",
+            "--configuration-file",
+            "/tmp/manifest.json",
+            "--quiet-unchanged",
+        ],
+    )
+
+    assert cfd_pipeline_cli.main() == 0
+    output = capsys.readouterr().out.splitlines()
+    assert len(output) == 2
+    assert '"pending":1' in output[0]
+    assert '"relative_path":"100/case.vtk"' in output[1]
+
+
 @pytest.mark.parametrize("field_map", [
     {"schema_version": "wrong", "fields": {}},
     {"schema_version": "cleanroomx.cfd-vtk-field-map.v1", "fields": {
@@ -290,3 +330,4 @@ def test_sync_enforces_source_file_limits_before_import(tmp_path):
     source, _, _, output, kwargs = _case(tmp_path)
     with pytest.raises(SyncError, match="file limit"):
         synchronize_openfoam_vtk_once(source, output, max_file_bytes=1, **kwargs)
+

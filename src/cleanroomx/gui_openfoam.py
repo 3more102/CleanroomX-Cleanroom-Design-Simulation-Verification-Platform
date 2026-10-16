@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import queue
 import re
@@ -187,9 +188,12 @@ def build_openfoam_sync_vtk_command(
     configuration_file: str,
     simulation_id: str,
     *,
+    field_map_file: str = "",
+    once: bool = True,
+    interval_seconds: float = 1.0,
     python_executable: str = sys.executable,
 ) -> list[str]:
-    """Build a one-pass foamToVTK import command."""
+    """Build a one-pass or continuous foamToVTK import command."""
     if not all(
         value.strip()
         for value in (
@@ -204,7 +208,15 @@ def build_openfoam_sync_vtk_command(
         )
     if _SYNC_SIMULATION_ID.fullmatch(simulation_id) is None:
         raise ValueError("Simulation ID must be 1-64 safe ASCII filename characters")
-    return [
+    if type(once) is not bool:
+        raise ValueError("once must be a boolean")
+    if (
+        type(interval_seconds) not in (int, float)
+        or not math.isfinite(interval_seconds)
+        or not 0.1 <= interval_seconds <= 3600
+    ):
+        raise ValueError("Scan interval must be finite and in [0.1,3600] seconds")
+    command = [
         python_executable,
         "-m",
         "cleanroomx.cfd_pipeline_cli",
@@ -215,8 +227,22 @@ def build_openfoam_sync_vtk_command(
         simulation_id,
         "--configuration-file",
         configuration_file,
-        "--once",
     ]
+    if field_map_file.strip():
+        command.extend(("--field-map-file", field_map_file))
+    if once:
+        command.append("--once")
+    else:
+        command.extend(
+            (
+                "--interval-seconds",
+                format(interval_seconds, ".6g"),
+                "--stable-seconds",
+                "0.5",
+                "--quiet-unchanged",
+            )
+        )
+    return command
 
 
 def read_openfoam_evidence_preview(
@@ -346,7 +372,16 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.simulation_id_var = tk.StringVar(value=f"cleanroomx-openfoam-{uuid.uuid4().hex[:10]}")
         self.vtk_source_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
+        self.field_map_var = tk.StringVar()
         self.vtk_simulation_id_var = tk.StringVar(value=f"cleanroomx-vtk-{uuid.uuid4().hex[:10]}")
+        self.sync_interval_var = tk.StringVar(value="0.5")
+        self._active_command_label = "OpenFOAM command"
+        self._stop_prompt = (
+            "Stop OpenFOAM command",
+            "Terminate the running command? The case may be left incomplete.",
+        )
+        self._stopping_status = "Stopping OpenFOAM command and child solvers"
+        self._stopped_message = "OpenFOAM command and child solvers stopped."
         self._build()
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.after(120, self._drain_events)
@@ -540,13 +575,35 @@ class OpenFOAMWorkspace(ttk.Frame):
         ttk.Entry(vtk, textvariable=self.vtk_simulation_id_var).grid(
             row=3, column=1, sticky="ew", pady=3
         )
+        self._path_row(
+            vtk,
+            4,
+            "Optional field map JSON",
+            self.field_map_var,
+            lambda: self._browse_file(
+                self.field_map_var,
+                (("JSON files", "*.json"), ("All files", "*")),
+            ),
+        )
+        ttk.Label(vtk, text="Live scan interval (seconds)").grid(
+            row=5, column=0, sticky="w", padx=(0, 8), pady=3
+        )
+        ttk.Entry(vtk, textvariable=self.sync_interval_var, width=8).grid(
+            row=5, column=1, sticky="w", pady=3
+        )
         vtk.columnconfigure(1, weight=1)
         self.sync_vtk_button = ttk.Button(
             vtk,
             text="Sync VTK once",
             command=self._sync_vtk,
         )
-        self.sync_vtk_button.grid(row=4, column=0, sticky="w", pady=(5, 0))
+        self.sync_vtk_button.grid(row=6, column=0, sticky="w", pady=(5, 0))
+        self.watch_vtk_button = ttk.Button(
+            vtk,
+            text="Start live sync",
+            command=self._watch_vtk,
+        )
+        self.watch_vtk_button.grid(row=6, column=1, sticky="w", pady=(5, 0))
 
         evidence = ttk.Frame(self._workflow_content, padding=(0, 5, 0, 3))
         evidence.pack(fill="x")
@@ -574,6 +631,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.generate_button,
             self.run_button,
             self.sync_vtk_button,
+            self.watch_vtk_button,
             self.preview_button,
             self.graph_button,
         )
@@ -700,15 +758,61 @@ class OpenFOAMWorkspace(ttk.Frame):
                 result_directory,
                 manifest,
                 self.vtk_simulation_id_var.get().strip(),
+                field_map_file=self.field_map_var.get().strip(),
             )
         except ValueError as exc:
             messagebox.showerror("OpenFOAM VTK synchronization", str(exc), parent=self)
             return
         self._start_command("Synchronize OpenFOAM VTK output", command)
 
-    def _start_command(self, label: str, command: list[str]) -> None:
+    def _watch_vtk(self) -> None:
+        result_directory = self.result_directory_var.get().strip()
+        manifest = self.manifest_var.get().strip()
+        if not manifest and self.case_directory_var.get().strip():
+            manifest = str(Path(self.case_directory_var.get().strip()) / "manifest.json")
+        try:
+            interval_seconds = float(self.sync_interval_var.get().strip())
+            command = build_openfoam_sync_vtk_command(
+                self.vtk_source_var.get().strip(),
+                result_directory,
+                manifest,
+                self.vtk_simulation_id_var.get().strip(),
+                field_map_file=self.field_map_var.get().strip(),
+                once=False,
+                interval_seconds=interval_seconds,
+            )
+        except ValueError as exc:
+            messagebox.showerror("OpenFOAM live synchronization", str(exc), parent=self)
+            return
+        self._start_command(
+            "Live OpenFOAM VTK synchronization",
+            command,
+            stop_prompt=(
+                "Stop live synchronization",
+                "Stop watching for new VTK snapshots? Imported CleanroomX results will remain saved.",
+            ),
+            stopping_status="Stopping live OpenFOAM result synchronization",
+            stopped_message="Live result synchronization stopped; imported snapshots remain saved.",
+        )
+
+    def _start_command(
+        self,
+        label: str,
+        command: list[str],
+        *,
+        stop_prompt: tuple[str, str] | None = None,
+        stopping_status: str | None = None,
+        stopped_message: str | None = None,
+    ) -> None:
         if self._busy:
             return
+        self._active_command_label = label
+        self._stop_prompt = stop_prompt or (
+            "Stop OpenFOAM command",
+            "Terminate the running command? The case may be left incomplete.",
+        )
+        self._stopping_status = stopping_status or "Stopping OpenFOAM command and child solvers"
+        self._stopped_message = stopped_message or "OpenFOAM command and child solvers stopped."
         self._append(f"{label}\n$ argv = {json.dumps(command, ensure_ascii=False)}\n")
         try:
             process = subprocess.Popen(
@@ -779,10 +883,8 @@ class OpenFOAMWorkspace(ttk.Frame):
                 self._set_busy(False)
                 if self._stop_requested:
                     self._stop_requested = False
-                    visible_output.append(
-                        "\nOpenFOAM command and child solvers stopped.\n"
-                    )
-                    self._status_setter("OpenFOAM command stopped")
+                    visible_output.append(f"\n{self._stopped_message}\n")
+                    self._status_setter(f"{self._active_command_label} stopped")
                 elif value == 0:
                     visible_output.append(
                         "\nProcess exited successfully. Review the command evidence; "
@@ -814,16 +916,13 @@ class OpenFOAMWorkspace(ttk.Frame):
         process = self._process
         if process is None or process.poll() is not None:
             return
-        if not messagebox.askyesno(
-            "Stop OpenFOAM command",
-            "Terminate the running command? The case may be left incomplete.",
-            parent=self,
-        ):
+        title, prompt = self._stop_prompt
+        if not messagebox.askyesno(title, prompt, parent=self):
             return
         self._stop_requested = True
         _signal_process_tree(process)
         self.stop_button.configure(state="disabled")
-        self._status_setter("Stopping OpenFOAM command and child solvers")
+        self._status_setter(self._stopping_status)
         self.after(5000, lambda: self._kill_if_running(process))
 
     @staticmethod
@@ -937,4 +1036,5 @@ class OpenFOAMWorkspace(ttk.Frame):
         process = self._process
         if process is not None and process.poll() is None:
             _signal_process_tree(process, force=True)
+
 

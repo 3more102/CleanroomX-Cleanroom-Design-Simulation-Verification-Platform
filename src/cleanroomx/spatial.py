@@ -2064,9 +2064,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(
-                self._inspector_content, text=group_name, padding=(8, 6)
-            )
+            section = ttk.LabelFrame(self._inspector_content, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -3721,6 +3719,29 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.show_inspector()
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
+            row = self._property_rows.get(key)
+            if row is not None and row.winfo_ismapped():
+                self._inspector_canvas.update_idletasks()
+                viewport_top = self._inspector_canvas.canvasy(0)
+                viewport_height = self._inspector_canvas.winfo_height()
+                content_height = max(1, self._inspector_content.winfo_height())
+                row_top = (
+                    row.winfo_rooty()
+                    - self._inspector_canvas.winfo_rooty()
+                    + viewport_top
+                )
+                row_bottom = row_top + row.winfo_height()
+                viewport_bottom = viewport_top + viewport_height
+                if row_top < viewport_top:
+                    target_top = row_top
+                elif row_bottom > viewport_bottom:
+                    target_top = row_bottom - viewport_height
+                else:
+                    target_top = None
+                if target_top is not None:
+                    self._inspector_canvas.yview_moveto(
+                        max(0.0, min(1.0, target_top / content_height))
+                    )
             entry.focus_set()
             entry.selection_range(0, "end")
 

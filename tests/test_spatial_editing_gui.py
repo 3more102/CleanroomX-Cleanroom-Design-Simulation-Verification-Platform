@@ -1093,7 +1093,7 @@ def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
 
 def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
     app.root.minsize(800, 300)
-    app.root.geometry("900x420")
+    app.root.geometry("900x640")
     app.set_focus_workspace(True)
     workspace = app.spatial_workspace
     workspace.show_inspector()
@@ -1128,7 +1128,7 @@ def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
 def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
     workspace = app.openfoam_workspace
     app.root.minsize(800, 300)
-    app.root.geometry("900x420")
+    app.root.geometry("900x640")
     app.set_focus_workspace(True)
     app.notebook.select(workspace)
     app.root.update()

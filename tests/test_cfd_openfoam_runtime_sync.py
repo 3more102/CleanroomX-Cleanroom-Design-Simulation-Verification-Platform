@@ -629,6 +629,7 @@ def test_sync_command_runner_marks_timeout(tmp_path, monkeypatch):
             raise AssertionError("process should exit after terminate")
 
     clock = iter((0.0, 60.0))
+    monkeypatch.setattr(synchronizer, "poll_once", lambda: None)
     monkeypatch.setattr(cfd_sync.subprocess, "Popen", FakeProcess)
     monkeypatch.setattr(cfd_sync.time, "monotonic", lambda: next(clock))
     monkeypatch.setattr(cfd_sync.time, "sleep", lambda _seconds: None)

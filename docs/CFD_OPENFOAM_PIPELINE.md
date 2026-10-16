@@ -307,8 +307,8 @@ quantity of interest but does not qualify the flow or make GCI a validation
 result. The exact-head synthetic integration workflow is configured to select
 solver labels `30`, `60`, and `90` from its five-output series, leaving the
 baseline latest-time output at `150` untouched. Add `--plot cfd_time_analysis.png`
-to write a data-derived mean and p05–p95 time-series chart alongside the JSON
-report. A temporal review still requires
+to write a data-derived chart of the mean, p05–p95 distribution, and consecutive
+same-mesh field change alongside the JSON report. A temporal review still requires
 project-defined range and volume criteria plus an explicitly configured solver
 log screen; missing criteria keep the report blocked. The completed run 160
 captured `50`, `100`, and `150` but did not run `time-audit` against those data.

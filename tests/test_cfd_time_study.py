@@ -352,12 +352,14 @@ def test_time_study_plot_renders_actual_report_and_never_replaces_existing_png(t
     content = plot.read_bytes()
     assert content.startswith(b"\x89PNG\r\n\x1a\n")
     width, height = struct.unpack(">II", content[16:24])
-    assert (width, height) == (1600, 880)
+    assert (width, height) == (1600, 1280)
     assert result == {
         "path": str(plot.resolve()),
         "format": "png",
         "sample_count": 3,
-        "series": "volume_weighted_mean_with_p05_p95_band",
+        "series": "volume_weighted_mean_p05_p95_and_pairwise_field_change",
+        "field_change_pair_count": 2,
+        "field_change_screening_status": "WITHIN_PROJECT_FIELD_CHANGE_SCREEN",
         "solver_time_semantics": "selected OpenFOAM labels; not physical seconds",
         "scientific_validation": "BLOCKED",
     }
@@ -366,7 +368,11 @@ def test_time_study_plot_renders_actual_report_and_never_replaces_existing_png(t
         render_time_study_plot(report, plot)
     assert plot.read_bytes() == original
     with pytest.raises(ValueError, match="distinct from its input"):
-        render_time_study_plot(report, tmp_path / "study-input.png", protected_inputs=(tmp_path / "study-input.png",))
+        render_time_study_plot(
+            report,
+            tmp_path / "study-input.png",
+            protected_inputs=(tmp_path / "study-input.png",),
+        )
 
 
 def test_time_study_plot_cli_adds_plot_provenance_and_guards_inputs(tmp_path, monkeypatch):
@@ -387,6 +393,7 @@ def test_time_study_plot_cli_adds_plot_provenance_and_guards_inputs(tmp_path, mo
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["plot"]["path"] == str(plot.resolve())
     assert report["plot"]["sample_count"] == 3
+    assert report["plot"]["field_change_pair_count"] == 2
     assert plot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
     original_spec = study_path.read_bytes()

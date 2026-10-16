@@ -566,7 +566,7 @@ def render_time_study_plot(
     *,
     protected_inputs: tuple[str | Path, ...] = (),
 ) -> dict:
-    """Render the measured per-snapshot mean and p05–p95 band to a new PNG.
+    """Render measured per-snapshot distributions and full-field changes.
 
     This is a visualization of the report's imported VTK values. It does not
     infer physical time or change the report's diagnostic/blocked status.
@@ -610,6 +610,48 @@ def render_time_study_plot(
         lower.append(p05)
         upper.append(p95)
 
+    field_analysis = report.get("field_change_analysis")
+    field_status = "UNAVAILABLE"
+    field_pairs = []
+    field_limit = None
+    if field_analysis is not None:
+        if type(field_analysis) is not dict:
+            raise ValueError("Time-study field-change analysis is malformed")
+        field_status = field_analysis.get("screening_status")
+        if type(field_status) is not str or not field_status:
+            raise ValueError("Time-study field-change status is missing")
+        field_pairs = field_analysis.get("pairwise_changes")
+        if type(field_pairs) is not list or len(field_pairs) != len(samples) - 1:
+            raise ValueError("Time-study field-change pairs do not match selected samples")
+        criteria = report.get("criteria")
+        if type(criteria) is dict:
+            field_limit = criteria.get("max_relative_field_change")
+        if field_limit is not None:
+            field_limit = _number(
+                field_limit, "max_relative_field_change", nonnegative=True
+            )
+            if field_limit > 2:
+                raise ValueError("max_relative_field_change must be <= 2")
+        for index, pair in enumerate(field_pairs, start=1):
+            if type(pair) is not dict:
+                raise ValueError(f"Time-study field-change pair {index} is malformed")
+            if (
+                pair.get("previous_solver_time_name") != labels[index - 1]
+                or pair.get("solver_time_name") != labels[index]
+            ):
+                raise ValueError("Time-study field-change pairs do not match selected labels")
+            pair_status = pair.get("status")
+            if pair_status == "COMPARABLE":
+                value = _number(
+                    pair.get("symmetric_relative_l2_change"),
+                    "symmetric_relative_l2_change",
+                    nonnegative=True,
+                )
+                if value > 2:
+                    raise ValueError("symmetric_relative_l2_change must be <= 2")
+            elif pair_status != "MESH_MISMATCH":
+                raise ValueError("Time-study field-change pair has an unsupported status")
+
     destination = Path(output).expanduser()
     if destination.suffix.lower() != ".png":
         raise ValueError("Time-study plot output must use the .png extension")
@@ -647,12 +689,15 @@ def render_time_study_plot(
     temporary = Path(temporary_name)
     figure = None
     try:
-        figure, axis = plt.subplots(figsize=(10, 5.5))
-        axis.fill_between(
+        figure, (mean_axis, change_axis) = plt.subplots(
+            2, 1, figsize=(10, 8), sharex=True,
+            gridspec_kw={"height_ratios": (2, 1)},
+        )
+        mean_axis.fill_between(
             indices, lower, upper, alpha=0.2, color="#268c87",
             label="Volume-weighted p05–p95",
         )
-        axis.plot(
+        mean_axis.plot(
             indices, means, color="#155b78", marker="o", linewidth=2,
             markersize=4, label="Volume-weighted mean",
         )
@@ -660,23 +705,92 @@ def render_time_study_plot(
         ticks = list(range(0, len(indices), tick_step))
         if ticks[-1] != len(indices) - 1:
             ticks.append(len(indices) - 1)
-        axis.set_xticks(ticks, [labels[index] for index in ticks])
-        axis.set_xlabel("Selected OpenFOAM solver-time label (not physical seconds)")
+        change_axis.set_xticks(ticks, [labels[index] for index in ticks])
+        change_axis.set_xlabel("Selected OpenFOAM solver-time label (not physical seconds)")
         display_quantity = {
             "velocity_mean_m_s": "Volume-weighted mean velocity",
             "contaminant_mean": "Volume-weighted mean contaminant concentration",
         }.get(quantity, quantity.replace("_", " "))
-        axis.set_ylabel(f"{display_quantity} ({unit})")
-        axis.set_title(study_name)
-        axis.grid(True, alpha=0.25)
-        axis.legend(loc="best")
+        mean_axis.set_ylabel(f"{display_quantity} ({unit})")
+        mean_axis.set_title(study_name)
+        mean_axis.grid(True, alpha=0.25)
+        mean_axis.legend(loc="best")
+
+        change_x = []
+        change_values = []
+        mismatched_pairs = []
+        for index, pair in enumerate(field_pairs, start=1):
+            if pair["status"] == "COMPARABLE":
+                change_x.append(index)
+                change_values.append(pair["symmetric_relative_l2_change"])
+            else:
+                mismatched_pairs.append(pair)
+        if change_values:
+            change_axis.plot(
+                change_x, change_values, color="#8a4b08", marker="o",
+                linewidth=1.8, markersize=4,
+                label="Consecutive full-field symmetric relative L2 change",
+            )
+        else:
+            change_axis.text(
+                0.5, 0.5, "No comparable same-mesh field pairs",
+                transform=change_axis.transAxes, ha="center", va="center",
+            )
+        if field_limit is not None:
+            change_axis.axhline(
+                field_limit, color="#b42318", linestyle="--", linewidth=1.5,
+                label=f"Project field-change limit ({field_limit:g})",
+            )
+        if mismatched_pairs:
+            change_axis.text(
+                0.01, 0.97,
+                f"{len(mismatched_pairs)} pair(s) excluded: mesh fingerprint mismatch",
+                transform=change_axis.transAxes, ha="left", va="top",
+                color="#b42318", fontsize=8,
+            )
+        ymax_candidates = [0.05, *change_values]
+        if field_limit is not None:
+            ymax_candidates.append(field_limit)
+        change_axis.set_ylim(
+            bottom=0, top=min(2.0, max(ymax_candidates) * 1.15)
+        )
+        change_axis.set_ylabel("Relative field change")
+        change_axis.grid(True, alpha=0.25)
+        if change_values or field_limit is not None:
+            change_axis.legend(loc="best", fontsize=8)
+
         summary = report.get("series_analysis", {})
         range_status = summary.get("screening_status", "UNAVAILABLE") if type(summary) is dict else "UNAVAILABLE"
         figure.tight_layout(rect=(0, 0.1, 1, 0.96))
+        range_label = {
+            "WITHIN_PROJECT_RANGE_SCREEN": "within limit",
+            "ABOVE_PROJECT_RANGE_SCREEN": "above limit",
+            "NO_PROJECT_RANGE_CRITERION": "no project criterion",
+            "INSUFFICIENT_SELECTED_TIMES": "insufficient samples",
+            "UNDEFINED_RELATIVE_SCALE": "undefined scale",
+        }.get(range_status, str(range_status).lower().replace("_", " "))
+        field_label = {
+            "WITHIN_PROJECT_FIELD_CHANGE_SCREEN": "within limit",
+            "ABOVE_PROJECT_FIELD_CHANGE_SCREEN": "above limit",
+            "NO_PROJECT_FIELD_CHANGE_CRITERION": "no project criterion",
+            "INSUFFICIENT_SELECTED_TIMES": "insufficient samples",
+            "NO_COMPARABLE_FIELD_PAIRS": "no comparable pairs",
+            "MESH_MISMATCH": "mesh mismatch",
+        }.get(field_status, field_status.lower().replace("_", " "))
+        engineering_status = report.get("engineering_review", "BLOCKED")
+        engineering_label = (
+            "ready for review"
+            if engineering_status == "READY_FOR_ENGINEERING_REVIEW"
+            else "blocked"
+        )
         figure.text(
-            0.5, 0.025,
-            f"Range screen: {range_status} | Engineering review: {report.get('engineering_review', 'BLOCKED')} | "
-            "Scientific validation: BLOCKED",
+            0.5, 0.055,
+            f"Range: {range_label} | Full-field change: {field_label} | "
+            f"Engineering review: {engineering_label}",
+            ha="center", va="top", fontsize=8,
+        )
+        figure.text(
+            0.5, 0.025, "Scientific validation: BLOCKED",
             ha="center", va="top", fontsize=8,
         )
         figure.savefig(temporary, format="png", dpi=160)
@@ -697,7 +811,9 @@ def render_time_study_plot(
         "path": str(destination),
         "format": "png",
         "sample_count": len(samples),
-        "series": "volume_weighted_mean_with_p05_p95_band",
+        "series": "volume_weighted_mean_p05_p95_and_pairwise_field_change",
+        "field_change_pair_count": len(field_pairs),
+        "field_change_screening_status": field_status,
         "solver_time_semantics": "selected OpenFOAM labels; not physical seconds",
         "scientific_validation": "BLOCKED",
     }

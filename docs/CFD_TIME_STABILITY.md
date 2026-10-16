@@ -58,10 +58,11 @@ Run the analysis and save its report:
       --plot cfd_time_analysis.png
 
 `--plot` is optional and writes a PNG from the same imported VTK summaries. It
-shows the volume-weighted mean and p05–p95 band for each selected output. The
-x-axis uses the original OpenFOAM solver-time labels and explicitly does not
-label them as seconds. The plot is diagnostic and retains the report's blocked
-scientific-validation status. Existing PNG files are never replaced.
+shows the volume-weighted mean and p05–p95 band for each selected output, plus
+the consecutive same-mesh full-field change and any configured project limit.
+The x-axis uses the original OpenFOAM solver-time labels and explicitly does
+not label them as seconds. The plot is diagnostic and retains the report's
+blocked scientific-validation status. Existing PNG files are never replaced.
 
 The CLI returns 0 only when the configured temporal and volume screens,
 same-mesh check, and solver-log screen are all ready for engineering review.

@@ -140,7 +140,10 @@ def build_parser():
     time_study=sub.add_parser("time-audit",help="Summarize selected VTK fields across one fixed-mesh run")
     time_study.add_argument("spec")
     time_study.add_argument("--output")
-    time_study.add_argument("--plot", help="Optional PNG of the measured time series and p05–p95 band")
+    time_study.add_argument(
+        "--plot",
+        help="Optional PNG of field means, percentile bands, and same-mesh changes",
+    )
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")

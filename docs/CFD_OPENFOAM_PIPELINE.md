@@ -25,8 +25,8 @@ For an existing `foamToVTK` export, select its VTK directory, the generated
 case bundle's `manifest.json`, a result directory, and a simulation ID, then
 choose **Sync VTK once**. The command uses the normal stability checks. Repeat
 the scan after the configured stability interval when the initial scan reports
-pending files. On compact displays, the workflow controls scroll independently
-from the command output so the output remains visible.
+pending files. On compact displays, the case settings scroll independently while
+a small, scrollable command log stays visible.
 
 **Verify case inputs** performs a read-only preflight over the generated bundle:
 it checks the exact 24 manifest-bound input files, verifies their SHA-256

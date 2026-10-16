@@ -171,7 +171,6 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         insertcolor=palette["text"],
         lightcolor=palette["border"],
         darkcolor=palette["border"],
-        padding=(5, 3),
     )
     style.map(
         "TEntry",

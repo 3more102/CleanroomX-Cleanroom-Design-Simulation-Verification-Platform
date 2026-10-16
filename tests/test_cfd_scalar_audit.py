@@ -247,10 +247,10 @@ def test_scalar_smoke_failure_evidence_keeps_solver_error_and_blocked_status(tmp
     summarize = module["_scalar_failure_diagnostics"]
     case_root = Path("/runner/temp/scalar")
     log_text = (
-        "--> FOAM FATAL IO ERROR:\\n"
-        "wrong token type - expected word, found on line 10 punctuation token '['\\n"
-        "file: /runner/temp/scalar/constant/physicalProperties/DT at line 10.\\n"
-        "FOAM exiting\\n"
+        "--> FOAM FATAL IO ERROR:\n"
+        "wrong token type - expected word, found on line 10 punctuation token '['\n"
+        "file: /runner/temp/scalar/constant/physicalProperties/DT at line 10.\n"
+        "FOAM exiting\n"
     )
     report = summarize(
         {

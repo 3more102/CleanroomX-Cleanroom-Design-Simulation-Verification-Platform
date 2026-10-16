@@ -1122,6 +1122,7 @@ def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
     workspace = app.openfoam_workspace
     app.root.minsize(800, 300)
     app.root.geometry("900x420")
+    app.set_focus_workspace(True)
     app.notebook.select(workspace)
     app.root.update()
 

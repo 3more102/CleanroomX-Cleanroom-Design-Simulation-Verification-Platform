@@ -375,3 +375,36 @@ def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
     assert report_json["tracks"]["integration_status"]["complete"] == 0
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
+
+
+def test_run_86_checkmesh_diagnostics_are_hash_replayed_and_stay_partial():
+    rows = {row["id"]: row for row in load(MATRIX)}
+    report = "docs/OPENFOAM_V10_RUN_38784313293_CHECKMESH_DIAGNOSTICS.md"
+
+    for capability_id in ("OF10-UTILITY-checkMesh", "OF10-MESH-QUALITY", "OF10-MESH-DESCRIPTION"):
+        row = rows[capability_id]
+        assert row["integration_status"] == "partial"
+        assert "run 86" in row["test_evidence"].lower()
+        assert report in row["test_evidence"]
+        assert "11997282424" in row["test_evidence"]
+        assert row["remaining_gap"].strip()
+
+    report_text = (ROOT / report).read_text(encoding="utf-8")
+    assert "3186b0e870c9842fc74401ae65fa1cfc6fe33823d942b2df32d5beba61ba9667" in report_text
+    assert "all 72 input hashes" in report_text
+    assert "all 36 log hashes" in report_text
+    assert "All nine reports were complete" in report_text
+    assert "No project mesh-quality limits were defined or applied" in report_text
+    assert "scientific validation BLOCKED" in report_text
+
+    result = subprocess.run(
+        [sys.executable, str(SCORER), "--format", "json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report_json = json.loads(result.stdout)
+    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["native_status"]["complete"] == 0
+    assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

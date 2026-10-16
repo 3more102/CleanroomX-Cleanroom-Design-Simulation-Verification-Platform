@@ -1259,11 +1259,36 @@ jobs:
               or state.get("field_map_sha256") != field_map_sha
           ):
               raise SystemExit("Synchronization state provenance does not match this case and generated family")
+          family_spec = json.loads(
+              Path("examples/cfd_grid_family.example.json").read_text(encoding="utf-8")
+          )
+          base_case = family_spec.get("base_case", {})
+          max_iterations = base_case.get("max_iterations")
+          output_interval = base_case.get("output_interval")
+          if (
+              type(max_iterations) is not int
+              or type(output_interval) is not int
+              or max_iterations <= 0
+              or output_interval <= 0
+              or output_interval > max_iterations
+          ):
+              raise SystemExit("Invalid grid-family iteration or output interval")
+          expected_times = {
+              str(step)
+              for step in range(output_interval, max_iterations + 1, output_interval)
+          }
+          if max_iterations % output_interval:
+              expected_times.add(str(max_iterations))
+
           records = state.get("records", {})
           imported = [item for item in records.values() if item.get("status") == "imported"]
-          if len(imported) != 3 or {item.get("solver_time") for item in imported} != {"50", "100", "150"}:
-              raise SystemExit("Expected exactly three synchronized solver times: 50, 100, and 150")
-          if len(records) != 3:
+          imported_times = {item.get("solver_time") for item in imported}
+          if len(imported) != len(expected_times) or imported_times != expected_times:
+              raise SystemExit(
+                  f"Expected {len(expected_times)} synchronized solver times from the grid specification; "
+                  f"received {len(imported_times)} unique times"
+              )
+          if len(records) != len(expected_times):
               raise SystemExit("Unexpected pending, duplicate, or rejected VTK records")
           snapshots = []
           for item in imported:

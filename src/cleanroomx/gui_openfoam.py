@@ -15,6 +15,7 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from .gui_theme import theme_palette
 from .strict_json import load_strict_json_snapshot
 
 
@@ -223,6 +224,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._process: subprocess.Popen[str] | None = None
         self._busy = False
         self._destroyed = False
+        self._theme_palette = theme_palette("light")
 
         self.specification_var = tk.StringVar()
         self.case_directory_var = tk.StringVar()
@@ -262,8 +264,39 @@ class OpenFOAMWorkspace(ttk.Frame):
             style="CX.Section.TLabel",
         ).pack(fill="x", padx=10, pady=(2, 7))
 
-        settings = ttk.LabelFrame(self, text="Case bundle", padding=8)
-        settings.pack(fill="x", padx=10, pady=4)
+        workflow_view = ttk.Frame(self)
+        workflow_view.pack(fill="both", expand=True, padx=10, pady=(0, 2))
+        self._workflow_canvas = tk.Canvas(
+            workflow_view,
+            background=self._theme_palette["background"],
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self._workflow_canvas.pack(side="left", fill="both", expand=True)
+        self._workflow_scrollbar = ttk.Scrollbar(
+            workflow_view,
+            orient="vertical",
+            command=self._workflow_canvas.yview,
+        )
+        self._workflow_scrollbar.pack(side="right", fill="y")
+        self._workflow_canvas.configure(
+            yscrollcommand=self._workflow_scrollbar.set
+        )
+        self._workflow_content = ttk.Frame(self._workflow_canvas)
+        self._workflow_window = self._workflow_canvas.create_window(
+            (0, 0),
+            window=self._workflow_content,
+            anchor="nw",
+        )
+        self._workflow_content.bind(
+            "<Configure>", self._update_workflow_scrollregion, add="+"
+        )
+        self._workflow_canvas.bind(
+            "<Configure>", self._resize_workflow_content, add="+"
+        )
+
+        settings = ttk.LabelFrame(self._workflow_content, text="Case bundle", padding=8)
+        settings.pack(fill="x", pady=4)
         self._path_row(
             settings,
             0,
@@ -319,8 +352,10 @@ class OpenFOAMWorkspace(ttk.Frame):
         )
         self.stop_button.pack(side="left", padx=4)
 
-        vtk = ttk.LabelFrame(self, text="Existing foamToVTK output", padding=8)
-        vtk.pack(fill="x", padx=10, pady=4)
+        vtk = ttk.LabelFrame(
+            self._workflow_content, text="Existing foamToVTK output", padding=8
+        )
+        vtk.pack(fill="x", pady=4)
         self._path_row(
             vtk,
             0,
@@ -358,7 +393,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         )
         self.sync_vtk_button.grid(row=4, column=0, sticky="w", pady=(5, 0))
 
-        evidence = ttk.Frame(self, padding=(10, 5, 10, 3))
+        evidence = ttk.Frame(self._workflow_content, padding=(0, 5, 0, 3))
         evidence.pack(fill="x")
         self.preview_button = ttk.Button(
             evidence,
@@ -403,6 +438,50 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.preview_button,
             self.graph_button,
         )
+        self._bind_workflow_scroll(self._workflow_canvas)
+
+    def apply_theme(self, value: str) -> None:
+        """Retheme native workbench surfaces without changing workflow state."""
+        self._theme_palette = theme_palette(value)
+        palette = self._theme_palette
+        self._workflow_canvas.configure(background=palette["background"])
+        self.output.configure(
+            background=palette["field"],
+            foreground=palette["field_text"],
+            insertbackground=palette["text"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+        )
+
+    def _update_workflow_scrollregion(self, _event=None) -> None:
+        self._workflow_canvas.configure(
+            scrollregion=self._workflow_canvas.bbox("all")
+        )
+
+    def _resize_workflow_content(self, event: tk.Event) -> None:
+        self._workflow_canvas.itemconfigure(
+            self._workflow_window, width=max(1, int(event.width))
+        )
+
+    def _bind_workflow_scroll(self, widget: tk.Misc) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_workflow_mousewheel, add="+")
+        for child in widget.winfo_children():
+            self._bind_workflow_scroll(child)
+
+    def _on_workflow_mousewheel(self, event: tk.Event) -> str | None:
+        delta = int(getattr(event, "delta", 0) or 0)
+        if delta:
+            steps = max(1, abs(delta) // 120)
+            direction = -1 if delta > 0 else 1
+        else:
+            button = getattr(event, "num", None)
+            if button not in (4, 5):
+                return None
+            steps = 1
+            direction = -1 if button == 4 else 1
+        self._workflow_canvas.yview_scroll(direction * steps, "units")
+        return "break"
 
     def _path_row(
         self,

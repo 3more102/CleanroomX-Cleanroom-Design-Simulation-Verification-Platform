@@ -71,3 +71,10 @@ stationarity, mesh independence, model correctness, measurement agreement,
 cleanroom performance, or certification. Synthetic VTK fixtures verify the
 software calculations only; actual engineering conclusions require reviewed
 physical inputs and independently supported evidence.
+
+
+## Current Foundation v10 integration evidence
+
+OpenFOAM Foundation v10 run [#160](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38944498458) completed the nine generated synthetic cases and all 36 command stages. Each case produced three synchronized VTK snapshots at solver-time labels `50`, `100`, and `150`, for 27 snapshots total. The run artifact [#12064319325](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38944498458/artifacts/12064319325) has SHA-256 `c99c6e69976802f331d5150a8b6ba8a8e82d4c99ab65bc9613ad541f8f058ace`; the downloaded archive digest matched this value.
+
+This run confirms OpenFOAM execution and result synchronization. It did not run `time-audit` against those VTK files. The cases remain `executed_requires_convergence_review`; no project-defined temporal range or room-volume criterion was supplied, and scientific validation remains `BLOCKED`. The three available snapshots meet the sample-count minimum but do not make the temporal or engineering screens pass.

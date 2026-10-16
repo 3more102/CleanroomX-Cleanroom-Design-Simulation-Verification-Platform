@@ -186,7 +186,10 @@ def main():
             counts=tuple(sorted(report.get("counts",{}).items()))
             signature=(report.get("discovered_results"),counts,imported)
             if not args.quiet_unchanged or signature!=last_signature:
-                print(dumps_strict_json(report),flush=True)
+                print(
+                    dumps_strict_json(report, indent=None, separators=(",", ":")),
+                    flush=True,
+                )
             last_signature=signature
         try:
             watch_openfoam_vtk(

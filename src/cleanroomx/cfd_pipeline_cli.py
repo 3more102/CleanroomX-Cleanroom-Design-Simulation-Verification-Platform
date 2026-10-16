@@ -15,6 +15,7 @@ from .cfd_openfoam_runtime_sync import (
     OpenFOAMResultSynchronizer,
     hash_case_configuration,
 )
+from .cfd_time_study import analyze_vtk_time_study, validate_time_study
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -132,6 +133,9 @@ def build_parser():
     verify_grid=sub.add_parser("grid-audit",help="VTK/log grounded three-grid Richardson and GCI screening")
     verify_grid.add_argument("spec")
     verify_grid.add_argument("--output")
+    time_study=sub.add_parser("time-audit",help="Summarize selected VTK fields across one fixed-mesh run")
+    time_study.add_argument("spec")
+    time_study.add_argument("--output")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -236,6 +240,22 @@ def main():
         else:
             print(payload)
         return 0 if report["status"]=="eligible_for_engineering_review" else 3
+    if args.command=="time-audit":
+        spec=load_cli_input(load_strict_json,args.spec)
+        validate_time_study(spec)
+        base=Path(args.spec).resolve().parent
+        report=analyze_vtk_time_study(spec,base_directory=base)
+        payload=dumps_strict_json(report)
+        if args.output:
+            protected=(args.spec,str(base/spec["solver_log"]),*(
+                str(base/sample["vtk_file"]) for sample in spec["samples"]
+            ))
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
+                                      protected_inputs=protected):
+                return 1
+        else:
+            print(payload)
+        return 0 if report["engineering_review"]=="READY_FOR_ENGINEERING_REVIEW" else 3
     if args.command=="scalar-prepare":
         result=prepare_scalar_case(args.flow_case,load_cli_input(load_strict_json,args.spec),
                                    args.output_directory)

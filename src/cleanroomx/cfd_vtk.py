@@ -47,6 +47,38 @@ def _read_vtk(path, *, require_cell_velocity=False):
     return sizes.GetOutput()
 
 
+def _vtk_mesh_geometry_sha256(grid):
+    """Hash VTK point coordinates and ordered cell topology, excluding fields."""
+    point_count = grid.GetNumberOfPoints()
+    cell_count = grid.GetNumberOfCells()
+    if point_count <= 0 or cell_count <= 0:
+        raise ValueError("VTK mesh geometry requires points and cells")
+    digest = hashlib.sha256()
+    digest.update(b"CleanroomX-VTK-mesh-geometry-v1\0")
+    digest.update(struct.pack(">QQ", point_count, cell_count))
+    for point_id in range(point_count):
+        point = grid.GetPoint(point_id)
+        coordinates = tuple(float(component) for component in point)
+        if len(coordinates) != 3 or not all(math.isfinite(value) for value in coordinates):
+            raise ValueError(f"VTK point {point_id} has non-finite coordinates")
+        digest.update(struct.pack(">ddd", *coordinates))
+    for cell_id in range(cell_count):
+        cell = grid.GetCell(cell_id)
+        if cell is None:
+            raise ValueError(f"VTK cell {cell_id} is missing")
+        ids = cell.GetPointIds()
+        size = ids.GetNumberOfIds()
+        if size <= 0:
+            raise ValueError(f"VTK cell {cell_id} has no points")
+        digest.update(struct.pack(">qQ", int(grid.GetCellType(cell_id)), size))
+        for local_id in range(size):
+            point_id = int(ids.GetId(local_id))
+            if point_id < 0 or point_id >= point_count:
+                raise ValueError(f"VTK cell {cell_id} references an invalid point")
+            digest.update(struct.pack(">Q", point_id))
+    return digest.hexdigest()
+
+
 _FOAM_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _FOAM_VECTOR = re.compile(
     rf"\(\s*({_FOAM_NUMBER})\s+({_FOAM_NUMBER})\s+({_FOAM_NUMBER})\s*\)"
@@ -1685,8 +1717,11 @@ def validate_vtk_field_map(field_map):
 
 def import_vtk_case(
     path, *, contaminant_array=None, temperature_array=None,
-    temperature_units=None, recirculation_array="recirculating", field_map=None
+    temperature_units=None, recirculation_array="recirculating", field_map=None,
+    include_mesh_fingerprint=False,
 ):
+    if type(include_mesh_fingerprint) is not bool:
+        raise ValueError("include_mesh_fingerprint must be boolean")
     source=Path(path)
     if not source.is_file(): raise FileNotFoundError(source)
     before=source.stat()
@@ -1832,6 +1867,8 @@ def import_vtk_case(
         result["field_map_schema"] = map_data["schema_version"]
         result["field_data"] = imported_fields
         result["unavailable_fields"] = unavailable_fields
+    if include_mesh_fingerprint:
+        result["mesh_geometry_sha256"] = _vtk_mesh_geometry_sha256(grid)
     return result
 
 def populate_study_from_vtk(

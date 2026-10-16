@@ -296,6 +296,16 @@ The results remain `DIAGNOSTIC_ONLY`; scientific validation remains `BLOCKED`.
 
 Run 90 applied this audit to all nine generated cases. Its 54 internal-field, patch, and surface-flux parity records passed, including 13,608 patch faces. The [run 90 report](OPENFOAM_V10_RUN_38867911839_VTK_TIME_SELECTION.md) records the independent artifact-digest and file-hash replay. Residual and flow-balance screens remain diagnostic; scientific validation remains BLOCKED.
 
+For a single fixed-mesh run with several selected VTK snapshots, use the
+[selected-time field analysis](CFD_TIME_STABILITY.md) and
+`cleanroomx-cfd-pipeline time-audit`. It reports volume-weighted field
+distributions and change across the selected solver-time labels, then checks
+an explicitly project-defined range screen alongside the solver-log screen.
+This is a separate diagnostic from grid-audit: it can identify a changing
+quantity of interest but does not qualify the flow or make GCI a validation
+result. Use at least three samples for temporal screening; the current
+two-time `50,100` export is insufficient for that screen.
+
 The independently rechecked run 58 U archive and per-case native/VTK hashes
 are recorded in [the run 58 parity report](OPENFOAM_V10_RUN_38694132081_NATIVE_VTK_PARITY.md).
 Run 61 extends that check to native final-time `U` and `p`; its artifact,

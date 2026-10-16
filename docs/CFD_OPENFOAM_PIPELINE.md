@@ -12,6 +12,33 @@ divergence term used by the v10 simpleFoam tutorial. These are version-specific
 case-input checks; they do not replace running the generated case with the
 target release.
 
+## Desktop OpenFOAM workspace
+
+The CleanroomX desktop application has an **OpenFOAM** tab for the supported
+three-case workflow. Select a specification JSON and a new output directory to
+generate the case bundle. The **Run Foundation v10** action requires an explicit
+confirmation and launches the bundled CLI with the current Python interpreter.
+Set an optional result directory to synchronize stable native fields during the
+run; the supplied simulation ID groups the imported snapshots.
+
+For an existing `foamToVTK` export, select its VTK directory, the generated
+case bundle's `manifest.json`, a result directory, and a simulation ID, then
+choose **Sync VTK once**. The command uses the normal stability checks. Repeat
+the scan after the configured stability interval when the initial scan reports
+pending files.
+
+**Preview result evidence** reads known manifest files and displays selected
+status fields and the raw-file SHA-256. It is a viewer, not an independent
+integrity audit. **Load ProofGraph JSON** sends an existing persisted graph to
+the application's ProofGraph viewer; the desktop tab does not generate that
+graph from the CFD artifacts.
+
+The tab is a software workflow integration. It does not yet derive OpenFOAM
+boundary geometry from the active CAD/IFC project or attach solver snapshots
+automatically to project requirements. Scientific validation remains
+`BLOCKED` pending physical cleanroom measurements, defined acceptance
+criteria, and independent engineering review.
+
 ## Educational source and limits
 
 The uploaded NANENG 523 Lab 1 CFD handout describes three single-pass airflow

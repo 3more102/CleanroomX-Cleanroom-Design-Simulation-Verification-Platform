@@ -1402,6 +1402,7 @@ jobs:
           if (
               report.get("status") != "sampled_cells_visualized_not_cfd_validation"
               or report.get("field") != "speed"
+              or report.get("units") != "m/s"
               or report.get("axis") != "y"
               or report.get("position_m") != 1.0
               or report.get("slab_thickness_m") != 0.5

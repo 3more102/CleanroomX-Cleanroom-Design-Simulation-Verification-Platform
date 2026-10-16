@@ -956,6 +956,7 @@ def test_vtk_png_sampled_cross_section(tmp_path):
     info=render_cfd_cross_section(sources,target,axis="y",position_m=.5,slab_thickness_m=.2)
     assert target.stat().st_size>5000
     assert info["sample_count"]=={"1":1,"2":1,"3":1}
+    assert info["units"]=="m/s"
     temperature_target=tmp_path/"temperature.png"
     temperature_info=render_cfd_cross_section(
         sources,temperature_target,axis="y",position_m=.5,slab_thickness_m=.2,

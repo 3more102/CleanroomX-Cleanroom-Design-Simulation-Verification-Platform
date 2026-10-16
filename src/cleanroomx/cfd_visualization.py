@@ -92,7 +92,8 @@ def render_cfd_cross_section(
     finally:
         plt.close(fig)
     return {"status":"sampled_cells_visualized_not_cfd_validation","path":str(destination),
-            "field":field,"array_name":array_name,"units":units,
+            "field":field,"array_name":array_name,
+            "units":"m/s" if field == "speed" else units,
             "axis":axis,"position_m":position_m,"slab_thickness_m":slab_thickness_m,
             "sample_count":{str(i):len(s) for i,s in enumerate(datasets,1)},
             "range":[vmin,vmax]}

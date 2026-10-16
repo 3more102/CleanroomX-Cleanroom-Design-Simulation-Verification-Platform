@@ -10,6 +10,11 @@ from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from .cfd_sync import synchronize_openfoam_vtk_once, watch_openfoam_vtk
+from .cfd_openfoam_runtime_sync import (
+    DEFAULT_OPTIONAL_FIELDS,
+    OpenFOAMResultSynchronizer,
+    hash_case_configuration,
+)
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -24,6 +29,16 @@ def build_parser():
     runner=sub.add_parser("run",help="Opt-in: run blockMesh, checkMesh, simpleFoam")
     runner.add_argument("directory")
     runner.add_argument("--timeout-seconds",type=int,default=3600)
+    runner.add_argument("--sync-results",metavar="DIRECTORY",
+                        help="Incrementally import stable simpleFoam outputs while it runs")
+    runner.add_argument("--simulation-id",help="Stable ID to resume or group synchronized outputs")
+    runner.add_argument("--sync-poll-interval-seconds",type=float,default=1.0)
+    runner.add_argument("--sync-timeout-seconds",type=int,default=600,
+                        help="Maximum time for each foamToVTK snapshot export")
+    runner.add_argument("--sync-max-field-mib",type=int,default=256)
+    runner.add_argument("--sync-max-snapshot-mib",type=int,default=512)
+    runner.add_argument("--sync-max-output-mib",type=int,default=2048)
+    runner.add_argument("--sync-max-retries",type=int,default=3)
     importer=sub.add_parser("import-vtk",help="Import real VTK cell data to existing study")
     for cfg in (1,2,3):
         importer.add_argument(f"--case-{cfg}",required=True)
@@ -50,6 +65,23 @@ def build_parser():
     sync.add_argument("--max-record-bytes",type=int,default=128*1024*1024)
     sync.add_argument("--max-scan-entries",type=int,default=100000)
     sync.add_argument("--once",action="store_true",help="Run one scan and exit; repeat to satisfy the stability window")
+    case_sync=sub.add_parser("sync-case",help="Watch a live Foundation v10 case and import stable native fields")
+    case_sync.add_argument("case_directory")
+    case_sync.add_argument("output_directory")
+    case_sync.add_argument("--simulation-id",help="Stable ID; defaults to a configuration-hash-derived ID")
+    case_sync.add_argument("--configuration-hash",help="Reuse a recorded configuration hash")
+    case_sync.add_argument("--expected-build",help="Reuse the recorded Foundation v10 build identity")
+    case_sync.add_argument("--solver-log",default="simpleFoam.log")
+    case_sync.add_argument("--max-runtime-seconds",type=int)
+    case_sync.add_argument("--poll-interval-seconds",type=float,default=1.0)
+    case_sync.add_argument("--settle-polls",type=int,default=2)
+    case_sync.add_argument("--timeout-seconds",type=int,default=600)
+    case_sync.add_argument("--max-field-mib",type=int,default=256)
+    case_sync.add_argument("--max-snapshot-mib",type=int,default=512)
+    case_sync.add_argument("--max-output-mib",type=int,default=2048)
+    case_sync.add_argument("--max-retries",type=int,default=3)
+    case_sync.add_argument("--optional-fields",nargs="*",default=list(DEFAULT_OPTIONAL_FIELDS))
+    case_sync.add_argument("--contaminant-field")
     plot=sub.add_parser("plot",help="3-panel sampled-cell cross-section PNG")
     for cfg in (1,2,3): plot.add_argument(f"--case-{cfg}",required=True)
     plot.add_argument("--field",choices=("speed","contaminant"),default="speed")
@@ -88,7 +120,18 @@ def main():
         print(dumps_strict_json(result))
         return 0
     if args.command=="run":
-        result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
+        result=run_openfoam_cases(
+            args.directory,
+            timeout_seconds=args.timeout_seconds,
+            sync_results_directory=args.sync_results,
+            simulation_id=args.simulation_id,
+            sync_poll_interval_seconds=args.sync_poll_interval_seconds,
+            sync_timeout_seconds=args.sync_timeout_seconds,
+            sync_max_field_bytes=args.sync_max_field_mib*1024*1024,
+            sync_max_snapshot_bytes=args.sync_max_snapshot_mib*1024*1024,
+            sync_max_output_bytes=args.sync_max_output_mib*1024*1024,
+            sync_max_retries=args.sync_max_retries,
+        )
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
     if args.command=="sync-vtk":
@@ -119,6 +162,35 @@ def main():
         except KeyboardInterrupt:
             return 130
         return 0
+    if args.command=="sync-case":
+        case=Path(args.case_directory).resolve(strict=True)
+        configuration_hash=args.configuration_hash or hash_case_configuration(case)
+        simulation_id=args.simulation_id or f"sync-{case.name}-{configuration_hash[:16]}"
+        solver_log=Path(args.solver_log)
+        if not solver_log.is_absolute():
+            solver_log=case/solver_log
+        synchronizer=OpenFOAMResultSynchronizer(
+            case,
+            args.output_directory,
+            simulation_id=simulation_id,
+            configuration_hash=configuration_hash,
+            expected_build=args.expected_build,
+            poll_interval_seconds=args.poll_interval_seconds,
+            settle_polls=args.settle_polls,
+            timeout_seconds=args.timeout_seconds,
+            max_field_bytes=args.max_field_mib*1024*1024,
+            max_snapshot_bytes=args.max_snapshot_mib*1024*1024,
+            max_output_bytes=args.max_output_mib*1024*1024,
+            max_retries=args.max_retries,
+            optional_fields=args.optional_fields,
+            contaminant_field=args.contaminant_field,
+        )
+        result=synchronizer.watch(
+            solver_log=solver_log,
+            max_runtime_seconds=args.max_runtime_seconds,
+        )
+        print(dumps_strict_json(result))
+        return 0 if result["status"]=="outputs_synced_process_status_unknown" else 2
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(report))

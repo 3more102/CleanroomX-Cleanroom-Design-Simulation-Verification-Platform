@@ -79,6 +79,16 @@ boundary flux balance, turbulence/Reynolds applicability, mesh quality and
 grid independence. Other OpenFOAM versions may require solver template
 changes: v11+ Foundation uses foamRun solver modules.
 
+| Distribution | Case generation | Solver runner / native-field synchronization | Evidence status |
+| --- | --- | --- | --- |
+| OpenFOAM Foundation v10 | Supported template | Supported with `blockMesh`, `checkMesh`, `simpleFoam`, `foamToVTK`, and Python VTK | The pinned workflow exercises the v10 path; execution and data integrity do not establish physical validation |
+| Foundation v11+ | Not runtime-qualified | Unsupported; the runner expects the v10 `simpleFoam` workflow | Not verified |
+| OpenCFD/OpenFOAM.com releases | Not runtime-qualified | Unsupported by this runner | Not verified |
+
+The runner checks the distribution and version markers before launching tools.
+Other releases need a separately tested compatibility adapter; a v10 marker
+does not establish compatibility with another vendor.
+
 See [OpenFOAM checkMesh diagnostics](OPENFOAM_CHECKMESH_DIAGNOSTICS.md) for the
 receipt schema, parser behavior, and the distinction between reported
 `checkMesh` checks and project-defined mesh acceptance.
@@ -191,6 +201,58 @@ remain separate gates.
 This mapping change uses synchronization-state and snapshot schema v2. Existing
 v1 stores are refused rather than silently resumed under different field
 semantics; start a new output store to import with the explicit map.
+
+## Synchronize native fields during `simpleFoam`
+
+`sync-vtk` above imports a VTK tree that already exists. To let the case runner
+watch native OpenFOAM time directories, export each stable time with
+`foamToVTK`, compare the VTK values with the native fields, and store verified
+snapshots while `simpleFoam` is still running, opt in with:
+
+    cleanroomx-cfd-pipeline run ./cfd_cases \
+      --sync-results ./cfd_sync_results \
+      --simulation-id room-study-2026-01 \
+      --sync-poll-interval-seconds 1
+
+It monitors the three generated cases. A positive numeric time is eligible
+after the configured settle polls see the same selected field set, file
+identity, size, and modification time. The exporter works in an isolated
+temporary case view, waits for `foamToVTK` to finish, checks that source fields
+did not change during export, verifies U/p cell IDs and values against native
+fields, and atomically publishes VTK assets, a receipt, and a resumable
+manifest. It never replaces an accepted time after the source changes.
+
+This direct path currently requires Foundation v10, ASCII native fields U
+and kinematic-pressure p, and legacy ASCII VTK output. It also imports any
+configured optional volume fields present (T, k, epsilon, omega, nut by
+default), and surface flux phi when present. Field names do not identify their
+physical meaning: set `--contaminant-field NAME` only when that field is a
+concentration produced by a separately configured transport model. No solver
+output is synthesized when no new time is written. Records report
+`DIAGNOSTIC_ONLY`; solver convergence, physical validation, and cleanroom
+qualification remain blocked.
+
+For a separately launched solver, use `sync-case` with the same simulation ID
+and output directory to resume its native-time watcher:
+
+    cleanroomx-cfd-pipeline sync-case ./active_case ./cfd_sync_results \
+      --simulation-id room-study-2026-01 \
+      --solver-log simpleFoam.log \
+      --max-runtime-seconds 3600
+
+After seeing the terminal `End` marker, this watcher drains final stable
+writes but reports `outputs_synced_process_status_unknown` because it cannot
+inspect the solver process return code. `run --sync-results` records the real
+return code and reports `results_synced` only when the process exits zero, the
+log ends in `End`, and no unrecovered synchronization errors remain. Re-run
+`sync-case` with the same case, ID, and output store after an interruption.
+
+Defaults are 256 MiB per field, 512 MiB per time snapshot, 2 GiB total output,
+three retries per failed snapshot, and a 600-second `foamToVTK` timeout. The
+integrated runner accepts `--sync-max-field-mib`,
+`--sync-max-snapshot-mib`, `--sync-max-output-mib`, `--sync-max-retries`, and
+`--sync-timeout-seconds`; `sync-case` has the corresponding `--max-*` options.
+The polling interval is configurable from 0.1 to 60 seconds.
 
 Foundation v10 run 94 completed this `50,100` audit for all nine synthetic
 cases. Its [multi-time report](OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md)

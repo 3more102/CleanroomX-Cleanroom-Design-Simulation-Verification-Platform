@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import uuid
 
 from .cfd_study import CONFIGURATIONS
 
@@ -844,11 +845,48 @@ def parse_openfoam_checkmesh_log(log_text, source_log_sha256):
         report["parse_status"] = "complete"
     return report
 
-def run_openfoam_cases(directory,*,timeout_seconds=3600):
-    """Opt-in external execution; never imply CFD convergence from process exit."""
+def run_openfoam_cases(directory,*,timeout_seconds=3600,sync_results_directory=None,
+                       simulation_id=None,sync_poll_interval_seconds=1.0,
+                       sync_timeout_seconds=600,sync_max_field_bytes=256*1024*1024,
+                       sync_max_snapshot_bytes=512*1024*1024,
+                       sync_max_output_bytes=2*1024*1024*1024,sync_max_retries=3):
+    """Opt-in external execution; never imply CFD convergence from process exit.
+
+    When ``sync_results_directory`` is supplied, stable solver writes are
+    exported and imported while ``simpleFoam`` runs. The result manifest is
+    diagnostic data-integrity evidence and does not qualify convergence.
+    """
     if type(timeout_seconds) is not int or not 60<=timeout_seconds<=86400:
         raise ValueError("timeout_seconds must be an integer in [60,86400]")
     root=Path(directory).resolve(strict=True)
+    sync_root=None
+    if sync_results_directory is not None:
+        from .cfd_openfoam_runtime_sync import _SIMULATION_ID
+        if simulation_id is None:
+            simulation_id="run-"+uuid.uuid4().hex
+        if type(simulation_id) is not str or _SIMULATION_ID.fullmatch(simulation_id) is None:
+            raise ValueError("simulation_id must be a safe 1..128 character identifier")
+        sync_candidate=Path(sync_results_directory)
+        if sync_candidate.is_symlink() or (sync_candidate.exists() and not sync_candidate.is_dir()):
+            raise ValueError("Synchronization output must be a regular directory")
+        sync_root=sync_candidate.resolve(strict=False)
+        if sync_root==root or sync_root.is_relative_to(root):
+            raise ValueError("Synchronization output cannot be inside the OpenFOAM case bundle")
+        if not (type(sync_poll_interval_seconds) in (int,float)
+                and math.isfinite(sync_poll_interval_seconds)
+                and 0.1<=sync_poll_interval_seconds<=60):
+            raise ValueError("sync_poll_interval_seconds must be finite and in [0.1,60]")
+        if type(sync_timeout_seconds) is not int or not 1<=sync_timeout_seconds<=3600:
+            raise ValueError("sync_timeout_seconds must be an integer in [1,3600]")
+        for name,value in (("sync_max_field_bytes",sync_max_field_bytes),
+                           ("sync_max_snapshot_bytes",sync_max_snapshot_bytes),
+                           ("sync_max_output_bytes",sync_max_output_bytes)):
+            if type(value) is not int or value<=0:
+                raise ValueError(f"{name} must be a positive integer")
+        if type(sync_max_retries) is not int or not 1<=sync_max_retries<=10:
+            raise ValueError("sync_max_retries must be an integer in [1,10]")
+    elif simulation_id is not None:
+        raise ValueError("simulation_id requires sync_results_directory")
     manifest=json.loads((root/"manifest.json").read_text(encoding="utf-8"))
     if manifest.get("schema_version")!=SCHEMA or set(manifest.get("evidence",{}))!={"1","2","3"}:
         raise ValueError("Incomplete OpenFOAM bundle")
@@ -885,16 +923,54 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
             "Expected the OpenFOAM Foundation v10 environment "
             "(WM_PROJECT=OpenFOAM, WM_PROJECT_VERSION=10); source its etc/bashrc"
         )
+    if sync_root is not None:
+        if shutil.which("foamToVTK") is None:
+            raise RuntimeError("foamToVTK not found; install the targeted OpenFOAM release")
+        try:
+            import vtk  # noqa: F401
+        except ImportError as error:
+            raise RuntimeError("pip install vtk to synchronize OpenFOAM result fields") from error
     results={}
+    synchronization={}
     expected_build=None
     for cfg in (1,2,3):
         stages=[]
         workdir=root/f"configuration_{cfg}"
         for executable in ("blockMesh","checkMesh","simpleFoam"):
             log=workdir/f"{executable}.log"
-            with log.open("x",encoding="utf-8") as output:
-                result=subprocess.run([executables[executable]],cwd=workdir,stdout=output,
-                                      stderr=subprocess.STDOUT,timeout=timeout_seconds,check=False)
+            if executable=="simpleFoam" and sync_root is not None:
+                from .cfd_openfoam_runtime_sync import OpenFOAMResultSynchronizer, run_solver_with_sync
+                sync_root.mkdir(parents=True,exist_ok=True)
+                case_file_hashes={relative:manifest["files"][f"configuration_{cfg}/{relative}"]
+                                  for relative in case_inputs}
+                configuration_hash=hashlib.sha256(json.dumps(
+                    case_file_hashes,sort_keys=True,separators=(",", ":"),allow_nan=False
+                ).encode("utf-8")).hexdigest()
+                synchronizer=OpenFOAMResultSynchronizer(
+                    workdir,
+                    sync_root/simulation_id/f"configuration_{cfg}",
+                    simulation_id=simulation_id,
+                    configuration_hash=configuration_hash,
+                    case_id=f"configuration_{cfg}",
+                    expected_build=expected_build,
+                    poll_interval_seconds=sync_poll_interval_seconds,
+                    timeout_seconds=sync_timeout_seconds,
+                    max_field_bytes=sync_max_field_bytes,
+                    max_snapshot_bytes=sync_max_snapshot_bytes,
+                    max_output_bytes=sync_max_output_bytes,
+                    max_retries=sync_max_retries,
+                )
+                returncode=run_solver_with_sync(
+                    [executables[executable]],cwd=workdir,log_path=log,
+                    timeout_seconds=timeout_seconds,synchronizer=synchronizer,
+                )
+                result=subprocess.CompletedProcess([executables[executable]],returncode)
+                sync_report=synchronizer.finish(solver_returncode=returncode,solver_log=log)
+                synchronization[str(cfg)]=sync_report
+            else:
+                with log.open("x",encoding="utf-8") as output:
+                    result=subprocess.run([executables[executable]],cwd=workdir,stdout=output,
+                                          stderr=subprocess.STDOUT,timeout=timeout_seconds,check=False)
             log_bytes=log.read_bytes()
             log_text=log_bytes.decode("utf-8",errors="replace")
             banner=_foundation_v10_banner(log_text)
@@ -909,8 +985,11 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
                 )
             if result.returncode:
                 results[str(cfg)]={"status":"solver_failed","stages":stages}
-                return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
-                        "warning":"Check logs and convergence; execution is not validation"}
+                response={"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
+                          "warning":"Check logs and convergence; execution is not validation"}
+                if sync_root is not None:
+                    response.update({"simulation_id":simulation_id,"result_synchronization":synchronization})
+                return response
             if not banner["is_foundation_v10"]:
                 results[str(cfg)]={"status":"unsupported_release","stages":stages}
                 return {"status":"incomplete","cases":results,"boundary_audits":boundary_audits,
@@ -932,15 +1011,25 @@ def run_openfoam_cases(directory,*,timeout_seconds=3600):
                     )
                                  else "checkmesh_diagnostics_incomplete")
                     results[str(cfg)]={"status":case_status,"stages":stages}
-                    return {"status":"incomplete","cases":results,
-                            "boundary_audits":boundary_audits,
-                            "solver_release":"OpenFOAM Foundation v10",
-                            "solver_build":expected_build,
-                            "warning":"checkMesh output was not a complete Mesh OK report; no project-specific quality thresholds were applied"}
+                    response={"status":"incomplete","cases":results,
+                              "boundary_audits":boundary_audits,
+                              "solver_release":"OpenFOAM Foundation v10",
+                              "solver_build":expected_build,
+                              "warning":"checkMesh output was not a complete Mesh OK report; no project-specific quality thresholds were applied"}
+                    if sync_root is not None:
+                        response.update({"simulation_id":simulation_id,"result_synchronization":synchronization})
+                    return response
         results[str(cfg)]={"status":"executed_requires_convergence_review","stages":stages}
-    return {"status":"executed_requires_convergence_review","cases":results,
-            "boundary_audits":boundary_audits,
-            "solver_release":"OpenFOAM Foundation v10",
-            "solver_build":expected_build,
-            "executables":executables,
-            "warning":"Review residuals, mass conservation, mesh sensitivity and physical validity"}
+    response={"status":"executed_requires_convergence_review","cases":results,
+              "boundary_audits":boundary_audits,
+              "solver_release":"OpenFOAM Foundation v10",
+              "solver_build":expected_build,
+              "executables":executables,
+              "warning":"Review residuals, mass conservation, mesh sensitivity and physical validity"}
+    if sync_root is not None:
+        response["simulation_id"]=simulation_id
+        response["result_synchronization"]=synchronization
+        if any(item.get("status")!="results_synced" for item in synchronization.values()):
+            response["status"]="incomplete"
+            response["warning"]="OpenFOAM execution finished but result synchronization is incomplete; inspect the persisted sync manifests"
+    return response

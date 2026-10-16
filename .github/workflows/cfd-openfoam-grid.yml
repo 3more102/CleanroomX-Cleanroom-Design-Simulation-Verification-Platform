@@ -78,6 +78,10 @@ jobs:
               _foundation_v10_banner,
               parse_openfoam_checkmesh_log,
           )
+          from cleanroomx.cfd_openfoam_runtime_sync import (
+              OpenFOAMResultSynchronizer,
+              run_solver_with_sync,
+          )
           from cleanroomx.cfd_vtk import (
               audit_openfoam_vtk_boundary_patch,
               audit_openfoam_checkmesh_poly_mesh_volume,
@@ -92,6 +96,8 @@ jobs:
               raise SystemExit("Expected the OpenFOAM Foundation v10 runtime environment")
           manifest_path = root / "manifest.json"
           manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          runtime_sync_root = Path(os.environ["RUNNER_TEMP"]) / "cleanroomx-openfoam-runtime-sync"
+          runtime_simulation_id = "grid-" + manifest["family_spec_sha256"][:24]
           expected_cases = {
               f"configuration_{configuration}/{level}"
               for configuration in (1, 2, 3)
@@ -193,17 +199,60 @@ jobs:
                   log_path = case_dir / (command + ".log")
                   problem = None
                   returncode = None
+                  sync_report = None
                   try:
-                      with log_path.open("xb") as output:
-                          result = subprocess.run(
+                      if command == "simpleFoam":
+                          case_input_hashes = {
+                              relative: expected_files[f"{case_id}/{relative}"]
+                              for relative in case_input_paths
+                          }
+                          configuration_hash = hashlib.sha256(
+                              json.dumps(
+                                  case_input_hashes,
+                                  sort_keys=True,
+                                  separators=(",", ":"),
+                                  allow_nan=False,
+                              ).encode("utf-8")
+                          ).hexdigest()
+                          synchronizer = OpenFOAMResultSynchronizer(
+                              case_dir,
+                              runtime_sync_root / runtime_simulation_id / case_id,
+                              simulation_id=runtime_simulation_id,
+                              case_id=case_id,
+                              configuration_hash=configuration_hash,
+                              expected_build=build,
+                              poll_interval_seconds=0.25,
+                              settle_polls=2,
+                              timeout_seconds=600,
+                              optional_fields=("T", "k", "epsilon", "omega", "nut"),
+                          )
+                          returncode = run_solver_with_sync(
                               [executables[command]],
                               cwd=case_dir,
-                              stdout=output,
-                              stderr=subprocess.STDOUT,
-                              timeout=600,
-                              check=False,
+                              log_path=log_path,
+                              timeout_seconds=600,
+                              synchronizer=synchronizer,
                           )
-                      returncode = result.returncode
+                          sync_report = synchronizer.finish(
+                              solver_returncode=returncode,
+                              solver_log=log_path,
+                          )
+                          sync_report["manifest"] = Path(sync_report["manifest"]).relative_to(
+                              Path(os.environ["RUNNER_TEMP"])
+                          ).as_posix()
+                          if sync_report.get("status") != "results_synced":
+                              problem = "RESULT_SYNCHRONIZATION_INCOMPLETE"
+                      else:
+                          with log_path.open("xb") as output:
+                              result = subprocess.run(
+                                  [executables[command]],
+                                  cwd=case_dir,
+                                  stdout=output,
+                                  stderr=subprocess.STDOUT,
+                                  timeout=600,
+                                  check=False,
+                              )
+                          returncode = result.returncode
                   except subprocess.TimeoutExpired:
                       returncode = 124
                       problem = "TIMEOUT_AFTER_600_SECONDS"
@@ -217,6 +266,9 @@ jobs:
                       "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
                       "openfoam": banner,
                   }
+                  if sync_report is not None:
+                      stage["result_synchronization"] = sync_report
+                      case_record["result_synchronization"] = sync_report
                   if command == "checkMesh":
                       diagnostics = parse_openfoam_checkmesh_log(log_text, stage["log_sha256"])
                       stage["mesh_quality_diagnostics"] = diagnostics
@@ -515,6 +567,7 @@ jobs:
           import hashlib
           import json
           import math
+          import os
           import sys
           from pathlib import Path, PurePosixPath
 
@@ -530,6 +583,12 @@ jobs:
           root = Path(sys.argv[1]).resolve(strict=True)
           manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
           receipt = json.loads((root / "grid_execution_evidence.json").read_text(encoding="utf-8"))
+          runtime_sync_root = Path(os.environ["RUNNER_TEMP"]) / "cleanroomx-openfoam-runtime-sync"
+          sync_case_input_paths = (
+              "system/blockMeshDict", "system/controlDict", "system/fvSchemes",
+              "system/fvSolution", "constant/physicalProperties",
+              "constant/momentumTransport", "0/U", "0/p",
+          )
           expected_cases = {
               f"configuration_{configuration}/{level}"
               for configuration in (1, 2, 3)
@@ -565,6 +624,106 @@ jobs:
                   raise SystemExit("Nonzero command stage in receipt: " + case_id)
               if case.get("status") != "executed_requires_convergence_review":
                   raise SystemExit("Case is not complete: " + case_id)
+              synchronization = case.get("result_synchronization")
+              if (
+                  not isinstance(synchronization, dict)
+                  or synchronization.get("status") != "results_synced"
+                  or synchronization.get("scientific_validation") != "BLOCKED"
+                  or type(synchronization.get("record_count")) is not int
+                  or synchronization["record_count"] <= 0
+              ):
+                  raise SystemExit("Incremental result synchronization is incomplete: " + case_id)
+              sync_relative = PurePosixPath(synchronization.get("manifest", ""))
+              if sync_relative.is_absolute() or any(
+                  part in ("", ".", "..") for part in sync_relative.parts
+              ):
+                  raise SystemExit("Unsafe result-synchronization manifest path: " + case_id)
+              sync_manifest_path = Path(os.environ["RUNNER_TEMP"]).joinpath(*sync_relative.parts)
+              if sync_manifest_path.is_symlink() or not sync_manifest_path.is_file():
+                  raise SystemExit("Result-synchronization manifest is missing: " + case_id)
+              sync_manifest_path = sync_manifest_path.resolve(strict=True)
+              if not sync_manifest_path.is_relative_to(Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)):
+                  raise SystemExit("Result-synchronization manifest escaped RUNNER_TEMP: " + case_id)
+              if not sync_manifest_path.is_relative_to(runtime_sync_root.resolve(strict=True)):
+                  raise SystemExit("Result-synchronization manifest escaped its dedicated store: " + case_id)
+              sync_manifest_bytes = sync_manifest_path.read_bytes()
+              if hashlib.sha256(sync_manifest_bytes).hexdigest() != synchronization.get("manifest_sha256"):
+                  raise SystemExit("Result-synchronization manifest hash mismatch: " + case_id)
+              sync_document = json.loads(sync_manifest_bytes.decode("utf-8"))
+              expected_configuration_hash = hashlib.sha256(
+                  json.dumps(
+                      {
+                          relative: manifest["files"][f"{case_id}/{relative}"]
+                          for relative in sync_case_input_paths
+                      },
+                      sort_keys=True,
+                      separators=(",", ":"),
+                      allow_nan=False,
+                  ).encode("utf-8")
+              ).hexdigest()
+              if (
+                  sync_document.get("schema_version") != "cleanroomx.openfoam-result-sync.v1"
+                  or sync_document.get("status") != "results_synced"
+                  or sync_document.get("simulation_id") != synchronization.get("simulation_id")
+                  or sync_document.get("case_id") != case_id
+                  or sync_document.get("configuration_hash") != expected_configuration_hash
+                  or sync_document.get("configuration_hash") != synchronization.get("configuration_hash")
+                  or sync_document.get("scientific_validation") != "BLOCKED"
+                  or len(sync_document.get("records", {})) != synchronization["record_count"]
+              ):
+                  raise SystemExit("Result-synchronization manifest metadata mismatch: " + case_id)
+              for time_name, synced in sync_document["records"].items():
+                  field_parity = synced.get("native_vtk_parity", {})
+                  field_metadata = synced.get("fields", {})
+                  if (
+                      synced.get("import_status") != "PASS_DIAGNOSTIC_ONLY"
+                      or synced.get("scientific_validation") != "BLOCKED"
+                      or not isinstance(field_parity, dict)
+                      or not field_parity
+                      or any(value.get("status") != "PASS" for value in field_parity.values())
+                      or field_metadata.get("U", {}).get("units") != "m/s"
+                      or field_metadata.get("p", {}).get("units") != "m^2/s^2 (kinematic pressure)"
+                      or (
+                          synced.get("surface_phi_parity") is not None
+                          and synced["surface_phi_parity"].get("status") != "PASS"
+                      )
+                  ):
+                      raise SystemExit("Synchronized field parity or units are incomplete: " + case_id + "/" + time_name)
+                  for asset in synced.get("assets", []):
+                      asset_relative = PurePosixPath(asset.get("path", ""))
+                      if asset_relative.is_absolute() or any(
+                          part in ("", ".", "..") for part in asset_relative.parts
+                      ):
+                          raise SystemExit("Unsafe synchronized dataset path: " + case_id + "/" + time_name)
+                      asset_path = sync_manifest_path.parent.joinpath(*asset_relative.parts)
+                      if asset_path.is_symlink() or not asset_path.is_file():
+                          raise SystemExit("Synchronized dataset is missing: " + case_id + "/" + time_name)
+                      asset_path = asset_path.resolve(strict=True)
+                      if not asset_path.is_relative_to(sync_manifest_path.parent.resolve(strict=True)):
+                          raise SystemExit("Synchronized dataset escaped its result directory: " + case_id)
+                      asset_bytes = asset_path.read_bytes()
+                      if (
+                          len(asset_bytes) != asset.get("size_bytes")
+                          or hashlib.sha256(asset_bytes).hexdigest() != asset.get("sha256")
+                      ):
+                          raise SystemExit("Synchronized dataset hash mismatch: " + case_id + "/" + time_name)
+                  synced_receipt = synced.get("receipt")
+                  receipt_relative = (
+                      PurePosixPath(synced_receipt.get("path", ""))
+                      if isinstance(synced_receipt, dict) else PurePosixPath("")
+                  )
+                  if receipt_relative.is_absolute() or any(
+                      part in ("", ".", "..") for part in receipt_relative.parts
+                  ):
+                      raise SystemExit("Unsafe synchronized receipt path: " + case_id + "/" + time_name)
+                  synced_receipt_path = sync_manifest_path.parent.joinpath(*receipt_relative.parts)
+                  if (
+                      synced_receipt_path.is_symlink()
+                      or not synced_receipt_path.is_file()
+                      or hashlib.sha256(synced_receipt_path.read_bytes()).hexdigest()
+                      != synced_receipt.get("sha256")
+                  ):
+                      raise SystemExit("Synchronized receipt hash mismatch: " + case_id + "/" + time_name)
               dataset = case.get("vtk_export")
               export_stage = stages[-1]
               if not isinstance(dataset, dict) or dataset != export_stage.get("vtk_dataset"):
@@ -1190,6 +1349,7 @@ jobs:
             ${{ runner.temp }}/simpleFoam-vtk-export-summary.txt
             ${{ runner.temp }}/simpleFoam-mesh-volume-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
+            ${{ runner.temp }}/cleanroomx-openfoam-runtime-sync
             ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
           if-no-files-found: warn
           retention-days: 14

@@ -264,6 +264,27 @@ class OpenFOAMWorkspace(ttk.Frame):
             style="CX.Section.TLabel",
         ).pack(fill="x", padx=10, pady=(2, 7))
 
+        output_frame = ttk.LabelFrame(
+            self, text="Command output and evidence preview", padding=5
+        )
+        self._output_frame = output_frame
+        output_frame.pack(
+            side="bottom", fill="both", expand=True, padx=10, pady=(2, 10)
+        )
+        self.output = tk.Text(
+            output_frame,
+            wrap="word",
+            height=12,
+            state="disabled",
+            font=("TkFixedFont", 9),
+        )
+        scroll = ttk.Scrollbar(
+            output_frame, orient="vertical", command=self.output.yview
+        )
+        self.output.configure(yscrollcommand=scroll.set)
+        self.output.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
         workflow_view = ttk.Frame(self)
         workflow_view.pack(fill="both", expand=True, padx=10, pady=(0, 2))
         self._workflow_canvas = tk.Canvas(
@@ -295,9 +316,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             "<Configure>", self._resize_workflow_content, add="+"
         )
 
-        settings = ttk.LabelFrame(
-            self._workflow_content, text="Case bundle", padding=8
-        )
+        settings = ttk.LabelFrame(self._workflow_content, text="Case bundle", padding=8)
         settings.pack(fill="x", pady=4)
         self._path_row(
             settings,
@@ -415,23 +434,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             text="JSON preview is read-only and does not independently verify hashes.",
         ).pack(side="left", padx=(10, 0))
 
-        output_frame = ttk.LabelFrame(
-            self, text="Command output and evidence preview", padding=5
-        )
-        output_frame.pack(fill="both", expand=True, padx=10, pady=(2, 10))
-        self.output = tk.Text(
-            output_frame,
-            wrap="word",
-            height=12,
-            state="disabled",
-            font=("TkFixedFont", 9),
-        )
-        scroll = ttk.Scrollbar(
-            output_frame, orient="vertical", command=self.output.yview
-        )
-        self.output.configure(yscrollcommand=scroll.set)
-        self.output.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+
 
         self._action_buttons = (
             self.generate_button,

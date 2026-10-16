@@ -623,6 +623,9 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     assert app.theme_var.get() == "dark"
     assert app.spatial_workspace.canvas_2d.cget("background") == "#1b222a"
     assert app.spatial_workspace.canvas_3d.cget("background") == "#0d1117"
+    assert app.spatial_workspace._inspector_canvas.cget("background") == "#14191f"
+    assert app.openfoam_workspace._workflow_canvas.cget("background") == "#14191f"
+    assert app.openfoam_workspace.output.cget("background") == "#11161c"
     assert app.plot_canvas.cget("background") == "#131920"
     assert app.input_text.cget("background") == "#11161c"
     assert app.project.to_dict() == project_before
@@ -631,6 +634,8 @@ def test_theme_switch_is_view_only_and_rethemes_engineering_surfaces(app):
     app.root.update()
     assert app.theme_var.get() == "light"
     assert app.spatial_workspace.canvas_2d.cget("background") == "#f7f9fb"
+    assert app.spatial_workspace._inspector_canvas.cget("background") == "#e9edf2"
+    assert app.openfoam_workspace._workflow_canvas.cget("background") == "#e9edf2"
     assert app.project.to_dict() == project_before
 
 
@@ -1056,3 +1061,53 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    project_before = copy.deepcopy(app.project.to_dict())
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    canvas = workspace._inspector_canvas
+    canvas.pack_configure(fill="x", expand=False)
+    canvas.configure(height=85)
+    app.root.update_idletasks()
+    app.root.update()
+
+    region = canvas.bbox("all")
+    assert region is not None
+    assert region[3] > canvas.winfo_height()
+    assert workspace._apply_properties_button.winfo_ismapped()
+    assert workspace._inspector_sync_label.winfo_ismapped()
+
+    canvas.yview_moveto(0)
+    workspace._property_entries["height_m"].event_generate(
+        "<MouseWheel>", delta=-120
+    )
+    app.root.update()
+    assert canvas.yview()[0] > 0
+    assert app.project.to_dict() == project_before
+
+
+def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
+    workspace = app.openfoam_workspace
+    app.notebook.select(workspace)
+    app.root.update()
+
+    canvas = workspace._workflow_canvas
+    canvas.pack_configure(fill="x", expand=False)
+    canvas.configure(height=85)
+    app.root.update_idletasks()
+    app.root.update()
+
+    region = canvas.bbox("all")
+    assert region is not None
+    assert region[3] > canvas.winfo_height()
+    assert workspace.output.winfo_ismapped()
+
+    canvas.yview_moveto(0)
+    workspace.sync_vtk_button.event_generate("<MouseWheel>", delta=-120)
+    app.root.update()
+    assert canvas.yview()[0] > 0

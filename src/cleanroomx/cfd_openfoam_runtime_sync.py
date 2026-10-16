@@ -458,6 +458,8 @@ def _validate_vtk_snapshot(
     )
     if analysis_import.get("mesh_cells") != cell_count:
         raise ValueError("CleanroomX analysis importer reported an inconsistent cell count")
+    if contaminant_field is not None and not analysis_import.get("has_contaminant_field"):
+        raise ValueError(f"Configured contaminant field {contaminant_field!r} is missing from imported VTK cell data")
     return {
         "cell_count": cell_count,
         "fields": summaries,

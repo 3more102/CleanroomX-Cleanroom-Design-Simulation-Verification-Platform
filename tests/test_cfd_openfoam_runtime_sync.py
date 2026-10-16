@@ -249,6 +249,24 @@ def test_sync_records_incomplete_field_and_never_accepts_it(tmp_path, monkeypatc
     assert "kinematic-pressure dimensions" in manifest["errors"][0]["message"]
 
 
+def test_sync_rejects_a_missing_explicit_contaminant_field(tmp_path, monkeypatch):
+    case = _case(tmp_path, temperature=False)
+    calls = _fake_foam_to_vtk(monkeypatch, expected_temperature=False)
+    synchronizer = _configured_sync(tmp_path, case, monkeypatch, contaminant_field="T")
+    for _ in range(7):
+        synchronizer.poll_once()
+    report = synchronizer.finish(solver_returncode=1)
+
+    assert report["status"] == "no_results_available"
+    assert report["record_count"] == 0
+    assert len(calls) == 3
+    manifest = json.loads((tmp_path / "sync" / "sync_manifest.json").read_text())
+    assert any(
+        "Configured contaminant field 'T' is missing" in error["message"]
+        for error in manifest["errors"]
+    )
+
+
 def test_sync_requires_target_release_and_rejects_unsupported_fields(tmp_path, monkeypatch):
     case = _case(tmp_path)
     executable = tmp_path / "foamToVTK"

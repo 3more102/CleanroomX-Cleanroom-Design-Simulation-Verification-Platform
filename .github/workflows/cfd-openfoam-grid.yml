@@ -1203,7 +1203,7 @@ jobs:
             exit 1
           fi
           python -m cleanroomx.cfd_vtk_time_selection \
-            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" --times 50,100
+            "$RUNNER_TEMP/cleanroomx-cfd-grid-family" --times 30,60,90
 
       - name: Incrementally synchronize real OpenFOAM VTK results
         run: |

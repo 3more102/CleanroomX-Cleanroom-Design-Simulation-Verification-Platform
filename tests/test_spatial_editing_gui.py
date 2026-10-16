@@ -698,6 +698,7 @@ def test_application_command_strip_remains_visible_at_minimum_window(app):
 def test_guided_workflow_is_visible_at_minimum_window_and_opens_design(app):
     app.root.geometry("1050x680")
     app.root.update()
+    assert app.workflow_run_button is app.run_button
 
     buttons = (
         app.workflow_design_button,

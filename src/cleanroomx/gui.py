@@ -2133,6 +2133,7 @@ class CleanroomXApp:
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
+        self.document_status_var = tk.StringVar(value="Not saved")
         self.status_var = tk.StringVar(value="Ready")
         self.autosave_status_var = tk.StringVar(
             value=(
@@ -2429,22 +2430,20 @@ class CleanroomXApp:
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
             row=0, column=4, sticky="ew", padx=(0, 10)
         )
-        ttk.Button(
+        self.document_status_label = ttk.Label(
             topbar,
-            text="Validate",
-            command=self.validate_current,
-        ).grid(row=0, column=5, padx=2)
-        self.run_button = ttk.Button(
-            topbar,
-            text="▶ Run",
-            command=self.run_current,
-            style="CX.Primary.TButton",
+            textvariable=self.document_status_var,
+            style="CX.Document.Unsaved.TLabel",
+            anchor="center",
+            width=13,
         )
-        self.run_button.grid(row=0, column=6, padx=2)
+        self.document_status_label.grid(
+            row=0, column=5, padx=(4, 8), sticky="e"
+        )
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar, text="Stop run", command=self.cancel_run, state="disabled"
         )
-        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+        self.cancel_button.grid(row=0, column=6, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
 
@@ -2585,13 +2584,14 @@ class CleanroomXApp:
             command=self.validate_current,
         )
         self.workflow_validate_button.pack(side="left", padx=1)
-        self.workflow_run_button = ttk.Button(
+        self.run_button = ttk.Button(
             workflowbar,
             text="4  Run",
             width=9,
             style="CX.Primary.TButton",
             command=self.run_current,
         )
+        self.workflow_run_button = self.run_button
         self.workflow_run_button.pack(side="left", padx=1)
         self.workflow_verify_button = ttk.Button(
             workflowbar,
@@ -6388,6 +6388,23 @@ class CleanroomXApp:
         has_unsaved_changes = self._has_unsaved_changes()
         if has_unsaved_changes:
             self._schedule_recovery_checkpoint()
+
+        document_status_var = getattr(self, "document_status_var", None)
+        document_status_label = getattr(self, "document_status_label", None)
+        if document_status_var is not None:
+            project_path = getattr(self, "project_path", None)
+            if project_path is None:
+                document_status = "Not saved"
+                document_style = "CX.Document.Unsaved.TLabel"
+            elif has_unsaved_changes:
+                document_status = "Modified"
+                document_style = "CX.Document.Modified.TLabel"
+            else:
+                document_status = "Saved"
+                document_style = "CX.Document.Saved.TLabel"
+            document_status_var.set(document_status)
+            if document_status_label is not None:
+                document_status_label.configure(style=document_style)
 
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):

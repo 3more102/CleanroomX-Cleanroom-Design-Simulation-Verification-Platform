@@ -53,7 +53,8 @@ def study_spec():
     return {
         "schema_version":SCHEMA,"name":"Synthetic and externally testable mesh study",
         "configuration":1,"room_volume_m3":1,"quantity":"velocity_mean_m_s",
-        "unit":"m/s","criteria":criteria(),"log_audit":audit_params(),
+        "unit":"m/s","contaminant_array":None,
+        "criteria":criteria(),"log_audit":audit_params(),
         "runs":[
             {"level":level,"mesh_cells":[n,n,n],"vtk_file":f"{level}.vtu",
              "solver_log":f"{level}.log","run_id":level+"-synthetic",
@@ -61,6 +62,22 @@ def study_spec():
             for level,n in (("fine",8),("medium",4),("coarse",2))
         ],
     }
+
+
+def test_contaminant_grid_study_requires_an_explicit_array_semantic():
+    spec=study_spec()
+    spec["quantity"]="contaminant_mean"
+    spec["unit"]="particles/m^3"
+    with pytest.raises(ValueError,match="contaminant_array"):
+        validate_grid_spec(spec)
+
+    spec["contaminant_array"]="CO2"
+    assert set(validate_grid_spec(spec))=={"fine","medium","coarse"}
+
+    spec["quantity"]="velocity_mean_m_s"
+    spec["unit"]="m/s"
+    with pytest.raises(ValueError,match="only allowed for contaminant_mean"):
+        validate_grid_spec(spec)
 
 
 def test_nasa_three_grid_reference():

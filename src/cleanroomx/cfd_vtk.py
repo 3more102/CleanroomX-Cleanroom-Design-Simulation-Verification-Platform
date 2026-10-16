@@ -1684,7 +1684,8 @@ def validate_vtk_field_map(field_map):
 
 
 def import_vtk_case(
-    path,*,contaminant_array="T",recirculation_array="recirculating",field_map=None
+    path, *, contaminant_array=None, temperature_array=None,
+    temperature_units=None, recirculation_array="recirculating", field_map=None
 ):
     source=Path(path)
     if not source.is_file(): raise FileNotFoundError(source)
@@ -1709,13 +1710,38 @@ def import_vtk_case(
         raise ValueError("VTK requires three-component U cell velocity in m/s")
     if volumes is None or volumes.GetNumberOfTuples()!=cell_count:
         raise ValueError("Cannot compute VTK cell volumes")
+    for label, array_name in (
+        ("contaminant_array", contaminant_array), ("temperature_array", temperature_array)
+    ):
+        if array_name is not None and (
+            type(array_name) is not str or not array_name.strip() or len(array_name) > 128
+        ):
+            raise ValueError(f"{label} must be a nonempty VTK array name of at most 128 characters")
+    if contaminant_array is not None and temperature_array is not None and contaminant_array == temperature_array:
+        raise ValueError("One VTK array cannot be both temperature and contaminant concentration")
+    if temperature_array is None:
+        if temperature_units is not None:
+            raise ValueError("temperature_units requires temperature_array")
+    elif temperature_units != "K":
+        raise ValueError("temperature_array requires explicit temperature_units='K'")
     c=arrays.GetArray(contaminant_array) if contaminant_array is not None else None
+    temp=arrays.GetArray(temperature_array) if temperature_array is not None else None
     mask=arrays.GetArray(recirculation_array) if recirculation_array is not None else None
+    if contaminant_array is not None and c is None:
+        raise ValueError(f"Configured contaminant array {contaminant_array!r} is missing from VTK cell data")
+    if temperature_array is not None and temp is None:
+        raise ValueError(f"Configured temperature array {temperature_array!r} is missing from VTK cell data")
     if c is not None and (c.GetNumberOfComponents()!=1 or c.GetNumberOfTuples()!=cell_count):
         raise ValueError("Contaminant field must be scalar")
+    if temp is not None and (temp.GetNumberOfComponents()!=1 or temp.GetNumberOfTuples()!=cell_count):
+        raise ValueError("Temperature field must be scalar")
     if mask is not None and (mask.GetNumberOfComponents()!=1 or mask.GetNumberOfTuples()!=cell_count):
         raise ValueError("Recirculation mask must be scalar")
     map_data = validate_vtk_field_map(field_map) if field_map is not None else None
+    cell_volumes = [float(volumes.GetTuple1(index)) for index in range(cell_count)]
+    if any(not math.isfinite(value) or value <= 0 for value in cell_volumes):
+        raise ValueError("Cannot summarize mapped VTK fields with invalid cell volumes")
+    total_cell_volume = math.fsum(cell_volumes)
     imported_fields = {}
     unavailable_fields = []
     if map_data is not None:
@@ -1735,6 +1761,7 @@ def import_vtk_case(
                 )
             tuples = []
             columns = [[] for _ in range(components)]
+            weighted_columns = [[] for _ in range(components)]
             for index in range(grid.GetNumberOfCells()):
                 value = tuple(float(x) for x in array.GetTuple(index))
                 if len(value) != components or not all(math.isfinite(x) for x in value):
@@ -1742,13 +1769,23 @@ def import_vtk_case(
                 tuples.append(value[0] if components == 1 else list(value))
                 for component, number in enumerate(value):
                     columns[component].append(number)
+                    weighted_value = cell_volumes[index] * number
+                    if not math.isfinite(weighted_value):
+                        raise ValueError(
+                            f"Mapped VTK array {array_name!r} has an overflowing weighted value"
+                        )
+                    weighted_columns[component].append(weighted_value)
             try:
                 summary = {
                     "minimum": [min(column) for column in columns],
                     "maximum": [max(column) for column in columns],
-                    "mean": [math.fsum(column) / len(column) for column in columns],
+                    "mean": [
+                        math.fsum(column) / total_cell_volume
+                        for column in weighted_columns
+                    ],
+                    "mean_weighting": "cell_volume",
                 }
-            except OverflowError as exc:
+            except (OverflowError, ValueError) as exc:
                 raise ValueError(f"Mapped VTK array {array_name!r} has an overflowing summary") from exc
             imported_fields[definition["semantic"]] = {
                 "array_name": array_name,
@@ -1772,6 +1809,11 @@ def import_vtk_case(
             if not math.isfinite(val) or val<0:
                 raise ValueError(f"Cell {i}: invalid contaminant concentration")
             cell["contaminant_concentration"]=val
+        if temp is not None:
+            val=float(temp.GetTuple1(i))
+            if not math.isfinite(val) or val<=0:
+                raise ValueError(f"Cell {i}: invalid absolute temperature in K")
+            cell["temperature_K"]=val
         if mask is not None:
             value=float(mask.GetTuple1(i))
             if value not in (0,1):
@@ -1779,14 +1821,23 @@ def import_vtk_case(
             cell["recirculating"]=bool(value)
         cells.append(cell)
     result={"cells":cells,"source_sha256":source_sha,"mesh_cells":len(cells),
-            "has_contaminant_field":c is not None,"has_recirculation_labels":mask is not None}
+            "has_contaminant_field":c is not None,
+            "contaminant_array":contaminant_array if c is not None else None,
+            "has_temperature_field":temp is not None,
+            "temperature_field":({"array_name":temperature_array,"units":"K",
+                                  "units_source":"explicit_caller_declaration"}
+                                 if temp is not None else None),
+            "has_recirculation_labels":mask is not None}
     if map_data is not None:
         result["field_map_schema"] = map_data["schema_version"]
         result["field_data"] = imported_fields
         result["unavailable_fields"] = unavailable_fields
     return result
 
-def populate_study_from_vtk(study,sources,*,solver_name,contaminant_array="T"):
+def populate_study_from_vtk(
+    study, sources, *, solver_name, contaminant_array=None,
+    temperature_array=None, temperature_units=None, field_map=None,
+):
     if type(solver_name) is not str or not solver_name.strip():
         raise ValueError("solver_name must be nonempty")
     if set(sources)!={1,2,3}: raise ValueError("Provide three VTK source files (1, 2, 3)")
@@ -1796,7 +1847,11 @@ def populate_study_from_vtk(study,sources,*,solver_name,contaminant_array="T"):
         raise ValueError("Study must contain unique cases 1, 2, 3")
     manifest={}
     for cfg in (1,2,3):
-        imported=import_vtk_case(sources[cfg],contaminant_array=contaminant_array)
+        imported=import_vtk_case(
+            sources[cfg], contaminant_array=contaminant_array,
+            temperature_array=temperature_array, temperature_units=temperature_units,
+            field_map=field_map,
+        )
         case=cases[cfg]
         if case.get("cells"): raise ValueError(f"Case {cfg}: refuse to overwrite existing samples")
         case["cells"]=imported["cells"]
@@ -1806,5 +1861,12 @@ def populate_study_from_vtk(study,sources,*,solver_name,contaminant_array="T"):
                         "source_reference":"sha256:"+imported["source_sha256"]}
         manifest[str(cfg)]={k:v for k,v in imported.items() if k!="cells"}
     validate_study(updated)
+    analysis = analyze_cfd_study(updated)
+    for result in analysis["cases"]:
+        imported = manifest[str(result["configuration"])]
+        result["fields"] = copy.deepcopy(imported.get("field_data", {}))
+        result["unavailable_fields"] = copy.deepcopy(
+            imported.get("unavailable_fields", [])
+        )
     return {"study":updated,"import_manifest":manifest,
-            "analysis":analyze_cfd_study(updated)}
+            "analysis":analysis}

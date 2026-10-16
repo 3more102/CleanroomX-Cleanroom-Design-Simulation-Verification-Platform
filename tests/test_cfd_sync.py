@@ -96,6 +96,18 @@ def test_sync_waits_for_stable_vtk_then_imports_atomically_and_resumes(tmp_path)
     assert snapshot_path.read_bytes() == saved_bytes
 
 
+def test_sync_refuses_old_state_schema_without_relabeling_saved_summaries(tmp_path):
+    source, _, _, output, kwargs = _case(tmp_path)
+    synchronize_openfoam_vtk_once(source, output, **kwargs)
+    state_path = output / "sync-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["schema_version"] = "cleanroomx.openfoam-vtk-sync.v2"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(SyncError, match="different simulation or configuration"):
+        synchronize_openfoam_vtk_once(source, output, **kwargs)
+
+
 def test_sync_discovers_foam_to_vtk_case_time_filenames(tmp_path):
     source = tmp_path / "VTK"
     source.mkdir()
@@ -140,7 +152,10 @@ def test_sync_imports_explicitly_mapped_pressure_and_tracks_absent_fields(tmp_pa
     assert pressure["units"] == "m^2/s^2"
     assert pressure["units_source"] == "explicit_caller_field_map"
     assert pressure["values"] == [2.5]
-    assert pressure["summary"] == {"minimum": [2.5], "maximum": [2.5], "mean": [2.5]}
+    assert pressure["summary"] == {
+        "minimum": [2.5], "maximum": [2.5], "mean": [2.5],
+        "mean_weighting": "cell_volume",
+    }
     assert fields["unavailable_fields"] == [{
         "array_name": "k",
         "semantic": "turbulent_kinetic_energy",

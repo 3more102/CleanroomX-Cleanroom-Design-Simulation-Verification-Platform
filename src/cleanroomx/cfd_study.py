@@ -118,13 +118,18 @@ def validate_study(data: Any) -> dict:
         if cells and (dimensions is None or solver is None):
             raise ValueError("sampled cells require room geometry and solver provenance")
         for cell in cells:
-            cell = _obj(cell, {"volume_m3", "velocity_m_s", "contaminant_concentration", "recirculating"}, "cell")
+            cell = _obj(cell, {
+                "volume_m3", "velocity_m_s", "temperature_K",
+                "contaminant_concentration", "recirculating",
+            }, "cell")
             _number(cell.get("volume_m3"), "cell.volume_m3", positive=True)
             velocity = cell.get("velocity_m_s")
             if type(velocity) is not list or len(velocity) != 3:
                 raise ValueError("cell.velocity_m_s must contain three components")
             for component in velocity:
                 _number(component, "cell.velocity_m_s")
+            if cell.get("temperature_K") is not None:
+                _number(cell["temperature_K"], "cell.temperature_K", positive=True)
             if cell.get("contaminant_concentration") is not None:
                 _number(cell["contaminant_concentration"], "cell.contaminant_concentration", nonnegative=True)
                 if limit is None:
@@ -147,6 +152,11 @@ def _metrics(case: dict, room_volume: float | None, settings: dict) -> dict:
         "velocity_mean_m_s": None,
         "velocity_nonuniformity_cv": None,
         "recirculation_volume_fraction": None,
+        "temperature_mean_K": None,
+        "temperature_min_K": None,
+        "temperature_max_K": None,
+        "temperature_coverage_fraction": 0.0,
+        "temperature_status": "unavailable",
         "contaminant_mean": None,
         "contaminant_max": None,
         "contaminant_exceedance_volume_fraction": None,
@@ -165,6 +175,20 @@ def _metrics(case: dict, room_volume: float | None, settings: dict) -> dict:
             )
     if not cells:
         return result
+    temperature_cells = [cell for cell in cells if cell.get("temperature_K") is not None]
+    if temperature_cells:
+        temperature_volume = math.fsum(cell["volume_m3"] for cell in temperature_cells)
+        result["temperature_coverage_fraction"] = temperature_volume / supplied
+        if len(temperature_cells) == len(cells):
+            temperatures = [cell["temperature_K"] for cell in cells]
+            result["temperature_mean_K"] = math.fsum(
+                cell["volume_m3"] * cell["temperature_K"] for cell in cells
+            ) / supplied
+            result["temperature_min_K"] = min(temperatures)
+            result["temperature_max_K"] = max(temperatures)
+            result["temperature_status"] = "complete"
+        else:
+            result["temperature_status"] = "partial"
     tolerance = settings.get("max_unrepresented_volume_fraction")
     if tolerance is not None:
         result["volume_coverage_status"] = "pass" if covered >= 1 - tolerance - 1e-12 else "fail"

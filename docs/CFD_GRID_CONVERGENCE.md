@@ -120,7 +120,14 @@ resolution time, not a guarantee against concurrent filesystem mutation.
 Currently supported QoIs:
 
 - velocity_mean_m_s: volume-weighted cell-centered |U|, in m/s
-- contaminant_mean: volume-weighted externally solved T (project units)
+- contaminant_mean: volume-weighted explicitly selected VTK scalar, using the
+  project-declared `unit` (array names do not infer contaminant semantics)
+
+For `contaminant_mean`, schema v2 requires a nonempty top-level
+`contaminant_array` naming the externally solved scalar. For
+`velocity_mean_m_s`, set `contaminant_array` to `null`. VTK carries no OpenFOAM
+dimension metadata, so the declared unit is provenance from the user; it is not
+converted or independently verified by this grid-study utility.
 
 The VTK importer hashes the exact file bytes; the independent log audit
 hashes the raw residual log. The grid audit rejects byte-identical VTK datasets

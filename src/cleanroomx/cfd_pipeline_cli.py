@@ -44,7 +44,14 @@ def build_parser():
         importer.add_argument(f"--case-{cfg}",required=True)
     importer.add_argument("study")
     importer.add_argument("--solver-name",required=True)
-    importer.add_argument("--contaminant-array",default="T")
+    importer.add_argument("--contaminant-array",
+                          help="Explicitly identify a scalar VTK array as contaminant concentration")
+    importer.add_argument("--temperature-array",
+                          help="Explicitly identify a scalar VTK array containing absolute temperature")
+    importer.add_argument("--temperature-units",choices=("K",),
+                          help="Required with --temperature-array; source values must be kelvin")
+    importer.add_argument("--field-map-file",
+                          help="Optional JSON map for additional scalar/vector VTK fields")
     importer.add_argument("--output",required=True)
     sync=sub.add_parser("sync-vtk",help="Incrementally import stable OpenFOAM foamToVTK time datasets")
     sync.add_argument("source_directory",help="foamToVTK VTK output root for one simulation")
@@ -84,7 +91,9 @@ def build_parser():
     case_sync.add_argument("--contaminant-field")
     plot=sub.add_parser("plot",help="3-panel sampled-cell cross-section PNG")
     for cfg in (1,2,3): plot.add_argument(f"--case-{cfg}",required=True)
-    plot.add_argument("--field",choices=("speed","contaminant"),default="speed")
+    plot.add_argument("--field",choices=("speed","temperature","contaminant","scalar"),default="speed")
+    plot.add_argument("--array-name",help="Explicit VTK scalar array name for non-speed plots")
+    plot.add_argument("--units",help="Explicit source units for non-speed plots (temperature requires K)")
     plot.add_argument("--axis",choices=("x","y","z"),required=True)
     plot.add_argument("--position-m",type=float,required=True)
     plot.add_argument("--slab-thickness-m",type=float,required=True)
@@ -237,11 +246,17 @@ def main():
     files={i:getattr(args,f"case_{i}") for i in (1,2,3)}
     if args.command=="plot":
         result=render_cfd_cross_section(files,args.output,axis=args.axis,
-                 position_m=args.position_m,slab_thickness_m=args.slab_thickness_m,field=args.field)
+                 position_m=args.position_m,slab_thickness_m=args.slab_thickness_m,
+                 field=args.field,array_name=args.array_name,units=args.units)
         print(dumps_strict_json(result))
         return 0
     result=populate_study_from_vtk(load_cli_input(load_strict_json,args.study),files,
-                                    solver_name=args.solver_name,contaminant_array=args.contaminant_array)
+                                    solver_name=args.solver_name,
+                                    contaminant_array=args.contaminant_array,
+                                    temperature_array=args.temperature_array,
+                                    temperature_units=args.temperature_units,
+                                    field_map=(load_cli_input(load_strict_json,args.field_map_file)
+                                               if args.field_map_file else None))
     if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,
                               dumps_strict_json(result),protected_inputs=(args.study,*files.values())):
         return 1

@@ -22,8 +22,8 @@ from typing import Callable
 
 from .cfd_vtk import MAX_VTK_BYTES, import_vtk_case, validate_vtk_field_map
 
-STATE_SCHEMA = "cleanroomx.openfoam-vtk-sync.v2"
-SNAPSHOT_SCHEMA = "cleanroomx.openfoam-vtk-result.v2"
+STATE_SCHEMA = "cleanroomx.openfoam-vtk-sync.v3"
+SNAPSHOT_SCHEMA = "cleanroomx.openfoam-vtk-result.v3"
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _TIME_NAME = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]{1,3})?\Z")
 _MAX_STATE_BYTES = 64 * 1024 * 1024

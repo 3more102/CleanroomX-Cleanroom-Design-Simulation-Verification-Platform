@@ -343,7 +343,10 @@ def test_tampered_boundary_audit_manifest_fails_before_solver_launch(tmp_path,mo
     with pytest.raises(ValueError,match="Boundary audit metadata mismatch"):
         run_openfoam_cases(tmp_path/"cases")
 
-def vtk_fixture(path, concentration=1., recirc=0., speed=.2):
+def vtk_fixture(
+    path, concentration=1., recirc=0., speed=.2, temperature_k=None,
+    turbulent_kinetic_energy=None,
+):
     vtk=pytest.importorskip("vtk")
     points=vtk.vtkPoints()
     for p in ((0,0,0),(1,0,0),(1,1,0),(0,1,0),
@@ -359,6 +362,14 @@ def vtk_fixture(path, concentration=1., recirc=0., speed=.2):
     t=vtk.vtkDoubleArray();t.SetName("T");t.InsertNextValue(concentration)
     r=vtk.vtkDoubleArray();r.SetName("recirculating");r.InsertNextValue(recirc)
     for arr in (u,t,r):grid.GetCellData().AddArray(arr)
+    if temperature_k is not None:
+        temperature=vtk.vtkDoubleArray();temperature.SetName("temperatureK")
+        temperature.InsertNextValue(temperature_k)
+        grid.GetCellData().AddArray(temperature)
+    if turbulent_kinetic_energy is not None:
+        kinetic=vtk.vtkDoubleArray();kinetic.SetName("k")
+        kinetic.InsertNextValue(turbulent_kinetic_energy)
+        grid.GetCellData().AddArray(kinetic)
     writer=vtk.vtkXMLUnstructuredGridWriter()
     writer.SetFileName(str(path));writer.SetInputData(grid)
     assert writer.Write()==1
@@ -820,7 +831,7 @@ def test_actual_vtk_field_import_and_pareto(tmp_path):
     for cfg in (1,2,3):
         path=tmp_path/f"case{cfg}.vtu"
         vtk_fixture(path,concentration=0 if cfg==3 else 10,
-                    recirc=0 if cfg==3 else 1)
+                    recirc=0 if cfg==3 else 1,turbulent_kinetic_energy=float(cfg))
         sources[cfg]=path
     study={"schema_version":"cleanroomx.cfd-study.v1","name":"synthetic VTK smoke",
            "room":{"length_m":1,"width_m":1,"height_m":1},
@@ -830,14 +841,108 @@ def test_actual_vtk_field_import_and_pareto(tmp_path):
            "cases":[{"configuration":i,"source_location_m":[.5,.5,.5],
                      "inlet_flow_m3_s":1,"outlet_flow_m3_s":1,"cells":[]}
                      for i in (1,2,3)]}
-    result=populate_study_from_vtk(study,sources,solver_name="synthetic VTK")
+    result=populate_study_from_vtk(
+        study,sources,solver_name="synthetic VTK",contaminant_array="T",
+        field_map={
+            "schema_version":"cleanroomx.cfd-vtk-field-map.v1",
+            "fields":{"k":{"semantic":"turbulent_kinetic_energy","units":"m^2/s^2"}},
+        },
+    )
     assert result["analysis"]["comparison_status"]=="comparable"
     assert result["analysis"]["unique_pareto_dominant_configuration"]==3
     assert result["analysis"]["cases"][2]["metrics"]["sampled_volume_m3"]==pytest.approx(1)
     assert all(not case["cells"] for case in study["cases"])
     assert result["import_manifest"]["1"]["source_sha256"]
+    turbulence=result["analysis"]["cases"][0]["fields"]["turbulent_kinetic_energy"]
+    assert turbulence["units"]=="m^2/s^2"
+    assert turbulence["summary"]["mean"]==pytest.approx([1])
+    assert turbulence["summary"]["mean_weighting"]=="cell_volume"
     with pytest.raises(ValueError,match="overwrite"):
         populate_study_from_vtk(result["study"],sources,solver_name="synthetic VTK")
+
+def test_vtk_temperature_is_explicit_and_analyzed_separately_from_contaminant(tmp_path):
+    sources={}
+    for cfg,temperature in ((1,293.15),(2,294.15),(3,295.15)):
+        path=tmp_path/f"temperature-{cfg}.vtu"
+        vtk_fixture(path,concentration=12.0,temperature_k=temperature)
+        sources[cfg]=path
+    study={"schema_version":"cleanroomx.cfd-study.v1","name":"temperature import",
+           "room":{"length_m":1,"width_m":1,"height_m":1},
+           "analysis":{"max_unrepresented_volume_fraction":0,
+                       "max_flow_imbalance_fraction":0},
+           "cases":[{"configuration":i,"cells":[]} for i in (1,2,3)]}
+
+    result=populate_study_from_vtk(
+        study,sources,solver_name="synthetic temperature",
+        temperature_array="temperatureK",temperature_units="K",
+    )
+
+    first=result["study"]["cases"][0]["cells"][0]
+    assert first["temperature_K"]==pytest.approx(293.15)
+    assert "contaminant_concentration" not in first
+    assert result["import_manifest"]["1"]["has_contaminant_field"] is False
+    assert result["import_manifest"]["1"]["temperature_field"] == {
+        "array_name":"temperatureK","units":"K",
+        "units_source":"explicit_caller_declaration",
+    }
+    metrics=result["analysis"]["cases"][0]["metrics"]
+    assert metrics["temperature_mean_K"]==pytest.approx(293.15)
+    assert metrics["temperature_min_K"]==pytest.approx(293.15)
+    assert metrics["temperature_max_K"]==pytest.approx(293.15)
+    assert metrics["temperature_coverage_fraction"]==pytest.approx(1)
+    assert metrics["temperature_status"]=="complete"
+
+def test_vtk_temperature_requires_kelvin_declaration(tmp_path):
+    from cleanroomx.cfd_vtk import import_vtk_case
+    path=tmp_path/"temperature.vtu"
+    vtk_fixture(path,temperature_k=293.15)
+    with pytest.raises(ValueError,match="explicit temperature_units='K'"):
+        import_vtk_case(path,temperature_array="temperatureK")
+    with pytest.raises(ValueError,match="Configured temperature array 'missing' is missing"):
+        import_vtk_case(path,temperature_array="missing",temperature_units="K")
+    with pytest.raises(ValueError,match="Configured contaminant array 'missing' is missing"):
+        import_vtk_case(path,contaminant_array="missing")
+    with pytest.raises(ValueError,match="cannot be both"):
+        import_vtk_case(
+            path,contaminant_array="T",temperature_array="T",temperature_units="K"
+        )
+
+def test_vtk_field_map_reports_volume_weighted_means(tmp_path):
+    vtk=pytest.importorskip("vtk")
+    path=tmp_path/"unequal-cell-volumes.vtu"
+    points=vtk.vtkPoints()
+    hexahedra=(
+        ((0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)),
+        ((1,0,0),(3,0,0),(3,1,0),(1,1,0),(1,0,1),(3,0,1),(3,1,1),(1,1,1)),
+    )
+    grid=vtk.vtkUnstructuredGrid()
+    for vertices in hexahedra:
+        first=points.GetNumberOfPoints()
+        for point in vertices:
+            points.InsertNextPoint(*point)
+        cell=vtk.vtkHexahedron()
+        for index in range(8):
+            cell.GetPointIds().SetId(index,first+index)
+        grid.InsertNextCell(cell.GetCellType(),cell.GetPointIds())
+    grid.SetPoints(points)
+    velocity=vtk.vtkDoubleArray();velocity.SetName("U");velocity.SetNumberOfComponents(3)
+    velocity.InsertNextTuple3(0,0,1);velocity.InsertNextTuple3(0,0,1)
+    kinetic_energy=vtk.vtkDoubleArray();kinetic_energy.SetName("k")
+    kinetic_energy.InsertNextValue(1);kinetic_energy.InsertNextValue(3)
+    grid.GetCellData().AddArray(velocity);grid.GetCellData().AddArray(kinetic_energy)
+    writer=vtk.vtkXMLUnstructuredGridWriter()
+    writer.SetFileName(str(path));writer.SetInputData(grid)
+    assert writer.Write()==1
+
+    imported=import_vtk_case(path,field_map={
+        "schema_version":"cleanroomx.cfd-vtk-field-map.v1",
+        "fields":{"k":{"semantic":"turbulent_kinetic_energy","units":"m^2/s^2"}},
+    })
+
+    summary=imported["field_data"]["turbulent_kinetic_energy"]["summary"]
+    assert [cell["volume_m3"] for cell in imported["cells"]]==pytest.approx([1,2])
+    assert summary["mean"]==pytest.approx([7/3])
+    assert summary["mean_weighting"]=="cell_volume"
 
 def test_vtk_png_sampled_cross_section(tmp_path):
     from cleanroomx.cfd_visualization import render_cfd_cross_section
@@ -845,11 +950,18 @@ def test_vtk_png_sampled_cross_section(tmp_path):
     sources={}
     for cfg in (1,2,3):
         f=tmp_path/f"plot{cfg}.vtu"
-        vtk_fixture(f,speed=cfg*.2)
+        vtk_fixture(f,speed=cfg*.2,temperature_k=290+cfg)
         sources[cfg]=f
     target=tmp_path/"actual-vtk-data.png"
     info=render_cfd_cross_section(sources,target,axis="y",position_m=.5,slab_thickness_m=.2)
     assert target.stat().st_size>5000
     assert info["sample_count"]=={"1":1,"2":1,"3":1}
+    temperature_target=tmp_path/"temperature.png"
+    temperature_info=render_cfd_cross_section(
+        sources,temperature_target,axis="y",position_m=.5,slab_thickness_m=.2,
+        field="temperature",array_name="temperatureK",units="K",
+    )
+    assert temperature_target.stat().st_size>5000
+    assert temperature_info["range"]==pytest.approx([291,293])
     with pytest.raises(FileExistsError):
         render_cfd_cross_section(sources,target,axis="y",position_m=.5,slab_thickness_m=.2)

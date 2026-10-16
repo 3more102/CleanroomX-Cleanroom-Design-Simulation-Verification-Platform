@@ -36,7 +36,7 @@ from .cfd_vtk import (
 from .cfd_vtk_time_selection import parse_foam_to_vtk_time_log
 
 
-SCHEMA = "cleanroomx.openfoam-result-sync.v1"
+SCHEMA = "cleanroomx.openfoam-result-sync.v2"
 DEFAULT_OPTIONAL_FIELDS = ("T", "k", "epsilon", "omega", "nut")
 MAX_FIELD_BYTES = 256 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 512 * 1024 * 1024
@@ -210,6 +210,21 @@ def _field_metadata(path: Path, field_name: str) -> dict[str, Any]:
         raise ValueError("OpenFOAM velocity U must use m/s dimensions [0 1 -1 0 0 0 0]")
     if field_name == "p" and dimension_values != [0, 2, -2, 0, 0, 0, 0]:
         raise ValueError("OpenFOAM p must use kinematic-pressure dimensions [0 2 -2 0 0 0 0]")
+    standard_dimensions = {
+        "T": ([0, 0, 0, 1, 0, 0, 0], "temperature in kelvin"),
+        "k": ([0, 2, -2, 0, 0, 0, 0], "turbulent kinetic energy"),
+        "epsilon": ([0, 2, -3, 0, 0, 0, 0], "turbulent dissipation rate"),
+        "omega": ([0, 0, -1, 0, 0, 0, 0], "specific dissipation rate"),
+        "nut": ([0, 2, -1, 0, 0, 0, 0], "turbulent kinematic viscosity"),
+    }
+    if field_name in standard_dimensions:
+        expected_dimensions, semantic_name = standard_dimensions[field_name]
+        if dimension_values != expected_dimensions:
+            raise ValueError(
+                f"OpenFOAM {field_name} must use dimensions for {semantic_name}"
+            )
+        if field_class != "volScalarField":
+            raise ValueError(f"OpenFOAM {field_name} must be a volScalarField")
     internal = re.findall(r"\binternalField\s+(uniform|nonuniform)\b", text)
     if len(internal) != 1:
         raise ValueError(f"OpenFOAM field has no unique supported internalField: {field_name}")
@@ -452,9 +467,12 @@ def _validate_vtk_snapshot(
         optional_parity[name] = _audit_optional_volume_field(
             native_paths[name], field_metadata, cell_data.GetArray(name), cell_ids, cell_count
         )
+    has_temperature = "T" in metadata
     analysis_import = import_vtk_case(
         internal_vtk,
-        contaminant_array=contaminant_field or "__cleanroomx_no_contaminant_field__",
+        contaminant_array=contaminant_field,
+        temperature_array="T" if has_temperature else None,
+        temperature_units="K" if has_temperature else None,
     )
     if analysis_import.get("mesh_cells") != cell_count:
         raise ValueError("CleanroomX analysis importer reported an inconsistent cell count")
@@ -473,6 +491,8 @@ def _validate_vtk_snapshot(
             "source_sha256": analysis_import["source_sha256"],
             "has_contaminant_field": analysis_import["has_contaminant_field"],
             "contaminant_field": contaminant_field if analysis_import["has_contaminant_field"] else None,
+            "has_temperature_field": analysis_import["has_temperature_field"],
+            "temperature_field": analysis_import["temperature_field"],
         },
     }
 

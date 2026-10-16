@@ -198,9 +198,10 @@ it does not convert kinematic pressure to Pa without a supplied density or
 convert other fields between units. Solver convergence and physical validation
 remain separate gates.
 
-This mapping change uses synchronization-state and snapshot schema v2. Existing
-v1 stores are refused rather than silently resumed under different field
-semantics; start a new output store to import with the explicit map.
+Mapped-field means are volume-weighted and carry an explicit weighting label.
+This field-summary change uses synchronization-state and snapshot schema v3.
+Existing v1/v2 stores are refused rather than silently mixed with different
+field semantics; start a new output store to import with the updated mapping.
 
 ## Synchronize native fields during `simpleFoam`
 
@@ -225,12 +226,20 @@ manifest. It never replaces an accepted time after the source changes.
 This direct path currently requires Foundation v10, ASCII native fields U
 and kinematic-pressure p, and legacy ASCII VTK output. It also imports any
 configured optional volume fields present (T, k, epsilon, omega, nut by
-default), and surface flux phi when present. Field names do not identify their
-physical meaning: set `--contaminant-field NAME` only when that field is a
-concentration produced by a separately configured transport model. No solver
-output is synthesized when no new time is written. Records report
+default), and surface flux phi when present. Standard optional fields are
+checked against their OpenFOAM dimensions: T must be kelvin, and k, epsilon,
+omega, and nut must use their standard turbulence dimensions. A valid T field
+is analyzed as temperature, not contamination. Set `--contaminant-field NAME`
+only for a separately configured concentration field with verified units; T
+cannot be relabelled as contamination. No solver output is synthesized when
+no new time is written. Records report
 `DIAGNOSTIC_ONLY`; solver convergence, physical validation, and cleanroom
 qualification remain blocked.
+
+The native runtime-result manifest uses schema v2 to distinguish its explicit
+temperature and contaminant semantics from earlier records. Existing v1 result
+stores must be retained as historical evidence and a new output directory used
+for this schema; the synchronizer refuses to relabel old snapshots in place.
 
 For a separately launched solver, use `sync-case` with the same simulation ID
 and output directory to resume its native-time watcher:
@@ -293,12 +302,19 @@ source coordinates, design limits, fluxes and matched boundary conditions.
       --solver-name 'OpenFOAM v10' --output evaluated.json
 
 Required field: three-component U in m/s, available at cell or point level.
-Real cell volumes are computed from the VTK mesh. Optional cell scalar T is
-the externally solved contaminant concentration; optional externally computed
-binary mask recirculating is required for recirculation metric. SHA-256 hashes
-bind raw VTK sources. NaNs, invalid volumes/concentration, changed inputs and
-oversized sources fail. Missing scalar/recirculation/flow evidence blocks a
-three-case winner. This feature **does not solve scalar transport**.
+Real cell volumes are computed from the VTK mesh. A scalar is never treated as
+contamination by its name: pass `--contaminant-array CO2` only for a field known
+to contain concentration values, and provide the project-specific concentration
+limit and units in the study. Absolute temperature can be imported separately
+with `--temperature-array T --temperature-units K`; the source values must be
+kelvin. Its volume-weighted mean, minimum, maximum, and cell-volume coverage are
+reported separately from contaminant metrics. Additional scalar/vector fields,
+including turbulence quantities, can be declared through `--field-map-file`;
+their semantics and units remain explicit metadata and are not inferred from
+array names. SHA-256 hashes bind raw VTK sources. NaNs, invalid volumes or
+concentrations, changed inputs and oversized sources fail. Missing
+scalar/recirculation/flow evidence blocks a three-case winner. This feature
+**does not solve scalar transport**.
 
 ## Compare visualized cell samples
 
@@ -306,6 +322,11 @@ three-case winner. This feature **does not solve scalar transport**.
       --case-1 c1.vtu --case-2 c2.vtu --case-3 c3.vtu \
       --field speed --axis y --position-m 1 --slab-thickness-m 0.25 \
       --output velocity-slab.png
+
+For an explicitly selected absolute-temperature array in kelvin, use
+`--field temperature --array-name T --units K`. For contaminant or another
+mapped scalar, select `--field contaminant` or `--field scalar`, then provide
+its array name and declared source units with `--array-name` and `--units`.
 
 This displays cell-center samples inside a finite-thickness slab; it is not
 an interpolated CFD contour or velocity streamline. The plot does not certify

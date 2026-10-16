@@ -3720,8 +3720,54 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.show_inspector()
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
+            self._reveal_property_entry(entry)
             entry.focus_set()
             entry.selection_range(0, "end")
+
+    def _reveal_property_entry(self, entry: tk.Widget) -> None:
+        """Scroll a focused field into view inside the inspector canvas."""
+        canvas = self._inspector_canvas
+        try:
+            canvas.update_idletasks()
+            region = canvas.bbox("all")
+            window = canvas.bbox(self._inspector_window)
+            if region is None or window is None:
+                return
+
+            region_top = int(region[1])
+            region_bottom = int(region[3])
+            region_height = region_bottom - region_top
+            viewport_height = int(canvas.winfo_height())
+            if region_height <= viewport_height or viewport_height <= 0:
+                return
+
+            content_y = int(window[1])
+            child: tk.Widget = entry
+            while child is not self._inspector_content:
+                content_y += int(child.winfo_y())
+                parent = child.master
+                if parent is None:
+                    return
+                child = parent
+
+            entry_top = content_y
+            entry_bottom = entry_top + int(entry.winfo_height())
+            current_top = region_top + int(canvas.yview()[0] * region_height)
+            current_bottom = current_top + viewport_height
+            if entry_top < current_top:
+                target_top = entry_top
+            elif entry_bottom > current_bottom:
+                target_top = entry_bottom - viewport_height
+            else:
+                return
+
+            target_top = min(
+                max(region_top, target_top),
+                max(region_top, region_bottom - viewport_height),
+            )
+            canvas.yview_moveto((target_top - region_top) / region_height)
+        except tk.TclError:
+            return
 
     def _build_context_menu_2d(self, hit: _Hit) -> tk.Menu:
         menu = tk.Menu(self, tearoff=False)

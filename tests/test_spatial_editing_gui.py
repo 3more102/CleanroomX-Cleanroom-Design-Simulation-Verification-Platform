@@ -1091,6 +1091,33 @@ def test_design_inspector_scrolls_on_compact_pane_without_project_changes(app):
     assert app.project.to_dict() == project_before
 
 
+def test_context_menu_property_focus_reveals_field_on_compact_inspector(app):
+    workspace = app.spatial_workspace
+    room = workspace.layout["rooms"][0]
+    project_before = copy.deepcopy(app.project.to_dict())
+    workspace.select_item("room", room["id"])
+    app.root.update()
+
+    canvas = workspace._inspector_canvas
+    canvas.pack_configure(fill="x", expand=False)
+    canvas.configure(height=85)
+    app.root.update_idletasks()
+    canvas.yview_moveto(0)
+    app.root.update()
+
+    for key in ("analysis_room_name", "x_m"):
+        entry = workspace._property_entries[key]
+        workspace._focus_property(key)
+        app.root.update()
+
+        canvas_top = canvas.winfo_rooty()
+        assert entry.winfo_rooty() >= canvas_top
+        assert entry.winfo_rooty() + entry.winfo_height() <= (
+            canvas_top + canvas.winfo_height()
+        )
+    assert app.project.to_dict() == project_before
+
+
 def test_openfoam_workbench_controls_scroll_while_output_stays_visible(app):
     workspace = app.openfoam_workspace
     app.root.minsize(800, 300)

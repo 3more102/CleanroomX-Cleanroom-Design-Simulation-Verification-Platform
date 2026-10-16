@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 17076)
-Total output lines: 1360
-
 """Incrementally import stable OpenFOAM Foundation v10 result writes.
 
 The synchronizer observes native time directories, waits for their selected
@@ -344,7 +341,690 @@ def _read_native_volume_values(path: Path, field_metadata: dict[str, Any]) -> tu
     )
     if not all(math.isfinite(float(value)) for value in flat_values):
         raise ValueError(f"OpenFOAM {field_name} internalField contains a non-finite value")
-    if _stab…9076 tokens truncated…K export")
+    if _stable_file_record(path, max_bytes=MAX_FIELD_BYTES)["sha256"] != record["sha256"]:
+        raise ValueError(f"OpenFOAM {field_name} changed while parsing")
+    if uniform_value:
+        return values, record["sha256"]
+    return values, record["sha256"]
+
+
+def _audit_optional_volume_field(
+    path: Path,
+    metadata: dict[str, Any],
+    vtk_array,
+    cell_ids,
+    cell_count: int,
+) -> dict[str, Any]:
+    native_values, native_sha = _read_native_volume_values(path, metadata)
+    if len(native_values) == 1 and metadata.get("uniform_internal_field"):
+        native_values = native_values * cell_count
+    if len(native_values) != cell_count:
+        raise ValueError(f"Native OpenFOAM {metadata['field']} cell count differs from VTK")
+    components = metadata["components"]
+    if vtk_array.GetNumberOfTuples() != cell_count or vtk_array.GetNumberOfComponents() != components:
+        raise ValueError(f"Imported VTK {metadata['field']} field does not cover every cell")
+    if vtk_array.GetDataTypeAsString() != "float":
+        raise ValueError(f"Imported VTK {metadata['field']} is not the expected Foundation v10 float array")
+
+    mapped: dict[int, int] = {}
+    for vtk_index in range(cell_count):
+        raw_id = float(cell_ids.GetTuple1(vtk_index))
+        if not math.isfinite(raw_id) or not raw_id.is_integer():
+            raise ValueError("Imported VTK cellID contains a non-integer value")
+        cell_id = int(raw_id)
+        if not 0 <= cell_id < cell_count or cell_id in mapped:
+            raise ValueError("Imported VTK cellID is not a unique in-range permutation")
+        mapped[cell_id] = vtk_index
+    if len(mapped) != cell_count:
+        raise ValueError("Imported VTK cellID does not cover every cell")
+
+    maximum_absolute_error = 0.0
+    maximum_relative_error = 0.0
+    maximum_allowed_error = 0.0
+    compared = 0
+    for native_index, native_value in enumerate(native_values):
+        native_components = native_value if components == 3 else (native_value,)
+        vtk_values = vtk_array.GetTuple(mapped[native_index])
+        for native_component, vtk_component_raw in zip(native_components, vtk_values):
+            vtk_component = float(vtk_component_raw)
+            native_component = float(native_component)
+            if not math.isfinite(vtk_component):
+                raise ValueError(f"Imported VTK {metadata['field']} contains a non-finite value")
+            expected_float32, conversion_bound = _float32_rounding_bound(native_component)
+            serialization_bound = _ascii_rounding_bound(
+                expected_float32, OPENFOAM_VTK_ASCII_PRECISION
+            )
+            allowed_reader_error = conversion_bound + serialization_bound
+            if abs(vtk_component - expected_float32) > allowed_reader_error + 4 * math.ulp(expected_float32):
+                raise ValueError(f"Imported VTK {metadata['field']} differs from its native OpenFOAM field")
+            error = abs(vtk_component - native_component)
+            maximum_absolute_error = max(maximum_absolute_error, error)
+            if native_component != 0:
+                maximum_relative_error = max(maximum_relative_error, error / abs(native_component))
+            maximum_allowed_error = max(
+                maximum_allowed_error,
+                conversion_bound + allowed_reader_error,
+            )
+            compared += 1
+    return {
+        "status": "PASS",
+        "cell_count": cell_count,
+        "components_compared": compared,
+        "native_field_sha256": native_sha,
+        "max_absolute_error_native_to_vtk": maximum_absolute_error,
+        "max_relative_error_native_to_vtk": maximum_relative_error,
+        "max_allowed_native_to_vtk_error": maximum_allowed_error,
+        "tolerance_basis": (
+            "Foundation v10 float32 conversion and VTK ASCII rounding bounds "
+            f"({OPENFOAM_VTK_ASCII_PRECISION} significant digits)"
+        ),
+    }
+
+
+def _validate_vtk_snapshot(
+    native_paths: dict[str, Path],
+    metadata: dict[str, dict[str, Any]],
+    internal_vtk: Path,
+    *,
+    contaminant_field: str | None,
+) -> dict[str, Any]:
+    grid = _read_vtk(internal_vtk, require_cell_velocity=True)
+    cell_count = grid.GetNumberOfCells()
+    if not 0 < cell_count <= MAX_VTK_CELLS:
+        raise ValueError("Imported VTK mesh is empty or exceeds CleanroomX cell limits")
+    cell_data = grid.GetCellData()
+    cell_ids = cell_data.GetArray("cellID")
+    if cell_ids is None or cell_ids.GetNumberOfComponents() != 1 or cell_ids.GetNumberOfTuples() != cell_count:
+        raise ValueError("Imported VTK dataset must include a complete cellID cell-data array")
+    seen: set[int] = set()
+    for index in range(cell_count):
+        raw_id = float(cell_ids.GetTuple1(index))
+        if not math.isfinite(raw_id) or not raw_id.is_integer():
+            raise ValueError("Imported VTK cellID is not an integer")
+        cell_id = int(raw_id)
+        if not 0 <= cell_id < cell_count or cell_id in seen:
+            raise ValueError("Imported VTK cellID is not a unique in-range permutation")
+        seen.add(cell_id)
+    if len(seen) != cell_count:
+        raise ValueError("Imported VTK cellID does not cover every cell")
+
+    summaries: dict[str, Any] = {}
+    for name, field_metadata in metadata.items():
+        array = cell_data.GetArray(name)
+        if array is None:
+            raise ValueError(f"foamToVTK omitted the requested volume field {name}")
+        if array.GetNumberOfComponents() != field_metadata["components"]:
+            raise ValueError(f"Imported VTK field component count differs for {name}")
+        summaries[name] = {
+            "components": field_metadata["components"],
+            "units": field_metadata["units"],
+            "dimensions": field_metadata["dimensions"],
+            "component_ranges": _component_ranges(array, cell_count),
+        }
+
+    velocity_parity = audit_openfoam_vtk_velocity(native_paths["U"], internal_vtk)
+    pressure_parity = audit_openfoam_vtk_pressure(native_paths["p"], internal_vtk)
+    if velocity_parity.get("status") != "PASS" or pressure_parity.get("status") != "PASS":
+        raise ValueError("Native OpenFOAM U/p fields did not reproduce in the VTK cell dataset")
+    optional_parity = {}
+    for name, field_metadata in metadata.items():
+        if name in ("U", "p"):
+            continue
+        optional_parity[name] = _audit_optional_volume_field(
+            native_paths[name], field_metadata, cell_data.GetArray(name), cell_ids, cell_count
+        )
+    has_temperature = (
+        metadata.get("T", {}).get("dimensions") == "[0 0 0 1 0 0 0]"
+    )
+    analysis_import = import_vtk_case(
+        internal_vtk,
+        contaminant_array=contaminant_field,
+        temperature_array="T" if has_temperature else None,
+        temperature_units="K" if has_temperature else None,
+    )
+    if analysis_import.get("mesh_cells") != cell_count:
+        raise ValueError("CleanroomX analysis importer reported an inconsistent cell count")
+    if contaminant_field is not None and not analysis_import.get("has_contaminant_field"):
+        raise ValueError(
+            f"Configured contaminant field {contaminant_field!r} is missing from imported VTK cell data"
+        )
+    return {
+        "cell_count": cell_count,
+        "fields": summaries,
+        "native_vtk_parity": {"U": velocity_parity, "p": pressure_parity, **optional_parity},
+        "cleanroomx_analysis_import": {
+            "status": "PASS",
+            "function": "cleanroomx.cfd_vtk.import_vtk_case",
+            "cell_count": cell_count,
+            "source_sha256": analysis_import["source_sha256"],
+            "has_contaminant_field": analysis_import["has_contaminant_field"],
+            "contaminant_field": contaminant_field if analysis_import["has_contaminant_field"] else None,
+            "has_temperature_field": analysis_import["has_temperature_field"],
+            "temperature_field": analysis_import["temperature_field"],
+        },
+    }
+
+
+class OpenFOAMResultSynchronizer:
+    """Poll one running case and publish each completed time snapshot once."""
+
+    def __init__(
+        self,
+        case_directory: str | Path,
+        output_directory: str | Path,
+        *,
+        simulation_id: str,
+        configuration_hash: str,
+        case_id: str | None = None,
+        required_fields: tuple[str, ...] | list[str] = ("U", "p"),
+        optional_fields: tuple[str, ...] | list[str] = DEFAULT_OPTIONAL_FIELDS,
+        contaminant_field: str | None = None,
+        expected_build: str | None = None,
+        poll_interval_seconds: float = 1.0,
+        settle_polls: int = 2,
+        timeout_seconds: int = 600,
+        max_field_bytes: int = MAX_FIELD_BYTES,
+        max_snapshot_bytes: int = MAX_SNAPSHOT_BYTES,
+        max_output_bytes: int = MAX_OUTPUT_BYTES,
+        max_retries: int = 3,
+    ) -> None:
+        if type(simulation_id) is not str or _SIMULATION_ID.fullmatch(simulation_id) is None:
+            raise ValueError("simulation_id must be a safe 1..128 character identifier")
+        self.configuration_hash = _safe_hash(configuration_hash, "configuration_hash")
+        if not (type(poll_interval_seconds) in (int, float) and math.isfinite(poll_interval_seconds)
+                and 0.1 <= poll_interval_seconds <= 60):
+            raise ValueError("poll_interval_seconds must be finite and in [0.1,60]")
+        if type(settle_polls) is not int or not 2 <= settle_polls <= 10:
+            raise ValueError("settle_polls must be an integer in [2,10]")
+        if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 3600:
+            raise ValueError("timeout_seconds must be an integer in [1,3600]")
+        for name, value in (("max_field_bytes", max_field_bytes),
+                            ("max_snapshot_bytes", max_snapshot_bytes),
+                            ("max_output_bytes", max_output_bytes)):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+        if type(max_retries) is not int or not 1 <= max_retries <= 10:
+            raise ValueError("max_retries must be an integer in [1,10]")
+
+        required = tuple(required_fields)
+        optional = tuple(optional_fields)
+        if contaminant_field is not None and contaminant_field not in optional:
+            optional = (*optional, contaminant_field)
+        if required != ("U", "p"):
+            raise ValueError("Foundation v10 synchronization requires U and p as the primary fields")
+        if len(set(optional)) != len(optional) or any(
+            type(name) is not str or _FIELD_NAME.fullmatch(name) is None for name in optional
+        ):
+            raise ValueError("optional_fields must contain unique safe OpenFOAM field names")
+        if set(required) & set(optional):
+            raise ValueError("required_fields cannot also be optional")
+        if "phi" in optional:
+            raise ValueError("phi is a surface field and cannot be listed as an optional volume field")
+        if contaminant_field is not None and (
+            type(contaminant_field) is not str or _FIELD_NAME.fullmatch(contaminant_field) is None
+        ):
+            raise ValueError("contaminant_field must be a safe OpenFOAM field name")
+
+        case_candidate = Path(case_directory)
+        if case_candidate.is_symlink() or not case_candidate.is_dir():
+            raise ValueError("OpenFOAM case must be a regular, non-symlink directory")
+        self.case_directory = case_candidate.resolve(strict=True)
+        for dirname in ("system", "constant"):
+            directory = self.case_directory / dirname
+            if directory.is_symlink() or not directory.is_dir():
+                raise ValueError(f"OpenFOAM case is missing a regular {dirname} directory")
+
+        output_candidate = Path(output_directory)
+        if output_candidate.is_symlink() or (output_candidate.exists() and not output_candidate.is_dir()):
+            raise ValueError("Synchronization output must be a regular directory")
+        self.output_directory = output_candidate.resolve(strict=False)
+        if self.output_directory == self.case_directory or self.output_directory.is_relative_to(self.case_directory):
+            raise ValueError("Synchronization output cannot be nested inside the OpenFOAM case")
+        if not self.output_directory.exists():
+            self.output_directory.mkdir(parents=True)
+        if any(self.output_directory.iterdir()) and not (self.output_directory / "sync_manifest.json").is_file():
+            raise ValueError("Refusing to initialize synchronization in a nonempty unrecognized directory")
+
+        if os.environ.get("WM_PROJECT") != "OpenFOAM" or os.environ.get("WM_PROJECT_VERSION") != "10":
+            raise RuntimeError("Expected OpenFOAM Foundation v10 (WM_PROJECT=OpenFOAM, WM_PROJECT_VERSION=10)")
+        foam_to_vtk = shutil.which("foamToVTK")
+        if foam_to_vtk is None:
+            raise RuntimeError("foamToVTK is required for automatic OpenFOAM result synchronization")
+        try:
+            import vtk  # noqa: F401
+        except ImportError as error:
+            raise RuntimeError("pip install vtk to synchronize OpenFOAM result fields") from error
+
+        self.simulation_id = simulation_id
+        self.configuration_id = case_id or self.case_directory.name
+        if type(self.configuration_id) is not str or not self.configuration_id or "\\" in self.configuration_id:
+            raise ValueError("case_id must be a nonempty POSIX-style identifier")
+        case_parts = Path(self.configuration_id).parts
+        if Path(self.configuration_id).is_absolute() or any(part in ("", ".", "..") for part in case_parts):
+            raise ValueError("case_id must be a safe relative identifier")
+        self.case_id = Path(*case_parts).as_posix()
+        self.required_fields = required
+        self.optional_fields = optional
+        self.allowed_fields = (*required, *optional)
+        self.contaminant_field = contaminant_field
+        self.expected_build = expected_build
+        self.poll_interval_seconds = float(poll_interval_seconds)
+        self.settle_polls = settle_polls
+        self.timeout_seconds = timeout_seconds
+        self.max_field_bytes = max_field_bytes
+        self.max_snapshot_bytes = max_snapshot_bytes
+        self.max_output_bytes = max_output_bytes
+        self.max_retries = max_retries
+        self.foam_to_vtk = str(Path(foam_to_vtk).resolve(strict=True))
+        self.manifest_path = self.output_directory / "sync_manifest.json"
+        self.results_directory = self.output_directory / "results"
+        self.results_directory.mkdir(exist_ok=True)
+        if self.results_directory.is_symlink():
+            raise ValueError("Synchronization results directory cannot be a symbolic link")
+        self._observations: dict[str, tuple[tuple[Any, ...], int]] = {}
+        self._attempts: dict[str, int] = {}
+        self._manifest = self._load_or_create_manifest()
+        for error in self._manifest["errors"]:
+            if (isinstance(error.get("time_name"), str)
+                    and error.get("status") == "not_imported"):
+                name = error["time_name"]
+                self._attempts[name] = max(self._attempts.get(name, 0), int(error.get("attempt", 0)))
+        self._recover_orphans()
+        self._output_bytes = self._output_size()
+        if self._manifest.get("status") not in (
+            "monitoring", "interrupted_resumable", "monitoring_checkpoint"
+        ):
+            self._manifest["status"] = "monitoring"
+            self._manifest["resumed_at_utc"] = _utc_now()
+            self._save_manifest()
+
+    def _base_manifest(self) -> dict[str, Any]:
+        return {
+            "schema_version": SCHEMA,
+            "status": "monitoring",
+            "interpretation": "solver_output_import_and_integrity_only",
+            "scientific_validation": "BLOCKED",
+            "simulation_id": self.simulation_id,
+            "case_id": self.case_id,
+            "configuration_hash": self.configuration_hash,
+            "solver_release": "OpenFOAM Foundation v10",
+            "solver_build": self.expected_build,
+            "foamToVTK_executable": self.foam_to_vtk,
+            "required_fields": list(self.required_fields),
+            "optional_fields": list(self.optional_fields),
+            "contaminant_field": self.contaminant_field,
+            "poll_interval_seconds": self.poll_interval_seconds,
+            "settle_polls": self.settle_polls,
+            "created_at_utc": _utc_now(),
+            "updated_at_utc": _utc_now(),
+            "records": {},
+            "errors": [],
+        }
+
+    def _load_or_create_manifest(self) -> dict[str, Any]:
+        if not self.manifest_path.exists():
+            manifest = self._base_manifest()
+            _atomic_json(self.manifest_path, manifest)
+            return manifest
+        if self.manifest_path.is_symlink() or not self.manifest_path.is_file():
+            raise ValueError("Synchronization manifest must be a regular file")
+        before = _stable_file_record(self.manifest_path, max_bytes=MAX_SNAPSHOT_BYTES)
+        try:
+            manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("Synchronization manifest is malformed") from error
+        if _stable_file_record(self.manifest_path, max_bytes=MAX_SNAPSHOT_BYTES)["sha256"] != before["sha256"]:
+            raise ValueError("Synchronization manifest changed while being parsed")
+        if (
+            type(manifest) is not dict
+            or manifest.get("schema_version") != SCHEMA
+            or manifest.get("simulation_id") != self.simulation_id
+            or manifest.get("case_id") != self.case_id
+            or manifest.get("configuration_hash") != self.configuration_hash
+            or manifest.get("required_fields") != list(self.required_fields)
+            or manifest.get("optional_fields") != list(self.optional_fields)
+            or manifest.get("contaminant_field") != self.contaminant_field
+            or manifest.get("scientific_validation") != "BLOCKED"
+            or type(manifest.get("records")) is not dict
+            or type(manifest.get("errors")) is not list
+        ):
+            raise ValueError("Existing synchronization manifest does not match this simulation/configuration")
+        if (self.expected_build is not None
+                and manifest.get("solver_build") not in (None, self.expected_build)):
+            raise ValueError("OpenFOAM solver build differs from the resumable synchronization manifest")
+        if self.expected_build is None:
+            self.expected_build = manifest.get("solver_build")
+        elif manifest.get("solver_build") is None:
+            manifest["solver_build"] = self.expected_build
+        for time_name, record in manifest["records"].items():
+            _time_value(time_name)
+            self._validate_record_assets(record)
+        return manifest
+
+    def _asset_path(self, relative: str) -> Path:
+        path = Path(relative)
+        if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+            raise ValueError("Unsafe synchronization asset path")
+        candidate = self.output_directory.joinpath(*path.parts)
+        current = self.output_directory
+        for part in path.parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError("Synchronization asset path contains a symlink")
+        resolved = candidate.resolve(strict=True)
+        if not resolved.is_relative_to(self.output_directory):
+            raise ValueError("Synchronization asset escaped its output directory")
+        return resolved
+
+    def _validate_record_assets(self, record: Any) -> None:
+        if type(record) is not dict or type(record.get("assets")) is not list:
+            raise ValueError("Synchronization record has no asset manifest")
+        for asset in record["assets"]:
+            if type(asset) is not dict:
+                raise ValueError("Synchronization asset entry is malformed")
+            path = self._asset_path(asset.get("path", ""))
+            expected = _safe_hash(asset.get("sha256"), "asset sha256")
+            observed = _stable_file_record(path, max_bytes=self.max_output_bytes)
+            if observed["sha256"] != expected or observed["size_bytes"] != asset.get("size_bytes"):
+                raise ValueError(f"Previously synchronized result is corrupt or outdated: {asset.get('path')}")
+        receipt = record.get("receipt")
+        if type(receipt) is not dict:
+            raise ValueError("Synchronization record is missing its immutable receipt")
+        receipt_path = self._asset_path(receipt.get("path", ""))
+        if _stable_file_record(receipt_path, max_bytes=MAX_SNAPSHOT_BYTES)["sha256"] != _safe_hash(
+            receipt.get("sha256"), "receipt sha256"
+        ):
+            raise ValueError("Previously synchronized receipt is corrupt")
+
+    def _save_manifest(self) -> None:
+        previous_size = self.manifest_path.stat().st_size if self.manifest_path.is_file() else 0
+        self._manifest["updated_at_utc"] = _utc_now()
+        _atomic_json(self.manifest_path, self._manifest)
+        if hasattr(self, "_output_bytes"):
+            self._output_bytes += self.manifest_path.stat().st_size - previous_size
+
+    def _recover_orphans(self) -> None:
+        if not self.results_directory.exists():
+            return
+        for directory in sorted(self.results_directory.iterdir()):
+            if directory.is_symlink() or not directory.is_dir():
+                raise ValueError("Synchronization result tree contains a symbolic or non-directory entry")
+            receipt_path = directory / "receipt.json"
+            if receipt_path.is_symlink() or not receipt_path.is_file():
+                raise ValueError(f"Unindexed synchronization result lacks a receipt: {directory.name}")
+            receipt_file = _stable_file_record(receipt_path, max_bytes=MAX_SNAPSHOT_BYTES)
+            try:
+                receipt_doc = json.loads(receipt_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError("Unindexed synchronization receipt is malformed") from error
+            if (
+                type(receipt_doc) is not dict
+                or receipt_doc.get("schema_version") != SCHEMA
+                or receipt_doc.get("simulation_id") != self.simulation_id
+                or receipt_doc.get("case_id") != self.case_id
+                or receipt_doc.get("configuration_hash") != self.configuration_hash
+                or type(receipt_doc.get("record")) is not dict
+            ):
+                raise ValueError("Unindexed synchronization receipt does not match this simulation")
+            time_name = receipt_doc.get("time_name")
+            _time_value(time_name)
+            record = receipt_doc["record"]
+            record["receipt"] = {
+                "path": receipt_path.relative_to(self.output_directory).as_posix(),
+                "sha256": receipt_file["sha256"],
+            }
+            self._validate_record_assets(record)
+            previous = self._manifest["records"].get(time_name)
+            if previous is not None and previous != record:
+                raise ValueError("Unindexed result conflicts with a previously indexed time")
+            if previous is None:
+                self._manifest["records"][time_name] = record
+                self._save_manifest()
+
+    def _current_fields(self, time_directory: Path) -> tuple[dict[str, Path], tuple[Any, ...]] | None:
+        native_paths: dict[str, Path] = {}
+        for field_name in (*self.allowed_fields, "phi"):
+            candidate = time_directory / field_name
+            if candidate.is_symlink():
+                raise ValueError(f"Refusing symbolic OpenFOAM result field: {field_name}")
+            if not candidate.exists():
+                continue
+            if not candidate.is_file():
+                raise ValueError(f"OpenFOAM result field is not a regular file: {field_name}")
+            size = candidate.stat().st_size
+            if size > self.max_field_bytes:
+                raise ValueError(f"OpenFOAM result field exceeds the configured limit: {field_name}")
+            native_paths[field_name] = candidate
+        if not set(self.required_fields).issubset(native_paths):
+            return None
+        total = sum(path.stat().st_size for path in native_paths.values())
+        if total > self.max_snapshot_bytes:
+            raise ValueError("OpenFOAM result snapshot exceeds the configured byte limit")
+        # Include field membership so a late optional field restarts the settle window.
+        signature = tuple(
+            (name, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            for name, path in sorted(native_paths.items())
+            for stat in (path.stat(),)
+        )
+        return native_paths, signature
+
+    def _scan_times(self) -> list[tuple[str, float, Path, dict[str, Path], tuple[Any, ...]]]:
+        candidates: list[tuple[str, float, Path, dict[str, Path], tuple[Any, ...]]] = []
+        seen_values: dict[float, str] = {}
+        count = 0
+        for entry in self.case_directory.iterdir():
+            if _TIME_NAME.fullmatch(entry.name) is None:
+                continue
+            if float(entry.name) == 0.0:
+                continue
+            count += 1
+            if count > MAX_TIME_DIRECTORIES:
+                raise ValueError("OpenFOAM case exceeds the time-directory resource limit")
+            if entry.is_symlink():
+                raise ValueError("Numeric OpenFOAM time directories cannot be symbolic links")
+            if not entry.is_dir():
+                continue
+            time_value = _time_value(entry.name)
+            if time_value in seen_values:
+                raise ValueError(
+                    f"OpenFOAM time names {seen_values[time_value]!r} and {entry.name!r} are numerically ambiguous"
+                )
+            seen_values[time_value] = entry.name
+            observed = self._current_fields(entry)
+            if observed is None:
+                continue
+            native_paths, signature = observed
+            candidates.append((entry.name, time_value, entry, native_paths, signature))
+        candidates.sort(key=lambda item: item[1])
+        return candidates
+
+    def _record_error(self, time_name: str, error: Exception) -> None:
+        attempts = self._attempts.get(time_name, 0) + 1
+        self._attempts[time_name] = attempts
+        self._manifest["errors"].append({
+            "time_name": time_name,
+            "attempt": attempts,
+            "error_type": type(error).__name__,
+            "message": str(error)[:1000],
+            "recorded_at_utc": _utc_now(),
+            "status": "not_imported",
+        })
+        self._save_manifest()
+
+    def _snapshot_metadata(self, native_paths: dict[str, Path]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        fields = {}
+        source_records = {}
+        total = 0
+        for name, path in sorted(native_paths.items()):
+            if name == "phi":
+                record = _stable_file_record(path, max_bytes=self.max_field_bytes)
+                raw = path.read_bytes()
+                try:
+                    text = raw.decode("ascii")
+                except UnicodeDecodeError as error:
+                    raise ValueError("Binary or non-ASCII surface flux phi is unsupported") from error
+                clean = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+                clean = re.sub(r"//[^\r\n]*", " ", clean)
+                if not re.search(r"\bclass\s+surfaceScalarField\s*;", clean):
+                    raise ValueError("OpenFOAM phi must be a surfaceScalarField")
+                if not re.search(r"\bobject\s+phi\s*;", clean):
+                    raise ValueError("OpenFOAM surface field object must be phi")
+                dimension_match = _DIMENSIONS.findall(clean)
+                if len(dimension_match) != 1 or dimension_match[0].split() != ["0", "3", "-1", "0", "0", "0", "0"]:
+                    raise ValueError("OpenFOAM phi must use volume-flux dimensions [0 3 -1 0 0 0 0]")
+                fields[name] = {
+                    "field": name,
+                    "class": "surfaceScalarField",
+                    "components": 1,
+                    "dimensions": "[0 3 -1 0 0 0 0]",
+                    "units": "m^3/s",
+                    "sha256": record["sha256"],
+                    "size_bytes": record["size_bytes"],
+                }
+            else:
+                fields[name] = _field_metadata(path, name)
+            record = _stable_file_record(path, max_bytes=self.max_field_bytes)
+            if fields[name]["sha256"] != record["sha256"]:
+                raise ValueError(f"OpenFOAM field changed while its snapshot was captured: {name}")
+            total += record["size_bytes"]
+            source_records[name] = {
+                "path": path.relative_to(self.case_directory).as_posix(),
+                "sha256": record["sha256"],
+                "size_bytes": record["size_bytes"],
+            }
+        if total > self.max_snapshot_bytes:
+            raise ValueError("OpenFOAM result snapshot exceeds the configured byte limit")
+        return fields, source_records
+
+    def _output_size(self) -> int:
+        size = 0
+        for current, directories, filenames in os.walk(self.output_directory, followlinks=False):
+            current_path = Path(current)
+            directories.sort()
+            for name in directories:
+                if (current_path / name).is_symlink():
+                    raise ValueError("Synchronization output contains a symbolic directory")
+            for name in filenames:
+                path = current_path / name
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("Synchronization output contains a symbolic or non-file entry")
+                size += path.stat().st_size
+                if size > self.max_output_bytes:
+                    raise ValueError("Synchronization output exceeds its configured storage limit")
+        return size
+
+    def _export_one(
+        self,
+        time_name: str,
+        time_directory: Path,
+        native_paths: dict[str, Path],
+        stable_signature: tuple[Any, ...],
+    ) -> dict[str, Any]:
+        fields, source_records = self._snapshot_metadata(native_paths)
+        current = self._current_fields(time_directory)
+        if current is None or current[1] != stable_signature:
+            raise ValueError("OpenFOAM field set changed after the settle window")
+        before_records = {name: _stable_file_record(path, max_bytes=self.max_field_bytes) for name, path in native_paths.items()}
+
+        selected_fields = [name for name in self.allowed_fields if name in native_paths]
+        if "phi" in native_paths:
+            # foamToVTK applies -fields to surfaceScalarFields too. Including
+            # -surfaceFields alone does not select phi for export.
+            selected_fields.append("phi")
+        arguments = [
+            self.foam_to_vtk,
+            "-time", time_name,
+            "-useTimeName",
+            "-fields", "( " + " ".join(selected_fields) + " )",
+            "-ascii",
+            "-poly",
+            "-noPointValues",
+        ]
+        if "phi" in native_paths:
+            arguments.append("-surfaceFields")
+
+        source_total = self._output_bytes
+        with tempfile.TemporaryDirectory(prefix=".cleanroomx-sync-stage-", dir=self.output_directory) as temporary_name:
+            temporary_root = Path(temporary_name)
+            view = temporary_root / self.case_directory.name
+            view.mkdir()
+            for dirname in ("system", "constant", time_name):
+                source = self.case_directory / dirname
+                if source.is_symlink() or not source.is_dir():
+                    raise ValueError(f"Cannot build isolated OpenFOAM view from {dirname}")
+                (view / dirname).symlink_to(source, target_is_directory=True)
+            try:
+                result = subprocess.run(
+                    arguments,
+                    cwd=view,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=self.timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise RuntimeError("foamToVTK snapshot export timed out") from error
+            output = result.stdout or b""
+            if isinstance(output, str):
+                output = output.encode("utf-8", errors="replace")
+            log_text = output.decode("utf-8", errors="replace")
+            if result.returncode != 0:
+                raise RuntimeError(f"foamToVTK returned {result.returncode}")
+            from .cfd_openfoam import _foundation_v10_banner
+
+            banner = _foundation_v10_banner(log_text)
+            if not banner.get("is_foundation_v10"):
+                raise ValueError("foamToVTK did not report an OpenFOAM Foundation v10 banner")
+            recorded_build = self._manifest.get("solver_build")
+            if recorded_build is not None and banner.get("build") != recorded_build:
+                raise ValueError("foamToVTK build differs from the recorded OpenFOAM build")
+            if self.expected_build is not None and banner.get("build") != self.expected_build:
+                raise ValueError("foamToVTK build differs from the running solver build")
+            if self.expected_build is None:
+                self.expected_build = banner.get("build")
+                self._manifest["solver_build"] = self.expected_build
+            selected_times = parse_foam_to_vtk_time_log(log_text, [time_name])
+            vtk_root = view / "VTK"
+            if vtk_root.is_symlink() or not vtk_root.is_dir():
+                raise ValueError("foamToVTK did not create a regular VTK output directory")
+            internal_dataset = vtk_root / f"{self.case_directory.name}_{time_name}.vtk"
+            if internal_dataset.is_symlink() or not internal_dataset.is_file():
+                raise ValueError("foamToVTK did not create the expected internal-mesh dataset")
+
+            validation = _validate_vtk_snapshot(
+                native_paths,
+                {name: value for name, value in fields.items() if name != "phi"},
+                internal_dataset,
+                contaminant_field=self.contaminant_field,
+            )
+            surface_flux_parity = None
+            if "phi" in native_paths:
+                surface_dataset = vtk_root / "surfaceFields" / f"surfaceFields_{time_name}.vtk"
+                if surface_dataset.is_symlink() or not surface_dataset.is_file():
+                    available = sorted(
+                        path.relative_to(vtk_root).as_posix()
+                        for path in vtk_root.rglob("*")
+                        if path.is_file() and not path.is_symlink()
+                    )[:20]
+                    log_tail = " | ".join(log_text.splitlines()[-8:])[:500]
+                    raise ValueError(
+                        "foamToVTK omitted the requested surface flux phi dataset; "
+                        f"available={available!r}; log_tail={log_tail!r}"
+                    )
+                surface_flux_parity = audit_openfoam_vtk_surface_flux(
+                    native_paths["phi"],
+                    self.case_directory / "constant" / "polyMesh",
+                    surface_dataset,
+                )
+                if surface_flux_parity.get("status") != "PASS":
+                    raise ValueError("Native phi and imported surface VTK flux did not match")
+
+            after_records = {name: _stable_file_record(path, max_bytes=self.max_field_bytes) for name, path in native_paths.items()}
+            if before_records != after_records:
+                raise ValueError("OpenFOAM result fields changed during foamToVTK export")
+            current_after = self._current_fields(time_directory)
+            if current_after is None or current_after[1] != stable_signature:
+                raise ValueError("OpenFOAM field set changed during foamToVTK export")
 
             output_files: list[dict[str, Any]] = []
             count = 0

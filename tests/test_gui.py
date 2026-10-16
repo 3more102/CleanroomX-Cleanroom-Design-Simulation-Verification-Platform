@@ -1353,11 +1353,13 @@ def test_window_title_marks_unsaved_editor_changes():
 
     app._update_title()
     assert not app.root.value.endswith("*")
+    assert "Demo" in app.root.value
     assert app.document_status_var.get() == "Not saved"
     assert app.document_status_label.style == "CX.Document.Unsaved.TLabel"
 
     app.project_path = Path("demo.cleanroomx.json")
     app._update_title()
+    assert "demo.cleanroomx.json" in app.root.value
     assert app.document_status_var.get() == "Saved"
     assert app.document_status_label.style == "CX.Document.Saved.TLabel"
 

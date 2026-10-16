@@ -6409,6 +6409,18 @@ class CleanroomXApp:
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
             return
+        name_var = getattr(self, "name_var", None)
+        project_name = ""
+        if name_var is not None:
+            get_name = getattr(name_var, "get", None)
+            if callable(get_name):
+                project_name = str(get_name()).strip()
+        if not project_name:
+            project_name = str(
+                getattr(getattr(self, "project", None), "name", "")
+            ).strip()
+        if not project_name:
+            project_name = "Untitled project"
         if getattr(self, "_migration_source_path", None) is not None:
             suffix = f" — Migrated copy of {self.project_path.name}"
         elif self.project_path is not None:
@@ -6418,7 +6430,7 @@ class CleanroomXApp:
         else:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
-        title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        title_method(f"CleanroomX {__version__} — {project_name}{suffix}{dirty}")
 
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(

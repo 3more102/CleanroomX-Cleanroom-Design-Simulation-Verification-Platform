@@ -66,8 +66,8 @@ def _scalar_failure_diagnostics(solver_report: dict, log_text: str, case_directo
         "solver_exit_code": solver_report.get("exit_code"),
         "solver_log_sha256": solver_report.get("log_sha256"),
         "result_synchronization_status": sync.get("status", "not_available"),
-        "result_synchronization_errors": errors[:20],
-        "solver_diagnostic_excerpt": excerpt[-12:],
+        "result_synchronization_errors": [str(error)[:500] for error in errors[:20]],
+        "solver_diagnostic_excerpt": [line[:500] for line in excerpt[-12:]],
         "scientific_validation": "BLOCKED",
         "interpretation": "runtime_failure_diagnostics_only",
     }

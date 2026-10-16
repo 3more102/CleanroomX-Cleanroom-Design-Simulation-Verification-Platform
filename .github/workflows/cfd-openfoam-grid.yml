@@ -1019,6 +1019,126 @@ jobs:
           python -m cleanroomx.cfd_vtk_time_selection \
             "$RUNNER_TEMP/cleanroomx-cfd-grid-family" --times 50,100
 
+      - name: Incrementally synchronize real OpenFOAM VTK results
+        run: |
+          set -euo pipefail
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          sync_root="$RUNNER_TEMP/cleanroomx-cfd-vtk-sync"
+          mkdir -p "$sync_root"
+          case_count=0
+          for case_dir in "$family"/configuration_*/*; do
+            [[ -d "$case_dir/VTK" ]] || continue
+            case_id="${case_dir#"$family"/}"
+            safe_case_id="${case_id//\//-}"
+            simulation_id="${GITHUB_RUN_ID}-${safe_case_id}"
+            result_dir="$sync_root/$simulation_id"
+            for scan in 1 2; do
+              cleanroomx-cfd-pipeline sync-vtk \
+                "$case_dir/VTK" "$result_dir" \
+                --simulation-id "$simulation_id" \
+                --configuration-file "$family/manifest.json" \
+                --stable-scans 2 --stable-seconds 0 --once \
+                > "$sync_root/${safe_case_id}.scan-${scan}.json"
+            done
+            python - "$result_dir/sync-state.json" "$family/manifest.json" \
+              "$result_dir" "$case_dir/VTK" "$sync_root/${safe_case_id}.verified.json" \
+              "$case_id" "$simulation_id" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          state_path = Path(sys.argv[1])
+          manifest_path = Path(sys.argv[2])
+          result_root = Path(sys.argv[3])
+          vtk_root = Path(sys.argv[4])
+          report_path = Path(sys.argv[5])
+          case_id = sys.argv[6]
+          simulation_id = sys.argv[7]
+          manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+          state = json.loads(state_path.read_text(encoding="utf-8"))
+          if state.get("schema_version") != "cleanroomx.openfoam-vtk-sync.v1":
+              raise SystemExit("Unexpected synchronization state schema")
+          if state.get("simulation_id") != simulation_id or state.get("configuration_sha256") != manifest_sha:
+              raise SystemExit("Synchronization state provenance does not match this case and generated family")
+          records = state.get("records", {})
+          imported = [item for item in records.values() if item.get("status") == "imported"]
+          if len(imported) != 3 or {item.get("solver_time") for item in imported} != {"50", "100", "150"}:
+              raise SystemExit("Expected exactly three synchronized solver times: 50, 100, and 150")
+          if len(records) != 3:
+              raise SystemExit("Unexpected pending, duplicate, or rejected VTK records")
+          snapshots = []
+          for item in imported:
+              source = vtk_root / item["relative_path"]
+              snapshot_path = result_root / item["snapshot_relative_path"]
+              source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+              snapshot_bytes = snapshot_path.read_bytes()
+              if source_sha != item.get("source_sha256"):
+                  raise SystemExit("Synchronized source VTK hash differs from the accepted record")
+              if hashlib.sha256(snapshot_bytes).hexdigest() != item.get("snapshot_sha256"):
+                  raise SystemExit("Synchronized snapshot hash differs from the accepted record")
+              snapshot = json.loads(snapshot_bytes)
+              if (
+                  snapshot.get("simulation_id") != simulation_id
+                  or snapshot.get("configuration_sha256") != manifest_sha
+                  or snapshot.get("source_sha256") != source_sha
+                  or snapshot.get("solver_time") != item.get("solver_time")
+                  or snapshot.get("scientific_validation") != "BLOCKED"
+              ):
+                  raise SystemExit("Snapshot time, configuration, content, or validation status is inconsistent")
+              fields = snapshot.get("fields", {})
+              fields_sha = hashlib.sha256(json.dumps(
+                  fields, sort_keys=True, separators=(",", ":"), allow_nan=False
+              ).encode("utf-8")).hexdigest()
+              if fields_sha != snapshot.get("fields_sha256") or fields.get("mesh_cells") != item.get("mesh_cells"):
+                  raise SystemExit("Imported VTK field payload hash or mesh-cell count is inconsistent")
+              snapshots.append({
+                  "solver_time": item["solver_time"],
+                  "source_relative_path": item["relative_path"],
+                  "source_sha256": source_sha,
+                  "snapshot_relative_path": item["snapshot_relative_path"],
+                  "snapshot_sha256": hashlib.sha256(snapshot_bytes).hexdigest(),
+                  "mesh_cells": item["mesh_cells"],
+                  "scientific_validation": "BLOCKED",
+              })
+          report = {
+              "schema_version": "cleanroomx.openfoam-vtk-sync-run.v1",
+              "status": "PASS_DATA_INGESTION_DIAGNOSTIC_ONLY",
+              "case_id": case_id,
+              "simulation_id": simulation_id,
+              "configuration_sha256": manifest_sha,
+              "synchronized_snapshot_count": len(snapshots),
+              "snapshots": sorted(snapshots, key=lambda item: int(item["solver_time"])),
+              "scientific_validation": "BLOCKED",
+          }
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+          PY
+            case_count=$((case_count + 1))
+          done
+          [[ "$case_count" -eq 9 ]]
+          python - "$sync_root" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          reports = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(root.glob("*.verified.json"))]
+          if len(reports) != 9 or any(item.get("status") != "PASS_DATA_INGESTION_DIAGNOSTIC_ONLY" for item in reports):
+              raise SystemExit("Expected nine verified VTK synchronization records")
+          result = {
+              "schema_version": "cleanroomx.openfoam-vtk-sync-run-family.v1",
+              "status": "PASS_DATA_INGESTION_DIAGNOSTIC_ONLY",
+              "case_count": len(reports),
+              "snapshot_count": sum(item["synchronized_snapshot_count"] for item in reports),
+              "cases": reports,
+              "scientific_validation": "BLOCKED",
+          }
+          (root / "openfoam-vtk-sync-report.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1032,5 +1152,6 @@ jobs:
             ${{ runner.temp }}/simpleFoam-vtk-export-summary.txt
             ${{ runner.temp }}/simpleFoam-mesh-volume-summary.txt
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
+            ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
           if-no-files-found: warn
           retention-days: 14

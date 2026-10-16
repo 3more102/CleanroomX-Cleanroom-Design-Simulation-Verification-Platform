@@ -137,6 +137,46 @@ validation. The pinned upstream [`foamToVTK.C`](https://github.com/OpenFOAM/Open
 registers comma-separated time ranges, iterates the selected time directories,
 and uses `-useTimeName` to name each dataset from the solver time name.
 
+## Incrementally synchronize VTK time results
+
+`sync-vtk` incrementally imports `foamToVTK` volume datasets named
+`<case>_<time>.vtk` or `.vtu` at the VTK root, as well as `internal.vtk` or
+`internal.vtu` under numeric time directories. The source must be the
+`foamToVTK` output tree; this command does not start OpenFOAM or run
+`foamToVTK` itself. For an export tree at
+`cfd_cases/configuration_1/VTK`, use the generated family `manifest.json` as
+configuration provenance:
+
+    cleanroomx-cfd-pipeline sync-vtk \
+      ./cfd_cases/configuration_1/VTK ./cfd_results/configuration_1 \
+      --simulation-id airflow-config-1-run-001 \
+      --configuration-file ./cfd_cases/manifest.json \
+      --interval-seconds 2 --stable-scans 2
+
+The watcher stores restart state in `sync-state.json` and writes each accepted
+snapshot atomically under `snapshots/`. The first observation remains pending;
+the same size and modification time must be observed on a later scan. CleanroomX
+then imports the VTK file through the existing bounded importer, checks the
+source hash before and after parsing, and records simulation ID, raw
+configuration SHA-256, solver time, file hash, mesh-cell count, and import
+timestamps. Repeating the command resumes the existing state. `--once` performs
+one scan and exits. A newly discovered file needs another scan after the
+default two-second stability window; use `--stable-seconds` and
+`--stable-scans` to configure that gate.
+
+The watcher refuses a changed configuration in an existing result store,
+rejects conflicting exports for the same case and solver time, preserves an
+accepted snapshot if its source is later modified, and enforces file-count,
+scan-entry, source-byte, and output-record limits. Stable size/mtime observations
+are a write-completion screen, not a guarantee from the solver; the importer
+must also parse the dataset and the source hash must remain unchanged throughout
+ingestion. The producing process should finish each `foamToVTK` write before
+the watcher accepts it. The current CleanroomX VTK importer maps `U` to velocity
+and an optional configured scalar (default array name `T`) to contaminant
+concentration. It does not yet map pressure, temperature, or turbulence fields
+through this snapshot schema. Solver convergence and physical validation remain
+separate gates.
+
 Foundation v10 run 94 completed this `50,100` audit for all nine synthetic
 cases. Its [multi-time report](OPENFOAM_V10_RUN_38872039438_MULTI_TIME_VTK_AUDIT.md)
 records 18 case-time pairs and 108 passing internal, patch, and surface-flux

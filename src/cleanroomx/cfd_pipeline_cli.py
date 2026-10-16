@@ -9,6 +9,7 @@ from .cfd_scalar import prepare_scalar_case, run_scalar_case
 from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
+from .cfd_sync import synchronize_openfoam_vtk_once, watch_openfoam_vtk
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -30,6 +31,22 @@ def build_parser():
     importer.add_argument("--solver-name",required=True)
     importer.add_argument("--contaminant-array",default="T")
     importer.add_argument("--output",required=True)
+    sync=sub.add_parser("sync-vtk",help="Incrementally import stable OpenFOAM foamToVTK time datasets")
+    sync.add_argument("source_directory",help="foamToVTK VTK output root for one simulation")
+    sync.add_argument("output_directory",help="Persistent CleanroomX result snapshot store")
+    sync.add_argument("--simulation-id",required=True)
+    sync.add_argument("--configuration-file",required=True,
+                      help="Configuration/manifest file whose raw SHA-256 binds this run")
+    sync.add_argument("--contaminant-array",default="T")
+    sync.add_argument("--interval-seconds",type=float,default=2.0)
+    sync.add_argument("--stable-scans",type=int,default=2)
+    sync.add_argument("--stable-seconds",type=float,default=2.0)
+    sync.add_argument("--max-files",type=int,default=1000)
+    sync.add_argument("--max-file-bytes",type=int,default=256*1024*1024)
+    sync.add_argument("--max-total-bytes",type=int,default=2*1024*1024*1024)
+    sync.add_argument("--max-record-bytes",type=int,default=128*1024*1024)
+    sync.add_argument("--max-scan-entries",type=int,default=100000)
+    sync.add_argument("--once",action="store_true",help="Run one scan and exit; repeat to satisfy the stability window")
     plot=sub.add_parser("plot",help="3-panel sampled-cell cross-section PNG")
     for cfg in (1,2,3): plot.add_argument(f"--case-{cfg}",required=True)
     plot.add_argument("--field",choices=("speed","contaminant"),default="speed")
@@ -71,6 +88,33 @@ def main():
         result=run_openfoam_cases(args.directory,timeout_seconds=args.timeout_seconds)
         print(dumps_strict_json(result))
         return 0 if result["status"]=="executed_requires_convergence_review" else 2
+    if args.command=="sync-vtk":
+        options={
+            "simulation_id":args.simulation_id,
+            "configuration_file":args.configuration_file,
+            "stable_scans":args.stable_scans,
+            "stable_seconds":args.stable_seconds,
+            "max_files":args.max_files,
+            "max_file_bytes":args.max_file_bytes,
+            "max_total_bytes":args.max_total_bytes,
+            "max_record_bytes":args.max_record_bytes,
+            "max_scan_entries":args.max_scan_entries,
+            "contaminant_array":args.contaminant_array,
+        }
+        if args.once:
+            report=synchronize_openfoam_vtk_once(args.source_directory,args.output_directory,**options)
+            print(dumps_strict_json(report))
+            return 0
+        try:
+            watch_openfoam_vtk(
+                args.source_directory,args.output_directory,
+                interval_seconds=args.interval_seconds,
+                on_scan=lambda report: print(dumps_strict_json(report),flush=True),
+                **options,
+            )
+        except KeyboardInterrupt:
+            return 130
+        return 0
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(report))

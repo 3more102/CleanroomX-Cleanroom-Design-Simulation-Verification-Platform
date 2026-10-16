@@ -25,6 +25,54 @@ def _write_json(path: Path, document: dict) -> None:
     temporary.replace(path)
 
 
+def _scalar_failure_diagnostics(solver_report: dict, log_text: str, case_directory: Path) -> dict:
+    """Summarize a failed real run without promoting scientific validation."""
+    sync = solver_report.get("result_synchronization")
+    if not isinstance(sync, dict):
+        sync = {}
+    solver_status = solver_report.get("status")
+    if solver_status == "solver_failed":
+        failure_stage = "solver"
+    elif solver_status == "execution_succeeded_synchronization_incomplete":
+        failure_stage = "result_synchronization"
+    else:
+        failure_stage = "solver_or_result_synchronization"
+
+    normalized = log_text.replace(str(case_directory), "<SCALAR_CASE>")
+    lines = normalized.splitlines()
+    markers = [
+        index for index, line in enumerate(lines)
+        if re.search(
+            r"FOAM FATAL|Fatal .*ERROR|wrong token type|FOAM exiting|"
+            r"expected .* found|Traceback",
+            line,
+            re.IGNORECASE,
+        )
+    ]
+    if markers:
+        start = max(0, markers[0] - 2)
+        excerpt = lines[start : min(len(lines), markers[0] + 8)]
+    else:
+        excerpt = [line for line in lines if line.strip()][-10:]
+
+    errors = sync.get("errors", [])
+    if not isinstance(errors, list):
+        errors = []
+    return {
+        "schema_version": "cleanroomx.openfoam-scalar-sync-failure.v1",
+        "status": "execution_failure_diagnostic_only",
+        "failure_stage": failure_stage,
+        "solver_status": solver_status,
+        "solver_exit_code": solver_report.get("exit_code"),
+        "solver_log_sha256": solver_report.get("log_sha256"),
+        "result_synchronization_status": sync.get("status", "not_available"),
+        "result_synchronization_errors": errors[:20],
+        "solver_diagnostic_excerpt": excerpt[-12:],
+        "scientific_validation": "BLOCKED",
+        "interpretation": "runtime_failure_diagnostics_only",
+    }
+
+
 def main() -> None:
     family = Path(sys.argv[1]).resolve(strict=True)
     output = Path(sys.argv[2]).resolve(strict=False)
@@ -72,7 +120,19 @@ def main() -> None:
         synchronizer=synchronizer,
     )
     if solver_report.get("status") != "executed_requires_residual_and_field_validation":
-        raise SystemExit("scalarTransportFoam execution or synchronization failed")
+        solver_log = scalar_case / "scalarTransportFoam.log"
+        log_text = (
+            solver_log.read_text(encoding="utf-8", errors="replace")
+            if solver_log.is_file() and not solver_log.is_symlink()
+            else ""
+        )
+        failure = _scalar_failure_diagnostics(solver_report, log_text, scalar_case)
+        _write_json(output / "scalar_sync_failure_evidence.json", failure)
+        print(json.dumps(failure, indent=2, sort_keys=True), file=sys.stderr)
+        raise SystemExit(
+            "scalarTransportFoam execution or synchronization failed; "
+            "see scalar_sync_failure_evidence.json and scalarTransportFoam.log"
+        )
     sync_report = solver_report.get("result_synchronization")
     if not isinstance(sync_report, dict) or sync_report.get("status") != "results_synced":
         raise SystemExit("Scalar solver did not finish with synchronized outputs")

@@ -63,6 +63,28 @@ def parse_foam_to_vtk_time_log(log_text: str, expected_time: str) -> list[str]:
     return selected
 
 
+def _verified_patch_face_count(patch_parity: dict) -> int:
+    """Sum patch faces only when native and VTK coverage agree for all patches."""
+    if type(patch_parity) is not dict or set(patch_parity) != set(PATCH_NAMES):
+        raise ValueError("Patch parity must contain exactly inlet, outlet, and walls")
+    total = 0
+    for patch_name in PATCH_NAMES:
+        parity = patch_parity[patch_name]
+        if type(parity) is not dict or parity.get("status") != "PASS":
+            raise ValueError(f"{patch_name} patch parity is incomplete")
+        native_count = parity.get("native_face_count")
+        vtk_count = parity.get("vtk_face_count")
+        if (
+            type(native_count) is not int
+            or type(vtk_count) is not int
+            or native_count <= 0
+            or vtk_count != native_count
+        ):
+            raise ValueError(f"{patch_name} patch face coverage is incomplete or inconsistent")
+        total += native_count
+    return total
+
+
 def _sha256_file(path: Path, root: Path) -> dict:
     try:
         relative = path.relative_to(root)
@@ -302,7 +324,6 @@ def audit_openfoam_vtk_time_selection(
                 raise ValueError("Explicit-time internal U/p parity did not cover every cell")
 
             patch_parity = {}
-            total_patch_faces = 0
             for patch, path in patch_paths.items():
                 parity = audit_openfoam_vtk_boundary_patch(
                     native_paths["U"],
@@ -314,7 +335,7 @@ def audit_openfoam_vtk_time_selection(
                 if parity.get("status") != "PASS":
                     raise ValueError(f"Explicit-time {patch} patch parity did not pass")
                 patch_parity[patch] = parity
-                total_patch_faces += parity.get("face_count", 0)
+            total_patch_faces = _verified_patch_face_count(patch_parity)
 
             surface_flux = audit_openfoam_vtk_surface_flux(
                 native_paths["phi"],

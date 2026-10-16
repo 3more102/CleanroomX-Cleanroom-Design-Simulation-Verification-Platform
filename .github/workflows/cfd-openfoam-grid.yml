@@ -1336,6 +1336,61 @@ jobs:
           )
           PY
 
+      - name: Render synchronized OpenFOAM airflow comparison
+        run: |
+          set -euo pipefail
+          family="$RUNNER_TEMP/cleanroomx-cfd-grid-family"
+          simulation_id="$(python - "$family/manifest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print("grid-" + manifest["family_spec_sha256"][:24])
+          PY
+          )"
+          sync_root="$RUNNER_TEMP/cleanroomx-openfoam-runtime-sync/$simulation_id"
+          visualization_root="$RUNNER_TEMP/cleanroomx-openfoam-visualization"
+          mkdir -p "$visualization_root"
+          cleanroomx-cfd-pipeline plot \
+            --case-1 "$sync_root/configuration_1/coarse/results/time_150/VTK/coarse_150.vtk" \
+            --case-2 "$sync_root/configuration_2/coarse/results/time_150/VTK/coarse_150.vtk" \
+            --case-3 "$sync_root/configuration_3/coarse/results/time_150/VTK/coarse_150.vtk" \
+            --field speed --axis y --position-m 1.0 --slab-thickness-m 0.5 \
+            --output "$visualization_root/airflow-speed-cross-section.png" \
+            > "$visualization_root/airflow-speed-cross-section.json"
+          python - "$visualization_root" <<'PY'
+          import json
+          import math
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          image = root / "airflow-speed-cross-section.png"
+          report_path = root / "airflow-speed-cross-section.json"
+          if image.is_symlink() or not image.is_file() or image.stat().st_size < 5000:
+              raise SystemExit("Synchronized airflow visualization is missing or incomplete")
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          counts = report.get("sample_count")
+          value_range = report.get("range")
+          if (
+              report.get("status") != "sampled_cells_visualized_not_cfd_validation"
+              or report.get("field") != "speed"
+              or report.get("axis") != "y"
+              or report.get("position_m") != 1.0
+              or report.get("slab_thickness_m") != 0.5
+              or not isinstance(counts, dict)
+              or set(counts) != {"1", "2", "3"}
+              or any(type(counts[key]) is not int or counts[key] <= 0 for key in counts)
+              or not isinstance(value_range, list)
+              or len(value_range) != 2
+              or any(type(value) not in (int, float) or not math.isfinite(value) for value in value_range)
+              or value_range[0] > value_range[1]
+          ):
+              raise SystemExit("Synchronized airflow visualization report is incomplete or malformed")
+          print(json.dumps({"image_bytes": image.stat().st_size, **report}, sort_keys=True))
+          PY
+
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1351,5 +1406,6 @@ jobs:
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
             ${{ runner.temp }}/cleanroomx-openfoam-runtime-sync
             ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
+            ${{ runner.temp }}/cleanroomx-openfoam-visualization
           if-no-files-found: warn
           retention-days: 14

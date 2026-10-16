@@ -93,10 +93,6 @@ See [OpenFOAM checkMesh diagnostics](OPENFOAM_CHECKMESH_DIAGNOSTICS.md) for the
 receipt schema, parser behavior, and the distinction between reported
 `checkMesh` checks and project-defined mesh acceptance.
 
-For the exact-head Foundation v10 run with incremental native-field
-synchronization, parity counts, artifact digest, test results, and numerical
-limits, see the [run 104 evidence report](OPENFOAM_V10_RUN_38888517187_RUNTIME_SYNC_EVIDENCE.md).
-
 The GitHub nine-case Foundation v10 workflow additionally requires
 `foamToVTK`. After each successful `simpleFoam` run, it exports the latest
 cell velocity `U`, kinematic-pressure `p`, and surface flux `phi` with ASCII
@@ -314,6 +310,13 @@ three-case winner. This feature **does not solve scalar transport**.
 This displays cell-center samples inside a finite-thickness slab; it is not
 an interpolated CFD contour or velocity streamline. The plot does not certify
 CFD, ISO classification, or any regulatory qualification.
+
+The Foundation v10 integration workflow runs this command on the final-time
+coarse-grid datasets in the native runtime-sync store for configurations 1–3.
+It uploads `airflow-speed-cross-section.png` and the JSON report with the solver,
+synchronization, and VTK parity evidence. The plot step reads the synchronized
+files directly and checks that each configuration contributes samples; it
+does not promote the samples to CFD validation evidence.
 
 ## Engineering follow-on gates
 

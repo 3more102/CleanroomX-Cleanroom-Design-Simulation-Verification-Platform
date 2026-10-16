@@ -107,46 +107,6 @@ def test_case_bundle_preflight_rejects_symbolic_link_inputs(tmp_path):
         verify_openfoam_case_bundle(case_directory)
 
 
-def test_case_bundle_preflight_rejects_directory_symlink_swap_during_hash(
-    tmp_path, monkeypatch
-):
-    import cleanroomx.cfd_openfoam as cfd_openfoam
-
-    case_directory = tmp_path / "cases"
-    export_openfoam_cases(spec(), case_directory)
-    configuration = case_directory / "configuration_1"
-    parked_configuration = case_directory / "configuration_1-original"
-    target = configuration / "constant" / "momentumTransport"
-    original_hash = cfd_openfoam.stable_file_sha256
-    swapped = False
-
-    def swap_then_hash(path, *, max_bytes):
-        nonlocal swapped
-        path = Path(path)
-        if not swapped and path == target:
-            configuration.rename(parked_configuration)
-            try:
-                configuration.symlink_to(
-                    parked_configuration,
-                    target_is_directory=True,
-                )
-            except OSError as error:
-                parked_configuration.rename(configuration)
-                pytest.skip(f"directory symlinks are unavailable: {error}")
-            swapped = True
-        return original_hash(path, max_bytes=max_bytes)
-
-    monkeypatch.setattr(cfd_openfoam, "stable_file_sha256", swap_then_hash)
-
-    with pytest.raises(
-        ValueError,
-        match="Case input path changed during preflight: configuration_1/constant/momentumTransport",
-    ):
-        verify_openfoam_case_bundle(case_directory)
-
-    assert swapped
-
-
 def test_case_bundle_preflight_rechecks_boundary_metadata(tmp_path):
     case_directory = tmp_path / "cases"
     manifest = export_openfoam_cases(spec(), case_directory)

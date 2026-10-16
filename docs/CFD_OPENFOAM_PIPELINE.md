@@ -52,7 +52,13 @@ For the default v10 bundle, install OpenFOAM Foundation v10 on Linux/WSL,
 source that installation's `etc/bashrc` in the environment that starts
 CleanroomX, and put `blockMesh`, `checkMesh` and `simpleFoam` on PATH. The
 runner requires `WM_PROJECT=OpenFOAM`, `WM_PROJECT_VERSION=10`, and a matching
-`OpenFOAM-10` solver version banner. Then opt in:
+`OpenFOAM-10` solver version banner. It also checks each successful stage log
+for the Foundation site, Version 10, and a nonempty build ID shared by every
+stage and layout. It records parsed identity, executable paths, commands,
+input hashes, exit codes, and log hashes in `run_manifest.json`; an identity
+mismatch marks the run incomplete and stops it. These checks cover the three
+generated layouts; the separate nine-case, three-grid evidence required by
+issue #1296 remains outstanding. Then opt in:
 
     cleanroomx-cfd-pipeline run ./cfd_cases --timeout-seconds 3600
 
@@ -121,7 +127,7 @@ not as a declared mesh-accuracy target.
 
 Release-specific baseline references:
 - OpenFOAM Foundation v10 [pitzDaily physicalProperties](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/constant/physicalProperties), [momentumTransport](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/constant/momentumTransport) and [fvSchemes](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/tutorials/incompressible/simpleFoam/pitzDaily/system/fvSchemes).
-- OpenFOAM Foundation v10 [turbulence guide](https://doc.cfd.direct/openfoam/user-guide-v10/turbulence) and [scalarTransportFoam source](https://cpp.openfoam.org/v10/scalarTransportFoam_8C_source.html).
+- OpenFOAM Foundation v10 [`etc/bashrc`](https://github.com/OpenFOAM/OpenFOAM-10/blob/89f925dc708d068f84f51e8317e3bebcda64f5cb/etc/bashrc), [turbulence guide](https://doc.cfd.direct/openfoam/user-guide-v10/turbulence) and [scalarTransportFoam source](https://cpp.openfoam.org/v10/scalarTransportFoam_8C_source.html).
 - OpenFOAM Foundation v14 [release notes](https://openfoam.org/release/14/) and [tagged source](https://github.com/OpenFOAM/OpenFOAM-14/tree/version-14).
 - OpenFOAM Foundation v14 [pitzDailySteady controlDict](https://github.com/OpenFOAM/OpenFOAM-14/blob/version-14/tutorials/incompressibleFluid/pitzDailySteady/system/controlDict).
 

@@ -33,7 +33,7 @@ _HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _build_identity(log_text: str) -> str | None:
-    match = re.search(r"(?m)^\\s*Build\\s*:\\s*(\\S+)\\s*$", log_text)
+    match = re.search(r"(?m)^\s*Build\s*:\s*(\S+)\s*$", log_text)
     return match.group(1) if match else None
 
 

@@ -265,26 +265,35 @@ def _line_svg(series: list[dict[str, float]], target: float, tolerance: float) -
 
 
 def _bars_svg(title: str, labels: list[str], values: list[float], units: str) -> str:
-    if len(labels) != len(values) or not values:
-        raise ValueError("Graph requires aligned nonempty values")
-    top = max(max(values), 0.0) * 1.15
-    if top == 0:
-        top = 1.0
+    if len(labels) != len(values) or not 1 <= len(values) <= 3:
+        raise ValueError("Graph requires one to three aligned values")
+    values = [_finite(x, "bar_value") for x in values]
+    low = min(0.0, *values)
+    high = max(0.0, *values)
+    extent = high - low or 1.0
+    margin = extent * 0.1
+    low -= margin
+    high += margin
+    scale = high - low
+    yp = lambda value: 235 - 170 * (value - low) / scale
+    baseline = yp(0.0)
     bars = []
     for i, (label, value) in enumerate(zip(labels, values)):
         x = 100 + 180 * i
-        y = 235 - 170 * value / top
-        height = max(0, 235 - y)
+        value_y = yp(value)
+        y = min(value_y, baseline)
+        height = abs(value_y - baseline)
+        text_y = max(40, min(225, value_y - 6 if value >= 0 else value_y + 16))
         bars.append(
             f'<rect x="{x}" y="{y:.2f}" width="85" height="{height:.2f}" fill="#1464b4"/>'
-            f'<text x="{x}" y="{min(y-6,228):.2f}" font-size="12">{value:.5g}</text>'
+            f'<text x="{x}" y="{text_y:.2f}" font-size="12">{value:.5g}</text>'
             f'<text x="{x}" y="256" font-size="12">{escape(label)}</text>'
         )
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="295" viewBox="0 0 720 295">'
         '<rect width="720" height="295" fill="#fff"/>'
         f'<text x="30" y="24" font-size="17">{escape(title)} ({escape(units)})</text>'
-        '<line x1="70" y1="235" x2="670" y2="235" stroke="#333"/>'
+        f'<line x1="70" y1="{baseline:.2f}" x2="670" y2="{baseline:.2f}" stroke="#333"/>'
         + "".join(bars)
         + '</svg>'
     )

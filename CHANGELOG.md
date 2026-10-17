@@ -2292,4 +2292,10 @@
 
 - Consolidates durable verified atomic persistence behind one shared persistence layer, including durable creation of previously missing nested parent directories.
 - Adds versioned crash-recovery integrity evidence while preserving legacy v1 recovery readability as unverified evidence.
-- Adds guarded saved-project revision history with migration-aware stable source revision tracki
+- Adds guarded saved-project revision history with migration-aware stable source revision tracking.
+- Consolidates project, analysis, and spatial edits into one bounded transactional Undo/Redo stream.
+- Makes completed analysis runs immutable snapshots and preserves exact submitted-input, implementation, runtime, and external-dependency provenance.
+- Adds a bounded integrity-checked persisted analysis run-history ledger.
+- Adds analysis plugin API v1 with deterministic discovery and built-in-key collision protection.
+- Adds integrity-checked portable project bundles and self-contained verified portable engineering HTML reports.
+- Adds Release 2 regression/performance gates while preserving existing solver equations, tolerances, and acceptance semantics.

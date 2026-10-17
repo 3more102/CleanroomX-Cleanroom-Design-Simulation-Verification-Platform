@@ -9,6 +9,9 @@ from .cfd_scalar import prepare_scalar_case, run_scalar_case
 from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
+from .cfd_suite_topology import assess_suite_topology
+from .project import load_project_document
+from .spatial_integrity import SPATIAL_METADATA_KEY
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -17,6 +20,10 @@ def build_parser():
     parser=argparse.ArgumentParser(prog="cleanroomx-cfd-pipeline",
                                    description="OpenFOAM v10 and VTK cleanroom CFD pipeline")
     sub=parser.add_subparsers(dest="command",required=True)
+    suite=sub.add_parser("suite-preflight",
+                         help="Validate 2D/3D room adjacency and openings; does not generate a CFD case")
+    suite.add_argument("project", help="Existing CleanroomX project JSON")
+    suite.add_argument("--output", help="Optional path for the geometry-only preflight report")
     create=sub.add_parser("generate",help="Generate three OpenFOAM cases")
     create.add_argument("spec")
     create.add_argument("directory")
@@ -63,6 +70,21 @@ def build_parser():
 @cli_error_boundary("cleanroomx-cfd-pipeline")
 def main():
     args=build_parser().parse_args()
+    if args.command=="suite-preflight":
+        project=load_project_document(args.project)
+        layout=project.metadata.get(SPATIAL_METADATA_KEY)
+        if layout is None:
+            raise ValueError("Project has no spatial_layout to preflight")
+        report=assess_suite_topology(layout)
+        payload=dumps_strict_json(report)
+        if args.output:
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,
+                                      payload,protected_inputs=(args.project,)):
+                return 1
+        else:
+            print(payload)
+        # Exit 0 means topology valid only; ready_for_solver remains false.
+        return 0 if report["topology_status"]=="valid" else 3
     if args.command=="generate":
         result=export_openfoam_cases(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(result))

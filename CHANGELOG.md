@@ -4,7 +4,7 @@
 
 - Adds standalone ProofGraph export from synchronized OpenFOAM result manifests through the GUI.
 - Re-hashes manifests, immutable receipts, and referenced result assets; mismatches stop export and missing configurations remain explicitly not checked.
-- Limits PASS to artifact integrity. Solver convergence and independent physical validation remain not checked and BLOCKED.
+- Limits PASS to local hash-link consistency, without claiming signatures, authenticity, or re-hashed source-field bytes. Solver convergence and independent physical validation remain not checked and BLOCKED.
 
 ## Unreleased Release 3 — responsive OpenFOAM console — 2026-10-17
 

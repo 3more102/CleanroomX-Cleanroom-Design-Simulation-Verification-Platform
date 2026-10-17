@@ -14,6 +14,7 @@ from cleanroomx.cfd_two_room import (
 )
 from cleanroomx.cfd_proofgraph import export_two_room_proofgraph
 from cleanroomx.cfd_two_room_analysis import export_two_room_analysis
+from cleanroomx.cfd_analysis_bundle import verify_analysis_bundle
 from cleanroomx.cli_output import load_cli_input
 from cleanroomx.strict_json import load_strict_json
 
@@ -87,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
             case, receipt_directory / "two_room_run_receipt.json", analysis_directory
         )
         parsed = json.loads((analysis_directory / "analysis.json").read_text(encoding="utf-8"))
+        bundle_audit = verify_analysis_bundle(analysis_directory)
         vtk_fields = parsed.get("vtk_fields", {})
         expected_graphs = {
             "pressure_probe_history.svg",
@@ -100,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
         }
         if (
             analysis_summary["status"] != "DIAGNOSTIC_ONLY"
+            or bundle_audit["status"] != "VERIFIED_LOCAL_ARTIFACT_INTEGRITY"
+            or analysis_summary["manifest_sha256"] != bundle_audit["manifest_sha256"]
             or parsed.get("scientific_validation") != "BLOCKED"
             or parsed.get("solver_convergence") != "NOT_ASSESSED"
             or parsed.get("receipt_sha256") != verified_receipt["receipt_sha256"]
@@ -117,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         analysis_summary = {
             **analysis_summary,
             "vtk_source_sha256": vtk_fields.get("source_sha256"),
+            "analysis_bundle_audit": bundle_audit,
             "room_1_cell_count": vtk_fields["rooms"]["room_1"]["velocity_magnitude"]["cell_count"],
             "room_2_cell_count": vtk_fields["rooms"]["room_2"]["velocity_magnitude"]["cell_count"],
         }

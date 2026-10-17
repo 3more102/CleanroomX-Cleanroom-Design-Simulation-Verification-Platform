@@ -111,6 +111,10 @@ Neither workflow overwrites the output directory or automatically launches a sol
 
 The result includes **analysis.json**, an **index.html** offline diagnostic
 review dashboard with traceable metrics, and self-contained SVG graphs.
+The dashboard also contains a per-room table of VTK volume-weighted mean
+velocity, P05/P95 velocity, sampled cell count and volume, and corresponding
+gauge-pressure summaries when pressure cell fields exist. Missing fields are
+shown as unavailable, never substituted with values from the probes.
 
 The export also publishes a versioned `artifact_manifest.json` with SHA-256
 and byte size for the JSON, dashboard, and every SVG. Outputs are staged into

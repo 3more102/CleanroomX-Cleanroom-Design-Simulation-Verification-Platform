@@ -8,11 +8,12 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 from .spatial_scene_finder import scene_entries
+from .spatial_3d_export import save_3d_svg
 from .spatial_3d_legibility import (
     draw_device_details_hud,
     draw_room_details_hud,
@@ -1921,6 +1922,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         camera_menu.add_command(
             label="Find room or device…  ( / )",
             command=self.open_scene_finder,
+        )
+        camera_menu.add_separator()
+        camera_menu.add_command(
+            label="Export current 3D view…  (SVG)",
+            command=self.export_3d_svg,
         )
         camera_button.pack(side="left", padx=(5, 2))
         ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
@@ -4617,6 +4623,35 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
+
+    def export_3d_svg(self) -> None:
+        """Save a design-only vector screenshot of the currently shown canvas."""
+        canvas = self.canvas_3d
+        if (canvas.winfo_width() < 100 or canvas.winfo_height() < 100
+                or not self.layout["rooms"]):
+            messagebox.showwarning(
+                "Export 3D design image",
+                "Open a room layout and expand the 3D viewport before exporting.",
+                parent=self,
+            )
+            return
+        destination = filedialog.asksaveasfilename(
+            parent=self, title="Export current 3D design view",
+            defaultextension=".svg", initialfile="cleanroomx-3d-view.svg",
+            filetypes=(("Scalable Vector Graphics", "*.svg"),),
+        )
+        if not destination:
+            return
+        try:
+            save_3d_svg(canvas, destination)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror(
+                "3D design export failed", str(exc), parent=self,
+            )
+            return
+        self._status_setter(
+            f"3D design SVG saved: {destination} (not CFD evidence)"
+        )
 
     def _on_scene_finder_shortcut(self, event: tk.Event | None = None) -> str:
         self.open_scene_finder()

@@ -178,6 +178,7 @@ def _capture(
     destination: Path,
     scene: str,
     theme: str,
+    expected_size: tuple[int, int],
 ) -> dict[str, object]:
     root.update_idletasks()
     root.update()
@@ -185,6 +186,12 @@ def _capture(
     root.update()
     x, y = root.winfo_rootx(), root.winfo_rooty()
     width, height = root.winfo_width(), root.winfo_height()
+    if (width, height) != expected_size:
+        raise RuntimeError(
+            f"GUI client size {width}x{height} != requested "
+            f"{expected_size[0]}x{expected_size[1]}; "
+            "this capture would not meet the native-resolution requirement"
+        )
     if x < 0 or y < 0 or width < 1440 or height < 900:
         raise RuntimeError(f"Window is not correctly framed: {x},{y} {width}x{height}")
     if x + width > root.winfo_screenwidth() or y + height > root.winfo_screenheight():
@@ -230,6 +237,14 @@ def _select_tab(app: CleanroomXApp, label: str) -> None:
             app.notebook.select(tab_id)
             app.root.update_idletasks()
             app.root.update()
+            selected = app.notebook.select()
+            tab_widget = app.root.nametowidget(tab_id)
+            if selected != tab_id or not tab_widget.winfo_ismapped():
+                raise RuntimeError(
+                    f"GUI tab {label!r} is not visibly mapped: "
+                    f"selected={selected!r}, expected={tab_id!r}, "
+                    f"mapped={tab_widget.winfo_ismapped()}"
+                )
             return
     raise RuntimeError(f"CleanroomX GUI tab was not found: {label}")
 
@@ -238,13 +253,17 @@ def _capture_theme(
     app: CleanroomXApp,
     output: Path,
     theme: str,
+    size: tuple[int, int],
 ) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
     app.set_focus_workspace(False)
     app.set_theme(theme, persist=False)
 
     def snap(scene: str) -> None:
-        records.append(_capture(app.root, output, scene, theme))
+        app.root.lift()
+        app.root.update_idletasks()
+        app.root.update()
+        records.append(_capture(app.root, output, scene, theme, size))
 
     _select_tab(app, "Start")
     snap("gui-start-center")
@@ -309,6 +328,11 @@ def capture(
         )
         _enable_windows_dpi_awareness()
         root = tk.Tk()
+        # On Windows, withdraw before any initial mapping. Decorating and
+        # subsequently toggling fullscreen leaves a 25-pixel nonclient offset
+        # on some systems even if the window appears to fill the desktop.
+        if os.name == "nt":
+            root.withdraw()
         try:
             if (
                 root.winfo_screenwidth() < width
@@ -326,24 +350,28 @@ def capture(
                 autosave_interval_seconds=0,
                 ui_state_path=temporary_root / "gui-layout.json",
             )
-            root.geometry(f"{width}x{height}+0+0")
             app.load_project_path(bundled_demo_project_path())
             app.proofgraph_viewer.set_documents([proofgraph.to_dict()])
-            # Windows still positions the client 25 px beneath the title bar
-            # when overrideredirect() is applied to an already-mapped window.
-            # Native fullscreen removes that offset and hides the taskbar.
-            # Apply it after app initialization (which restores GUI geometry).
-            if os.name == "nt" and (
-                width == root.winfo_screenwidth()
-                and height == root.winfo_screenheight()
-            ):
-                root.overrideredirect(False)
-                root.attributes("-fullscreen", True)
+            # Force a native, undecorated app client area before showing Tk.
+            # Do not enable WM fullscreen: Windows can subtract the titlebar
+            # height from the 1080-pixel area even after fullscreen is set.
+            if os.name == "nt":
+                root.overrideredirect(True)
+            root.geometry(f"{width}x{height}+0+0")
+            if os.name == "nt":
+                root.deiconify()
+                root.attributes("-topmost", True)
+                root.lift()
             root.update_idletasks()
             root.update()
+            print(
+                f"Capture window: client {root.winfo_width()}x{root.winfo_height()} "
+                f"at {root.winfo_rootx()},{root.winfo_rooty()} "
+                f"on {root.winfo_screenwidth()}x{root.winfo_screenheight()} display"
+            )
             screenshots = []
             for theme in themes:
-                screenshots.extend(_capture_theme(app, output, theme))
+                screenshots.extend(_capture_theme(app, output, theme, size))
         finally:
             root.destroy()
 

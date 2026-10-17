@@ -196,7 +196,7 @@ def assess_suite_topology(layout: dict[str, Any]) -> dict[str, Any]:
         if not device.get("wall_side"):
             issue("opening_wall_unknown", "Opening requires an explicit wall_side", device_id)
             continue
-        if "width_m" not in device or "height_m" not in device:
+        if device.get("width_m") is None or device.get("height_m") is None:
             issue("opening_dimensions_missing", "Opening requires width and height", device_id)
             continue
         parent = by_id[room_id]

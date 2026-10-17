@@ -1060,6 +1060,7 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
 
 def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
     """The design-zone tint never changes stored geometry or verification."""
+    app.set_focus_workspace(True)
     workspace = app.spatial_workspace
     workspace.set_workspace_mode("3d")
     app.root.update()
@@ -1091,9 +1092,9 @@ def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
 
 
 def test_3d_room_labels_are_compact_nonoverlapping_and_inspectable(app):
-    workspace = app.spatial_workspace
     app.root.geometry("1440x900")
-    workspace.set_inspector_visible(False)
+    app.set_focus_workspace(True)
+    workspace = app.spatial_workspace
     workspace.set_workspace_mode("3d")
     app.root.update()
     workspace.fit_3d()
@@ -1172,6 +1173,8 @@ def test_keyboard_3d_camera_actions_keep_project_geometry_unchanged(app):
 def test_scrollable_inspector_keeps_3d_canvas_and_apply_accessible(app):
     workspace = app.spatial_workspace
     app.root.geometry("1050x680")
+    app.hide_output_panel()
+    workspace.set_inspector_visible(True)
     workspace.set_workspace_mode("3d")
     app.root.update()
     inspector = workspace._inspector_canvas
@@ -1192,8 +1195,9 @@ def test_scrollable_inspector_keeps_3d_canvas_and_apply_accessible(app):
 
 
 def test_3d_device_selection_has_details_without_fake_airflow(app):
-    workspace = app.spatial_workspace
     app.root.geometry("1440x900")
+    app.set_focus_workspace(True)
+    workspace = app.spatial_workspace
     workspace.set_workspace_mode("3d")
     app.root.update()
     device = workspace.layout["devices"][0]
@@ -1209,3 +1213,19 @@ def test_3d_device_selection_has_details_without_fake_airflow(app):
     ]
     assert "SELECTED DEVICE" in labels
     assert any("Placement only" in label for label in labels)
+
+
+def test_focus_3d_button_toggles_existing_reversible_layout_mode(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout["rooms"])
+    assert workspace._on_focus_requested is not None
+    workspace.focus_3d_workspace()
+    app.root.update()
+    assert app.focus_workspace_var.get()
+    assert workspace._workspace_mode.get() == "3d"
+    assert not app.output_panel_visible_var.get()
+    assert not workspace.inspector_visible()
+    workspace.focus_3d_workspace()
+    app.root.update()
+    assert not app.focus_workspace_var.get()
+    assert workspace.layout["rooms"] == before

@@ -1229,3 +1229,46 @@ def test_focus_3d_button_toggles_existing_reversible_layout_mode(app):
     app.root.update()
     assert not app.focus_workspace_var.get()
     assert workspace.layout["rooms"] == before
+
+
+def test_3d_scene_finder_searches_rooms_and_selects_devices_without_model_edits(app):
+    workspace = app.spatial_workspace
+    app.set_focus_workspace(True)
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    before_rooms = copy.deepcopy(workspace.layout["rooms"])
+    before_devices = copy.deepcopy(workspace.layout["devices"])
+
+    workspace.open_scene_finder()
+    app.root.update()
+    window = workspace._scene_finder_window
+    assert window is not None and window.winfo_exists()
+
+    def descend(parent):
+        for child in parent.winfo_children():
+            yield child
+            yield from descend(child)
+
+    widgets = list(descend(window))
+    search = next(widget for widget in widgets if isinstance(widget, ttk.Entry))
+    tree = next(widget for widget in widgets if isinstance(widget, ttk.Treeview))
+    search.delete(0, "end")
+    search.insert(0, "supply")
+    app.root.update()
+    device_rows = [
+        iid for iid in tree.get_children() if iid.startswith("device:")
+    ]
+    assert device_rows
+    selected_iid = device_rows[0]
+    tree.selection_set(selected_iid)
+    open_button = next(
+        widget for widget in widgets
+        if isinstance(widget, ttk.Button) and widget.cget("text") == "Open and fit"
+    )
+    open_button.invoke()
+    app.root.update()
+    assert not window.winfo_exists()
+    assert workspace.selected == _Hit("device", selected_iid.split(":", 1)[1])
+    assert workspace.layout["rooms"] == before_rooms
+    assert workspace.layout["devices"] == before_devices
+    assert workspace.canvas_3d.bind("<KeyPress-slash>")

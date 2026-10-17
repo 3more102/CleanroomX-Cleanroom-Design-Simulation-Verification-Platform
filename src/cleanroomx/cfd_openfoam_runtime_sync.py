@@ -538,6 +538,7 @@ class OpenFOAMResultSynchronizer:
         case_id: str | None = None,
         required_fields: tuple[str, ...] | list[str] = ("U", "p"),
         optional_fields: tuple[str, ...] | list[str] = DEFAULT_OPTIONAL_FIELDS,
+        include_surface_flux: bool = True,
         contaminant_field: str | None = None,
         field_map: dict[str, Any] | None = None,
         expected_build: str | None = None,
@@ -569,6 +570,8 @@ class OpenFOAMResultSynchronizer:
 
         required = tuple(required_fields)
         optional = tuple(optional_fields)
+        if type(include_surface_flux) is not bool:
+            raise ValueError("include_surface_flux must be a boolean")
         if contaminant_field is not None and contaminant_field not in optional:
             optional = (*optional, contaminant_field)
         if required not in (("U", "p"), ("U",), ("U", "T")):
@@ -636,6 +639,7 @@ class OpenFOAMResultSynchronizer:
         self.required_fields = required
         self.optional_fields = optional
         self.allowed_fields = (*required, *optional)
+        self.include_surface_flux = include_surface_flux
         self.contaminant_field = contaminant_field
         self.field_map = normalized_field_map
         self.expected_build = expected_build
@@ -685,6 +689,7 @@ class OpenFOAMResultSynchronizer:
             "optional_fields": list(self.optional_fields),
             "contaminant_field": self.contaminant_field,
             "field_map": self.field_map,
+            "include_surface_flux": self.include_surface_flux,
             "poll_interval_seconds": self.poll_interval_seconds,
             "settle_polls": self.settle_polls,
             "created_at_utc": _utc_now(),
@@ -717,6 +722,7 @@ class OpenFOAMResultSynchronizer:
             or manifest.get("optional_fields") != list(self.optional_fields)
             or manifest.get("contaminant_field") != self.contaminant_field
             or manifest.get("field_map") != self.field_map
+            or manifest.get("include_surface_flux", True) != self.include_surface_flux
             or manifest.get("scientific_validation") != "BLOCKED"
             or type(manifest.get("records")) is not dict
             or type(manifest.get("errors")) is not list
@@ -816,7 +822,11 @@ class OpenFOAMResultSynchronizer:
 
     def _current_fields(self, time_directory: Path) -> tuple[dict[str, Path], tuple[Any, ...]] | None:
         native_paths: dict[str, Path] = {}
-        for field_name in (*self.allowed_fields, "phi"):
+        selected_fields = (
+            (*self.allowed_fields, "phi")
+            if self.include_surface_flux else self.allowed_fields
+        )
+        for field_name in selected_fields:
             candidate = time_directory / field_name
             if candidate.is_symlink():
                 raise ValueError(f"Refusing symbolic OpenFOAM result field: {field_name}")

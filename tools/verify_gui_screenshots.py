@@ -68,10 +68,12 @@ def verify_gallery(directory: Path) -> int:
                 raise ValueError(f"Screenshot resolution/format mismatch: {name}")
             if (row["width_px"], row["height_px"]) != img.size:
                 raise ValueError(f"Manifest dimensions mismatch: {name}")
+            # Pillow verify() must run immediately after opening, before load/convert.
+            img.verify()
+        with Image.open(picture) as img:
             extrema = img.convert("RGB").getextrema()
             if max(hi - lo for lo, hi in extrema) < 30:
                 raise ValueError(f"Screenshot appears blank: {name}")
-            img.verify()
         expected_provenance = (
             "synthetic-sync-diagnostic"
             if scene == "gui-openfoam-proofgraph-diagnostic"

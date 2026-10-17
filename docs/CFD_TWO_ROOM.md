@@ -159,6 +159,14 @@ Open the HTML file in a browser after export; it uses no remote assets or script
   that VTK contains scalar p, converted from kinematic pressure using the
   specified density.
 
+Long pressure, residual, and continuity histories use bounded
+extrema-preserving graph sampling (up to 1,000 vertices per plotted series).
+Both first and final solver readings are kept; local minima and maxima
+inside each sampling bucket are included so narrow diagnostic spikes are not
+silently discarded by uniform-stride sampling. The full, unthinned bounded
+numerical histories remain available in `analysis.json`. Graph sampling is
+not an additional convergence or physical validation screen.
+
 VTK graphs require the optional **vtk** Python package. Input is bounded to
 256 MiB and 100,000 cells and rehashed before and after analysis. Surface VTK
 datasets are excluded from room volume summaries. If no volume VTK is present,

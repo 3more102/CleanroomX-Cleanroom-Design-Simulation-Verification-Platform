@@ -90,7 +90,7 @@ def test_scoring_counts_only_complete_rows_and_reports_all_three_tracks():
     assert report["tracks"]["cleanroom_status"]["denominator"] == 21
     summary = (ROOT / "docs" / "OPENFOAM_FOUNDATION_V10_PARITY.md").read_text(encoding="utf-8")
     assert "| Native solver capability parity | 0 | 192 | 0.00% |" in summary
-        assert "| End-to-end OpenFOAM integration coverage | 1 | 717 | 0.14% |" in summary
+    assert "| End-to-end OpenFOAM integration coverage | 1 | 717 | 0.14% |" in summary
     assert "| OpenFOAM tutorial workflows | 1 | 240 | 0.42% |" in summary
     assert "| Validated cleanroom engineering workflows | 0 | 21 | 0.00% |" in summary
 

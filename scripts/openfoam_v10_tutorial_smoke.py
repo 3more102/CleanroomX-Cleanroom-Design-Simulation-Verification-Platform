@@ -32,6 +32,11 @@ SCHEMA = "cleanroomx.openfoam-v10-tutorial-run.v1"
 _HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
+def _build_identity(log_text: str) -> str | None:
+    match = re.search(r"(?m)^\\s*Build\\s*:\\s*(\\S+)\\s*$", log_text)
+    return match.group(1) if match else None
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -141,8 +146,13 @@ def validate_receipt(receipt: dict[str, Any]) -> None:
         or not environment["foamToVTK_executable"].strip()
     ):
         raise ValueError("Foundation v10 runtime identity is incomplete")
-    if not isinstance(receipt.get("solver_build"), str) or not receipt["solver_build"].strip():
-        raise ValueError("foamToVTK did not report a solver build identity")
+    if (
+        not isinstance(receipt.get("solver_build"), str)
+        or not receipt["solver_build"].strip()
+        or not isinstance(receipt.get("foamToVTK_build"), str)
+        or receipt["foamToVTK_build"] != receipt["solver_build"]
+    ):
+        raise ValueError("simpleFoam and foamToVTK build identities do not match")
     if receipt.get("scientific_validation") != "BLOCKED":
         raise ValueError("tutorial evidence cannot declare physical validation")
 
@@ -253,10 +263,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             timeout_seconds=args.stage_timeout_seconds,
             synchronizer=synchronizer,
         )
-        solver_log_completed = any(
-            line.strip() == "End"
-            for line in solver_log.read_text(encoding="utf-8", errors="replace").splitlines()
-        )
+        solver_log_text = solver_log.read_text(encoding="utf-8", errors="replace")
+        solver_log_completed = any(line.strip() == "End" for line in solver_log_text.splitlines())
+        solver_build = _build_identity(solver_log_text)
         sync_summary = synchronizer.finish(
             solver_returncode=solver_returncode,
             solver_log=solver_log,
@@ -290,7 +299,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "source_mesh_dictionary": UPSTREAM_MESH,
         "source_mesh_dictionary_sha256": _sha256(source_mesh),
         "solver_release": "OpenFOAM Foundation v10",
-        "solver_build": None,
+        "solver_build": solver_build if solver_stage is not None else None,
+        "foamToVTK_build": None,
         "environment": environment,
         "case_configuration_sha256": configuration_hash,
         "stages": stages,
@@ -314,7 +324,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     }
     if sync_manifest_path is not None and sync_manifest_path.is_file():
         manifest = json.loads(sync_manifest_path.read_text(encoding="utf-8"))
-        receipt["solver_build"] = manifest.get("solver_build")
+        receipt["foamToVTK_build"] = manifest.get("solver_build")
         receipt["environment"]["foamToVTK_executable"] = manifest.get("foamToVTK_executable")
     try:
         if (

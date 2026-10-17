@@ -2526,13 +2526,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._status_setter("CFD topology preflight: invalid layout")
             return None
         issues = report["issues"]
+        warnings = report["warnings"]
         count = len(report["rooms"])
         shared_count = len(report["shared_walls"])
         status = report["topology_status"]
         lines = [
             f"Topology: {status.upper()}",
             f"Rooms: {count} | Shared walls: {shared_count}",
-            f"Detected issues: {len(issues)}",
+            f"Blocking issues: {len(issues)} | Advisory warnings: {len(warnings)}",
             "",
         ]
         for item in issues[:12]:
@@ -2540,6 +2541,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             lines.append(f"- {item['code']} ({subjects}): {item['message']}")
         if len(issues) > 12:
             lines.append(f"... {len(issues) - 12} further issues; export CLI report for all")
+        for item in warnings[:5]:
+            lines.append(f"- ADVISORY {item['code']}: {', '.join(item['subject_ids'])}")
+        if len(warnings) > 5:
+            lines.append(f"... {len(warnings) - 5} more warnings in the CLI report")
         lines.extend([
             "",
             "No OpenFOAM mesh or CFD simulation was generated.",

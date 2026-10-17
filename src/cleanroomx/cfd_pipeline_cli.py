@@ -12,6 +12,7 @@ from .cfd_grid_family import generate_grid_family
 from .cfd_proofgraph import export_two_room_proofgraph
 from .cfd_two_room_analysis import export_two_room_analysis
 from .cfd_analysis_bundle import verify_analysis_bundle
+from .cfd_two_room_numerics import screen_two_room_numerics
 from .cfd_two_room import (
     execute_two_room_case,
     export_two_room_case,
@@ -160,6 +161,11 @@ def build_parser():
     two_room_analysis.add_argument("case_directory")
     two_room_analysis.add_argument("receipt")
     two_room_analysis.add_argument("output_directory")
+    numerical=sub.add_parser("two-room-numerical-screen",help="Apply receipt-bound, explicit numerical log criteria (not physical validation)")
+    numerical.add_argument("case_directory")
+    numerical.add_argument("receipt")
+    numerical.add_argument("criteria",help="Strict JSON criteria file; no default threshold")
+    numerical.add_argument("--output",help="Optional local numerical-screen JSON report")
     analysis_audit=sub.add_parser("two-room-analysis-audit",help="Verify all hashes and declared files in an exported analysis directory")
     analysis_audit.add_argument("directory")
     return parser
@@ -277,6 +283,20 @@ def main():
         report=export_two_room_analysis(args.case_directory,args.receipt,args.output_directory)
         print(dumps_strict_json(report))
         return 0
+    if args.command=="two-room-numerical-screen":
+        report=screen_two_room_numerics(
+            args.case_directory,args.receipt,
+            load_cli_input(load_strict_json,args.criteria),
+        )
+        payload=dumps_strict_json(report)
+        if args.output:
+            protected=(args.receipt,args.criteria,str(Path(args.case_directory)/"simpleFoam.log"))
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
+                                      protected_inputs=protected):
+                return 1
+        else:
+            print(payload)
+        return 0 if report["status"]=="PROJECT_NUMERICAL_SCREEN_MET" else 3
     if args.command=="two-room-analysis-audit":
         report=verify_analysis_bundle(args.directory)
         print(dumps_strict_json(report))

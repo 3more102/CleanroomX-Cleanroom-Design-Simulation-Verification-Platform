@@ -93,3 +93,83 @@ uploaded a hash-addressed evidence archive. Its v1 receipt predates VTK asset
 hash binding, so it is historical software-integration evidence; it must be
 rerun with the current v2 receipt before its visualization assets can be used
 in a ProofGraph integrity verdict. See the [run 202 evidence report](OPENFOAM_V10_RUN_202_TWO_ROOM_EVIDENCE.md).
+
+
+## Receipt-bound CFD analysis graphs
+
+After a completed v2 receipt has been generated, export diagnostic analysis
+through the existing strict ProofGraph artifact-integrity gate:
+
+    cleanroomx-cfd-pipeline two-room-analyze \
+      ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
+      ./two_room_analysis
+
+Or use **OpenFOAM workspace → Two-room pressure integration case →
+Export analysis graphs…**. The GUI asks for an existing destination *parent*
+directory and creates a new **cleanroomx-two-room-analysis** subdirectory.
+Neither workflow overwrites the output directory or automatically launches a solver.
+
+The result includes **analysis.json**, an **index.html** offline diagnostic
+review dashboard with traceable metrics, and self-contained SVG graphs.
+The dashboard also contains a per-room table of VTK volume-weighted mean
+velocity, P05/P95 velocity, sampled cell count and volume, and corresponding
+gauge-pressure summaries when pressure cell fields exist. Missing fields are
+shown as unavailable, never substituted with values from the probes.
+
+The export also publishes a versioned `artifact_manifest.json` with SHA-256
+and byte size for the JSON, dashboard, and every SVG. Outputs are staged into
+a new temporary directory and published as a completed directory; the writer
+refuses existing destination paths. To verify an exported bundle after copying
+or archiving it, use:
+
+    cleanroomx-cfd-pipeline two-room-analysis-audit ./two_room_analysis
+
+In the GUI, use **Audit saved analysis graphs…** to select an existing
+analysis directory and execute this command without typing a shell command.
+
+The independent audit checks exact file membership, SHA-256 and size, graph
+names, receipt and case-manifest references, and the explicit
+`scientific_validation=BLOCKED` evidence boundary. Missing, altered,
+replaced, symlinked, or extra artifacts fail the audit. The bundle hash is
+**not a digital signature** and does not prove source authenticity or
+physical correctness.
+
+Open the HTML file in a browser after export; it uses no remote assets or scripts.
+
+
+- **simplefoam_residual_Ux.svg**, **simplefoam_residual_Uy.svg**,
+  **simplefoam_residual_Uz.svg**, **simplefoam_residual_p.svg** (when logged):
+  parsed initial/final per-field linear solver residuals on logarithmic axes,
+  labeled by field solve count, not physical simulation time. Up to eight recorded
+  fields are graphed. The JSON includes all bounded parsed residual and reported
+  continuity histories; these are numerical diagnostics, not proof of convergence.
+- **simplefoam_continuity_history.svg**: logged per-iteration sum-local and
+  signed global continuity errors, with a zero reference line. This is an
+  OpenFOAM log diagnostic, not an independently calculated mass-balance check.
+
+- **pressure_probe_history.svg**: actual room 1 minus room 2 *point-probe*
+  pressure vs OpenFOAM solver index (not physical seconds), with the declared
+  *synthetic* target band.
+- **inlet_outlet_flux.svg**: final solver-phi inlet/outlet patch flow in m³/s.
+- **room_velocity_comparison.svg** and per-room **room_*_speed_distribution.svg**:
+  volume-weighted velocity magnitude, only when a verified final-time volume VTK
+  contains cell velocity U.
+- **room_pressure_comparison.svg** and per-room
+  **room_*_pressure_distribution.svg**: volume-weighted gauge pressure, only when
+  that VTK contains scalar p, converted from kinematic pressure using the
+  specified density.
+
+VTK graphs require the optional **vtk** Python package. Input is bounded to
+256 MiB and 100,000 cells and rehashed before and after analysis. Surface VTK
+datasets are excluded from room volume summaries. If no volume VTK is present,
+the report labels it UNAVAILABLE and still exports pressure/flux charts;
+ambiguous or malformed VTK fails rather than plotting invented values.
+
+The JSON report records the v2 receipt hash, case-manifest hash, probe SHA-256,
+VTK asset hashes, per-room volumes, percentiles and volume-weighted histogram
+fractions. It does not invent an air-change rate without verifiable room-specific
+flow allocation; neither temperature nor particle transport is solved by this
+fixture. Probe readings are not room-average pressures and these graphs do not
+establish a physical facility pressure cascade. Solver convergence stays
+NOT_ASSESSED and scientific validation remains BLOCKED. Hash agreement checks
+local consistency, not source authenticity or cleanroom certification.

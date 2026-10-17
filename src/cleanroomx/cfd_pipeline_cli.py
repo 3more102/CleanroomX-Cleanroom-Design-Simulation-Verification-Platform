@@ -10,6 +10,8 @@ from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
 from .cfd_proofgraph import export_two_room_proofgraph
+from .cfd_two_room_analysis import export_two_room_analysis
+from .cfd_analysis_bundle import verify_analysis_bundle
 from .cfd_two_room import (
     execute_two_room_case,
     export_two_room_case,
@@ -154,6 +156,12 @@ def build_parser():
     two_room_proofgraph.add_argument("case_directory")
     two_room_proofgraph.add_argument("receipt")
     two_room_proofgraph.add_argument("destination")
+    two_room_analysis=sub.add_parser("two-room-analyze",help="Export verified probe, flux and room-field diagnostic SVG graphs")
+    two_room_analysis.add_argument("case_directory")
+    two_room_analysis.add_argument("receipt")
+    two_room_analysis.add_argument("output_directory")
+    analysis_audit=sub.add_parser("two-room-analysis-audit",help="Verify all hashes and declared files in an exported analysis directory")
+    analysis_audit.add_argument("directory")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -263,6 +271,14 @@ def main():
         return 0
     if args.command=="two-room-proofgraph":
         report=export_two_room_proofgraph(args.case_directory,args.receipt,args.destination)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-analyze":
+        report=export_two_room_analysis(args.case_directory,args.receipt,args.output_directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-analysis-audit":
+        report=verify_analysis_bundle(args.directory)
         print(dumps_strict_json(report))
         return 0
     if args.command=="grid-audit":

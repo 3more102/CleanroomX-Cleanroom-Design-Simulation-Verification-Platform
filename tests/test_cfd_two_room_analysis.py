@@ -169,3 +169,55 @@ def test_residual_chart_never_uses_physical_time():
     svg = analysis._residual_svg("Ux", {"initial": [0.1, 0.05], "final": [0.01, 0.005]})
     assert "Per-field solve number" in svg
     assert "physical time" not in svg.lower()
+
+
+def test_real_vtk_volume_weighted_room_field_statistics(tmp_path):
+    vtk = pytest.importorskip("vtk")
+    case = tmp_path / "case"
+    source = case / "VTK" / "case_150.vtu"
+    source.parent.mkdir(parents=True)
+    points = vtk.vtkPoints()
+    grid = vtk.vtkUnstructuredGrid()
+    grid.SetPoints(points)
+    for x0, x1 in ((0.0, 1.0), (6.0, 8.0)):
+        corners = (
+            (x0, 0, 0), (x1, 0, 0), (x1, 1, 0), (x0, 1, 0),
+            (x0, 0, 1), (x1, 0, 1), (x1, 1, 1), (x0, 1, 1),
+        )
+        first = points.GetNumberOfPoints()
+        for pt in corners:
+            points.InsertNextPoint(*pt)
+        cell = vtk.vtkHexahedron()
+        for vertex in range(8):
+            cell.GetPointIds().SetId(vertex, first + vertex)
+        grid.InsertNextCell(cell.GetCellType(), cell.GetPointIds())
+    velocity = vtk.vtkDoubleArray()
+    velocity.SetName("U")
+    velocity.SetNumberOfComponents(3)
+    velocity.InsertNextTuple3(1.0, 0.0, 0.0)
+    velocity.InsertNextTuple3(3.0, 0.0, 0.0)
+    grid.GetCellData().AddArray(velocity)
+    p = vtk.vtkDoubleArray()
+    p.SetName("p")
+    p.InsertNextValue(-2.0)
+    p.InsertNextValue(4.0)
+    grid.GetCellData().AddArray(p)
+    writer = vtk.vtkXMLUnstructuredGridWriter()
+    writer.SetFileName(str(source))
+    writer.SetInputData(grid)
+    assert writer.Write() == 1
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    result = analysis._vtk_room_fields(
+        case, {"VTK/case_150.vtu": digest}, room_length=6.0, density=1.2
+    )
+    assert result["status"] == "MEASURED_DIAGNOSTIC_ONLY"
+    rooms = result["rooms"]
+    assert rooms["room_1"]["velocity_magnitude"]["sampled_volume_m3"] == pytest.approx(1)
+    assert rooms["room_2"]["velocity_magnitude"]["sampled_volume_m3"] == pytest.approx(2)
+    assert rooms["room_1"]["velocity_magnitude"]["volume_weighted_mean"] == pytest.approx(1)
+    assert rooms["room_2"]["velocity_magnitude"]["volume_weighted_mean"] == pytest.approx(3)
+    assert rooms["room_1"]["pressure_gauge"]["volume_weighted_mean"] == pytest.approx(-2.4)
+    assert rooms["room_2"]["pressure_gauge"]["volume_weighted_mean"] == pytest.approx(4.8)
+    assert sum(
+        rooms["room_2"]["pressure_gauge"]["bin_volume_percent"]
+    ) == pytest.approx(100)

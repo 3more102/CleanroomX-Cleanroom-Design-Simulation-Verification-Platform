@@ -103,6 +103,8 @@ def test_export_creates_actual_graphs_and_refuses_overwrite(tmp_path, monkeypatc
     report = analysis.export_two_room_analysis(case, receipt, output)
     assert sorted(report["graphs"]) == ["inlet_outlet_flux.svg", "pressure_probe_history.svg", "simplefoam_residual_Ux.svg", "simplefoam_residual_p.svg"]
     assert report["scientific_validation"] == "BLOCKED"
+    assert report["artifact_integrity"] == "VERIFIED_LOCAL_ARTIFACT_INTEGRITY"
+    assert (output / "artifact_manifest.json").is_file()
     data = json.loads((output / "analysis.json").read_text(encoding="utf-8"))
     assert data["pressure"]["time_axis"].startswith("OpenFOAM solver indices")
     assert "<svg " in (output / "pressure_probe_history.svg").read_text(encoding="utf-8")
@@ -152,6 +154,9 @@ def test_cli_parser_exposes_analysis_command():
     args = build_parser().parse_args(["two-room-analyze", "case", "receipt.json", "graphs"])
     assert args.command == "two-room-analyze"
     assert args.output_directory == "graphs"
+    audit = build_parser().parse_args(["two-room-analysis-audit", "graphs"])
+    assert audit.command == "two-room-analysis-audit"
+    assert audit.directory == "graphs"
 
 
 def test_solver_log_change_fails_after_receipt_gate(tmp_path, monkeypatch):

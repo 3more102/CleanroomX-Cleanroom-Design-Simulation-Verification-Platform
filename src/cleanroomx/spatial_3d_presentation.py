@@ -131,39 +131,79 @@ def draw_3d_reference(
             )
 
 
+def zone_legend_bounds(
+    width: int, height: int, room_count: int,
+) -> tuple[int, int, int, int] | None:
+    """Measured 3D legend bounds; compact mode retains room-label space."""
+    if room_count < 1 or width < 200 or height < 95:
+        return None
+    if width < 530 or height < 335:
+        # Compact information chip, not a full overlay covering the floor.
+        return (12, 12, min(width - 12, 195), 59)
+    lines = min(7, room_count)
+    height_px = 46 + lines * 19 + (19 if room_count > 7 else 0)
+    y = max(10, height - height_px - 12)
+    return (12, y, 262, y + height_px)
+
+
 def draw_3d_zone_legend(
     canvas: object,
     rooms: list[dict],
     colors: dict[str, str],
 ) -> None:
-    """Draw a distinct design-zone legend, explicitly separate from CFD overlays."""
+    """Design-zone key only: neither a pressure nor ISO compliance legend."""
     visible = sorted(rooms, key=lambda room: (str(room["name"]), str(room["id"])))
-    shown = visible[:7]
-    total = len(visible)
-    if not shown:
+    width_px = max(1, int(getattr(canvas, "winfo_width", lambda: 900)()))
+    height_px = max(1, int(canvas.winfo_height()))
+    bounds = zone_legend_bounds(width_px, height_px, len(visible))
+    if bounds is None:
         return
-    canvas_height = max(1, int(canvas.winfo_height()))
-    box_height = 46 + len(shown) * 19 + (19 if total > 7 else 0)
-    x, y, box_width = 12, max(10, canvas_height - box_height - 12), 250
+    x0, y0, x1, y1 = bounds
     tag = ("zone_legend_3d",)
-    canvas.create_rectangle(x, y, x + box_width, y + box_height,
-                            fill="#101d30", outline="#416080", width=1, tags=tag)
-    canvas.create_text(x + 10, y + 9, text="DESIGN ZONES", anchor="nw",
-                       fill="#e6efff", font=("TkDefaultFont", 10, "bold"), tags=tag)
-    for index, room in enumerate(shown):
-        baseline = y + 30 + index * 19
-        canvas.create_rectangle(x + 10, baseline, x + 24, baseline + 12,
-                                fill=colors[room["id"]], outline="", tags=tag)
+    canvas.create_rectangle(
+        x0, y0, x1, y1, fill="#101d30", outline="#416080", tags=tag,
+    )
+    compact = width_px < 530 or height_px < 335
+    if compact:
+        canvas.create_text(
+            x0 + 9, y0 + 8, text=f"DESIGN ZONES  ·  {len(visible)}",
+            anchor="nw", fill="#e6efff",
+            font=("TkDefaultFont", 9, "bold"), tags=tag,
+        )
+        canvas.create_text(
+            x0 + 9, y0 + 27, text="Room colors — not CFD data",
+            anchor="nw", fill="#a7c0dc", font=("TkDefaultFont", 8),
+            tags=tag,
+        )
+        canvas.tag_raise("zone_legend_3d")
+        return
+
+    canvas.create_text(
+        x0 + 10, y0 + 9, text="DESIGN ZONES", anchor="nw",
+        fill="#e6efff", font=("TkDefaultFont", 10, "bold"), tags=tag,
+    )
+    for index, room in enumerate(visible[:7]):
+        baseline = y0 + 30 + index * 19
+        canvas.create_rectangle(
+            x0 + 10, baseline, x0 + 24, baseline + 12,
+            fill=colors[room["id"]], outline="", tags=tag,
+        )
         label = str(room["name"])
         if len(label) > 29:
             label = label[:26] + "..."
-        canvas.create_text(x + 32, baseline + 6, text=label, anchor="w",
-                           fill="#cedcf0", font=("TkDefaultFont", 9), tags=tag)
-    if total > 7:
-        canvas.create_text(x + 32, y + 30 + 7 * 19 + 6,
-                           text=f"+ {total - 7} more zones",
-                           anchor="w", fill="#9aafcc", tags=tag)
-    canvas.create_text(x + 10, y + box_height - 7, anchor="sw",
-                       text="Colors identify rooms — not CFD or ISO verification",
-                       fill="#91a9c6", font=("TkDefaultFont", 7), tags=tag)
+        canvas.create_text(
+            x0 + 32, baseline + 6, text=label, anchor="w",
+            fill="#cedcf0", font=("TkDefaultFont", 9), tags=tag,
+        )
+    if len(visible) > 7:
+        canvas.create_text(
+            x0 + 32, y0 + 30 + 7 * 19 + 6,
+            text=f"+ {len(visible) - 7} more zones",
+            anchor="w", fill="#9aafcc", tags=tag,
+        )
+    canvas.create_text(
+        x0 + 10, y1 - 7, anchor="sw",
+        text="Room colors only — not CFD or ISO verification",
+        fill="#91a9c6", font=("TkDefaultFont", 7), tags=tag,
+    )
     canvas.tag_raise("zone_legend_3d")

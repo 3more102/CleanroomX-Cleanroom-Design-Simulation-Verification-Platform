@@ -151,3 +151,25 @@ pixels to inspect those features.
 This mode does not save new pressure results, silently discard edits, or
 overwrite the model. Focused Tk tests explicitly exercise the reversible
 panel layout instead of assuming a 25-pixel canvas can display a full legend.
+
+### Searchable 3D scene finder
+
+From the 3D **Views** menu, choose **Find room or device…** (keyboard
+shortcut **/** after clicking the canvas). The floating window searches all
+room IDs/names, device types, device IDs/names and assigned room names.
+Double-click an object or press **Open and fit** to select and fit it in the
+current 3D view; Esc closes the finder. Results are sorted deterministically,
+rooms first, and limited to 250 rows for responsive large projects.
+
+This is an inspection action: it changes only selection and camera view.
+It does not create airflow values, alter geometry, save pressure measurements,
+or automatically assign rooms to unassigned equipment.
+
+### Verification boundary
+
+The last observed real-Tk failure on the predecessor PR resulted from a
+deliberately narrow/short viewport that remained below the 3D HUD threshold.
+The separate **Focus 3D** mode explicitly allocates visible canvas space;
+the scrollable Properties editor is tested with the Inspector shown and
+Output/Verification hidden. Do not treat tiny canvases as permission to
+draw illegible text; the dedicated compact mode stays intentional.

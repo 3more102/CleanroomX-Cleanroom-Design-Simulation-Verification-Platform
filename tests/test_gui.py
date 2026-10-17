@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -1157,6 +1158,65 @@ def test_bundled_demo_project_is_self_contained_and_active_analysis_runs():
     run = run_analysis(active.kind, active.input, base_dir=path.parent)
     assert run.result
     json.dumps(run.to_dict(), allow_nan=False)
+
+
+def test_bundled_demo_results_produce_actual_computed_plot():
+    path = gui_module.bundled_demo_project_path()
+    project = load_project_document(path)
+    analysis_id = gui_module.demo_plot_analysis_id(project)
+    analysis = project.analysis_by_id(analysis_id)
+
+    assert analysis.kind == "fan_operating_point"
+    run = run_analysis(analysis.kind, analysis.input, base_dir=path.parent)
+    assert run.result
+    assert run.plot is not None
+    assert len(run.plot["series"]) >= 2
+    for series in run.plot["series"]:
+        assert len(series["x"]) == len(series["y"])
+        assert len(series["x"]) >= 2
+    assert gui_module.build_parser().parse_args(["--demo-results"]).demo_results
+    json.dumps(run.to_dict(), allow_nan=False)
+
+
+
+def test_open_demo_plot_analysis_selects_plot_and_starts_run():
+    plot_tab = object()
+    events = []
+    project = SimpleNamespace(
+        analyses=[SimpleNamespace(kind="fan_operating_point", id="fan-demo")],
+        active_analysis_id=None,
+    )
+    app = SimpleNamespace(
+        project=project,
+        notebook=SimpleNamespace(select=lambda tab: events.append(("tab", tab))),
+        plot_canvas=SimpleNamespace(master=plot_tab),
+        workspace_status_var=SimpleNamespace(
+            set=lambda value: events.append(("status", value))
+        ),
+        _refresh_analysis_list=lambda **kwargs: events.append(("refresh", kwargs)),
+        _update_title=lambda: events.append(("title", None)),
+        run_current=lambda: events.append(("run", None)),
+    )
+    app.select_demo_plot_analysis = lambda: CleanroomXApp.select_demo_plot_analysis(app)
+
+    CleanroomXApp.open_demo_plot_analysis(app)
+
+    assert project.active_analysis_id == "fan-demo"
+    assert ("refresh", {"select_id": "fan-demo"}) in events
+    assert ("tab", plot_tab) in events
+    assert (
+        "status",
+        "Workspace: Plot — calculating example fan/system curves",
+    ) in events
+    assert events[-1] == ("run", None)
+
+
+def test_demo_plot_selection_fails_without_numerical_example():
+    project = ProjectDocument(
+        name="No fan", analyses=[], active_analysis_id=None
+    )
+    with pytest.raises(ValueError, match="fan/system operating-point"):
+        gui_module.demo_plot_analysis_id(project)
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():

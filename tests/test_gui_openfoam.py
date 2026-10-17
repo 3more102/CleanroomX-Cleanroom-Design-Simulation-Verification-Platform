@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import queue
+import tkinter as tk
 import json
 import signal
 import subprocess
@@ -10,6 +12,7 @@ import pytest
 
 from cleanroomx import gui_openfoam
 from cleanroomx.gui_openfoam import (
+    OpenFOAMConsoleLog,
     OpenFOAMWorkspace,
     build_openfoam_generate_command,
     build_openfoam_run_command,
@@ -200,3 +203,124 @@ def test_case_verification_summary_keeps_validation_limit_clear() -> None:
     assert "Manifest trust: local file; not digitally signed" in summary
     assert "Scientific validation: BLOCKED" in summary
 
+
+
+def test_openfoam_console_log_bounds_live_view_and_saves_full_session(tmp_path) -> None:
+    console = OpenFOAMConsoleLog(
+        max_display_chars=128,
+        max_display_lines=3,
+        spool_max_bytes=32,
+    )
+    full_output = "".join(f"solver line {index:03d}\n" for index in range(12))
+    visible = ""
+    try:
+        for line in full_output.splitlines(keepends=True):
+            removed = console.append(line)
+            visible = (visible + line)[removed:]
+
+        assert console.truncated is True
+        assert visible == console.display_text
+        assert visible == "solver line 009\nsolver line 010\nsolver line 011\n"
+
+        saved = tmp_path / "complete-openfoam-session.log"
+        assert console.save_to(saved) == saved
+        assert saved.read_text(encoding="utf-8") == full_output
+
+        console.append("final status\n")
+        saved_again = tmp_path / "complete-openfoam-session-2.log"
+        console.save_to(saved_again)
+        assert saved_again.read_text(encoding="utf-8") == full_output + "final status\n"
+    finally:
+        console.close()
+
+
+def test_openfoam_console_log_bounds_an_unterminated_long_line() -> None:
+    console = OpenFOAMConsoleLog(
+        max_display_chars=8,
+        max_display_lines=2,
+        spool_max_bytes=8,
+    )
+    try:
+        removed = console.append("0123456789")
+        assert removed == 2
+        assert console.display_text == "23456789"
+        assert console.truncated is True
+    finally:
+        console.close()
+
+
+def test_openfoam_console_log_save_requires_an_available_session(tmp_path) -> None:
+    console = OpenFOAMConsoleLog()
+    console.close()
+
+    with pytest.raises(OSError, match="session log is closed"):
+        console.save_to(tmp_path / "closed.log")
+
+
+def test_openfoam_console_log_save_failure_preserves_existing_destination(
+    monkeypatch, tmp_path
+) -> None:
+    console = OpenFOAMConsoleLog()
+    console.append("new session output\n")
+    destination = tmp_path / "existing.log"
+    destination.write_text("previous file\n", encoding="utf-8")
+
+    def fail_copy(*_args, **_kwargs):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(gui_openfoam.shutil, "copyfileobj", fail_copy)
+    try:
+        with pytest.raises(OSError, match="simulated disk failure"):
+            console.save_to(destination)
+        assert destination.read_text(encoding="utf-8") == "previous file\n"
+        assert list(tmp_path.glob(".cleanroomx-console-*.tmp")) == []
+    finally:
+        console.close()
+
+
+def test_openfoam_event_drain_batches_output_and_yields_to_tk() -> None:
+    workspace = OpenFOAMWorkspace.__new__(OpenFOAMWorkspace)
+    workspace._destroyed = False
+    workspace._events = queue.Queue()
+    expected = [f"solver output {index:03d}\n" for index in range(300)]
+    for line in expected:
+        workspace._events.put(("output", line))
+    appended: list[str] = []
+    scheduled: list[tuple[int, object]] = []
+    workspace._append = appended.append
+    workspace.after = lambda delay, callback: scheduled.append((delay, callback))
+
+    workspace._drain_events()
+
+    assert appended == ["".join(expected[:256])]
+    assert workspace._events.qsize() == 44
+    assert scheduled[0][0] == 15
+
+    scheduled.clear()
+    workspace._drain_events()
+    assert appended[1] == "".join(expected[256:])
+    assert workspace._events.empty()
+    assert scheduled[0][0] == 120
+
+
+def test_openfoam_workspace_compact_console_stays_scrollable() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    try:
+        root.geometry("900x300")
+        workspace = OpenFOAMWorkspace(root)
+        workspace.pack(fill="both", expand=True)
+        root.update()
+
+        assert workspace._output_frame.winfo_height() == 122
+        assert workspace._workflow_canvas.winfo_height() > 0
+        assert (
+            workspace._workflow_canvas.winfo_height()
+            < workspace._workflow_content.winfo_height()
+        )
+        assert workspace.save_log_button.winfo_viewable()
+        assert "disabled" in workspace.save_log_button.state()
+    finally:
+        root.destroy()

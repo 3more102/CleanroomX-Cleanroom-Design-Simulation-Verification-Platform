@@ -4,14 +4,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_windows_launchers_use_repository_source_and_open_demo_by_default():
+def test_windows_launchers_use_repository_source_and_open_computed_demo_by_default():
     powershell = (ROOT / "start-cleanroomx.ps1").read_text(encoding="utf-8")
     cmd = (ROOT / "start-cleanroomx.cmd").read_text(encoding="utf-8")
 
     assert '".venv\\Scripts\\python.exe"' in powershell
     assert '"src"' in powershell
-    assert '"--demo"' in powershell
+    assert 'if (-not $CleanroomXArgs -or $CleanroomXArgs.Count -eq 0)' in powershell
+    assert '$CleanroomXArgs = @("--demo-results")' in powershell
     assert "-m cleanroomx.gui" in powershell
+    assert "& $python @pythonPrefix -m cleanroomx.gui @CleanroomXArgs" in powershell
     assert "sys.version_info >= (3, 11)" in powershell
     assert '-c "import tkinter"' in powershell
     assert "CleanroomX requires Python 3.11 or newer" in powershell
@@ -25,6 +27,7 @@ def test_windows_launchers_use_repository_source_and_open_demo_by_default():
     assert '-c "import tkinter"' in cmd
     assert "CleanroomX requires Python 3.11 or newer" in cmd
     assert "CleanroomX GUI requires Tkinter" in cmd
-    assert "-m cleanroomx.gui --demo" in cmd
+    assert "if \"%~1\"==\"\"" in cmd
+    assert "-m cleanroomx.gui --demo-results" in cmd
     assert "-m cleanroomx.gui %*" in cmd
     assert cmd.rstrip().endswith("exit /b %ERRORLEVEL%")

@@ -134,12 +134,36 @@ Spatial and engineering data remain deliberately separated.
 
 ### Windows — repository checkout
 
-From PowerShell:
+Install Git and Python 3.11 or newer with Tcl/Tk first. From PowerShell,
+run this on a laptop without a checkout. It clones the computed-graph branch to
+your user folder and launches the demo:
 
 ```powershell
-cd C:\CleanroomX
+$repoPath = Join-Path $env:USERPROFILE 'CleanroomX'
+$repoBranch = 'feat/demo-computed-graphs-20261016'
+$repoUrl = 'https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform.git'
+if (Test-Path $repoPath) {
+    if (-not (Test-Path (Join-Path $repoPath '.git'))) {
+        throw 'The CleanroomX folder exists but is not a Git checkout. Choose another path or move it first.'
+    }
+    $currentBranch = git -C $repoPath branch --show-current
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the current CleanroomX branch.' }
+    if ($currentBranch -ne $repoBranch) {
+        throw "The existing checkout is on '$currentBranch'. Switch it to '$repoBranch' or use another folder."
+    }
+} else {
+    git clone --branch $repoBranch $repoUrl $repoPath
+    if ($LASTEXITCODE -ne 0) { throw 'Git clone failed.' }
+}
+Set-Location $repoPath
 .\start-cleanroomx.ps1
 ```
+
+The launchers open a computed **fan/system operating-point example graph** by
+default. It is based on bundled, explicitly illustrative engineering inputs,
+not a validated CFD field or physical cleanroom measurement. Use
+`.\start-cleanroomx.ps1 --demo` to open the synchronized 2D/3D design demo
+instead.
 
 CMD is also supported:
 
@@ -167,6 +191,13 @@ Open the packaged demonstration:
 
 ```bash
 cleanroomx-gui --demo
+```
+
+To run the example fan/system calculation and display the computed graph at
+startup:
+
+```bash
+cleanroomx-gui --demo-results
 ```
 
 Headless readiness check:

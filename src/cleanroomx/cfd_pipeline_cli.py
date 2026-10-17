@@ -14,6 +14,7 @@ from .cfd_two_room_analysis import export_two_room_analysis
 from .cfd_analysis_bundle import verify_analysis_bundle
 from .cfd_two_room_numerics import screen_two_room_numerics
 from .cfd_two_room_boundary import screen_two_room_boundary_flow
+from .cfd_two_room_internal_flux import screen_two_room_internal_flux
 from .cfd_two_room import (
     execute_two_room_case,
     export_two_room_case,
@@ -172,6 +173,11 @@ def build_parser():
     flow_screen.add_argument("receipt")
     flow_screen.add_argument("criteria",help="Strict versioned JSON flow-balance policy; no default limits")
     flow_screen.add_argument("--output",help="Optional boundary-screen JSON result")
+    cell_screen=sub.add_parser("two-room-internal-flux",help="Reconstruct signed internal-cell phi fluxes with explicit limits")
+    cell_screen.add_argument("case_directory")
+    cell_screen.add_argument("receipt")
+    cell_screen.add_argument("criteria",help="Strict JSON project criteria; no default limits")
+    cell_screen.add_argument("--output")
     analysis_audit=sub.add_parser("two-room-analysis-audit",help="Verify all hashes and declared files in an exported analysis directory")
     analysis_audit.add_argument("directory")
     return parser
@@ -315,6 +321,18 @@ def main():
         else:
             print(payload)
         return 0 if report["status"]=="PROJECT_BOUNDARY_SCREEN_MET" else 3
+    if args.command=="two-room-internal-flux":
+        report=screen_two_room_internal_flux(
+            args.case_directory,args.receipt,load_cli_input(load_strict_json,args.criteria)
+        )
+        payload=dumps_strict_json(report)
+        if args.output:
+            if not publish_cli_output("cleanroomx-cfd-pipeline",args.output,payload,
+                                      protected_inputs=(args.receipt,args.criteria)):
+                return 1
+        else:
+            print(payload)
+        return 0 if report["status"]=="PROJECT_INTERNAL_FLUX_SCREEN_MET" else 3
     if args.command=="two-room-analysis-audit":
         report=verify_analysis_bundle(args.directory)
         print(dumps_strict_json(report))

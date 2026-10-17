@@ -1,14 +1,17 @@
 """Desktop OpenFOAM Foundation v10 workflow and evidence browser."""
 from __future__ import annotations
 
+from collections import deque
 import hashlib
 import json
 import os
 import queue
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import uuid
 from pathlib import Path
@@ -23,9 +26,157 @@ from .strict_json import load_strict_json_snapshot
 
 
 _MAX_PREVIEW_BYTES = 2_000_000
+_MAX_QUEUED_EVENTS_PER_TICK = 256
+_BUSY_QUEUE_POLL_MS = 15
+_IDLE_QUEUE_POLL_MS = 120
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _SYNC_SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _EVIDENCE_NAMES = ("manifest.json", "sync-state.json", "sync_manifest.json")
+
+
+class OpenFOAMConsoleLog:
+    """Retain the full session transcript while bounding the live Text view."""
+
+    def __init__(
+        self,
+        *,
+        max_display_chars: int = 500_000,
+        max_display_lines: int = 4_000,
+        spool_max_bytes: int = 1_000_000,
+    ) -> None:
+        self._max_display_chars = max(1, int(max_display_chars))
+        self._max_display_lines = max(1, int(max_display_lines))
+        self._stream = tempfile.SpooledTemporaryFile(
+            max_size=max(1, int(spool_max_bytes)),
+            mode="w+t",
+            encoding="utf-8",
+            newline="",
+        )
+        self._display_chunks: deque[str] = deque()
+        self._display_chars = 0
+        self._display_newlines = 0
+        self.total_chars = 0
+        self.truncated = False
+        self.error: str | None = None
+        self._closed = False
+
+    @property
+    def display_text(self) -> str:
+        return "".join(self._display_chunks)
+
+    @property
+    def full_log_available(self) -> bool:
+        return not self._closed and self.error is None
+
+    @property
+    def has_output(self) -> bool:
+        return self.total_chars > 0
+
+    def _remove_prefix(self, count: int) -> int:
+        remaining = max(0, int(count))
+        removed = 0
+        while remaining and self._display_chunks:
+            chunk = self._display_chunks[0]
+            take = min(remaining, len(chunk))
+            prefix = chunk[:take]
+            if take == len(chunk):
+                self._display_chunks.popleft()
+            else:
+                self._display_chunks[0] = chunk[take:]
+            self._display_chars -= take
+            self._display_newlines -= prefix.count("\n")
+            removed += take
+            remaining -= take
+        return removed
+
+    def _remove_first_line(self) -> int:
+        prefix_chars = 0
+        for chunk in self._display_chunks:
+            newline = chunk.find("\n")
+            if newline >= 0:
+                prefix_chars += newline + 1
+                self.truncated = True
+                return self._remove_prefix(prefix_chars)
+            prefix_chars += len(chunk)
+        return 0
+
+    def append(self, value: str) -> int:
+        """Append output and return the number of leading display characters trimmed."""
+        text = str(value)
+        if not text:
+            return 0
+        self.total_chars += len(text)
+        if self.full_log_available:
+            try:
+                self._stream.write(text)
+                self._stream.flush()
+            except (OSError, ValueError) as exc:
+                self.error = str(exc)
+
+        self._display_chunks.append(text)
+        self._display_chars += len(text)
+        self._display_newlines += text.count("\n")
+        removed = 0
+
+        def line_count() -> int:
+            tail = self._display_chunks[-1] if self._display_chunks else ""
+            return self._display_newlines + (
+                1 if self._display_chars and not tail.endswith("\n") else 0
+            )
+
+        while line_count() > self._max_display_lines:
+            line_removed = self._remove_first_line()
+            if not line_removed:
+                break
+            removed += line_removed
+
+        if self._display_chars > self._max_display_chars:
+            excess = self._display_chars - self._max_display_chars
+            removed_chars = self._remove_prefix(excess)
+            self.truncated = self.truncated or removed_chars > 0
+            removed += removed_chars
+        return removed
+
+    def save_to(self, destination: str | Path) -> Path:
+        """Atomically save the complete session log to a user-selected path."""
+        if not self.full_log_available:
+            detail = self.error or "the session log is closed"
+            raise OSError(f"full session console log is unavailable: {detail}")
+        target = Path(destination)
+        self._stream.flush()
+        position = self._stream.tell()
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                prefix=".cleanroomx-console-",
+                suffix=".tmp",
+                dir=target.parent,
+                delete=False,
+            ) as handle:
+                temporary_path = Path(handle.name)
+                self._stream.seek(0)
+                shutil.copyfileobj(self._stream, handle, length=64 * 1024)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, target)
+            return target
+        finally:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink()
+                except FileNotFoundError:
+                    pass
+            if not self._closed:
+                self._stream.seek(position)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._stream.close()
 
 
 def _process_group_launch_options(*, windows: bool | None = None) -> dict[str, Any]:
@@ -285,6 +436,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._destroyed = False
         self._stop_requested = False
         self._theme_palette = theme_palette("light")
+        self._console_log = OpenFOAMConsoleLog()
 
         self.specification_var = tk.StringVar()
         self.case_directory_var = tk.StringVar()
@@ -328,13 +480,31 @@ class OpenFOAMWorkspace(ttk.Frame):
             self,
             text="Command output and evidence preview",
             padding=5,
-            height=100,
+            height=122,
         )
         self._output_frame = output_frame
         output_frame.pack_propagate(False)
         output_frame.pack(
             side="bottom", fill="both", expand=False, padx=10, pady=(2, 10)
         )
+        output_toolbar = ttk.Frame(output_frame)
+        output_toolbar.pack(fill="x", pady=(0, 2))
+        self.output_log_status_var = tk.StringVar(
+            value="Complete session output is retained; save it before closing."
+        )
+        ttk.Label(
+            output_toolbar,
+            textvariable=self.output_log_status_var,
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
+        self.save_log_button = ttk.Button(
+            output_toolbar,
+            text="Save full log…",
+            command=self.save_full_console_log,
+            state="disabled",
+        )
+        self.save_log_button.pack(side="right", padx=(6, 0))
+
         self.output = tk.Text(
             output_frame,
             wrap="word",
@@ -715,14 +885,21 @@ class OpenFOAMWorkspace(ttk.Frame):
     def _drain_events(self) -> None:
         if self._destroyed:
             return
-        while True:
+        processed = 0
+        output_parts: list[str] = []
+        while processed < _MAX_QUEUED_EVENTS_PER_TICK:
             try:
                 kind, value = self._events.get_nowait()
             except queue.Empty:
                 break
+            processed += 1
             if kind == "output":
-                self._append(value)
-            elif kind == "finished":
+                output_parts.append(str(value))
+                continue
+            if output_parts:
+                self._append("".join(output_parts))
+                output_parts.clear()
+            if kind == "finished":
                 self._process = None
                 self._set_busy(False)
                 if self._stop_requested:
@@ -748,7 +925,14 @@ class OpenFOAMWorkspace(ttk.Frame):
                 self._set_busy(False)
                 self._append(f"\nCase input verification failed: {value}\n")
                 self._status_setter("OpenFOAM case input verification failed")
-        self.after(120, self._drain_events)
+        if output_parts:
+            self._append("".join(output_parts))
+        delay_ms = (
+            _BUSY_QUEUE_POLL_MS
+            if not self._events.empty()
+            else _IDLE_QUEUE_POLL_MS
+        )
+        self.after(delay_ms, self._drain_events)
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
@@ -847,10 +1031,59 @@ class OpenFOAMWorkspace(ttk.Frame):
     def _append(self, value: str) -> None:
         if self._destroyed:
             return
+        removed_chars = self._console_log.append(value)
         self.output.configure(state="normal")
         self.output.insert("end", value)
+        if removed_chars:
+            self.output.delete("1.0", f"1.0 + {removed_chars} chars")
         self.output.see("end")
         self.output.configure(state="disabled")
+
+        if self._console_log.error is not None:
+            self.output_log_status_var.set(
+                "Full log capture failed; only the visible tail remains."
+            )
+            self.save_log_button.configure(state="disabled")
+        elif self._console_log.truncated:
+            self.output_log_status_var.set(
+                "Showing the latest output; save the full session log before closing."
+            )
+            self.save_log_button.configure(
+                state="normal" if self._console_log.has_output else "disabled"
+            )
+        else:
+            self.output_log_status_var.set(
+                "Complete session output is retained; save it before closing."
+            )
+            self.save_log_button.configure(
+                state="normal" if self._console_log.has_output else "disabled"
+            )
+
+    def save_full_console_log(self) -> None:
+        if not self._console_log.full_log_available:
+            self._status_setter("Full OpenFOAM console log is unavailable")
+            return
+        selected = filedialog.asksaveasfilename(
+            title="Save full OpenFOAM console log",
+            defaultextension=".log",
+            initialfile="cleanroomx-openfoam-console.log",
+            filetypes=(("Log files", "*.log"), ("Text files", "*.txt"), ("All files", "*")),
+        )
+        if not selected:
+            return
+        try:
+            self._console_log.save_to(selected)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Save OpenFOAM console log",
+                f"Could not save the complete session output: {exc}",
+                parent=self,
+            )
+            return
+        self.output_log_status_var.set(
+            f"Full session log saved to {Path(selected).name}."
+        )
+        self._status_setter("Full OpenFOAM console log saved")
 
     def _on_destroy(self, event: tk.Event) -> None:
         if event.widget is not self:
@@ -859,4 +1092,4 @@ class OpenFOAMWorkspace(ttk.Frame):
         process = self._process
         if process is not None and process.poll() is None:
             _signal_process_tree(process, force=True)
-
+        self._console_log.close()

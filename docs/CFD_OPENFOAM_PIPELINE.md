@@ -26,7 +26,13 @@ case bundle's `manifest.json`, a result directory, and a simulation ID, then
 choose **Sync VTK once**. The command uses the normal stability checks. Repeat
 the scan after the configured stability interval when the initial scan reports
 pending files. On compact displays, the case settings scroll independently while
-a small, scrollable command log stays visible.
+a small, scrollable command log stays visible. The live console keeps at most
+4,000 lines and 500,000 characters, whichever cap comes first, so long solver
+output cannot grow the GUI text widget without limit. CleanroomX retains the
+complete session transcript in a temporary spool that spills to disk after 1 MB
+while the workspace remains open. Use **Save full log…** to export it before
+closing the workspace. If temporary storage fails, the GUI reports that
+complete-log capture stopped.
 
 **Verify case inputs** performs a read-only preflight over the generated bundle:
 it checks the exact 24 manifest-bound input files, verifies their SHA-256

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — responsive OpenFOAM console — 2026-10-17
+
+- Bounds the live OpenFOAM console view to the latest 4,000 lines or 500,000 characters while retaining the full session transcript in a temporary spool that spills to disk after 1 MB.
+- Adds an atomic **Save full log…** action, reports when the displayed tail is truncated or full-log capture fails, and closes the temporary spool with the workspace.
+- Processes queued solver output in bounded batches so sustained output does not monopolize the Tk event loop; solver and scientific-validation semantics are unchanged.
+
 ## Unreleased Release 3 — refined industrial GUI theme — 2026-10-16
 
 - Refines the light and dark workstation palettes around slate surfaces and a teal primary action, with distinct Design, Analyze, Verify, Evidence, and Release accents.

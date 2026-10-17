@@ -11,6 +11,7 @@ from cleanroomx.spatial_3d_presentation import (
     draw_3d_reference,
     draw_3d_zone_legend,
     room_zone_colors,
+    zone_legend_bounds,
 )
 
 
@@ -108,3 +109,25 @@ def test_invalid_cage_extents_fail_before_canvas_mutation():
                           bounds=(2, 0, 1, 1),
                           bottom_z=0, top_z=3, show_grid=True)
     assert not canvas.items
+
+
+def test_responsive_legend_uses_compact_screen_space_bounds():
+    assert zone_legend_bounds(100, 200, 4) is None
+    assert zone_legend_bounds(320, 240, 0) is None
+    assert zone_legend_bounds(320, 240, 3) == (12, 12, 195, 59)
+    assert zone_legend_bounds(900, 520, 3) == (12, 405, 262, 509)
+    assert zone_legend_bounds(900, 520, 9) == (12, 310, 262, 509)
+
+
+def test_compact_legend_keeps_full_room_labels_outside():
+    canvas = RecordingCanvas()
+    canvas.winfo_width = lambda: 320
+    canvas.winfo_height = lambda: 240
+    rooms = [{"id": "a", "name": "Room A"}, {"id": "b", "name": "Room B"}]
+    draw_3d_zone_legend(canvas, rooms, room_zone_colors(rooms))
+    boxes = [kw for kind, _, kw in canvas.items if kind == "rectangle"]
+    assert len(boxes) == 1
+    text = [kw["text"] for kind, _, kw in canvas.items if kind == "text"]
+    assert any("DESIGN ZONES" in value for value in text)
+    assert any("not CFD data" in value for value in text)
+    assert not any("Room A" == value for value in text)

@@ -116,15 +116,19 @@ def draw_3d_reference(
                       fill=axis_color, font=("TkDefaultFont", 8),
                       tags=("axis3d",))
 
-    px, py = project((x0 + x1) / 2, y0, bottom_z)
-    draw_text(px, py + 27, text="Length X (m)", fill="#b8d1ef",
-              font=("TkDefaultFont", 9, "bold"), tags=("axis3d",))
-    px, py = project(x0, (y0 + y1) / 2, bottom_z)
-    draw_text(px - 25, py, text="Width Y (m)", fill="#b8d1ef",
-              font=("TkDefaultFont", 9, "bold"), tags=("axis3d",))
-    px, py = project(x0, y0, (bottom_z + top_z) / 2)
-    draw_text(px - 15, py, text="Height Z (m)", anchor="e", fill="#b8d1ef",
-              font=("TkDefaultFont", 9, "bold"), tags=("axis3d",))
+    # Fixed screen-space axis captions do not collide with room roofs as
+    # the user orbits. The numeric rulers above remain world-space metres.
+    width_px = max(1, int(getattr(canvas, "winfo_width", lambda: 680)()))
+    height_px = max(1, int(canvas.winfo_height()))
+    if width_px >= 280 and height_px >= 170:
+        x_label = width_px - 12
+        for dy, title in ((66, "Length X (m)"), (44, "Width Y (m)"),
+                          (22, "Height Z (m)")):
+            draw_text(
+                x_label, height_px - dy, text=title, anchor="ne",
+                fill="#b8d1ef", font=("TkDefaultFont", 9, "bold"),
+                tags=("axis3d", "axis_caption_3d"),
+            )
 
 
 def draw_3d_zone_legend(

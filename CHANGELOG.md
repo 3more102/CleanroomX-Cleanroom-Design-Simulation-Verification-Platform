@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — OpenFOAM ProofGraph export — 2026-10-17
+
+- Adds standalone ProofGraph export from synchronized OpenFOAM result manifests through the GUI.
+- Re-hashes manifests, immutable receipts, and referenced result assets; mismatches stop export and missing configurations remain explicitly not checked.
+- Limits PASS to artifact integrity. Solver convergence and independent physical validation remain not checked and BLOCKED.
+
 ## Unreleased Release 3 — responsive OpenFOAM console — 2026-10-17
 
 - Bounds the live OpenFOAM console view to the latest 4,000 lines or 500,000 characters while retaining the full session transcript in a temporary spool that spills to disk after 1 MB.

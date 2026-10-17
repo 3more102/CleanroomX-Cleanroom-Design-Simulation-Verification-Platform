@@ -6,6 +6,7 @@ import tkinter as tk
 import json
 import signal
 import subprocess
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -322,5 +323,50 @@ def test_openfoam_workspace_compact_console_stays_scrollable() -> None:
         )
         assert workspace.save_log_button.winfo_viewable()
         assert "disabled" in workspace.save_log_button.state()
+        assert "disabled" in workspace.export_graph_button.state()
+    finally:
+        root.destroy()
+
+
+def test_openfoam_proofgraph_export_button_loads_export_into_viewer(
+    monkeypatch, tmp_path
+) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    destination = tmp_path / "openfoam-proofgraph.json"
+    document = {"graph_sha256": "a" * 64}
+    loaded: list[dict] = []
+    monkeypatch.setattr(
+        gui_openfoam.filedialog,
+        "asksaveasfilename",
+        lambda **_kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_openfoam,
+        "export_openfoam_proofgraph",
+        lambda *_args: document,
+    )
+    try:
+        workspace = OpenFOAMWorkspace(
+            root,
+            on_proofgraph_loaded=loaded.append,
+        )
+        workspace.pack(fill="both", expand=True)
+        workspace.result_directory_var.set(str(tmp_path))
+        workspace.vtk_simulation_id_var.set("simulation-001")
+        root.update()
+
+        assert "disabled" not in workspace.export_graph_button.state()
+        workspace.export_graph_button.invoke()
+        deadline = time.monotonic() + 2.0
+        while not loaded and time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        root.update()
+
+        assert loaded == [document]
+        assert not workspace._busy
     finally:
         root.destroy()

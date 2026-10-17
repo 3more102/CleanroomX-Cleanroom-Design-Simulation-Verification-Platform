@@ -58,15 +58,18 @@ def _require_sha256(value: Any, field: str) -> str:
 
 
 def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
-    # Windows can report different file-index values for pathname stat()
-    # versus descriptor fstat() on some filesystems. Do not reject an
-    # otherwise stable asset on that basis alone. Size and timestamps
-    # remain checked before/during/after reading, and each asset's SHA-256
-    # is validated against the evidence manifest by _verify_asset().
-    inode = 0 if os.name == "nt" else info.st_ino
+    """Compare stable file metadata across path-stat and descriptor-fstat.
+
+    Windows may report different device, file-index and creation/change-time
+    values from os.stat() and os.fstat() for the same unmodified file.
+    Size and last-modified time remain comparable on both APIs. Manifest and
+    receipt hashes are independently validated wherever referenced.
+    """
+    if os.name == "nt":
+        return (0, 0, info.st_size, info.st_mtime_ns, 0)
     return (
         info.st_dev,
-        inode,
+        info.st_ino,
         info.st_size,
         info.st_mtime_ns,
         info.st_ctime_ns,

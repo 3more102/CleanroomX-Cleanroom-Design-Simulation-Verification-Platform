@@ -1167,3 +1167,45 @@ def test_keyboard_3d_camera_actions_keep_project_geometry_unchanged(app):
     assert workspace.canvas_3d.bind("<KeyPress-f>")
     assert workspace.canvas_3d.bind("<KeyPress-r>")
     assert workspace.canvas_3d.bind("<KeyPress-i>")
+
+
+def test_scrollable_inspector_keeps_3d_canvas_and_apply_accessible(app):
+    workspace = app.spatial_workspace
+    app.root.geometry("1050x680")
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    inspector = workspace._inspector_canvas
+    assert inspector.winfo_ismapped()
+    assert inspector.winfo_height() > 50
+    assert workspace.canvas_3d.winfo_height() > 70
+
+    workspace.select_item("room", workspace.layout["rooms"][0]["id"])
+    app.root.update()
+    before = copy.deepcopy(workspace.layout)
+    assert inspector.bbox("all") is not None
+    assert inspector.bbox("all")[3] > inspector.winfo_height()
+    assert workspace._on_inspector_wheel(
+        type("Wheel", (), {"num": None, "delta": -120})()
+    ) == "break"
+    assert float(inspector.yview()[0]) > 0
+    assert workspace.layout == before
+
+
+def test_3d_device_selection_has_details_without_fake_airflow(app):
+    workspace = app.spatial_workspace
+    app.root.geometry("1440x900")
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    device = workspace.layout["devices"][0]
+    workspace.selected = _Hit("device", device["id"])
+    workspace._hovered_3d = None
+    workspace._draw_3d()
+    canvas = workspace.canvas_3d
+    assert canvas.find_withtag("room_details_hud")
+    labels = [
+        canvas.itemcget(item, "text")
+        for item in canvas.find_withtag("room_details_hud")
+        if canvas.type(item) == "text"
+    ]
+    assert "SELECTED DEVICE" in labels
+    assert any("Placement only" in label for label in labels)

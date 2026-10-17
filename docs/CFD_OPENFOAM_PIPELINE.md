@@ -48,9 +48,12 @@ result store and simulation ID. It re-hashes each manifest, immutable receipt,
 and referenced result asset before writing a standalone ProofGraph JSON file
 and loading it into the application's viewer. A missing configuration is
 represented as `not_checked`; a malformed manifest or mismatched asset hash
-aborts export. A PASS verdict covers artifact integrity only. Solver convergence
-and physical validation remain `not_checked` / `BLOCKED`, even when solver
-metadata or VTK parity reports success. **Load ProofGraph JSON** remains
+aborts export. A PASS verdict covers local hash-link consistency only. It does
+not establish authenticity: no digital signature or external trusted digest is
+checked, and the export does not reopen the original native source-field files
+to re-hash their contents. Solver convergence and physical validation remain
+`not_checked` / `BLOCKED`, even when solver metadata or VTK parity reports
+success. **Load ProofGraph JSON** remains
 available for persisted graphs created elsewhere.
 
 The tab is a software workflow integration. It does not yet derive OpenFOAM

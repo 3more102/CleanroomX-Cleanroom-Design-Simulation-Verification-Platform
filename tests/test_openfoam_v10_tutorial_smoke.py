@@ -32,6 +32,14 @@ def passing_receipt():
             "times": ["0", "100"],
             "manifest_sha256": "d" * 64,
         },
+        "solver_build": "10-test-build",
+        "environment": {
+            "WM_PROJECT": "OpenFOAM",
+            "WM_PROJECT_VERSION": "10",
+            "openfoam_package_version": "10-test",
+            "simpleFoam_executable": "/opt/openfoam10/bin/simpleFoam",
+            "foamToVTK_executable": "/opt/openfoam10/bin/foamToVTK",
+        },
         "scientific_validation": "BLOCKED",
     }
 

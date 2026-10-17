@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             analysis_summary["status"] != "DIAGNOSTIC_ONLY"
             or parsed.get("scientific_validation") != "BLOCKED"
             or parsed.get("solver_convergence") != "NOT_ASSESSED"
-            or parsed.get("receipt_sha256") != receipt["receipt_sha256"]
+            or parsed.get("receipt_sha256") != verified_receipt["receipt_sha256"]
             or vtk_fields.get("status") != "MEASURED_DIAGNOSTIC_ONLY"
             or vtk_fields.get("pressure_availability") == "NOT_AVAILABLE_IN_VTK"
             or not expected_graphs.issubset(set(analysis_summary["graphs"]))

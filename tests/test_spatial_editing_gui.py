@@ -1281,3 +1281,47 @@ def test_3d_scene_finder_searches_rooms_and_selects_devices_without_model_edits(
     assert workspace.layout["rooms"] == before_rooms
     assert workspace.layout["devices"] == before_devices
     assert workspace.canvas_3d.bind("<KeyPress-slash>")
+
+
+def test_current_3d_view_can_export_svg_without_changing_project(app, tmp_path, monkeypatch):
+    """Real Tk export includes model geometry without simulating fields."""
+    import xml.etree.ElementTree as ET
+
+    app.set_focus_workspace(True)
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    workspace.fit_3d()
+    app.root.update()
+    canvas = workspace.canvas_3d
+    assert canvas.winfo_width() >= 100
+    assert canvas.winfo_height() >= 100
+    before = copy.deepcopy(workspace.layout)
+    saved = tmp_path / "3d-model-review.svg"
+    monkeypatch.setattr(
+        spatial_module.filedialog, "asksaveasfilename",
+        lambda **kwargs: str(saved),
+    )
+    workspace.export_3d_svg()
+    assert saved.exists()
+    root = ET.parse(saved).getroot()
+    namespace = "{http://www.w3.org/2000/svg}"
+    assert root.find(namespace + "desc") is not None
+    assert root.findall(".//" + namespace + "polygon")
+    assert "CFD" in root.find(namespace + "desc").text
+    assert workspace.layout == before
+
+
+def test_cancel_3d_export_does_not_write_or_change_layout(app, tmp_path, monkeypatch):
+    app.set_focus_workspace(True)
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    before = copy.deepcopy(workspace.layout)
+    monkeypatch.setattr(
+        spatial_module.filedialog, "asksaveasfilename",
+        lambda **kwargs: "",
+    )
+    workspace.export_3d_svg()
+    assert list(tmp_path.iterdir()) == []
+    assert workspace.layout == before

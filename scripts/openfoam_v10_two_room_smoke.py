@@ -17,6 +17,7 @@ from cleanroomx.cfd_two_room_analysis import export_two_room_analysis
 from cleanroomx.cfd_analysis_bundle import verify_analysis_bundle
 from cleanroomx.cfd_two_room_numerics import screen_two_room_numerics, SCHEMA as NUMERICAL_SCHEMA
 from cleanroomx.cfd_two_room_boundary import screen_two_room_boundary_flow, SCHEMA as BOUNDARY_SCHEMA
+from cleanroomx.cfd_two_room_internal_flux import screen_two_room_internal_flux, SCHEMA as INTERNAL_SCHEMA
 from cleanroomx.cli_output import load_cli_input
 from cleanroomx.strict_json import load_strict_json
 
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     analysis_summary = None
     numerical_summary = None
     boundary_summary = None
+    internal_summary = None
     if receipt.get("status") == "executed_requires_engineering_review":
         if (
             verified_receipt.get("scientific_validation") != "BLOCKED"
@@ -184,6 +186,38 @@ def main(argv: list[str] | None = None) -> int:
             "unsigned_policy_sha256": boundary_result["unsigned_policy_sha256"],
             "note": "permissive software integration limits only; no cleanroom acceptance",
         }
+        # Real solver owner/neighbour connectivity and phi, with permissive
+        # smoke-only limits; this is NOT project engineering acceptance.
+        internal_result = screen_two_room_internal_flux(
+            case, receipt_directory / "two_room_run_receipt.json",
+            {
+                "schema_version": INTERNAL_SCHEMA,
+                "max_sum_abs_cell_imbalance_percent_of_gross_inlet": 1000000.0,
+                "max_worst_cell_imbalance_percent_of_gross_inlet": 1000000.0,
+            },
+        )
+        if (
+            internal_result["status"] != "PROJECT_INTERNAL_FLUX_SCREEN_MET"
+            or internal_result["scientific_validation"] != "BLOCKED"
+            or internal_result["solver_convergence"] != "NOT_ASSESSED"
+            or internal_result["receipt_sha256"] != verified_receipt["receipt_sha256"]
+            or internal_result["source_files_sha256"]["phi"] != receipt["solver_flux"]["phi_sha256"]
+            or internal_result["source_files_sha256"]["boundary"] != receipt["solver_flux"]["poly_mesh_boundary_sha256"]
+        ):
+            raise ValueError("Real OpenFOAM internal-cell diagnostic lost source identity")
+        (output / "internal_cell_flux.json").write_text(
+            json.dumps(internal_result, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        internal_summary = {
+            "status": internal_result["status"],
+            "cell_count": internal_result["metrics"]["cell_count"],
+            "internal_face_count": internal_result["metrics"]["internal_face_count"],
+            "sum_absolute_cell_imbalance_m3_s": internal_result["metrics"]["sum_absolute_cell_imbalance_m3_s"],
+            "source_files_sha256": internal_result["source_files_sha256"],
+            "scientific_validation": "BLOCKED",
+            "note": "synthetic Foundation v10 software integration smoke only",
+        }
         numerical_summary = {
             "status": numerical_result["status"],
             "scientific_validation": numerical_result["scientific_validation"],
@@ -206,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         "analysis": analysis_summary,
         "numerical_screen": numerical_summary,
         "boundary_screen": boundary_summary,
+        "internal_cell_flux": internal_summary,
     }, indent=2, sort_keys=True, allow_nan=False))
     return 0 if receipt.get("status") == "executed_requires_engineering_review" else 2
 

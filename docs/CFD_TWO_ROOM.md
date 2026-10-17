@@ -95,6 +95,48 @@ rerun with the current v2 receipt before its visualization assets can be used
 in a ProofGraph integrity verdict. See the [run 202 evidence report](OPENFOAM_V10_RUN_202_TWO_ROOM_EVIDENCE.md).
 
 
+## Internal-cell solver flux reconstruction (explicit numerical screen)
+
+Use `two-room-internal-flux` with a completed OpenFOAM Foundation v10 v2
+receipt plus solver `phi` and local ASCII polyMesh `boundary`, `owner`,
+and `neighbour` files. The existing ProofGraph gate checks the completed
+run first. The `phi` and `boundary` hashes must match the receipt. Mesh
+connectivity files are regular-file checked, bounded, hashed and rechecked
+after processing, but are NOT receipt-bound or digitally signed.
+
+Internal faces contribute `+phi` to owner, `-phi` to neighbour; boundary
+faces contribute `+phi` to owner. This recomputes local per-cell net flux
+and checks the total against the solver boundary flux. A globally balanced
+domain can still have strongly unbalanced individual cells.
+
+Supply YOUR OWN engineering limits (values below only illustrate JSON
+format; they are NOT a recommended acceptance threshold):
+
+```json
+{
+  "schema_version": "cleanroomx.cfd-two-room-internal-flux-criteria.v1",
+  "max_sum_abs_cell_imbalance_percent_of_gross_inlet": 10.0,
+  "max_worst_cell_imbalance_percent_of_gross_inlet": 2.0
+}
+```
+
+```bash
+cleanroomx-cfd-pipeline two-room-internal-flux \
+  ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
+  ./internal_flux_criteria.json --output ./internal_cell_flux.json
+```
+
+Both percentages are normalized by the solver-derived gross inlet.
+The status is PROJECT_INTERNAL_FLUX_SCREEN_MET (exit 0) or
+PROJECT_INTERNAL_FLUX_SCREEN_NOT_MET (exit 3) depending on explicit
+user limits. Malformed mesh/phi, unsafe paths, changed evidence or
+unsupported field types fail closed, not as a passing screen.
+
+This is a solver-derived numerical continuity diagnostic, NOT independent
+physical airflow measurement, validated convergence, mesh independence,
+room ACH, or ISO acceptance. Always scientific_validation=BLOCKED and
+solver_convergence=NOT_ASSESSED.
+
 ## Optional receipt-bound boundary-face flow screen
 
 The two-room diagnostic can reparse **all final-time** OpenFOAM `phi`

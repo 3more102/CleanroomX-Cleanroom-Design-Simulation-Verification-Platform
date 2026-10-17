@@ -106,6 +106,11 @@ def test_export_creates_actual_graphs_and_refuses_overwrite(tmp_path, monkeypatc
     data = json.loads((output / "analysis.json").read_text(encoding="utf-8"))
     assert data["pressure"]["time_axis"].startswith("OpenFOAM solver indices")
     assert "<svg " in (output / "pressure_probe_history.svg").read_text(encoding="utf-8")
+    dashboard = (output / "index.html").read_text(encoding="utf-8")
+    assert "Scientific validation: BLOCKED" in dashboard
+    assert "inlet_outlet_flux.svg" in dashboard
+    assert "simplefoam_residual_p.svg" in dashboard
+    assert "<script" not in dashboard
     with pytest.raises(FileExistsError):
         analysis.export_two_room_analysis(case, receipt, output)
 

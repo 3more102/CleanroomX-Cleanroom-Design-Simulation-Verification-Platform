@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 from .spatial_3d_legibility import (
+    draw_device_details_hud,
     draw_room_details_hud,
     draw_room_label_chips,
     place_room_label_chips,
@@ -4107,21 +4108,40 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         view_width = max(1, canvas.winfo_width())
         view_height = max(1, canvas.winfo_height())
-        active_hit = self.selected if self.selected is not None and self.selected.kind == "room" else None
-        if active_hit is None:
-            active_hit = self._hovered_3d if self._hovered_3d is not None and self._hovered_3d.kind == "room" else None
-        active_room = next(
-            (
-                room for room in ordered
-                if active_hit is not None and room["id"] == active_hit.item_id
-                and (section_height is None or
-                     room.get("floor_elevation_m", floor_z) < section_height)
-            ),
-            None,
-        )
+        # Hover reveals transient information even while a different item is
+        # selected. When the cursor leaves, the selected item's card returns.
+        active_hit = self._hovered_3d or self.selected
+        active_room = None
+        active_device = None
+        if active_hit is not None and active_hit.kind == "room":
+            active_room = next(
+                (
+                    room for room in ordered
+                    if room["id"] == active_hit.item_id
+                    and (section_height is None or
+                         room.get("floor_elevation_m", floor_z) < section_height)
+                ),
+                None,
+            )
+        elif active_hit is not None and active_hit.kind == "device":
+            active_device = next(
+                (
+                    device for device in self.layout["devices"]
+                    if device["id"] == active_hit.item_id
+                    and self._is_item_visible("device", device["id"])
+                    and (section_height is None or
+                         device["z_m"] +
+                         next(
+                             (room.get("floor_elevation_m", floor_z)
+                              for room in self.layout["rooms"]
+                              if room["id"] == device.get("room_id")),
+                             floor_z,
+                         ) < section_height)
+                ),
+                None,
+            )
         reserved = []
         if view_width >= 280 and view_height >= 170:
-            # X/Y/Z captions are fixed to the bottom-right.
             reserved.append(
                 (max(0, view_width - 185), max(0, view_height - 82),
                  view_width, view_height)
@@ -4137,7 +4157,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 (0, 0, 215, 125 if overlay_mode == "status" else 84)
             )
         details_bounds = room_hud_bounds(
-            view_width, view_height, active=active_room is not None,
+            view_width, view_height,
+            active=active_room is not None or active_device is not None,
         )
         if details_bounds is not None:
             reserved.append(details_bounds)
@@ -4151,11 +4172,27 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         if active_room is not None:
             overlay_room = overlay_by_room.get(active_room["id"], {})
+            count = sum(
+                device.get("room_id") == active_room["id"]
+                for device in self.layout["devices"]
+            )
             draw_room_details_hud(
                 canvas, active_room, width=view_width, height=view_height,
                 selected=active_hit == self.selected,
                 overlay_title=str(overlay.get("title") or overlay_mode.title()),
                 overlay_label=str(overlay_room.get("label") or ""),
+                device_count=count,
+            )
+        elif active_device is not None:
+            source_room = next(
+                (room for room in self.layout["rooms"]
+                 if room["id"] == active_device.get("room_id")),
+                None,
+            )
+            draw_device_details_hud(
+                canvas, active_device, width=view_width, height=view_height,
+                selected=active_hit == self.selected,
+                room_name=source_room["name"] if source_room else None,
             )
 
     def _update_overlay_summary(self, overlay: dict) -> None:

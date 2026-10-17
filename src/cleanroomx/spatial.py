@@ -1620,6 +1620,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_focus_requested: Callable[[], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1634,6 +1635,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_focus_requested = on_focus_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1756,6 +1758,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(
             modebar, text="Balance panels",
             command=self.balance_workspace_panes,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            modebar, text="Focus 3D",
+            command=self.focus_3d_workspace,
+            state="normal" if self._on_focus_requested is not None else "disabled",
         ).pack(side="left", padx=2)
 
         # Keep sync/actions on a second row so both operations remain visible
@@ -2192,6 +2199,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         # Reparenting a pane may leave the 3D canvas at its previous 1px
         # geometry until idle layout. Redraw after actual Tk geometry settles.
         self.after_idle(self._draw_3d)
+
+    def focus_3d_workspace(self) -> None:
+        """Toggle the app's existing focus mode for an unobstructed 3D canvas."""
+        self.set_workspace_mode("3d")
+        if self._on_focus_requested is not None:
+            self._on_focus_requested()
+        self.after_idle(self.fit_3d)
 
     def balance_workspace_panes(self) -> None:
         """Restore usable 2D/3D/inspector sash widths without changing design."""

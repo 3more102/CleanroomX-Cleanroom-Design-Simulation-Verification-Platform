@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections import deque
 import hashlib
 import json
-import math
 from typing import Any
 
 from .spatial_integrity import validate_spatial_layout_document
@@ -124,7 +123,8 @@ def assess_suite_topology(layout: dict[str, Any]) -> dict[str, Any]:
     canonical = json.dumps(layout, ensure_ascii=False, allow_nan=False,
                            separators=(",", ":"), sort_keys=True)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    default_z = float(layout.get("floor", {}).get("elevation_m", 0.0))
+    floor = layout.get("floor") or {}
+    default_z = float(floor.get("elevation_m", 0.0))
     boxes = sorted((_box(room, default_z) for room in rooms), key=lambda r: r["id"])
     by_id = {box["id"]: box for box in boxes}
     walls: list[dict] = []

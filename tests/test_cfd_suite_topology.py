@@ -72,7 +72,9 @@ def test_external_door_not_promoted_to_internal_airflow_path():
     model = layout()
     model["devices"][0].update(x_m=2, y_m=0, wall_side="south")
     report = assess_suite_topology(model)
-    assert {"opening_unmapped", "disconnected_suite"} <= codes(report)
+    assert "disconnected_suite" in codes(report)
+    assert "opening_unmapped" not in codes(report)
+    assert any(item["code"] == "exterior_opening" for item in report["warnings"])
     assert report["shared_walls"][0]["opening_ids"] == []
 
 
@@ -92,6 +94,27 @@ def test_wrong_wall_side_and_missing_assignment():
     model = layout()
     model["devices"][0].pop("room_id")
     assert "opening_unassigned" in codes(assess_suite_topology(model))
+
+
+def test_valid_internal_passage_and_an_exterior_door_remain_geometrically_valid():
+    model = layout()
+    model["devices"].append({
+        "id": "entry", "name": "Exterior access", "type": "door",
+        "room_id": "process", "x_m": 2, "y_m": 0, "z_m": 0,
+        "wall_side": "south", "width_m": 1, "height_m": 2,
+    })
+    report = assess_suite_topology(model)
+    assert report["topology_status"] == "valid"
+    assert report["shared_walls"][0]["opening_ids"] == ["door-1"]
+    assert [item["code"] for item in report["warnings"]] == ["exterior_opening"]
+
+
+def test_overflowing_box_bounds_are_rejected_before_serialization():
+    model = layout()
+    model["rooms"][0]["x_m"] = 1e308
+    model["rooms"][0]["length_m"] = 1e308
+    with pytest.raises(ValueError, match="overflowing"):
+        assess_suite_topology(model)
 
 
 def test_geometry_vertical_mismatch_is_not_silently_extruded():

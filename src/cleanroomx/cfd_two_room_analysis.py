@@ -16,6 +16,7 @@ from .cfd_proofgraph import _hash_regular_file, _read_json, proofgraph_from_two_
 from .cfd_audit import _RESIDUAL, _CONTINUITY, _FATAL, MAX_LOG_BYTES
 from .cfd_two_room import compute_pressure_difference_pa, parse_pressure_probe_data
 from .cfd_vtk import import_vtk_case, _read_vtk, MAX_VTK_BYTES
+from .cfd_analysis_bundle import publish_analysis_bundle, verify_analysis_bundle
 
 
 def _finite(value: Any, label: str) -> float:
@@ -579,12 +580,26 @@ def export_two_room_analysis(
     for field, samples in sorted(report["residual_history"]["fields"].items())[:8]:
         graphs[f"simplefoam_residual_{field}.svg"] = _residual_svg(field, samples)
     report["graphs"] = sorted(graphs)
-    destination.mkdir(exist_ok=False)
-    (destination / "analysis.json").write_text(
-        json.dumps(report, sort_keys=True, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    source_files = {
+        "analysis.json": json.dumps(report, sort_keys=True, indent=2, allow_nan=False) + "\n",
+        "index.html": _offline_dashboard(report),
+        **{filename: svg + "\n" for filename, svg in graphs.items()},
+    }
+    published = publish_analysis_bundle(
+        destination,
+        source_files,
+        receipt_sha256=report["receipt_sha256"],
+        case_manifest_sha256=report["case_manifest_sha256"],
     )
-    for filename, svg in graphs.items():
-        (destination / filename).write_text(svg + "\n", encoding="utf-8")
-    (destination / "index.html").write_text(_offline_dashboard(report), encoding="utf-8")
-    return {"status": "DIAGNOSTIC_ONLY", "directory": str(destination), "graphs": report["graphs"],
-            "scientific_validation": "BLOCKED", "receipt_sha256": report["receipt_sha256"]}
+    audited = verify_analysis_bundle(destination)
+    if audited["manifest_sha256"] != published["manifest_sha256"]:
+        raise ValueError("Fresh analysis bundle failed its manifest verification")
+    return {
+        "status": "DIAGNOSTIC_ONLY",
+        "directory": str(destination),
+        "graphs": report["graphs"],
+        "manifest_sha256": published["manifest_sha256"],
+        "artifact_integrity": audited["status"],
+        "scientific_validation": "BLOCKED",
+        "receipt_sha256": report["receipt_sha256"],
+    }

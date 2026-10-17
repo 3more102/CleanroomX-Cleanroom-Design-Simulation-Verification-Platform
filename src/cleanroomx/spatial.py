@@ -1775,6 +1775,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             actionbar, text="Push to analysis",
             command=self._on_sync_requested,
         ).pack(side="left", padx=2)
+        ttk.Button(
+            actionbar, text="Validate",
+            command=self.report_validation,
+        ).pack(side="left", padx=(12, 2))
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
@@ -1794,9 +1798,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
         ttk.Label(viewbar, textvariable=self._validation_var).pack(
             side="right", padx=(10, 2)
         )
@@ -2004,10 +2005,45 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._inspector_close_button.pack(side="right")
         ttk.Label(
-            inspector,
-            textvariable=self._selection_var,
-            wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            inspector, textvariable=self._selection_var,
+            wraplength=220,
+        ).pack(fill="x", pady=(3, 5))
+
+        # Fixed-height canvas keeps the numerous property inputs scrollable
+        # rather than forcing the full Design / 3D viewport to collapse.
+        scroll_host = ttk.Frame(inspector)
+        scroll_host.pack(fill="both", expand=True)
+        inspector_canvas = tk.Canvas(
+            scroll_host, borderwidth=0, highlightthickness=0,
+            width=230, height=230,
+        )
+        self._inspector_canvas = inspector_canvas
+        inspector_scrollbar = ttk.Scrollbar(
+            scroll_host, orient="vertical", command=inspector_canvas.yview,
+        )
+        inspector_canvas.configure(yscrollcommand=inspector_scrollbar.set)
+        inspector_scrollbar.pack(side="right", fill="y")
+        inspector_canvas.pack(side="left", fill="both", expand=True)
+        inspector_contents = ttk.Frame(inspector_canvas)
+        inspector_window_id = inspector_canvas.create_window(
+            0, 0, anchor="nw", window=inspector_contents,
+        )
+        inspector_contents.bind(
+            "<Configure>",
+            lambda _event: inspector_canvas.configure(
+                scrollregion=inspector_canvas.bbox("all"),
+            ),
+        )
+        inspector_canvas.bind(
+            "<Configure>",
+            lambda event: inspector_canvas.itemconfigure(
+                inspector_window_id, width=max(1, event.width),
+            ),
+        )
+        for widget in (inspector_canvas, inspector_contents):
+            widget.bind("<MouseWheel>", self._on_inspector_wheel)
+            widget.bind("<Button-4>", self._on_inspector_wheel)
+            widget.bind("<Button-5>", self._on_inspector_wheel)
 
         property_groups = (
             (
@@ -2047,7 +2083,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(inspector_contents, text=group_name, padding=(6, 4))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -2057,14 +2093,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
-                entry = ttk.Entry(value_frame, textvariable=var, width=16)
+                entry = ttk.Entry(value_frame, textvariable=var, width=11)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
                 if unit:
-                    ttk.Label(value_frame, text=unit, width=4).pack(
-                        side="left", padx=(4, 0)
+                    ttk.Label(value_frame, text=unit, width=3).pack(
+                        side="left", padx=(2, 0)
                     )
                 self._property_rows[key] = row
+                for widget in (section, row, value_frame, entry):
+                    widget.bind("<MouseWheel>", self._on_inspector_wheel)
+                    widget.bind("<Button-4>", self._on_inspector_wheel)
+                    widget.bind("<Button-5>", self._on_inspector_wheel)
         ttk.Button(
             inspector,
             text="Apply properties",
@@ -2795,6 +2835,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        inspector_canvas = getattr(self, "_inspector_canvas", None)
+        if inspector_canvas is not None:
+            inspector_canvas.yview_moveto(0)
         room_fields = {
             "name",
             "x_m",
@@ -2833,6 +2876,21 @@ class SpatialDesignWorkspace(ttk.Frame):
                     row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+
+    def _on_inspector_wheel(self, event: tk.Event) -> str:
+        """Scroll property sections only, never modify geometry or field text."""
+        number = getattr(event, "num", None)
+        delta = getattr(event, "delta", 0)
+        if number == 4:
+            steps = -3
+        elif number == 5:
+            steps = 3
+        elif delta:
+            steps = -3 if delta > 0 else 3
+        else:
+            return "break"
+        self._inspector_canvas.yview_scroll(steps, "units")
+        return "break"
 
     def apply_properties(self) -> None:
         item = self._selected_object()

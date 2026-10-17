@@ -182,8 +182,19 @@ def _capture(
 ) -> dict[str, object]:
     root.update_idletasks()
     root.update()
-    time.sleep(0.25)
+    time.sleep(0.4)
     root.update()
+    if os.name == "nt":
+        # Ensure Win32 has presented the newly selected notebook page before
+        # ImageGrab samples the desktop; otherwise consecutive captures can
+        # contain the previous page even when Tk selection has changed.
+        import ctypes
+
+        try:
+            ctypes.windll.dwmapi.DwmFlush()
+        except (AttributeError, OSError):
+            pass
+        time.sleep(0.15)
     x, y = root.winfo_rootx(), root.winfo_rooty()
     width, height = root.winfo_width(), root.winfo_height()
     if (width, height) != expected_size:
@@ -263,7 +274,15 @@ def _capture_theme(
         app.root.lift()
         app.root.update_idletasks()
         app.root.update()
-        records.append(_capture(app.root, output, scene, theme, size))
+        captured = _capture(app.root, output, scene, theme, size)
+        for previous in records:
+            if captured["sha256"] == previous["sha256"]:
+                raise RuntimeError(
+                    f"Two different GUI scenes rendered identical pixels: "
+                    f"{previous['scene']} and {scene} ({theme}). "
+                    "Capture halted rather than publishing duplicate views."
+                )
+        records.append(captured)
 
     _select_tab(app, "Start")
     snap("gui-start-center")

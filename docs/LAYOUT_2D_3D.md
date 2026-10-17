@@ -88,6 +88,28 @@ Room floor elevation and room height control the vertical extrusion. Device Z is
 assigned room floor elevation. Door, window, generic-opening, and transfer-opening height is
 rendered from the same device record used in 2D.
 
+
+### Reference-style 3D zone visualization
+
+The 3D view includes a **Zone tint** checkbox (on by default). It gives each
+room a distinct semi-transparent color using its stable room ID and displays a
+matching room-name legend. The translucent wall and ceiling surfaces are still
+selectable, and the same layout backs the 2D and 3D editors. The grid/cage uses
+metric X (length), Y (width), and Z (height) ticks derived from the real room
+dimensions and elevations, rather than arbitrary screen-space numbers.
+Use the shared **Grid** checkbox to toggle ground grid lines and graduations.
+
+Zone tint is a **design-only color key**; it does not claim ISO classification,
+measure particle concentration, generate airflow vectors, or compute pressure.
+Existing pressure-cascade relation arrows and fresh-or-explicit pressure labels
+remain available. To compare the actual pressure fill/colors, uncheck
+**Zone tint**. When ACH, Airflow, or Status engineering overlays are active,
+the 3D viewer automatically uses the corresponding result/status overlay
+colors and legend instead of design-zone colors. Missing evidence stays
+unavailable, not zero. The toggle is a local presentation preference and does
+not change persisted geometry, pressure evidence, or engineering inputs.
+
+
 ## Engineering synchronization
 
 Spatial editing does not silently alter engineering inputs. Use **Push to analysis**

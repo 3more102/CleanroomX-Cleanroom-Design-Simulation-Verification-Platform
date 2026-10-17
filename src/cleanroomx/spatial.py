@@ -1929,7 +1929,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             header3, text="Reset", command=self.reset_3d,
         ).pack(side="left", padx=(5, 2))
         ttk.Label(
-            header3, text="Shift + drag to orbit",
+            header3, text="Shift+drag orbit  ·  Wheel zoom  ·  F fit",
         ).pack(side="right", padx=(4, 3))
         ttk.Checkbutton(
             tools3,
@@ -2102,6 +2102,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<KeyPress-f>", lambda event: self._3d_key_command("fit"))
+        self.canvas_3d.bind("<KeyPress-r>", lambda event: self._3d_key_command("reset"))
+        self.canvas_3d.bind("<KeyPress-i>", lambda event: self._3d_key_command("iso"))
+        self.canvas_3d.bind("<Escape>", self._on_escape)
         self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
@@ -4409,6 +4413,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        self.canvas_3d.focus_set()
         self._orbit_anchor = (event.x, event.y)
         self._orbit_origin = (
             self.layout["view"]["azimuth_deg"],
@@ -4445,6 +4450,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
 
+    def _3d_key_command(self, command: str) -> str:
+        """Camera shortcuts modify only presentation state."""
+        if command == "fit":
+            self.fit_3d()
+        elif command == "reset":
+            self.reset_3d()
+        elif command == "iso":
+            self.set_3d_view_preset("iso")
+        else:
+            raise ValueError(f"Unknown 3D camera command: {command}")
+        return "break"
+
     def _on_3d_motion(self, event: tk.Event) -> None:
         current = self.canvas_3d.find_withtag("current")
         hovered = (
@@ -4463,6 +4480,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         if not current:
             return

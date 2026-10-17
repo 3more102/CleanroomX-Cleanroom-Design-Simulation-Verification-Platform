@@ -180,6 +180,27 @@ def test_openfoam_sync_export_rejects_windows_drive_asset_path(tmp_path):
         proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
 
 
+def test_openfoam_sync_export_rejects_case_id_from_another_configuration(tmp_path):
+    case = _write_case(tmp_path)
+    manifest_path = case / "sync_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    record = manifest["records"]["100"]
+    receipt_path = case / record["receipt"]["path"]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    # Keep the manifest and receipt mutually consistent so this exercises the
+    # missing directory-to-configuration identity check.
+    manifest["case_id"] = "configuration_2"
+    receipt["case_id"] = "configuration_2"
+    receipt_bytes = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode()
+    receipt_path.write_bytes(receipt_bytes)
+    record["receipt"]["sha256"] = _sha256(receipt_bytes)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="does not match its configuration directory"):
+        proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
+
+
 def test_openfoam_sync_export_recomputes_source_field_fingerprint(tmp_path):
     case = _write_case(tmp_path)
     manifest_path = case / "sync_manifest.json"

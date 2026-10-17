@@ -377,6 +377,12 @@ def _read_sync_manifest(
     case_id = manifest.get("case_id")
     if type(case_id) is not str or not case_id.strip():
         raise ValueError("OpenFOAM sync manifest case_id must be a non-empty string")
+    expected_case_id = f"configuration_{configuration_number}"
+    if case_id != expected_case_id:
+        raise ValueError(
+            "OpenFOAM sync manifest case_id does not match its configuration directory: "
+            f"expected {expected_case_id!r}, received {case_id!r}"
+        )
     configuration_hash = _require_sha256(
         manifest.get("configuration_hash"), "manifest.configuration_hash"
     )

@@ -22,6 +22,7 @@ from .spatial_3d_presentation import (
     draw_3d_reference,
     draw_3d_zone_legend,
     room_zone_colors,
+    zone_legend_bounds,
 )
 
 from .spatial_integrity import (
@@ -4056,20 +4057,19 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
             None,
         )
-        reserved = [
-            # Axes are a fixed caption in the bottom-right, not world text.
-            (max(0, view_width - 185), max(0, view_height - 82),
-             view_width, view_height),
-        ]
-        if zone_tint:
-            zone_count = len(visible_zone_rooms)
-            legend_height = 46 + min(7, zone_count) * 19 + (
-                19 if zone_count > 7 else 0
-            )
+        reserved = []
+        if view_width >= 280 and view_height >= 170:
+            # X/Y/Z captions are fixed to the bottom-right.
             reserved.append(
-                (0, max(0, view_height - legend_height - 15),
-                 270, view_height)
+                (max(0, view_width - 185), max(0, view_height - 82),
+                 view_width, view_height)
             )
+        if zone_tint:
+            zone_bounds = zone_legend_bounds(
+                view_width, view_height, len(visible_zone_rooms),
+            )
+            if zone_bounds is not None:
+                reserved.append(zone_bounds)
         elif overlay_mode != "none":
             reserved.append(
                 (0, 0, 215, 125 if overlay_mode == "status" else 84)

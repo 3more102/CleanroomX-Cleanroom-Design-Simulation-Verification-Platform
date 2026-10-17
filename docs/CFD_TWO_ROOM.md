@@ -120,6 +120,9 @@ or archiving it, use:
 
     cleanroomx-cfd-pipeline two-room-analysis-audit ./two_room_analysis
 
+In the GUI, use **Audit saved analysis graphs…** to select an existing
+analysis directory and execute this command without typing a shell command.
+
 The independent audit checks exact file membership, SHA-256 and size, graph
 names, receipt and case-manifest references, and the explicit
 `scientific_validation=BLOCKED` evidence boundary. Missing, altered,

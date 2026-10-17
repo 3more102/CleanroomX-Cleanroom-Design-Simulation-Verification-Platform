@@ -130,3 +130,24 @@ The 3D HUD now displays:
   device must not alter the saved CAD room geometry or CFD evidence.
 - Exact area and volume use lengths in meters from the canonical layout,
   not OpenFOAM mesh cells or any solver data.
+
+### Focus 3D when working at 1050×680
+
+The lower Output / Verification notebook can consume the remaining vertical
+space if users previously dragged its sash upwards or saved a small main-window
+layout. The application already provides a reversible **Focus Workspace** mode.
+A dedicated **Focus 3D** button now opens the 3D-only view and toggles that
+existing mode. On first use it temporarily hides the Project Navigator,
+Output/Verification panel, and Properties pane to prioritize model inspection,
+then fits the visible model into the viewport. Press the button again to
+restore the prior panel visibility.
+
+For detailed property editing instead, show the Inspector and optionally hide
+Output/Verification from the View menu. The Inspector is scrollable. Small,
+intentionally minimized canvases below the legibility thresholds do not draw
+overlapping labels or HUD cards; focused viewport tests must allocate enough
+pixels to inspect those features.
+
+This mode does not save new pressure results, silently discard edits, or
+overwrite the model. Focused Tk tests explicitly exercise the reversible
+panel layout instead of assuming a 25-pixel canvas can display a full legend.

@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import deque
 import hashlib
 import json
+import math
 from typing import Any
 
 from .spatial_integrity import validate_spatial_layout_document
@@ -28,6 +29,11 @@ def _interval_intersection(a0: float, a1: float, b0: float, b1: float) -> tuple[
 def _box(room: dict, default_z: float) -> dict:
     x, y = float(room["x_m"]), float(room["y_m"])
     z = float(room.get("floor_elevation_m", default_z))
+    if not all(math.isfinite(value) for value in (
+        x, y, z, x + room["length_m"], y + room["width_m"],
+        z + room["height_m"],
+    )):
+        raise ValueError(f"Room {room['id']!r} has overflowing 3D bounds")
     return {
         "id": room["id"], "name": room["name"],
         "x0": x, "x1": x + room["length_m"],
@@ -89,6 +95,27 @@ def _opening_matches(device: dict, room: dict, wall: dict) -> bool:
     return z0 >= wall["bottom_m"] - TOLERANCE_M and z1 <= wall["top_m"] + TOLERANCE_M
 
 
+def _on_room_exterior_wall(device: dict, room: dict) -> bool:
+    """Recognize geometrically valid exterior apertures without inventing neighbors."""
+    side = device.get("wall_side")
+    if side not in {"north", "south", "east", "west"}:
+        return False
+    axis = "x" if side in {"north", "south"} else "y"
+    along = float(device[f"{axis}_m"])
+    width = float(device["width_m"])
+    if along - width / 2 < room[f"{axis}0"] - TOLERANCE_M:
+        return False
+    if along + width / 2 > room[f"{axis}1"] + TOLERANCE_M:
+        return False
+    normal = "y" if axis == "x" else "x"
+    wall = room[f"{normal}1"] if side in {"north", "east"} else room[f"{normal}0"]
+    if abs(float(device[f"{normal}_m"]) - wall) > TOLERANCE_M:
+        return False
+    bottom = room["z0"] + float(device["z_m"])
+    return (bottom >= room["z0"] - TOLERANCE_M and
+            bottom + float(device["height_m"]) <= room["z1"] + TOLERANCE_M)
+
+
 def _all_connected(ids: list[str], walls: list[dict]) -> bool:
     if not ids:
         return False
@@ -129,10 +156,15 @@ def assess_suite_topology(layout: dict[str, Any]) -> dict[str, Any]:
     by_id = {box["id"]: box for box in boxes}
     walls: list[dict] = []
     issues: list[dict] = []
+    warnings: list[dict] = []
 
     def issue(code: str, message: str, *ids: str) -> None:
         issues.append({"code": code, "message": message,
                        "subject_ids": sorted(ids)})
+
+    def warning(code: str, message: str, *ids: str) -> None:
+        warnings.append({"code": code, "message": message,
+                         "subject_ids": sorted(ids)})
 
     for i, a in enumerate(boxes):
         for b in boxes[i + 1:]:
@@ -173,9 +205,12 @@ def assess_suite_topology(layout: dict[str, Any]) -> dict[str, Any]:
             hits[0]["opening_ids"].append(device_id)
         elif len(hits) > 1:
             issue("opening_ambiguous", "Opening matches multiple shared walls", device_id)
+        elif _on_room_exterior_wall(device, parent):
+            # An exterior access door is not an internal fluid connection.
+            # Its external boundary conditions still require independent data.
+            warning("exterior_opening", "Exterior opening has no inter-room connection",
+                    device_id)
         else:
-            # External doors remain useful design devices; they are not
-            # automatically promoted to inter-room CFD connections.
             issue("opening_unmapped", "Opening is not fully within a shared room wall",
                   device_id)
 
@@ -204,6 +239,7 @@ def assess_suite_topology(layout: dict[str, Any]) -> dict[str, Any]:
         issue("disconnected_suite", "Rooms do not form one connected inter-room opening network")
 
     issues.sort(key=lambda item: (item["code"], item["subject_ids"]))
+    warnings.sort(key=lambda item: (item["code"], item["subject_ids"]))
     return {
         "schema_version": SCHEMA,
         "spatial_layout_sha256": digest,
@@ -215,6 +251,7 @@ def assess_suite_topology(layout: dict[str, Any]) -> dict[str, Any]:
         ],
         "shared_walls": walls,
         "issues": issues,
+        "warnings": warnings,
         "openfoam_case_status": "not_generated",
         "ready_for_solver": False,
         "next_required_evidence": [

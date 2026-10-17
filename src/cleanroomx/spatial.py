@@ -18,6 +18,7 @@ from .spatial_3d_legibility import (
     draw_room_label_chips,
     place_room_label_chips,
     room_hud_bounds,
+    room_area_volume,
 )
 from .spatial_3d_presentation import (
     draw_3d_reference,
@@ -1997,6 +1998,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="PROPERTIES",
             style="CX.PanelHeader.TLabel",
         ).pack(side="left")
+        ttk.Button(
+            inspector_header, text="Fit", width=4,
+            command=self.fit_selected,
+        ).pack(side="right", padx=(4, 0))
         self._inspector_close_button = ttk.Button(
             inspector_header,
             text="×",
@@ -2009,6 +2014,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector, textvariable=self._selection_var,
             wraplength=220,
         ).pack(fill="x", pady=(3, 5))
+        self._selection_metrics_var = tk.StringVar(value="")
+        ttk.Label(
+            inspector, textvariable=self._selection_metrics_var,
+            wraplength=215,
+        ).pack(fill="x", pady=(0, 5))
 
         # Fixed-height canvas keeps the numerous property inputs scrollable
         # rather than forcing the full Design / 3D viewport to collapse.
@@ -2815,6 +2825,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._selection_metrics_var.set("")
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2836,6 +2847,22 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            area, volume = room_area_volume(item)
+            device_count = sum(
+                device.get("room_id") == item["id"]
+                for device in self.layout["devices"]
+            )
+            self._selection_metrics_var.set(
+                f"Area {area:g} m²  ·  Volume {volume:g} m³"
+                f"  ·  {device_count} device(s)"
+            )
+        else:
+            kind = str(item.get("type") or "device").replace("_", " ").title()
+            self._selection_metrics_var.set(
+                f"{kind}  ·  X {item.get('x_m', 0):g} m"
+                f"  ·  Y {item.get('y_m', 0):g} m"
+            )
         inspector_canvas = getattr(self, "_inspector_canvas", None)
         if inspector_canvas is not None:
             inspector_canvas.yview_moveto(0)

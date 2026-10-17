@@ -1056,3 +1056,35 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
+    """The design-zone tint never changes stored geometry or verification."""
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    before = copy.deepcopy(workspace.layout)
+    workspace._draw_3d()
+    assert workspace.canvas_3d.find_withtag("axis3d")
+    assert workspace.canvas_3d.find_withtag("grid3d")
+    assert workspace.canvas_3d.find_withtag("zone3d")
+    assert workspace.canvas_3d.find_withtag("zone_legend_3d")
+
+    workspace._zone_colors_3d.set(False)
+    workspace._draw_3d()
+    assert not workspace.canvas_3d.find_withtag("zone3d")
+    assert not workspace.canvas_3d.find_withtag("zone_legend_3d")
+    assert workspace.canvas_3d.find_withtag("room3d")
+
+    workspace._zone_colors_3d.set(True)
+    workspace._show_grid.set(False)
+    workspace._draw_3d()
+    assert workspace.canvas_3d.find_withtag("axis3d")
+    assert not workspace.canvas_3d.find_withtag("grid3d")
+
+    workspace._show_grid.set(True)
+    workspace._overlay_mode.set("Status")
+    workspace._draw_3d()
+    assert not workspace.canvas_3d.find_withtag("zone3d")
+    assert workspace.canvas_3d.find_withtag("overlay_legend")
+    assert workspace.layout == before

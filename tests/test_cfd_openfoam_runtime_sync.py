@@ -232,6 +232,42 @@ def test_sync_selects_phi_for_surface_field_export(tmp_path, monkeypatch):
     assert record["surface_phi_parity"]["status"] == "PASS"
 
 
+
+def test_sync_can_disable_optional_surface_flux_capture(tmp_path, monkeypatch):
+    case = _case(tmp_path, temperature=False)
+    (case / "100" / "phi").write_text("unused unsupported surface flux fixture\n", encoding="ascii")
+    calls = _fake_foam_to_vtk(monkeypatch, expected_temperature=False)
+    synchronizer = _configured_sync(
+        tmp_path,
+        case,
+        monkeypatch,
+        optional_fields=(),
+        include_surface_flux=False,
+    )
+
+    synchronizer.poll_once()
+    result = synchronizer.poll_once()
+
+    assert result["imported_times"] == ["100"]
+    fields_argument = calls[0][calls[0].index("-fields") + 1]
+    assert "phi" not in fields_argument
+    assert "-surfaceFields" not in calls[0]
+    manifest = json.loads((tmp_path / "sync" / "sync_manifest.json").read_text())
+    record = manifest["records"]["100"]
+    assert manifest["include_surface_flux"] is False
+    assert "phi" not in record["fields"]
+
+    with pytest.raises(ValueError, match="does not match this simulation/configuration"):
+        _configured_sync(
+            tmp_path,
+            case,
+            monkeypatch,
+            output=tmp_path / "sync",
+            optional_fields=(),
+            include_surface_flux=True,
+        )
+
+
 def test_sync_resume_reuses_hash_bound_record_without_duplicate_export(tmp_path, monkeypatch):
     case = _case(tmp_path, temperature=False)
     calls = _fake_foam_to_vtk(monkeypatch, expected_temperature=False)

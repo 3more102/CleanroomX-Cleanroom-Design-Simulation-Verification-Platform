@@ -1464,7 +1464,6 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             tutorials/incompressible/simpleFoam/pitzDaily
-            tutorials/resources/blockMesh/pitzDaily
           sparse-checkout-cone-mode: false
 
       - name: Install OpenFOAM Foundation v10

@@ -381,6 +381,23 @@ def build_two_room_run_command(
     ]
 
 
+def build_two_room_analysis_command(
+    case_directory: str,
+    receipt_directory: str,
+    output_directory: str,
+    *,
+    python_executable: str = sys.executable,
+) -> list[str]:
+    """Build an argv command for receipt-gated two-room analysis."""
+    if not all(value.strip() for value in (case_directory, receipt_directory, output_directory)):
+        raise ValueError("Choose a case, receipt directory and new analysis output directory")
+    return [
+        python_executable, "-m", "cleanroomx.cfd_pipeline_cli", "two-room-analyze",
+        case_directory, str(Path(receipt_directory) / "two_room_run_receipt.json"),
+        output_directory,
+    ]
+
+
 def read_openfoam_evidence_preview(
     directory: str | Path,
     *,
@@ -757,6 +774,12 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="normal" if self._on_proofgraph_loaded is not None else "disabled",
         )
         self.two_room_proofgraph_button.pack(side="left", padx=4)
+        self.two_room_analyze_button = ttk.Button(
+            two_room_actions,
+            text="Export analysis graphs…",
+            command=self._analyze_two_room,
+        )
+        self.two_room_analyze_button.pack(side="left", padx=4)
         ttk.Label(
             two_room,
             text="Synthetic diagnostic case; integrity can pass while validation remains BLOCKED.",
@@ -846,6 +869,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.two_room_verify_button,
             self.two_room_run_button,
             self.two_room_proofgraph_button,
+            self.two_room_analyze_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -975,6 +999,29 @@ class OpenFOAMWorkspace(ttk.Frame):
         if not messagebox.askyesno("Run two-room Foundation v10 case", prompt, parent=self):
             return
         self._start_command("Run synthetic two-room Foundation v10 case", command)
+
+    def _analyze_two_room(self) -> None:
+        if self._busy:
+            return
+        parent_directory = filedialog.askdirectory(
+            title="Choose destination parent for two-room analysis graphs", parent=self
+        )
+        if not parent_directory:
+            return
+        output_directory = str(Path(parent_directory) / "cleanroomx-two-room-analysis")
+        try:
+            command = build_two_room_analysis_command(
+                self.two_room_case_directory_var.get().strip(),
+                self.two_room_receipt_directory_var.get().strip(),
+                output_directory,
+            )
+        except ValueError as exc:
+            messagebox.showerror("Analyze two-room solver evidence", str(exc), parent=self)
+            return
+        self._append(
+            "\nVerifying receipt-bound pressure, flux, VTK and solver evidence before graphing…\n"
+        )
+        self._start_command("Export two-room diagnostic analysis graphs", command)
 
     def _export_two_room_proofgraph(self) -> None:
         if self._on_proofgraph_loaded is None or self._busy:

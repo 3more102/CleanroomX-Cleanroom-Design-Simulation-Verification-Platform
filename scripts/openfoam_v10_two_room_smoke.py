@@ -15,6 +15,7 @@ from cleanroomx.cfd_two_room import (
 from cleanroomx.cfd_proofgraph import export_two_room_proofgraph
 from cleanroomx.cfd_two_room_analysis import export_two_room_analysis
 from cleanroomx.cfd_analysis_bundle import verify_analysis_bundle
+from cleanroomx.cfd_two_room_numerics import screen_two_room_numerics, SCHEMA as NUMERICAL_SCHEMA
 from cleanroomx.cli_output import load_cli_input
 from cleanroomx.strict_json import load_strict_json
 
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     verified_receipt = verify_two_room_receipt(receipt_directory / "two_room_run_receipt.json")
     proofgraph_summary = None
     analysis_summary = None
+    numerical_summary = None
     if receipt.get("status") == "executed_requires_engineering_review":
         if (
             verified_receipt.get("scientific_validation") != "BLOCKED"
@@ -119,6 +121,43 @@ def main(argv: list[str] | None = None) -> int:
         for name in analysis_summary["graphs"]:
             if not (analysis_directory / name).is_file():
                 raise ValueError(f"Missing generated two-room evidence chart: {name}")
+        # Exercise receipt-linked screening against actual Foundation v10 output.
+        # These very broad thresholds are smoke-test inputs, NOT design limits.
+        numerical_result = screen_two_room_numerics(
+            case, receipt_directory / "two_room_run_receipt.json",
+            {
+                "schema_version": NUMERICAL_SCHEMA,
+                "fields": ["Ux", "Uy", "Uz", "p"],
+                "max_initial_residual": 1000000.0,
+                "max_final_residual": 1000000.0,
+                "max_global_continuity": 1000000.0,
+                "window": 2,
+            },
+        )
+        if (
+            numerical_result["status"] not in (
+                "PROJECT_NUMERICAL_SCREEN_MET", "PROJECT_NUMERICAL_SCREEN_NOT_MET"
+            )
+            or numerical_result["scientific_validation"] != "BLOCKED"
+            or numerical_result["solver_convergence"] != "NOT_ASSESSED"
+            or numerical_result["source_solver_log_sha256"] != next(
+                stage["log_sha256"] for stage in receipt["stages"] if stage["command"] == "simpleFoam"
+            )
+            or numerical_result["source_receipt_sha256"] != verified_receipt["receipt_sha256"]
+        ):
+            raise ValueError("Real OpenFOAM numerical screen lost its source-identity boundary")
+        (output / "numerical_screen.json").write_text(
+            json.dumps(numerical_result, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        numerical_summary = {
+            "status": numerical_result["status"],
+            "scientific_validation": numerical_result["scientific_validation"],
+            "solver_convergence": numerical_result["solver_convergence"],
+            "unsigned_policy_sha256": numerical_result["unsigned_policy_sha256"],
+            "source_solver_log_sha256": numerical_result["source_solver_log_sha256"],
+            "note": "permissive synthetic software integration thresholds; not engineering acceptance",
+        }
         analysis_summary = {
             **analysis_summary,
             "vtk_source_sha256": vtk_fields.get("source_sha256"),
@@ -131,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         "receipt_integrity": verified_receipt,
         "proofgraph": proofgraph_summary,
         "analysis": analysis_summary,
+        "numerical_screen": numerical_summary,
     }, indent=2, sort_keys=True, allow_nan=False))
     return 0 if receipt.get("status") == "executed_requires_engineering_review" else 2
 

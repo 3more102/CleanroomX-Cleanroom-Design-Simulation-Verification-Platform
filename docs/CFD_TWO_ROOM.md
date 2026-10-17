@@ -95,6 +95,57 @@ rerun with the current v2 receipt before its visualization assets can be used
 in a ProofGraph integrity verdict. See the [run 202 evidence report](OPENFOAM_V10_RUN_202_TWO_ROOM_EVIDENCE.md).
 
 
+## Optional receipt-bound numerical log screen
+
+A complete two-room v2 receipt can be screened against **explicit, user-reviewed**
+linear-solver residual and reported continuity limits. This adds no assumed
+engineering acceptance threshold and does **not** establish CFD convergence or
+cleanroom compliance. The screening covers **all Ux, Uy, Uz, p fields** and the
+reported global continuity entries over the final specified per-field sample
+window (2–100 records). It requires a terminal `End` marker and no fatal or
+nonfinite solver-log marker.
+
+Create a JSON policy with **your project's own numerical limits**, using this
+exact schema (replace the illustrative values after engineering review):
+
+```json
+{
+  "schema_version": "cleanroomx.cfd-two-room-numerical-criteria.v1",
+  "fields": ["Ux", "Uy", "Uz", "p"],
+  "max_initial_residual": 0.001,
+  "max_final_residual": 0.0001,
+  "max_global_continuity": 0.00001,
+  "window": 3
+}
+```
+
+The numbers above are formatting examples, **not recommended or validated
+thresholds**. Supply a saved policy path and the specific, previously verified
+case and receipt:
+
+```bash
+cleanroomx-cfd-pipeline two-room-numerical-screen \
+  ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
+  ./criteria.json --output ./two_room_numerical_screen.json
+```
+
+The command repeats the complete ProofGraph evidence gate, then checks the
+unique `simpleFoam.log` SHA-256 against the receipt before and after log
+ingestion. Its result binds the receipt hash, case-manifest hash, source-log
+hash and SHA-256 of the **unsigned** numerical policy. It produces
+`PROJECT_NUMERICAL_SCREEN_MET` (exit code 0) only when each user-defined
+log threshold passes, or `PROJECT_NUMERICAL_SCREEN_NOT_MET` (exit code 3)
+for incomplete evidence or threshold violations identified within the
+verified solver log. Invalid criteria, missing/tampered evidence, and other
+input failures cause an error instead of a green result.
+
+Even a passing user-supplied log screen deliberately retains
+`solver_convergence=NOT_ASSESSED`, `mesh_independence=NOT_ASSESSED`, and
+`scientific_validation=BLOCKED`. No independent cell-wise flux balance,
+mesh refinement analysis, physical measurement comparison, or ISO acceptance
+is calculated by this command. The separate numerical report is not itself
+a signed source-authentication record.
+
 ## Receipt-bound CFD analysis graphs
 
 After a completed v2 receipt has been generated, export diagnostic analysis

@@ -136,6 +136,9 @@ Open the HTML file in a browser after export; it uses no remote assets or script
   labeled by field solve count, not physical simulation time. Up to eight recorded
   fields are graphed. The JSON includes all bounded parsed residual and reported
   continuity histories; these are numerical diagnostics, not proof of convergence.
+- **simplefoam_continuity_history.svg**: logged per-iteration sum-local and
+  signed global continuity errors, with a zero reference line. This is an
+  OpenFOAM log diagnostic, not an independently calculated mass-balance check.
 
 - **pressure_probe_history.svg**: actual room 1 minus room 2 *point-probe*
   pressure vs OpenFOAM solver index (not physical seconds), with the declared

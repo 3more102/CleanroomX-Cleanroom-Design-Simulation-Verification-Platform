@@ -13,6 +13,7 @@ from .proofgraph_project_requirements import (
     proofgraphs_from_project_requirements_verification,
 )
 from .proofgraph_io import proofgraph_from_dict
+from .proofgraph_openfoam import build_openfoam_sync_proofgraph
 from .proofgraph_ifc import (
     ifc_design_evidence_bundle,
     proofgraph_with_ifc_design_evidence,
@@ -83,6 +84,7 @@ __all__ = [
     "proofgraphs_from_project_requirements_verification",
     "proofgraphs_from_project_requirements_analysis_run",
     "proofgraph_from_dict",
+    "build_openfoam_sync_proofgraph",
     "ifc_design_evidence_bundle",
     "proofgraph_with_ifc_design_evidence",
     "assess_evidence_precedence",

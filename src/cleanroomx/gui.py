@@ -2133,6 +2133,7 @@ class CleanroomXApp:
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
+        self.document_status_var = tk.StringVar(value="Not saved")
         self.status_var = tk.StringVar(value="Ready")
         self.autosave_status_var = tk.StringVar(
             value=(
@@ -2429,22 +2430,20 @@ class CleanroomXApp:
         ttk.Entry(topbar, textvariable=self.description_var, width=28).grid(
             row=0, column=4, sticky="ew", padx=(0, 10)
         )
-        ttk.Button(
+        self.document_status_label = ttk.Label(
             topbar,
-            text="Validate",
-            command=self.validate_current,
-        ).grid(row=0, column=5, padx=2)
-        self.run_button = ttk.Button(
-            topbar,
-            text="▶ Run",
-            command=self.run_current,
-            style="CX.Primary.TButton",
+            textvariable=self.document_status_var,
+            style="CX.Document.Unsaved.TLabel",
+            anchor="center",
+            width=13,
         )
-        self.run_button.grid(row=0, column=6, padx=2)
+        self.document_status_label.grid(
+            row=0, column=5, padx=(4, 8), sticky="e"
+        )
         self.cancel_button = ttk.Button(
-            topbar, text="Abandon", command=self.cancel_run, state="disabled"
+            topbar, text="Stop run", command=self.cancel_run, state="disabled"
         )
-        self.cancel_button.grid(row=0, column=7, padx=(2, 0))
+        self.cancel_button.grid(row=0, column=6, padx=(2, 0))
         topbar.columnconfigure(2, weight=1)
         topbar.columnconfigure(4, weight=2)
 
@@ -2585,13 +2584,14 @@ class CleanroomXApp:
             command=self.validate_current,
         )
         self.workflow_validate_button.pack(side="left", padx=1)
-        self.workflow_run_button = ttk.Button(
+        self.run_button = ttk.Button(
             workflowbar,
             text="4  Run",
             width=9,
             style="CX.Primary.TButton",
             command=self.run_current,
         )
+        self.workflow_run_button = self.run_button
         self.workflow_run_button.pack(side="left", padx=1)
         self.workflow_verify_button = ttk.Button(
             workflowbar,
@@ -2808,6 +2808,21 @@ class CleanroomXApp:
                 self.notebook.select(self.proofgraph_viewer),
             ),
             status_setter=self.status_var.set,
+            project_context_getter=lambda: {
+                "project_name": self.project.name,
+                "spatial_layout": self.spatial_workspace.layout,
+                "selection_kind": (
+                    self.spatial_workspace.selected.kind
+                    if self.spatial_workspace.selected is not None
+                    else None
+                ),
+                "selected_room_id": (
+                    self.spatial_workspace.selected.item_id
+                    if self.spatial_workspace.selected is not None
+                    else None
+                ),
+                "project_path": self.project_path,
+            },
         )
         self.notebook.add(self.openfoam_workspace, text="OpenFOAM")
 
@@ -3138,6 +3153,14 @@ class CleanroomXApp:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
             workspace.apply_theme(self.theme_var.get(), redraw=redraw)
+
+        openfoam_workspace = getattr(self, "openfoam_workspace", None)
+        if openfoam_workspace is not None:
+            openfoam_workspace.apply_theme(self.theme_var.get())
+
+        proofgraph_viewer = getattr(self, "proofgraph_viewer", None)
+        if proofgraph_viewer is not None:
+            proofgraph_viewer.apply_theme(self.theme_var.get(), redraw=redraw)
 
         menubar = getattr(self, "menubar", None)
         if isinstance(menubar, tk.Menu):
@@ -6381,9 +6404,38 @@ class CleanroomXApp:
         if has_unsaved_changes:
             self._schedule_recovery_checkpoint()
 
+        document_status_var = getattr(self, "document_status_var", None)
+        document_status_label = getattr(self, "document_status_label", None)
+        if document_status_var is not None:
+            project_path = getattr(self, "project_path", None)
+            if project_path is None:
+                document_status = "Not saved"
+                document_style = "CX.Document.Unsaved.TLabel"
+            elif has_unsaved_changes:
+                document_status = "Modified"
+                document_style = "CX.Document.Modified.TLabel"
+            else:
+                document_status = "Saved"
+                document_style = "CX.Document.Saved.TLabel"
+            document_status_var.set(document_status)
+            if document_status_label is not None:
+                document_status_label.configure(style=document_style)
+
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
             return
+        name_var = getattr(self, "name_var", None)
+        project_name = ""
+        if name_var is not None:
+            get_name = getattr(name_var, "get", None)
+            if callable(get_name):
+                project_name = str(get_name()).strip()
+        if not project_name:
+            project_name = str(
+                getattr(getattr(self, "project", None), "name", "")
+            ).strip()
+        if not project_name:
+            project_name = "Untitled project"
         if getattr(self, "_migration_source_path", None) is not None:
             suffix = f" — Migrated copy of {self.project_path.name}"
         elif self.project_path is not None:
@@ -6393,7 +6445,7 @@ class CleanroomXApp:
         else:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
-        title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        title_method(f"CleanroomX {__version__} — {project_name}{suffix}{dirty}")
 
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(

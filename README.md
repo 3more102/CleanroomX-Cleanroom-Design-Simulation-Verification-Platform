@@ -6,7 +6,7 @@
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The latest stable release is **v0.102.1**. This checkout also contains development-preview work; features marked as preview below are not part of the stable release unless they are separately released or qualified by your organization. The current documentation snapshot is based on `gui/openfoam-timeseries-workbench-20261017` at `0193925`.
 
 ### Workstation and package-readiness diagnostics
 
@@ -21,6 +21,18 @@ See [System Health Doctor](docs/SYSTEM_HEALTH.md) for all options, exit
 codes, privacy considerations, and limitations.
 
 ## What CleanroomX provides
+
+### Desktop engineering workstation
+
+- A guided **Design → Inputs → Validate → Run → Save & Verify → Report** workflow.
+- A searchable Project Navigator for spatial objects, analyses, requirements, ProofGraph evidence, and reports.
+- A shared spatial model with 2D, 3D, and split-view editing, contextual properties, project-wide Undo/Redo, and explicit dimension synchronization.
+- Structured and JSON input views, validation diagnostics, background analysis runs, result inspection, and plots.
+- Project recovery, saved revisions, integrity-checked run history, portable reports and project bundles.
+- A read-only ProofGraph explorer for inspecting persisted requirement, evidence, finding, and verdict relationships.
+- When a ProofGraph contains valid OpenFOAM field-series evidence, a read-only **Field trends** view plots imported means and bounds by solver-time label, shows complete/partial sample coverage, and links points to retained snapshots. Mesh equivalence is not asserted.
+
+The application is an operator interface to CleanroomX's shared engineering backends. The GUI does not introduce separate equations or acceptance rules. See the [desktop application guide](docs/APPLICATION_GUI.md) for launch, navigation, project, and evidence workflows.
 
 ### 2D + 3D cleanroom design workspace
 
@@ -46,6 +58,14 @@ codes, privacy considerations, and limitations.
 - Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
 - This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
 - Track documented Foundation v10 capabilities, measured parity scores, and open evidence gaps in the [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
+
+### OpenFOAM result time-series workbench — development preview
+
+- Inspect mapped field summaries from hash-checked CleanroomX synchronization snapshots.
+- Compare volume-weighted component means over solver time labels, inspect individual samples, and export the selected case/field series to CSV.
+- Plot persisted OpenFOAM ProofGraph summaries from **Field trends**; initial time `0` is supported and physical time units are never inferred.
+- The plots are descriptive summaries. Solver time labels are not assumed to be seconds, and snapshot integrity does not establish scientific validation or physical correctness.
+- This workbench is a development preview in the documented branch, not part of v0.102.1. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md) and [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
 
 ### Source-driven CFD passive tracer and numerical audit
 
@@ -175,6 +195,28 @@ Headless readiness check:
 cleanroomx-gui --check
 ```
 
+## Desktop GUI workflow
+
+1. Launch the packaged demonstration with `cleanroomx-gui --demo` or use the Windows checkout launcher.
+2. In **Design**, review the demo's rooms and devices. Use **2D**, **3D**, or **Split**; `Ctrl+1`, `Ctrl+2`, and `Ctrl+3` select those views. Select a room in the canvas or Project Navigator to inspect its properties.
+3. Use the guided workflow to edit project inputs, validate them, run the selected analysis, review the result and diagnostics, then save and export the required report.
+4. Open **ProofGraph** to inspect stored traceability evidence. The viewer validates and presents the saved graph; it does not recalculate engineering results or compliance verdicts.
+5. For OpenFOAM work, use the **OpenFOAM** workspace to prepare and inspect solver evidence. Time-series analysis requires a CleanroomX result store with synchronized snapshots and mapped VTK field summaries.
+
+The demo is a software walkthrough, not project design data. Treat all engineering assumptions, source evidence, and acceptance criteria as project-owned inputs.
+
+### Real GUI screenshot set
+
+Capture the application itself on a desktop to document all 16 views: Start Center, 2D/3D/split design, both input editors, Plot, ProofGraph, OpenFOAM, and the seven output panels. Install the project and Pillow, then run:
+
+```powershell
+python -m pip install -e .
+python -m pip install Pillow
+python scripts/capture_gui_screenshots.py
+```
+
+This saves real CleanroomX workspace PNGs and a source/version manifest in `docs/gui_screenshots/`. The manual PDF embeds the complete set as landscape pages only when all 16 standard views exist and the capture commit matches its documented preview snapshot. To also capture the mapped-field time-series dialog from an existing result store, pass `--timeseries-result-directory "C:\path\to\cleanroomx-results"`; the store is opened read-only. See [GUI screenshots](docs/GUI_SCREENSHOTS.md) for the image-by-image index, smaller-window options, and review checklist. A headless environment cannot produce authentic desktop screenshots.
+
 ## Main command-line tools
 
 Run a saved project:
@@ -236,10 +278,11 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Documentation
 
-- [Professional Engineering User & Validation Manual (PDF)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf)
-- [Professional manual source (Markdown)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md)
+- [Professional Engineering User & Validation Manual (PDF)](output/pdf/CleanroomX_Complete_Solution_Manual_2026-10-17.pdf)
+- [Professional manual source (Markdown)](docs/CleanroomX_Complete_Solution_Manual_2026-10-17.md)
 
 - [Application & GUI](docs/APPLICATION_GUI.md)
+- [GUI screenshot capture](docs/GUI_SCREENSHOTS.md)
 - [2D + 3D spatial workspace](docs/LAYOUT_2D_3D.md)
 - [Architecture](ARCHITECTURE.md)
 - [Design assurance matrix](docs/DESIGN_ASSURANCE.md)

@@ -25,6 +25,10 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "field_text": "#18212b",
         "tree": "#fbfcfd",
         "disabled": "#9aa5b1",
+        "success": "#236b45",
+        "success_bg": "#e4f2e9",
+        "warning": "#875b10",
+        "warning_bg": "#f8eed8",
         "canvas_2d": "#f7f9fb",
         "canvas_3d": "#111820",
         "plot": "#ffffff",
@@ -47,6 +51,10 @@ _THEME_PALETTES: dict[str, dict[str, str]] = {
         "field_text": "#e6edf3",
         "tree": "#171d24",
         "disabled": "#6f7b87",
+        "success": "#62d394",
+        "success_bg": "#1b3427",
+        "warning": "#f0bf67",
+        "warning_bg": "#392e1b",
         "canvas_2d": "#1b222a",
         "canvas_3d": "#0d1117",
         "plot": "#131920",
@@ -340,6 +348,18 @@ def configure_ttk_theme(root: tk.Misc, value: Any) -> dict[str, str]:
         ],
         foreground=[("disabled", palette["disabled"])],
     )
+    for name, foreground, background in (
+        ("Saved", palette["success"], palette["success_bg"]),
+        ("Modified", palette["warning"], palette["warning_bg"]),
+        ("Unsaved", palette["warning"], palette["warning_bg"]),
+    ):
+        style.configure(
+            f"CX.Document.{name}.TLabel",
+            background=background,
+            foreground=foreground,
+            padding=(8, 4),
+            font=("TkDefaultFont", 9, "bold"),
+        )
 
     # Defaults for Tk-native widgets created after this call.
     root.option_add("*Text.background", palette["field"])

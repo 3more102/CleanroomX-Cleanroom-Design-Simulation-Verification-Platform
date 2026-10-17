@@ -3,6 +3,11 @@ from __future__ import annotations
 import argparse
 import sys
 from .cfd_openfoam import export_openfoam_cases, run_openfoam_cases
+from .cfd_project_handoff import project_room_openfoam_spec
+from .cfd_openfoam_timeseries import (
+    export_openfoam_time_series_csv,
+    read_openfoam_sync_time_series,
+)
 from .cfd_vtk import populate_study_from_vtk
 from .cfd_visualization import render_cfd_cross_section
 from .cfd_scalar import prepare_scalar_case, run_scalar_case
@@ -15,9 +20,15 @@ from .cfd_openfoam_runtime_sync import (
     OpenFOAMResultSynchronizer,
     hash_case_configuration,
 )
+from .proofgraph_openfoam import (
+    build_openfoam_result_sync_proofgraph,
+    openfoam_result_sync_graph_input_paths,
+)
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
+from .project import load_project_document
+from .spatial_integrity import SPATIAL_METADATA_KEY
 
 def build_parser():
     parser=argparse.ArgumentParser(prog="cleanroomx-cfd-pipeline",
@@ -26,6 +37,14 @@ def build_parser():
     create=sub.add_parser("generate",help="Generate three OpenFOAM cases")
     create.add_argument("spec")
     create.add_argument("directory")
+    project_spec=sub.add_parser(
+        "project-room-spec",
+        help="Create a reviewable OpenFOAM spec from one selected CleanroomX room",
+    )
+    project_spec.add_argument("project",help="CleanroomX project document")
+    project_spec.add_argument("template_spec",help="Existing spec for explicit CFD inputs")
+    project_spec.add_argument("--room-id",required=True)
+    project_spec.add_argument("--output",required=True)
     runner=sub.add_parser("run",help="Opt-in: run blockMesh, checkMesh, simpleFoam")
     runner.add_argument("directory")
     runner.add_argument("--timeout-seconds",type=int,default=3600)
@@ -72,6 +91,22 @@ def build_parser():
     sync.add_argument("--max-record-bytes",type=int,default=128*1024*1024)
     sync.add_argument("--max-scan-entries",type=int,default=100000)
     sync.add_argument("--once",action="store_true",help="Run one scan and exit; repeat to satisfy the stability window")
+    sync.add_argument("--quiet-unchanged",action="store_true",
+                      help="In watch mode, print only when imported results or scan counts change")
+    proofgraph=sub.add_parser(
+        "proofgraph-export",
+        help="Verify a native or VTK OpenFOAM sync store and export a ProofGraph",
+    )
+    proofgraph.add_argument("result_directory",help="CleanroomX OpenFOAM synchronization result store")
+    proofgraph.add_argument("--output",required=True,help="Output ProofGraph JSON path")
+    timeseries=sub.add_parser(
+        "timeseries-export",
+        help="Audit synchronized snapshots and export one mapped field series as CSV",
+    )
+    timeseries.add_argument("result_directory",help="CleanroomX synchronized result store")
+    timeseries.add_argument("--case-id",required=True)
+    timeseries.add_argument("--field",required=True,help="Explicitly mapped field semantic")
+    timeseries.add_argument("--output",required=True,help="Output CSV path")
     case_sync=sub.add_parser("sync-case",help="Watch a live Foundation v10 case and import stable native fields")
     case_sync.add_argument("case_directory")
     case_sync.add_argument("output_directory")
@@ -141,6 +176,31 @@ def main():
         result=export_openfoam_cases(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(result))
         return 0
+    if args.command=="project-room-spec":
+        project=load_project_document(args.project)
+        spec=project_room_openfoam_spec(
+            load_cli_input(load_strict_json,args.template_spec),
+            project_name=project.name,
+            spatial_layout=project.metadata.get(SPATIAL_METADATA_KEY),
+            selection_kind="room",
+            selected_room_id=args.room_id,
+        )
+        if not publish_cli_output(
+            "cleanroomx-cfd-pipeline",
+            args.output,
+            dumps_strict_json(spec),
+            protected_inputs=(args.project,args.template_spec),
+        ):
+            return 1
+        print(dumps_strict_json({
+            "status":"reviewable_spec_created",
+            "output":str(Path(args.output).expanduser()),
+            "room_id":args.room_id,
+            "room_m":spec["room_m"],
+            "mapping":"rectangular_room_envelope_only",
+            "scientific_validation":"BLOCKED",
+        }))
+        return 0
     if args.command=="run":
         result=run_openfoam_cases(
             args.directory,
@@ -174,15 +234,72 @@ def main():
             report=synchronize_openfoam_vtk_once(args.source_directory,args.output_directory,**options)
             print(dumps_strict_json(report))
             return 0
+        last_signature=None
+        def emit_scan(report):
+            nonlocal last_signature
+            imported=tuple(sorted(
+                (item.get("relative_path"),item.get("source_sha256"),item.get("status"))
+                for item in report.get("imported",[]) if isinstance(item,dict)
+            ))
+            counts=tuple(sorted(report.get("counts",{}).items()))
+            signature=(report.get("discovered_results"),counts,imported)
+            if not args.quiet_unchanged or signature!=last_signature:
+                print(
+                    dumps_strict_json(report, indent=None, separators=(",", ":")),
+                    flush=True,
+                )
+            last_signature=signature
         try:
             watch_openfoam_vtk(
                 args.source_directory,args.output_directory,
                 interval_seconds=args.interval_seconds,
-                on_scan=lambda report: print(dumps_strict_json(report),flush=True),
+                on_scan=emit_scan,
                 **options,
             )
         except KeyboardInterrupt:
             return 130
+        return 0
+    if args.command=="proofgraph-export":
+        graph=build_openfoam_result_sync_proofgraph(args.result_directory).to_dict()
+        payload=dumps_strict_json(graph)
+        if not publish_cli_output(
+            "cleanroomx-cfd-pipeline",
+            args.output,
+            payload,
+            protected_inputs=openfoam_result_sync_graph_input_paths(args.result_directory),
+        ):
+            return 1
+        verdicts={item["requirement_id"]:item["status"] for item in graph["verdicts"]}
+        print(dumps_strict_json({
+            "status":"proofgraph_exported",
+            "output":str(Path(args.output).expanduser()),
+            "graph_id":graph["id"],
+            "graph_sha256":graph["graph_sha256"],
+            "verdicts":verdicts,
+            "scientific_validation":"BLOCKED",
+        }))
+        return 0
+    if args.command=="timeseries-export":
+        series=read_openfoam_sync_time_series(args.result_directory)
+        output=export_openfoam_time_series_csv(
+            series,
+            args.output,
+            case_id=args.case_id,
+            field=args.field,
+        )
+        print(dumps_strict_json({
+            "status":"descriptive_time_series_exported",
+            "output":str(output),
+            "case_id":args.case_id,
+            "field":args.field,
+            "row_count":sum(
+                row["case_id"]==args.case_id and row["field"]==args.field
+                for row in series["rows"]
+            ),
+            "integrity_status":series["integrity_status"],
+            "scientific_validation":"BLOCKED",
+            "solver_time_units":"not_asserted",
+        }))
         return 0
     if args.command=="sync-case":
         case=Path(args.case_directory).resolve(strict=True)
@@ -310,3 +427,4 @@ def main():
 
 if __name__=="__main__":
     sys.exit(main())
+

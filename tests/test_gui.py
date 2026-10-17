@@ -1313,6 +1313,13 @@ def test_window_title_marks_unsaved_editor_changes():
         def get(self):
             return self.value
 
+        def set(self, value):
+            self.value = value
+
+    class Label:
+        def configure(self, **kwargs):
+            self.style = kwargs.get("style")
+
     class Text:
         def __init__(self, value):
             self.value = value
@@ -1338,15 +1345,29 @@ def test_window_title_marks_unsaved_editor_changes():
     app._editor_analysis_id = "a"
     app.name_var = Value("Demo")
     app.description_var = Value("")
+    app.document_status_var = Value("")
+    app.document_status_label = Label()
     app.input_text = Text('{"value": 1}')
     app._baseline_state = app._project_state_signature()
+    app._schedule_recovery_checkpoint = lambda: None
 
     app._update_title()
     assert not app.root.value.endswith("*")
+    assert "Demo" in app.root.value
+    assert app.document_status_var.get() == "Not saved"
+    assert app.document_status_label.style == "CX.Document.Unsaved.TLabel"
+
+    app.project_path = Path("demo.cleanroomx.json")
+    app._update_title()
+    assert "demo.cleanroomx.json" in app.root.value
+    assert app.document_status_var.get() == "Saved"
+    assert app.document_status_label.style == "CX.Document.Saved.TLabel"
 
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+    assert app.document_status_var.get() == "Modified"
+    assert app.document_status_label.style == "CX.Document.Modified.TLabel"
 
 def test_dirty_title_debounces_recovery_checkpoint():
     class Root:

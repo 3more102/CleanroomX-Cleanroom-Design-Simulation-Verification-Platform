@@ -164,6 +164,7 @@ def dumps_strict_json(
     *,
     indent: int | None = 2,
     sort_keys: bool = False,
+    separators: tuple[str, str] | None = None,
 ) -> str:
     """Serialize CLI results as standards-compliant JSON with no NaN/Infinity."""
     try:
@@ -172,6 +173,7 @@ def dumps_strict_json(
             snapshot,
             indent=indent,
             sort_keys=sort_keys,
+            separators=separators,
             ensure_ascii=False,
             allow_nan=False,
         )

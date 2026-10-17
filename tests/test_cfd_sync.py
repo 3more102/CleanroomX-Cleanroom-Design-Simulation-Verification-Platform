@@ -5,7 +5,9 @@ import shutil
 import pytest
 
 from cleanroomx.cfd_sync import SyncError, synchronize_openfoam_vtk_once
+from cleanroomx import cfd_pipeline_cli
 from cleanroomx.cfd_pipeline_cli import build_parser
+from cleanroomx.proofgraph_openfoam import build_openfoam_sync_proofgraph
 
 
 def _make_grid(vtk, velocity, contaminant, pressure=2.5):
@@ -94,6 +96,14 @@ def test_sync_waits_for_stable_vtk_then_imports_atomically_and_resumes(tmp_path)
     resumed = synchronize_openfoam_vtk_once(source, output, **kwargs)
     assert resumed["counts"]["imported"] == 1
     assert snapshot_path.read_bytes() == saved_bytes
+
+    graph = build_openfoam_sync_proofgraph(output).to_dict()
+    assert {
+        item["requirement_id"]: item["status"] for item in graph["verdicts"]
+    } == {
+        "OPENFOAM-SYNC-INTEGRITY": "pass",
+        "OPENFOAM-SCIENTIFIC-VALIDATION": "not_checked",
+    }
 
 
 def test_sync_refuses_old_state_schema_without_relabeling_saved_summaries(tmp_path):
@@ -203,6 +213,56 @@ def test_sync_cli_does_not_assume_vtk_array_t_is_contaminant():
     assert args.contaminant_array is None
 
 
+def test_watch_cli_quiet_unchanged_emits_only_new_scan_state(monkeypatch, capsys):
+    reports = [
+        {"scan_time": "1", "discovered_results": 1, "counts": {"pending": 1}, "imported": []},
+        {"scan_time": "2", "discovered_results": 1, "counts": {"pending": 1}, "imported": []},
+        {
+            "scan_time": "3",
+            "discovered_results": 1,
+            "counts": {"imported": 1},
+            "imported": [{"relative_path": "100/case.vtk", "source_sha256": "a" * 64, "status": "imported"}],
+        },
+    ]
+
+    def fake_watch(_source, _output, *, on_scan, **_options):
+        for report in reports:
+            on_scan(report)
+
+    monkeypatch.setattr(cfd_pipeline_cli, "watch_openfoam_vtk", fake_watch)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cleanroomx-cfd-pipeline",
+            "sync-vtk",
+            "/tmp/VTK",
+            "/tmp/results",
+            "--simulation-id",
+            "live-1",
+            "--configuration-file",
+            "/tmp/manifest.json",
+            "--quiet-unchanged",
+        ],
+    )
+
+    assert cfd_pipeline_cli.main() == 0
+    output = capsys.readouterr().out
+    decoder = json.JSONDecoder()
+    emitted = []
+    offset = 0
+    while offset < len(output):
+        while offset < len(output) and output[offset].isspace():
+            offset += 1
+        if offset == len(output):
+            break
+        report, offset = decoder.raw_decode(output, offset)
+        emitted.append(report)
+
+    assert len(emitted) == 2
+    assert emitted[0]["counts"] == {"pending": 1}
+    assert emitted[1]["imported"][0]["relative_path"] == "100/case.vtk"
+
+
 @pytest.mark.parametrize("field_map", [
     {"schema_version": "wrong", "fields": {}},
     {"schema_version": "cleanroomx.cfd-vtk-field-map.v1", "fields": {
@@ -284,9 +344,13 @@ def test_sync_deduplicates_byte_identical_time_exports(tmp_path):
     state = json.loads((output / "sync-state.json").read_text(encoding="utf-8"))
     duplicate_records = [record for record in state["records"].values() if record["status"] == "duplicate"]
     assert duplicate_records[0]["duplicate_of"] == "100/internal.vtu"
+    graph = build_openfoam_sync_proofgraph(output).to_dict()
+    verdicts = {item["requirement_id"]: item["status"] for item in graph["verdicts"]}
+    assert verdicts["OPENFOAM-SYNC-INTEGRITY"] == "pass"
 
 
 def test_sync_enforces_source_file_limits_before_import(tmp_path):
     source, _, _, output, kwargs = _case(tmp_path)
     with pytest.raises(SyncError, match="file limit"):
         synchronize_openfoam_vtk_once(source, output, max_file_bytes=1, **kwargs)
+

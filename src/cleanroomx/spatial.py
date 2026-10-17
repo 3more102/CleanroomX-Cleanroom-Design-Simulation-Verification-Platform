@@ -1971,11 +1971,52 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_inspector_visible(False),
         )
         self._inspector_close_button.pack(side="right")
-        ttk.Label(
+        self._inspector_selection_label = ttk.Label(
             inspector,
             textvariable=self._selection_var,
-            wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            wraplength=260,
+        )
+        self._inspector_selection_label.pack(fill="x", pady=(3, 8))
+
+        inspector_footer = ttk.Frame(inspector)
+        inspector_footer.pack(side="bottom", fill="x", pady=(4, 0))
+        self._apply_properties_button = ttk.Button(
+            inspector_footer,
+            text="Apply properties",
+            style="CX.Primary.TButton",
+            command=self.apply_properties,
+        )
+        self._apply_properties_button.pack(anchor="e", pady=(2, 6))
+        property_view = ttk.Frame(inspector)
+        property_view.pack(fill="both", expand=True)
+        self._inspector_canvas = tk.Canvas(
+            property_view,
+            background=self._theme_palette["background"],
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self._inspector_canvas.pack(side="left", fill="both", expand=True)
+        self._inspector_scrollbar = ttk.Scrollbar(
+            property_view,
+            orient="vertical",
+            command=self._inspector_canvas.yview,
+        )
+        self._inspector_scrollbar.pack(side="right", fill="y")
+        self._inspector_canvas.configure(
+            yscrollcommand=self._inspector_scrollbar.set
+        )
+        self._inspector_content = ttk.Frame(self._inspector_canvas)
+        self._inspector_window = self._inspector_canvas.create_window(
+            (0, 0),
+            window=self._inspector_content,
+            anchor="nw",
+        )
+        self._inspector_content.bind(
+            "<Configure>", self._update_inspector_scrollregion, add="+"
+        )
+        self._inspector_canvas.bind(
+            "<Configure>", self._resize_inspector_content, add="+"
+        )
 
         property_groups = (
             (
@@ -2015,7 +2056,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(self._inspector_content, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -2033,16 +2074,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                         side="left", padx=(4, 0)
                     )
                 self._property_rows[key] = row
-        ttk.Button(
-            inspector,
-            text="Apply properties",
-            command=self.apply_properties,
-        ).pack(anchor="e", pady=(2, 6))
-        ttk.Separator(inspector, orient="horizontal").pack(fill="x", pady=5)
-        ttk.Label(inspector, textvariable=self._sync_var, wraplength=310).pack(
-            fill="x", pady=(3, 0)
+        ttk.Separator(self._inspector_content, orient="horizontal").pack(
+            fill="x", pady=5
         )
-
+        self._inspector_sync_label = ttk.Label(
+            self._inspector_content,
+            textvariable=self._sync_var,
+            wraplength=260,
+        )
+        self._inspector_sync_label.pack(fill="x", pady=(3, 6))
         self._apply_workspace_mode()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
@@ -2086,6 +2126,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+        self._bind_inspector_scroll(self._inspector_canvas)
 
     def _apply_workspace_mode(self) -> None:
         mode = self._workspace_mode.get()
@@ -2109,10 +2150,43 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._workspace_mode.set(mode)
         self._apply_workspace_mode()
 
+    def _update_inspector_scrollregion(self, _event=None) -> None:
+        self._inspector_canvas.configure(
+            scrollregion=self._inspector_canvas.bbox("all")
+        )
+
+    def _resize_inspector_content(self, event: tk.Event) -> None:
+        width = max(1, int(event.width))
+        self._inspector_canvas.itemconfigure(self._inspector_window, width=width)
+        wraplength = max(140, width - 18)
+        self._inspector_selection_label.configure(wraplength=wraplength)
+        self._inspector_sync_label.configure(wraplength=wraplength)
+
+    def _bind_inspector_scroll(self, widget: tk.Misc) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_inspector_mousewheel, add="+")
+        for child in widget.winfo_children():
+            self._bind_inspector_scroll(child)
+
+    def _on_inspector_mousewheel(self, event: tk.Event) -> str | None:
+        delta = int(getattr(event, "delta", 0) or 0)
+        if delta:
+            steps = max(1, abs(delta) // 120)
+            direction = -1 if delta > 0 else 1
+        else:
+            button = getattr(event, "num", None)
+            if button not in (4, 5):
+                return None
+            steps = 1
+            direction = -1 if button == 4 else 1
+        self._inspector_canvas.yview_scroll(direction * steps, "units")
+        return "break"
+
     def apply_theme(self, value: str, *, redraw: bool = True) -> None:
         """Apply presentation colors without modifying spatial/project state."""
         self._theme_palette = theme_palette(value)
         palette = self._theme_palette
+        self._inspector_canvas.configure(background=palette["background"])
         self.canvas_2d.configure(
             background=palette["canvas_2d"],
             highlightbackground=palette["border"],
@@ -3646,8 +3720,46 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.show_inspector()
         entry = self._property_entries.get(key)
         if entry is not None and entry.winfo_manager():
+            self._reveal_property_entry(entry)
             entry.focus_set()
             entry.selection_range(0, "end")
+
+    def _reveal_property_entry(self, entry: tk.Widget) -> None:
+        """Scroll a focused field into view inside the inspector canvas."""
+        canvas = self._inspector_canvas
+        try:
+            canvas.update_idletasks()
+            region = canvas.bbox("all")
+            if region is None:
+                return
+
+            region_height = int(region[3] - region[1])
+            viewport_height = int(canvas.winfo_height())
+            if region_height <= viewport_height or viewport_height <= 0:
+                return
+
+            canvas_top = int(canvas.winfo_rooty())
+            canvas_bottom = canvas_top + viewport_height
+            entry_top = int(entry.winfo_rooty())
+            entry_bottom = entry_top + int(entry.winfo_height())
+            margin = min(3, max(0, (viewport_height - entry.winfo_height()) // 2))
+            if entry_top < canvas_top:
+                scroll_delta = entry_top - canvas_top - margin
+            elif entry_bottom > canvas_bottom:
+                scroll_delta = entry_bottom - canvas_bottom + margin
+            else:
+                return
+
+            current_offset = int(canvas.yview()[0] * region_height)
+            max_offset = max(0, region_height - viewport_height)
+            target_offset = min(
+                max(0, current_offset + scroll_delta),
+                max_offset,
+            )
+            canvas.yview_moveto(target_offset / region_height)
+            canvas.update_idletasks()
+        except tk.TclError:
+            return
 
     def _build_context_menu_2d(self, hit: _Hit) -> tk.Menu:
         menu = tk.Menu(self, tearoff=False)

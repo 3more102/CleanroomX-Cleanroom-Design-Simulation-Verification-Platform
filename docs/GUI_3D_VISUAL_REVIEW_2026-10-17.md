@@ -201,3 +201,25 @@ export, click **Focus 3D**, then use **Views → Export current 3D view… (SVG)
 This is an image of the existing design GUI, not CFD visualization data
 provenance, numerical solver output, a manufacturing drawing, or an
 ISO 14644-1 / EU GMP compliance certificate.
+
+## Reusable 3D camera bookmarks
+
+In **Design → 3D → Views → Camera bookmarks**, choose **Save current
+as View 1 / 2 / 3**. After orbiting, zooming, panning or switching between
+orthographic and perspective views, use **Recall View 1 / 2 / 3** to return
+to the saved camera. Empty slots are visibly disabled.
+
+Bookmarks capture only azimuth, elevation, zoom, screen pan and projection.
+They do **not** capture a CFD result, alter room/device geometry, take
+an undo/redo action or infer cleanroom classification. Each slot is an
+independent copy. Bookmarks belong to the active project in the current
+application session and are cleared when another project object is loaded.
+They are intentionally **not serialized** into the project file.
+
+Use these to prepare consistent camera angles, then export individual
+design illustrations from **Views → Export current 3D view… (SVG)**.
+SVG remains a presentation image, not an engineering verification record.
+
+Regression tests cover capture/recall, copying, invalid slots, invalid
+camera parameters, stored-view isolation, and actual Tk menu state when
+the project is reloaded.

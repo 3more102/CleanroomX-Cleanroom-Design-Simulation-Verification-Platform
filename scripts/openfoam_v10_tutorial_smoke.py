@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import os
 import re
 import shutil
 import subprocess
@@ -99,7 +101,8 @@ def validate_receipt(receipt: dict[str, Any]) -> None:
     for name, stage in stages.items():
         if (
             type(stage) is not dict
-            or stage.get("returncode") != 0
+            or type(stage.get("returncode")) is not int
+            or stage["returncode"] != 0
             or type(stage.get("log_sha256")) is not str
             or _HASH.fullmatch(stage["log_sha256"]) is None
         ):
@@ -120,6 +123,21 @@ def validate_receipt(receipt: dict[str, Any]) -> None:
         or _HASH.fullmatch(sync["manifest_sha256"]) is None
     ):
         raise ValueError("CleanroomX did not synchronize a hash-bound nonzero-time result")
+    environment = receipt.get("environment")
+    if (
+        type(environment) is not dict
+        or environment.get("WM_PROJECT") != "OpenFOAM"
+        or environment.get("WM_PROJECT_VERSION") != "10"
+        or not isinstance(environment.get("openfoam_package_version"), str)
+        or not environment["openfoam_package_version"].strip()
+        or not isinstance(environment.get("simpleFoam_executable"), str)
+        or not environment["simpleFoam_executable"].strip()
+        or not isinstance(environment.get("foamToVTK_executable"), str)
+        or not environment["foamToVTK_executable"].strip()
+    ):
+        raise ValueError("Foundation v10 runtime identity is incomplete")
+    if not isinstance(receipt.get("solver_build"), str) or not receipt["solver_build"].strip():
+        raise ValueError("foamToVTK did not report a solver build identity")
     if receipt.get("scientific_validation") != "BLOCKED":
         raise ValueError("tutorial evidence cannot declare physical validation")
 
@@ -144,12 +162,28 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if actual_commit != UPSTREAM_COMMIT:
         raise ValueError(f"expected pinned source {UPSTREAM_COMMIT}, got {actual_commit}")
 
-    source_case = (upstream_root / UPSTREAM_CASE).resolve(strict=True)
-    source_mesh = (upstream_root / UPSTREAM_MESH).resolve(strict=True)
+    source_case_candidate = upstream_root / UPSTREAM_CASE
+    source_mesh_candidate = upstream_root / UPSTREAM_MESH
+    if source_case_candidate.is_symlink() or source_mesh_candidate.is_symlink():
+        raise ValueError("pinned upstream inputs must not be symbolic links")
+    source_case = source_case_candidate.resolve(strict=True)
+    source_mesh = source_mesh_candidate.resolve(strict=True)
     if not source_case.is_dir() or not source_mesh.is_file():
         raise ValueError("pinned upstream tutorial or its mesh dictionary is missing")
-    if source_case.is_symlink() or source_mesh.is_symlink():
-        raise ValueError("pinned upstream inputs must not be symbolic links")
+    environment = {
+        "WM_PROJECT": os.environ.get("WM_PROJECT"),
+        "WM_PROJECT_VERSION": os.environ.get("WM_PROJECT_VERSION"),
+        "openfoam_package_version": subprocess.run(
+            ["dpkg-query", "-W", "-f=${Version}", "openfoam10"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip(),
+        "simpleFoam_executable": shutil.which("simpleFoam"),
+        "foamToVTK_executable": shutil.which("foamToVTK"),
+    }
+    if environment["WM_PROJECT"] != "OpenFOAM" or environment["WM_PROJECT_VERSION"] != "10":
+        raise ValueError("runtime environment is not OpenFOAM Foundation v10")
 
     case_directory = args.case_directory
     result_directory = args.result_directory
@@ -252,6 +286,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "source_mesh_dictionary_sha256": _sha256(source_mesh),
         "solver_release": "OpenFOAM Foundation v10",
         "solver_build": None,
+        "environment": environment,
         "case_configuration_sha256": configuration_hash,
         "stages": stages,
         "mesh_ok": mesh_ok,
@@ -275,6 +310,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if sync_manifest_path is not None and sync_manifest_path.is_file():
         manifest = json.loads(sync_manifest_path.read_text(encoding="utf-8"))
         receipt["solver_build"] = manifest.get("solver_build")
+        receipt["environment"]["foamToVTK_executable"] = manifest.get("foamToVTK_executable")
     try:
         if (
             mesh_stage["returncode"] == 0

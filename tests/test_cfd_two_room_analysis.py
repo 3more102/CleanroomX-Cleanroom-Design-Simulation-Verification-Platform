@@ -21,11 +21,25 @@ def _fixture(tmp_path, monkeypatch):
     payload = b"# probe time values\n0 3 1\n1 4 1\n"
     probe.write_bytes(payload)
     probe_sha = hashlib.sha256(payload).hexdigest()
+    log = case / "simpleFoam.log"
+    log_raw = (
+        "Time = 1\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 0.01, Final residual = 0.001, No Iterations 2\n"
+        "GAMG: Solving for p, Initial residual = 0.025, Final residual = 0.002, No Iterations 3\n"
+        "time step continuity errors : sum local = 0.0001, global = -0.00001, cumulative = 0\n"
+        "Time = 2\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 0.008, Final residual = 0.0008, No Iterations 2\n"
+        "GAMG: Solving for p, Initial residual = 0.020, Final residual = 0.0015, No Iterations 3\n"
+        "End\n"
+    ).encode("utf-8")
+    log.write_bytes(log_raw)
+    log_sha = hashlib.sha256(log_raw).hexdigest()
     receipt = tmp_path / "receipt.json"
     document = {
         "receipt_sha256": "a" * 64,
         "manifest_sha256": "b" * 64,
         "vtk_assets_sha256": {},
+        "stages": [{"command": "simpleFoam", "log_path": "simpleFoam.log", "log_sha256": log_sha}],
         "pressure_probe": {
             "path": "postProcessing/roomPressureProbes/150/p",
             "sha256": probe_sha,
@@ -75,13 +89,15 @@ def test_receipt_values_are_recomputed_from_actual_probe_file(tmp_path, monkeypa
     assert result["solver_convergence"] == "NOT_ASSESSED"
     assert result["scientific_validation"] == "BLOCKED"
     assert result["vtk_fields"]["status"] == "UNAVAILABLE"
+    assert result["residual_history"]["fields"]["p"]["initial"] == pytest.approx([0.025, 0.020])
+    assert result["residual_history"]["continuity"][0]["global"] == pytest.approx(-0.00001)
 
 
 def test_export_creates_actual_graphs_and_refuses_overwrite(tmp_path, monkeypatch):
     case, receipt, _ = _fixture(tmp_path, monkeypatch)
     output = tmp_path / "analysis"
     report = analysis.export_two_room_analysis(case, receipt, output)
-    assert sorted(report["graphs"]) == ["inlet_outlet_flux.svg", "pressure_probe_history.svg"]
+    assert sorted(report["graphs"]) == ["inlet_outlet_flux.svg", "pressure_probe_history.svg", "simplefoam_residual_Ux.svg", "simplefoam_residual_p.svg"]
     assert report["scientific_validation"] == "BLOCKED"
     data = json.loads((output / "analysis.json").read_text(encoding="utf-8"))
     assert data["pressure"]["time_axis"].startswith("OpenFOAM solver indices")
@@ -127,3 +143,29 @@ def test_cli_parser_exposes_analysis_command():
     args = build_parser().parse_args(["two-room-analyze", "case", "receipt.json", "graphs"])
     assert args.command == "two-room-analyze"
     assert args.output_directory == "graphs"
+
+
+def test_solver_log_change_fails_after_receipt_gate(tmp_path, monkeypatch):
+    case, receipt, _ = _fixture(tmp_path, monkeypatch)
+    (case / "simpleFoam.log").write_text("fake residual\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="simpleFoam log changed"):
+        analysis.export_two_room_analysis(case, receipt, tmp_path / "graphs")
+
+
+def test_nonfinite_residual_markers_retained_without_convergence_claim(tmp_path, monkeypatch):
+    case, receipt, _ = _fixture(tmp_path, monkeypatch)
+    log = case / "simpleFoam.log"
+    content = log.read_text(encoding="utf-8") + "\nFOAM FATAL ERROR\n"
+    log.write_text(content, encoding="utf-8")
+    doc = json.loads(receipt.read_text(encoding="utf-8"))
+    doc["stages"][0]["log_sha256"] = hashlib.sha256(log.read_bytes()).hexdigest()
+    receipt.write_text(json.dumps(doc), encoding="utf-8")
+    result = analysis.analyze_two_room_evidence(case, receipt)
+    assert result["residual_history"]["fatal_or_nonfinite_marker"] is True
+    assert result["residual_history"]["solver_convergence"] == "NOT_ASSESSED"
+
+
+def test_residual_chart_never_uses_physical_time():
+    svg = analysis._residual_svg("Ux", {"initial": [0.1, 0.05], "final": [0.01, 0.005]})
+    assert "Per-field solve number" in svg
+    assert "physical time" not in svg.lower()

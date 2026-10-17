@@ -93,3 +93,83 @@ into the project model.
 The shortcuts do not change rooms, pressure fields, or CFD evidence.
 The regression suite checks a readable full-width 3D view separately from
 small-view legend layout; failures are not treated as proof of CFD validation.
+
+## Detailed inspector and viewport recovery
+
+The next iteration addresses a measured regression in the prior development
+branch on Linux Python 3.13: the 3D canvas was only **1037×25 px** in a real Tk
+test. The old Properties sidebar stacked all editable sections at their full
+natural height and competed vertically with the viewer.
+
+The Properties pane now contains a vertically scrollable field editor with a
+constant-height canvas. The **Apply properties** button remains outside the
+scrolling area. A read-only selection summary reports exact floor area,
+geometric room volume and the number of placed devices; all values come from
+existing design geometry. A **Fit** button frames the selected room/device.
+
+The full-width action toolbar also keeps **Validate** visible at 1050×680.
+The prior compact legend, 3D camera shortcuts and zone-color display stay
+unchanged.
+
+The 3D HUD now displays:
+- For rooms: name, project classification, L/W/H dimensions, computed floor
+  area, computed geometric volume, room-device count and the *supplied* overlay.
+- For devices: name, type, assigned room, X/Y/Z placement and available
+  dimensions. It does not infer CFD supply rate, air-change rate or
+  verified cleanliness from placement geometry.
+- Hover can temporarily inspect a different visible room/device; leaving
+  the canvas restores the selected object's information.
+
+### Regression and acceptance
+
+- Check minimum 1050×680 window: **Validate**, **Pull from analysis**, and
+  **Push to analysis** remain mapped; 3D camera and a useful viewport remain
+  available; property rows scroll with the mouse wheel.
+- Check real Tk tests on supported Python 3.11–3.13 and full CLI suite.
+- Changing viewport, scrolling the inspector, using Fit, and selecting a
+  device must not alter the saved CAD room geometry or CFD evidence.
+- Exact area and volume use lengths in meters from the canonical layout,
+  not OpenFOAM mesh cells or any solver data.
+
+### Focus 3D when working at 1050×680
+
+The lower Output / Verification notebook can consume the remaining vertical
+space if users previously dragged its sash upwards or saved a small main-window
+layout. The application already provides a reversible **Focus Workspace** mode.
+A dedicated **Focus 3D** button now opens the 3D-only view and toggles that
+existing mode. On first use it temporarily hides the Project Navigator,
+Output/Verification panel, and Properties pane to prioritize model inspection,
+then fits the visible model into the viewport. Press the button again to
+restore the prior panel visibility.
+
+For detailed property editing instead, show the Inspector and optionally hide
+Output/Verification from the View menu. The Inspector is scrollable. Small,
+intentionally minimized canvases below the legibility thresholds do not draw
+overlapping labels or HUD cards; focused viewport tests must allocate enough
+pixels to inspect those features.
+
+This mode does not save new pressure results, silently discard edits, or
+overwrite the model. Focused Tk tests explicitly exercise the reversible
+panel layout instead of assuming a 25-pixel canvas can display a full legend.
+
+### Searchable 3D scene finder
+
+From the 3D **Views** menu, choose **Find room or device…** (keyboard
+shortcut **/** after clicking the canvas). The floating window searches all
+room IDs/names, device types, device IDs/names and assigned room names.
+Double-click an object or press **Open and fit** to select and fit it in the
+current 3D view; Esc closes the finder. Results are sorted deterministically,
+rooms first, and limited to 250 rows for responsive large projects.
+
+This is an inspection action: it changes only selection and camera view.
+It does not create airflow values, alter geometry, save pressure measurements,
+or automatically assign rooms to unassigned equipment.
+
+### Verification boundary
+
+The last observed real-Tk failure on the predecessor PR resulted from a
+deliberately narrow/short viewport that remained below the 3D HUD threshold.
+The separate **Focus 3D** mode explicitly allocates visible canvas space;
+the scrollable Properties editor is tested with the Inspector shown and
+Output/Verification hidden. Do not treat tiny canvases as permission to
+draw illegible text; the dedicated compact mode stays intentional.

@@ -1060,6 +1060,7 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
 
 def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
     """The design-zone tint never changes stored geometry or verification."""
+    app.set_focus_workspace(True)
     workspace = app.spatial_workspace
     workspace.set_workspace_mode("3d")
     app.root.update()
@@ -1091,9 +1092,9 @@ def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
 
 
 def test_3d_room_labels_are_compact_nonoverlapping_and_inspectable(app):
-    workspace = app.spatial_workspace
     app.root.geometry("1440x900")
-    workspace.set_inspector_visible(False)
+    app.set_focus_workspace(True)
+    workspace = app.spatial_workspace
     workspace.set_workspace_mode("3d")
     app.root.update()
     workspace.fit_3d()
@@ -1167,3 +1168,116 @@ def test_keyboard_3d_camera_actions_keep_project_geometry_unchanged(app):
     assert workspace.canvas_3d.bind("<KeyPress-f>")
     assert workspace.canvas_3d.bind("<KeyPress-r>")
     assert workspace.canvas_3d.bind("<KeyPress-i>")
+
+
+def test_scrollable_inspector_keeps_3d_canvas_and_apply_accessible(app):
+    workspace = app.spatial_workspace
+    app.root.geometry("1050x680")
+    app.hide_output_panel()
+    workspace.set_inspector_visible(True)
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    inspector = workspace._inspector_canvas
+    assert workspace.inspector_visible(), "Inspector pane must be registered"
+    assert inspector.winfo_ismapped(), (
+        f"parent={workspace._inspector_frame.winfo_ismapped()}, "
+        f"pane={workspace._inspector_frame.winfo_width()}x"
+        f"{workspace._inspector_frame.winfo_height()}, "
+        f"body={workspace._body.winfo_width()}x"
+        f"{workspace._body.winfo_height()}, "
+        f"canvas={inspector.winfo_width()}x{inspector.winfo_height()}, "
+        f"notebook={app.notebook.select()}, active={workspace}"
+    )
+    assert inspector.winfo_height() > 50
+    assert workspace.canvas_3d.winfo_height() > 70
+
+    workspace.select_item("room", workspace.layout["rooms"][0]["id"])
+    app.root.update()
+    before = copy.deepcopy(workspace.layout)
+    assert inspector.bbox("all") is not None
+    assert inspector.bbox("all")[3] > inspector.winfo_height()
+    assert workspace._on_inspector_wheel(
+        type("Wheel", (), {"num": None, "delta": -120})()
+    ) == "break"
+    assert float(inspector.yview()[0]) > 0
+    assert workspace.layout == before
+
+
+def test_3d_device_selection_has_details_without_fake_airflow(app):
+    app.root.geometry("1440x900")
+    app.set_focus_workspace(True)
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    device = workspace.layout["devices"][0]
+    workspace.selected = _Hit("device", device["id"])
+    workspace._hovered_3d = None
+    workspace._draw_3d()
+    canvas = workspace.canvas_3d
+    assert canvas.find_withtag("room_details_hud")
+    labels = [
+        canvas.itemcget(item, "text")
+        for item in canvas.find_withtag("room_details_hud")
+        if canvas.type(item) == "text"
+    ]
+    assert "SELECTED DEVICE" in labels
+    assert any("Placement only" in label for label in labels)
+
+
+def test_focus_3d_button_toggles_existing_reversible_layout_mode(app):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout["rooms"])
+    assert workspace._on_focus_requested is not None
+    workspace.focus_3d_workspace()
+    app.root.update()
+    assert app.focus_workspace_var.get()
+    assert workspace._workspace_mode.get() == "3d"
+    assert not app.output_panel_visible_var.get()
+    assert not workspace.inspector_visible()
+    workspace.focus_3d_workspace()
+    app.root.update()
+    assert not app.focus_workspace_var.get()
+    assert workspace.layout["rooms"] == before
+
+
+def test_3d_scene_finder_searches_rooms_and_selects_devices_without_model_edits(app):
+    workspace = app.spatial_workspace
+    app.set_focus_workspace(True)
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    before_rooms = copy.deepcopy(workspace.layout["rooms"])
+    before_devices = copy.deepcopy(workspace.layout["devices"])
+
+    workspace.open_scene_finder()
+    app.root.update()
+    window = workspace._scene_finder_window
+    assert window is not None and window.winfo_exists()
+
+    def descend(parent):
+        for child in parent.winfo_children():
+            yield child
+            yield from descend(child)
+
+    widgets = list(descend(window))
+    search = next(widget for widget in widgets if isinstance(widget, ttk.Entry))
+    tree = next(widget for widget in widgets if isinstance(widget, ttk.Treeview))
+    search.delete(0, "end")
+    search.insert(0, "supply")
+    app.root.update()
+    device_rows = [
+        iid for iid in tree.get_children() if iid.startswith("device:")
+    ]
+    assert device_rows
+    selected_iid = device_rows[0]
+    tree.selection_set(selected_iid)
+    open_button = next(
+        widget for widget in widgets
+        if isinstance(widget, ttk.Button) and widget.cget("text") == "Open and fit"
+    )
+    open_button.invoke()
+    app.root.update()
+    assert not window.winfo_exists()
+    assert workspace.selected == _Hit("device", selected_iid.split(":", 1)[1])
+    assert workspace.layout["rooms"] == before_rooms
+    assert workspace.layout["devices"] == before_devices
+    assert workspace.canvas_3d.bind("<KeyPress-slash>")

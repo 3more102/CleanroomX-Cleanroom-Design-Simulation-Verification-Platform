@@ -29,9 +29,9 @@ def _short(value: Any, limit: int) -> str:
 
 def room_hud_bounds(width: int, height: int, *, active: bool) -> tuple[int, int, int, int] | None:
     """Reserve space for the floating inspector only on a readable viewport."""
-    if not active or width < 530 or height < 235:
+    if not active or width < 530 or height < 275:
         return None
-    return width - 306, 12, width - 12, 136
+    return width - 324, 12, width - 12, 180
 
 
 def place_room_label_chips(
@@ -121,20 +121,48 @@ def draw_room_label_chips(
     canvas.tag_raise("room_label3d")
 
 
-def draw_room_details_hud(
-    canvas: Any, room: dict | None, *, width: int, height: int,
-    selected: bool, overlay_title: str, overlay_label: str,
-) -> tuple[int, int, int, int] | None:
-    """Show existing room and overlay values; never manufacture missing data."""
-    bounds = room_hud_bounds(width, height, active=room is not None)
-    if room is None or bounds is None:
-        return None
+def room_area_volume(room: dict) -> tuple[float, float]:
+    """Exact dimensions-derived quantities, not solver predictions."""
+    length = float(room["length_m"])
+    width = float(room["width_m"])
+    height = float(room["height_m"])
+    if not all(math.isfinite(value) and value > 0 for value in (
+        length, width, height,
+    )):
+        raise ValueError("Room dimensions must be finite and positive")
+    return length * width, length * width * height
+
+
+def _draw_details_card(
+    canvas: Any, bounds: tuple[int, int, int, int],
+    rows: list[tuple[str, str]],
+) -> None:
     x0, y0, x1, y1 = bounds
     tags = ("room_details_hud",)
     canvas.create_rectangle(
         x0, y0, x1, y1,
         fill="#102235", outline="#4e6c8c", width=1, tags=tags,
     )
+    for index, (text, color) in enumerate(rows[:7]):
+        canvas.create_text(
+            x0 + 10, y0 + 9 + index * 23, text=_short(text, 46),
+            anchor="nw", fill=color,
+            font=("TkDefaultFont", 9, "bold" if index < 2 else "normal"),
+            tags=tags,
+        )
+    canvas.tag_raise("room_details_hud")
+
+
+def draw_room_details_hud(
+    canvas: Any, room: dict | None, *, width: int, height: int,
+    selected: bool, overlay_title: str, overlay_label: str,
+    device_count: int | None = None,
+) -> tuple[int, int, int, int] | None:
+    """Show room geometry, design inputs, and supplied engineering data."""
+    bounds = room_hud_bounds(width, height, active=room is not None)
+    if room is None or bounds is None:
+        return None
+    area, volume = room_area_volume(room)
     rows = [
         ("SELECTED ROOM" if selected else "ROOM UNDER CURSOR", "#70d8f8"),
         (_short(room.get("name", "Room"), 36), "#f4f8ff"),
@@ -146,15 +174,50 @@ def draw_room_details_hud(
         f"L {room['length_m']:g}  W {room['width_m']:g}  H {room['height_m']:g} m",
         "#b8cce0",
     ))
+    rows.append((f"Floor area {area:g} m²  |  Volume {volume:g} m³", "#b8cce0"))
+    if device_count is not None:
+        rows.append((f"Placed devices: {device_count}", "#b8cce0"))
+    # Overlay values may come from a project design or a real analysis, so
+    # never silently call these values verified or measured.
     if overlay_title.strip().lower() != "none":
-        evidence = _short(overlay_label or "No result values available", 39)
+        evidence = _short(overlay_label or "No result values available", 31)
         rows.append((_short(overlay_title, 12) + ": " + evidence, "#e3bd7c"))
-    for index, (text, color) in enumerate(rows[:5]):
-        canvas.create_text(
-            x0 + 10, y0 + 10 + index * 23, text=text, anchor="nw",
-            fill=color,
-            font=("TkDefaultFont", 9, "bold" if index < 2 else "normal"),
-            tags=tags,
-        )
-    canvas.tag_raise("room_details_hud")
+    _draw_details_card(canvas, bounds, rows)
+    return bounds
+
+
+def draw_device_details_hud(
+    canvas: Any, device: dict | None, *, width: int, height: int,
+    selected: bool, room_name: str | None,
+) -> tuple[int, int, int, int] | None:
+    """Inspect a placed device without generating airflows or solver values."""
+    bounds = room_hud_bounds(width, height, active=device is not None)
+    if device is None or bounds is None:
+        return None
+    kind = str(device.get("type") or "device").replace("_", " ").title()
+    rows = [
+        ("SELECTED DEVICE" if selected else "DEVICE UNDER CURSOR", "#70d8f8"),
+        (_short(device.get("name") or kind, 36), "#f4f8ff"),
+        (f"Type: {kind}", "#b8cce0"),
+        ("Room: " + _short(room_name or "Unassigned", 30), "#b8cce0"),
+    ]
+    coords = (
+        device.get("x_m"), device.get("y_m"), device.get("z_m")
+    )
+    if all(isinstance(value, (int, float)) and not isinstance(value, bool)
+           and math.isfinite(value) for value in coords):
+        rows.append((
+            f"X {coords[0]:g}   Y {coords[1]:g}   Z {coords[2]:g} m",
+            "#b8cce0",
+        ))
+    dimensions = [
+        f"{key[0].upper()} {device[key]:g}"
+        for key in ("width_m", "height_m")
+        if isinstance(device.get(key), (float, int))
+        and not isinstance(device[key], bool) and math.isfinite(device[key])
+    ]
+    if dimensions:
+        rows.append(("Size " + "  ".join(dimensions) + " m", "#b8cce0"))
+    rows.append(("Placement only — no CFD result inferred", "#e3bd7c"))
+    _draw_details_card(canvas, bounds, rows)
     return bounds

@@ -12,11 +12,14 @@ from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
+from .spatial_scene_finder import scene_entries
 from .spatial_3d_legibility import (
+    draw_device_details_hud,
     draw_room_details_hud,
     draw_room_label_chips,
     place_room_label_chips,
     room_hud_bounds,
+    room_area_volume,
 )
 from .spatial_3d_presentation import (
     draw_3d_reference,
@@ -1618,6 +1621,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_focus_requested: Callable[[], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1632,6 +1636,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_focus_requested = on_focus_requested
+        self._scene_finder_window: tk.Toplevel | None = None
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1755,6 +1761,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             modebar, text="Balance panels",
             command=self.balance_workspace_panes,
         ).pack(side="left", padx=2)
+        ttk.Button(
+            modebar, text="Focus 3D",
+            command=self.focus_3d_workspace,
+            state="normal" if self._on_focus_requested is not None else "disabled",
+        ).pack(side="left", padx=2)
 
         # Keep sync/actions on a second row so both operations remain visible
         # at the 1050 px laptop minimum. Never clip safety-critical actions.
@@ -1775,6 +1786,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             actionbar, text="Push to analysis",
             command=self._on_sync_requested,
         ).pack(side="left", padx=2)
+        ttk.Button(
+            actionbar, text="Validate",
+            command=self.report_validation,
+        ).pack(side="left", padx=(12, 2))
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
@@ -1794,9 +1809,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
         ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(10, 2))
-        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
-            side="left", padx=(10, 2)
-        )
         ttk.Label(viewbar, textvariable=self._validation_var).pack(
             side="right", padx=(10, 2)
         )
@@ -1905,6 +1917,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 label=label,
                 command=lambda p=preset: self.set_3d_view_preset(p),
             )
+        camera_menu.add_separator()
+        camera_menu.add_command(
+            label="Find room or device…  ( / )",
+            command=self.open_scene_finder,
+        )
         camera_button.pack(side="left", padx=(5, 2))
         ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
             side="left", padx=2
@@ -1995,6 +2012,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="PROPERTIES",
             style="CX.PanelHeader.TLabel",
         ).pack(side="left")
+        ttk.Button(
+            inspector_header, text="Fit", width=4,
+            command=self.fit_selected,
+        ).pack(side="right", padx=(4, 0))
         self._inspector_close_button = ttk.Button(
             inspector_header,
             text="×",
@@ -2004,10 +2025,50 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._inspector_close_button.pack(side="right")
         ttk.Label(
-            inspector,
-            textvariable=self._selection_var,
-            wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+            inspector, textvariable=self._selection_var,
+            wraplength=220,
+        ).pack(fill="x", pady=(3, 5))
+        self._selection_metrics_var = tk.StringVar(value="")
+        ttk.Label(
+            inspector, textvariable=self._selection_metrics_var,
+            wraplength=215,
+        ).pack(fill="x", pady=(0, 5))
+
+        # Fixed-height canvas keeps the numerous property inputs scrollable
+        # rather than forcing the full Design / 3D viewport to collapse.
+        scroll_host = ttk.Frame(inspector)
+        scroll_host.pack(fill="both", expand=True)
+        inspector_canvas = tk.Canvas(
+            scroll_host, borderwidth=0, highlightthickness=0,
+            width=230, height=230,
+        )
+        self._inspector_canvas = inspector_canvas
+        inspector_scrollbar = ttk.Scrollbar(
+            scroll_host, orient="vertical", command=inspector_canvas.yview,
+        )
+        inspector_canvas.configure(yscrollcommand=inspector_scrollbar.set)
+        inspector_scrollbar.pack(side="right", fill="y")
+        inspector_canvas.pack(side="left", fill="both", expand=True)
+        inspector_contents = ttk.Frame(inspector_canvas)
+        inspector_window_id = inspector_canvas.create_window(
+            0, 0, anchor="nw", window=inspector_contents,
+        )
+        inspector_contents.bind(
+            "<Configure>",
+            lambda _event: inspector_canvas.configure(
+                scrollregion=inspector_canvas.bbox("all"),
+            ),
+        )
+        inspector_canvas.bind(
+            "<Configure>",
+            lambda event: inspector_canvas.itemconfigure(
+                inspector_window_id, width=max(1, event.width),
+            ),
+        )
+        for widget in (inspector_canvas, inspector_contents):
+            widget.bind("<MouseWheel>", self._on_inspector_wheel)
+            widget.bind("<Button-4>", self._on_inspector_wheel)
+            widget.bind("<Button-5>", self._on_inspector_wheel)
 
         property_groups = (
             (
@@ -2047,7 +2108,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(inspector_contents, text=group_name, padding=(6, 4))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -2057,14 +2118,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 value_frame.pack(side="right")
                 var = tk.StringVar()
                 self._property_vars[key] = var
-                entry = ttk.Entry(value_frame, textvariable=var, width=16)
+                entry = ttk.Entry(value_frame, textvariable=var, width=11)
                 entry.pack(side="left")
                 self._property_entries[key] = entry
                 if unit:
-                    ttk.Label(value_frame, text=unit, width=4).pack(
-                        side="left", padx=(4, 0)
+                    ttk.Label(value_frame, text=unit, width=3).pack(
+                        side="left", padx=(2, 0)
                     )
                 self._property_rows[key] = row
+                for widget in (section, row, value_frame, entry):
+                    widget.bind("<MouseWheel>", self._on_inspector_wheel)
+                    widget.bind("<Button-4>", self._on_inspector_wheel)
+                    widget.bind("<Button-5>", self._on_inspector_wheel)
         ttk.Button(
             inspector,
             text="Apply properties",
@@ -2105,6 +2170,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<KeyPress-f>", lambda event: self._3d_key_command("fit"))
         self.canvas_3d.bind("<KeyPress-r>", lambda event: self._3d_key_command("reset"))
         self.canvas_3d.bind("<KeyPress-i>", lambda event: self._3d_key_command("iso"))
+        self.canvas_3d.bind("<KeyPress-slash>", self._on_scene_finder_shortcut)
         self.canvas_3d.bind("<Escape>", self._on_escape)
         self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
@@ -2141,6 +2207,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         # Reparenting a pane may leave the 3D canvas at its previous 1px
         # geometry until idle layout. Redraw after actual Tk geometry settles.
         self.after_idle(self._draw_3d)
+
+    def focus_3d_workspace(self) -> None:
+        """Toggle the app's existing focus mode for an unobstructed 3D canvas."""
+        self.set_workspace_mode("3d")
+        if self._on_focus_requested is not None:
+            self._on_focus_requested()
+        self.after_idle(self.fit_3d)
 
     def balance_workspace_panes(self) -> None:
         """Restore usable 2D/3D/inspector sash widths without changing design."""
@@ -2201,6 +2274,26 @@ class SpatialDesignWorkspace(ttk.Frame):
             body.forget(frame)
         state = "shown" if requested else "hidden"
         self._status_setter(f"Design Inspector {state}")
+        if requested:
+            # A restored Panedwindow may retain a sash at its far edge,
+            # leaving a present inspector with zero mapped width. Recover
+            # *only* collapsed panes; respect normal user-adjusted widths.
+            self.after_idle(self._ensure_inspector_reachable)
+
+    def _ensure_inspector_reachable(self) -> None:
+        if not self.inspector_visible():
+            return
+        self.update_idletasks()
+        width = self._body.winfo_width()
+        if width < 490:
+            return
+        pane_width = self._inspector_frame.winfo_width()
+        if pane_width >= 150:
+            return
+        target_width = min(330, max(235, int(width * 0.30)))
+        self._body.sashpos(0, max(230, width - target_width))
+        self.update_idletasks()
+        self.redraw()
 
     def toggle_inspector(self) -> None:
         self.set_inspector_visible(not self.inspector_visible())
@@ -2774,6 +2867,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._selection_metrics_var.set("")
             for key, var in self._property_vars.items():
                 var.set("")
                 row = self._property_rows.get(key)
@@ -2795,6 +2889,25 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            area, volume = room_area_volume(item)
+            device_count = sum(
+                device.get("room_id") == item["id"]
+                for device in self.layout["devices"]
+            )
+            self._selection_metrics_var.set(
+                f"Area {area:g} m²  ·  Volume {volume:g} m³"
+                f"  ·  {device_count} device(s)"
+            )
+        else:
+            kind = str(item.get("type") or "device").replace("_", " ").title()
+            self._selection_metrics_var.set(
+                f"{kind}  ·  X {item.get('x_m', 0):g} m"
+                f"  ·  Y {item.get('y_m', 0):g} m"
+            )
+        inspector_canvas = getattr(self, "_inspector_canvas", None)
+        if inspector_canvas is not None:
+            inspector_canvas.yview_moveto(0)
         room_fields = {
             "name",
             "x_m",
@@ -2833,6 +2946,21 @@ class SpatialDesignWorkspace(ttk.Frame):
                     row.pack_forget()
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+
+    def _on_inspector_wheel(self, event: tk.Event) -> str:
+        """Scroll property sections only, never modify geometry or field text."""
+        number = getattr(event, "num", None)
+        delta = getattr(event, "delta", 0)
+        if number == 4:
+            steps = -3
+        elif number == 5:
+            steps = 3
+        elif delta:
+            steps = -3 if delta > 0 else 3
+        else:
+            return "break"
+        self._inspector_canvas.yview_scroll(steps, "units")
+        return "break"
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -4049,21 +4177,40 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         view_width = max(1, canvas.winfo_width())
         view_height = max(1, canvas.winfo_height())
-        active_hit = self.selected if self.selected is not None and self.selected.kind == "room" else None
-        if active_hit is None:
-            active_hit = self._hovered_3d if self._hovered_3d is not None and self._hovered_3d.kind == "room" else None
-        active_room = next(
-            (
-                room for room in ordered
-                if active_hit is not None and room["id"] == active_hit.item_id
-                and (section_height is None or
-                     room.get("floor_elevation_m", floor_z) < section_height)
-            ),
-            None,
-        )
+        # Hover reveals transient information even while a different item is
+        # selected. When the cursor leaves, the selected item's card returns.
+        active_hit = self._hovered_3d or self.selected
+        active_room = None
+        active_device = None
+        if active_hit is not None and active_hit.kind == "room":
+            active_room = next(
+                (
+                    room for room in ordered
+                    if room["id"] == active_hit.item_id
+                    and (section_height is None or
+                         room.get("floor_elevation_m", floor_z) < section_height)
+                ),
+                None,
+            )
+        elif active_hit is not None and active_hit.kind == "device":
+            active_device = next(
+                (
+                    device for device in self.layout["devices"]
+                    if device["id"] == active_hit.item_id
+                    and self._is_item_visible("device", device["id"])
+                    and (section_height is None or
+                         device["z_m"] +
+                         next(
+                             (room.get("floor_elevation_m", floor_z)
+                              for room in self.layout["rooms"]
+                              if room["id"] == device.get("room_id")),
+                             floor_z,
+                         ) < section_height)
+                ),
+                None,
+            )
         reserved = []
         if view_width >= 280 and view_height >= 170:
-            # X/Y/Z captions are fixed to the bottom-right.
             reserved.append(
                 (max(0, view_width - 185), max(0, view_height - 82),
                  view_width, view_height)
@@ -4079,7 +4226,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 (0, 0, 215, 125 if overlay_mode == "status" else 84)
             )
         details_bounds = room_hud_bounds(
-            view_width, view_height, active=active_room is not None,
+            view_width, view_height,
+            active=active_room is not None or active_device is not None,
         )
         if details_bounds is not None:
             reserved.append(details_bounds)
@@ -4093,11 +4241,27 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         if active_room is not None:
             overlay_room = overlay_by_room.get(active_room["id"], {})
+            count = sum(
+                device.get("room_id") == active_room["id"]
+                for device in self.layout["devices"]
+            )
             draw_room_details_hud(
                 canvas, active_room, width=view_width, height=view_height,
                 selected=active_hit == self.selected,
                 overlay_title=str(overlay.get("title") or overlay_mode.title()),
                 overlay_label=str(overlay_room.get("label") or ""),
+                device_count=count,
+            )
+        elif active_device is not None:
+            source_room = next(
+                (room for room in self.layout["rooms"]
+                 if room["id"] == active_device.get("room_id")),
+                None,
+            )
+            draw_device_details_hud(
+                canvas, active_device, width=view_width, height=view_height,
+                selected=active_hit == self.selected,
+                room_name=source_room["name"] if source_room else None,
             )
 
     def _update_overlay_summary(self, overlay: dict) -> None:
@@ -4453,6 +4617,101 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
+
+    def _on_scene_finder_shortcut(self, event: tk.Event | None = None) -> str:
+        self.open_scene_finder()
+        return "break"
+
+    def open_scene_finder(self) -> None:
+        """Non-modal searchable room/device navigator for a crowded 3D scene."""
+        existing = self._scene_finder_window
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            existing.lift()
+            existing.focus_set()
+            return
+
+        window = tk.Toplevel(self)
+        self._scene_finder_window = window
+        window.title("CleanroomX · Find room or device")
+        window.geometry("570x390")
+        window.minsize(360, 250)
+        window.transient(self.winfo_toplevel())
+        window.protocol("WM_DELETE_WINDOW", window.destroy)
+
+        content = ttk.Frame(window, padding=12)
+        content.pack(fill="both", expand=True)
+        ttk.Label(
+            content, text="FIND IN 3D SCENE",
+            style="CX.Section.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        query = tk.StringVar()
+        search = ttk.Entry(content, textvariable=query)
+        search.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            content, text="Search by name, type, room, or object ID.",
+        ).pack(anchor="w", pady=(0, 8))
+
+        listing = ttk.Frame(content)
+        listing.pack(fill="both", expand=True)
+        tree = ttk.Treeview(
+            listing, columns=("kind", "name", "room"),
+            show="headings", selectmode="browse", height=10,
+        )
+        for col, label, width in (
+            ("kind", "Type", 105), ("name", "Name", 210),
+            ("room", "Assigned room", 160),
+        ):
+            tree.heading(col, text=label)
+            tree.column(col, width=width, minwidth=70, stretch=True)
+        scroll = ttk.Scrollbar(listing, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        status = tk.StringVar(value="")
+        ttk.Label(content, textvariable=status).pack(anchor="w", pady=(5, 2))
+
+        def populate(*_args: object) -> None:
+            tree.delete(*tree.get_children())
+            results = scene_entries(self.layout, query.get())
+            for result in results:
+                tree.insert(
+                    "", "end", iid=f"{result['kind']}:{result['id']}",
+                    values=(result["type"], result["name"], result["room"]),
+                )
+            if results:
+                tree.selection_set(tree.get_children()[0])
+                tree.focus(tree.get_children()[0])
+            status.set(f"{len(results)} matching objects (showing up to 250)")
+
+        def open_selected(event: tk.Event | None = None) -> str:
+            selected = tree.selection()
+            if not selected:
+                return "break"
+            kind, item_id = selected[0].split(":", 1)
+            if self.select_item(kind, item_id, notify=True):
+                self.fit_selected()
+                self._status_setter(
+                    f"3D scene: selected {kind} {item_id}"
+                )
+                window.destroy()
+            return "break"
+
+        query.trace_add("write", populate)
+        tree.bind("<Double-Button-1>", open_selected)
+        tree.bind("<Return>", open_selected)
+        search.bind("<Return>", open_selected)
+        window.bind("<Escape>", lambda _event: window.destroy())
+        buttons = ttk.Frame(content)
+        buttons.pack(fill="x", pady=(6, 0))
+        ttk.Button(
+            buttons, text="Open and fit", command=open_selected,
+        ).pack(side="right", padx=(4, 0))
+        ttk.Button(
+            buttons, text="Close", command=window.destroy,
+        ).pack(side="right")
+        populate()
+        search.focus_set()
 
     def _3d_key_command(self, command: str) -> str:
         """Camera shortcuts modify only presentation state."""

@@ -4,6 +4,9 @@ from __future__ import annotations
 import copy
 import json
 import sys
+from pathlib import Path
+
+from cleanroomx.project import load_project_document
 
 import pytest
 
@@ -181,3 +184,18 @@ def test_cli_topology_preflight_does_not_overwrite_project(tmp_path, monkeypatch
     assert report["topology_status"] == "valid"
     assert report["ready_for_solver"] is False
     assert project_file.read_bytes() == before
+
+
+def test_checked_in_three_room_concept_is_connected_and_not_cfd_ready():
+    example = Path(__file__).resolve().parents[1] / "examples" / "cfd_suite_topology_demo.cleanroomx.json"
+    project = load_project_document(example)
+    report = assess_suite_topology(project.metadata["spatial_layout"])
+    assert report["topology_status"] == "valid"
+    assert len(report["rooms"]) == 3
+    assert len(report["shared_walls"]) == 2
+    assert {tuple(wall["opening_ids"]) for wall in report["shared_walls"]} == {
+        ("d1",), ("d2",)
+    }
+    assert [item["code"] for item in report["warnings"]] == ["exterior_opening"]
+    assert report["openfoam_case_status"] == "not_generated"
+    assert report["ready_for_solver"] is False

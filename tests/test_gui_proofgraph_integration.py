@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import os
 import tkinter as tk
+from types import SimpleNamespace
 
 import pytest
 
@@ -222,6 +223,41 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     app.root.update()
     assert app.proofgraph_viewer.search_var.get() == ""
     assert app.proofgraph_viewer.filter_var.get() == "All"
+
+
+def test_proofgraph_viewport_controls_fit_zoom_and_reset(app):
+    room = app.spatial_workspace.layout["rooms"][0]
+    viewer = app.proofgraph_viewer
+    viewer.set_documents([_room_graph(room["id"])])
+    app.root.update()
+
+    assert 0.2 <= viewer._zoom <= 1.0
+    assert viewer.zoom_var.get() == f"{round(viewer._zoom * 100)}%"
+
+    fitted_zoom = viewer._zoom
+    viewer.zoom_in_button.invoke()
+    app.root.update()
+    assert viewer._zoom > fitted_zoom
+
+    wheel_zoom = viewer._zoom
+    viewer._on_zoom_wheel(SimpleNamespace(x=120, y=80, delta=120))
+    assert viewer._zoom > wheel_zoom
+
+    viewer.reset_zoom_button.invoke()
+    app.root.update()
+    assert viewer._zoom == 1.0
+    assert viewer.zoom_var.get() == "100%"
+
+    viewer.fit_button.invoke()
+    app.root.update()
+    assert viewer._zoom <= 1.0
+
+    viewer.reset_zoom_button.invoke()
+    viewer.canvas.xview_moveto(0)
+    viewer._pan_start(SimpleNamespace(x=200, y=100))
+    viewer._pan_drag(SimpleNamespace(x=100, y=100))
+    app.root.update()
+    assert viewer.canvas.xview()[0] > 0
 
 
 def test_proofgraph_native_surfaces_follow_light_and_dark_themes(app):

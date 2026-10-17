@@ -5,7 +5,9 @@ import copy
 import pytest
 
 from cleanroomx.gui_proofgraph import (
+    _clamp_proofgraph_zoom,
     _filtered_projection,
+    _proofgraph_layout,
     _search_projection,
     proofgraph_evidence_summary,
     proofgraph_projection,
@@ -288,3 +290,24 @@ def test_proofgraph_search_keeps_matching_nodes_and_immediate_trace_context():
     assert "evidence:evidence-pressure" in keys
 
     assert _search_projection(projection, "   ") is projection
+
+
+def test_proofgraph_viewport_layout_scales_positions_and_bounds_consistently():
+    nodes = proofgraph_projection(_sample_graph())["nodes"]
+
+    normal_positions, normal_width, normal_height = _proofgraph_layout(nodes, 1.0)
+    half_positions, half_width, half_height = _proofgraph_layout(nodes, 0.5)
+
+    assert normal_positions
+    assert half_positions.keys() == normal_positions.keys()
+    for key, (x, y) in normal_positions.items():
+        assert half_positions[key] == (x * 0.5, y * 0.5)
+    assert half_width == normal_width * 0.5
+    assert half_height == normal_height * 0.5
+
+
+def test_proofgraph_zoom_is_finite_and_clamped_to_operable_range():
+    assert _clamp_proofgraph_zoom(0.01) == 0.2
+    assert _clamp_proofgraph_zoom(10) == 3.0
+    assert _clamp_proofgraph_zoom(float("nan")) == 1.0
+    assert _clamp_proofgraph_zoom("bad") == 1.0

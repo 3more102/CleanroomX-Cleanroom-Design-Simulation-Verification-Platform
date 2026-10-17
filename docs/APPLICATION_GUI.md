@@ -178,6 +178,8 @@ The explorer provides a tree, an interactive graph, and a node-detail view. It p
 
 The Project Navigator **ProofGraph** entry activates this workspace. Graph selection is digest-aware and duplicate retained documents are collapsed by canonical `graph_sha256`. Invalid retained evidence is cleared from the viewer and reported through the existing evidence/status surfaces rather than silently accepted.
 
+The graph viewport includes zoom in/out, 100% reset, fit-to-view, cursor-centered Ctrl+wheel zoom, and middle-button drag panning. Selecting a node from the tree or graph brings it into view and synchronizes its details. With the graph canvas focused, `+`/`-` zoom, `0` fits, and `1` resets to 100%. A newly loaded graph is fitted automatically. These display controls do not modify persisted graph documents or recompute evidence or verdicts.
+
 ## Professional inspection and recovery browsers
 
 The analysis picker, retained run history, project verification history, requirements traceability, IFC re-import review, saved revisions, and recovery center use consistent dense inspection patterns: search, domain-specific filters, visible/total counts, keyboard navigation, deliberate no-match states, horizontal scrolling for wide engineering records, and read-only canonical detail views where applicable.

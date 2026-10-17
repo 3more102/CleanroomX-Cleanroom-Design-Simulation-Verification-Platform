@@ -299,6 +299,38 @@ def _bars_svg(title: str, labels: list[str], values: list[float], units: str) ->
     )
 
 
+
+def _histogram_svg(title: str, distribution: dict[str, Any]) -> str:
+    """Volume-weighted histogram; bins describe samples, not an interpolated contour."""
+    fractions = distribution["bin_volume_percent"]
+    bounds = distribution["bin_edges"]
+    if len(fractions) != 12 or len(bounds) != 13:
+        raise ValueError("Invalid binned CFD distribution")
+    maximum = max(1.0, *(float(value) for value in fractions))
+    bars = []
+    for index, fraction in enumerate(fractions):
+        amount = _finite(fraction, "bin_volume_percent")
+        if not 0 <= amount <= 100:
+            raise ValueError("Histogram percentage must be between 0 and 100")
+        height = 170 * amount / maximum
+        bars.append(
+            f'<rect x="{75 + 49 * index}" y="{235-height:.2f}" width="43" '
+            f'height="{height:.2f}" fill="#1464b4"/>'
+        )
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300">'
+        '<rect width="720" height="300" fill="#fff"/>'
+        f'<text x="28" y="24" font-size="16">{escape(title)}</text>'
+        '<line x1="70" y1="235" x2="675" y2="235" stroke="#333"/>'
+        + "".join(bars)
+        + f'<text x="72" y="258" font-size="12">{bounds[0]:.4g}</text>'
+        + f'<text x="619" y="258" font-size="12">{bounds[-1]:.4g}</text>'
+        + f'<text x="240" y="285" font-size="12">{escape(distribution["units"])} | % sampled cell volume</text>'
+        + '</svg>'
+    )
+
+
+
 def export_two_room_analysis(
     case_directory: str | Path, receipt_path: str | Path, output_directory: str | Path
 ) -> dict[str, Any]:
@@ -332,6 +364,16 @@ def export_two_room_analysis(
                 [rooms[name]["pressure_gauge"]["volume_weighted_mean"] for name in ("room_1", "room_2")],
                 "Pa",
             )
+    if vtk["status"] == "MEASURED_DIAGNOSTIC_ONLY":
+        for room in ("room_1", "room_2"):
+            dist = vtk["rooms"][room]
+            graphs[f"{room}_speed_distribution.svg"] = _histogram_svg(
+                f"{room.replace('_', ' ').title()}: velocity magnitude distribution", dist["velocity_magnitude"]
+            )
+            if dist["pressure_gauge"].get("status") != "UNAVAILABLE":
+                graphs[f"{room}_pressure_distribution.svg"] = _histogram_svg(
+                    f"{room.replace('_', ' ').title()}: gauge pressure distribution", dist["pressure_gauge"]
+                )
     report["graphs"] = sorted(graphs)
     destination.mkdir(exist_ok=False)
     (destination / "analysis.json").write_text(

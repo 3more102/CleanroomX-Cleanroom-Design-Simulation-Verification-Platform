@@ -21,6 +21,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .cfd_openfoam import verify_openfoam_case_bundle
+from .cfd_proofgraph import export_openfoam_proofgraph
 from .gui_theme import theme_palette
 from .strict_json import load_strict_json_snapshot
 
@@ -669,9 +670,16 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="normal" if self._on_proofgraph_loaded is not None else "disabled",
         )
         self.graph_button.pack(side="left", padx=5)
+        self.export_graph_button = ttk.Button(
+            evidence,
+            text="Export ProofGraph…",
+            command=self._export_proofgraph,
+            state="normal" if self._on_proofgraph_loaded is not None else "disabled",
+        )
+        self.export_graph_button.pack(side="left", padx=5)
         ttk.Label(
             evidence,
-            text="JSON preview is read-only and does not independently verify hashes.",
+            text="Export verifies artifact hashes only; CFD validation remains blocked.",
         ).pack(side="left", padx=(10, 0))
 
 
@@ -683,6 +691,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.sync_vtk_button,
             self.preview_button,
             self.graph_button,
+            self.export_graph_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -925,6 +934,37 @@ class OpenFOAMWorkspace(ttk.Frame):
                 self._set_busy(False)
                 self._append(f"\nCase input verification failed: {value}\n")
                 self._status_setter("OpenFOAM case input verification failed")
+            elif kind == "proofgraph_export_finished":
+                self._set_busy(False)
+                document = value["document"]
+                try:
+                    if self._on_proofgraph_loaded is None:
+                        raise ValueError("ProofGraph viewer is unavailable")
+                    self._on_proofgraph_loaded(document)
+                except Exception as exc:
+                    self._append(
+                        f"\nProofGraph was saved, but the viewer could not load it: {exc}\n"
+                    )
+                    messagebox.showerror(
+                        "OpenFOAM ProofGraph",
+                        f"The file was exported, but it could not be opened in the viewer: {exc}",
+                        parent=self,
+                    )
+                    self._status_setter("OpenFOAM ProofGraph saved; viewer load failed")
+                else:
+                    self._append(
+                        f"\nProofGraph exported: {Path(value['destination']).name}\n"
+                        f"Graph SHA-256: {document['graph_sha256']}\n"
+                        "Artifact hashes: verified. Solver convergence and physical validation: not checked.\n"
+                    )
+                    self._status_setter(
+                        "OpenFOAM ProofGraph exported; scientific validation remains blocked"
+                    )
+            elif kind == "proofgraph_export_failed":
+                self._set_busy(False)
+                self._append(f"\nOpenFOAM ProofGraph export failed: {value}\n")
+                self._status_setter("OpenFOAM ProofGraph export failed")
+                messagebox.showerror("OpenFOAM ProofGraph export", str(value), parent=self)
         if output_parts:
             self._append("".join(output_parts))
         delay_ms = (
@@ -937,7 +977,14 @@ class OpenFOAMWorkspace(ttk.Frame):
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         for button in self._action_buttons:
-            button.configure(state="disabled" if busy else "normal")
+            state = "disabled" if busy else "normal"
+            if (
+                not busy
+                and button in (self.graph_button, self.export_graph_button)
+                and self._on_proofgraph_loaded is None
+            ):
+                state = "disabled"
+            button.configure(state=state)
         self.stop_button.configure(
             state="normal" if busy and self._process is not None else "disabled"
         )
@@ -1004,6 +1051,63 @@ class OpenFOAMWorkspace(ttk.Frame):
             + json.dumps(previews, ensure_ascii=False, indent=2, sort_keys=True)
             + "\n"
         )
+
+    def _export_proofgraph(self) -> None:
+        if self._on_proofgraph_loaded is None or self._busy:
+            return
+        result_directory = self.result_directory_var.get().strip()
+        simulation_id = self.vtk_simulation_id_var.get().strip()
+        if not result_directory or not simulation_id:
+            messagebox.showerror(
+                "Export OpenFOAM ProofGraph",
+                "Choose the import result store and its Simulation ID first.",
+                parent=self,
+            )
+            return
+        destination = filedialog.asksaveasfilename(
+            title="Export OpenFOAM ProofGraph",
+            defaultextension=".json",
+            initialfile=f"{simulation_id}-proofgraph.json",
+            filetypes=(("ProofGraph JSON", "*.json"), ("All files", "*")),
+            parent=self,
+        )
+        if not destination:
+            return
+        self._append(
+            "\nVerifying synchronized OpenFOAM manifests, receipts, and result hashes…\n"
+        )
+        self._set_busy(True)
+        self._status_setter(
+            "Verifying OpenFOAM result hashes and exporting ProofGraph"
+        )
+        threading.Thread(
+            target=self._export_proofgraph_worker,
+            args=(result_directory, simulation_id, destination),
+            name="cleanroomx-openfoam-proofgraph-export",
+            daemon=True,
+        ).start()
+
+    def _export_proofgraph_worker(
+        self,
+        result_directory: str,
+        simulation_id: str,
+        destination: str,
+    ) -> None:
+        try:
+            document = export_openfoam_proofgraph(
+                result_directory,
+                simulation_id,
+                destination,
+            )
+        except Exception as exc:
+            self._events.put(("proofgraph_export_failed", str(exc)))
+        else:
+            self._events.put(
+                (
+                    "proofgraph_export_finished",
+                    {"destination": destination, "document": document},
+                )
+            )
 
     def _load_proofgraph(self) -> None:
         if self._on_proofgraph_loaded is None:

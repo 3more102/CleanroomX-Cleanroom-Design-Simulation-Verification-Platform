@@ -62,35 +62,45 @@ For CI or Linux automation with a virtual display:
 xvfb-run -a cleanroomx-gui --demo --smoke
 ```
 
-## Real desktop screenshots
+## Real desktop screenshots and illustrated manual
 
-The following PNGs are captured from the running Tk application with
-`tools/capture_gui_screenshots.py`; they are not UI mockups. Regenerate them
-from the repository root with:
+The [Illustrated GUI Manual](CleanroomX_Illustrated_GUI_Manual_2026-10-17.md)
+documents actual Windows CleanroomX captures with step-by-step navigation,
+including light/dark start centers, 2D design, 3D design, split view,
+the project navigator, selected fan analyses and their numeric results.
+The standalone [illustrated PDF](CleanroomX_Illustrated_GUI_Manual_2026-10-17.pdf)
+and [offline gallery](screenshots/gallery.html) are included in the binary
+publication package, and will become available in this branch after that
+package is published.
 
-```bash
-python -m pip install -e ".[dev,cfd]"
-xvfb-run -a -s "-screen 0 1600x1000x24" \
-  python tools/capture_gui_screenshots.py --output docs/screenshots
-```
+**Screenshot integrity note (17 October 2026):** The uploaded capture set
+includes **18 files but only 13 unique SHA-256 hashes**. Several screenshots
+named `gui-openfoam-workbench` and
+`gui-openfoam-proofgraph-diagnostic` actually repeat the fan Results pane.
+They cannot be represented as screenshots of those workspaces. Similarly,
+the file named `gui-computed-fan-results` visibly contains numerical JSON
+output, not the plotted fan/system graph. The standalone PDF and image
+manifest retain this distinction. Pixel dimensions are 1920×1080 or
+1920×1055; no capture is synthetically enlarged.
 
-The computed fan/system screen comes from the bundled numerical example. The
-OpenFOAM ProofGraph screen uses a synthetic synchronization fixture to
-demonstrate how the interface distinguishes local artifact-hash consistency
-from scientific validation. The PASS status is not a signature, convergence,
-or cleanroom-performance claim; scientific validation stays blocked.
+The genuine 2D/3D views are represented below:
 
 | Start center | Design: 2D | Design: 3D |
 | --- | --- | --- |
 | ![Start center](screenshots/gui-start-center.png) | ![2D plan](screenshots/gui-design-2d.png) | ![3D model](screenshots/gui-design-3d.png) |
 
-| Design: split view | Computed fan result | OpenFOAM workbench |
-| --- | --- | --- |
-| ![Split design](screenshots/gui-design-split.png) | ![Computed fan result](screenshots/gui-computed-fan-results.png) | ![OpenFOAM workbench](screenshots/gui-openfoam-workbench.png) |
+| Design: split view | Fan/system numeric results |
+| --- | --- |
+| ![Split design](screenshots/gui-design-split.png) | ![Fan numerical results](screenshots/gui-computed-fan-results.png) |
 
-| OpenFOAM ProofGraph diagnostic view |
-| --- |
-| ![ProofGraph diagnostic view](screenshots/gui-openfoam-proofgraph-diagnostic.png) |
+Capture regeneration requires a working desktop at the selected dimensions:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\capture_gui_gallery.ps1 -Size 1920x1080 -Theme both
+```
+
+The captured fan study is not CFD evidence. A ProofGraph integrity check
+must not be misrepresented as convergence or cleanroom-performance validation.
 
 ## Project format
 

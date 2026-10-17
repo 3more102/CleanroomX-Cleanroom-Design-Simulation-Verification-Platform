@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import tkinter as tk
 import xml.etree.ElementTree as ET
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -27,7 +28,7 @@ def _tag(name: str) -> str:
 def _option(canvas: object, item_id: int, key: str, default: str = "") -> str:
     try:
         return str(canvas.itemcget(item_id, key))
-    except (ValueError, KeyError, AttributeError):
+    except (ValueError, KeyError, AttributeError, tk.TclError):
         return default
 
 

@@ -453,6 +453,86 @@ def _histogram_svg(title: str, distribution: dict[str, Any]) -> str:
 
 
 
+
+def _offline_dashboard(report: dict[str, Any]) -> str:
+    """Self-contained, script-free graph index with explicit evidence boundaries."""
+    pressure = report["pressure"]
+    last = pressure["series"][-1]
+    flow = report["flow"]
+    title = "CleanroomX | Two-room CFD diagnostic review"
+    figures = []
+    for filename in report["graphs"]:
+        if not filename.endswith(".svg") or "/" in filename or "\\" in filename:
+            raise ValueError("Dashboard graph path must be a local SVG basename")
+        label = escape(filename.removesuffix(".svg").replace("_", " ").title())
+        figures.append(
+            '<figure class="panel">'
+            f'<figcaption>{label}</figcaption>'
+            f'<a href="{escape(filename, quote=True)}" title="Open source SVG">'
+            f'<img loading="lazy" src="{escape(filename, quote=True)}" alt="{label}"/></a>'
+            '</figure>'
+        )
+    cards = (
+        ("Final probe Δp", f'{last["delta_pressure_pa"]:.5g} Pa'),
+        ("Target band", f'{pressure["target_pa"]:.5g} ± {pressure["tolerance_pa"]:.5g} Pa'),
+        ("Inlet / outlet", f'{flow["inlet_m3_s"]:.5g} / {flow["outlet_m3_s"]:.5g} m³/s'),
+        ("Flow imbalance", f'{flow["relative_difference_percent"]:.5g}%'),
+        ("VTK room fields", report["vtk_fields"]["status"]),
+    )
+    metrics = "".join(
+        f'<div class="metric"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
+        for label, value in cards
+    )
+    missing = "".join(
+        f'<li><strong>{escape(k.replace("_", " ").title())}:</strong> {escape(v)}</li>'
+        for k, v in report["not_derived"].items()
+    )
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{escape(title)}</title>
+<style>
+:root {{color-scheme:dark;font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}}
+* {{box-sizing:border-box}}
+body {{margin:0;background:#0b1220;color:#e4ebf5}}
+header,main,footer {{max-width:1380px;margin:auto;padding:26px 26px}}
+header {{border-bottom:1px solid #293a52}}
+h1 {{font-size:clamp(1.4rem,3vw,2.3rem);line-height:1.2;margin:9px 0}}
+h2 {{font-size:1.15rem;margin-top:32px}}
+.eyebrow {{color:#90b9eb;font-weight:700;letter-spacing:.08em;text-transform:uppercase}}
+.notice {{padding:14px 18px;border-left:4px solid #f5ae54;background:#252132;border-radius:6px}}
+.metrics {{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:12px;margin:23px 0}}
+.metric,.panel {{border:1px solid #2c3e54;border-radius:12px;background:#152237}}
+.metric {{padding:17px;min-height:110px}}
+small {{display:block;color:#a6b9cc}}
+strong {{display:block;font-weight:650;margin-top:6px;overflow-wrap:anywhere}}
+.metric strong {{font-size:1.25rem}}
+.plots {{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,450px),1fr));gap:16px}}
+figure {{margin:0;overflow:hidden}}
+figcaption {{padding:14px 17px;font-weight:650}}
+img {{display:block;width:100%;height:auto;background:white}}
+a {{color:#a6d0ff}}
+li {{margin:.5rem 0}}
+footer {{font-size:.9rem;color:#a6b9cc;border-top:1px solid #293a52}}
+</style></head>
+<body><header><div class="eyebrow">CleanroomX · solver-backed evidence</div>
+<h1>Two-room CFD diagnostic review</h1>
+<p>Offline report based on a locally verified OpenFOAM Foundation v10 run.</p></header>
+<main><div class="notice"><strong>Scientific validation: BLOCKED · Solver convergence: NOT ASSESSED</strong>
+<p>Graphs describe synthetic-case CFD diagnostics. Hash consistency is not solver
+authenticity, physical measurement correlation, cleanroom compliance, or certification.
+Pressure probes are not spatial room-average measurements.</p></div>
+<section aria-label="Run diagnostics"><div class="metrics">{metrics}</div></section>
+<h2>Verified CFD charts</h2><section class="plots" aria-label="Graphs">
+{''.join(figures)}</section>
+<h2>Unavailable or unsupported metrics</h2><ul>{missing}</ul>
+<p>Numerical provenance and complete datasets: <a href="analysis.json">analysis.json</a>.</p>
+</main><footer>Receipt SHA-256: {escape(report["receipt_sha256"])} ·
+Case manifest SHA-256: {escape(report["case_manifest_sha256"])}</footer></body></html>
+"""
+
+
+
 def export_two_room_analysis(
     case_directory: str | Path, receipt_path: str | Path, output_directory: str | Path
 ) -> dict[str, Any]:
@@ -505,5 +585,6 @@ def export_two_room_analysis(
     )
     for filename, svg in graphs.items():
         (destination / filename).write_text(svg + "\n", encoding="utf-8")
+    (destination / "index.html").write_text(_offline_dashboard(report), encoding="utf-8")
     return {"status": "DIAGNOSTIC_ONLY", "directory": str(destination), "graphs": report["graphs"],
             "scientific_validation": "BLOCKED", "receipt_sha256": report["receipt_sha256"]}

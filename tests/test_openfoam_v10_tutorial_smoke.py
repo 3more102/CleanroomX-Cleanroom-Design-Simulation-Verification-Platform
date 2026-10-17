@@ -33,6 +33,7 @@ def passing_receipt():
             "manifest_sha256": "d" * 64,
         },
         "solver_build": "10-test-build",
+        "foamToVTK_build": "10-test-build",
         "environment": {
             "WM_PROJECT": "OpenFOAM",
             "WM_PROJECT_VERSION": "10",

@@ -111,6 +111,13 @@ Neither workflow overwrites the output directory or automatically launches a sol
 
 The result includes **analysis.json** and self-contained SVG graphs:
 
+- **simplefoam_residual_Ux.svg**, **simplefoam_residual_Uy.svg**,
+  **simplefoam_residual_Uz.svg**, **simplefoam_residual_p.svg** (when logged):
+  parsed initial/final per-field linear solver residuals on logarithmic axes,
+  labeled by field solve count, not physical simulation time. Up to eight recorded
+  fields are graphed. The JSON includes all bounded parsed residual and reported
+  continuity histories; these are numerical diagnostics, not proof of convergence.
+
 - **pressure_probe_history.svg**: actual room 1 minus room 2 *point-probe*
   pressure vs OpenFOAM solver index (not physical seconds), with the declared
   *synthetic* target band.

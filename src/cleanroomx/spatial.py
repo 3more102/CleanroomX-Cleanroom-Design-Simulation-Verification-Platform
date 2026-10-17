@@ -22,6 +22,7 @@ from .spatial_3d_presentation import (
     draw_3d_reference,
     draw_3d_zone_legend,
     room_zone_colors,
+    zone_legend_bounds,
 )
 
 from .spatial_integrity import (
@@ -1750,27 +1751,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
-        ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
-            side="left", padx=2
-        )
         ttk.Button(
             modebar, text="Balance panels",
             command=self.balance_workspace_panes,
         ).pack(side="left", padx=2)
-        ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
-            side="left", padx=2
-        )
+
+        # Keep sync/actions on a second row so both operations remain visible
+        # at the 1050 px laptop minimum. Never clip safety-critical actions.
+        actionbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        actionbar.pack(fill="x")
         ttk.Button(
-            modebar,
-            text="Push to analysis",
-            command=self._on_sync_requested,
-        ).pack(side="right", padx=2)
+            actionbar, text="Reset 2D", width=9, command=self.reset_2d,
+        ).pack(side="left", padx=2)
         ttk.Button(
-            modebar,
-            text="Pull from analysis",
+            actionbar, text="Floor…", width=7, command=self.edit_floor,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            actionbar, text="Pull from analysis",
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
-        ).pack(side="right", padx=2)
+        ).pack(side="left", padx=(12, 2))
+        ttk.Button(
+            actionbar, text="Push to analysis",
+            command=self._on_sync_requested,
+        ).pack(side="left", padx=2)
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
@@ -1925,7 +1929,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             header3, text="Reset", command=self.reset_3d,
         ).pack(side="left", padx=(5, 2))
         ttk.Label(
-            header3, text="Shift + drag to orbit",
+            header3, text="Shift+drag orbit  ·  Wheel zoom  ·  F fit",
         ).pack(side="right", padx=(4, 3))
         ttk.Checkbutton(
             tools3,
@@ -2098,6 +2102,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<KeyPress-f>", lambda event: self._3d_key_command("fit"))
+        self.canvas_3d.bind("<KeyPress-r>", lambda event: self._3d_key_command("reset"))
+        self.canvas_3d.bind("<KeyPress-i>", lambda event: self._3d_key_command("iso"))
+        self.canvas_3d.bind("<Escape>", self._on_escape)
         self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
@@ -2130,6 +2138,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         if mode in {"3d", "split"}:
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
         self.redraw()
+        # Reparenting a pane may leave the 3D canvas at its previous 1px
+        # geometry until idle layout. Redraw after actual Tk geometry settles.
+        self.after_idle(self._draw_3d)
 
     def balance_workspace_panes(self) -> None:
         """Restore usable 2D/3D/inspector sash widths without changing design."""
@@ -4050,20 +4061,19 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
             None,
         )
-        reserved = [
-            # Axes are a fixed caption in the bottom-right, not world text.
-            (max(0, view_width - 185), max(0, view_height - 82),
-             view_width, view_height),
-        ]
-        if zone_tint:
-            zone_count = len(visible_zone_rooms)
-            legend_height = 46 + min(7, zone_count) * 19 + (
-                19 if zone_count > 7 else 0
-            )
+        reserved = []
+        if view_width >= 280 and view_height >= 170:
+            # X/Y/Z captions are fixed to the bottom-right.
             reserved.append(
-                (0, max(0, view_height - legend_height - 15),
-                 270, view_height)
+                (max(0, view_width - 185), max(0, view_height - 82),
+                 view_width, view_height)
             )
+        if zone_tint:
+            zone_bounds = zone_legend_bounds(
+                view_width, view_height, len(visible_zone_rooms),
+            )
+            if zone_bounds is not None:
+                reserved.append(zone_bounds)
         elif overlay_mode != "none":
             reserved.append(
                 (0, 0, 215, 125 if overlay_mode == "status" else 84)
@@ -4403,6 +4413,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        # Unit-tested model-space gestures may use a lightweight canvas stub.
+        # A real Tk canvas accepts keyboard focus after mouse interaction.
+        focus = getattr(self.canvas_3d, "focus_set", None)
+        if callable(focus):
+            focus()
         self._orbit_anchor = (event.x, event.y)
         self._orbit_origin = (
             self.layout["view"]["azimuth_deg"],
@@ -4439,6 +4454,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
 
+    def _3d_key_command(self, command: str) -> str:
+        """Camera shortcuts modify only presentation state."""
+        if command == "fit":
+            self.fit_3d()
+        elif command == "reset":
+            self.reset_3d()
+        elif command == "iso":
+            self.set_3d_view_preset("iso")
+        else:
+            raise ValueError(f"Unknown 3D camera command: {command}")
+        return "break"
+
     def _on_3d_motion(self, event: tk.Event) -> None:
         current = self.canvas_3d.find_withtag("current")
         hovered = (
@@ -4457,6 +4484,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         if not current:
             return

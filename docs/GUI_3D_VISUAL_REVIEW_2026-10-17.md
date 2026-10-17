@@ -67,3 +67,29 @@ a generated simulator screenshot or stored in this repository by this PR.
    inspector return to usable sizes without editing the model.
 6. Reduce the window width: the 3D toolbar has two rows and the detailed
    HUD automatically hides when its available width is too small.
+
+## Responsive GUI follow-up (PR #1336)
+
+The first real Tk CI pass exposed two narrow-screen failures: a clipped
+**Pull from analysis** button at 1050×680 and a room-label visibility test
+that relied on a too-small initial viewport. The follow-up keeps both
+**Pull from analysis** and **Push to analysis** on their own full-width row.
+
+The design-zone legend now switches to a compact, clearly labeled
+non-CFD badge when the 3D canvas is below 530 px wide or 335 px tall.
+The collision-aware label layout reserves only the badge's actual bounds.
+At larger sizes the existing colored multi-room legend remains visible.
+Viewport label placements remain presentation-only and are never written
+into the project model.
+
+3D keyboard shortcuts (click inside the canvas first):
+
+- **F:** fit visible 3D room geometry into the viewport
+- **R:** reset the 3D camera
+- **I:** isometric camera
+- **Shift + left-drag:** orbit
+- **Mouse wheel:** zoom
+
+The shortcuts do not change rooms, pressure fields, or CFD evidence.
+The regression suite checks a readable full-width 3D view separately from
+small-view legend layout; failures are not treated as proof of CFD validation.

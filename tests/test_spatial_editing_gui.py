@@ -1092,13 +1092,19 @@ def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
 
 def test_3d_room_labels_are_compact_nonoverlapping_and_inspectable(app):
     workspace = app.spatial_workspace
+    app.root.geometry("1440x900")
+    workspace.set_inspector_visible(False)
     workspace.set_workspace_mode("3d")
     app.root.update()
     workspace.fit_3d()
     app.root.update()
     canvas = workspace.canvas_3d
     label_items = canvas.find_withtag("room_label3d")
-    assert label_items
+    assert label_items, (
+        f"3D canvas={canvas.winfo_width()}x{canvas.winfo_height()}, "
+        f"labels={workspace._show_labels.get()}, "
+        f"rooms={len(workspace.layout['rooms'])}"
+    )
     label_text = [
         canvas.itemcget(item, "text") for item in label_items
         if canvas.type(item) == "text"
@@ -1141,3 +1147,23 @@ def test_balance_workspace_panels_restores_inspector_width_without_model_edits(a
         pane_position = workspace._body.sashpos(0)
         assert 235 <= total_width - pane_position <= 360
     assert workspace.layout == before
+
+
+def test_keyboard_3d_camera_actions_keep_project_geometry_unchanged(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    before = copy.deepcopy(workspace.layout["rooms"])
+    workspace.layout["view"]["zoom_3d"] = 0.3
+    assert workspace._3d_key_command("fit") == "break"
+    assert workspace.layout["view"]["zoom_3d"] > 0
+    assert workspace._3d_key_command("iso") == "break"
+    assert workspace.layout["view"]["azimuth_deg"] == 35
+    assert workspace._3d_key_command("reset") == "break"
+    assert workspace.layout["view"]["zoom_3d"] == 1
+    with pytest.raises(ValueError, match="Unknown"):
+        workspace._3d_key_command("bogus")
+    assert workspace.layout["rooms"] == before
+    assert workspace.canvas_3d.bind("<KeyPress-f>")
+    assert workspace.canvas_3d.bind("<KeyPress-r>")
+    assert workspace.canvas_3d.bind("<KeyPress-i>")

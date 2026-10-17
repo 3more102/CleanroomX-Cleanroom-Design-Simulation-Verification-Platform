@@ -242,6 +242,25 @@ jobs:
       - name: Exercise spatial editing with real Tk widgets
         if: matrix.python-version == '3.13'
         run: xvfb-run -a python -m pytest -q tests/test_spatial_editing_gui.py tests/test_gui_openfoam.py
+      - name: Capture real desktop GUI screenshots in both themes (1920x1080)
+        if: matrix.python-version == '3.13'
+        run: >-
+          xvfb-run -a -s "-screen 0 2560x1440x24"
+          python tools/capture_gui_screenshots.py
+          --output docs/screenshots
+          --size 1920x1080
+          --themes light dark
+      - name: Verify screenshot dimensions, SHA-256 and evidence labels
+        if: matrix.python-version == '3.13'
+        run: python tools/verify_gui_screenshots.py --input docs/screenshots
+      - name: Upload real desktop GUI screenshots and offline gallery
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cleanroomx-real-gui-screenshots
+          path: docs/screenshots/
+          if-no-files-found: error
+          compression-level: 0
       - name: Run representative v0.100 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

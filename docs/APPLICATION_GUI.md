@@ -62,6 +62,46 @@ For CI or Linux automation with a virtual display:
 xvfb-run -a cleanroomx-gui --demo --smoke
 ```
 
+## Real desktop screenshots and illustrated manual
+
+The [Illustrated GUI Manual](CleanroomX_Illustrated_GUI_Manual_2026-10-17.md)
+documents actual Windows CleanroomX captures with step-by-step navigation,
+including light/dark start centers, 2D design, 3D design, split view,
+the project navigator, selected fan analyses and their numeric results.
+The standalone [illustrated PDF](CleanroomX_Illustrated_GUI_Manual_2026-10-17.pdf)
+and [offline gallery](screenshots/gallery.html) are included in the binary
+publication package, and will become available in this branch after that
+package is published.
+
+**Screenshot integrity note (17 October 2026):** The uploaded capture set
+includes **18 files but only 13 unique SHA-256 hashes**. Several screenshots
+named `gui-openfoam-workbench` and
+`gui-openfoam-proofgraph-diagnostic` actually repeat the fan Results pane.
+They cannot be represented as screenshots of those workspaces. Similarly,
+the file named `gui-computed-fan-results` visibly contains numerical JSON
+output, not the plotted fan/system graph. The standalone PDF and image
+manifest retain this distinction. Pixel dimensions are 1920×1080 or
+1920×1055; no capture is synthetically enlarged.
+
+The genuine 2D/3D views are represented below:
+
+| Start center | Design: 2D | Design: 3D |
+| --- | --- | --- |
+| ![Start center](screenshots/gui-start-center.png) | ![2D plan](screenshots/gui-design-2d.png) | ![3D model](screenshots/gui-design-3d.png) |
+
+| Design: split view | Fan/system numeric results |
+| --- | --- |
+| ![Split design](screenshots/gui-design-split.png) | ![Fan numerical results](screenshots/gui-computed-fan-results.png) |
+
+Capture regeneration requires a working desktop at the selected dimensions:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\capture_gui_gallery.ps1 -Size 1920x1080 -Theme both
+```
+
+The captured fan study is not CFD evidence. A ProofGraph integrity check
+must not be misrepresented as convergence or cleanroom-performance validation.
+
 ## Project format
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.

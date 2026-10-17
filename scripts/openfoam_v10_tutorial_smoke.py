@@ -252,6 +252,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             configuration_hash=configuration_hash,
             required_fields=("U", "p"),
             optional_fields=(),
+            include_surface_flux=False,
             poll_interval_seconds=0.5,
             settle_polls=2,
             timeout_seconds=args.stage_timeout_seconds,

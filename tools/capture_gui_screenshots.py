@@ -296,15 +296,46 @@ def _capture_theme(
         app.root.lift()
         app.root.update_idletasks()
         app.root.update()
-        captured = _capture(app.root, output, scene, theme, size)
-        for previous in records:
-            if captured["sha256"] == previous["sha256"]:
-                raise RuntimeError(
-                    f"Two different GUI scenes rendered identical pixels: "
-                    f"{previous['scene']} and {scene} ({theme}). "
-                    "Capture halted rather than publishing duplicate views."
+        for attempt in range(3):
+            captured = _capture(app.root, output, scene, theme, size)
+            same_as = next(
+                (
+                    previous["scene"] for previous in records
+                    if captured["sha256"] == previous["sha256"]
+                ),
+                None,
+            )
+            if same_as is None:
+                records.append(captured)
+                return
+            print(
+                f"Scene {scene} ({theme}) matched {same_as}; "
+                f"forcing a fresh desktop repaint (attempt {attempt + 1}/3)"
+            )
+            if os.name == "nt":
+                import ctypes
+
+                # Repaint the actual Tk window and all its children, without
+                # changing any visualization or engineering result data.
+                RDW_INVALIDATE = 0x0001
+                RDW_ERASE = 0x0004
+                RDW_ALLCHILDREN = 0x0080
+                RDW_UPDATENOW = 0x0100
+                ctypes.windll.user32.RedrawWindow(
+                    ctypes.c_void_p(app.root.winfo_id()),
+                    None,
+                    None,
+                    RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW,
                 )
-        records.append(captured)
+            app.root.update_idletasks()
+            app.root.update()
+            app.root.lift()
+            time.sleep(0.4)
+        raise RuntimeError(
+            f"Scene {scene} ({theme}) stayed visually identical to "
+            f"{same_as} after three screen captures. Refusing to "
+            "publish duplicate or potentially stale GUI views."
+        )
 
     _select_tab(app, "Start")
     snap("gui-start-center")

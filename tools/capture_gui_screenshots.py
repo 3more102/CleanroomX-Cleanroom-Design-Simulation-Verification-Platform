@@ -196,24 +196,46 @@ def _capture(
             pass
         time.sleep(0.15)
     x, y = root.winfo_rootx(), root.winfo_rooty()
-    width, height = root.winfo_width(), root.winfo_height()
-    if (width, height) != expected_size:
-        raise RuntimeError(
-            f"GUI client size {width}x{height} != requested "
-            f"{expected_size[0]}x{expected_size[1]}; "
-            "this capture would not meet the native-resolution requirement"
-        )
-    if x < 0 or y < 0 or width < 1440 or height < 900:
-        raise RuntimeError(f"Window is not correctly framed: {x},{y} {width}x{height}")
-    if x + width > root.winfo_screenwidth() or y + height > root.winfo_screenheight():
-        raise RuntimeError(
-            f"Application client area {x},{y} {width}x{height} exceeds "
-            f"display {root.winfo_screenwidth()}x{root.winfo_screenheight()}; "
-            "use a larger display or a smaller capture size"
-        )
-    # Grab the real Tk window in its native pixel dimensions; do not enlarge
-    # small captures, synthesize results, sharpen labels or remove UI elements.
-    image = ImageGrab.grab(bbox=(x, y, x + width, y + height)).convert("RGB")
+    client_width, client_height = root.winfo_width(), root.winfo_height()
+    width, height = expected_size
+    if os.name == "nt":
+        # The native Tk menu belongs to the window but is excluded from the
+        # reported Tk client area. On the user's machine the menu is 25 px:
+        # client origin (0,25) and client height 1055 are CORRECT for a real
+        # 1920x1080 window. Capture the full physical window from its
+        # anchored desktop origin instead of extending the client past it.
+        if (
+            x != 0
+            or y < 0
+            or y > 120
+            or client_width != width
+            or client_height + y != height
+        ):
+            raise RuntimeError(
+                f"Windows window framing mismatch: client {client_width}x"
+                f"{client_height} at {x},{y}; expected native "
+                f"{width}x{height} including its menu bar"
+            )
+        bbox = (0, 0, width, height)
+    else:
+        if (client_width, client_height) != expected_size:
+            raise RuntimeError(
+                f"GUI client size {client_width}x{client_height} != requested "
+                f"{width}x{height}"
+            )
+        if (
+            x < 0 or y < 0
+            or x + client_width > root.winfo_screenwidth()
+            or y + client_height > root.winfo_screenheight()
+        ):
+            raise RuntimeError(
+                f"Application client {x},{y} {client_width}x{client_height} "
+                "extends beyond its display"
+            )
+        bbox = (x, y, x + width, y + height)
+    # All captured pixels come directly from the visible desktop; there is
+    # no resizing, stitching, fake visualization, or appended color padding.
+    image = ImageGrab.grab(bbox=bbox).convert("RGB")
     if image.size != (width, height):
         raise RuntimeError(f"Unexpected capture dimensions for {scene}: {image.size}")
     if max(high - low for low, high in image.getextrema()) < 30:
@@ -383,10 +405,27 @@ def capture(
                 root.lift()
             root.update_idletasks()
             root.update()
+            if os.name == "nt":
+                # Geometry controls the Tk client, *not* the native menu.
+                # Make the client end at the requested image bottom so that
+                # the menu + client together occupy precisely the target.
+                for _ in range(3):
+                    menu_offset = root.winfo_rooty()
+                    if menu_offset < 0 or menu_offset >= height - 900:
+                        raise RuntimeError(
+                            f"Unexpected Windows menu/client offset: {menu_offset}"
+                        )
+                    client_height = height - menu_offset
+                    if root.winfo_width() == width and root.winfo_height() == client_height:
+                        break
+                    root.geometry(f"{width}x{client_height}+0+0")
+                    root.update_idletasks()
+                    root.update()
             print(
                 f"Capture window: client {root.winfo_width()}x{root.winfo_height()} "
                 f"at {root.winfo_rootx()},{root.winfo_rooty()} "
-                f"on {root.winfo_screenwidth()}x{root.winfo_screenheight()} display"
+                f"on {root.winfo_screenwidth()}x{root.winfo_screenheight()} display; "
+                f"image target {width}x{height} includes native menu"
             )
             screenshots = []
             for theme in themes:

@@ -212,9 +212,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if system.is_symlink() or not system.is_dir():
         raise ValueError("tutorial system directory is missing or unsafe")
     block_mesh_dict = system / "blockMeshDict"
-    if block_mesh_dict.exists() or block_mesh_dict.is_symlink():
-        raise FileExistsError("tutorial unexpectedly contains system/blockMeshDict")
-    shutil.copyfile(source_mesh, block_mesh_dict)
+    if block_mesh_dict.is_symlink() or not block_mesh_dict.is_file():
+        raise ValueError("tutorial blockMeshDict is missing or unsafe")
+    if _sha256(block_mesh_dict) != _sha256(source_mesh):
+        raise ValueError("tutorial blockMeshDict does not match its pinned upstream resource")
 
     configuration_hash = hash_case_configuration(case_directory)
     mesh_stage = _run_logged(

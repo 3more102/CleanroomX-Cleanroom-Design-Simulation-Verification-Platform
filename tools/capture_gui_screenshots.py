@@ -188,7 +188,11 @@ def _capture(
     if x < 0 or y < 0 or width < 1440 or height < 900:
         raise RuntimeError(f"Window is not correctly framed: {x},{y} {width}x{height}")
     if x + width > root.winfo_screenwidth() or y + height > root.winfo_screenheight():
-        raise RuntimeError("Captured application would extend beyond the virtual display")
+        raise RuntimeError(
+            f"Application client area {x},{y} {width}x{height} exceeds "
+            f"display {root.winfo_screenwidth()}x{root.winfo_screenheight()}; "
+            "use a larger display or a smaller capture size"
+        )
     # Grab the real Tk window in its native pixel dimensions; do not enlarge
     # small captures, synthesize results, sharpen labels or remove UI elements.
     image = ImageGrab.grab(bbox=(x, y, x + width, y + height)).convert("RGB")
@@ -322,6 +326,14 @@ def capture(
                 autosave_interval_seconds=0,
                 ui_state_path=temporary_root / "gui-layout.json",
             )
+            # A decorated 1920x1080 window cannot fit inside a 1920x1080
+            # Windows desktop: its title bar pushes the client area down.
+            # Capture the real app borderlessly only when it fills the display.
+            if os.name == "nt" and (
+                width >= root.winfo_screenwidth()
+                or height >= root.winfo_screenheight()
+            ):
+                root.overrideredirect(True)
             root.geometry(f"{width}x{height}+0+0")
             app.load_project_path(bundled_demo_project_path())
             app.proofgraph_viewer.set_documents([proofgraph.to_dict()])

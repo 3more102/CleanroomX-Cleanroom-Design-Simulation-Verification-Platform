@@ -905,6 +905,41 @@ def test_grid_family_measures_final_phi_flux_without_inventing_acceptance(tmp_pa
     assert flux["scientific_validation"] == "BLOCKED"
 
 
+def test_two_room_flux_diagnostic_includes_partition_faces_as_wall_boundary(tmp_path):
+    root = tmp_path / "family"
+    case = root / "two_room"
+    boundary = case / "constant" / "polyMesh" / "boundary"
+    phi = case / "1" / "phi"
+    boundary.parent.mkdir(parents=True)
+    phi.parent.mkdir(parents=True)
+    boundary.write_text(
+        "4\n(\n"
+        "inlet\n{\n type patch;\n nFaces 1;\n startFace 0;\n}\n"
+        "outlet\n{\n type patch;\n nFaces 1;\n startFace 1;\n}\n"
+        "walls\n{\n type wall;\n nFaces 1;\n startFace 2;\n}\n"
+        "partition\n{\n type wall;\n nFaces 1;\n startFace 3;\n}\n)\n"
+    )
+    phi.write_text(
+        "dimensions [0 3 -1 0 0 0 0];\n"
+        "boundaryField\n{\n"
+        "inlet\n{\n type calculated;\n value uniform -0.1;\n}\n"
+        "outlet\n{\n type calculated;\n value uniform 0.098;\n}\n"
+        "walls\n{\n type calculated;\n value uniform 0;\n}\n"
+        "partition\n{\n type calculated;\n value uniform 0.002;\n}\n"
+        "}\n"
+    )
+
+    report = diagnose_grid_flux(case, "1", family_root=root)
+
+    assert report["status"] == "MEASURED_DIAGNOSTIC_ONLY"
+    assert report["inlet"]["net_inward_m3_s"] == pytest.approx(0.1)
+    assert report["outlet"]["net_outward_m3_s"] == pytest.approx(0.098)
+    assert report["partition_net_outward_m3_s"] == pytest.approx(0.002)
+    assert report["walls_net_outward_m3_s"] == pytest.approx(0.002)
+    assert report["relative_flux_imbalance_percent"] == pytest.approx(0.0)
+    assert report["flow_balance_assessment"] == "NO_PROJECT_ACCEPTANCE_CRITERION"
+
+
 def test_missing_final_phi_is_separate_from_complete_solver_log_status(tmp_path):
     root = tmp_path / "family"
     _write_grid_family(root)

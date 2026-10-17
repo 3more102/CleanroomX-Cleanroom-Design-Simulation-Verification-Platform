@@ -8,8 +8,12 @@ import pytest
 
 from cleanroomx.cfd_proofgraph import (
     export_openfoam_proofgraph,
+    export_two_room_proofgraph,
     proofgraph_from_openfoam_sync_results,
+    proofgraph_from_two_room_receipt,
 )
+from cleanroomx import cfd_two_room
+from cleanroomx.cfd_two_room import SCHEMA as TWO_ROOM_SCHEMA, export_two_room_case, verify_two_room_case
 from cleanroomx.proofgraph_io import proofgraph_from_dict
 
 
@@ -156,6 +160,147 @@ def test_openfoam_sync_export_rejects_changed_result_asset(tmp_path):
 
     with pytest.raises(ValueError, match="hash or size"):
         proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
+
+
+def _write_two_room_receipt(case: Path, receipt_path: Path) -> dict:
+    verified_case = verify_two_room_case(case)
+    stage_logs = {}
+    stages = []
+    for command in ("blockMesh", "checkMesh", "simpleFoam", "foamToVTK"):
+        relative = f"{command}.log"
+        data = f"OpenFOAM Foundation v10 {command} test log\n".encode()
+        (case / relative).write_bytes(data)
+        digest = _sha256(data)
+        stage_logs[relative] = digest
+        stage = {
+            "command": command,
+            "return_code": 0,
+            "log_path": relative,
+            "log_sha256": digest,
+        }
+        if command == "checkMesh":
+            stage["checkmesh"] = {"mesh_result": "mesh_ok"}
+        stages.append(stage)
+
+    probe_relative = "postProcessing/roomPressureProbes/150/p"
+    probe_path = case / probe_relative
+    probe_path.parent.mkdir(parents=True)
+    probe_bytes = b"# Time p_room_1 p_room_2\n150 4.2 0.1\n"
+    probe_path.write_bytes(probe_bytes)
+    probe_sha = _sha256(probe_bytes)
+    phi_path = case / "150" / "phi"
+    phi_path.parent.mkdir()
+    phi_bytes = b"final-time surface flux fixture\n"
+    phi_path.write_bytes(phi_bytes)
+    phi_sha = _sha256(phi_bytes)
+    boundary_path = case / "constant" / "polyMesh" / "boundary"
+    boundary_path.parent.mkdir()
+    boundary_bytes = b"final mesh boundary fixture\n"
+    boundary_path.write_bytes(boundary_bytes)
+    boundary_sha = _sha256(boundary_bytes)
+    receipt = {
+        "schema_version": cfd_two_room.RECEIPT_SCHEMA,
+        "status": "executed_requires_engineering_review",
+        "solver_release": "OpenFOAM Foundation v10",
+        "manifest_sha256": verified_case["manifest_sha256"],
+        "spec_sha256": verified_case["spec_sha256"],
+        "input_sha256": verified_case["input_sha256"],
+        "stages": stages,
+        "pressure_probe": {
+            "path": probe_relative,
+            "sha256": probe_sha,
+            "sample_count": 1,
+            "last_solver_time": 150,
+            "delta_pressure_pa_room_1_minus_room_2": 4.92,
+            "density_kg_m3": 1.2,
+        },
+        "solver_flux": {
+            "status": "MEASURED_DIAGNOSTIC_ONLY",
+            "phi_path": "150/phi",
+            "phi_sha256": phi_sha,
+            "poly_mesh_boundary_sha256": boundary_sha,
+            "inlet": {"net_inward_m3_s": 0.1},
+            "outlet": {"net_outward_m3_s": 0.1},
+        },
+        "engineering_screens": {
+            "pressure_target_screen": "within_declared_band",
+            "flow_balance_status": "MEASURED_DIAGNOSTIC_ONLY",
+            "flow_balance_acceptance_criterion": "NOT_SET",
+            "solver_convergence_status": "NOT_ASSESSED",
+            "scientific_validation": "BLOCKED",
+        },
+        "result_sha256": {
+            **stage_logs,
+            probe_relative: probe_sha,
+            "150/phi": phi_sha,
+            "constant/polyMesh/boundary": boundary_sha,
+        },
+        "scientific_validation": "BLOCKED",
+    }
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    cfd_two_room._write_json(receipt_path, receipt)
+    return receipt
+
+
+def test_two_room_proofgraph_binds_case_and_solver_artifacts(tmp_path):
+    spec = {
+        "schema_version": TWO_ROOM_SCHEMA,
+        "name": "SYNTHETIC ProofGraph fixture",
+        "room_m": [6.0, 4.0, 3.0],
+        "mesh_cells_per_room": [12, 12, 8],
+        "door_opening_m": [0.2, 0.2],
+        "supply_flow_m3_s": 0.1,
+        "density_kg_m3": 1.2,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "target_delta_pressure_pa": 5.0,
+        "pressure_tolerance_pa": 1.0,
+        "max_iterations": 150,
+        "output_interval": 1,
+    }
+    case = tmp_path / "case"
+    export_two_room_case(spec, case)
+    receipt_path = tmp_path / "receipt" / "two_room_run_receipt.json"
+    _write_two_room_receipt(case, receipt_path)
+
+    document = export_two_room_proofgraph(
+        case,
+        receipt_path,
+        tmp_path / "two_room_proofgraph.json",
+    )
+    restored = proofgraph_from_dict(document)
+    assert restored.to_dict() == document
+    evidence = document["evidence"][0]
+    assert evidence["value"]["asset_hashes_verified"] is True
+    assert evidence["value"]["integrity_scope"] == "local_hash_link_consistency_not_authenticity"
+    assert evidence["value"]["scientific_validation"] == "BLOCKED"
+    statuses = {verdict["id"]: verdict["status"] for verdict in document["verdicts"]}
+    assert statuses["VERDICT-TWO-ROOM-ARTIFACT-INTEGRITY"] == "pass"
+    assert statuses["VERDICT-TWO-ROOM-SCIENTIFIC-VALIDATION"] == "not_checked"
+
+
+def test_two_room_proofgraph_rejects_changed_run_artifact(tmp_path):
+    spec = {
+        "schema_version": TWO_ROOM_SCHEMA,
+        "name": "SYNTHETIC ProofGraph fixture",
+        "room_m": [6.0, 4.0, 3.0],
+        "mesh_cells_per_room": [12, 12, 8],
+        "door_opening_m": [0.2, 0.2],
+        "supply_flow_m3_s": 0.1,
+        "density_kg_m3": 1.2,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "target_delta_pressure_pa": 5.0,
+        "pressure_tolerance_pa": 1.0,
+        "max_iterations": 150,
+        "output_interval": 1,
+    }
+    case = tmp_path / "case"
+    export_two_room_case(spec, case)
+    receipt_path = tmp_path / "receipt" / "two_room_run_receipt.json"
+    _write_two_room_receipt(case, receipt_path)
+    (case / "simpleFoam.log").write_text("changed after receipt\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="artifact hash mismatch"):
+        proofgraph_from_two_room_receipt(case, receipt_path)
 
 
 def test_openfoam_sync_export_rejects_unsafe_asset_path(tmp_path):

@@ -9,6 +9,13 @@ from .cfd_scalar import prepare_scalar_case, run_scalar_case
 from .cfd_audit import audit_openfoam_log
 from .cfd_grid_study import analyze_vtk_grid_study, validate_grid_spec
 from .cfd_grid_family import generate_grid_family
+from .cfd_proofgraph import export_two_room_proofgraph
+from .cfd_two_room import (
+    execute_two_room_case,
+    export_two_room_case,
+    verify_two_room_case,
+    verify_two_room_receipt,
+)
 from .cfd_sync import synchronize_openfoam_vtk_once, watch_openfoam_vtk
 from .cfd_openfoam_runtime_sync import (
     DEFAULT_OPTIONAL_FIELDS,
@@ -132,6 +139,21 @@ def build_parser():
     verify_grid=sub.add_parser("grid-audit",help="VTK/log grounded three-grid Richardson and GCI screening")
     verify_grid.add_argument("spec")
     verify_grid.add_argument("--output")
+    two_room=sub.add_parser("two-room-generate",help="Generate a bounded two-room Foundation v10 case")
+    two_room.add_argument("spec")
+    two_room.add_argument("directory")
+    two_room_audit=sub.add_parser("two-room-audit",help="Verify two-room case input hashes")
+    two_room_audit.add_argument("directory")
+    two_room_run=sub.add_parser("two-room-run",help="Run blockMesh/checkMesh/simpleFoam/foamToVTK for the two-room case")
+    two_room_run.add_argument("directory")
+    two_room_run.add_argument("--receipt-directory",required=True)
+    two_room_run.add_argument("--timeout-seconds",type=int,default=900)
+    two_room_receipt=sub.add_parser("two-room-receipt-audit",help="Verify two-room run receipt integrity")
+    two_room_receipt.add_argument("receipt")
+    two_room_proofgraph=sub.add_parser("two-room-proofgraph",help="Verify two-room run artifacts and export a ProofGraph")
+    two_room_proofgraph.add_argument("case_directory")
+    two_room_proofgraph.add_argument("receipt")
+    two_room_proofgraph.add_argument("destination")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
@@ -217,6 +239,30 @@ def main():
         return 0 if result["status"]=="outputs_synced_process_status_unknown" else 2
     if args.command=="grid-generate":
         report=generate_grid_family(load_cli_input(load_strict_json,args.spec),args.directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-generate":
+        report=export_two_room_case(load_cli_input(load_strict_json,args.spec),args.directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-audit":
+        report=verify_two_room_case(args.directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-run":
+        report=execute_two_room_case(
+            args.directory,
+            args.receipt_directory,
+            timeout_seconds=args.timeout_seconds,
+        )
+        print(dumps_strict_json(report))
+        return 0 if report["status"]=="executed_requires_engineering_review" else 2
+    if args.command=="two-room-receipt-audit":
+        report=verify_two_room_receipt(args.receipt)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-proofgraph":
+        report=export_two_room_proofgraph(args.case_directory,args.receipt,args.destination)
         print(dumps_strict_json(report))
         return 0
     if args.command=="grid-audit":

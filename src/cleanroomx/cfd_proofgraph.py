@@ -26,6 +26,7 @@ from .proofgraph_models import (
     ProvenanceRecord,
     VerificationRun,
 )
+from .cfd_two_room import verify_two_room_case, verify_two_room_receipt
 
 
 SYNC_SCHEMA = "cleanroomx.openfoam-result-sync.v2"
@@ -762,6 +763,326 @@ def export_openfoam_proofgraph(
     """Write a verified OpenFOAM result ProofGraph atomically and return it."""
     graph = proofgraph_from_openfoam_sync_results(result_directory, simulation_id)
     document = graph.to_dict()
+    destination_path = Path(destination).expanduser()
+    if destination_path.is_symlink() or destination_path.exists() and not destination_path.is_file():
+        raise ValueError("ProofGraph export destination must be a regular file")
+    parent = destination_path.parent
+    if not parent.is_dir() or parent.is_symlink():
+        raise ValueError("ProofGraph export parent must be a regular directory")
+    encoded = (json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=parent,
+            prefix=f".{destination_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination_path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    return document
+
+
+def proofgraph_from_two_room_receipt(
+    case_directory: str | Path,
+    receipt_path: str | Path,
+) -> ProofGraph:
+    """Create a ProofGraph from verified two-room solver evidence.
+
+    The adapter checks the case manifest, the receipt self-hash, and every
+    result artifact hash recorded in the receipt. The resulting pass finding
+    is limited to local hash-link consistency; scientific validation remains
+    not checked.
+    """
+    case_candidate = Path(case_directory).expanduser()
+    if case_candidate.is_symlink() or not case_candidate.is_dir():
+        raise ValueError("Two-room case directory must be a regular directory")
+    case_root = case_candidate.resolve(strict=True)
+    receipt_candidate = Path(receipt_path).expanduser()
+    receipt_document, _receipt_raw = _read_json(
+        receipt_candidate, max_bytes=MAX_MANIFEST_BYTES
+    )
+    receipt_integrity = verify_two_room_receipt(receipt_candidate)
+    receipt_sha = receipt_integrity["receipt_sha256"]
+    checked_case = verify_two_room_case(case_root)
+    if (
+        receipt_document.get("status") != "executed_requires_engineering_review"
+        or receipt_document.get("scientific_validation") != "BLOCKED"
+        or receipt_document.get("manifest_sha256") != checked_case["manifest_sha256"]
+        or receipt_document.get("spec_sha256") != checked_case["spec_sha256"]
+        or receipt_document.get("input_sha256") != checked_case["input_sha256"]
+    ):
+        raise ValueError("Two-room receipt is incomplete or does not match the case inputs")
+
+    stages = receipt_document.get("stages")
+    expected_commands = ("blockMesh", "checkMesh", "simpleFoam", "foamToVTK")
+    if type(stages) is not list or len(stages) != len(expected_commands):
+        raise ValueError("Two-room receipt does not contain four successful Foundation v10 stages")
+    if any(type(stage) is not dict for stage in stages):
+        raise ValueError("Two-room receipt stage entries must be objects")
+    if tuple(stage.get("command") for stage in stages) != expected_commands or any(
+        type(stage.get("return_code")) is not int
+        or stage.get("return_code") != 0
+        or stage.get("log_path") != f"{stage['command']}.log"
+        or type(stage.get("log_sha256")) is not str
+        or _SHA256.fullmatch(stage["log_sha256"]) is None
+        for stage in stages
+    ):
+        raise ValueError("Two-room receipt does not contain four successful Foundation v10 stages")
+    if (
+        type(stages[1].get("checkmesh")) is not dict
+        or stages[1]["checkmesh"].get("mesh_result") != "mesh_ok"
+    ):
+        raise ValueError("Two-room receipt does not contain a successful checkMesh result")
+
+    result_hashes = receipt_document.get("result_sha256")
+    probe = receipt_document.get("pressure_probe")
+    flux = receipt_document.get("solver_flux")
+    screens = receipt_document.get("engineering_screens")
+    if (
+        type(result_hashes) is not dict
+        or type(probe) is not dict
+        or type(flux) is not dict
+        or type(screens) is not dict
+        or flux.get("status") != "MEASURED_DIAGNOSTIC_ONLY"
+        or screens.get("scientific_validation") != "BLOCKED"
+        or screens.get("flow_balance_acceptance_criterion") != "NOT_SET"
+    ):
+        raise ValueError("Two-room receipt is missing measured pressure or flux diagnostics")
+    if type(probe.get("path")) is not str:
+        raise ValueError("Two-room pressure-probe path must be text")
+    if type(flux.get("phi_path")) is not str:
+        raise ValueError("Two-room solver-flux path must be case-relative text")
+    expected_paths = {stage["log_path"] for stage in stages}
+    expected_paths.add(probe["path"])
+    expected_paths.update((flux["phi_path"], "constant/polyMesh/boundary"))
+    if set(result_hashes) != expected_paths:
+        raise ValueError("Two-room receipt does not bind every stage log and pressure-probe file")
+
+    verified_results: dict[str, str] = {}
+    for relative, expected_sha in sorted(result_hashes.items()):
+        path, normalized = _asset_path(case_root, relative)
+        if normalized != relative:
+            raise ValueError("Two-room result paths must use normalized relative POSIX names")
+        digest, _size = _hash_regular_file(path, max_bytes=MAX_ASSET_BYTES)
+        if digest != _require_sha256(expected_sha, "result_sha256 entry"):
+            raise ValueError(f"Two-room result artifact hash mismatch: {relative}")
+        verified_results[relative] = digest
+    if any(verified_results.get(stage["log_path"]) != stage["log_sha256"] for stage in stages):
+        raise ValueError("Two-room stage-log hashes disagree with the receipt artifact map")
+    if probe.get("sha256") != verified_results.get(probe.get("path")):
+        raise ValueError("Two-room pressure-probe hash disagrees with the receipt artifact map")
+    if flux.get("phi_sha256") != verified_results.get(flux.get("phi_path")):
+        raise ValueError("Two-room final-time phi hash disagrees with the receipt artifact map")
+    if flux.get("poly_mesh_boundary_sha256") != verified_results.get("constant/polyMesh/boundary"):
+        raise ValueError("Two-room polyMesh boundary hash disagrees with the receipt artifact map")
+
+    receipt_name = receipt_candidate.name
+    source_id = f"SOURCE-TWO-ROOM-{receipt_sha[:12]}"
+    evidence_id = f"EVIDENCE-TWO-ROOM-{receipt_sha[:12]}"
+    integrity_requirement_id = "REQ-TWO-ROOM-ARTIFACT-INTEGRITY"
+    validation_requirement_id = "REQ-TWO-ROOM-SCIENTIFIC-VALIDATION"
+    integrity_check_id = "CHECK-TWO-ROOM-ARTIFACT-INTEGRITY"
+    validation_check_id = "CHECK-TWO-ROOM-SCIENTIFIC-VALIDATION"
+    integrity_finding_id = "FIND-TWO-ROOM-ARTIFACT-INTEGRITY"
+    validation_finding_id = "FIND-TWO-ROOM-SCIENTIFIC-VALIDATION"
+    integrity_verdict_id = "VERDICT-TWO-ROOM-ARTIFACT-INTEGRITY"
+    validation_verdict_id = "VERDICT-TWO-ROOM-SCIENTIFIC-VALIDATION"
+
+    clean_stages = [
+        {
+            "command": stage["command"],
+            "return_code": stage["return_code"],
+            "log_path": stage["log_path"],
+            "log_sha256": stage["log_sha256"],
+            **({"checkmesh": stage["checkmesh"]} if "checkmesh" in stage else {}),
+        }
+        for stage in stages
+    ]
+    evidence_value = {
+        "receipt_sha256": receipt_sha,
+        "case_manifest_sha256": checked_case["manifest_sha256"],
+        "spec_sha256": checked_case["spec_sha256"],
+        "input_sha256": checked_case["input_sha256"],
+        "result_sha256": verified_results,
+        "solver_release": "OpenFOAM Foundation v10",
+        "stages": clean_stages,
+        "pressure_probe": probe,
+        "solver_flux": flux,
+        "engineering_screens": screens,
+        "receipt_status": receipt_document["status"],
+        "asset_hashes_verified": True,
+        "integrity_scope": "local_hash_link_consistency_not_authenticity",
+        "scientific_validation": "BLOCKED",
+        "interpretation": (
+            "Receipt, case input, stage-log, probe, and solver-flux hash links were verified locally. "
+            "This does not authenticate the source, assess convergence, or establish physical validation."
+        ),
+    }
+    input_sha = _sha256(
+        json.dumps(
+            {
+                "receipt_sha256": receipt_sha,
+                "case_manifest_sha256": checked_case["manifest_sha256"],
+                "input_sha256": checked_case["input_sha256"],
+                "result_sha256": verified_results,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    )
+
+    requirements = RequirementSet(
+        id=f"REQSET-TWO-ROOM-{receipt_sha[:12]}",
+        version="1",
+        title="Two-room solver receipt integrity and validation status",
+        source="CleanroomX two-room OpenFOAM evidence adapter",
+        requirements=(
+            Requirement(
+                id=integrity_requirement_id,
+                title="Two-room case and run artifact integrity",
+                source="CleanroomX hash-bound two-room case and run receipt",
+                reference=receipt_name,
+                scope=("two_room_case",),
+                criteria={
+                    "required": "Receipt, case inputs, stage logs, and solver result hashes are locally consistent.",
+                    "decision_scope": "artifact_integrity_only",
+                },
+            ),
+            Requirement(
+                id=validation_requirement_id,
+                title="Independent cleanroom CFD validation",
+                source="Independent measurements and engineering review",
+                scope=("two_room_case",),
+                criteria={
+                    "required": [
+                        "Reviewed solver convergence and mesh independence",
+                        "Aligned independent cleanroom measurements and uncertainty",
+                        "Competent engineering correlation review",
+                    ],
+                    "decision_scope": "physical_validation",
+                },
+            ),
+        ),
+    )
+    return ProofGraph(
+        id=f"PROOFGRAPH-TWO-ROOM-{receipt_sha[:16]}",
+        requirement_set=requirements,
+        evidence_sources=(
+            EvidenceSource(
+                id=source_id,
+                kind="openfoam_two_room_run_receipt",
+                reference=receipt_name,
+                revision=receipt_sha,
+            ),
+        ),
+        evidence=(
+            SimulationEvidence(
+                id=evidence_id,
+                property_name="two_room_openfoam_run_evidence",
+                value=evidence_value,
+                source_id=source_id,
+                version=receipt_sha,
+                subject_ref="two_room_case",
+                provenance=(
+                    ProvenanceRecord(
+                        id=f"PROV-TWO-ROOM-{receipt_sha[:12]}",
+                        source_id=source_id,
+                        origin="OpenFOAM Foundation v10 two-room run receipt",
+                        originating_file=receipt_name,
+                        originating_calculation="two_room_openfoam_run",
+                        method="sha256_receipt_case_input_and_result_artifact_verification",
+                    ),
+                ),
+            ),
+        ),
+        checks=(
+            ComplianceCheck(
+                id=integrity_check_id,
+                requirement_id=integrity_requirement_id,
+                evidence_ids=(evidence_id,),
+                required_evidence_kinds=("simulation",),
+            ),
+            ComplianceCheck(
+                id=validation_check_id,
+                requirement_id=validation_requirement_id,
+                evidence_ids=(evidence_id,),
+            ),
+        ),
+        findings=(
+            ComplianceFinding(
+                id=integrity_finding_id,
+                check_id=integrity_check_id,
+                requirement_id=integrity_requirement_id,
+                status="pass",
+                reason="The receipt, case inputs, stage logs, and measured result artifacts have matching local SHA-256 links.",
+                evidence_ids=(evidence_id,),
+                evidence_present=True,
+                expected="locally consistent receipt and result hashes",
+                actual={"receipt_sha256": receipt_sha, "verified_result_sha256": verified_results},
+            ),
+            ComplianceFinding(
+                id=validation_finding_id,
+                check_id=validation_check_id,
+                requirement_id=validation_requirement_id,
+                status="not_checked",
+                reason="Scientific validation remains BLOCKED; independent measurements, mesh-independence review, and engineering correlation are not supplied.",
+                evidence_ids=(evidence_id,),
+                evidence_present=True,
+                expected="independent validation evidence and engineering review",
+                actual="BLOCKED",
+            ),
+        ),
+        verdicts=(
+            ComplianceVerdict(
+                id=integrity_verdict_id,
+                requirement_id=integrity_requirement_id,
+                status="pass",
+                finding_ids=(integrity_finding_id,),
+                reason="Local artifact integrity was verified; authenticity is not assessed.",
+            ),
+            ComplianceVerdict(
+                id=validation_verdict_id,
+                requirement_id=validation_requirement_id,
+                status="not_checked",
+                finding_ids=(validation_finding_id,),
+                reason="Scientific validation remains BLOCKED.",
+            ),
+        ),
+        verification_runs=(
+            VerificationRun(
+                id=f"RUN-TWO-ROOM-{input_sha[:16]}",
+                requirement_set_id=requirements.id,
+                check_ids=(integrity_check_id, validation_check_id),
+                verdict_ids=(integrity_verdict_id, validation_verdict_id),
+                input_sha256=input_sha,
+                metadata={
+                    "adapter": "cleanroomx.cfd_proofgraph",
+                    "receipt_sha256": receipt_sha,
+                    "asset_hashes_verified": True,
+                    "scientific_validation": "BLOCKED",
+                    "interpretation": "Local artifact integrity only; convergence, authenticity, and physical validation are not checked.",
+                },
+            ),
+        ),
+    )
+
+
+def export_two_room_proofgraph(
+    case_directory: str | Path,
+    receipt_path: str | Path,
+    destination: str | Path,
+) -> dict[str, Any]:
+    """Atomically export a receipt-bound two-room ProofGraph JSON document."""
+    document = proofgraph_from_two_room_receipt(case_directory, receipt_path).to_dict()
     destination_path = Path(destination).expanduser()
     if destination_path.is_symlink() or destination_path.exists() and not destination_path.is_file():
         raise ValueError("ProofGraph export destination must be a regular file")

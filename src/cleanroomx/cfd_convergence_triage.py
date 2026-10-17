@@ -363,6 +363,7 @@ _GRID_MESH_INPUT = "system/blockMeshDict"
 _MAX_GRID_DICTIONARY_BYTES = 16 * 1024 * 1024
 _MAX_GRID_FLUX_BYTES = 64 * 1024 * 1024
 _GRID_FLUX_PATCHES = ("inlet", "outlet", "walls")
+_OPTIONAL_GRID_FLUX_PATCHES = ("partition",)
 
 
 def _sha256_grid_input(path: Path) -> str:
@@ -441,8 +442,8 @@ def _grid_poly_mesh_patch_counts(text: str) -> dict[str, int]:
         raise ValueError("polyMesh boundary has no patch list")
     body, _ = _balanced_section(text, opening + 1, "(", ")")
     blocks = _named_dictionary_blocks(body)
-    if set(blocks) != set(_GRID_FLUX_PATCHES):
-        raise ValueError("polyMesh boundary does not contain exactly inlet, outlet, and walls")
+    if not set(_GRID_FLUX_PATCHES) <= set(blocks) or set(blocks) - set(_GRID_FLUX_PATCHES) - set(_OPTIONAL_GRID_FLUX_PATCHES):
+        raise ValueError("polyMesh boundary must contain inlet, outlet, and walls, with only supported optional patches")
     counts = {}
     for patch, block in blocks.items():
         match = re.search(r"\bnFaces\s+(\d+)\s*;", block)
@@ -569,13 +570,15 @@ def diagnose_grid_flux(case_directory: str | Path, last_time: str, *,
     inlet = patch_values["inlet"]
     outlet = patch_values["outlet"]
     walls = patch_values["walls"]
+    partition = patch_values.get("partition", [])
     gross_inlet = sum(max(-value, 0.0) for value in inlet)
     reverse_inlet = sum(max(value, 0.0) for value in inlet)
     net_inlet = -sum(inlet)
     gross_outlet = sum(max(value, 0.0) for value in outlet)
     reverse_outlet = sum(max(-value, 0.0) for value in outlet)
     net_outlet = sum(outlet)
-    net_wall = sum(walls)
+    net_partition = sum(partition)
+    net_wall = sum(walls) + net_partition
     net_boundary = sum(inlet) + net_outlet + net_wall
     if gross_inlet <= 0 or net_inlet <= 0:
         return {"status": "UNAVAILABLE", "problems": ["NO_POSITIVE_NET_INLET_FLOW"]}
@@ -601,6 +604,7 @@ def diagnose_grid_flux(case_directory: str | Path, last_time: str, *,
             "net_outward_m3_s": rounded(net_outlet),
         },
         "walls_net_outward_m3_s": rounded(net_wall),
+        "partition_net_outward_m3_s": rounded(net_partition),
         "net_boundary_outward_m3_s": rounded(net_boundary),
         "absolute_flux_imbalance_m3_s": rounded(imbalance),
         "relative_flux_imbalance_percent": rounded(100 * imbalance / gross_inlet),

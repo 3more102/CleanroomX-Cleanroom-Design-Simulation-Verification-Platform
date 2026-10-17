@@ -7,15 +7,19 @@ on:
       - "docs/CFD_GRID_EXECUTION_EVIDENCE.md"
       - "docs/CFD_GRID_CONVERGENCE.md"
       - "docs/CFD_OPENFOAM_PIPELINE.md"
+      - "examples/cfd_two_room_5pa.example.json"
       - "examples/cfd_grid_family.example.json"
       - "examples/cfd_openfoam_field_map.example.json"
       - "examples/cfd_scalar_spec.example.json"
       - "examples/cfd_scalar_field_map.example.json"
       - "scripts/openfoam_v10_scalar_sync_smoke.py"
+      - "scripts/openfoam_v10_two_room_smoke.py"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
       - "tests/test_cfd_openfoam_runtime_sync.py"
       - "tests/test_cfd_scalar_audit.py"
+      - "tests/test_cfd_convergence_triage.py"
+      - "tests/test_cfd_two_room.py"
   workflow_dispatch:
 
 permissions:
@@ -1187,6 +1191,25 @@ jobs:
             examples/cfd_scalar_spec.example.json \
             examples/cfd_scalar_field_map.example.json
 
+      - name: Run the two-room 5 Pa integration case
+        run: |
+          set -eo pipefail
+          set +e
+          source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            exit 1
+          fi
+          python scripts/openfoam_v10_two_room_smoke.py \
+            examples/cfd_two_room_5pa.example.json \
+            "$RUNNER_TEMP/cleanroomx-openfoam-two-room"
+
       - name: Audit multi-time foamToVTK selection
         run: |
           set -eo pipefail
@@ -1433,6 +1456,7 @@ jobs:
             ${{ runner.temp }}/simpleFoam-grid-family-triage.json
             ${{ runner.temp }}/cleanroomx-openfoam-runtime-sync
             ${{ runner.temp }}/cleanroomx-openfoam-scalar-sync
+            ${{ runner.temp }}/cleanroomx-openfoam-two-room
             ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
             ${{ runner.temp }}/cleanroomx-openfoam-visualization
           if-no-files-found: warn

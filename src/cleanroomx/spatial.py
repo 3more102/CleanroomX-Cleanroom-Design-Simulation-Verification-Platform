@@ -1750,27 +1750,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
-        ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
-            side="left", padx=2
-        )
         ttk.Button(
             modebar, text="Balance panels",
             command=self.balance_workspace_panes,
         ).pack(side="left", padx=2)
-        ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
-            side="left", padx=2
-        )
+
+        # Keep sync/actions on a second row so both operations remain visible
+        # at the 1050 px laptop minimum. Never clip safety-critical actions.
+        actionbar = ttk.Frame(self, padding=(8, 0, 8, 4))
+        actionbar.pack(fill="x")
         ttk.Button(
-            modebar,
-            text="Push to analysis",
-            command=self._on_sync_requested,
-        ).pack(side="right", padx=2)
+            actionbar, text="Reset 2D", width=9, command=self.reset_2d,
+        ).pack(side="left", padx=2)
         ttk.Button(
-            modebar,
-            text="Pull from analysis",
+            actionbar, text="Floor…", width=7, command=self.edit_floor,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            actionbar, text="Pull from analysis",
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
-        ).pack(side="right", padx=2)
+        ).pack(side="left", padx=(12, 2))
+        ttk.Button(
+            actionbar, text="Push to analysis",
+            command=self._on_sync_requested,
+        ).pack(side="left", padx=2)
 
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
@@ -2130,6 +2133,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         if mode in {"3d", "split"}:
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
         self.redraw()
+        # Reparenting a pane may leave the 3D canvas at its previous 1px
+        # geometry until idle layout. Redraw after actual Tk geometry settles.
+        self.after_idle(self._draw_3d)
 
     def balance_workspace_panes(self) -> None:
         """Restore usable 2D/3D/inspector sash widths without changing design."""

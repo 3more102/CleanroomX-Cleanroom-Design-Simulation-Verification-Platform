@@ -12,6 +12,11 @@ from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
+from .spatial_3d_presentation import (
+    draw_3d_reference,
+    draw_3d_zone_legend,
+    room_zone_colors,
+)
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -1663,6 +1668,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._isolated_item: _Hit | None = None
         self._hovered_3d: _Hit | None = None
         self._xray_3d = tk.BooleanVar(value=False)
+        self._zone_colors_3d = tk.BooleanVar(value=True)
         self._projection_mode = tk.StringVar(value="Orthographic")
         self._section_enabled = tk.BooleanVar(value=False)
         self._section_height_var = tk.StringVar(value="2.40")
@@ -1924,6 +1930,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             header3,
             text="X-Ray",
             variable=self._xray_3d,
+            command=self._draw_3d,
+        ).pack(side="left", padx=(4, 2))
+        ttk.Checkbutton(
+            header3, text="Zone tint",
+            variable=self._zone_colors_3d,
             command=self._draw_3d,
         ).pack(side="left", padx=(4, 2))
         for label, delta in (("↺", -15), ("↻", 15)):
@@ -3757,6 +3768,26 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
+        # Metric axes use room geometry; no CFD fields are synthesized.
+        bottom_z = min(
+            [floor_z] + [
+                room.get("floor_elevation_m", floor_z)
+                for room in self.layout["rooms"]
+            ]
+        )
+        top_z = max(
+            room.get("floor_elevation_m", floor_z) + room["height_m"]
+            for room in self.layout["rooms"]
+        ) + 0.4
+        draw_3d_reference(
+            canvas, self._project_3d,
+            bounds=(min_x - cx - pad, min_y - cy - pad,
+                    max_x - cx + pad, max_y - cy + pad),
+            bottom_z=bottom_z,
+            top_z=max(bottom_z + 0.2, top_z),
+            show_grid=self._show_grid.get(),
+        )
+
         section_height = self._active_section_height()
         if section_height is not None:
             section_points = [
@@ -3783,6 +3814,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
+        # 3D design-zone tints are distinct from physical engineering results.
+        # Status, ACH and airflow modes keep their original overlay colors.
+        zone_tint = self._zone_colors_3d.get() and overlay_mode in {"none", "pressure"}
+        zone_colors = room_zone_colors(self.layout["rooms"])
+        visible_zone_rooms = []
         warning_ids = self._warning_item_ids()
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -3821,10 +3857,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x0, y1, z1),
             ]
             fill = (
-                overlay_by_room[room["id"]]["fill"]
-                if overlay_mode != "none"
-                else "#dfe7ef"
+                zone_colors[room["id"]] if zone_tint
+                else (
+                    overlay_by_room[room["id"]]["fill"]
+                    if overlay_mode != "none"
+                    else "#dfe7ef"
+                )
             )
+            if zone_tint:
+                visible_zone_rooms.append(room)
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
@@ -3837,7 +3878,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
             )
             tag = f"room:{room['id']}"
-            stipple = "gray50" if self._xray_3d.get() else ""
+            tags = (tag, "room3d", "zone3d") if zone_tint else (tag, "room3d")
+            stipple = "gray50" if (self._xray_3d.get() or zone_tint) else ""
+            wall_fill = fill if zone_tint else "#6c7f92"
+            wall_stipple = "gray25" if zone_tint else stipple
             polygon_width = 3 if selected else (2 if hovered else 1)
             canvas.create_polygon(
                 *sum(top, ()),
@@ -3845,23 +3889,23 @@ class SpatialDesignWorkspace(ttk.Frame):
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
-                tags=(tag, "room3d"),
+                tags=tags,
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
+                fill=wall_fill,
                 outline=outline,
                 width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
+                stipple=wall_stipple,
+                tags=tags,
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
+                fill=wall_fill if zone_tint else "#53687c",
                 outline=outline,
                 width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
+                stipple=wall_stipple,
+                tags=tags,
             )
             for start, end in zip(base, top):
                 canvas.create_line(
@@ -3874,10 +3918,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                     if overlay_mode == "none"
                     else "\n" + str(overlay_room.get("label") or "")
                 )
+                classification = str(room.get("classification") or "").strip()
+                details = [room["name"]]
+                if classification:
+                    details.append(classification)
+                if overlay_text.strip():
+                    details.append(overlay_text.strip())
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"] + overlay_text,
+                    text="\n".join(details),
                     fill="#f0f6fc",
+                    font=("TkDefaultFont", 9, "bold"),
+                    justify="center",
                     tags=(tag, "room3d"),
                 )
 
@@ -3948,7 +4000,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                         width=2, tags=(tag, "device3d"),
                     )
 
-        self._draw_engineering_legend(canvas, overlay)
+        if zone_tint:
+            draw_3d_zone_legend(canvas, visible_zone_rooms, zone_colors)
+        else:
+            self._draw_engineering_legend(canvas, overlay)
 
     def _update_overlay_summary(self, overlay: dict) -> None:
         mode = str(overlay.get("mode") or "none")

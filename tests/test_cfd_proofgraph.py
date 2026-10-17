@@ -44,11 +44,25 @@ def _write_case(root: Path, configuration: int = 1) -> Path:
             "size_bytes": len(log_bytes),
         },
     ]
+    source_fields = {
+        "U": {
+            "path": "100/U",
+            "sha256": "c" * 64,
+            "size_bytes": 48,
+        }
+    }
+    source_fingerprint = _sha256(
+        json.dumps(
+            source_fields,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    )
     record = {
         "time_name": "100",
         "selected_times": ["100"],
-        "input_fingerprint_sha256": "b" * 64,
-        "source_fields": {"U": {"sha256": "c" * 64}},
+        "input_fingerprint_sha256": source_fingerprint,
+        "source_fields": source_fields,
         "fields": {"U": {"units": "m/s"}},
         "cell_count": 12,
         "imported_field_summary": {"U": {"status": "PASS"}},
@@ -109,10 +123,23 @@ def test_openfoam_sync_export_is_hash_linked_and_keeps_validation_blocked(tmp_pa
     assert document["graph_sha256"]
     assert len(document["evidence"]) == 1
     evidence = document["evidence"][0]
+    manifest = json.loads(
+        (
+            tmp_path
+            / SIMULATION_ID
+            / "configuration_1"
+            / "sync_manifest.json"
+        ).read_text(encoding="utf-8")
+    )
     assert evidence["kind"] == "simulation"
     assert evidence["value"]["asset_hashes_verified"] is True
+    assert evidence["value"]["integrity_scope"] == "local_hash_link_consistency_not_authenticity"
     assert evidence["value"]["scientific_validation"] == "BLOCKED"
     assert evidence["value"]["records"][0]["assets"][0]["sha256"]
+    assert (
+        evidence["value"]["records"][0]["input_fingerprint_sha256"]
+        == manifest["records"]["100"]["input_fingerprint_sha256"]
+    )
 
     statuses = {item["id"]: item["status"] for item in document["verdicts"]}
     assert statuses["VERDICT-OPENFOAM-CFG-1-ARTIFACT-INTEGRITY"] == "pass"
@@ -139,6 +166,17 @@ def test_openfoam_sync_export_rejects_unsafe_asset_path(tmp_path):
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(ValueError, match="escapes"):
+        proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
+
+
+def test_openfoam_sync_export_recomputes_source_field_fingerprint(tmp_path):
+    case = _write_case(tmp_path)
+    manifest_path = case / "sync_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["records"]["100"]["source_fields"]["U"]["sha256"] = "d" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="input fingerprint"):
         proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
 
 

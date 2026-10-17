@@ -169,6 +169,17 @@ def test_openfoam_sync_export_rejects_unsafe_asset_path(tmp_path):
         proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
 
 
+def test_openfoam_sync_export_rejects_windows_drive_asset_path(tmp_path):
+    case = _write_case(tmp_path)
+    manifest_path = case / "sync_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["records"]["100"]["assets"][0]["path"] = "C:/outside.vtk"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="safe relative POSIX"):
+        proofgraph_from_openfoam_sync_results(tmp_path, SIMULATION_ID)
+
+
 def test_openfoam_sync_export_recomputes_source_field_fingerprint(tmp_path):
     case = _write_case(tmp_path)
     manifest_path = case / "sync_manifest.json"

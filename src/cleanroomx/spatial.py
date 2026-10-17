@@ -2274,6 +2274,26 @@ class SpatialDesignWorkspace(ttk.Frame):
             body.forget(frame)
         state = "shown" if requested else "hidden"
         self._status_setter(f"Design Inspector {state}")
+        if requested:
+            # A restored Panedwindow may retain a sash at its far edge,
+            # leaving a present inspector with zero mapped width. Recover
+            # *only* collapsed panes; respect normal user-adjusted widths.
+            self.after_idle(self._ensure_inspector_reachable)
+
+    def _ensure_inspector_reachable(self) -> None:
+        if not self.inspector_visible():
+            return
+        self.update_idletasks()
+        width = self._body.winfo_width()
+        if width < 490:
+            return
+        pane_width = self._inspector_frame.winfo_width()
+        if pane_width >= 150:
+            return
+        target_width = min(330, max(235, int(width * 0.30)))
+        self._body.sashpos(0, max(230, width - target_width))
+        self.update_idletasks()
+        self.redraw()
 
     def toggle_inspector(self) -> None:
         self.set_inspector_visible(not self.inspector_visible())

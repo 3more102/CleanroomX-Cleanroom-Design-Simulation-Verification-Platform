@@ -7,6 +7,7 @@ synthetic synchronization fixture to show the viewer's diagnostic-only states.
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import json
 from pathlib import Path
@@ -18,6 +19,30 @@ from PIL import ImageGrab
 
 from cleanroomx.cfd_proofgraph import proofgraph_from_openfoam_sync_results
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
+
+
+def _enable_windows_dpi_awareness() -> None:
+    """Use physical monitor pixels for actual-resolution GUI screenshots.
+
+    Must run before creating Tk's first window. On 125% scaling, otherwise
+    Windows may virtualize a 1920x1080 desktop as 1536x864.
+    """
+    if os.name != "nt":
+        return
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    try:
+        # PER_MONITOR_AWARE_V2 (Windows 10+)
+        if user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            return
+    except (AttributeError, OSError):
+        pass
+    try:
+        # Legacy system-DPI-aware fallback.
+        user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
 
 
 SIMULATION_ID = "ui-screenshot-demo"
@@ -278,6 +303,7 @@ def capture(
         proofgraph = proofgraph_from_openfoam_sync_results(
             proofgraph_root, SIMULATION_ID
         )
+        _enable_windows_dpi_awareness()
         root = tk.Tk()
         try:
             if (
@@ -287,7 +313,8 @@ def capture(
                 raise RuntimeError(
                     f"Virtual display {root.winfo_screenwidth()}x"
                     f"{root.winfo_screenheight()} cannot fit {width}x{height}; "
-                    "increase Xvfb -screen size or choose a smaller --size"
+                    "set your physical display to at least the capture size, "
+                    "or increase Xvfb -screen size on Linux"
                 )
             root.tk.call("tk", "scaling", scaling)
             app = CleanroomXApp(

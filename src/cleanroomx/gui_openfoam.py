@@ -19,6 +19,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .gui_theme import theme_palette
+from .proofgraph_io import proofgraph_from_dict
 from .strict_json import load_strict_json_snapshot
 
 
@@ -33,6 +34,7 @@ _OUTPUT_TRIM_NOTICE = (
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _SYNC_SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _EVIDENCE_NAMES = ("manifest.json", "sync-state.json", "sync_manifest.json")
+_MAX_PROOFGRAPH_BYTES = 64 * 1024 * 1024
 
 
 def _enqueue_process_event(
@@ -245,6 +247,26 @@ def build_openfoam_sync_vtk_command(
     return command
 
 
+def build_openfoam_proofgraph_command(
+    result_directory: str,
+    output_file: str,
+    *,
+    python_executable: str = sys.executable,
+) -> list[str]:
+    """Build an argv-only command for the hash-verified sync-to-ProofGraph bridge."""
+    if not result_directory.strip() or not output_file.strip():
+        raise ValueError("Choose the OpenFOAM result store and a ProofGraph output file")
+    return [
+        python_executable,
+        "-m",
+        "cleanroomx.cfd_pipeline_cli",
+        "proofgraph-export",
+        result_directory,
+        "--output",
+        output_file,
+    ]
+
+
 def read_openfoam_evidence_preview(
     directory: str | Path,
     *,
@@ -361,6 +383,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._output_chars = 0
         self._output_truncated = False
         self._process: subprocess.Popen[str] | None = None
+        self._command_success_action: Callable[[], None] | None = None
         self._busy = False
         self._destroyed = False
         self._stop_requested = False
@@ -620,9 +643,16 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="normal" if self._on_proofgraph_loaded is not None else "disabled",
         )
         self.graph_button.pack(side="left", padx=5)
+        self.build_graph_button = ttk.Button(
+            evidence,
+            text="Build ProofGraph from results…",
+            command=self._build_proofgraph,
+            state="normal" if self._on_proofgraph_loaded is not None else "disabled",
+        )
+        self.build_graph_button.pack(side="left", padx=5)
         ttk.Label(
             evidence,
-            text="JSON preview is read-only and does not independently verify hashes.",
+            text="Generated graphs audit retained hashes; scientific validation remains BLOCKED.",
         ).pack(side="left", padx=(10, 0))
 
 
@@ -634,6 +664,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.watch_vtk_button,
             self.preview_button,
             self.graph_button,
+            self.build_graph_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -795,6 +826,35 @@ class OpenFOAMWorkspace(ttk.Frame):
             stopped_message="Live result synchronization stopped; imported snapshots remain saved.",
         )
 
+    def _build_proofgraph(self) -> None:
+        result_directory = self.result_directory_var.get().strip()
+        if not result_directory:
+            messagebox.showerror(
+                "OpenFOAM ProofGraph",
+                "Choose the CleanroomX OpenFOAM result store first.",
+                parent=self,
+            )
+            return
+        output_file = filedialog.asksaveasfilename(
+            title="Save OpenFOAM synchronization ProofGraph",
+            initialfile="openfoam-sync-proofgraph.json",
+            defaultextension=".json",
+            filetypes=(("JSON files", "*.json"), ("All files", "*")),
+            confirmoverwrite=True,
+        )
+        if not output_file:
+            return
+        try:
+            command = build_openfoam_proofgraph_command(result_directory, output_file)
+        except ValueError as exc:
+            messagebox.showerror("OpenFOAM ProofGraph", str(exc), parent=self)
+            return
+        self._start_command(
+            "Verify OpenFOAM snapshots and build ProofGraph",
+            command,
+            on_success=lambda: self._open_built_proofgraph(output_file),
+        )
+
     def _start_command(
         self,
         label: str,
@@ -803,6 +863,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         stop_prompt: tuple[str, str] | None = None,
         stopping_status: str | None = None,
         stopped_message: str | None = None,
+        on_success: Callable[[], None] | None = None,
     ) -> None:
         if self._busy:
             return
@@ -813,6 +874,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         )
         self._stopping_status = stopping_status or "Stopping OpenFOAM command and child solvers"
         self._stopped_message = stopped_message or "OpenFOAM command and child solvers stopped."
+        self._command_success_action = on_success
         self._append(f"{label}\n$ argv = {json.dumps(command, ensure_ascii=False)}\n")
         try:
             process = subprocess.Popen(
@@ -828,6 +890,7 @@ class OpenFOAMWorkspace(ttk.Frame):
                 **_process_group_launch_options(),
             )
         except OSError as exc:
+            self._command_success_action = None
             messagebox.showerror(label, f"Could not start command: {exc}", parent=self)
             self._status_setter(f"{label} could not start")
             return
@@ -881,6 +944,8 @@ class OpenFOAMWorkspace(ttk.Frame):
             elif kind == "finished":
                 self._process = None
                 self._set_busy(False)
+                success_action = self._command_success_action
+                self._command_success_action = None
                 if self._stop_requested:
                     self._stop_requested = False
                     visible_output.append(f"\n{self._stopped_message}\n")
@@ -891,6 +956,12 @@ class OpenFOAMWorkspace(ttk.Frame):
                         "this does not establish CFD convergence or validation.\n"
                     )
                     self._status_setter("OpenFOAM command finished; scientific validation remains blocked")
+                    if success_action is not None:
+                        try:
+                            success_action()
+                        except (OSError, ValueError, UnicodeError) as exc:
+                            visible_output.append(f"\nCould not open generated ProofGraph: {exc}\n")
+                            self._status_setter("ProofGraph export completed but could not be loaded")
                 else:
                     visible_output.append(f"\nProcess exited with status {value}.\n")
                     self._status_setter(f"OpenFOAM command failed with status {value}")
@@ -979,6 +1050,27 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._append(f"Loaded persisted ProofGraph from {selected}\n")
         self._status_setter(
             "ProofGraph loaded; confirm its evidence and validation statuses in the viewer"
+        )
+
+    def _open_built_proofgraph(self, output_file: str) -> None:
+        if self._on_proofgraph_loaded is None:
+            return
+        snapshot = load_strict_json_snapshot(
+            output_file, max_bytes=_MAX_PROOFGRAPH_BYTES
+        )
+        graph = proofgraph_from_dict(snapshot.value)
+        self._on_proofgraph_loaded(graph.to_dict())
+        integrity = next(
+            item["status"]
+            for item in graph.to_dict()["verdicts"]
+            if item["requirement_id"] == "OPENFOAM-SYNC-INTEGRITY"
+        )
+        self._append(
+            f"Verified OpenFOAM sync ProofGraph saved to {output_file}; "
+            f"snapshot integrity: {integrity}; scientific validation: BLOCKED.\n"
+        )
+        self._status_setter(
+            f"OpenFOAM ProofGraph loaded; snapshot integrity is {integrity}, scientific validation remains blocked"
         )
 
     def _append(self, value: str) -> None:

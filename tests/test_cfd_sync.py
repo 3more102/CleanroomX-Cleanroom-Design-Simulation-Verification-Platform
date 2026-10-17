@@ -7,6 +7,7 @@ import pytest
 from cleanroomx.cfd_sync import SyncError, synchronize_openfoam_vtk_once
 from cleanroomx import cfd_pipeline_cli
 from cleanroomx.cfd_pipeline_cli import build_parser
+from cleanroomx.proofgraph_openfoam import build_openfoam_sync_proofgraph
 
 
 def _make_grid(vtk, velocity, contaminant, pressure=2.5):
@@ -95,6 +96,14 @@ def test_sync_waits_for_stable_vtk_then_imports_atomically_and_resumes(tmp_path)
     resumed = synchronize_openfoam_vtk_once(source, output, **kwargs)
     assert resumed["counts"]["imported"] == 1
     assert snapshot_path.read_bytes() == saved_bytes
+
+    graph = build_openfoam_sync_proofgraph(output).to_dict()
+    assert {
+        item["requirement_id"]: item["status"] for item in graph["verdicts"]
+    } == {
+        "OPENFOAM-SYNC-INTEGRITY": "pass",
+        "OPENFOAM-SCIENTIFIC-VALIDATION": "not_checked",
+    }
 
 
 def test_sync_refuses_old_state_schema_without_relabeling_saved_summaries(tmp_path):
@@ -335,6 +344,9 @@ def test_sync_deduplicates_byte_identical_time_exports(tmp_path):
     state = json.loads((output / "sync-state.json").read_text(encoding="utf-8"))
     duplicate_records = [record for record in state["records"].values() if record["status"] == "duplicate"]
     assert duplicate_records[0]["duplicate_of"] == "100/internal.vtu"
+    graph = build_openfoam_sync_proofgraph(output).to_dict()
+    verdicts = {item["requirement_id"]: item["status"] for item in graph["verdicts"]}
+    assert verdicts["OPENFOAM-SYNC-INTEGRITY"] == "pass"
 
 
 def test_sync_enforces_source_file_limits_before_import(tmp_path):

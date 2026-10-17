@@ -14,6 +14,7 @@ import pytest
 from cleanroomx import gui_openfoam
 from cleanroomx.gui_openfoam import (
     build_openfoam_generate_command,
+    build_openfoam_proofgraph_command,
     build_openfoam_run_command,
     build_openfoam_sync_vtk_command,
     read_openfoam_evidence_preview,
@@ -97,6 +98,26 @@ def test_live_vtk_command_watches_and_keeps_extra_field_map_path_intact() -> Non
     assert command[command.index("--interval-seconds") + 1] == "0.25"
     assert command[command.index("--stable-seconds") + 1] == "0.5"
     assert "--quiet-unchanged" in command
+
+
+def test_openfoam_proofgraph_command_preserves_paths_as_single_arguments() -> None:
+    command = build_openfoam_proofgraph_command(
+        "/tmp/result store",
+        "/tmp/output graph.json",
+        python_executable="/python",
+    )
+
+    assert command == [
+        "/python",
+        "-m",
+        "cleanroomx.cfd_pipeline_cli",
+        "proofgraph-export",
+        "/tmp/result store",
+        "--output",
+        "/tmp/output graph.json",
+    ]
+    with pytest.raises(ValueError, match="result store"):
+        build_openfoam_proofgraph_command("", "/tmp/output graph.json")
 
 
 @pytest.mark.parametrize("interval", [0, 0.099, 3600.1, float("nan"), float("inf")])

@@ -46,7 +46,17 @@ visible pane without stopping a running command.
 status fields and the raw-file SHA-256. It is a viewer, not an independent
 integrity audit. **Load ProofGraph JSON** sends an existing persisted graph to
 the application's ProofGraph viewer; the desktop tab does not generate that
-graph from the CFD artifacts.
+graph from the CFD artifacts. **Build ProofGraph from results** independently
+checks each retained snapshot's raw SHA-256, its embedded simulation and
+configuration provenance, and the canonical digest of its parsed fields
+against `sync-state.json`. It saves the generated graph to a user-selected JSON
+file and opens it in the ProofGraph viewer. Its integrity verdict covers the
+retained CleanroomX result store. It does not re-read the original VTK source or
+configuration file, establish solver convergence, or assess cleanroom
+performance. The graph therefore keeps scientific validation `BLOCKED` and
+marks it `not_checked` even when snapshot integrity passes. Incomplete sync
+records produce a warning verdict; missing snapshots or mismatched digests fail
+closed and do not produce a graph.
 
 The tab is a software workflow integration. It does not yet derive OpenFOAM
 boundary geometry from the active CAD/IFC project or attach solver snapshots
@@ -239,6 +249,17 @@ known concentration semantics. Field mapping preserves the exported values;
 it does not convert kinematic pressure to Pa without a supplied density or
 convert other fields between units. Solver convergence and physical validation
 remain separate gates.
+
+Export a ProofGraph from a synchronized VTK result store after import:
+
+    cleanroomx-cfd-pipeline proofgraph-export ./cfd_results \
+      --output ./cfd_results/openfoam-sync-proofgraph.json
+
+The command re-hashes imported snapshot files and verifies the fields digest
+and metadata links before exporting. The graph includes a separate integrity
+verdict and a `not_checked` scientific-validation verdict. It protects the
+sync-state, imported snapshot, and still-present source VTK files from being
+selected as the output path.
 
 Mapped-field means are volume-weighted and carry an explicit weighting label.
 This field-summary change uses synchronization-state and snapshot schema v3.

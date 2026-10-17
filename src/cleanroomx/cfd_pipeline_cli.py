@@ -15,6 +15,10 @@ from .cfd_openfoam_runtime_sync import (
     OpenFOAMResultSynchronizer,
     hash_case_configuration,
 )
+from .proofgraph_openfoam import (
+    build_openfoam_sync_proofgraph,
+    openfoam_sync_graph_input_paths,
+)
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
 from .strict_json import load_strict_json
@@ -74,6 +78,12 @@ def build_parser():
     sync.add_argument("--once",action="store_true",help="Run one scan and exit; repeat to satisfy the stability window")
     sync.add_argument("--quiet-unchanged",action="store_true",
                       help="In watch mode, print only when imported results or scan counts change")
+    proofgraph=sub.add_parser(
+        "proofgraph-export",
+        help="Verify retained OpenFOAM sync snapshots and export a ProofGraph",
+    )
+    proofgraph.add_argument("result_directory",help="CleanroomX sync-vtk result store")
+    proofgraph.add_argument("--output",required=True,help="Output ProofGraph JSON path")
     case_sync=sub.add_parser("sync-case",help="Watch a live Foundation v10 case and import stable native fields")
     case_sync.add_argument("case_directory")
     case_sync.add_argument("output_directory")
@@ -200,6 +210,26 @@ def main():
             )
         except KeyboardInterrupt:
             return 130
+        return 0
+    if args.command=="proofgraph-export":
+        graph=build_openfoam_sync_proofgraph(args.result_directory).to_dict()
+        payload=dumps_strict_json(graph)
+        if not publish_cli_output(
+            "cleanroomx-cfd-pipeline",
+            args.output,
+            payload,
+            protected_inputs=openfoam_sync_graph_input_paths(args.result_directory),
+        ):
+            return 1
+        verdicts={item["requirement_id"]:item["status"] for item in graph["verdicts"]}
+        print(dumps_strict_json({
+            "status":"proofgraph_exported",
+            "output":str(Path(args.output).expanduser()),
+            "graph_id":graph["id"],
+            "graph_sha256":graph["graph_sha256"],
+            "verdicts":verdicts,
+            "scientific_validation":"BLOCKED",
+        }))
         return 0
     if args.command=="sync-case":
         case=Path(args.case_directory).resolve(strict=True)

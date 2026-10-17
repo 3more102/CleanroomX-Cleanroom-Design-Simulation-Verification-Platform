@@ -48,14 +48,17 @@ def _color(canvas: object, raw: str, *, default: str = "none") -> str:
     # CSS strings from an untrusted project to become SVG attributes.
     try:
         red, green, blue = canvas.winfo_rgb(value)
-    except (ValueError, AttributeError, Exception) as exc:
+    except Exception as exc:
         raise ValueError(f"Canvas color cannot be exported: {value!r}") from exc
     return f"#{red // 257:02x}{green // 257:02x}{blue // 257:02x}"
 
 
 def _stroke(canvas: object, item_id: int, attrs: dict[str, str],
             *, fill_key: str = "fill", stroke_key: str = "outline") -> None:
-    attrs["fill"] = _color(canvas, _option(canvas, item_id, fill_key))
+    attrs["fill"] = (
+        "none" if fill_key == "none"
+        else _color(canvas, _option(canvas, item_id, fill_key))
+    )
     attrs["stroke"] = _color(canvas, _option(canvas, item_id, stroke_key))
     if attrs["stroke"] != "none":
         attrs["stroke-width"] = _coord(float(_option(canvas, item_id, "width", "1") or 1))
@@ -137,9 +140,7 @@ def svg_from_3d_canvas(canvas: object) -> str:
                 "stroke-linejoin": "round", "stroke-linecap": "round",
             }
             _stroke(canvas, item_id, attrs, fill_key="none", stroke_key="fill")
-            # Tk line fill is the stroke; _stroke's "none" option is not
-            # a Tk widget option, so force a transparent SVG interior.
-            attrs["fill"] = "none"
+            # Tk line fill is its stroke; SVG polyline interior is empty.
             arrow = _option(canvas, item_id, "arrow")
             if arrow in ("first", "both"):
                 attrs["marker-start"] = "url(#cx-arrowhead)"

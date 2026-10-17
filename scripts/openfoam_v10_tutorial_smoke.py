@@ -27,7 +27,7 @@ from cleanroomx.cfd_openfoam_runtime_sync import (
 UPSTREAM_REPOSITORY = "OpenFOAM/OpenFOAM-10"
 UPSTREAM_COMMIT = "89f925dc708d068f84f51e8317e3bebcda64f5cb"
 UPSTREAM_CASE = "tutorials/incompressible/simpleFoam/pitzDaily"
-UPSTREAM_MESH = "tutorials/resources/blockMesh/pitzDaily"
+UPSTREAM_MESH = "tutorials/incompressible/simpleFoam/pitzDaily/system/blockMeshDict"
 SCHEMA = "cleanroomx.openfoam-v10-tutorial-run.v1"
 _HASH = re.compile(r"^[0-9a-f]{64}$")
 

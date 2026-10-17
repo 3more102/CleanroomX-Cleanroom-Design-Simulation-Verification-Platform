@@ -40,6 +40,10 @@ def _fixture(tmp_path, monkeypatch):
         "manifest_sha256": "b" * 64,
         "vtk_assets_sha256": {},
         "stages": [{"command": "simpleFoam", "log_path": "simpleFoam.log", "log_sha256": log_sha}],
+        "solver_flux": {
+            "inlet": {"net_inward_m3_s": 0.1},
+            "outlet": {"net_outward_m3_s": 0.09},
+        },
         "pressure_probe": {
             "path": "postProcessing/roomPressureProbes/150/p",
             "sha256": probe_sha,
@@ -221,3 +225,22 @@ def test_real_vtk_volume_weighted_room_field_statistics(tmp_path):
     assert sum(
         rooms["room_2"]["pressure_gauge"]["bin_volume_percent"]
     ) == pytest.approx(100)
+
+
+@pytest.mark.parametrize("mutation, expected", [
+    ("flow", "Inlet/outlet relative difference disagrees"),
+    ("band", "Pressure target screen disagrees"),
+    ("phi", "Solver phi flow and engineering screen disagree"),
+])
+def test_recomputed_physics_screens_reject_forged_receipt_values(tmp_path, monkeypatch, mutation, expected):
+    case, receipt, _ = _fixture(tmp_path, monkeypatch)
+    doc = json.loads(receipt.read_text(encoding="utf-8"))
+    if mutation == "flow":
+        doc["engineering_screens"]["relative_inlet_outlet_difference_percent"] = 0
+    elif mutation == "band":
+        doc["engineering_screens"]["pressure_target_screen"] = "within_declared_band"
+    else:
+        doc["solver_flux"]["inlet"]["net_inward_m3_s"] = 0.5
+    receipt.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(ValueError, match=expected):
+        analysis.analyze_two_room_evidence(case, receipt)

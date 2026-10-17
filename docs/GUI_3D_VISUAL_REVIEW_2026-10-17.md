@@ -173,3 +173,31 @@ The separate **Focus 3D** mode explicitly allocates visible canvas space;
 the scrollable Properties editor is tested with the Inspector shown and
 Output/Verification hidden. Do not treat tiny canvases as permission to
 draw illegible text; the dedicated compact mode stays intentional.
+
+
+## SVG vector export for design reviews
+
+The **3D MODEL → Views → Export current 3D view… (SVG)** action writes a
+standalone, scalable vector snapshot of *the currently drawn 3D canvas*. It
+preserves the camera angle, floor and axis cage, room volumes, color legend,
+labels, devices, pressure relationships and supplied engineering overlays
+that are visible at export time.
+
+Use it to embed a clean design image in a report or manual. The export:
+- Does not need Pillow, OpenFOAM, a render server or a new 3D geometry model.
+- Emits standards-based SVG polygons, lines, rectangles, ellipses and text.
+- Preserves the current visible draw order, arrowheads and common stipple
+  transparency approximately; normal Tk/SVG font differences can occur.
+- Includes an accessible description that distinguishes design colors
+  from CFD solver values or regulatory compliance.
+- Writes atomically, refusing unsupported shapes and non-finite geometry
+  rather than silently omitting elements or overwriting a valid prior file.
+- Does not mutate CAD geometry, engineering inputs, selections or undo history.
+
+The user must expand the 3D pane to at least 100×100 pixels before export.
+Tiny, minimized or otherwise unreadable views are rejected. For a full-image
+export, click **Focus 3D**, then use **Views → Export current 3D view… (SVG)**.
+
+This is an image of the existing design GUI, not CFD visualization data
+provenance, numerical solver output, a manufacturing drawing, or an
+ISO 14644-1 / EU GMP compliance certificate.

@@ -1127,3 +1127,17 @@ def test_3d_room_labels_are_compact_nonoverlapping_and_inspectable(app):
     assert any("Project class:" in text for text in detail_lines)
     # The same canonical room remains selected and geometry is untouched.
     assert workspace.selected == _Hit("room", room["id"])
+
+
+def test_balance_workspace_panels_restores_inspector_width_without_model_edits(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("split")
+    app.root.update()
+    before = copy.deepcopy(workspace.layout)
+    workspace.balance_workspace_panes()
+    app.root.update()
+    total_width = workspace._body.winfo_width()
+    if total_width >= 650 and workspace.inspector_visible():
+        pane_position = workspace._body.sashpos(0)
+        assert 235 <= total_width - pane_position <= 360
+    assert workspace.layout == before

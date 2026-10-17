@@ -99,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             "room_2_speed_distribution.svg",
             "room_1_pressure_distribution.svg",
             "room_2_pressure_distribution.svg",
+            "simplefoam_continuity_history.svg",
         }
         if (
             analysis_summary["status"] != "DIAGNOSTIC_ONLY"

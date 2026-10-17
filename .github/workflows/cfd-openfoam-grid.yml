@@ -1481,8 +1481,15 @@ jobs:
         run: |
           set -eo pipefail
           set +u
+          set +e
           source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
           set -u
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
           if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
             printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
             exit 1

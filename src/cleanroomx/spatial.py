@@ -12,6 +12,7 @@ from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
+from .spatial_scene_finder import scene_entries
 from .spatial_3d_legibility import (
     draw_device_details_hud,
     draw_room_details_hud,
@@ -1636,6 +1637,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
         self._on_focus_requested = on_focus_requested
+        self._scene_finder_window: tk.Toplevel | None = None
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1915,6 +1917,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 label=label,
                 command=lambda p=preset: self.set_3d_view_preset(p),
             )
+        camera_menu.add_separator()
+        camera_menu.add_command(
+            label="Find room or device…  ( / )",
+            command=self.open_scene_finder,
+        )
         camera_button.pack(side="left", padx=(5, 2))
         ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
             side="left", padx=2
@@ -2163,6 +2170,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<KeyPress-f>", lambda event: self._3d_key_command("fit"))
         self.canvas_3d.bind("<KeyPress-r>", lambda event: self._3d_key_command("reset"))
         self.canvas_3d.bind("<KeyPress-i>", lambda event: self._3d_key_command("iso"))
+        self.canvas_3d.bind("<KeyPress-slash>", self._on_scene_finder_shortcut)
         self.canvas_3d.bind("<Escape>", self._on_escape)
         self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
         self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
@@ -4589,6 +4597,101 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
+
+    def _on_scene_finder_shortcut(self, event: tk.Event | None = None) -> str:
+        self.open_scene_finder()
+        return "break"
+
+    def open_scene_finder(self) -> None:
+        """Non-modal searchable room/device navigator for a crowded 3D scene."""
+        existing = self._scene_finder_window
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            existing.lift()
+            existing.focus_set()
+            return
+
+        window = tk.Toplevel(self)
+        self._scene_finder_window = window
+        window.title("CleanroomX · Find room or device")
+        window.geometry("570x390")
+        window.minsize(360, 250)
+        window.transient(self.winfo_toplevel())
+        window.protocol("WM_DELETE_WINDOW", window.destroy)
+
+        content = ttk.Frame(window, padding=12)
+        content.pack(fill="both", expand=True)
+        ttk.Label(
+            content, text="FIND IN 3D SCENE",
+            style="CX.Section.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        query = tk.StringVar()
+        search = ttk.Entry(content, textvariable=query)
+        search.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            content, text="Search by name, type, room, or object ID.",
+        ).pack(anchor="w", pady=(0, 8))
+
+        listing = ttk.Frame(content)
+        listing.pack(fill="both", expand=True)
+        tree = ttk.Treeview(
+            listing, columns=("kind", "name", "room"),
+            show="headings", selectmode="browse", height=10,
+        )
+        for col, label, width in (
+            ("kind", "Type", 105), ("name", "Name", 210),
+            ("room", "Assigned room", 160),
+        ):
+            tree.heading(col, text=label)
+            tree.column(col, width=width, minwidth=70, stretch=True)
+        scroll = ttk.Scrollbar(listing, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        status = tk.StringVar(value="")
+        ttk.Label(content, textvariable=status).pack(anchor="w", pady=(5, 2))
+
+        def populate(*_args: object) -> None:
+            tree.delete(*tree.get_children())
+            results = scene_entries(self.layout, query.get())
+            for result in results:
+                tree.insert(
+                    "", "end", iid=f"{result['kind']}:{result['id']}",
+                    values=(result["type"], result["name"], result["room"]),
+                )
+            if results:
+                tree.selection_set(tree.get_children()[0])
+                tree.focus(tree.get_children()[0])
+            status.set(f"{len(results)} matching objects (showing up to 250)")
+
+        def open_selected(event: tk.Event | None = None) -> str:
+            selected = tree.selection()
+            if not selected:
+                return "break"
+            kind, item_id = selected[0].split(":", 1)
+            if self.select_item(kind, item_id, notify=True):
+                self.fit_selected()
+                self._status_setter(
+                    f"3D scene: selected {kind} {item_id}"
+                )
+                window.destroy()
+            return "break"
+
+        query.trace_add("write", populate)
+        tree.bind("<Double-Button-1>", open_selected)
+        tree.bind("<Return>", open_selected)
+        search.bind("<Return>", open_selected)
+        window.bind("<Escape>", lambda _event: window.destroy())
+        buttons = ttk.Frame(content)
+        buttons.pack(fill="x", pady=(6, 0))
+        ttk.Button(
+            buttons, text="Open and fit", command=open_selected,
+        ).pack(side="right", padx=(4, 0))
+        ttk.Button(
+            buttons, text="Close", command=window.destroy,
+        ).pack(side="right")
+        populate()
+        search.focus_set()
 
     def _3d_key_command(self, command: str) -> str:
         """Camera shortcuts modify only presentation state."""

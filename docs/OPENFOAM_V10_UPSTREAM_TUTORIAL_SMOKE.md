@@ -6,9 +6,8 @@ commit `89f925dc708d068f84f51e8317e3bebcda64f5cb` and its
 `tutorials/incompressible/simpleFoam/pitzDaily` case.
 
 The job copies the pinned case into an isolated temporary directory, resolves
-its upstream `tutorials/resources/blockMesh/pitzDaily` mesh-dictionary
-reference and verifies the file hash, then runs `blockMesh`, `checkMesh`,
-and `simpleFoam`. During the actual
+pinned `system/blockMeshDict` file and verifies its hash, then runs
+`blockMesh`, `checkMesh`, and `simpleFoam`. During the actual
 `simpleFoam` process, CleanroomX polls native result times and synchronizes
 stable velocity (`U`) and kinematic pressure (`p`) snapshots through
 `OpenFOAMResultSynchronizer`. The job retains command logs, input/configuration

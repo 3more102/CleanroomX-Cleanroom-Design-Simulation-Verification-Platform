@@ -26,7 +26,7 @@ On Windows PowerShell from the repository root:
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
 py -3 -m cleanroomx.cfd_pipeline_cli suite-preflight `
-    examples/gui_demo.cleanroomx.json `
+    examples/cfd_suite_topology_demo.cleanroomx.json `
     --output "$env:TEMP\cleanroomx-suite-preflight.json"
 ```
 
@@ -34,7 +34,7 @@ On Linux / WSL after `pip install -e .`:
 
 ```bash
 cleanroomx-cfd-pipeline suite-preflight \
-    examples/gui_demo.cleanroomx.json --output /tmp/suite-preflight.json
+    examples/cfd_suite_topology_demo.cleanroomx.json --output /tmp/suite-preflight.json
 ```
 
 Exit code **0** means *geometry topology valid only*; **3** means topology
@@ -42,9 +42,14 @@ blocked; **1** may mean output publication failed. None means CFD validated.
 The report always says `ready_for_solver: false` and
 `openfoam_case_status: not_generated`.
 
-The bundled demo contains 1 m gaps between rooms and its doors face outside.
-The preflight appropriately flags it as disconnected instead of inventing
-shared walls or an internal flow path.
+The new `cfd_suite_topology_demo.cleanroomx.json` is a clearly marked
+**concept-only** three-room facility with aligned shared walls, two connecting
+doors, and a legitimate exterior entry. It provides a positive geometry-topology
+example for the 2D/3D viewer and CLI, not CFD or ISO qualification.
+
+The older `gui_demo.cleanroomx.json` intentionally contains 1 m gaps between
+rooms; the preflight reports that older layout as disconnected rather than
+inventing internal passages.
 
 ## Engineering boundaries
 

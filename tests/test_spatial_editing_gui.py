@@ -1178,7 +1178,16 @@ def test_scrollable_inspector_keeps_3d_canvas_and_apply_accessible(app):
     workspace.set_workspace_mode("3d")
     app.root.update()
     inspector = workspace._inspector_canvas
-    assert inspector.winfo_ismapped()
+    assert workspace.inspector_visible(), "Inspector pane must be registered"
+    assert inspector.winfo_ismapped(), (
+        f"parent={workspace._inspector_frame.winfo_ismapped()}, "
+        f"pane={workspace._inspector_frame.winfo_width()}x"
+        f"{workspace._inspector_frame.winfo_height()}, "
+        f"body={workspace._body.winfo_width()}x"
+        f"{workspace._body.winfo_height()}, "
+        f"canvas={inspector.winfo_width()}x{inspector.winfo_height()}, "
+        f"notebook={app.notebook.select()}, active={workspace}"
+    )
     assert inspector.winfo_height() > 50
     assert workspace.canvas_3d.winfo_height() > 70
 

@@ -25,6 +25,36 @@ def _finite(value: Any, label: str) -> float:
     return float(value)
 
 
+def _envelope_indices(series: list[list[float]], max_points: int = 1000) -> list[int]:
+    """Bound plot vertices while retaining endpoints and per-series local extrema.
+
+    Uniform stride sampling can conceal narrow solver spikes and skip the final
+    verified sample. A shared envelope index keeps all plotted fields aligned
+    and reserves vertices for each field's minima and maxima in every bucket.
+    """
+    if (
+        not series or len(series) > 4 or type(max_points) is not int
+        or max_points < 2 + 2 * len(series)
+    ):
+        raise ValueError("Invalid chart series count or point budget")
+    count = len(series[0])
+    if not count or any(len(values) != count for values in series):
+        raise ValueError("Chart series must be nonempty and aligned")
+    if any(not math.isfinite(value) for values in series for value in values):
+        raise ValueError("Chart series must contain only finite values")
+    if count <= max_points:
+        return list(range(count))
+    bucket_count = min(count - 2, (max_points - 2) // (2 * len(series)))
+    chosen = {0, count - 1}
+    for bucket in range(bucket_count):
+        start = 1 + bucket * (count - 2) // bucket_count
+        end = 1 + (bucket + 1) * (count - 2) // bucket_count
+        for values in series:
+            chosen.add(min(range(start, end), key=values.__getitem__))
+            chosen.add(max(range(start, end), key=values.__getitem__))
+    return sorted(chosen)
+
+
 def _probe_series(text: str, density: float, expected: dict[str, Any]) -> list[dict[str, float]]:
     verified = parse_pressure_probe_data(text)
     if verified["sample_count"] != expected.get("sample_count"):
@@ -317,7 +347,9 @@ def analyze_two_room_evidence(case_directory: str | Path, receipt_path: str | Pa
 
 
 def _line_svg(series: list[dict[str, float]], target: float, tolerance: float) -> str:
-    series = series[::max(1, math.ceil(len(series) / 1000))]
+    series = [series[i] for i in _envelope_indices(
+        [[row["delta_pressure_pa"] for row in series]]
+    )]
     xs = [row["solver_index"] for row in series]
     ys = [row["delta_pressure_pa"] for row in series]
     x0, x1 = min(xs), max(xs)
@@ -396,14 +428,14 @@ def _residual_svg(field: str, records: dict[str, list[float]]) -> str:
     if maximum <= minimum:
         maximum = minimum + 1.0
     n = len(initial)
-    step = max(1, math.ceil(n / 1000))
+    indices = _envelope_indices([initial, final])
     xscale = lambda i: 75.0 + 585.0 * i / max(1, n - 1)
     yscale = lambda value: 235.0 - 175.0 * (value - minimum) / (maximum - minimum)
     segments = []
     for key, color in (("initial", "#1464b4"), ("final", "#d96b27")):
         points = " ".join(
             f"{xscale(i):.2f},{yscale(math.log10(max(1e-16, records[key][i]))):.2f}"
-            for i in range(0, n, step)
+            for i in indices
         )
         segments.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="1.8"/>')
     return (
@@ -437,8 +469,7 @@ def _continuity_svg(continuity: list[dict[str, float]]) -> str:
     if extent == 0.0:
         extent = 1.0
     total = len(continuity)
-    step = max(1, math.ceil(total / 1000))
-    indices = sorted(set(range(0, total, step)) | {total - 1})
+    indices = _envelope_indices([readings["sum_local"], readings["global"]])
     scale_x = lambda i: 70.0 + 600.0 * i / max(1, total - 1)
     # Symmetric scale preserves the sign of the reported global continuity error.
     scale_y = lambda y: 145.0 - 82.0 * (y / extent)

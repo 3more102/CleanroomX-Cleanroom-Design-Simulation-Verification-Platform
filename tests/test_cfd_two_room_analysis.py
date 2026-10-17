@@ -310,3 +310,72 @@ def test_offline_dashboard_uses_verified_volume_weighted_room_statistics(tmp_pat
     assert "Room 1" in html and "Room 2" in html
     assert "Unavailable</td>" in html
     assert "<script" not in html
+
+
+def test_chart_envelope_preserves_endpoints_and_spikes_under_vertex_budget():
+    pressure = [0.0] * 5002
+    pressure[1137] = 42.0
+    pressure[3379] = -25.0
+    indices = analysis._envelope_indices([pressure], max_points=600)
+    assert indices[0] == 0
+    assert indices[-1] == 5001
+    assert 1137 in indices and 3379 in indices
+    assert len(indices) <= 600
+    assert indices == sorted(set(indices))
+
+
+def test_chart_envelope_aligns_multiple_fields_and_preserves_both_extrema():
+    initial = [0.0001] * 5000
+    final = [0.00001] * 5000
+    initial[33] = 12.0
+    initial[3333] = 1e-12
+    final[4900] = 55.0
+    indices = analysis._envelope_indices([initial, final])
+    assert {0, 4999, 33, 3333, 4900}.issubset(indices)
+    assert len(indices) <= 1000
+
+
+@pytest.mark.parametrize("series,budget", [
+    ([], 1000),
+    ([[1.0], [1.0, 2.0]], 1000),
+    ([[float("nan")]], 1000),
+    ([[1.0], [float("inf")]], 1000),
+    ([[1.0, 2.0]] * 5, 1000),
+    ([[1.0, 2.0]], True),
+    ([[1.0, 2.0]], 3),
+])
+def test_chart_envelope_rejects_invalid_data_and_budgets(series, budget):
+    with pytest.raises(ValueError):
+        analysis._envelope_indices(series, max_points=budget)
+
+
+def test_long_pressure_residual_and_continuity_svgs_show_last_data_point():
+    import re
+
+    pressure = [
+        {"solver_index": float(i), "delta_pressure_pa": 0.0}
+        for i in range(4001)
+    ]
+    pressure[103] = {"solver_index": 103.0, "delta_pressure_pa": 25.0}
+    pressure[-1]["delta_pressure_pa"] = 7.0
+    pressure_svg = analysis._line_svg(pressure, 5.0, 1.0)
+    assert re.search(r'<polyline points="[^"]*670\.00,[^"]*"', pressure_svg)
+
+    initial = [0.01] * 4001
+    final = [0.001] * 4001
+    initial[101] = 2.0
+    residual_svg = analysis._residual_svg("p", {"initial": initial, "final": final})
+    polylines = re.findall(r'<polyline points="([^"]+)"', residual_svg)
+    assert len(polylines) == 2
+    assert all(polyline.split()[-1].startswith("660.00,") for polyline in polylines)
+    assert all(len(polyline.split()) <= 1000 for polyline in polylines)
+
+    continuity = [
+        {"sum_local": 0.01, "global": -0.001} for _ in range(4001)
+    ]
+    continuity[151]["global"] = -4.0
+    continuity_svg = analysis._continuity_svg(continuity)
+    polylines = re.findall(r'<polyline points="([^"]+)"', continuity_svg)
+    assert len(polylines) == 2
+    assert all(polyline.split()[-1].startswith("670.00,") for polyline in polylines)
+    assert all(len(polyline.split()) <= 1000 for polyline in polylines)

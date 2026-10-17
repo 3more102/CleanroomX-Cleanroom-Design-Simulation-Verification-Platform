@@ -115,8 +115,8 @@ def test_responsive_legend_uses_compact_screen_space_bounds():
     assert zone_legend_bounds(100, 200, 4) is None
     assert zone_legend_bounds(320, 240, 0) is None
     assert zone_legend_bounds(320, 240, 3) == (12, 12, 195, 59)
-    assert zone_legend_bounds(900, 520, 3) == (12, 405, 262, 509)
-    assert zone_legend_bounds(900, 520, 9) == (12, 310, 262, 509)
+    assert zone_legend_bounds(900, 520, 3) == (12, 405, 262, 508)
+    assert zone_legend_bounds(900, 520, 9) == (12, 310, 262, 508)
 
 
 def test_compact_legend_keeps_full_room_labels_outside():

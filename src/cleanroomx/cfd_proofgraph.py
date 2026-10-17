@@ -58,9 +58,15 @@ def _require_sha256(value: Any, field: str) -> str:
 
 
 def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    # Windows can report different file-index values for pathname stat()
+    # versus descriptor fstat() on some filesystems. Do not reject an
+    # otherwise stable asset on that basis alone. Size and timestamps
+    # remain checked before/during/after reading, and each asset's SHA-256
+    # is validated against the evidence manifest by _verify_asset().
+    inode = 0 if os.name == "nt" else info.st_ino
     return (
         info.st_dev,
-        info.st_ino,
+        inode,
         info.st_size,
         info.st_mtime_ns,
         info.st_ctime_ns,

@@ -156,7 +156,13 @@ def _hash_regular_file(path: Path, *, max_bytes: int) -> tuple[str, int]:
 
 
 def _asset_path(manifest_directory: Path, relative: Any) -> tuple[Path, str]:
-    if type(relative) is not str or not relative or "\\" in relative or "\x00" in relative:
+    if (
+        type(relative) is not str
+        or not relative
+        or "\\" in relative
+        or ":" in relative
+        or "\x00" in relative
+    ):
         raise ValueError("Result asset path must be a safe relative POSIX path")
     parsed = PurePosixPath(relative)
     if parsed.is_absolute() or any(part in ("", ".", "..") for part in parsed.parts):
@@ -254,6 +260,7 @@ def _validate_record(
             type(source_path) is not str
             or not source_path
             or "\\" in source_path
+            or ":" in source_path
             or "\x00" in source_path
         ):
             raise ValueError("OpenFOAM source-field path must be a relative POSIX path")

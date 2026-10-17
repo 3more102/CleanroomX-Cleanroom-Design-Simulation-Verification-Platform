@@ -356,16 +356,29 @@ def verify_two_room_case(directory: str | Path) -> dict[str, Any]:
         raise ValueError("two-room manifest is missing, symlinked, or oversized")
     manifest_raw = manifest_path.read_bytes()
     manifest = json.loads(manifest_raw.decode("utf-8"))
-    if type(manifest) is not dict or manifest.get("schema_version") != CASE_MANIFEST_SCHEMA:
+    manifest_fields = {
+        "schema_version", "solver_release", "spec_sha256", "spec",
+        "metadata", "files", "scientific_validation",
+    }
+    if (
+        type(manifest) is not dict
+        or set(manifest) != manifest_fields
+        or manifest.get("schema_version") != CASE_MANIFEST_SCHEMA
+    ):
         raise ValueError("unexpected two-room case manifest schema")
+    if (
+        manifest.get("solver_release") != "OpenFOAM Foundation v10"
+        or manifest.get("scientific_validation") != "BLOCKED"
+    ):
+        raise ValueError("two-room manifest has an unsupported solver release or validation status")
     spec = validate_two_room_spec(manifest.get("spec"))
     if manifest.get("spec_sha256") != _sha256(_canonical_json(spec)):
         raise ValueError("two-room specification digest mismatch")
+    expected_files, expected_metadata = build_two_room_files(spec)
+    if manifest.get("metadata") != expected_metadata:
+        raise ValueError("two-room manifest metadata does not match its specification")
     files = manifest.get("files")
-    if type(files) is not dict or set(files) != {
-        "system/blockMeshDict", "system/controlDict", "system/fvSchemes", "system/fvSolution",
-        "constant/physicalProperties", "constant/momentumTransport", "0/U", "0/p",
-    }:
+    if type(files) is not dict or set(files) != set(expected_files):
         raise ValueError("two-room manifest does not bind the exact generated input set")
     verified = {}
     for relative, expected in sorted(files.items()):
@@ -378,6 +391,8 @@ def verify_two_room_case(directory: str | Path) -> dict[str, Any]:
         raw = resolved.read_bytes()
         if len(raw) > MAX_CASE_BYTES or _sha256(raw) != expected:
             raise ValueError(f"two-room input digest mismatch: {relative}")
+        if raw != expected_files[relative].encode("utf-8"):
+            raise ValueError(f"two-room input does not match its declared specification: {relative}")
         verified[relative] = expected
     return {
         "status": "verified",

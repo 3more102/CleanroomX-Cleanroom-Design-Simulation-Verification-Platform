@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import pytest
@@ -77,6 +78,38 @@ def test_two_room_export_binds_all_inputs_and_refuses_overwrite(tmp_path):
     block_mesh = case / "system" / "blockMeshDict"
     block_mesh.write_text(block_mesh.read_text() + "// changed\n", encoding="utf-8")
     with pytest.raises(ValueError, match="digest mismatch"):
+        verify_two_room_case(case)
+
+
+@pytest.mark.parametrize("tamper", ["rehash_input", "metadata", "release", "validation"])
+def test_two_room_audit_rejects_self_consistent_but_noncanonical_manifest(tmp_path, tamper):
+    case = tmp_path / "case"
+    export_two_room_case(_spec(), case)
+    manifest_path = case / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    if tamper == "rehash_input":
+        input_path = case / "0" / "U"
+        changed = input_path.read_bytes().replace(b"type noSlip;", b"type slip;", 1)
+        assert changed != input_path.read_bytes()
+        input_path.write_bytes(changed)
+        manifest["files"]["0/U"] = hashlib.sha256(changed).hexdigest()
+        expected_error = "does not match its declared specification"
+    elif tamper == "metadata":
+        manifest["metadata"]["door_opening_area_m2"] = 0.05
+        expected_error = "metadata does not match"
+    elif tamper == "release":
+        manifest["solver_release"] = "OpenFOAM Enterprise v10"
+        expected_error = "unsupported solver release"
+    else:
+        manifest["scientific_validation"] = "PASS"
+        expected_error = "unsupported solver release or validation status"
+
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=expected_error):
         verify_two_room_case(case)
 
 

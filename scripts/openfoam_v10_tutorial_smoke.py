@@ -287,6 +287,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     sync = sync_summary or {}
     sync_manifest_path = Path(sync["manifest"]) if sync.get("manifest") else None
+    sync_manifest_doc: dict[str, Any] = {}
+    if sync_manifest_path is not None and sync_manifest_path.is_file():
+        sync_manifest_doc = json.loads(sync_manifest_path.read_text(encoding="utf-8"))
+    sync_errors = sync_manifest_doc.get("errors", [])
+    if type(sync_errors) is not list:
+        sync_errors = []
     receipt: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "BLOCKED",
@@ -313,8 +319,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "times": sync.get("times", []),
             "manifest": sync.get("manifest"),
             "manifest_sha256": sync.get("manifest_sha256"),
-            "solver_returncode": sync.get("solver_returncode"),
-            "solver_log_status": sync.get("solver_log_status"),
+            "error_count": sync.get("error_count", 0),
+            "errors": [
+                {
+                    key: error.get(key)
+                    for key in ("time_name", "attempt", "error_type", "message", "status")
+                }
+                for error in sync_errors[-10:]
+                if type(error) is dict
+            ],
+            "failed_times": sync_manifest_doc.get("failed_times", []),
+            "solver_returncode": sync_manifest_doc.get("solver_returncode"),
+            "solver_log_status": sync_manifest_doc.get("solver_log_status"),
         },
         "scientific_validation": "BLOCKED",
         "limitations": [
@@ -323,10 +339,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "No independent cleanroom measurements or uncertainty analysis are included.",
         ],
     }
-    if sync_manifest_path is not None and sync_manifest_path.is_file():
-        manifest = json.loads(sync_manifest_path.read_text(encoding="utf-8"))
-        receipt["foamToVTK_build"] = manifest.get("solver_build")
-        receipt["environment"]["foamToVTK_executable"] = manifest.get("foamToVTK_executable")
+    if sync_manifest_doc:
+        receipt["foamToVTK_build"] = sync_manifest_doc.get("solver_build")
+        receipt["environment"]["foamToVTK_executable"] = sync_manifest_doc.get("foamToVTK_executable")
     try:
         if (
             mesh_stage["returncode"] == 0

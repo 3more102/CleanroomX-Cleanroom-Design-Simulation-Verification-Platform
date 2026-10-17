@@ -2736,6 +2736,7 @@ class CleanroomXApp:
             on_redo_requested=self.redo_project_edit,
             on_selection_change=self._on_workspace_selection_change,
             on_view_status_change=self.view_status_var.set,
+            on_focus_requested=self.toggle_focus_workspace,
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 

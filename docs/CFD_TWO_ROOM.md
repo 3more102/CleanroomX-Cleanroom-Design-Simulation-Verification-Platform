@@ -111,6 +111,22 @@ Neither workflow overwrites the output directory or automatically launches a sol
 
 The result includes **analysis.json**, an **index.html** offline diagnostic
 review dashboard with traceable metrics, and self-contained SVG graphs.
+
+The export also publishes a versioned `artifact_manifest.json` with SHA-256
+and byte size for the JSON, dashboard, and every SVG. Outputs are staged into
+a new temporary directory and published as a completed directory; the writer
+refuses existing destination paths. To verify an exported bundle after copying
+or archiving it, use:
+
+    cleanroomx-cfd-pipeline two-room-analysis-audit ./two_room_analysis
+
+The independent audit checks exact file membership, SHA-256 and size, graph
+names, receipt and case-manifest references, and the explicit
+`scientific_validation=BLOCKED` evidence boundary. Missing, altered,
+replaced, symlinked, or extra artifacts fail the audit. The bundle hash is
+**not a digital signature** and does not prove source authenticity or
+physical correctness.
+
 Open the HTML file in a browser after export; it uses no remote assets or scripts.
 
 

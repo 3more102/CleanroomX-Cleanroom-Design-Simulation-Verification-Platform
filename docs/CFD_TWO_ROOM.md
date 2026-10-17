@@ -93,3 +93,47 @@ uploaded a hash-addressed evidence archive. Its v1 receipt predates VTK asset
 hash binding, so it is historical software-integration evidence; it must be
 rerun with the current v2 receipt before its visualization assets can be used
 in a ProofGraph integrity verdict. See the [run 202 evidence report](OPENFOAM_V10_RUN_202_TWO_ROOM_EVIDENCE.md).
+
+
+## Receipt-bound CFD analysis graphs
+
+After a completed v2 receipt has been generated, export diagnostic analysis
+through the existing strict ProofGraph artifact-integrity gate:
+
+    cleanroomx-cfd-pipeline two-room-analyze \
+      ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
+      ./two_room_analysis
+
+Or use **OpenFOAM workspace → Two-room pressure integration case →
+Export analysis graphs…**. The GUI asks for an existing destination *parent*
+directory and creates a new **cleanroomx-two-room-analysis** subdirectory.
+Neither workflow overwrites the output directory or automatically launches a solver.
+
+The result includes **analysis.json** and self-contained SVG graphs:
+
+- **pressure_probe_history.svg**: actual room 1 minus room 2 *point-probe*
+  pressure vs OpenFOAM solver index (not physical seconds), with the declared
+  *synthetic* target band.
+- **inlet_outlet_flux.svg**: final solver-phi inlet/outlet patch flow in m³/s.
+- **room_velocity_comparison.svg** and per-room **room_*_speed_distribution.svg**:
+  volume-weighted velocity magnitude, only when a verified final-time volume VTK
+  contains cell velocity U.
+- **room_pressure_comparison.svg** and per-room
+  **room_*_pressure_distribution.svg**: volume-weighted gauge pressure, only when
+  that VTK contains scalar p, converted from kinematic pressure using the
+  specified density.
+
+VTK graphs require the optional **vtk** Python package. Input is bounded to
+256 MiB and 100,000 cells and rehashed before and after analysis. Surface VTK
+datasets are excluded from room volume summaries. If no volume VTK is present,
+the report labels it UNAVAILABLE and still exports pressure/flux charts;
+ambiguous or malformed VTK fails rather than plotting invented values.
+
+The JSON report records the v2 receipt hash, case-manifest hash, probe SHA-256,
+VTK asset hashes, per-room volumes, percentiles and volume-weighted histogram
+fractions. It does not invent an air-change rate without verifiable room-specific
+flow allocation; neither temperature nor particle transport is solved by this
+fixture. Probe readings are not room-average pressures and these graphs do not
+establish a physical facility pressure cascade. Solver convergence stays
+NOT_ASSESSED and scientific validation remains BLOCKED. Hash agreement checks
+local consistency, not source authenticity or cleanroom certification.

@@ -21,6 +21,10 @@ Configuration 3 has distributed ceiling supply and a perforated-floor
 effective exhaust boundary. The underfloor plenum and perforation hydraulics
 are **not resolved**. No internal furniture/FFUs/obstacles are modeled.
 
+For spatial-suite CAD adjacency and opening checks before any multi-room solver
+case generation, see [CAD-to-CFD topology preflight](CAD_TO_CFD_TOPOLOGY.md).
+This check **does not** upgrade the current single-room exporter to multi-room CFD.
+
 ## Install / generate / run
 
 In Python 3.11+:

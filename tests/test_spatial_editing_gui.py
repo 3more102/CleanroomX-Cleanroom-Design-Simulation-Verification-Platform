@@ -1056,3 +1056,20 @@ def test_floor_properties_apply_as_one_transaction_and_preserve_cancel_safety(
     workspace.edit_floor()
     app.root.update()
     assert workspace.layout == applied
+
+
+def test_cfd_topology_preflight_reports_real_layout_without_modification(app, monkeypatch):
+    workspace = app.spatial_workspace
+    before = copy.deepcopy(workspace.layout)
+    messages = []
+    monkeypatch.setattr(
+        spatial_module.messagebox, "showinfo",
+        lambda title, body, **kwargs: messages.append((title, body)),
+    )
+    report = workspace.report_cfd_topology()
+    assert report is not None
+    assert report["schema_version"] == "cleanroomx.cfd-suite-topology.v1"
+    assert report["ready_for_solver"] is False
+    assert report["openfoam_case_status"] == "not_generated"
+    assert workspace.layout == before
+    assert messages and "No OpenFOAM mesh" in messages[0][1]

@@ -12,6 +12,7 @@ from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
+from .cfd_suite_topology import assess_suite_topology
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -1804,6 +1805,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+        ttk.Button(
+            overlaybar,
+            text="CFD topology preflight",
+            command=self.report_cfd_topology,
+        ).pack(side="right", padx=(6, 2))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -2510,6 +2516,44 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change()
         self._status_setter(f"Engineering overlay: {mode.title()}")
         self.redraw()
+
+    def report_cfd_topology(self) -> dict | None:
+        """Inspect editable CAD without modifying the project or running CFD."""
+        try:
+            report = assess_suite_topology(self.layout)
+        except ValueError as exc:
+            messagebox.showerror("CAD-to-CFD topology preflight", str(exc), parent=self)
+            self._status_setter("CFD topology preflight: invalid layout")
+            return None
+        issues = report["issues"]
+        warnings = report["warnings"]
+        count = len(report["rooms"])
+        shared_count = len(report["shared_walls"])
+        status = report["topology_status"]
+        lines = [
+            f"Topology: {status.upper()}",
+            f"Rooms: {count} | Shared walls: {shared_count}",
+            f"Blocking issues: {len(issues)} | Advisory warnings: {len(warnings)}",
+            "",
+        ]
+        for item in issues[:12]:
+            subjects = ", ".join(item["subject_ids"]) or "suite"
+            lines.append(f"- {item['code']} ({subjects}): {item['message']}")
+        if len(issues) > 12:
+            lines.append(f"... {len(issues) - 12} further issues; export CLI report for all")
+        for item in warnings[:5]:
+            lines.append(f"- ADVISORY {item['code']}: {', '.join(item['subject_ids'])}")
+        if len(warnings) > 5:
+            lines.append(f"... {len(warnings) - 5} more warnings in the CLI report")
+        lines.extend([
+            "",
+            "No OpenFOAM mesh or CFD simulation was generated.",
+            "Valid topology does NOT mean CFD-ready or ISO-compliant.",
+            "CLI: cleanroomx-cfd-pipeline suite-preflight PROJECT.json --output report.json",
+        ])
+        messagebox.showinfo("CAD-to-CFD topology preflight", "\n".join(lines), parent=self)
+        self._status_setter(f"CFD topology: {status} ({len(issues)} issues)")
+        return report
 
     def _set_view_flag(self, key: str, value: bool) -> None:
         self.layout.setdefault("view", {})[key] = bool(value)

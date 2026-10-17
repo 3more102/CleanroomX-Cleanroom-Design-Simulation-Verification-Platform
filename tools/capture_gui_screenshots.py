@@ -120,19 +120,79 @@ def _write_synthetic_openfoam_store(root: Path) -> None:
     )
 
 
-def _capture(root: tk.Tk, destination: Path, name: str) -> None:
+# Keep engineering-data provenance distinct from screenshot rendering.
+SCENES = {
+    "gui-start-center": "Desktop start center; bundled demonstration project",
+    "gui-design-split-context": "2D/3D workspace with the surrounding engineering controls",
+    "gui-design-2d": "2D plan view of the bundled demonstration model",
+    "gui-design-3d": "3D view of the bundled demonstration model",
+    "gui-design-split": "Synchronized 2D and 3D design views",
+    "gui-analysis-inputs": "Editable input view for the bundled fan analysis",
+    "gui-computed-fan-results": "Numerically computed fan/system example, not CFD",
+    "gui-openfoam-workbench": "OpenFOAM workbench interface; no solver run implied",
+    "gui-openfoam-proofgraph-diagnostic":
+        "Synthetic OpenFOAM synchronization fixture; scientific validation BLOCKED",
+}
+
+
+def _window_size(value: str) -> tuple[int, int]:
+    try:
+        parts = value.lower().split("x")
+        if len(parts) != 2:
+            raise ValueError
+        width, height = (int(part) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Expected WIDTHxHEIGHT (e.g. 1920x1080)") from exc
+    if width < 1440 or height < 900 or width > 7680 or height > 4320:
+        raise argparse.ArgumentTypeError("Window must be between 1440x900 and 7680x4320")
+    return width, height
+
+
+def _capture(
+    root: tk.Tk,
+    destination: Path,
+    scene: str,
+    theme: str,
+) -> dict[str, object]:
     root.update_idletasks()
     root.update()
-    time.sleep(0.2)
-    x = root.winfo_rootx()
-    y = root.winfo_rooty()
-    width = root.winfo_width()
-    height = root.winfo_height()
-    if width < 1000 or height < 650:
-        raise RuntimeError(f"GUI window is too small to capture: {width}x{height}")
-    image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
-    image.save(destination / f"{name}.png", format="PNG")
-    print(f"Captured {name}.png ({width}x{height})")
+    time.sleep(0.25)
+    root.update()
+    x, y = root.winfo_rootx(), root.winfo_rooty()
+    width, height = root.winfo_width(), root.winfo_height()
+    if x < 0 or y < 0 or width < 1440 or height < 900:
+        raise RuntimeError(f"Window is not correctly framed: {x},{y} {width}x{height}")
+    if x + width > root.winfo_screenwidth() or y + height > root.winfo_screenheight():
+        raise RuntimeError("Captured application would extend beyond the virtual display")
+    # Grab the real Tk window in its native pixel dimensions; do not enlarge
+    # small captures, synthesize results, sharpen labels or remove UI elements.
+    image = ImageGrab.grab(bbox=(x, y, x + width, y + height)).convert("RGB")
+    if image.size != (width, height):
+        raise RuntimeError(f"Unexpected capture dimensions for {scene}: {image.size}")
+    if max(high - low for low, high in image.getextrema()) < 30:
+        raise RuntimeError(f"Likely blank or unreadable desktop capture: {scene}")
+    filename = f"{scene}{'-dark' if theme == 'dark' else ''}.png"
+    location = destination / filename
+    image.save(location, format="PNG", optimize=True)
+    digest = _sha256(location.read_bytes())
+    print(f"Captured {filename} ({width}x{height}) SHA-256 {digest[:12]}")
+    return {
+        "filename": filename,
+        "scene": scene,
+        "theme": theme,
+        "width_px": width,
+        "height_px": height,
+        "sha256": digest,
+        "bytes": location.stat().st_size,
+        "description": SCENES[scene],
+        "provenance": (
+            "synthetic-sync-diagnostic"
+            if scene == "gui-openfoam-proofgraph-diagnostic"
+            else "computed-example-not-cfd"
+            if scene == "gui-computed-fan-results"
+            else "running-tk-application"
+        ),
+    }
 
 
 def _select_tab(app: CleanroomXApp, label: str) -> None:
@@ -145,7 +205,71 @@ def _select_tab(app: CleanroomXApp, label: str) -> None:
     raise RuntimeError(f"CleanroomX GUI tab was not found: {label}")
 
 
-def capture(output: Path) -> None:
+def _capture_theme(
+    app: CleanroomXApp,
+    output: Path,
+    theme: str,
+) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    app.set_focus_workspace(False)
+    app.set_theme(theme, persist=False)
+
+    def snap(scene: str) -> None:
+        records.append(_capture(app.root, output, scene, theme))
+
+    _select_tab(app, "Start")
+    snap("gui-start-center")
+
+    app.spatial_workspace.set_workspace_mode("split")
+    _select_tab(app, "Design")
+    snap("gui-design-split-context")
+
+    app.set_focus_workspace(True)
+    for mode, scene in (
+        ("2d", "gui-design-2d"),
+        ("3d", "gui-design-3d"),
+        ("split", "gui-design-split"),
+    ):
+        app.spatial_workspace.set_workspace_mode(mode)
+        _select_tab(app, "Design")
+        snap(scene)
+
+    app.set_focus_workspace(False)
+    app.select_demo_plot_analysis()
+    _select_tab(app, "Input")
+    snap("gui-analysis-inputs")
+
+    # This is a real CleanroomX numerical calculation, not an OpenFOAM result.
+    app.smoke_run_active()
+    _select_tab(app, "Plot")
+    snap("gui-computed-fan-results")
+
+    app.openfoam_workspace._workflow_canvas.yview_moveto(0)
+    _select_tab(app, "OpenFOAM")
+    snap("gui-openfoam-workbench")
+
+    _select_tab(app, "ProofGraph")
+    snap("gui-openfoam-proofgraph-diagnostic")
+    return records
+
+
+def capture(
+    output: Path,
+    *,
+    size: tuple[int, int] = (1920, 1080),
+    themes: tuple[str, ...] = ("light", "dark"),
+    scaling: float = 1.15,
+) -> dict[str, object]:
+    if not themes or len(set(themes)) != len(themes):
+        raise ValueError("Themes must be distinct and non-empty")
+    if any(theme not in ("light", "dark") for theme in themes):
+        raise ValueError("Only light and dark themes are supported")
+    if not 0.8 <= scaling <= 2.0:
+        raise ValueError("Tk scaling must be between 0.8 and 2.0")
+    width, height = size
+    if _window_size(f"{width}x{height}") != size:
+        raise ValueError("Invalid capture size")
+
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="cleanroomx-gui-capture-") as temp:
         temporary_root = Path(temp)
@@ -154,61 +278,83 @@ def capture(output: Path) -> None:
         proofgraph = proofgraph_from_openfoam_sync_results(
             proofgraph_root, SIMULATION_ID
         )
-
         root = tk.Tk()
-        app = CleanroomXApp(
-            root,
-            autosave_interval_seconds=0,
-            ui_state_path=temporary_root / "gui-layout.json",
-        )
         try:
-            root.geometry("1440x900+0+0")
+            if (
+                root.winfo_screenwidth() < width
+                or root.winfo_screenheight() < height
+            ):
+                raise RuntimeError(
+                    f"Virtual display {root.winfo_screenwidth()}x"
+                    f"{root.winfo_screenheight()} cannot fit {width}x{height}; "
+                    "increase Xvfb -screen size or choose a smaller --size"
+                )
+            root.tk.call("tk", "scaling", scaling)
+            app = CleanroomXApp(
+                root,
+                autosave_interval_seconds=0,
+                ui_state_path=temporary_root / "gui-layout.json",
+            )
+            root.geometry(f"{width}x{height}+0+0")
             app.load_project_path(bundled_demo_project_path())
+            app.proofgraph_viewer.set_documents([proofgraph.to_dict()])
             root.update_idletasks()
             root.update()
-
-            _select_tab(app, "Start")
-            _capture(root, output, "gui-start-center")
-
-            app.set_focus_workspace(True)
-            app.spatial_workspace.set_workspace_mode("2d")
-            _select_tab(app, "Design")
-            _capture(root, output, "gui-design-2d")
-
-            app.spatial_workspace.set_workspace_mode("3d")
-            _select_tab(app, "Design")
-            _capture(root, output, "gui-design-3d")
-
-            app.spatial_workspace.set_workspace_mode("split")
-            _select_tab(app, "Design")
-            _capture(root, output, "gui-design-split")
-
-            app.select_demo_plot_analysis()
-            app.smoke_run_active()
-            _select_tab(app, "Plot")
-            _capture(root, output, "gui-computed-fan-results")
-
-            app.openfoam_workspace._workflow_canvas.yview_moveto(0)
-            _select_tab(app, "OpenFOAM")
-            _capture(root, output, "gui-openfoam-workbench")
-
-            app.proofgraph_viewer.set_documents([proofgraph.to_dict()])
-            _select_tab(app, "ProofGraph")
-            _capture(root, output, "gui-openfoam-proofgraph-diagnostic")
+            screenshots = []
+            for theme in themes:
+                screenshots.extend(_capture_theme(app, output, theme))
         finally:
             root.destroy()
+
+    if len({row["sha256"] for row in screenshots}) != len(screenshots):
+        raise RuntimeError("Two screenshots are byte-identical; inspect tabs before publishing")
+    manifest = {
+        "schema": "cleanroomx.gui-screenshot-capture.v1",
+        "capture": "real-tk-window-native-pixels",
+        "source_project": "bundled-demo-project",
+        "target_window": {"width_px": width, "height_px": height},
+        "tk_scaling": scaling,
+        "scientific_validation": "NOT_ESTABLISHED",
+        "notes": [
+            "These are genuine desktop GUI screenshots, not generated mockups.",
+            "The fan operating-point plot uses the real numerical example, not CFD.",
+            "The ProofGraph view uses synthetic synchronization metadata; scientific validation remains BLOCKED.",
+            "No screenshots represent CFD convergence or measured cleanroom performance.",
+        ],
+        "images": screenshots,
+    }
+    (output / "screenshot-manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Verified {len(screenshots)} real GUI captures across {len(themes)} themes")
+    return manifest
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("docs/screenshots"),
-        help="Directory for captured PNG images (default: docs/screenshots)",
+        "--output", type=Path, default=Path("docs/screenshots"),
+        help="Output directory (default: docs/screenshots)",
+    )
+    parser.add_argument(
+        "--size", type=_window_size, default=(1920, 1080),
+        help="Real application window size: WIDTHxHEIGHT (default: 1920x1080)",
+    )
+    parser.add_argument(
+        "--themes", nargs="+", choices=("light", "dark"),
+        default=["light", "dark"],
+        help="Capture one or both presentation themes",
+    )
+    parser.add_argument(
+        "--tk-scaling", type=float, default=1.15,
+        help="Tk UI scaling for legibility (default: 1.15)",
     )
     args = parser.parse_args()
-    capture(args.output)
+    capture(
+        args.output, size=args.size, themes=tuple(args.themes),
+        scaling=args.tk_scaling,
+    )
     return 0
 
 

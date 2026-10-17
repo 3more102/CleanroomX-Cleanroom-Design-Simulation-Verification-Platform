@@ -321,6 +321,6 @@ def test_openfoam_workspace_compact_console_stays_scrollable() -> None:
             < workspace._workflow_content.winfo_height()
         )
         assert workspace.save_log_button.winfo_viewable()
-        assert workspace.save_log_button.cget("state") == "disabled"
+        assert "disabled" in workspace.save_log_button.state()
     finally:
         root.destroy()

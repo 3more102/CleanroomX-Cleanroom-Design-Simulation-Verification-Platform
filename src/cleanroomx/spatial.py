@@ -1753,6 +1753,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
+        ttk.Button(
+            modebar, text="Balance panels",
+            command=self.balance_workspace_panes,
+        ).pack(side="left", padx=2)
         ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
             side="left", padx=2
         )
@@ -2125,6 +2129,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._view_panes.add(self._two_d_frame, weight=5 if mode == "split" else 1)
         if mode in {"3d", "split"}:
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
+        self.redraw()
+
+    def balance_workspace_panes(self) -> None:
+        """Restore usable 2D/3D/inspector sash widths without changing design."""
+        self.update_idletasks()
+        if self.inspector_visible():
+            width = self._body.winfo_width()
+            if width >= 650:
+                # Preserve a readable minimum for the properties inspector;
+                # do not assume screen or primary desktop resolution.
+                inspector_width = min(330, max(235, int(width * 0.24)))
+                self._body.sashpos(0, max(300, width - inspector_width))
+        if self._workspace_mode.get() == "split":
+            pane_width = self._view_panes.winfo_width()
+            if pane_width >= 350:
+                self._view_panes.sashpos(0, int(pane_width * 0.42))
+        self._status_setter("Design panels balanced")
         self.redraw()
 
     def set_workspace_mode(self, mode: str) -> None:

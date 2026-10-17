@@ -39,6 +39,8 @@ def _probe_series(text: str, density: float, expected: dict[str, Any]) -> list[d
         result = compute_pressure_difference_pa(
             {"kinematic_pressure_m2_s2": [room1, room2]}, density
         )
+        if not all(math.isfinite(value) for value in result.values()):
+            raise ValueError("Probe pressure conversion overflowed the declared density")
         samples.append({
             "solver_index": index,
             "room_1_pressure_pa_gauge": result["room_1_pressure_pa_gauge"],
@@ -240,6 +242,37 @@ def analyze_two_room_evidence(case_directory: str | Path, receipt_path: str | Pa
     outlet = _finite(flow["actual_outlet_flow_m3_s"], "actual_outlet_flow_m3_s")
     if inlet < 0 or outlet < 0:
         raise ValueError("Measured inlet or outlet flow cannot be negative")
+    recorded_flux = receipt["solver_flux"]
+    for label, nested, recorded in (
+        ("inlet", "net_inward_m3_s", inlet),
+        ("outlet", "net_outward_m3_s", outlet),
+    ):
+        source = recorded_flux.get(label)
+        if type(source) is not dict or not math.isclose(
+            _finite(source.get(nested), f"solver_flux.{label}"), recorded,
+            rel_tol=1e-10, abs_tol=1e-12,
+        ):
+            raise ValueError(f"Solver phi flow and engineering screen disagree at {label}")
+    mean_flow = (inlet + outlet) / 2
+    if mean_flow <= 0:
+        raise ValueError("Cannot calculate balance with zero inlet and outlet flow")
+    expected_imbalance = 100 * abs(inlet - outlet) / mean_flow
+    recorded_imbalance = _finite(
+        flow["relative_inlet_outlet_difference_percent"], "relative_inlet_outlet_difference_percent"
+    )
+    if not math.isclose(expected_imbalance, recorded_imbalance, rel_tol=1e-9, abs_tol=1e-8):
+        raise ValueError("Inlet/outlet relative difference disagrees with measured solver flux")
+    target = _finite(flow["pressure_target_pa"], "pressure_target_pa")
+    tolerance = _finite(flow["pressure_tolerance_pa"], "pressure_tolerance_pa")
+    if tolerance <= 0 or target <= 0:
+        raise ValueError("Pressure screen target and tolerance must be positive")
+    expected_screen = (
+        "within_declared_band"
+        if abs(samples[-1]["delta_pressure_pa"] - target) <= tolerance
+        else "outside_declared_band"
+    )
+    if flow["pressure_target_screen"] != expected_screen:
+        raise ValueError("Pressure target screen disagrees with final verified probe values")
     result = {
         "schema_version": "cleanroomx.cfd-two-room-analysis.v1",
         "status": "DIAGNOSTIC_ONLY",
@@ -254,8 +287,8 @@ def analyze_two_room_evidence(case_directory: str | Path, receipt_path: str | Pa
             "time_axis": "OpenFOAM solver indices; not physical seconds",
             "density_kg_m3": density,
             "series": samples,
-            "target_pa": _finite(flow["pressure_target_pa"], "pressure_target_pa"),
-            "tolerance_pa": _finite(flow["pressure_tolerance_pa"], "pressure_tolerance_pa"),
+            "target_pa": target,
+            "tolerance_pa": tolerance,
             "screen": flow["pressure_target_screen"],
             "meaning": "two probe locations only; not spatial room-average pressure",
         },

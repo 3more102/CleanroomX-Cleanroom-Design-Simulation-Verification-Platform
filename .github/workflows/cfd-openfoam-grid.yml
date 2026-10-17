@@ -1506,7 +1506,6 @@ jobs:
         with:
           name: openfoam-v10-pitzdaily-evidence
           path: |
-            ${{ runner.temp }}/cleanroomx-openfoam-pitzDaily-case
             ${{ runner.temp }}/cleanroomx-openfoam-pitzDaily-results
             ${{ runner.temp }}/cleanroomx-openfoam-pitzDaily-evidence
           if-no-files-found: warn

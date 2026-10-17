@@ -4413,7 +4413,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_orbit_3d_down(self, event: tk.Event) -> str:
-        self.canvas_3d.focus_set()
+        # Unit-tested model-space gestures may use a lightweight canvas stub.
+        # A real Tk canvas accepts keyboard focus after mouse interaction.
+        focus = getattr(self.canvas_3d, "focus_set", None)
+        if callable(focus):
+            focus()
         self._orbit_anchor = (event.x, event.y)
         self._orbit_origin = (
             self.layout["view"]["azimuth_deg"],

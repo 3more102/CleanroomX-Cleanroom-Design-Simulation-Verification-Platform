@@ -95,6 +95,53 @@ rerun with the current v2 receipt before its visualization assets can be used
 in a ProofGraph integrity verdict. See the [run 202 evidence report](OPENFOAM_V10_RUN_202_TWO_ROOM_EVIDENCE.md).
 
 
+## Optional receipt-bound boundary-face flow screen
+
+The two-room diagnostic can reparse **all final-time** OpenFOAM `phi`
+boundary-face values (inlet, outlet, walls, partition), recompute flux
+totals, and check each reported aggregate against the existing v2 receipt.
+It also computes the **sum of absolute wall and partition face fluxes**,
+which cannot hide inward and outward leaks through signed cancellation.
+The relative percentages below are normalized by the solver's gross inlet
+volumetric flow, not by a physical measurement.
+
+User-supplied criteria are mandatory. An example JSON file (the values are
+**illustrative software inputs, not acceptable design thresholds**) is:
+
+```json
+{
+  "schema_version": "cleanroomx.cfd-two-room-boundary-policy.v1",
+  "max_total_boundary_imbalance_percent": 1.0,
+  "max_wall_gross_leakage_percent": 1.0,
+  "max_reverse_inlet_percent": 0.0,
+  "max_reverse_outlet_percent": 0.0
+}
+```
+
+```bash
+cleanroomx-cfd-pipeline two-room-boundary-screen \
+  ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
+  ./flow_policy.json --output ./boundary_screen.json
+```
+
+The command repeats the complete ProofGraph integrity verification,
+rechecks case-bound final-time `phi` and `constant/polyMesh/boundary`
+hashes, requires the same patch-face counts as the receipt, and recomputes
+all relevant signed flow summaries before applying four explicit limits.
+It returns `PROJECT_BOUNDARY_SCREEN_MET` (exit 0) only when the
+user-defined conditions hold, `PROJECT_BOUNDARY_SCREEN_NOT_MET` (exit 3)
+for a verified but out-of-limits result, and an error for invalid policy,
+tampered artifacts, or inconsistent receipt calculations. The report stores
+the receipt, case, `phi`, and boundary digests, plus an unsigned policy
+hash and each numerical violation.
+
+This is a **solver-derived boundary consistency screen**, not an
+independent mass-flow experiment, cell-by-cell internal divergence
+reconstruction, room-specific ACH, mesh-independence study, validated
+convergence criterion, or physical cleanroom verification. It never
+promotes `scientific_validation=BLOCKED` or
+`solver_convergence=NOT_ASSESSED`.
+
 ## Optional receipt-bound numerical log screen
 
 A complete two-room v2 receipt can be screened against **explicit, user-reviewed**

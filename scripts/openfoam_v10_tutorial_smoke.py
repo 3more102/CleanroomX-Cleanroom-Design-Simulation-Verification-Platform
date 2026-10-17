@@ -118,10 +118,15 @@ def validate_receipt(receipt: dict[str, Any]) -> None:
         or type(sync.get("record_count")) is not int
         or sync["record_count"] < 1
         or type(sync.get("times")) is not list
-        or not any(float(value) > 0 for value in sync["times"])
         or type(sync.get("manifest_sha256")) is not str
         or _HASH.fullmatch(sync["manifest_sha256"]) is None
     ):
+        raise ValueError("CleanroomX did not synchronize a hash-bound nonzero-time result")
+    try:
+        numeric_times = [float(value) for value in sync["times"]]
+    except (TypeError, ValueError):
+        raise ValueError("CleanroomX synchronized an invalid solver time") from None
+    if not any(math.isfinite(value) and value > 0 for value in numeric_times):
         raise ValueError("CleanroomX did not synchronize a hash-bound nonzero-time result")
     environment = receipt.get("environment")
     if (

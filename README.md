@@ -33,6 +33,25 @@ codes, privacy considerations, and limitations.
 - Validated, atomic property edits that keep devices attached when room coordinates change.
 - Room/device duplication with fresh IDs, synchronized views, and one-step Undo/Redo.
 
+### CleanroomX desktop screenshots
+
+These are unedited captures from the running Tk desktop application. The
+ProofGraph view uses a synthetic synchronization fixture to demonstrate the
+viewer states; its artifact-integrity PASS means local hash-link consistency
+only, and scientific validation remains not checked.
+
+| Start center | 2D plan | 3D model |
+| --- | --- | --- |
+| ![CleanroomX start center](docs/screenshots/gui-start-center.png) | ![CleanroomX 2D plan](docs/screenshots/gui-design-2d.png) | ![CleanroomX 3D model](docs/screenshots/gui-design-3d.png) |
+
+| Split design | Computed fan result | OpenFOAM workspace |
+| --- | --- | --- |
+| ![CleanroomX split design workspace](docs/screenshots/gui-design-split.png) | ![Computed fan and system result](docs/screenshots/gui-computed-fan-results.png) | ![OpenFOAM workspace](docs/screenshots/gui-openfoam-workbench.png) |
+
+| OpenFOAM ProofGraph |
+| --- |
+| ![OpenFOAM ProofGraph diagnostic view](docs/screenshots/gui-openfoam-proofgraph-diagnostic.png) |
+
 ### Cleanroom CFD study (external solver evidence)
 
 - Compare three supply/exhaust layouts: central ceiling / low-wall, distributed ceiling / low-wall, and distributed ceiling / raised perforated floor.

@@ -62,6 +62,36 @@ For CI or Linux automation with a virtual display:
 xvfb-run -a cleanroomx-gui --demo --smoke
 ```
 
+## Real desktop screenshots
+
+The following PNGs are captured from the running Tk application with
+`tools/capture_gui_screenshots.py`; they are not UI mockups. Regenerate them
+from the repository root with:
+
+```bash
+python -m pip install -e ".[dev,cfd]"
+xvfb-run -a -s "-screen 0 1600x1000x24" \
+  python tools/capture_gui_screenshots.py --output docs/screenshots
+```
+
+The computed fan/system screen comes from the bundled numerical example. The
+OpenFOAM ProofGraph screen uses a synthetic synchronization fixture to
+demonstrate how the interface distinguishes local artifact-hash consistency
+from scientific validation. The PASS status is not a signature, convergence,
+or cleanroom-performance claim; scientific validation stays blocked.
+
+| Start center | Design: 2D | Design: 3D |
+| --- | --- | --- |
+| ![Start center](screenshots/gui-start-center.png) | ![2D plan](screenshots/gui-design-2d.png) | ![3D model](screenshots/gui-design-3d.png) |
+
+| Design: split view | Computed fan result | OpenFOAM workbench |
+| --- | --- | --- |
+| ![Split design](screenshots/gui-design-split.png) | ![Computed fan result](screenshots/gui-computed-fan-results.png) | ![OpenFOAM workbench](screenshots/gui-openfoam-workbench.png) |
+
+| OpenFOAM ProofGraph diagnostic view |
+| --- |
+| ![ProofGraph diagnostic view](screenshots/gui-openfoam-proofgraph-diagnostic.png) |
+
 ## Project format
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.

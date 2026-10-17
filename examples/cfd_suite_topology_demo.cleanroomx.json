@@ -1,0 +1,139 @@
+{
+  "schema": "cleanroomx.project",
+  "schema_version": 1,
+  "application_version": "0.103.0.dev0",
+  "project": {
+    "name": "CleanroomX connected three-room CFD topology concept",
+    "description": "Geometry-only layout to demonstrate suite adjacency preflight; not CFD, ISO compliance, or validated airflow.",
+    "metadata": {
+      "spatial_layout": {
+        "version": 1,
+        "floor": {
+          "id": "floor-1",
+          "name": "Concept suite",
+          "elevation_m": 0,
+          "default_ceiling_height_m": 3,
+          "units": "m"
+        },
+        "grid_m": 0.5,
+        "rooms": [
+          {
+            "id": "process",
+            "name": "Process zone",
+            "x_m": 0,
+            "y_m": 0,
+            "length_m": 4,
+            "width_m": 3,
+            "height_m": 3,
+            "floor_elevation_m": 0,
+            "classification": "Concept only - unverified"
+          },
+          {
+            "id": "preparation",
+            "name": "Preparation",
+            "x_m": 4,
+            "y_m": 0,
+            "length_m": 3,
+            "width_m": 3,
+            "height_m": 3,
+            "floor_elevation_m": 0,
+            "classification": "Concept only - unverified"
+          },
+          {
+            "id": "airlock",
+            "name": "Airlock",
+            "x_m": 7,
+            "y_m": 0,
+            "length_m": 2,
+            "width_m": 3,
+            "height_m": 3,
+            "floor_elevation_m": 0,
+            "classification": "Concept only - unverified"
+          }
+        ],
+        "devices": [
+          {
+            "id": "d1",
+            "type": "door",
+            "name": "Process to preparation",
+            "room_id": "process",
+            "x_m": 4,
+            "y_m": 1.5,
+            "z_m": 0,
+            "width_m": 0.9,
+            "height_m": 2.1,
+            "wall_side": "east",
+            "swing": "left"
+          },
+          {
+            "id": "d2",
+            "type": "door",
+            "name": "Preparation to airlock",
+            "room_id": "preparation",
+            "x_m": 7,
+            "y_m": 1.5,
+            "z_m": 0,
+            "width_m": 0.9,
+            "height_m": 2.1,
+            "wall_side": "east",
+            "swing": "left"
+          },
+          {
+            "id": "d3",
+            "type": "door",
+            "name": "Exterior entrance",
+            "room_id": "airlock",
+            "x_m": 8,
+            "y_m": 0,
+            "z_m": 0,
+            "width_m": 0.9,
+            "height_m": 2.1,
+            "wall_side": "south",
+            "swing": "left"
+          },
+          {
+            "id": "supply-process",
+            "name": "Supply placeholder",
+            "type": "supply",
+            "room_id": "process",
+            "x_m": 2,
+            "y_m": 1.5,
+            "z_m": 3,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "return-process",
+            "name": "Return placeholder",
+            "type": "return",
+            "room_id": "process",
+            "x_m": 1,
+            "y_m": 1,
+            "z_m": 2.6,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          }
+        ],
+        "view": {
+          "azimuth_deg": 35,
+          "elevation_deg": 28,
+          "zoom_3d": 1,
+          "zoom_2d": 1,
+          "pan_x": 0,
+          "pan_y": 0,
+          "pan_3d_x": 0,
+          "pan_3d_y": 0,
+          "snap_to_grid": true,
+          "show_pressure": false,
+          "show_labels": true,
+          "show_devices": true,
+          "show_relationships": true
+        }
+      }
+    }
+  },
+  "analyses": [],
+  "active_analysis_id": null
+}

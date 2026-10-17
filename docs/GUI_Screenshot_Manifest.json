@@ -1,0 +1,129 @@
+{
+  "title": "CleanroomX genuine GUI screenshot appendix",
+  "source_manual": "CleanroomX_Complete_Solution_Manual_2026-10-17.pdf",
+  "manual_revision": "2.3 (original; screenshot appendix added separately)",
+  "screenshot_count": 15,
+  "note": "Authentic screenshots of the demonstration GUI; not CFD or OpenFOAM validation.",
+  "screenshots": [
+    {
+      "file": "01_start.png",
+      "title": "Start Center and project navigation",
+      "description": "The Start tab, guided workflow and project navigator for the demo.",
+      "sha256": "9eb3d0a894d930579608765fe0c670be53a2b938d816e6eb546257114d739a02",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "02_design_2d.png",
+      "title": "Spatial design — 2D workspace",
+      "description": "The 2D plan uses a pressure overlay. The drawing viewport is compressed by the Output/Verification panel.",
+      "sha256": "616c205038155022e52208b2674ca719927cded037808579460263809d7f53ad",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "03_design_3d.png",
+      "title": "Spatial design — 3D workspace",
+      "description": "The 3D design controls appear, but the drawing viewport is mostly hidden by the Output/Verification panel.",
+      "sha256": "5327423cd9be38af7c07743cc086fe4600b8b0337411d2f5edd0e11ca67bacf8",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "04_design_split.png",
+      "title": "Spatial design — split workspace",
+      "description": "Split 2D/3D controls and the pressure overlay. The viewports are too small to assess geometry.",
+      "sha256": "8c86865aeca369015dc8deb207039f560a070d13eae12916608333032500bc20",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "05_inputs_structured.png",
+      "title": "Engineering inputs — structured editor",
+      "description": "Structured engineering inputs, including pressure-cascade relationships and thresholds.",
+      "sha256": "b8d9ad8151c3a2c348940392fbd8f91dffc254ed5bba9102ca063fcb33eeb6d6",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "06_inputs_json.png",
+      "title": "Engineering inputs — JSON editor",
+      "description": "Raw JSON input for review; the demonstration values are not approved design inputs.",
+      "sha256": "68bbdf247de1a215746f0ecb7cf18f4499c00d1ca118ac04b1173d78a2ba67fe",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "07_plot.png",
+      "title": "Plot workspace",
+      "description": "The Plot tab shows that no plot is available for the selected analysis result.",
+      "sha256": "284d9aac8f8382068f8bea488f17717264f38fa75f8d8deffbedf8b42854404d",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "08_proofgraph.png",
+      "title": "ProofGraph evidence viewer",
+      "description": "Evidence graph controls are present; the demo has no persisted ProofGraph graph or nodes.",
+      "sha256": "9076c1061c9579b76afcc30e1239c9f74326be5733967e931febb1ffe3dbaf40",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "09_problems.png",
+      "title": "Problems panel",
+      "description": "Displays an unmapped analysis room warning, among other engineering findings.",
+      "sha256": "d1a59b0fc139e3c7d4a86be70db6ee47cc895a26e9eaa1c6286ff42b05212838",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "10_diagnostics.png",
+      "title": "Diagnostics panel",
+      "description": "Displays application execution provenance; this is not independent CFD validation.",
+      "sha256": "65e0812d346aa3f86cc2309f8e7faef221121b3ffa5d099ab65d0119812cb938",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "11_verification.png",
+      "title": "Verification currency",
+      "description": "Shows no current verified analyses in this demo session.",
+      "sha256": "3b74a93728565f402a572b5dc294fe84192a7b0e59c2426eaf2febe16fb93aaa",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "12_console.png",
+      "title": "Execution console",
+      "description": "Shows development build information, project metadata and a pass-with-unchecked run.",
+      "sha256": "68db47ceab57ec9f22b1cbbe40437928c7d66fb9f7f46c64b892ca3431c78020",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "13_evidence.png",
+      "title": "Persisted evidence panel",
+      "description": "Displays zero retained records and no persisted project-verification evidence.",
+      "sha256": "3b5b236ad1b9a521ccccf7971bddb9f1b4888dc9c5ffc4972b8e825048a1a783",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "14_results.png",
+      "title": "Structured results panel",
+      "description": "Reports pass_with_unchecked, complete=false and verified=false.",
+      "sha256": "43ed338406893ff430ae9de80c22c7b51a4a406cc0c3e622b4e41d64911fb320",
+      "width": 1456,
+      "height": 754
+    },
+    {
+      "file": "15_report.png",
+      "title": "Engineering report panel",
+      "description": "Shows the human-readable report, marked pass_with_unchecked.",
+      "sha256": "4c112c902d71c4959ee2256099620d1d1600a6faeba7b6dd34d8ccdc6fc6ebc0",
+      "width": 1456,
+      "height": 754
+    }
+  ]
+}

@@ -1088,3 +1088,56 @@ def test_3d_zone_grid_and_engineering_mode_remain_distinct(app):
     assert not workspace.canvas_3d.find_withtag("zone3d")
     assert workspace.canvas_3d.find_withtag("overlay_legend")
     assert workspace.layout == before
+
+
+def test_3d_room_labels_are_compact_nonoverlapping_and_inspectable(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    workspace.fit_3d()
+    app.root.update()
+    canvas = workspace.canvas_3d
+    label_items = canvas.find_withtag("room_label3d")
+    assert label_items
+    label_text = [
+        canvas.itemcget(item, "text") for item in label_items
+        if canvas.type(item) == "text"
+    ]
+    assert label_text
+    assert all("\n" not in text for text in label_text)
+    assert not any("Demo process suite" in text for text in label_text)
+    cards = [
+        canvas.bbox(item) for item in label_items if canvas.type(item) == "rectangle"
+    ]
+    for index, a in enumerate(cards):
+        for b in cards[index + 1:]:
+            assert a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1]
+
+    room = workspace.layout["rooms"][0]
+    workspace.selected = _Hit("room", room["id"])
+    workspace._draw_3d()
+    hud = canvas.find_withtag("room_details_hud")
+    assert hud
+    detail_lines = [
+        canvas.itemcget(item, "text") for item in hud
+        if canvas.type(item) == "text"
+    ]
+    assert "SELECTED ROOM" in detail_lines
+    assert any(room["name"] in text for text in detail_lines)
+    assert any("Project class:" in text for text in detail_lines)
+    # The same canonical room remains selected and geometry is untouched.
+    assert workspace.selected == _Hit("room", room["id"])
+
+
+def test_balance_workspace_panels_restores_inspector_width_without_model_edits(app):
+    workspace = app.spatial_workspace
+    workspace.set_workspace_mode("split")
+    app.root.update()
+    before = copy.deepcopy(workspace.layout)
+    workspace.balance_workspace_panes()
+    app.root.update()
+    total_width = workspace._body.winfo_width()
+    if total_width >= 650 and workspace.inspector_visible():
+        pane_position = workspace._body.sashpos(0)
+        assert 235 <= total_width - pane_position <= 360
+    assert workspace.layout == before

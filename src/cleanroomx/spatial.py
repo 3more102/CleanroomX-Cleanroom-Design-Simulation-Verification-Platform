@@ -12,6 +12,12 @@ from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
+from .spatial_3d_legibility import (
+    draw_room_details_hud,
+    draw_room_label_chips,
+    place_room_label_chips,
+    room_hud_bounds,
+)
 from .spatial_3d_presentation import (
     draw_3d_reference,
     draw_3d_zone_legend,
@@ -1747,6 +1753,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
+        ttk.Button(
+            modebar, text="Balance panels",
+            command=self.balance_workspace_panes,
+        ).pack(side="left", padx=2)
         ttk.Button(modebar, text="Floor…", width=7, command=self.edit_floor).pack(
             side="left", padx=2
         )
@@ -1907,14 +1917,24 @@ class SpatialDesignWorkspace(ttk.Frame):
             "<<ComboboxSelected>>",
             lambda _event: self.set_3d_projection(self._projection_mode.get()),
         )
+        # A second, dedicated row prevents clipping of the 3D tools in
+        # the default split workspace and on laptop-sized displays.
+        tools3 = ttk.Frame(self._three_d_frame)
+        tools3.pack(fill="x", padx=4, pady=(0, 4))
+        ttk.Button(
+            header3, text="Reset", command=self.reset_3d,
+        ).pack(side="left", padx=(5, 2))
+        ttk.Label(
+            header3, text="Shift + drag to orbit",
+        ).pack(side="right", padx=(4, 3))
         ttk.Checkbutton(
-            header3,
+            tools3,
             text="Section",
             variable=self._section_enabled,
             command=self._toggle_section_plane,
         ).pack(side="left", padx=(4, 2))
         section_height = ttk.Spinbox(
-            header3,
+            tools3,
             textvariable=self._section_height_var,
             from_=-100.0,
             to=1000.0,
@@ -1925,34 +1945,31 @@ class SpatialDesignWorkspace(ttk.Frame):
         section_height.pack(side="left", padx=(0, 2))
         section_height.bind("<Return>", self._apply_section_height)
         section_height.bind("<FocusOut>", self._apply_section_height)
-        ttk.Label(header3, text="Z m").pack(side="left", padx=(0, 4))
+        ttk.Label(tools3, text="Z m").pack(side="left", padx=(0, 4))
         ttk.Checkbutton(
-            header3,
+            tools3,
             text="X-Ray",
             variable=self._xray_3d,
             command=self._draw_3d,
         ).pack(side="left", padx=(4, 2))
         ttk.Checkbutton(
-            header3, text="Zone tint",
+            tools3, text="Zone tint",
             variable=self._zone_colors_3d,
             command=self._draw_3d,
         ).pack(side="left", padx=(4, 2))
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
-                header3,
+                tools3,
                 text=label,
                 width=3,
                 command=lambda d=delta: self.rotate_3d(d),
             ).pack(side="right", padx=2)
         ttk.Button(
-            header3, text="↓", width=3, command=lambda: self.tilt_3d(-5)
+            tools3, text="↓", width=3, command=lambda: self.tilt_3d(-5)
         ).pack(side="right", padx=2)
         ttk.Button(
-            header3, text="↑", width=3, command=lambda: self.tilt_3d(5)
+            tools3, text="↑", width=3, command=lambda: self.tilt_3d(5)
         ).pack(side="right", padx=2)
-        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(
-            side="right", padx=2
-        )
         self.canvas_3d = tk.Canvas(
             self._three_d_frame,
             background=self._theme_palette["canvas_3d"],
@@ -2112,6 +2129,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._view_panes.add(self._two_d_frame, weight=5 if mode == "split" else 1)
         if mode in {"3d", "split"}:
             self._view_panes.add(self._three_d_frame, weight=5 if mode == "split" else 1)
+        self.redraw()
+
+    def balance_workspace_panes(self) -> None:
+        """Restore usable 2D/3D/inspector sash widths without changing design."""
+        self.update_idletasks()
+        if self.inspector_visible():
+            width = self._body.winfo_width()
+            if width >= 650:
+                # Preserve a readable minimum for the properties inspector;
+                # do not assume screen or primary desktop resolution.
+                inspector_width = min(330, max(235, int(width * 0.24)))
+                self._body.sashpos(0, max(300, width - inspector_width))
+        if self._workspace_mode.get() == "split":
+            pane_width = self._view_panes.winfo_width()
+            if pane_width >= 350:
+                self._view_panes.sashpos(0, int(pane_width * 0.42))
+        self._status_setter("Design panels balanced")
         self.redraw()
 
     def set_workspace_mode(self, mode: str) -> None:
@@ -3348,14 +3382,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill=color,
                 tags=("pressure_relationship_3d",),
             )
-            if self._show_labels.get():
-                self.canvas_3d.create_text(
-                    (start[0] + end[0]) / 2.0,
-                    (start[1] + end[1]) / 2.0 - 10,
-                    text=self._relationship_label(minimum, observed_delta),
-                    fill=color,
-                    tags=("pressure_relationship_3d",),
-                )
+            # Relation arrows retain computed evidence state, but labels
+            # are intentionally omitted here: midpoint text obscured the
+            # transparent rooms and collided with room/device labels.
+            # The 2D workspace retains the full relationship text.
 
     def _draw_2d(self) -> None:
         canvas = self.canvas_2d
@@ -3819,6 +3849,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         zone_tint = self._zone_colors_3d.get() and overlay_mode in {"none", "pressure"}
         zone_colors = room_zone_colors(self.layout["rooms"])
         visible_zone_rooms = []
+        name_anchor_entries = []
         warning_ids = self._warning_item_ids()
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -3911,27 +3942,27 @@ class SpatialDesignWorkspace(ttk.Frame):
                 canvas.create_line(
                     *start, *end, fill=outline, width=1, tags=(tag, "room3d")
                 )
+            # Defer labels until all geometry and devices are drawn:
+            # compact chips are placed once, with viewport collision checks.
             if self._show_labels.get():
-                overlay_room = overlay_by_room[room["id"]]
-                overlay_text = (
-                    ""
-                    if overlay_mode == "none"
-                    else "\n" + str(overlay_room.get("label") or "")
-                )
-                classification = str(room.get("classification") or "").strip()
-                details = [room["name"]]
-                if classification:
-                    details.append(classification)
-                if overlay_text.strip():
-                    details.append(overlay_text.strip())
-                canvas.create_text(
-                    *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text="\n".join(details),
-                    fill="#f0f6fc",
-                    font=("TkDefaultFont", 9, "bold"),
-                    justify="center",
-                    tags=(tag, "room3d"),
-                )
+                caption = room["name"]
+                if overlay_mode in {"ach", "airflow", "status"}:
+                    # Preserve fresh engineering fields in the room's
+                    # clickable label, but do not repeat verbose pressure
+                    # and classification paragraphs on every roof.
+                    result_caption = str(
+                        overlay_by_room[room["id"]].get("label") or ""
+                    ).strip()
+                    if result_caption:
+                        caption += " · " + result_caption
+                name_anchor_entries.append({
+                    "room_id": room["id"],
+                    "text": caption,
+                    "anchor": self._project_3d(
+                        (x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2,
+                    ),
+                    "priority": 2 if selected else (1 if hovered else 0),
+                })
 
         self._draw_relationships_3d(
             center_x_m=cx,
@@ -4004,6 +4035,60 @@ class SpatialDesignWorkspace(ttk.Frame):
             draw_3d_zone_legend(canvas, visible_zone_rooms, zone_colors)
         else:
             self._draw_engineering_legend(canvas, overlay)
+
+        view_width = max(1, canvas.winfo_width())
+        view_height = max(1, canvas.winfo_height())
+        active_hit = self.selected if self.selected is not None and self.selected.kind == "room" else None
+        if active_hit is None:
+            active_hit = self._hovered_3d if self._hovered_3d is not None and self._hovered_3d.kind == "room" else None
+        active_room = next(
+            (
+                room for room in ordered
+                if active_hit is not None and room["id"] == active_hit.item_id
+                and (section_height is None or
+                     room.get("floor_elevation_m", floor_z) < section_height)
+            ),
+            None,
+        )
+        reserved = [
+            # Axes are a fixed caption in the bottom-right, not world text.
+            (max(0, view_width - 185), max(0, view_height - 82),
+             view_width, view_height),
+        ]
+        if zone_tint:
+            zone_count = len(visible_zone_rooms)
+            legend_height = 46 + min(7, zone_count) * 19 + (
+                19 if zone_count > 7 else 0
+            )
+            reserved.append(
+                (0, max(0, view_height - legend_height - 15),
+                 270, view_height)
+            )
+        elif overlay_mode != "none":
+            reserved.append(
+                (0, 0, 215, 125 if overlay_mode == "status" else 84)
+            )
+        details_bounds = room_hud_bounds(
+            view_width, view_height, active=active_room is not None,
+        )
+        if details_bounds is not None:
+            reserved.append(details_bounds)
+
+        if self._show_labels.get():
+            chips = place_room_label_chips(
+                name_anchor_entries, width=view_width,
+                height=view_height, reserved=reserved,
+            )
+            draw_room_label_chips(canvas, chips, zone_colors)
+
+        if active_room is not None:
+            overlay_room = overlay_by_room.get(active_room["id"], {})
+            draw_room_details_hud(
+                canvas, active_room, width=view_width, height=view_height,
+                selected=active_hit == self.selected,
+                overlay_title=str(overlay.get("title") or overlay_mode.title()),
+                overlay_label=str(overlay_room.get("label") or ""),
+            )
 
     def _update_overlay_summary(self, overlay: dict) -> None:
         mode = str(overlay.get("mode") or "none")

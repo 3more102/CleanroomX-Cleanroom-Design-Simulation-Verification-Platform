@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CleanroomX | Real GUI Gallery</title>
+<style>
+:root{color-scheme:light;--ink:#18323e;--muted:#607987;--line:#d9e5ea;--canvas:#f2f6f9;--paper:#fff;--accent:#097b77;--tag:#e9f5f3;--shadow:0 12px 35px rgba(15,38,51,.075)}
+*{box-sizing:border-box}body{margin:0;background:var(--canvas);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink)}
+body.dark{color-scheme:dark;--ink:#e8f2f6;--muted:#b2c2ce;--line:#344a57;--canvas:#101b23;--paper:#1b2a34;--accent:#58cebf;--tag:#233e42;--shadow:0 12px 35px rgba(0,0,0,.2)}
+.wrap{max-width:1530px;margin:auto;padding:32px 34px 70px}.header{padding:24px 0 28px;display:flex;justify-content:space-between;gap:24px;align-items:flex-end;flex-wrap:wrap}
+.eyebrow{font-size:12px;letter-spacing:.15em;text-transform:uppercase;font-weight:800;color:var(--accent)}
+h1{font-size:clamp(32px,5vw,60px);letter-spacing:-.045em;line-height:1.06;margin:12px 0}p{color:var(--muted);line-height:1.55;max-width:850px;margin:8px 0}
+.toggle{display:flex;gap:8px;background:var(--paper);padding:6px;border-radius:13px;border:1px solid var(--line)}
+button{border:0;background:transparent;color:var(--muted);font-size:14px;font-weight:700;border-radius:9px;padding:11px 19px;cursor:pointer}
+button.active{background:var(--accent);color:#fff}body.dark button.active{color:#0b2525}
+.summary{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px}.chip{background:var(--paper);padding:9px 13px;border-radius:9px;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:650}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.card{min-width:0;border:1px solid var(--line);background:var(--paper);border-radius:17px;overflow:hidden;box-shadow:var(--shadow)}
+.frame{display:block;border-bottom:1px solid var(--line);background:#cad7df;aspect-ratio:16/9;overflow:hidden}.frame img{display:block;width:100%;height:100%;object-fit:contain}
+.card-body{padding:20px 22px 22px}.number{font-size:11px;font-weight:900;letter-spacing:.1em;color:var(--accent)}h2{font-size:20px;letter-spacing:-.015em;margin:7px 0}
+.card p{font-size:14px;min-height:42px}.flag{font-size:11px;background:var(--tag);color:var(--accent);padding:5px 8px;border-radius:6px;font-weight:750;display:inline-block}
+.footer{border-top:1px solid var(--line);margin-top:35px;padding-top:18px;font-size:13px;color:var(--muted)}
+a{color:var(--accent)}.note{max-width:none}
+@media(max-width:850px){.wrap{padding:18px 16px 45px}.grid{grid-template-columns:1fr;gap:16px}.header{align-items:start}.card-body{padding:14px 16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="header">
+<div><div class="eyebrow">CleanroomX / Engineering workspace</div>
+<h1>Desktop interface gallery</h1>
+<p>Native-pixel captures from the running CleanroomX desktop application, in two presentation themes. Select any image to see the original full-resolution PNG.</p>
+</div>
+<div class="toggle" role="group" aria-label="Screenshot theme">
+<button id="light" class="active" type="button" aria-pressed="true">Light</button>
+<button id="dark" type="button" aria-pressed="false">Dark</button>
+</div>
+</header>
+<div class="summary">
+<span class="chip">9 actual application views</span>
+<span class="chip">1920 × 1080 capture target</span>
+<span class="chip">Light / Dark</span>
+<span class="chip">Lossless PNG</span>
+<span class="chip">SHA-256 integrity manifest</span>
+</div>
+<main class="grid" id="gallery" aria-label="CleanroomX screenshots"></main>
+<footer class="footer"><strong>Evidence disclaimer.</strong> These are GUI demonstration captures, not evidence of solver convergence, measured cleanroom performance or validated CFD. The calculated fan plot uses a real bundled numerical example (not OpenFOAM). The ProofGraph view uses a synthetic synchronization fixture and shows scientific validation blocked. View <a href="screenshot-manifest.json">screenshot-manifest.json</a> for provenance, pixel dimensions and SHA-256 hashes.</footer>
+</div>
+<script>
+"use strict";
+const shots=[
+["gui-start-center","Start center","Project launch and desktop navigation.","Real Tk GUI"],
+["gui-design-split-context","2D + 3D workspace","Synchronized design views with visible engineering tools.","Real Tk GUI"],
+["gui-design-2d","2D cleanroom plan","Scaled spatial arrangement in plan view.","Bundled demo"],
+["gui-design-3d","3D spatial model","Three-dimensional spatial design visualization.","Bundled demo"],
+["gui-design-split","Split workspace","2D and 3D views together in an enlarged viewport.","Bundled demo"],
+["gui-analysis-inputs","Engineering inputs","Parameters and editable source values for the fan example.","Bundled demo"],
+["gui-computed-fan-results","Calculated fan/system plot","Backend-computed numerical result; not CFD.","Computed example"],
+["gui-openfoam-workbench","OpenFOAM workbench","Controls for simulation and imported-result workflows.","UI only"],
+["gui-openfoam-proofgraph-diagnostic","ProofGraph diagnostic","Synthetic import-integrity fixture; scientific validation blocked.","Synthetic fixture"]
+];
+const gallery=document.getElementById("gallery");
+function filename(key,theme){return key+(theme==="dark"?"-dark":"")+".png";}
+shots.forEach(([key,title,description,provenance],index)=>{
+  const article=document.createElement("article");article.className="card";
+  const link=document.createElement("a");link.className="frame";link.target="_blank";link.rel="noopener";link.title="Open full-resolution screenshot";
+  link.href=filename(key,"light");
+  const img=document.createElement("img");img.src=link.href;img.alt=title+" — "+description;img.loading=index<2?"eager":"lazy";
+  link.append(img);
+  const content=document.createElement("div");content.className="card-body";
+  const id=document.createElement("div");id.className="number";id.textContent="VIEW "+String(index+1).padStart(2,"0");
+  const heading=document.createElement("h2");heading.textContent=title;
+  const descriptionNode=document.createElement("p");descriptionNode.textContent=description;
+  const flag=document.createElement("span");flag.className="flag";flag.textContent=provenance;
+  content.append(id,heading,descriptionNode,flag);article.append(link,content);gallery.append(article);
+  article.dataset.scene=key;
+});
+function setTheme(theme){
+  document.body.classList.toggle("dark",theme==="dark");
+  ["light","dark"].forEach(id=>{
+    const active=id===theme;document.getElementById(id).classList.toggle("active",active);
+    document.getElementById(id).setAttribute("aria-pressed",String(active));
+  });
+  gallery.querySelectorAll(".card").forEach(card=>{
+    const url=filename(card.dataset.scene,theme);
+    const link=card.querySelector("a");link.href=url;link.querySelector("img").src=url;
+  });
+}
+document.getElementById("light").addEventListener("click",()=>setTheme("light"));
+document.getElementById("dark").addEventListener("click",()=>setTheme("dark"));
+</script>
+</body>
+</html>

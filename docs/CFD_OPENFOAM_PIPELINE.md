@@ -40,17 +40,24 @@ digests, rejects linked or oversized inputs, and reruns the boundary-geometry
 and inlet-flow consistency audit for all three configurations. Hashes are
 compared with the bundle's local unsigned manifest. The result does not run
 OpenFOAM or establish solver convergence, grid independence, or physical
-validation. **Preview result evidence** remains a viewer for selected fields
-and raw-file SHA-256 values.
-**Load ProofGraph JSON** sends an existing persisted graph to the application's
-ProofGraph viewer; the desktop tab does not generate that graph from CFD
-artifacts.
+validation. **Preview result evidence** displays selected fields and raw-file
+SHA-256 values without independently validating those hashes.
+
+**Export ProofGraph…** reads the synchronized result manifests under the chosen
+result store and simulation ID. It re-hashes each manifest, immutable receipt,
+and referenced result asset before writing a standalone ProofGraph JSON file
+and loading it into the application's viewer. A missing configuration is
+represented as `not_checked`; a malformed manifest or mismatched asset hash
+aborts export. A PASS verdict covers artifact integrity only. Solver convergence
+and physical validation remain `not_checked` / `BLOCKED`, even when solver
+metadata or VTK parity reports success. **Load ProofGraph JSON** remains
+available for persisted graphs created elsewhere.
 
 The tab is a software workflow integration. It does not yet derive OpenFOAM
-boundary geometry from the active CAD/IFC project or attach solver snapshots
-automatically to project requirements. Scientific validation remains
-`BLOCKED` pending physical cleanroom measurements, defined acceptance
-criteria, and independent engineering review.
+boundary geometry from the active CAD/IFC project or attach the standalone
+export to project requirements. Scientific validation remains `BLOCKED`
+pending independent cleanroom measurements, justified acceptance criteria, and
+engineering review.
 
 ## Educational source and limits
 

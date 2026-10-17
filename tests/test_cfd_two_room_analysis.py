@@ -101,7 +101,7 @@ def test_export_creates_actual_graphs_and_refuses_overwrite(tmp_path, monkeypatc
     case, receipt, _ = _fixture(tmp_path, monkeypatch)
     output = tmp_path / "analysis"
     report = analysis.export_two_room_analysis(case, receipt, output)
-    assert sorted(report["graphs"]) == ["inlet_outlet_flux.svg", "pressure_probe_history.svg", "simplefoam_residual_Ux.svg", "simplefoam_residual_p.svg"]
+    assert sorted(report["graphs"]) == ["inlet_outlet_flux.svg", "pressure_probe_history.svg", "simplefoam_continuity_history.svg", "simplefoam_residual_Ux.svg", "simplefoam_residual_p.svg"]
     assert report["scientific_validation"] == "BLOCKED"
     assert report["artifact_integrity"] == "VERIFIED_LOCAL_ARTIFACT_INTEGRITY"
     assert (output / "artifact_manifest.json").is_file()
@@ -254,3 +254,27 @@ def test_recomputed_physics_screens_reject_forged_receipt_values(tmp_path, monke
     receipt.write_text(json.dumps(doc), encoding="utf-8")
     with pytest.raises(ValueError, match=expected):
         analysis.analyze_two_room_evidence(case, receipt)
+
+
+def test_signed_solver_continuity_graph_preserves_zero_line_and_record_axis():
+    svg = analysis._continuity_svg([
+        {"sum_local": 0.0001, "global": -0.00001},
+        {"sum_local": 0.0002, "global": 0.00003},
+        {"sum_local": 0.0001, "global": 0.0},
+    ])
+    assert "Continuity record index (not seconds)" in svg
+    assert "zero" not in svg
+    assert 'y1="145" x2="670" y2="145"' in svg
+    assert svg.count("<polyline") == 2
+    assert "<script" not in svg
+
+
+@pytest.mark.parametrize("records", [
+    [],
+    [{"sum_local": 1.0}],
+    [{"sum_local": float("nan"), "global": 0.0}],
+    [{"sum_local": 0.0, "global": float("inf")}],
+])
+def test_solver_continuity_graph_rejects_unbounded_or_missing_values(records):
+    with pytest.raises(ValueError):
+        analysis._continuity_svg(records)

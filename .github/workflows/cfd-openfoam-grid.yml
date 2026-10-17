@@ -1479,8 +1479,10 @@ jobs:
 
       - name: Run pinned pitzDaily through solver and CleanroomX result sync
         run: |
-          set -euo pipefail
+          set -eo pipefail
+          set +u
           source /opt/openfoam10/etc/bashrc
+          set -u
           if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
             printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
             exit 1

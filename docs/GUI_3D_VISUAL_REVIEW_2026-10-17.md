@@ -23,7 +23,9 @@ a generated simulator screenshot or stored in this repository by this PR.
 - The 3D toolbar puts projection, section height, X-ray, zone tint,
   orbit, tilt, and reset on one row; some controls are clipped at narrower widths.
 - The right-side Properties pane is visually very narrow in the captured layout.
-  This PR does **not** claim to resolve the pane-sash layout issue.
+  Use the new **Balance panels** button to restore a readable 235–330 px
+  inspector and allocate around 42% of the remaining view to the 2D plan.
+  This is an explicit reset action, not an automatic persisted sash migration.
 
 ## Changes in this enhancement PR
 
@@ -41,6 +43,8 @@ a generated simulator screenshot or stored in this repository by this PR.
   and keep the existing 2D label contents unchanged.
 - Preserve engineering pressure-cascade arrows without midpoint text spilling
   over adjacent 3D volumes. Never infer missing pressure or airflow values.
+- Add **Balance panels** to recover from an accidentally collapsed Properties
+  pane while keeping the geometry and engineering results unchanged.
 
 ## Verification targets
 
@@ -59,6 +63,7 @@ a generated simulator screenshot or stored in this repository by this PR.
 3. Toggle **Labels**, **Zone tint**, **X-Ray**, and engineering overlays.
 4. Select and hover Process, Preparation and Ante / Airlock;
    verify the inspector HUD and unique short name chips.
-5. Reduce the window width: no clipped 3D toolbar actions should be required
-   to interact with the viewport, but the global Properties pane may still
-   require manual sash adjustment.
+5. Click **Balance panels** and verify the 2D/3D split and Properties
+   inspector return to usable sizes without editing the model.
+6. Reduce the window width: the 3D toolbar has two rows and the detailed
+   HUD automatically hides when its available width is too small.

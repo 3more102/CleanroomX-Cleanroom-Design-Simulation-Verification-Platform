@@ -93,3 +93,40 @@ into the project model.
 The shortcuts do not change rooms, pressure fields, or CFD evidence.
 The regression suite checks a readable full-width 3D view separately from
 small-view legend layout; failures are not treated as proof of CFD validation.
+
+## Detailed inspector and viewport recovery
+
+The next iteration addresses a measured regression in the prior development
+branch on Linux Python 3.13: the 3D canvas was only **1037×25 px** in a real Tk
+test. The old Properties sidebar stacked all editable sections at their full
+natural height and competed vertically with the viewer.
+
+The Properties pane now contains a vertically scrollable field editor with a
+constant-height canvas. The **Apply properties** button remains outside the
+scrolling area. A read-only selection summary reports exact floor area,
+geometric room volume and the number of placed devices; all values come from
+existing design geometry. A **Fit** button frames the selected room/device.
+
+The full-width action toolbar also keeps **Validate** visible at 1050×680.
+The prior compact legend, 3D camera shortcuts and zone-color display stay
+unchanged.
+
+The 3D HUD now displays:
+- For rooms: name, project classification, L/W/H dimensions, computed floor
+  area, computed geometric volume, room-device count and the *supplied* overlay.
+- For devices: name, type, assigned room, X/Y/Z placement and available
+  dimensions. It does not infer CFD supply rate, air-change rate or
+  verified cleanliness from placement geometry.
+- Hover can temporarily inspect a different visible room/device; leaving
+  the canvas restores the selected object's information.
+
+### Regression and acceptance
+
+- Check minimum 1050×680 window: **Validate**, **Pull from analysis**, and
+  **Push to analysis** remain mapped; 3D camera and a useful viewport remain
+  available; property rows scroll with the mouse wheel.
+- Check real Tk tests on supported Python 3.11–3.13 and full CLI suite.
+- Changing viewport, scrolling the inspector, using Fit, and selecting a
+  device must not alter the saved CAD room geometry or CFD evidence.
+- Exact area and volume use lengths in meters from the canonical layout,
+  not OpenFOAM mesh cells or any solver data.

@@ -423,6 +423,49 @@ def _residual_svg(field: str, records: dict[str, list[float]]) -> str:
 
 
 
+def _continuity_svg(continuity: list[dict[str, float]]) -> str:
+    """Graph solver-reported continuity histories, NOT integrated physical mass balance."""
+    if not continuity or len(continuity) > 16000:
+        raise ValueError("Continuity graph requires one to 16000 logged records")
+    readings: dict[str, list[float]] = {"sum_local": [], "global": []}
+    for sample in continuity:
+        if type(sample) is not dict or set(sample) != {"sum_local", "global"}:
+            raise ValueError("Continuity record needs only sum_local and global")
+        for name in readings:
+            readings[name].append(_finite(sample[name], "continuity_" + name))
+    extent = max(abs(v) for group in readings.values() for v in group)
+    if extent == 0.0:
+        extent = 1.0
+    total = len(continuity)
+    step = max(1, math.ceil(total / 1000))
+    indices = sorted(set(range(0, total, step)) | {total - 1})
+    scale_x = lambda i: 70.0 + 600.0 * i / max(1, total - 1)
+    # Symmetric scale preserves the sign of the reported global continuity error.
+    scale_y = lambda y: 145.0 - 82.0 * (y / extent)
+    segments = []
+    for key, color in (("sum_local", "#1464b4"), ("global", "#d96b27")):
+        points = " ".join(
+            f"{scale_x(i):.2f},{scale_y(readings[key][i]):.2f}" for i in indices
+        )
+        segments.append(
+            f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="1.8"/>'
+        )
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300">'
+        '<rect width="720" height="300" fill="#fff"/>'
+        '<text x="24" y="25" font-size="16">simpleFoam reported continuity history</text>'
+        '<line x1="70" y1="145" x2="670" y2="145" stroke="#444" stroke-dasharray="5,4"/>'
+        + "".join(segments)
+        + f'<text x="3" y="64" font-size="11">+{extent:.3g}</text>'
+        + '<text x="26" y="149" font-size="11">0</text>'
+        + f'<text x="3" y="232" font-size="11">-{extent:.3g}</text>'
+        + '<text x="70" y="255" font-size="12">1</text>'
+        + f'<text x="634" y="255" font-size="12">{total}</text>'
+        + '<text x="130" y="284" font-size="12">Continuity record index (not seconds); blue: sum local, orange: global</text>'
+        + '</svg>'
+    )
+
+
 def _histogram_svg(title: str, distribution: dict[str, Any]) -> str:
     """Volume-weighted histogram; bins describe samples, not an interpolated contour."""
     fractions = distribution["bin_volume_percent"]
@@ -579,6 +622,9 @@ def export_two_room_analysis(
                 )
     for field, samples in sorted(report["residual_history"]["fields"].items())[:8]:
         graphs[f"simplefoam_residual_{field}.svg"] = _residual_svg(field, samples)
+    continuity = report["residual_history"]["continuity"]
+    if continuity:
+        graphs["simplefoam_continuity_history.svg"] = _continuity_svg(continuity)
     report["graphs"] = sorted(graphs)
     source_files = {
         "analysis.json": json.dumps(report, sort_keys=True, indent=2, allow_nan=False) + "\n",

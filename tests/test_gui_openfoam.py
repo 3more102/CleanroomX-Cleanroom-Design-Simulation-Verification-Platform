@@ -19,6 +19,8 @@ from cleanroomx.gui_openfoam import (
     build_openfoam_run_command,
     build_openfoam_sync_vtk_command,
     build_two_room_audit_command,
+    build_two_room_analysis_command,
+    build_two_room_analysis_audit_command,
     build_two_room_generate_command,
     build_two_room_run_command,
     read_openfoam_evidence_preview,
@@ -112,6 +114,27 @@ def test_two_room_commands_preserve_paths_and_require_new_receipt_location() -> 
     ]
     with pytest.raises(ValueError, match="new receipt directory"):
         build_two_room_run_command("/tmp/case", "")
+
+
+def test_two_room_graph_command_builders_preserve_spaces_and_paths() -> None:
+    command = build_two_room_analysis_command(
+        "/tmp/valid solver case", "/tmp/verified receipt", "/tmp/new charts",
+        python_executable="/python",
+    )
+    assert command == [
+        "/python", "-m", "cleanroomx.cfd_pipeline_cli", "two-room-analyze",
+        "/tmp/valid solver case", "/tmp/verified receipt/two_room_run_receipt.json",
+        "/tmp/new charts",
+    ]
+    audit = build_two_room_analysis_audit_command(
+        "/tmp/saved chart bundle", python_executable="/python"
+    )
+    assert audit == [
+        "/python", "-m", "cleanroomx.cfd_pipeline_cli",
+        "two-room-analysis-audit", "/tmp/saved chart bundle",
+    ]
+    with pytest.raises(ValueError, match="graph directory"):
+        build_two_room_analysis_audit_command("   ")
 
 
 def test_evidence_preview_reports_digest_and_diagnostic_status(tmp_path) -> None:

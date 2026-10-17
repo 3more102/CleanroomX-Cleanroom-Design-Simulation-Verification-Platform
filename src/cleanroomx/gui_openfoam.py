@@ -679,7 +679,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.export_graph_button.pack(side="left", padx=5)
         ttk.Label(
             evidence,
-            text="Export verifies artifact hashes only; CFD validation remains blocked.",
+            text="Hash consistency only; CFD validation stays BLOCKED.",
         ).pack(side="left", padx=(10, 0))
 
 

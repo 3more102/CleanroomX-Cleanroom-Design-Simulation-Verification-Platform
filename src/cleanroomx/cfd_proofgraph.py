@@ -26,7 +26,12 @@ from .proofgraph_models import (
     ProvenanceRecord,
     VerificationRun,
 )
-from .cfd_two_room import verify_two_room_case, verify_two_room_receipt
+from .cfd_two_room import (
+    RECEIPT_SCHEMA as TWO_ROOM_RECEIPT_SCHEMA,
+    _hash_two_room_vtk_assets,
+    verify_two_room_case,
+    verify_two_room_receipt,
+)
 
 
 SYNC_SCHEMA = "cleanroomx.openfoam-result-sync.v2"
@@ -811,6 +816,8 @@ def proofgraph_from_two_room_receipt(
     )
     receipt_integrity = verify_two_room_receipt(receipt_candidate)
     receipt_sha = receipt_integrity["receipt_sha256"]
+    if receipt_document.get("schema_version") != TWO_ROOM_RECEIPT_SCHEMA:
+        raise ValueError("Two-room receipt predates VTK asset binding; rerun the case before ProofGraph export")
     checked_case = verify_two_room_case(case_root)
     if (
         receipt_document.get("status") != "executed_requires_engineering_review"
@@ -883,6 +890,12 @@ def proofgraph_from_two_room_receipt(
         raise ValueError("Two-room final-time phi hash disagrees with the receipt artifact map")
     if flux.get("poly_mesh_boundary_sha256") != verified_results.get("constant/polyMesh/boundary"):
         raise ValueError("Two-room polyMesh boundary hash disagrees with the receipt artifact map")
+    recorded_vtk_assets = receipt_document.get("vtk_assets_sha256")
+    if type(recorded_vtk_assets) is not dict or not recorded_vtk_assets:
+        raise ValueError("Two-room receipt does not bind foamToVTK result assets")
+    actual_vtk_assets = _hash_two_room_vtk_assets(case_root)
+    if actual_vtk_assets != recorded_vtk_assets:
+        raise ValueError("Two-room VTK result asset hashes do not match the receipt")
 
     receipt_name = receipt_candidate.name
     source_id = f"SOURCE-TWO-ROOM-{receipt_sha[:12]}"
@@ -912,6 +925,7 @@ def proofgraph_from_two_room_receipt(
         "spec_sha256": checked_case["spec_sha256"],
         "input_sha256": checked_case["input_sha256"],
         "result_sha256": verified_results,
+        "vtk_assets_sha256": actual_vtk_assets,
         "solver_release": "OpenFOAM Foundation v10",
         "stages": clean_stages,
         "pressure_probe": probe,
@@ -922,7 +936,7 @@ def proofgraph_from_two_room_receipt(
         "integrity_scope": "local_hash_link_consistency_not_authenticity",
         "scientific_validation": "BLOCKED",
         "interpretation": (
-            "Receipt, case input, stage-log, probe, and solver-flux hash links were verified locally. "
+            "Receipt, case input, stage-log, probe, solver-flux, and foamToVTK asset hash links were verified locally. "
             "This does not authenticate the source, assess convergence, or establish physical validation."
         ),
     }
@@ -933,6 +947,7 @@ def proofgraph_from_two_room_receipt(
                 "case_manifest_sha256": checked_case["manifest_sha256"],
                 "input_sha256": checked_case["input_sha256"],
                 "result_sha256": verified_results,
+                "vtk_assets_sha256": actual_vtk_assets,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -953,7 +968,7 @@ def proofgraph_from_two_room_receipt(
                 reference=receipt_name,
                 scope=("two_room_case",),
                 criteria={
-                    "required": "Receipt, case inputs, stage logs, and solver result hashes are locally consistent.",
+                    "required": "Receipt, case inputs, stage logs, solver results, and foamToVTK assets are locally consistent.",
                     "decision_scope": "artifact_integrity_only",
                 },
             ),
@@ -999,7 +1014,7 @@ def proofgraph_from_two_room_receipt(
                         origin="OpenFOAM Foundation v10 two-room run receipt",
                         originating_file=receipt_name,
                         originating_calculation="two_room_openfoam_run",
-                        method="sha256_receipt_case_input_and_result_artifact_verification",
+                        method="sha256_receipt_case_input_result_and_vtk_asset_verification",
                     ),
                 ),
             ),
@@ -1023,11 +1038,15 @@ def proofgraph_from_two_room_receipt(
                 check_id=integrity_check_id,
                 requirement_id=integrity_requirement_id,
                 status="pass",
-                reason="The receipt, case inputs, stage logs, and measured result artifacts have matching local SHA-256 links.",
+                reason="The receipt, case inputs, stage logs, measured result artifacts, and foamToVTK assets have matching local SHA-256 links.",
                 evidence_ids=(evidence_id,),
                 evidence_present=True,
                 expected="locally consistent receipt and result hashes",
-                actual={"receipt_sha256": receipt_sha, "verified_result_sha256": verified_results},
+                actual={
+                    "receipt_sha256": receipt_sha,
+                    "verified_result_sha256": verified_results,
+                    "verified_vtk_assets_sha256": actual_vtk_assets,
+                },
             ),
             ComplianceFinding(
                 id=validation_finding_id,
@@ -1069,7 +1088,7 @@ def proofgraph_from_two_room_receipt(
                     "receipt_sha256": receipt_sha,
                     "asset_hashes_verified": True,
                     "scientific_validation": "BLOCKED",
-                    "interpretation": "Local artifact integrity only; convergence, authenticity, and physical validation are not checked.",
+                    "interpretation": "Local case, result, and VTK asset integrity only; convergence, authenticity, and physical validation are not checked.",
                 },
             ),
         ),

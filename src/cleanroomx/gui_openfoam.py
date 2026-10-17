@@ -999,7 +999,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         if not destination:
             return
         self._append(
-            "\nVerifying two-room case inputs, run receipt, stage logs, pressure probe, and solver flux…\n"
+            "\nVerifying two-room case inputs, run receipt, stage logs, pressure probe, solver flux, and foamToVTK assets…\n"
         )
         self._set_busy(True)
         self._status_setter("Verifying two-room OpenFOAM artifacts and exporting ProofGraph")

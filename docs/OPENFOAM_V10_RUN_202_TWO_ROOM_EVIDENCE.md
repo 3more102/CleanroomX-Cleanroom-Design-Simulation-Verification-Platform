@@ -34,7 +34,8 @@ case-input, stage-log, probe, final-time `phi`, and mesh-boundary hashes. That
 receipt used schema v1 and did not include hashes for the files under `VTK/`,
 even though `foamToVTK` produced visualization output. It is therefore
 historical solver-integration evidence, not a complete VTK asset-integrity
-receipt.
+receipt. Because the two-room specification is synthetic, this run does not
+add a completed cleanroom workflow or a completed capability-matrix row.
 
 The follow-up receipt schema v2 records every VTK asset hash and makes
 ProofGraph reject changed, added, removed, linked, or oversized VTK outputs.

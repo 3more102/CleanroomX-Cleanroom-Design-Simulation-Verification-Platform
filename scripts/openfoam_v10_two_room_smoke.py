@@ -12,6 +12,7 @@ from cleanroomx.cfd_two_room import (
     export_two_room_case,
     verify_two_room_receipt,
 )
+from cleanroomx.cfd_proofgraph import export_two_room_proofgraph
 from cleanroomx.cli_output import load_cli_input
 from cleanroomx.strict_json import load_strict_json
 
@@ -41,9 +42,14 @@ def main(argv: list[str] | None = None) -> int:
         timeout_seconds=args.timeout_seconds,
     )
     verified_receipt = verify_two_room_receipt(receipt_directory / "two_room_run_receipt.json")
+    proofgraph_summary = None
     if receipt.get("status") == "executed_requires_engineering_review":
-        if verified_receipt.get("scientific_validation") != "BLOCKED":
-            raise ValueError("two-room smoke receipt promoted scientific validation")
+        if (
+            verified_receipt.get("scientific_validation") != "BLOCKED"
+            or verified_receipt.get("vtk_assets_bound") is not True
+            or not receipt.get("vtk_assets_sha256")
+        ):
+            raise ValueError("two-room smoke receipt lacks VTK asset hashes or promoted scientific validation")
         screens = receipt.get("engineering_screens")
         if (
             not isinstance(screens, dict)
@@ -56,7 +62,27 @@ def main(argv: list[str] | None = None) -> int:
             or len(receipt.get("stages", [])) != 4
         ):
             raise ValueError("two-room smoke output is missing solver-backed pressure/flux evidence")
-    print(json.dumps({"receipt": receipt, "receipt_integrity": verified_receipt}, indent=2, sort_keys=True, allow_nan=False))
+        graph_path = output / "two_room_proofgraph.json"
+        graph = export_two_room_proofgraph(case, receipt_directory / "two_room_run_receipt.json", graph_path)
+        verdicts = {item["id"]: item["status"] for item in graph["verdicts"]}
+        if (
+            verdicts.get("VERDICT-TWO-ROOM-ARTIFACT-INTEGRITY") != "pass"
+            or verdicts.get("VERDICT-TWO-ROOM-SCIENTIFIC-VALIDATION") != "not_checked"
+            or graph["evidence"][0]["value"].get("vtk_assets_sha256") != receipt["vtk_assets_sha256"]
+        ):
+            raise ValueError("two-room smoke ProofGraph did not preserve the VTK-bound integrity verdicts")
+        proofgraph_summary = {
+            "path": graph_path.name,
+            "graph_sha256": graph["graph_sha256"],
+            "artifact_integrity": verdicts["VERDICT-TWO-ROOM-ARTIFACT-INTEGRITY"],
+            "scientific_validation": verdicts["VERDICT-TWO-ROOM-SCIENTIFIC-VALIDATION"],
+            "vtk_asset_count": len(receipt["vtk_assets_sha256"]),
+        }
+    print(json.dumps({
+        "receipt": receipt,
+        "receipt_integrity": verified_receipt,
+        "proofgraph": proofgraph_summary,
+    }, indent=2, sort_keys=True, allow_nan=False))
     return 0 if receipt.get("status") == "executed_requires_engineering_review" else 2
 
 

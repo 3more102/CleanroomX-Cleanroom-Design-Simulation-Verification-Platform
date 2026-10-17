@@ -10,9 +10,10 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import subprocess
 import time
 from typing import Any
@@ -28,9 +29,12 @@ from .cfd_openfoam import (
 
 SCHEMA = "cleanroomx.openfoam.two-room.v1"
 CASE_MANIFEST_SCHEMA = "cleanroomx.openfoam.two-room-case.v1"
-RECEIPT_SCHEMA = "cleanroomx.openfoam.two-room-run.v1"
+LEGACY_RECEIPT_SCHEMA = "cleanroomx.openfoam.two-room-run.v1"
+RECEIPT_SCHEMA = "cleanroomx.openfoam.two-room-run.v2"
 MAX_CASE_BYTES = 32 * 1024 * 1024
 MAX_TIMEOUT_SECONDS = 3600
+MAX_VTK_ASSET_COUNT = 64
+MAX_VTK_TOTAL_BYTES = 256 * 1024 * 1024
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 _TIME = re.compile(rf"^({_NUMBER})$")
 
@@ -41,6 +45,87 @@ def _sha256(data: bytes) -> str:
 
 def _canonical_json(value: Any) -> bytes:
     return (json.dumps(value, allow_nan=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def _stable_file_sha256(path: Path, *, max_bytes: int) -> tuple[str, int]:
+    """Hash one regular, singly linked file without following a final symlink."""
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise ValueError(f"Cannot inspect VTK result file: {path.name}") from exc
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise ValueError(f"VTK result must be a singly linked regular file: {path.name}")
+    if before.st_size > max_bytes:
+        raise ValueError(f"VTK result exceeds the per-file size limit: {path.name}")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise ValueError(f"Cannot safely open VTK result file: {path.name}") from exc
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with os.fdopen(descriptor, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+                raise ValueError(f"VTK result changed to a non-regular file: {path.name}")
+            while chunk := stream.read(1024 * 1024):
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError(f"VTK result exceeds the per-file size limit: {path.name}")
+                digest.update(chunk)
+            after = os.fstat(stream.fileno())
+        final = path.lstat()
+    except OSError as exc:
+        raise ValueError(f"Cannot read VTK result file: {path.name}") from exc
+    identity = lambda info: (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    if (
+        before.st_nlink != 1
+        or opened.st_nlink != 1
+        or after.st_nlink != 1
+        or final.st_nlink != 1
+        or identity(before) != identity(opened)
+        or identity(opened) != identity(after)
+        or identity(after) != identity(final)
+    ):
+        raise ValueError(f"VTK result changed while it was being hashed: {path.name}")
+    return digest.hexdigest(), size
+
+
+def _hash_two_room_vtk_assets(case: Path) -> dict[str, str]:
+    """Return bounded SHA-256 links for every regular asset under ``VTK/``."""
+    root = case / "VTK"
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("foamToVTK did not create a regular VTK output directory")
+    hashes: dict[str, str] = {}
+    total_bytes = 0
+
+    def walk_error(error: OSError) -> None:
+        raise ValueError(f"Cannot enumerate VTK result directory: {error.filename or root}") from error
+
+    for current, directories, files in os.walk(root, topdown=True, followlinks=False, onerror=walk_error):
+        parent = Path(current)
+        for name in directories:
+            directory = parent / name
+            if directory.is_symlink() or not directory.is_dir():
+                raise ValueError(f"VTK result contains an unsafe directory: {directory.name}")
+        for name in files:
+            path = parent / name
+            if path.is_symlink():
+                raise ValueError(f"VTK result contains a symbolic link: {path.name}")
+            relative = path.relative_to(case).as_posix()
+            if not relative.startswith("VTK/") or ".." in Path(relative).parts:
+                raise ValueError("VTK result path is not a safe case-relative path")
+            if len(hashes) >= MAX_VTK_ASSET_COUNT:
+                raise ValueError("VTK result contains too many assets")
+            digest, size = _stable_file_sha256(path, max_bytes=MAX_VTK_TOTAL_BYTES)
+            total_bytes += size
+            if total_bytes > MAX_VTK_TOTAL_BYTES:
+                raise ValueError("VTK result assets exceed the total size limit")
+            hashes[relative] = digest
+    if not hashes or not any(Path(name).name.startswith("case_") and name.endswith(".vtk") for name in hashes):
+        raise ValueError("foamToVTK did not create a main case VTK dataset")
+    return dict(sorted(hashes.items()))
 
 
 def _positive(value: Any, name: str) -> float:
@@ -651,6 +736,7 @@ def execute_two_room_case(
         result_hashes[phi_relative] = _sha256(phi_path.read_bytes())
         boundary_relative = "constant/polyMesh/boundary"
         result_hashes[boundary_relative] = _sha256((case / boundary_relative).read_bytes())
+        receipt["vtk_assets_sha256"] = _hash_two_room_vtk_assets(case)
         receipt["result_sha256"] = result_hashes
         receipt["status"] = "executed_requires_engineering_review"
         receipt["finished_at_unix"] = time.time()
@@ -668,7 +754,10 @@ def verify_two_room_receipt(path: str | Path) -> dict[str, Any]:
     if len(raw) > MAX_CASE_BYTES:
         raise ValueError("two-room receipt exceeds the size limit")
     document = json.loads(raw.decode("utf-8"))
-    if type(document) is not dict or document.get("schema_version") != RECEIPT_SCHEMA:
+    if type(document) is not dict or document.get("schema_version") not in {
+        LEGACY_RECEIPT_SCHEMA,
+        RECEIPT_SCHEMA,
+    }:
         raise ValueError("unexpected two-room receipt schema")
     expected = document.get("receipt_sha256")
     payload = dict(document)
@@ -677,4 +766,26 @@ def verify_two_room_receipt(path: str | Path) -> dict[str, Any]:
         raise ValueError("two-room receipt digest mismatch")
     if document.get("scientific_validation") != "BLOCKED":
         raise ValueError("two-room receipt cannot promote scientific validation")
-    return {"status": "verified", "receipt_sha256": expected, "scientific_validation": "BLOCKED"}
+    vtk_assets = document.get("vtk_assets_sha256")
+    if document.get("schema_version") == RECEIPT_SCHEMA and document.get("status") == "executed_requires_engineering_review":
+        if type(vtk_assets) is not dict or not vtk_assets or len(vtk_assets) > MAX_VTK_ASSET_COUNT:
+            raise ValueError("complete v2 two-room receipt must bind its VTK result assets")
+        for relative, digest in vtk_assets.items():
+            posix_path = PurePosixPath(relative) if type(relative) is str else PurePosixPath()
+            if (
+                type(relative) is not str
+                or not relative.startswith("VTK/")
+                or posix_path.is_absolute()
+                or posix_path.as_posix() != relative
+                or any(part in {"", ".", ".."} for part in posix_path.parts)
+                or "\\" in relative
+                or type(digest) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            ):
+                raise ValueError("two-room VTK result asset map contains an unsafe path or digest")
+    return {
+        "status": "verified",
+        "receipt_sha256": expected,
+        "scientific_validation": "BLOCKED",
+        "vtk_assets_bound": document.get("schema_version") == RECEIPT_SCHEMA and bool(vtk_assets),
+    }

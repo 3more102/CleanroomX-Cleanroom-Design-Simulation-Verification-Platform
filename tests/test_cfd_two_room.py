@@ -148,7 +148,9 @@ def test_two_room_execution_without_foundation_v10_writes_blocked_receipt(tmp_pa
     assert receipt["status"] == "execution_or_evidence_incomplete"
     assert receipt["scientific_validation"] == "BLOCKED"
     assert any("Expected OpenFOAM Foundation v10" in item for item in receipt["failures"])
-    assert verify_two_room_receipt(receipt_dir / "two_room_run_receipt.json")["status"] == "verified"
+    checked_receipt = verify_two_room_receipt(receipt_dir / "two_room_run_receipt.json")
+    assert checked_receipt["status"] == "verified"
+    assert checked_receipt["vtk_assets_bound"] is False
     receipt_path = receipt_dir / "two_room_run_receipt.json"
     original = json.loads(receipt_path.read_text(encoding="utf-8"))
     original["scientific_validation"] = "PASS"

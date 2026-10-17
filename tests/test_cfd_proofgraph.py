@@ -198,6 +198,13 @@ def _write_two_room_receipt(case: Path, receipt_path: Path) -> dict:
     boundary_bytes = b"final mesh boundary fixture\n"
     boundary_path.write_bytes(boundary_bytes)
     boundary_sha = _sha256(boundary_bytes)
+    vtk_case = case / "VTK" / "case_150.vtk"
+    vtk_case.parent.mkdir(parents=True)
+    vtk_case.write_bytes(b"vtk DataFile Version 3.0\ncase fixture\nASCII\nDATASET POLYDATA\n")
+    vtk_surface = case / "VTK" / "surfaceFields" / "surfaceFields_150.vtk"
+    vtk_surface.parent.mkdir(parents=True)
+    vtk_surface.write_bytes(b"vtk DataFile Version 3.0\nsurface fixture\nASCII\nDATASET POLYDATA\n")
+    vtk_assets = cfd_two_room._hash_two_room_vtk_assets(case)
     receipt = {
         "schema_version": cfd_two_room.RECEIPT_SCHEMA,
         "status": "executed_requires_engineering_review",
@@ -235,6 +242,7 @@ def _write_two_room_receipt(case: Path, receipt_path: Path) -> dict:
             "150/phi": phi_sha,
             "constant/polyMesh/boundary": boundary_sha,
         },
+        "vtk_assets_sha256": vtk_assets,
         "scientific_validation": "BLOCKED",
     }
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -260,7 +268,8 @@ def test_two_room_proofgraph_binds_case_and_solver_artifacts(tmp_path):
     case = tmp_path / "case"
     export_two_room_case(spec, case)
     receipt_path = tmp_path / "receipt" / "two_room_run_receipt.json"
-    _write_two_room_receipt(case, receipt_path)
+    receipt = _write_two_room_receipt(case, receipt_path)
+    assert cfd_two_room.verify_two_room_receipt(receipt_path)["vtk_assets_bound"] is True
 
     document = export_two_room_proofgraph(
         case,
@@ -271,6 +280,7 @@ def test_two_room_proofgraph_binds_case_and_solver_artifacts(tmp_path):
     assert restored.to_dict() == document
     evidence = document["evidence"][0]
     assert evidence["value"]["asset_hashes_verified"] is True
+    assert evidence["value"]["vtk_assets_sha256"] == receipt["vtk_assets_sha256"]
     assert evidence["value"]["integrity_scope"] == "local_hash_link_consistency_not_authenticity"
     assert evidence["value"]["scientific_validation"] == "BLOCKED"
     statuses = {verdict["id"]: verdict["status"] for verdict in document["verdicts"]}
@@ -300,6 +310,84 @@ def test_two_room_proofgraph_rejects_changed_run_artifact(tmp_path):
     (case / "simpleFoam.log").write_text("changed after receipt\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="artifact hash mismatch"):
+        proofgraph_from_two_room_receipt(case, receipt_path)
+
+
+def test_two_room_proofgraph_requires_vtk_bound_receipt_schema(tmp_path):
+    spec = {
+        "schema_version": TWO_ROOM_SCHEMA,
+        "name": "SYNTHETIC ProofGraph fixture",
+        "room_m": [6.0, 4.0, 3.0],
+        "mesh_cells_per_room": [12, 12, 8],
+        "door_opening_m": [0.2, 0.2],
+        "supply_flow_m3_s": 0.1,
+        "density_kg_m3": 1.2,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "target_delta_pressure_pa": 5.0,
+        "pressure_tolerance_pa": 1.0,
+        "max_iterations": 150,
+        "output_interval": 1,
+    }
+    case = tmp_path / "case"
+    export_two_room_case(spec, case)
+    receipt_path = tmp_path / "receipt" / "two_room_run_receipt.json"
+    _write_two_room_receipt(case, receipt_path)
+    legacy = json.loads(receipt_path.read_text(encoding="utf-8"))
+    legacy["schema_version"] = cfd_two_room.LEGACY_RECEIPT_SCHEMA
+    cfd_two_room._write_json(receipt_path, legacy)
+
+    with pytest.raises(ValueError, match="predates VTK asset binding"):
+        proofgraph_from_two_room_receipt(case, receipt_path)
+
+
+def test_two_room_proofgraph_rejects_changed_vtk_asset(tmp_path):
+    spec = {
+        "schema_version": TWO_ROOM_SCHEMA,
+        "name": "SYNTHETIC ProofGraph fixture",
+        "room_m": [6.0, 4.0, 3.0],
+        "mesh_cells_per_room": [12, 12, 8],
+        "door_opening_m": [0.2, 0.2],
+        "supply_flow_m3_s": 0.1,
+        "density_kg_m3": 1.2,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "target_delta_pressure_pa": 5.0,
+        "pressure_tolerance_pa": 1.0,
+        "max_iterations": 150,
+        "output_interval": 1,
+    }
+    case = tmp_path / "case"
+    export_two_room_case(spec, case)
+    receipt_path = tmp_path / "receipt" / "two_room_run_receipt.json"
+    _write_two_room_receipt(case, receipt_path)
+    (case / "VTK" / "case_150.vtk").write_text("tampered VTK output\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="VTK result asset hashes do not match"):
+        proofgraph_from_two_room_receipt(case, receipt_path)
+
+
+def test_two_room_proofgraph_rejects_unreceipted_vtk_asset(tmp_path):
+    spec = {
+        "schema_version": TWO_ROOM_SCHEMA,
+        "name": "SYNTHETIC ProofGraph fixture",
+        "room_m": [6.0, 4.0, 3.0],
+        "mesh_cells_per_room": [12, 12, 8],
+        "door_opening_m": [0.2, 0.2],
+        "supply_flow_m3_s": 0.1,
+        "density_kg_m3": 1.2,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "target_delta_pressure_pa": 5.0,
+        "pressure_tolerance_pa": 1.0,
+        "max_iterations": 150,
+        "output_interval": 1,
+    }
+    case = tmp_path / "case"
+    export_two_room_case(spec, case)
+    receipt_path = tmp_path / "receipt" / "two_room_run_receipt.json"
+    _write_two_room_receipt(case, receipt_path)
+    extra = case / "VTK" / "unreceipted.vtk"
+    extra.write_bytes(b"unreceipted output\n")
+
+    with pytest.raises(ValueError, match="VTK result asset hashes do not match"):
         proofgraph_from_two_room_receipt(case, receipt_path)
 
 

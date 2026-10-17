@@ -42,12 +42,13 @@ cleanroomx-cfd-pipeline two-room-receipt-audit \
 ```
 
 The receipt records executable paths, stage logs and hashes, the final pressure
-probe sample, solver `phi` boundary-flux diagnostics, and the declared pressure
-target-band screen. OpenFOAM's `p` is kinematic pressure in this case, so the
-reported pressure difference converts it to pascals using the density in the
-specification. Inlet/outlet fluxes are measurements with no project acceptance
-limit; the runner does not decide that a percentage is acceptable. Residuals
-are not treated as convergence, and scientific validation remains `BLOCKED`.
+probe sample, solver `phi` boundary-flux diagnostics, the declared pressure
+target-band screen, and hashes for every file emitted under `VTK/`. OpenFOAM's
+`p` is kinematic pressure in this case, so the reported pressure difference
+converts it to pascals using the density in the specification. Inlet/outlet
+fluxes are measurements with no project acceptance limit; the runner does not
+decide that a percentage is acceptable. Residuals are not treated as
+convergence, and scientific validation remains `BLOCKED`.
 
 If Foundation v10 or its utilities are unavailable, the runner still writes a
 hash-bound incomplete receipt and exits with a nonzero status. Solver errors,
@@ -57,8 +58,8 @@ against accidental edits; it is not a digital signature or an authenticity
 claim.
 
 Export a completed run as a ProofGraph after checking the case, receipt, four
-stage logs, pressure-probe file, and final-time `phi` / mesh-boundary files used
-by the flux diagnostic:
+stage logs, pressure-probe file, final-time `phi` / mesh-boundary files used by
+the flux diagnostic, and the exact `VTK/` asset set recorded in the receipt:
 
 ```bash
 cleanroomx-cfd-pipeline two-room-proofgraph \
@@ -67,10 +68,13 @@ cleanroomx-cfd-pipeline two-room-proofgraph \
 ```
 
 The ProofGraph reports local artifact integrity as `pass` and scientific
-validation as `not_checked` / `BLOCKED`. The GUI's two-room panel can generate,
-verify, run, preview, and export the same evidence into the ProofGraph viewer.
-Hash agreement is not authenticity because the manifest and receipt are
-unsigned.
+validation as `not_checked` / `BLOCKED`. VTK assets are checked for additions,
+removals, links, and byte changes before they are included in the graph. Run
+receipt schema v2 adds these VTK hashes; schema v1 receipts can still be checked
+for their self-hash but must be rerun with the current runner before a
+ProofGraph export. The GUI's two-room panel can generate, verify, run, preview,
+and export the same evidence into the ProofGraph viewer. Hash agreement is not
+authenticity because the manifest and receipt are unsigned.
 
 ## Continuous integration
 
@@ -78,6 +82,14 @@ The pinned Foundation v10 CFD workflow runs this case after the existing
 three-grid and passive-scalar cases. It requires the pressure and flux evidence
 to be present and the synthetic case's measured pressure screen to fall inside
 its declared 5 ± 1 Pa band. That band checks this pinned software fixture only;
-it is not a cleanroom pressure-cascade acceptance criterion. Run outputs, logs,
-and receipt are uploaded with the workflow evidence artifact. A green workflow
-does not validate cleanroom performance.
+it is not a cleanroom pressure-cascade acceptance criterion. The smoke job also
+exports the solver result to ProofGraph and requires the receipt-bound VTK set,
+artifact-integrity `pass`, and scientific-validation `not_checked` verdicts.
+Run outputs, logs, receipt, and ProofGraph are uploaded with the workflow
+evidence artifact. A green workflow does not validate cleanroom performance.
+
+Run 202 completed the four solver stages on the exact PR #1326 head and
+uploaded a hash-addressed evidence archive. Its v1 receipt predates VTK asset
+hash binding, so it is historical software-integration evidence; it must be
+rerun with the current v2 receipt before its visualization assets can be used
+in a ProofGraph integrity verdict. See the [run 202 evidence report](OPENFOAM_V10_RUN_202_TWO_ROOM_EVIDENCE.md).

@@ -1325,3 +1325,45 @@ def test_cancel_3d_export_does_not_write_or_change_layout(app, tmp_path, monkeyp
     workspace.export_3d_svg()
     assert not list(tmp_path.glob("*.svg"))
     assert workspace.layout == before
+
+
+def test_session_camera_bookmarks_restore_visible_view_not_cad(app):
+    workspace = app.spatial_workspace
+    app.set_focus_workspace(True)
+    workspace.set_workspace_mode("3d")
+    app.root.update()
+    before_rooms = copy.deepcopy(workspace.layout["rooms"])
+    before_devices = copy.deepcopy(workspace.layout["devices"])
+
+    workspace.set_3d_view_preset("iso")
+    workspace.layout["view"]["zoom_3d"] = 2.3
+    workspace.layout["view"]["pan_3d_x"] = 71.0
+    workspace.layout["view"]["pan_3d_y"] = -12.5
+    workspace.save_camera_bookmark(1)
+    assert workspace._camera_bookmark_menu.entrycget(4, "state") == "normal"
+    assert "Recall View 1" in workspace._camera_bookmark_menu.entrycget(4, "label")
+
+    workspace.rotate_3d(105)
+    workspace.layout["view"]["zoom_3d"] = 0.6
+    workspace.layout["view"]["pan_3d_x"] = 0
+    workspace.layout["view"]["pan_3d_y"] = 0
+    assert workspace.recall_camera_bookmark(1)
+    current = workspace.layout["view"]
+    assert current["azimuth_deg"] == 35
+    assert current["elevation_deg"] == 28
+    assert current["zoom_3d"] == 2.3
+    assert current["pan_3d_x"] == 71
+    assert current["pan_3d_y"] == -12.5
+    assert not workspace.recall_camera_bookmark(2)
+    assert workspace.layout["rooms"] == before_rooms
+    assert workspace.layout["devices"] == before_devices
+
+
+def test_camera_bookmarks_are_cleared_when_a_project_is_reloaded(app):
+    workspace = app.spatial_workspace
+    workspace.save_camera_bookmark(1)
+    assert workspace._camera_bookmarks.filled(1)
+    app.load_project_path(bundled_demo_project_path())
+    app.root.update()
+    assert not workspace._camera_bookmarks.filled(1)
+    assert workspace._camera_bookmark_menu.entrycget(4, "state") == "disabled"

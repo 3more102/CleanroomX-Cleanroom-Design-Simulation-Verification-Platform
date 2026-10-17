@@ -326,17 +326,19 @@ def capture(
                 autosave_interval_seconds=0,
                 ui_state_path=temporary_root / "gui-layout.json",
             )
-            # A decorated 1920x1080 window cannot fit inside a 1920x1080
-            # Windows desktop: its title bar pushes the client area down.
-            # Capture the real app borderlessly only when it fills the display.
-            if os.name == "nt" and (
-                width >= root.winfo_screenwidth()
-                or height >= root.winfo_screenheight()
-            ):
-                root.overrideredirect(True)
             root.geometry(f"{width}x{height}+0+0")
             app.load_project_path(bundled_demo_project_path())
             app.proofgraph_viewer.set_documents([proofgraph.to_dict()])
+            # Windows still positions the client 25 px beneath the title bar
+            # when overrideredirect() is applied to an already-mapped window.
+            # Native fullscreen removes that offset and hides the taskbar.
+            # Apply it after app initialization (which restores GUI geometry).
+            if os.name == "nt" and (
+                width == root.winfo_screenwidth()
+                and height == root.winfo_screenheight()
+            ):
+                root.overrideredirect(False)
+                root.attributes("-fullscreen", True)
             root.update_idletasks()
             root.update()
             screenshots = []

@@ -5,9 +5,10 @@ solver-to-results path using the OpenFOAM Foundation source tree pinned to
 commit `89f925dc708d068f84f51e8317e3bebcda64f5cb` and its
 `tutorials/incompressible/simpleFoam/pitzDaily` case.
 
-The job copies the pinned case into an isolated temporary directory, adds the
-case's upstream `tutorials/resources/blockMesh/pitzDaily` mesh dictionary,
-then runs `blockMesh`, `checkMesh`, and `simpleFoam`. During the actual
+The job copies the pinned case into an isolated temporary directory, resolves
+its upstream `tutorials/resources/blockMesh/pitzDaily` mesh-dictionary
+reference and verifies the file hash, then runs `blockMesh`, `checkMesh`,
+and `simpleFoam`. During the actual
 `simpleFoam` process, CleanroomX polls native result times and synchronizes
 stable velocity (`U`) and kinematic pressure (`p`) snapshots through
 `OpenFOAMResultSynchronizer`. The job retains command logs, input/configuration

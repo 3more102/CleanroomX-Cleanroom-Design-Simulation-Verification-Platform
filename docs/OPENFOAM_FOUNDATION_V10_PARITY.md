@@ -77,7 +77,7 @@ Matrix rows: 723
 | Track | Complete | Denominator | Score |
 |---|---:|---:|---:|
 | Native solver capability parity | 0 | 192 | 0.00% |
-| End-to-end OpenFOAM integration coverage | 0 | 717 | 0.00% |
+| End-to-end OpenFOAM integration coverage | 1 | 717 | 0.14% |
 | Validated cleanroom engineering workflows | 0 | 21 | 0.00% |
 
 ### Native solver capability parity by category
@@ -131,7 +131,7 @@ Matrix rows: 723
 | Linear solver algorithms | 0 | 6 | 0.00% |
 | Mesh generation, conversion, and quality | 0 | 9 | 0.00% |
 | Multi-region and coupling | 0 | 2 | 0.00% |
-| OpenFOAM tutorial workflows | 0 | 240 | 0.00% |
+| OpenFOAM tutorial workflows | 1 | 240 | 0.42% |
 | Parallel execution | 0 | 3 | 0.00% |
 | Post-processing and field operations | 0 | 8 | 0.00% |
 | Solver and physical model families | 0 | 12 | 0.00% |
@@ -213,7 +213,7 @@ partial and no scientific validation claim is made.
 
 The latest synthetic execution is [Foundation v10 run 56](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38680418943), using build `10-c4cf895ad8fa`. All nine cases and all 36 command stages completed successfully; each case ran `blockMesh`, `checkMesh`, `simpleFoam`, and `foamToVTK`. The workflow imported each final-time cell-`U` VTK, verified its three components, positive cell volumes, manifest-bound cell count and source digest, then uploaded the receipt, triage JSON, and VTK integrity summary in [artifact 11948056355](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/38680418943/artifacts/11948056355), archive SHA-256 `6ecfea97466c9cb618273e5dcad6ef0a6675e4c1597590e4a603b388f73ca5e4`. This remains synthetic execution and data-ingestion evidence only; it does not establish solver convergence, GCI eligibility, or physical validation.
 
-For detailed residual and flux interpretation, the [run 54 triage report](OPENFOAM_V10_RUN_38675919475_TRIAGE.md) records the prior synthetic run's 18 terminal `U`/`p` residual comparisons above tolerance, final-time `phi` imbalance of 0.005341%–0.187145%, and lack of a project-defined flux acceptance criterion. The current run's triage JSON is included in its artifact. See the [run 56 VTK export report](OPENFOAM_V10_RUN_38680418943_VTK_EXPORT.md) for all nine cell counts and dataset hashes. The matrix reflects both utility and VTK ingestion as partial evidence only; scores remain 0/192 native, 0/717 integration, and 0/21 cleanroom workflows.
+For detailed residual and flux interpretation, the [run 54 triage report](OPENFOAM_V10_RUN_38675919475_TRIAGE.md) records the prior synthetic run's 18 terminal `U`/`p` residual comparisons above tolerance, final-time `phi` imbalance of 0.005341%–0.187145%, and lack of a project-defined flux acceptance criterion. The current run's triage JSON is included in its artifact. See the [run 56 VTK export report](OPENFOAM_V10_RUN_38680418943_VTK_EXPORT.md) for all nine cell counts and dataset hashes. Utility and VTK ingestion remain partial evidence. A separate non-synthetic upstream tutorial run now completes the pinned `simpleFoam/pitzDaily` tutorial row: Foundation v10 run [39039884427](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39039884427) synchronized `U` and `p` at times 100, 200, and 287 with zero sync errors. Its [artifact 12103701946](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39039884427/artifacts/12103701946) records pinned inputs, build identities, logs, manifest, and VTK snapshots. This adds one integration row only; convergence, mesh independence, measured cleanroom performance, and scientific validation remain blocked. Scores: 0/192 native, 1/717 integration, and 0/21 cleanroom workflows.
 
 ## Verification snapshot
 
@@ -221,7 +221,7 @@ Local software verification used CPython 3.12.14.
 
 ```text
 python scripts/openfoam_v10_parity_score.py --format json
-  validated 723 unique rows and the pinned source inventory; scores: 0/192 native, 0/717 integration, 0/21 cleanroom
+  validated 723 unique rows and the pinned source inventory; scores: 0/192 native, 1/717 integration, 0/21 cleanroom
 python -m pytest -q tests/test_cfd_pipeline.py tests/test_openfoam_v10_capability_matrix.py
   23 passed in 3.58s
 python -m pytest -q

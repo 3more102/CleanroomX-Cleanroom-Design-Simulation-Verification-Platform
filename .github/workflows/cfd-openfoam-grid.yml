@@ -12,6 +12,9 @@ on:
       - "examples/cfd_scalar_spec.example.json"
       - "examples/cfd_scalar_field_map.example.json"
       - "scripts/openfoam_v10_scalar_sync_smoke.py"
+      - "scripts/openfoam_v10_tutorial_smoke.py"
+      - "tests/test_openfoam_v10_tutorial_smoke.py"
+      - "docs/OPENFOAM_V10_UPSTREAM_TUTORIAL_SMOKE.md"
       - "pyproject.toml"
       - "src/cleanroomx/cfd_*.py"
       - "tests/test_cfd_openfoam_runtime_sync.py"
@@ -1435,5 +1438,75 @@ jobs:
             ${{ runner.temp }}/cleanroomx-openfoam-scalar-sync
             ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
             ${{ runner.temp }}/cleanroomx-openfoam-visualization
+          if-no-files-found: warn
+          retention-days: 14
+
+  openfoam-v10-upstream-tutorial:
+    name: OpenFOAM v10 pinned tutorial integration
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install CleanroomX CFD package
+        run: python -m pip install -e ".[dev,cfd]"
+
+      - name: Checkout pinned OpenFOAM Foundation v10 tutorial sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenFOAM/OpenFOAM-10
+          ref: 89f925dc708d068f84f51e8317e3bebcda64f5cb
+          path: upstream-openfoam10
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            tutorials/incompressible/simpleFoam/pitzDaily
+          sparse-checkout-cone-mode: false
+
+      - name: Install OpenFOAM Foundation v10
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common wget
+          sudo wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key
+          sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
+          sudo apt-get update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=120 -o Acquire::https::Timeout=120 install --no-install-recommends -y openfoam10
+          test -f /opt/openfoam10/etc/bashrc
+
+      - name: Run pinned pitzDaily through solver and CleanroomX result sync
+        run: |
+          set -eo pipefail
+          set +u
+          set +e
+          source /opt/openfoam10/etc/bashrc
+          source_rc=$?
+          set -e
+          set -u
+          if [[ "$source_rc" -ne 0 ]]; then
+            printf 'OpenFOAM environment setup returned %s\\n' "$source_rc" >&2
+            exit "$source_rc"
+          fi
+          if [[ "${WM_PROJECT:-}" != "OpenFOAM" || "${WM_PROJECT_VERSION:-}" != "10" ]]; then
+            printf 'Expected OpenFOAM Foundation v10; got %s %s\n' "${WM_PROJECT:-unset}" "${WM_PROJECT_VERSION:-unset}" >&2
+            exit 1
+          fi
+          python scripts/openfoam_v10_tutorial_smoke.py \
+            --upstream-root "$GITHUB_WORKSPACE/upstream-openfoam10" \
+            --case-directory "$RUNNER_TEMP/cleanroomx-openfoam-pitzDaily-case" \
+            --result-directory "$RUNNER_TEMP/cleanroomx-openfoam-pitzDaily-results" \
+            --evidence-directory "$RUNNER_TEMP/cleanroomx-openfoam-pitzDaily-evidence" \
+            --stage-timeout-seconds 1800
+
+      - name: Upload upstream tutorial execution evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openfoam-v10-pitzdaily-evidence
+          path: |
+            ${{ runner.temp }}/cleanroomx-openfoam-pitzDaily-results
+            ${{ runner.temp }}/cleanroomx-openfoam-pitzDaily-evidence
           if-no-files-found: warn
           retention-days: 14

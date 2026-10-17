@@ -76,14 +76,22 @@ def test_scoring_counts_only_complete_rows_and_reports_all_three_tracks():
     assert report["rows"] == 723
     assert set(report["tracks"]) == {"native_status", "integration_status", "cleanroom_status"}
     assert report["tracks"]["native_status"]["complete"] == 0
-    assert report["tracks"]["integration_status"]["complete"] == 0
+    assert report["tracks"]["integration_status"]["complete"] == 1
     assert report["tracks"]["cleanroom_status"]["complete"] == 0
+    tutorial = {row["id"]: row for row in load(MATRIX)}[
+        "OF10-TUTORIAL-CASE-TUTORIALS-INCOMPRESSIBLE-SIMPLEFOAM-PITZDAILY"
+    ]
+    assert tutorial["integration_status"] == "complete"
+    assert tutorial["native_status"] == tutorial["cleanroom_status"] == "na"
+    assert tutorial["test_evidence"].startswith("PASS: non-synthetic OpenFOAM Foundation v10")
+    assert tutorial["remaining_gap"] == "none"
     assert report["tracks"]["native_status"]["denominator"] == 192
     assert report["tracks"]["integration_status"]["denominator"] == 717
     assert report["tracks"]["cleanroom_status"]["denominator"] == 21
     summary = (ROOT / "docs" / "OPENFOAM_FOUNDATION_V10_PARITY.md").read_text(encoding="utf-8")
     assert "| Native solver capability parity | 0 | 192 | 0.00% |" in summary
-    assert "| End-to-end OpenFOAM integration coverage | 0 | 717 | 0.00% |" in summary
+    assert "| End-to-end OpenFOAM integration coverage | 1 | 717 | 0.14% |" in summary
+    assert "| OpenFOAM tutorial workflows | 1 | 240 | 0.42% |" in summary
     assert "| Validated cleanroom engineering workflows | 0 | 21 | 0.00% |" in summary
 
 @pytest.mark.parametrize(
@@ -165,7 +173,7 @@ def test_runner_and_simplefoam_evidence_remain_partial():
     )
     report_json = json.loads(result.stdout)
     assert report_json["tracks"]["native_status"]["complete"] == 0
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
 
@@ -191,12 +199,12 @@ def test_run_61_vtk_field_parity_evidence_is_partial_and_keeps_parity_scope():
         text=True,
     )
     report = json.loads(result.stdout)
-    assert report["tracks"]["integration_status"]["complete"] == 0
+    assert report["tracks"]["integration_status"]["complete"] == 1
     assert report["tracks"]["native_status"]["complete"] == 0
     assert report["tracks"]["cleanroom_status"]["complete"] == 0
 
 
-def test_run_63_vtk_patch_parity_evidence_is_partial_and_keeps_counts_zero():
+def test_run_63_vtk_patch_parity_evidence_does_not_add_to_tutorial_completion():
     rows = {row["id"]: row for row in load(MATRIX)}
     report = "docs/OPENFOAM_V10_RUN_38772855917_NATIVE_VTK_PATCH_PARITY.md"
     for capability_id in ("OF10-UTILITY-foamToVTK", "OF10-VTK-IMPORT"):
@@ -218,12 +226,12 @@ def test_run_63_vtk_patch_parity_evidence_is_partial_and_keeps_counts_zero():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
 
-def test_run_66_checkmesh_quality_diagnostics_are_partial_and_keep_counts_zero():
+def test_run_66_checkmesh_quality_diagnostics_keep_tutorial_as_only_completion():
     rows = {row["id"]: row for row in load(MATRIX)}
     report = "docs/OPENFOAM_V10_RUN_38776224839_CHECKMESH_QUALITY.md"
     for capability_id in ("OF10-MESH-QUALITY", "OF10-UTILITY-checkMesh"):
@@ -247,7 +255,7 @@ def test_run_66_checkmesh_quality_diagnostics_are_partial_and_keep_counts_zero()
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
@@ -274,7 +282,7 @@ def test_run_66_residual_history_does_not_claim_convergence_or_validation():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
@@ -301,12 +309,12 @@ def test_run_67_execution_report_stays_synthetic_and_is_linked():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
 
-def test_run_70_surface_flux_parity_is_partial_and_keeps_completion_counts_zero():
+def test_run_70_surface_flux_parity_keeps_tutorial_as_only_completion():
     rows = {row["id"]: row for row in load(MATRIX)}
     report = "docs/OPENFOAM_V10_RUN_38780408294_PHI_CHECKMESH_EVIDENCE.md"
     foam_to_vtk = rows["OF10-UTILITY-foamToVTK"]
@@ -331,7 +339,7 @@ def test_run_70_surface_flux_parity_is_partial_and_keeps_completion_counts_zero(
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
@@ -372,7 +380,7 @@ def test_run_80_poly_mesh_volume_evidence_stays_diagnostic_and_partial():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
@@ -405,7 +413,7 @@ def test_run_86_checkmesh_diagnostics_are_hash_replayed_and_stay_partial():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
@@ -449,7 +457,7 @@ def test_run_90_explicit_time_vtk_evidence_stays_partial():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0
 
@@ -490,6 +498,6 @@ def test_run_94_multi_time_vtk_evidence_stays_partial():
         text=True,
     )
     report_json = json.loads(result.stdout)
-    assert report_json["tracks"]["integration_status"]["complete"] == 0
+    assert report_json["tracks"]["integration_status"]["complete"] == 1
     assert report_json["tracks"]["native_status"]["complete"] == 0
     assert report_json["tracks"]["cleanroom_status"]["complete"] == 0

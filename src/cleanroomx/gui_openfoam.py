@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .cfd_openfoam import verify_openfoam_case_bundle
-from .cfd_proofgraph import export_openfoam_proofgraph
+from .cfd_proofgraph import export_openfoam_proofgraph, export_two_room_proofgraph
 from .gui_theme import theme_palette
 from .strict_json import load_strict_json_snapshot
 
@@ -32,7 +32,12 @@ _BUSY_QUEUE_POLL_MS = 15
 _IDLE_QUEUE_POLL_MS = 120
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _SYNC_SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
-_EVIDENCE_NAMES = ("manifest.json", "sync-state.json", "sync_manifest.json")
+_EVIDENCE_NAMES = (
+    "manifest.json",
+    "sync-state.json",
+    "sync_manifest.json",
+    "two_room_run_receipt.json",
+)
 
 
 class OpenFOAMConsoleLog:
@@ -323,6 +328,59 @@ def build_openfoam_sync_vtk_command(
     ]
 
 
+def build_two_room_generate_command(
+    specification: str,
+    case_directory: str,
+    *,
+    python_executable: str = sys.executable,
+) -> list[str]:
+    """Build an argv-only command for the synthetic two-room case."""
+    if not specification.strip() or not case_directory.strip():
+        raise ValueError("Choose a two-room specification and a new case directory")
+    return [
+        python_executable,
+        "-m",
+        "cleanroomx.cfd_pipeline_cli",
+        "two-room-generate",
+        specification,
+        case_directory,
+    ]
+
+
+def build_two_room_audit_command(
+    case_directory: str,
+    *,
+    python_executable: str = sys.executable,
+) -> list[str]:
+    if not case_directory.strip():
+        raise ValueError("Choose a generated two-room case directory")
+    return [python_executable, "-m", "cleanroomx.cfd_pipeline_cli", "two-room-audit", case_directory]
+
+
+def build_two_room_run_command(
+    case_directory: str,
+    receipt_directory: str,
+    *,
+    timeout_seconds: int = 900,
+    python_executable: str = sys.executable,
+) -> list[str]:
+    if not case_directory.strip() or not receipt_directory.strip():
+        raise ValueError("Choose a two-room case and a new receipt directory")
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 3600:
+        raise ValueError("Two-room run timeout must be an integer in [1, 3600]")
+    return [
+        python_executable,
+        "-m",
+        "cleanroomx.cfd_pipeline_cli",
+        "two-room-run",
+        case_directory,
+        "--receipt-directory",
+        receipt_directory,
+        "--timeout-seconds",
+        str(timeout_seconds),
+    ]
+
+
 def read_openfoam_evidence_preview(
     directory: str | Path,
     *,
@@ -391,10 +449,15 @@ def read_openfoam_evidence_preview(
                 "simulation_id",
                 "configuration_hash",
                 "solver_build",
+                "solver_release",
                 "record_count",
                 "error_count",
                 "times",
                 "failed_times",
+                "manifest_sha256",
+                "spec_sha256",
+                "receipt_sha256",
+                "scientific_validation",
             )
             if key in value
         }
@@ -406,6 +469,25 @@ def read_openfoam_evidence_preview(
                 str(key): item.get("status")
                 for key, item in sorted(value["cases"].items())
                 if isinstance(item, dict)
+            }
+        if isinstance(value.get("engineering_screens"), dict):
+            summary["engineering_screens"] = {
+                key: value["engineering_screens"].get(key)
+                for key in (
+                    "pressure_target_screen",
+                    "flow_balance_status",
+                    "solver_convergence_status",
+                    "scientific_validation",
+                )
+            }
+        if isinstance(value.get("pressure_probe"), dict):
+            summary["pressure_probe"] = {
+                key: value["pressure_probe"].get(key)
+                for key in (
+                    "last_solver_time",
+                    "delta_pressure_pa_room_1_minus_room_2",
+                    "density_kg_m3",
+                )
             }
         previews.append(
             {
@@ -446,6 +528,9 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.vtk_source_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
         self.vtk_simulation_id_var = tk.StringVar(value=f"cleanroomx-vtk-{uuid.uuid4().hex[:10]}")
+        self.two_room_specification_var = tk.StringVar()
+        self.two_room_case_directory_var = tk.StringVar()
+        self.two_room_receipt_directory_var = tk.StringVar()
         self._build()
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.after(120, self._drain_events)
@@ -614,6 +699,71 @@ class OpenFOAMWorkspace(ttk.Frame):
         )
         self.stop_button.pack(side="left", padx=4)
 
+        two_room = ttk.LabelFrame(
+            self._workflow_content,
+            text="Two-room pressure integration case",
+            padding=8,
+        )
+        two_room.pack(fill="x", pady=4)
+        self._path_row(
+            two_room,
+            0,
+            "Synthetic specification JSON",
+            self.two_room_specification_var,
+            lambda: self._browse_file(
+                self.two_room_specification_var,
+                (("JSON files", "*.json"), ("All files", "*")),
+            ),
+        )
+        self._path_row(
+            two_room,
+            1,
+            "New two-room case directory",
+            self.two_room_case_directory_var,
+            lambda: self._browse_directory(self.two_room_case_directory_var),
+        )
+        self._path_row(
+            two_room,
+            2,
+            "New run receipt directory",
+            self.two_room_receipt_directory_var,
+            lambda: self._browse_directory(self.two_room_receipt_directory_var),
+        )
+        two_room_actions = ttk.Frame(two_room)
+        two_room_actions.grid(row=3, column=0, columnspan=3, sticky="w", pady=(5, 0))
+        self.two_room_generate_button = ttk.Button(
+            two_room_actions,
+            text="Generate two-room case",
+            command=self._generate_two_room,
+        )
+        self.two_room_generate_button.pack(side="left", padx=(0, 4))
+        self.two_room_verify_button = ttk.Button(
+            two_room_actions,
+            text="Verify inputs",
+            command=self._verify_two_room_case,
+        )
+        self.two_room_verify_button.pack(side="left", padx=4)
+        self.two_room_run_button = ttk.Button(
+            two_room_actions,
+            text="Run Foundation v10…",
+            style="CX.Primary.TButton",
+            command=self._run_two_room,
+        )
+        self.two_room_run_button.pack(side="left", padx=4)
+        self.two_room_proofgraph_button = ttk.Button(
+            two_room_actions,
+            text="Export two-room ProofGraph…",
+            command=self._export_two_room_proofgraph,
+            state="normal" if self._on_proofgraph_loaded is not None else "disabled",
+        )
+        self.two_room_proofgraph_button.pack(side="left", padx=4)
+        ttk.Label(
+            two_room,
+            text="Synthetic diagnostic case; integrity can pass while validation remains BLOCKED.",
+            wraplength=900,
+        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(5, 0))
+        two_room.columnconfigure(1, weight=1)
+
         vtk = ttk.LabelFrame(
             self._workflow_content, text="Existing foamToVTK output", padding=8
         )
@@ -692,6 +842,10 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.preview_button,
             self.graph_button,
             self.export_graph_button,
+            self.two_room_generate_button,
+            self.two_room_verify_button,
+            self.two_room_run_button,
+            self.two_room_proofgraph_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -781,6 +935,80 @@ class OpenFOAMWorkspace(ttk.Frame):
             messagebox.showerror("OpenFOAM case generation", str(exc), parent=self)
             return
         self._start_command("Generate OpenFOAM cases", command)
+
+    def _generate_two_room(self) -> None:
+        try:
+            command = build_two_room_generate_command(
+                self.two_room_specification_var.get().strip(),
+                self.two_room_case_directory_var.get().strip(),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Two-room case generation", str(exc), parent=self)
+            return
+        self._start_command("Generate synthetic two-room case", command)
+
+    def _verify_two_room_case(self) -> None:
+        try:
+            command = build_two_room_audit_command(
+                self.two_room_case_directory_var.get().strip()
+            )
+        except ValueError as exc:
+            messagebox.showerror("Verify two-room case", str(exc), parent=self)
+            return
+        self._start_command("Verify two-room case inputs", command)
+
+    def _run_two_room(self) -> None:
+        try:
+            command = build_two_room_run_command(
+                self.two_room_case_directory_var.get().strip(),
+                self.two_room_receipt_directory_var.get().strip(),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Two-room OpenFOAM run", str(exc), parent=self)
+            return
+        prompt = (
+            "Run blockMesh, checkMesh, simpleFoam, and foamToVTK for the "
+            "synthetic two-room case?\n\nThe runner requires OpenFOAM "
+            "Foundation v10. Pressure and flux outputs are diagnostics; a "
+            "successful run does not establish convergence or cleanroom validation."
+        )
+        if not messagebox.askyesno("Run two-room Foundation v10 case", prompt, parent=self):
+            return
+        self._start_command("Run synthetic two-room Foundation v10 case", command)
+
+    def _export_two_room_proofgraph(self) -> None:
+        if self._on_proofgraph_loaded is None or self._busy:
+            return
+        case_directory = self.two_room_case_directory_var.get().strip()
+        receipt_directory = self.two_room_receipt_directory_var.get().strip()
+        if not case_directory or not receipt_directory:
+            messagebox.showerror(
+                "Export two-room ProofGraph",
+                "Choose the generated case and its run receipt directory first.",
+                parent=self,
+            )
+            return
+        receipt_path = Path(receipt_directory) / "two_room_run_receipt.json"
+        destination = filedialog.asksaveasfilename(
+            title="Export two-room ProofGraph",
+            defaultextension=".json",
+            initialfile="two-room-openfoam-proofgraph.json",
+            filetypes=(("ProofGraph JSON", "*.json"), ("All files", "*")),
+            parent=self,
+        )
+        if not destination:
+            return
+        self._append(
+            "\nVerifying two-room case inputs, run receipt, stage logs, pressure probe, solver flux, and foamToVTK assets…\n"
+        )
+        self._set_busy(True)
+        self._status_setter("Verifying two-room OpenFOAM artifacts and exporting ProofGraph")
+        threading.Thread(
+            target=self._export_two_room_proofgraph_worker,
+            args=(case_directory, str(receipt_path), destination),
+            name="cleanroomx-two-room-proofgraph-export",
+            daemon=True,
+        ).start()
 
     def _verify_case_bundle(self) -> None:
         directory = self.case_directory_var.get().strip()
@@ -937,6 +1165,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             elif kind == "proofgraph_export_finished":
                 self._set_busy(False)
                 document = value["document"]
+                context = value.get("context", "OpenFOAM")
                 try:
                     if self._on_proofgraph_loaded is None:
                         raise ValueError("ProofGraph viewer is unavailable")
@@ -953,18 +1182,20 @@ class OpenFOAMWorkspace(ttk.Frame):
                     self._status_setter("OpenFOAM ProofGraph saved; viewer load failed")
                 else:
                     self._append(
-                        f"\nProofGraph exported: {Path(value['destination']).name}\n"
+                        f"\n{context} ProofGraph exported: {Path(value['destination']).name}\n"
                         f"Graph SHA-256: {document['graph_sha256']}\n"
                         "Artifact hashes: verified. Solver convergence and physical validation: not checked.\n"
                     )
                     self._status_setter(
-                        "OpenFOAM ProofGraph exported; scientific validation remains blocked"
+                        f"{context} ProofGraph exported; scientific validation remains blocked"
                     )
             elif kind == "proofgraph_export_failed":
                 self._set_busy(False)
-                self._append(f"\nOpenFOAM ProofGraph export failed: {value}\n")
-                self._status_setter("OpenFOAM ProofGraph export failed")
-                messagebox.showerror("OpenFOAM ProofGraph export", str(value), parent=self)
+                context = value.get("context", "OpenFOAM") if isinstance(value, dict) else "OpenFOAM"
+                error = value.get("error", "Unknown error") if isinstance(value, dict) else value
+                self._append(f"\n{context} ProofGraph export failed: {error}\n")
+                self._status_setter(f"{context} ProofGraph export failed")
+                messagebox.showerror(f"{context} ProofGraph export", str(error), parent=self)
         if output_parts:
             self._append("".join(output_parts))
         delay_ms = (
@@ -980,7 +1211,11 @@ class OpenFOAMWorkspace(ttk.Frame):
             state = "disabled" if busy else "normal"
             if (
                 not busy
-                and button in (self.graph_button, self.export_graph_button)
+                and button in (
+                    self.graph_button,
+                    self.export_graph_button,
+                    self.two_room_proofgraph_button,
+                )
                 and self._on_proofgraph_loaded is None
             ):
                 state = "disabled"
@@ -1100,12 +1335,45 @@ class OpenFOAMWorkspace(ttk.Frame):
                 destination,
             )
         except Exception as exc:
-            self._events.put(("proofgraph_export_failed", str(exc)))
+            self._events.put(
+                ("proofgraph_export_failed", {"context": "OpenFOAM", "error": str(exc)})
+            )
         else:
             self._events.put(
                 (
                     "proofgraph_export_finished",
-                    {"destination": destination, "document": document},
+                    {"destination": destination, "document": document, "context": "OpenFOAM"},
+                )
+            )
+
+    def _export_two_room_proofgraph_worker(
+        self,
+        case_directory: str,
+        receipt_path: str,
+        destination: str,
+    ) -> None:
+        try:
+            document = export_two_room_proofgraph(
+                case_directory,
+                receipt_path,
+                destination,
+            )
+        except Exception as exc:
+            self._events.put(
+                (
+                    "proofgraph_export_failed",
+                    {"context": "Two-room OpenFOAM", "error": str(exc)},
+                )
+            )
+        else:
+            self._events.put(
+                (
+                    "proofgraph_export_finished",
+                    {
+                        "destination": destination,
+                        "document": document,
+                        "context": "Two-room OpenFOAM",
+                    },
                 )
             )
 

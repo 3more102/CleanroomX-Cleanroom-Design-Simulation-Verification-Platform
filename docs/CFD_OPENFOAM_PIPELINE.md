@@ -153,6 +153,11 @@ This workflow export is a reproducibility and ingestion check; it is not part
 of the standalone `run` command and does not establish CFD convergence,
 mesh independence, or physical validation.
 
+The separate bounded two-room pressure-probe and flux integration case is
+documented in [Two-Room OpenFOAM Workflow](CFD_TWO_ROOM.md). Its synthetic 5 Pa
+target is an engineering screen only and does not establish a project pressure
+cascade requirement.
+
 The nine-case v10 workflow compares exported cell velocity and kinematic
 pressure with the native final-time OpenFOAM `U` and `p` fields. It uses the
 `cellID` cell-data array

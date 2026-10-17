@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased Release 3 — bind two-room VTK outputs into evidence — 2026-10-17
+
+- Upgrades two-room run receipts to v2 and records SHA-256 digests for every regular file emitted under `VTK/`, with bounded file count, byte limits, stable-file checks, and symlink rejection.
+- Makes ProofGraph export re-hash the exact VTK asset set and reject modified, added, or removed visualization outputs; legacy v1 receipts remain self-hash auditable but require a rerun before ProofGraph export.
+- Adds regressions for VTK tampering and unreceipted files. Artifact integrity remains a local consistency check; convergence and scientific cleanroom validation remain blocked.
+
+## Unreleased Release 3 — canonical two-room case audit — 2026-10-17
+
+- Rebuild the generated OpenFOAM inputs and derived metadata from the declared case specification during audit, rejecting altered boundary conditions or metadata even when an unsigned manifest is rewritten with matching hashes.
+- Require the exact two-room manifest schema, Foundation v10 release label, and blocked scientific-validation status; solver and physical validation remain separate and blocked.
+
 ## Unreleased Release 3 — OpenFOAM ProofGraph export — 2026-10-17
 
 - Adds standalone ProofGraph export from synchronized OpenFOAM result manifests through the GUI.

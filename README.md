@@ -44,7 +44,9 @@ codes, privacy considerations, and limitations.
 
 - Parameterized 3D case generation for all three ventilation layouts, with physically explicit inlet/outlet patches and SHA-256 manifest.
 - Opt-in OpenFOAM Foundation v10 laminar flow execution, VTK cell field import, and cross-section previews.
+- Bounded two-room Foundation v10 integration case with an aligned internal door opening, room pressure probes, measured `phi` flux diagnostics, and a hash-bound run receipt.
 - This is **not a physically validated end-to-end CFD/particle solver**. See [OpenFOAM CFD Pipeline](docs/CFD_OPENFOAM_PIPELINE.md).
+- The two-room synthetic integration case and its limits are documented in [Two-Room OpenFOAM Workflow](docs/CFD_TWO_ROOM.md).
 - Track documented Foundation v10 capabilities, measured parity scores, and open evidence gaps in the [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
 
 ### Source-driven CFD passive tracer and numerical audit
@@ -238,6 +240,25 @@ cleanroomx-project-check project.cleanroomx.json
 See [Project Diagnostics](docs/PROJECT_DIAGNOSTICS.md) for rule scope, severity, freshness behavior, and exit codes.
 
 Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/network studies, uncertainty, consistency checks, and engineering dossiers.
+
+Generate and audit a synthetic two-room OpenFOAM integration case:
+
+```bash
+cleanroomx-cfd-pipeline two-room-generate examples/cfd_two_room_5pa.example.json ./two_room_case
+cleanroomx-cfd-pipeline two-room-audit ./two_room_case
+```
+
+With OpenFOAM Foundation v10 sourced, run it and write a receipt outside the
+case directory:
+
+```bash
+cleanroomx-cfd-pipeline two-room-run ./two_room_case --receipt-directory ./two_room_receipt
+cleanroomx-cfd-pipeline two-room-receipt-audit ./two_room_receipt/two_room_run_receipt.json
+cleanroomx-cfd-pipeline two-room-proofgraph ./two_room_case ./two_room_receipt/two_room_run_receipt.json ./two-room-proofgraph.json
+```
+
+See [Two-Room OpenFOAM Workflow](docs/CFD_TWO_ROOM.md) for the input schema,
+evidence fields, CI smoke run, and limits of the synthetic 5 Pa target.
 
 ## Validation
 

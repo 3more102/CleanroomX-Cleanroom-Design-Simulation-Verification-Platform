@@ -18,6 +18,9 @@ from cleanroomx.gui_openfoam import (
     build_openfoam_generate_command,
     build_openfoam_run_command,
     build_openfoam_sync_vtk_command,
+    build_two_room_audit_command,
+    build_two_room_generate_command,
+    build_two_room_run_command,
     read_openfoam_evidence_preview,
 )
 
@@ -80,6 +83,37 @@ def test_sync_vtk_command_is_a_single_scan_and_preserves_source_paths() -> None:
     assert command[-1] == "--once"
 
 
+def test_two_room_commands_preserve_paths_and_require_new_receipt_location() -> None:
+    generated = build_two_room_generate_command(
+        "/tmp/two-room spec.json",
+        "/tmp/new two-room case",
+        python_executable="/python",
+    )
+    assert generated[-2:] == ["/tmp/two-room spec.json", "/tmp/new two-room case"]
+
+    audited = build_two_room_audit_command(
+        "/tmp/two-room case",
+        python_executable="/python",
+    )
+    assert audited[-2:] == ["two-room-audit", "/tmp/two-room case"]
+
+    run = build_two_room_run_command(
+        "/tmp/two-room case",
+        "/tmp/new receipt",
+        timeout_seconds=120,
+        python_executable="/python",
+    )
+    assert run[-5:] == [
+        "/tmp/two-room case",
+        "--receipt-directory",
+        "/tmp/new receipt",
+        "--timeout-seconds",
+        "120",
+    ]
+    with pytest.raises(ValueError, match="new receipt directory"):
+        build_two_room_run_command("/tmp/case", "")
+
+
 def test_evidence_preview_reports_digest_and_diagnostic_status(tmp_path) -> None:
     manifest = {
         "schema_version": "cleanroomx.openfoam.v1",
@@ -96,6 +130,37 @@ def test_evidence_preview_reports_digest_and_diagnostic_status(tmp_path) -> None
     assert previews[0]["path"] == "manifest.json"
     assert previews[0]["sha256"] == hashlib.sha256(raw).hexdigest()
     assert previews[0]["summary"]["status"] == "executed_requires_convergence_review"
+
+
+def test_two_room_receipt_preview_shows_status_without_claiming_verification(tmp_path) -> None:
+    receipt = {
+        "schema_version": "cleanroomx.openfoam.two-room-run.v1",
+        "status": "executed_requires_engineering_review",
+        "solver_release": "OpenFOAM Foundation v10",
+        "receipt_sha256": "a" * 64,
+        "scientific_validation": "BLOCKED",
+        "pressure_probe": {
+            "last_solver_time": 150.0,
+            "delta_pressure_pa_room_1_minus_room_2": 4.9,
+            "density_kg_m3": 1.2,
+        },
+        "engineering_screens": {
+            "pressure_target_screen": "within_declared_band",
+            "flow_balance_status": "MEASURED_DIAGNOSTIC_ONLY",
+            "solver_convergence_status": "NOT_ASSESSED",
+            "scientific_validation": "BLOCKED",
+        },
+    }
+    raw = (json.dumps(receipt, sort_keys=True) + "\n").encode()
+    (tmp_path / "two_room_run_receipt.json").write_bytes(raw)
+
+    previews = read_openfoam_evidence_preview(tmp_path)
+
+    assert previews[0]["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert previews[0]["summary"]["status"] == "executed_requires_engineering_review"
+    assert previews[0]["summary"]["pressure_probe"][
+        "delta_pressure_pa_room_1_minus_room_2"
+    ] == 4.9
 
 
 def test_evidence_preview_rejects_a_symlink_directory(tmp_path) -> None:
@@ -324,6 +389,7 @@ def test_openfoam_workspace_compact_console_stays_scrollable() -> None:
         assert workspace.save_log_button.winfo_viewable()
         assert "disabled" in workspace.save_log_button.state()
         assert "disabled" in workspace.export_graph_button.state()
+        assert "disabled" in workspace.two_room_proofgraph_button.state()
     finally:
         root.destroy()
 
@@ -360,6 +426,50 @@ def test_openfoam_proofgraph_export_button_loads_export_into_viewer(
 
         assert "disabled" not in workspace.export_graph_button.state()
         workspace.export_graph_button.invoke()
+        deadline = time.monotonic() + 2.0
+        while not loaded and time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        root.update()
+
+        assert loaded == [document]
+        assert not workspace._busy
+    finally:
+        root.destroy()
+
+
+def test_two_room_proofgraph_export_button_loads_export_into_viewer(
+    monkeypatch, tmp_path
+) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    destination = tmp_path / "two-room-proofgraph.json"
+    document = {"graph_sha256": "b" * 64}
+    loaded: list[dict] = []
+    monkeypatch.setattr(
+        gui_openfoam.filedialog,
+        "asksaveasfilename",
+        lambda **_kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_openfoam,
+        "export_two_room_proofgraph",
+        lambda *_args: document,
+    )
+    try:
+        workspace = OpenFOAMWorkspace(
+            root,
+            on_proofgraph_loaded=loaded.append,
+        )
+        workspace.pack(fill="both", expand=True)
+        workspace.two_room_case_directory_var.set(str(tmp_path / "case"))
+        workspace.two_room_receipt_directory_var.set(str(tmp_path / "receipt"))
+        root.update()
+
+        assert "disabled" not in workspace.two_room_proofgraph_button.state()
+        workspace.two_room_proofgraph_button.invoke()
         deadline = time.monotonic() + 2.0
         while not loaded and time.monotonic() < deadline:
             root.update()

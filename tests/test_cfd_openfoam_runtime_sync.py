@@ -8,7 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 import cleanroomx.cfd_openfoam_runtime_sync as cfd_sync
+from cleanroomx import cfd_pipeline_cli
 from cleanroomx.cfd_pipeline_cli import build_parser
+from cleanroomx.proofgraph_io import proofgraph_from_dict
+from cleanroomx.proofgraph_openfoam import (
+    build_openfoam_native_sync_proofgraph,
+    openfoam_native_sync_graph_input_paths,
+)
 
 
 CONFIGURATION_HASH = "a" * 64
@@ -201,6 +207,90 @@ def test_sync_waits_for_stable_result_and_imports_real_vtk_fields_once(tmp_path,
     assert all((tmp_path / "sync" / asset["path"]).is_file() for asset in record["assets"])
     assert synchronizer.poll_once()["imported_times"] == []
     assert len(calls) == 1
+
+
+def _finished_native_sync(tmp_path, monkeypatch):
+    case = _case(tmp_path)
+    _fake_foam_to_vtk(monkeypatch)
+    output = tmp_path / "native-sync"
+    synchronizer = _configured_sync(tmp_path, case, monkeypatch, output=output)
+    synchronizer.poll_once()
+    synchronizer.poll_once()
+    solver_log = tmp_path / "solver.log"
+    solver_log.write_text("End\n", encoding="ascii")
+    report = synchronizer.finish(solver_returncode=0, solver_log=solver_log)
+    assert report["status"] == "results_synced"
+    return output
+
+
+def test_native_sync_result_store_exports_receipt_and_asset_bound_proofgraph(
+    tmp_path, monkeypatch
+):
+    output = _finished_native_sync(tmp_path, monkeypatch)
+
+    graph = proofgraph_from_dict(build_openfoam_native_sync_proofgraph(output).to_dict())
+    document = graph.to_dict()
+    summary = next(
+        item["value"] for item in document["evidence"]
+        if item["property_name"] == "openfoam_native_sync_integrity_summary"
+    )
+
+    assert summary["integrity_status"] == "pass"
+    assert summary["verified_snapshot_count"] == 1
+    assert summary["scientific_validation"] == "BLOCKED"
+    assert summary["original_native_field_sources_rehashed"] is False
+    assert {item["requirement_id"]: item["status"] for item in document["verdicts"]} == {
+        "OPENFOAM-NATIVE-SYNC-INTEGRITY": "pass",
+        "OPENFOAM-SCIENTIFIC-VALIDATION": "not_checked",
+    }
+    snapshot = next(
+        item["value"] for item in document["evidence"]
+        if item["property_name"] == "openfoam_native_result_snapshot"
+    )
+    assert snapshot["import_status"] == "PASS_DIAGNOSTIC_ONLY"
+    assert snapshot["scientific_validation"] == "BLOCKED"
+    paths = openfoam_native_sync_graph_input_paths(output)
+    assert output / "sync_manifest.json" in paths
+    assert output / snapshot["receipt_relative_path"] in paths
+    assert all(output / asset["path"] in paths for asset in snapshot["assets"])
+
+
+@pytest.mark.parametrize("tamper", ["asset", "receipt"])
+def test_native_sync_proofgraph_fails_closed_when_receipt_or_asset_changes(
+    tmp_path, monkeypatch, tamper
+):
+    output = _finished_native_sync(tmp_path, monkeypatch)
+    manifest = json.loads((output / "sync_manifest.json").read_text(encoding="utf-8"))
+    record = manifest["records"]["100"]
+    if tamper == "asset":
+        target = output / record["assets"][0]["path"]
+    else:
+        target = output / record["receipt"]["path"]
+    target.write_bytes(target.read_bytes() + b"tampered")
+
+    with pytest.raises(ValueError, match="SHA-256|corrupt|changed"):
+        build_openfoam_native_sync_proofgraph(output)
+
+
+def test_proofgraph_export_cli_autodetects_native_sync_store(
+    tmp_path, monkeypatch, capsys
+):
+    output = _finished_native_sync(tmp_path, monkeypatch)
+    graph_path = tmp_path / "native-proofgraph.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cleanroomx-cfd-pipeline",
+            "proofgraph-export",
+            str(output),
+            "--output",
+            str(graph_path),
+        ],
+    )
+
+    assert cfd_pipeline_cli.main() == 0
+    assert json.loads(graph_path.read_text(encoding="utf-8"))["evidence_sources"][0]["kind"] == "openfoam_native_result_sync"
+    assert json.loads(capsys.readouterr().out)["scientific_validation"] == "BLOCKED"
 
 
 def test_sync_selects_phi_for_surface_field_export(tmp_path, monkeypatch):

@@ -14,6 +14,10 @@ import re
 from typing import Any
 
 from .cfd_sync import SNAPSHOT_SCHEMA, STATE_SCHEMA
+from .cfd_openfoam_runtime_sync import (
+    SCHEMA as NATIVE_SYNC_SCHEMA,
+    _stable_file_record,
+)
 from .proofgraph_models import (
     ComplianceCheck,
     ComplianceFinding,
@@ -36,8 +40,15 @@ MAX_OPENFOAM_SYNC_RECORDS = 100_000
 MAX_OPENFOAM_SYNC_GRAPH_SNAPSHOTS = 5_000
 MAX_OPENFOAM_FIELD_SERIES = 1_000
 MAX_OPENFOAM_FIELD_SERIES_POINTS = 50_000
+MAX_OPENFOAM_NATIVE_MANIFEST_BYTES = 128 * 1024 * 1024
+MAX_OPENFOAM_NATIVE_RECEIPT_BYTES = 64 * 1024 * 1024
+MAX_OPENFOAM_NATIVE_RECORDS = 5_000
+MAX_OPENFOAM_NATIVE_ASSETS = 20_000
+MAX_OPENFOAM_NATIVE_ASSET_BYTES = 256 * 1024 * 1024
+MAX_OPENFOAM_NATIVE_TOTAL_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
+_NATIVE_SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
 def _regular_path(path: Path, description: str) -> None:
@@ -747,6 +758,519 @@ def build_openfoam_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
         ),
     )
     return graph
+
+
+def _native_result_path(root: Path, relative: Any, description: str) -> tuple[Path, PurePosixPath]:
+    safe = _relative_path(relative, description)
+    current = root
+    for part in safe.parts:
+        current = current / part
+        _regular_path(current, f"OpenFOAM {description} path")
+    candidate = root.joinpath(*safe.parts)
+    if not candidate.is_file():
+        raise ValueError(f"OpenFOAM {description} must be a regular file")
+    resolved = candidate.resolve(strict=True)
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"OpenFOAM {description} escaped its result store")
+    return resolved, safe
+
+
+def build_openfoam_native_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
+    """Verify receipts and result assets retained by the native OpenFOAM sync."""
+    supplied_root = Path(result_directory).expanduser()
+    _regular_path(supplied_root, "OpenFOAM native result directory")
+    if not supplied_root.is_dir():
+        raise ValueError("OpenFOAM native result directory must be an existing directory")
+    root = supplied_root.resolve(strict=True)
+    manifest_path = root / "sync_manifest.json"
+    manifest, manifest_raw = _read_snapshot(
+        manifest_path, max_bytes=MAX_OPENFOAM_NATIVE_MANIFEST_BYTES
+    )
+    manifest_sha256 = hashlib.sha256(manifest_raw).hexdigest()
+    if manifest.get("schema_version") != NATIVE_SYNC_SCHEMA:
+        raise ValueError(f"Expected {NATIVE_SYNC_SCHEMA} in sync_manifest.json")
+    simulation_id = manifest.get("simulation_id")
+    if type(simulation_id) is not str or _NATIVE_SIMULATION_ID.fullmatch(simulation_id) is None:
+        raise ValueError("sync_manifest.json has an invalid simulation_id")
+    case_id = manifest.get("case_id")
+    _relative_path(case_id, "case_id")
+    configuration_hash = _sha(manifest.get("configuration_hash"), "configuration_hash")
+    if manifest.get("scientific_validation") != "BLOCKED":
+        raise ValueError("Native OpenFOAM synchronization must retain BLOCKED scientific validation")
+    status = manifest.get("status")
+    if type(status) is not str or not status:
+        raise ValueError("sync_manifest.json has an invalid run status")
+    updated_at = manifest.get("updated_at_utc")
+    if updated_at is not None and (type(updated_at) is not str or not updated_at):
+        raise ValueError("sync_manifest.json has an invalid update timestamp")
+
+    records = manifest.get("records")
+    if type(records) is not dict or len(records) > MAX_OPENFOAM_NATIVE_RECORDS:
+        raise ValueError("sync_manifest.json has an invalid or oversized records table")
+    errors = manifest.get("errors")
+    if type(errors) is not list:
+        raise ValueError("sync_manifest.json errors must be an array")
+    if type(manifest.get("record_count")) is int and manifest["record_count"] != len(records):
+        raise ValueError("sync_manifest.json record_count disagrees with its records table")
+
+    error_status_counts: dict[str, int] = {}
+    active_errors = False
+    for error in errors:
+        if type(error) is not dict:
+            raise ValueError("sync_manifest.json contains a malformed error record")
+        error_status = error.get("status")
+        if type(error_status) is not str or not error_status:
+            raise ValueError("sync_manifest.json error has no status")
+        error_status_counts[error_status] = error_status_counts.get(error_status, 0) + 1
+        if error_status != "recovered_after_retry":
+            active_errors = True
+
+    verified: list[dict[str, Any]] = []
+    seen_numeric_times: set[Decimal] = set()
+    seen_assets: set[str] = set()
+    total_asset_bytes = 0
+    asset_count = 0
+    import_status_counts: dict[str, int] = {}
+    for time_name, record in sorted(records.items()):
+        if type(time_name) is not str or type(record) is not dict:
+            raise ValueError("sync_manifest.json records must map time labels to objects")
+        numeric_time, _label = _time_label(time_name)
+        if numeric_time in seen_numeric_times:
+            raise ValueError("Native OpenFOAM sync has duplicate numeric time labels")
+        seen_numeric_times.add(numeric_time)
+        if record.get("time_name") != time_name:
+            raise ValueError("Native OpenFOAM record time_name disagrees with its manifest key")
+        if record.get("scientific_validation") != "BLOCKED":
+            raise ValueError("Native OpenFOAM record must retain BLOCKED scientific validation")
+
+        import_status = record.get("import_status")
+        if type(import_status) is not str or not import_status:
+            raise ValueError("Native OpenFOAM record has an invalid import_status")
+        import_status_counts[import_status] = import_status_counts.get(import_status, 0) + 1
+
+        source_fields = record.get("source_fields")
+        fields = record.get("fields")
+        if type(source_fields) is not dict or type(fields) is not dict or not source_fields:
+            raise ValueError("Native OpenFOAM record is missing source-field metadata")
+        normalized_source_fields: dict[str, dict[str, Any]] = {}
+        for field_name, source in sorted(source_fields.items()):
+            if (
+                type(field_name) is not str
+                or re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", field_name) is None
+                or type(source) is not dict
+            ):
+                raise ValueError("Native OpenFOAM source-field identity is malformed")
+            source_path = _relative_path(source.get("path"), "source field path")
+            source_sha = _sha(source.get("sha256"), "source field sha256")
+            source_size = source.get("size_bytes")
+            if type(source_size) is not int or not 0 < source_size <= MAX_OPENFOAM_NATIVE_ASSET_BYTES:
+                raise ValueError("Native OpenFOAM source-field size is invalid")
+            field_metadata = fields.get(field_name)
+            if (
+                type(field_metadata) is not dict
+                or field_metadata.get("sha256") != source_sha
+                or field_metadata.get("size_bytes") != source_size
+            ):
+                raise ValueError("Native OpenFOAM source-field metadata disagrees with its field record")
+            normalized_source_fields[field_name] = {
+                "path": source_path.as_posix(),
+                "sha256": source_sha,
+                "size_bytes": source_size,
+            }
+
+        raw_assets = record.get("assets")
+        if type(raw_assets) is not list or not raw_assets:
+            raise ValueError("Native OpenFOAM record has no retained result assets")
+        if asset_count + len(raw_assets) > MAX_OPENFOAM_NATIVE_ASSETS:
+            raise ValueError("Native OpenFOAM asset count exceeds the configured ProofGraph limit")
+        normalized_assets: list[dict[str, Any]] = []
+        for asset in raw_assets:
+            if type(asset) is not dict:
+                raise ValueError("Native OpenFOAM asset entry is malformed")
+            asset_path, asset_relative = _native_result_path(
+                root, asset.get("path"), "result asset"
+            )
+            expected_parts = ("results", f"time_{time_name}")
+            if asset_relative.parts[:2] != expected_parts:
+                raise ValueError("Native OpenFOAM asset is outside its recorded time directory")
+            asset_key = asset_relative.as_posix()
+            if asset_key in seen_assets:
+                raise ValueError("Native OpenFOAM asset is listed more than once")
+            seen_assets.add(asset_key)
+            expected_sha = _sha(asset.get("sha256"), "asset sha256")
+            expected_size = asset.get("size_bytes")
+            if type(expected_size) is not int or not 0 < expected_size <= MAX_OPENFOAM_NATIVE_ASSET_BYTES:
+                raise ValueError("Native OpenFOAM asset size is invalid")
+            total_asset_bytes += expected_size
+            if total_asset_bytes > MAX_OPENFOAM_NATIVE_TOTAL_ASSET_BYTES:
+                raise ValueError("Native OpenFOAM assets exceed the configured ProofGraph byte limit")
+            observed = _stable_file_record(
+                asset_path, max_bytes=MAX_OPENFOAM_NATIVE_ASSET_BYTES
+            )
+            if observed["sha256"] != expected_sha or observed["size_bytes"] != expected_size:
+                raise ValueError(f"Native OpenFOAM result asset is corrupt or outdated: {asset_key}")
+            normalized_assets.append({
+                "path": asset_key,
+                "sha256": expected_sha,
+                "size_bytes": expected_size,
+            })
+        asset_count += len(raw_assets)
+
+        receipt = record.get("receipt")
+        if type(receipt) is not dict:
+            raise ValueError("Native OpenFOAM record has no immutable receipt")
+        receipt_path, receipt_relative = _native_result_path(
+            root, receipt.get("path"), "receipt"
+        )
+        if receipt_relative.as_posix() != f"results/time_{time_name}/receipt.json":
+            raise ValueError("Native OpenFOAM receipt is outside its recorded time directory")
+        expected_receipt_sha = _sha(receipt.get("sha256"), "receipt sha256")
+        observed_receipt = _stable_file_record(
+            receipt_path, max_bytes=MAX_OPENFOAM_NATIVE_RECEIPT_BYTES
+        )
+        if observed_receipt["sha256"] != expected_receipt_sha:
+            raise ValueError("Native OpenFOAM immutable receipt SHA-256 does not match the manifest")
+        receipt_doc, receipt_raw = _read_snapshot(
+            receipt_path, max_bytes=MAX_OPENFOAM_NATIVE_RECEIPT_BYTES
+        )
+        if hashlib.sha256(receipt_raw).hexdigest() != expected_receipt_sha:
+            raise ValueError("Native OpenFOAM receipt changed during its integrity audit")
+        if (
+            receipt_doc.get("schema_version") != NATIVE_SYNC_SCHEMA
+            or receipt_doc.get("simulation_id") != simulation_id
+            or receipt_doc.get("case_id") != case_id
+            or receipt_doc.get("configuration_hash") != configuration_hash
+            or receipt_doc.get("time_name") != time_name
+        ):
+            raise ValueError("Native OpenFOAM receipt provenance disagrees with the manifest")
+        receipt_record = receipt_doc.get("record")
+        expected_record = {key: value for key, value in record.items() if key != "receipt"}
+        if type(receipt_record) is not dict or receipt_record != expected_record:
+            raise ValueError("Native OpenFOAM immutable receipt disagrees with its manifest record")
+
+        cell_count = record.get("cell_count")
+        if type(cell_count) is not int or cell_count < 1:
+            raise ValueError("Native OpenFOAM record has an invalid cell_count")
+        verified.append({
+            "time_name": time_name,
+            "receipt_relative_path": receipt_relative.as_posix(),
+            "receipt_sha256": expected_receipt_sha,
+            "import_status": import_status,
+            "cell_count": cell_count,
+            "source_fields": normalized_source_fields,
+            "fields": fields,
+            "imported_field_summary": record.get("imported_field_summary"),
+            "native_vtk_parity": record.get("native_vtk_parity"),
+            "cleanroomx_analysis_import": record.get("cleanroomx_analysis_import"),
+            "surface_phi_parity": record.get("surface_phi_parity"),
+            "assets": sorted(normalized_assets, key=lambda item: item["path"]),
+        })
+
+    terminal_status = status in {
+        "results_synced",
+        "outputs_synced_process_status_unknown",
+    }
+    if not verified:
+        integrity_status = "not_checked"
+        integrity_reason = "No native OpenFOAM result snapshots are available to audit."
+    elif terminal_status and not active_errors and all(
+        item["import_status"] == "PASS_DIAGNOSTIC_ONLY" for item in verified
+    ):
+        integrity_status = "pass"
+        integrity_reason = (
+            "Every listed result asset matches its manifest digest, and each manifest record "
+            "matches its hash-checked immutable receipt."
+        )
+    else:
+        integrity_status = "warning"
+        integrity_reason = (
+            "Retained result files were audited, but the run is incomplete, has unresolved "
+            "sync errors, or contains a non-diagnostic-only import status."
+        )
+
+    source_id = f"source:openfoam-native-sync:{manifest_sha256[:20]}"
+    summary_id = f"evidence:openfoam-native-sync-summary:{manifest_sha256[:20]}"
+    scientific_evidence_id = f"evidence:openfoam-native-scientific-status:{manifest_sha256[:20]}"
+    status_counts: dict[str, int] = {}
+    for item in verified:
+        status_counts[item["import_status"]] = status_counts.get(item["import_status"], 0) + 1
+    summary_value = {
+        "simulation_id": simulation_id,
+        "case_id": case_id,
+        "configuration_hash": configuration_hash,
+        "synchronization_manifest_sha256": manifest_sha256,
+        "terminal_status": status,
+        "verified_snapshot_count": len(verified),
+        "verified_asset_count": asset_count,
+        "verified_asset_bytes": total_asset_bytes,
+        "import_status_counts": dict(sorted(status_counts.items())),
+        "error_count": len(errors),
+        "error_status_counts": dict(sorted(error_status_counts.items())),
+        "integrity_status": integrity_status,
+        "original_native_field_sources_rehashed": False,
+        "scientific_validation": "BLOCKED",
+    }
+    summary_provenance = lambda suffix: (
+        ProvenanceRecord(
+            id=f"provenance:openfoam-native-sync:{suffix}:{manifest_sha256[:20]}",
+            source_id=source_id,
+            origin="sync_manifest.json and retained per-time receipt.json files",
+            originating_file="sync_manifest.json",
+            method=(
+                "manifest and immutable receipt consistency checks plus stable SHA-256 "
+                "re-hashing of listed result assets"
+            ),
+        ),
+    )
+    evidence: list[SimulationEvidence] = [
+        SimulationEvidence(
+            id=summary_id,
+            property_name="openfoam_native_sync_integrity_summary",
+            value=summary_value,
+            source_id=source_id,
+            version=manifest_sha256,
+            timestamp=updated_at,
+            provenance=summary_provenance("summary"),
+        ),
+        SimulationEvidence(
+            id=scientific_evidence_id,
+            property_name="scientific_validation_status",
+            value={
+                "status": "BLOCKED",
+                "reason": (
+                    "Native result synchronization does not provide measured cleanroom "
+                    "validation data or reviewed acceptance criteria."
+                ),
+                "solver_convergence_status": "not_assessed_by_this_adapter",
+                "integrity_status_is_not_physical_validation": True,
+            },
+            source_id=source_id,
+            version=manifest_sha256,
+            timestamp=updated_at,
+            provenance=summary_provenance("scientific-status"),
+        ),
+    ]
+    snapshot_ids = [summary_id]
+    receipt_hashes: list[str] = []
+    asset_hashes: list[str] = []
+    for item in verified:
+        token = hashlib.sha256(item["time_name"].encode("utf-8")).hexdigest()[:20]
+        evidence_id = f"evidence:openfoam-native-snapshot:{token}"
+        snapshot_ids.append(evidence_id)
+        receipt_hashes.append(item["receipt_sha256"])
+        asset_hashes.extend(asset["sha256"] for asset in item["assets"])
+        evidence_value = {
+            "simulation_id": simulation_id,
+            "case_id": case_id,
+            **item,
+            "scientific_validation": "BLOCKED",
+            "native_field_source_hashes_were_recorded_at_sync_not_rechecked": True,
+        }
+        evidence.append(
+            SimulationEvidence(
+                id=evidence_id,
+                property_name="openfoam_native_result_snapshot",
+                value=evidence_value,
+                source_id=source_id,
+                version=item["receipt_sha256"],
+                timestamp=updated_at,
+                subject_ref=case_id,
+                provenance=(
+                    ProvenanceRecord(
+                        id=f"provenance:openfoam-native-snapshot:{token}",
+                        source_id=source_id,
+                        origin=item["receipt_relative_path"],
+                        upstream_evidence_ids=(summary_id,),
+                        originating_file="sync_manifest.json",
+                        method=(
+                            "immutable receipt matched the manifest record and all listed "
+                            "result assets were re-hashed; original native case fields were "
+                            "not re-read"
+                        ),
+                    ),
+                ),
+            )
+        )
+
+    integrity_requirement = Requirement(
+        id="OPENFOAM-NATIVE-SYNC-INTEGRITY",
+        title="OpenFOAM native result-store integrity",
+        source="CleanroomX OpenFOAM native result synchronization record",
+        reference=manifest_sha256,
+        criteria={
+            "scope": "retained per-time receipts and result assets listed by sync_manifest.json",
+            "pass_means": "receipt links and asset SHA-256 values match the retained files",
+            "does_not_mean": "solver convergence, physical correctness, or cleanroom performance validation",
+        },
+    )
+    scientific_requirement = Requirement(
+        id="OPENFOAM-SCIENTIFIC-VALIDATION",
+        title="OpenFOAM scientific validation",
+        source="CleanroomX CFD validation gate",
+        reference="issue-1296",
+        criteria={
+            "required": [
+                "measured cleanroom data",
+                "reviewed acceptance criteria",
+                "independent engineering review",
+            ],
+            "status": "BLOCKED",
+        },
+    )
+    requirement_set_id = f"OPENFOAM-NATIVE-SYNC-{manifest_sha256[:16]}"
+    requirement_set = RequirementSet(
+        id=requirement_set_id,
+        version="1",
+        title=f"OpenFOAM native synchronization evidence: {simulation_id}",
+        source="CleanroomX OpenFOAM native result-store adapter",
+        requirements=(integrity_requirement, scientific_requirement),
+    )
+    integrity_check = ComplianceCheck(
+        id="CHECK-OPENFOAM-NATIVE-SYNC-INTEGRITY",
+        requirement_id=integrity_requirement.id,
+        evidence_ids=tuple(snapshot_ids),
+        required_evidence_kinds=("simulation",),
+    )
+    scientific_check = ComplianceCheck(
+        id="CHECK-OPENFOAM-NATIVE-SCIENTIFIC-VALIDATION",
+        requirement_id=scientific_requirement.id,
+        evidence_ids=(scientific_evidence_id,),
+        required_evidence_kinds=("simulation",),
+    )
+    integrity_finding = ComplianceFinding(
+        id="FINDING-OPENFOAM-NATIVE-SYNC-INTEGRITY",
+        check_id=integrity_check.id,
+        requirement_id=integrity_requirement.id,
+        status=integrity_status,
+        reason=integrity_reason,
+        evidence_ids=tuple(snapshot_ids),
+        evidence_present=bool(verified),
+        expected={"terminal_statuses": ["results_synced", "outputs_synced_process_status_unknown"]},
+        actual=summary_value,
+    )
+    scientific_finding = ComplianceFinding(
+        id="FINDING-OPENFOAM-NATIVE-SCIENTIFIC-VALIDATION",
+        check_id=scientific_check.id,
+        requirement_id=scientific_requirement.id,
+        status="not_checked",
+        reason="No measured cleanroom results or reviewed acceptance criteria are attached to this sync store.",
+        evidence_ids=(scientific_evidence_id,),
+        evidence_present=True,
+        expected=scientific_requirement.criteria["required"],
+        actual={"status": "BLOCKED"},
+    )
+    integrity_verdict = ComplianceVerdict(
+        id="VERDICT-OPENFOAM-NATIVE-SYNC-INTEGRITY",
+        requirement_id=integrity_requirement.id,
+        status=integrity_status,
+        finding_ids=(integrity_finding.id,),
+        reason=integrity_reason,
+    )
+    scientific_verdict = ComplianceVerdict(
+        id="VERDICT-OPENFOAM-NATIVE-SCIENTIFIC-VALIDATION",
+        requirement_id=scientific_requirement.id,
+        status="not_checked",
+        finding_ids=(scientific_finding.id,),
+        reason=scientific_finding.reason,
+    )
+    input_sha256 = _canonical_sha256({
+        "manifest_sha256": manifest_sha256,
+        "receipt_sha256": receipt_hashes,
+        "asset_sha256": asset_hashes,
+    })
+    return ProofGraph(
+        id=f"proofgraph:openfoam-native-sync:{input_sha256[:20]}",
+        requirement_set=requirement_set,
+        evidence_sources=(
+            EvidenceSource(
+                id=source_id,
+                kind="openfoam_native_result_sync",
+                reference="sync_manifest.json",
+                revision=manifest_sha256,
+            ),
+        ),
+        evidence=tuple(evidence),
+        checks=(integrity_check, scientific_check),
+        findings=(integrity_finding, scientific_finding),
+        verdicts=(integrity_verdict, scientific_verdict),
+        verification_runs=(
+            VerificationRun(
+                id=f"verification:openfoam-native-sync:{input_sha256[:20]}",
+                requirement_set_id=requirement_set_id,
+                check_ids=(integrity_check.id, scientific_check.id),
+                verdict_ids=(integrity_verdict.id, scientific_verdict.id),
+                timestamp=updated_at,
+                input_sha256=input_sha256,
+                metadata={
+                    "adapter": "openfoam_native_result_store",
+                    "integrity_status": integrity_status,
+                    "scientific_validation": "BLOCKED",
+                    "verified_snapshot_count": len(verified),
+                    "verified_asset_count": asset_count,
+                    "original_native_field_sources_rehashed": False,
+                },
+            ),
+        ),
+    )
+
+
+def build_openfoam_result_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
+    """Build a ProofGraph from either supported CleanroomX OpenFOAM result store."""
+    root = Path(result_directory).expanduser()
+    has_native = (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink()
+    has_vtk = (root / "sync-state.json").exists() or (root / "sync-state.json").is_symlink()
+    if has_native and has_vtk:
+        raise ValueError("Result directory contains both native and VTK sync manifests")
+    if has_native:
+        return build_openfoam_native_sync_proofgraph(root)
+    return build_openfoam_sync_proofgraph(root)
+
+
+def openfoam_native_sync_graph_input_paths(result_directory: str | Path) -> tuple[Path, ...]:
+    """Return all native-store files consumed by the ProofGraph exporter."""
+    root_candidate = Path(result_directory).expanduser()
+    _regular_path(root_candidate, "OpenFOAM native result directory")
+    if not root_candidate.is_dir():
+        raise ValueError("OpenFOAM native result directory must be an existing directory")
+    root = root_candidate.resolve(strict=True)
+    manifest, _raw = _read_snapshot(
+        root / "sync_manifest.json", max_bytes=MAX_OPENFOAM_NATIVE_MANIFEST_BYTES
+    )
+    records = manifest.get("records")
+    if type(records) is not dict:
+        raise ValueError("sync_manifest.json has an invalid records table")
+    paths: list[Path] = [root / "sync_manifest.json"]
+    for time_name, record in sorted(records.items()):
+        if type(time_name) is not str or type(record) is not dict:
+            raise ValueError("sync_manifest.json records are malformed")
+        receipt = record.get("receipt")
+        receipt_path, _relative = _native_result_path(
+            root, receipt.get("path") if type(receipt) is dict else None, "receipt"
+        )
+        paths.append(receipt_path)
+        assets = record.get("assets")
+        if type(assets) is not list:
+            raise ValueError("Native OpenFOAM record has no asset list")
+        for asset in assets:
+            asset_path, _relative = _native_result_path(
+                root,
+                asset.get("path") if type(asset) is dict else None,
+                "result asset",
+            )
+            paths.append(asset_path)
+    return tuple(paths)
+
+
+def openfoam_result_sync_graph_input_paths(result_directory: str | Path) -> tuple[Path, ...]:
+    """Return files protected from being overwritten by ProofGraph export."""
+    root = Path(result_directory).expanduser()
+    has_native = (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink()
+    has_vtk = (root / "sync-state.json").exists() or (root / "sync-state.json").is_symlink()
+    if has_native and has_vtk:
+        raise ValueError("Result directory contains both native and VTK sync manifests")
+    if has_native:
+        return openfoam_native_sync_graph_input_paths(root)
+    return openfoam_sync_graph_input_paths(root)
 
 
 def openfoam_sync_graph_input_paths(result_directory: str | Path) -> tuple[Path, ...]:

@@ -1241,8 +1241,9 @@ class OpenFOAMWorkspace(ttk.Frame):
         ttk.Label(
             window,
             text=(
-                "Volume-weighted means from imported, mapped VTK fields. The plot is "
-                "descriptive; OpenFOAM time labels are not assumed to be seconds."
+                "Volume-weighted means with cell min/max envelopes from imported, "
+                "mapped VTK fields. The plot is descriptive; OpenFOAM time labels "
+                "are not assumed to be seconds."
             ),
             wraplength=880,
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -1343,7 +1344,12 @@ class OpenFOAMWorkspace(ttk.Frame):
             height = max(220, chart.winfo_height())
             left, right, top, bottom = 78, width - 24, 28, height - 58
             x_values = [row["solver_time_value"] for row in selected]
-            y_values = [number for row in selected for number in row["mean"]]
+            y_values = [
+                number
+                for row in selected
+                for component_values in (row["mean"], row["minimum"], row["maximum"])
+                for number in component_values
+            ]
             x_low, x_high = min(x_values), max(x_values)
             if x_low == x_high:
                 x_low -= 0.5
@@ -1399,22 +1405,68 @@ class OpenFOAMWorkspace(ttk.Frame):
                 hover_rows.append((x_pixel(row["solver_time_value"]), row))
             for component in range(component_count):
                 color = colors[component]
+                upper = [
+                    (x_pixel(row["solver_time_value"]), y_pixel(row["maximum"][component]))
+                    for row in selected
+                ]
+                lower = [
+                    (x_pixel(row["solver_time_value"]), y_pixel(row["minimum"][component]))
+                    for row in selected
+                ]
+                range_tag = f"field-range-component-{component + 1}"
+                if len(selected) == 1:
+                    x, upper_y = upper[0]
+                    _lower_x, lower_y = lower[0]
+                    chart.create_line(
+                        x, upper_y, x, lower_y, fill=color, width=8,
+                        tags=("field-range", range_tag),
+                    )
+                else:
+                    envelope = [*upper, *reversed(lower)]
+                    chart.create_polygon(
+                        *(coordinate for point in envelope for coordinate in point),
+                        fill=color, stipple="gray50", outline="",
+                        tags=("field-range", range_tag),
+                    )
+                    chart.create_line(
+                        *(coordinate for point in upper for coordinate in point),
+                        fill=color, width=1, dash=(3, 2),
+                        tags=("field-range-boundary", range_tag),
+                    )
+                    chart.create_line(
+                        *(coordinate for point in lower for coordinate in point),
+                        fill=color, width=1, dash=(3, 2),
+                        tags=("field-range-boundary", range_tag),
+                    )
                 points = []
                 for row in selected:
                     points.extend((x_pixel(row["solver_time_value"]),
                                    y_pixel(row["mean"][component])))
                 if len(selected) > 1:
-                    chart.create_line(*points, fill=color, width=2)
+                    chart.create_line(
+                        *points, fill=color, width=2,
+                        tags=("field-mean", f"field-mean-component-{component + 1}"),
+                    )
                 for index in range(0, len(points), 2):
                     x, y = points[index], points[index + 1]
                     chart.create_oval(x - 3, y - 3, x + 3, y + 3,
-                                      fill=color, outline=color)
+                                      fill=color, outline=color,
+                                      tags=("field-mean", f"field-mean-component-{component + 1}"))
                 label = "mean" if component_count == 1 else f"component {component + 1}"
                 chart.create_line(right - 142, top + component * 20,
                                   right - 122, top + component * 20,
                                   fill=color, width=2)
                 chart.create_text(right - 116, top + component * 20,
                                   text=label, anchor="w", fill=self._theme_palette["text"])
+            range_legend_y = top + component_count * 20
+            chart.create_rectangle(
+                right - 142, range_legend_y - 6, right - 122, range_legend_y + 6,
+                fill=colors[0], stipple="gray50", outline=colors[0],
+            )
+            chart.create_text(
+                right - 116, range_legend_y, text="cell min/max range",
+                anchor="w", fill=self._theme_palette["text"],
+            )
 
             table.delete(*table.get_children())
             for row in selected:

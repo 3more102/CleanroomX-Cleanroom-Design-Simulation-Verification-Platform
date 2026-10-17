@@ -69,8 +69,9 @@ closed and do not produce a graph.
 
 **View mapped-field time series…** runs the same retained-snapshot integrity
 audit before opening a descriptive plot. Choose a case and explicitly mapped
-field to inspect cell-volume-weighted component means; hovering a sample shows
-its exact solver-time label, mean, minimum, and maximum. **Export CSV…** writes
+field to inspect cell-volume-weighted component means as lines with shaded
+per-snapshot cell min/max envelopes; hovering a sample shows its exact
+solver-time label, mean, minimum, and maximum. **Export CSV…** writes
 the selected means and bounds with declared units, the source VTK hash recorded
 at import, and the retained snapshot SHA-256. Numeric solver-time labels are used
 only for ordering and plotting, without inferred units. The view does not
@@ -85,7 +86,14 @@ means and bounds, the observed range, and the first-to-last change, with links
 back to the exact snapshot evidence. The adapter does not verify mesh identity,
 interpret solver-time labels as seconds, apply project thresholds, or create a
 temporal verdict. These records remain descriptive and `BLOCKED` for scientific
-validation; use the ProofGraph viewer's **OpenFOAM** filter to inspect them.
+validation. In the ProofGraph viewer, **Field trends** plots one mean, minimum,
+or maximum component at a time. Each point remains linked to its retained
+snapshot evidence; time `0` is allowed, while negative, duplicate, non-finite,
+and non-distinct plot-axis times are suppressed. Means retain cell-volume
+weighting; minimum and maximum values are the imported per-snapshot bounds.
+The chart reports the available sample count and complete/partial case coverage,
+and states that mesh identity is not verified across snapshots. This chart is
+descriptive and does not change the graph or its verdicts.
 
 The tab is a software workflow integration. The selected-room handoff carries
 only one room's rectangular dimensions into a reviewable case-spec draft; it
@@ -292,16 +300,20 @@ it does not convert kinematic pressure to Pa without a supplied density or
 convert other fields between units. Solver convergence and physical validation
 remain separate gates.
 
-Export a ProofGraph from a synchronized VTK result store after import:
+Export a ProofGraph from either supported CleanroomX OpenFOAM result store:
 
     cleanroomx-cfd-pipeline proofgraph-export ./cfd_results \
       --output ./cfd_results/openfoam-sync-proofgraph.json
 
-The command re-hashes imported snapshot files and verifies the fields digest
-and metadata links before exporting. The graph includes a separate integrity
-verdict and a `not_checked` scientific-validation verdict. It protects the
-sync-state, imported snapshot, and still-present source VTK files from being
-selected as the output path.
+For `sync-vtk` stores, the command re-hashes imported snapshot files and
+verifies the fields digest and metadata links. For native `run --sync-results`
+or `sync-case` stores, it re-hashes retained VTK/log result assets and checks
+that every manifest record matches its immutable per-time receipt. The graph
+includes a separate integrity verdict and a `not_checked`
+scientific-validation verdict. Native case input fields are recorded by hash
+at synchronization time but are not re-read during export. The exporter
+protects the manifest, receipts, result assets, imported snapshots, and
+still-present source VTK files from being selected as the output path.
 
 Mapped-field means are volume-weighted and carry an explicit weighting label.
 This field-summary change uses synchronization-state and snapshot schema v3.

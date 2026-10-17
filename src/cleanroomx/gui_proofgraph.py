@@ -7,6 +7,10 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .gui_openfoam_trends import (
+    OpenFOAMFieldTrendWindow,
+    openfoam_field_series_from_proofgraph,
+)
 from .gui_theme import theme_palette
 from .proofgraph_io import proofgraph_from_dict
 
@@ -607,6 +611,8 @@ class ProofGraphViewer(ttk.Frame):
         self._fit_pending = False
         self._theme_name = "light"
         self._theme_palette = theme_palette(self._theme_name)
+        self._field_trend_window: OpenFOAMFieldTrendWindow | None = None
+        self._field_series_cache: dict[str, list[dict[str, Any]]] = {}
 
         self.graph_var = tk.StringVar(value="")
         self.filter_var = tk.StringVar(value="All")
@@ -657,6 +663,14 @@ class ProofGraphViewer(ttk.Frame):
             style="CX.Compact.TButton",
             command=self._clear_search_and_filter,
         ).pack(side="left")
+        self.field_trends_button = ttk.Button(
+            toolbar,
+            text="Field trends",
+            style="CX.Compact.TButton",
+            command=self._open_field_trends,
+            state="disabled",
+        )
+        self.field_trends_button.pack(side="left", padx=(5, 0))
         self.graph_picker.bind("<<ComboboxSelected>>", self._on_graph_changed)
         self.filter_picker.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
         self.search_var.trace_add("write", lambda *_: self._refresh())
@@ -809,6 +823,11 @@ class ProofGraphViewer(ttk.Frame):
             selectbackground=palette["selection"],
             selectforeground=palette["selection_text"],
         )
+        if (
+            self._field_trend_window is not None
+            and self._field_trend_window.window.winfo_exists()
+        ):
+            self._field_trend_window.apply_theme(self._theme_name)
         if redraw:
             self._draw_graph()
 
@@ -828,6 +847,7 @@ class ProofGraphViewer(ttk.Frame):
             if key and key not in unique:
                 unique[key] = canonical
         self._documents = list(unique.values())
+        self._field_series_cache.clear()
         current_identity = tuple(
             _text(document.get("graph_sha256")) or _text(document.get("id"))
             for document in self._documents
@@ -884,6 +904,15 @@ class ProofGraphViewer(ttk.Frame):
         )
 
         evidence = proofgraph_evidence_summary(projection)
+        field_series = self._active_field_series()
+        self.field_trends_button.configure(
+            state="normal" if field_series else "disabled"
+        )
+        if (
+            self._field_trend_window is not None
+            and self._field_trend_window.window.winfo_exists()
+        ):
+            self._field_trend_window.set_series(field_series)
         if not all_nodes:
             readiness = "Evidence readiness: unavailable"
         elif evidence["check_count"]:
@@ -907,6 +936,40 @@ class ProofGraphViewer(ttk.Frame):
         self._fit_pending = True
         self._selected_key = None
         self._refresh()
+
+    def _open_field_trends(self) -> None:
+        field_series = self._active_field_series()
+        if not field_series:
+            self._status_setter(
+                "No verified OpenFOAM field time series are available in this graph"
+            )
+            return
+        if (
+            self._field_trend_window is not None
+            and self._field_trend_window.window.winfo_exists()
+        ):
+            self._field_trend_window.set_series(field_series)
+            self._field_trend_window.window.deiconify()
+            self._field_trend_window.window.lift()
+            return
+        self._field_trend_window = OpenFOAMFieldTrendWindow(
+            self.winfo_toplevel(),
+            series=field_series,
+            theme=self._theme_name,
+        )
+
+    def _active_field_series(self) -> list[dict[str, Any]]:
+        document = self._active_document()
+        if document is None:
+            return []
+        identity = _text(document.get("graph_sha256")) or _text(document.get("id"))
+        if not identity:
+            return []
+        if identity not in self._field_series_cache:
+            self._field_series_cache[identity] = openfoam_field_series_from_proofgraph(
+                document
+            )
+        return self._field_series_cache[identity]
 
     def _clear_search_and_filter(self) -> None:
         self.search_var.set("")

@@ -240,12 +240,14 @@ def test_openfoam_time_series_window_plots_samples_and_exports_csv(
                 "case_id": "room-a", "field": "speed", "array_name": "speed",
                 "components": 1, "units": "m/s", "solver_time_label": "1",
                 "solver_time_value": 1.0, "mean": [1.25],
+                "minimum": [0.75], "maximum": [1.8],
                 "source_vtk_sha256": "a" * 64, "snapshot_sha256": "b" * 64,
             },
             {
                 "case_id": "room-a", "field": "speed", "array_name": "speed",
                 "components": 1, "units": "m/s", "solver_time_label": "2",
                 "solver_time_value": 2.0, "mean": [1.75],
+                "minimum": [1.1], "maximum": [2.2],
                 "source_vtk_sha256": "c" * 64, "snapshot_sha256": "d" * 64,
             },
         ],
@@ -263,6 +265,8 @@ def test_openfoam_time_series_window_plots_samples_and_exports_csv(
             if isinstance(widget, ttk.Button) and widget.cget("text") == "Export CSV…"
         )
         assert chart.find_all()
+        assert chart.find_withtag("field-range-component-1")
+        assert chart.find_withtag("field-mean-component-1")
         assert len(table.get_children()) == 2
 
         export.invoke()

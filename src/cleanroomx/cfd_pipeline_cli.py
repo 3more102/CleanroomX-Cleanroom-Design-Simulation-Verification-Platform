@@ -21,8 +21,8 @@ from .cfd_openfoam_runtime_sync import (
     hash_case_configuration,
 )
 from .proofgraph_openfoam import (
-    build_openfoam_sync_proofgraph,
-    openfoam_sync_graph_input_paths,
+    build_openfoam_result_sync_proofgraph,
+    openfoam_result_sync_graph_input_paths,
 )
 from pathlib import Path
 from .cli_output import cli_error_boundary, dumps_strict_json, load_cli_input, publish_cli_output
@@ -95,9 +95,9 @@ def build_parser():
                       help="In watch mode, print only when imported results or scan counts change")
     proofgraph=sub.add_parser(
         "proofgraph-export",
-        help="Verify retained OpenFOAM sync snapshots and export a ProofGraph",
+        help="Verify a native or VTK OpenFOAM sync store and export a ProofGraph",
     )
-    proofgraph.add_argument("result_directory",help="CleanroomX sync-vtk result store")
+    proofgraph.add_argument("result_directory",help="CleanroomX OpenFOAM synchronization result store")
     proofgraph.add_argument("--output",required=True,help="Output ProofGraph JSON path")
     timeseries=sub.add_parser(
         "timeseries-export",
@@ -260,13 +260,13 @@ def main():
             return 130
         return 0
     if args.command=="proofgraph-export":
-        graph=build_openfoam_sync_proofgraph(args.result_directory).to_dict()
+        graph=build_openfoam_result_sync_proofgraph(args.result_directory).to_dict()
         payload=dumps_strict_json(graph)
         if not publish_cli_output(
             "cleanroomx-cfd-pipeline",
             args.output,
             payload,
-            protected_inputs=openfoam_sync_graph_input_paths(args.result_directory),
+            protected_inputs=openfoam_result_sync_graph_input_paths(args.result_directory),
         ):
             return 1
         verdicts={item["requirement_id"]:item["status"] for item in graph["verdicts"]}

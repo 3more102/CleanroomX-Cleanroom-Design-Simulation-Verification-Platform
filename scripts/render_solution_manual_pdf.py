@@ -2,20 +2,23 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 import sys
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak,
-    Preformatted, Table, TableStyle, KeepTogether, Flowable, HRFlowable
+    Preformatted, Table, TableStyle, KeepTogether, Flowable, HRFlowable,
+    Image as PDFImage, NextPageTemplate,
 )
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus.tableofcontents import TableOfContents
 from reportlab.graphics.shapes import Drawing, Rect, String, Line, Polygon, Circle
 
@@ -85,8 +88,8 @@ ST = {
     "CalloutTitle": ParagraphStyle("CalloutTitle", parent=BASE["BodyText"], fontName=FONT_BOLD, fontSize=9, leading=12, textColor=INK, spaceAfter=2),
     "CalloutBody": ParagraphStyle("CalloutBody", parent=BASE["BodyText"], fontName=FONT, fontSize=8.5, leading=12, textColor=INK),
     "TOCHead": ParagraphStyle("TOCHead", parent=BASE["Heading1"], fontName=FONT_BOLD, fontSize=20, leading=24, textColor=NAVY, spaceAfter=10),
-    "TOC0": ParagraphStyle("TOC0", parent=BASE["BodyText"], fontName=FONT_BOLD, fontSize=9, leading=12.2, textColor=NAVY, spaceBefore=3),
-    "TOC1": ParagraphStyle("TOC1", parent=BASE["BodyText"], fontName=FONT, fontSize=8.2, leading=11.2, textColor=INK, leftIndent=12),
+    "TOC0": ParagraphStyle("TOC0", parent=BASE["BodyText"], fontName=FONT_BOLD, fontSize=9, leading=12.2, textColor=NAVY, spaceBefore=4, spaceAfter=2),
+    "TOC1": ParagraphStyle("TOC1", parent=BASE["BodyText"], fontName=FONT, fontSize=8.2, leading=11.2, textColor=INK, leftIndent=12, spaceAfter=2),
     "Caption": ParagraphStyle("Caption", parent=BASE["BodyText"], fontName=FONT, fontSize=7.5, leading=10, textColor=MUTED, alignment=1, spaceAfter=6),
 }
 
@@ -97,18 +100,44 @@ class ManualDoc(BaseDocTemplate):
         self.current_chapter = "Front Matter"
         self._seq = 0
         frame = Frame(self.leftMargin, self.bottomMargin, self.width, self.height, id="body")
-        self.addPageTemplates([PageTemplate(id="main", frames=frame, onPage=self.page_decor)])
+        wide_width, wide_height = landscape(A4)
+        screenshot_frame = Frame(
+            14 * mm,
+            17 * mm,
+            wide_width - 28 * mm,
+            wide_height - 31 * mm,
+            id="gui_screenshots",
+        )
+        self.addPageTemplates([
+            PageTemplate(id="main", frames=frame, onPage=self.page_decor, pagesize=A4),
+            PageTemplate(
+                id="gui_screenshots",
+                frames=screenshot_frame,
+                onPage=self.page_decor,
+                pagesize=landscape(A4),
+            ),
+        ])
+
+    def beforeDocument(self):
+        # multiBuild performs more than one layout pass for the table of
+        # contents. Reset page-header context so the cover/TOC does not inherit
+        # the last chapter title from the preceding pass.
+        self.current_chapter = "Controlled manual"
 
     def page_decor(self, canvas, doc):
         canvas.saveState()
-        w, h = A4
+        w, h = canvas._pagesize
         canvas.setFillColor(NAVY2)
         canvas.rect(0, h-13*mm, w, 13*mm, fill=1, stroke=0)
         canvas.setFillColor(WHITE)
         canvas.setFont(FONT_BOLD, 7.4)
         canvas.drawString(16*mm, h-8.3*mm, "CLEANROOMX | PROFESSIONAL ENGINEERING USER MANUAL")
         canvas.setFont(FONT, 7)
-        canvas.drawRightString(w-16*mm, h-8.3*mm, self.current_chapter[:64])
+        canvas.drawRightString(
+            w-16*mm,
+            h-8.3*mm,
+            f"REVISION {MANUAL_META.get('revision', 'unknown')}",
+        )
         canvas.setStrokeColor(BORDER)
         canvas.line(16*mm, 14*mm, w-16*mm, 14*mm)
         canvas.setFillColor(MUTED)
@@ -202,6 +231,121 @@ def callout(kind, title, body):
         ("BOX", (0,0), (-1,-1), .5, BORDER),
     ]))
     return KeepTogether([t, Spacer(1,3)])
+
+
+GUI_SCREENSHOT_FILES = {
+    "start-center.png": "Start Center and project actions",
+    "design-2d.png": "2D floor plan and room editing",
+    "design-3d.png": "3D room view",
+    "design-split.png": "Synchronized 2D and 3D design",
+    "input-structured.png": "Structured project inputs",
+    "input-json-editor.png": "Strict JSON input editor",
+    "plot.png": "Analysis plot workspace",
+    "proofgraph.png": "ProofGraph evidence explorer",
+    "openfoam.png": "OpenFOAM case and evidence workbench",
+    "output-problems.png": "Problems output panel",
+    "output-diagnostics.png": "Diagnostics output panel",
+    "output-verification.png": "Verification output panel",
+    "output-console.png": "Console output panel",
+    "output-evidence.png": "Evidence output panel",
+    "output-results.png": "Results output panel",
+    "output-report.png": "Report output panel",
+}
+
+
+def _load_gui_screenshot_records(source_path: Path, preview_snapshot: str):
+    screenshot_dir = source_path.parent / "gui_screenshots"
+    manifest_path = screenshot_dir / "capture-manifest.json"
+    if not manifest_path.is_file() or manifest_path.is_symlink():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"GUI screenshot manifest is unreadable: {exc}") from exc
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("captures"), list):
+        raise ValueError("GUI screenshot manifest must contain a captures array")
+    if manifest.get("errors"):
+        raise ValueError("GUI screenshot manifest records capture errors")
+    expected_commit = re.search(r"@\s*([0-9a-f]{7,40})", preview_snapshot or "")
+    actual_commit = manifest.get("source_commit")
+    if not expected_commit or not isinstance(actual_commit, str):
+        raise ValueError("GUI screenshot commit cannot be matched to the manual preview")
+    if not actual_commit.lower().startswith(expected_commit.group(1).lower()):
+        raise ValueError("GUI screenshots were captured from a different source commit")
+
+    captures_by_name = {}
+    for item in manifest["captures"]:
+        if not isinstance(item, dict):
+            raise ValueError("GUI screenshot capture entries must be objects")
+        filename = item.get("file")
+        if filename not in GUI_SCREENSHOT_FILES and filename != "openfoam-timeseries.png":
+            raise ValueError(f"Unexpected GUI screenshot filename: {filename!r}")
+        if filename in captures_by_name:
+            raise ValueError(f"Duplicate GUI screenshot entry: {filename}")
+        captures_by_name[filename] = item
+    required = set(GUI_SCREENSHOT_FILES)
+    if not required.issubset(captures_by_name):
+        missing = sorted(required.difference(captures_by_name))
+        raise ValueError(f"GUI screenshot set is incomplete: {', '.join(missing)}")
+
+    records = []
+    for filename, item in captures_by_name.items():
+        path = screenshot_dir / filename
+        if path.is_symlink() or not path.is_file() or path.resolve().parent != screenshot_dir.resolve():
+            raise ValueError(f"GUI screenshot is missing or unsafe: {filename}")
+        try:
+            actual_size = ImageReader(str(path)).getSize()
+        except Exception as exc:
+            raise ValueError(f"GUI screenshot is not a readable image: {filename}") from exc
+        dimensions = item.get("dimensions_px")
+        if (
+            not isinstance(dimensions, list)
+            or len(dimensions) != 2
+            or not isinstance(dimensions[0], int)
+            or not isinstance(dimensions[1], int)
+            or dimensions[0] < 700
+            or dimensions[1] < 500
+            or tuple(dimensions) != actual_size
+        ):
+            raise ValueError(f"GUI screenshot dimensions are invalid: {filename}")
+        label = GUI_SCREENSHOT_FILES.get(filename, "OpenFOAM mapped-field time-series dialog")
+        records.append((filename, label, path, dimensions))
+    return records
+
+
+def add_gui_screenshot_gallery(story, source_path: Path, preview_snapshot: str):
+    records = _load_gui_screenshot_records(source_path, preview_snapshot)
+    if records is None:
+        story.append(callout(
+            "WARNING",
+            "Real GUI screenshots are not attached to this manual build",
+            "Capture the 16-view CleanroomX screenshot set on a desktop with "
+            "`python scripts/capture_gui_screenshots.py`, then rebuild this manual. "
+            "A mapped-field time-series screen can be added from a real result store "
+            "with `--timeseries-result-directory`. No substitute or synthetic UI "
+            "images are inserted.",
+        ))
+        return
+
+    wide_width, wide_height = landscape(A4)
+    image_width = wide_width - 28 * mm
+    image_height = wide_height - 55 * mm
+    story.append(NextPageTemplate("gui_screenshots"))
+    story.append(PageBreak())
+    for index, (filename, label, path, dimensions) in enumerate(records, start=1):
+        title = f"{index:02d}. {label}"
+        image = PDFImage(str(path), width=image_width, height=image_height, kind="proportional")
+        image.hAlign = "CENTER"
+        story.append(Paragraph(inline(title), ST["H2"]))
+        story.append(image)
+        story.append(Paragraph(
+            inline(f"{filename} | {dimensions[0]} × {dimensions[1]} px | "
+                   f"Source commit {preview_snapshot.split('@', 1)[-1].strip().split()[0]}"),
+            ST["Caption"],
+        ))
+        if index < len(records):
+            story.append(PageBreak())
+    story.extend([NextPageTemplate("main"), PageBreak()])
 
 
 def md_table(lines, width):
@@ -372,6 +516,7 @@ def cover(meta):
         ["Revision",meta.get("revision","unknown")],
         ["Stable release",meta.get("stable","uncontrolled")],
         ["Engineering baseline",meta.get("baseline","")],
+        ["Preview snapshot",meta.get("preview_snapshot","not applicable")],
         ["Manual date",meta.get("date","undated")],
     ]
     data = [[Paragraph(inline(a),ST["TableHead"] if i==0 else ST["Table"]),Paragraph(inline(b),ST["TableHead"] if i==0 else ST["Table"])] for i,(a,b) in enumerate(rows)]
@@ -392,13 +537,14 @@ def cover(meta):
         callout("CRITICAL","Engineering and regulatory boundary","CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence. It does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Applicable criteria remain explicit project inputs and require qualified review."),
         Spacer(1,8*mm),
         Paragraph("Intended audience: cleanroom/HVAC engineers, BIM coordinators, verification engineers, reviewers, QA/validation personnel, technical leads, and controlled-document owners.",ST["Body"]),
-        Paragraph("This revision reorganizes the manual around operator tasks, review gates, and industrial use rather than repository chronology. Development status is isolated in the final appendix.",ST["Body"]),
+        Paragraph("This revision expands the desktop operating procedure and identifies which features belong to the stable release and which belong to the documented development preview.",ST["Body"]),
         PageBreak()
     ]
 
 
 def parse(source):
-    lines = Path(source).read_text(encoding="utf-8").splitlines()
+    source_path = Path(source).resolve()
+    lines = source_path.read_text(encoding="utf-8").splitlines()
     meta, lines = front_matter(lines)
     MANUAL_META.clear()
     MANUAL_META.update(meta)
@@ -469,6 +615,11 @@ def parse(source):
             flush(); story.append(Paragraph(inline(s[3:].strip()),ST["H2"])); i += 1; continue
         if s.startswith("### "):
             flush(); story.append(Paragraph(inline(s[4:].strip()),ST["H3"])); i += 1; continue
+        if s == "[GUI_SCREENSHOTS]":
+            flush()
+            add_gui_screenshot_gallery(story, source_path, meta.get("preview_snapshot", ""))
+            i += 1
+            continue
         if re.match(r"^[-*] ",s):
             flush(); story.append(Paragraph("• "+inline(s[2:].strip()),ST["Bullet"])); i += 1; continue
         n = re.match(r"^(\d+)\.\s+(.*)",s)

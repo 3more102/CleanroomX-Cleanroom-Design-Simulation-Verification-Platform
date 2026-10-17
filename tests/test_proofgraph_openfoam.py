@@ -16,6 +16,7 @@ from cleanroomx.cfd_openfoam_timeseries import (
     export_openfoam_time_series_csv,
     read_openfoam_sync_time_series,
 )
+from cleanroomx.gui_openfoam_trends import openfoam_field_series_from_proofgraph
 from cleanroomx.proofgraph_io import proofgraph_from_dict
 from cleanroomx.proofgraph_openfoam import build_openfoam_sync_proofgraph
 
@@ -247,6 +248,15 @@ def test_openfoam_proofgraph_exposes_descriptive_field_time_series(tmp_path):
     assert graph["verification_runs"][0]["metadata"]["field_time_series_count"] == 1
     assert _verdicts(graph)["OPENFOAM-SCIENTIFIC-VALIDATION"] == "not_checked"
     assert validated.to_dict()["graph_sha256"] == graph["graph_sha256"]
+    plotted = openfoam_field_series_from_proofgraph(graph)
+    assert len(plotted) == 1
+    assert plotted[0]["coverage_status"] == "complete"
+    assert plotted[0]["same_mesh_verified"] is False
+    assert [point["solver_time"] for point in plotted[0]["points"]] == ["100", "200"]
+    assert [point["mean"] for point in plotted[0]["points"]] == [
+        [1.0, 0.0, 0.0],
+        [1.5, 0.1, 0.0],
+    ]
 
 
 def test_openfoam_timeseries_reader_exports_integrity_bound_rows(tmp_path):

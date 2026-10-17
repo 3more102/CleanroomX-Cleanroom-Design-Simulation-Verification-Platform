@@ -228,10 +228,63 @@ def _validate_record(
             raise ValueError(f"OpenFOAM result record {time_name!r} has no {name} list")
     if not record["assets"]:
         raise ValueError(f"OpenFOAM result record {time_name!r} has no synchronized assets")
-    for name in ("source_fields", "fields", "imported_field_summary", "native_vtk_parity", "cleanroomx_analysis_import"):
+    for name in (
+        "source_fields",
+        "fields",
+        "imported_field_summary",
+        "native_vtk_parity",
+        "cleanroomx_analysis_import",
+    ):
         if type(record.get(name)) is not dict:
             raise ValueError(f"OpenFOAM result record {time_name!r} has invalid {name}")
-    _require_sha256(record.get("input_fingerprint_sha256"), "record.input_fingerprint_sha256")
+    source_fields = record["source_fields"]
+    normalized_source_fields: dict[str, dict[str, Any]] = {}
+    for field_name, source in source_fields.items():
+        if (
+            type(field_name) is not str
+            or re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", field_name) is None
+            or type(source) is not dict
+            or set(source) != {"path", "sha256", "size_bytes"}
+        ):
+            raise ValueError(
+                f"OpenFOAM result record {time_name!r} has invalid source-field metadata"
+            )
+        source_path = source["path"]
+        if (
+            type(source_path) is not str
+            or not source_path
+            or "\\" in source_path
+            or "\x00" in source_path
+        ):
+            raise ValueError("OpenFOAM source-field path must be a relative POSIX path")
+        parsed_source_path = PurePosixPath(source_path)
+        if parsed_source_path.is_absolute() or any(
+            part in ("", ".", "..") for part in parsed_source_path.parts
+        ):
+            raise ValueError("OpenFOAM source-field path is not safely relative")
+        source_size = source["size_bytes"]
+        if type(source_size) is not int or source_size <= 0:
+            raise ValueError("OpenFOAM source-field size must be a positive integer")
+        normalized_source_fields[field_name] = {
+            "path": parsed_source_path.as_posix(),
+            "sha256": _require_sha256(source["sha256"], "source_field.sha256"),
+            "size_bytes": source_size,
+        }
+    source_fingerprint = _require_sha256(
+        record.get("input_fingerprint_sha256"), "record.input_fingerprint_sha256"
+    )
+    computed_source_fingerprint = _sha256(
+        json.dumps(
+            normalized_source_fields,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    )
+    if computed_source_fingerprint != source_fingerprint:
+        raise ValueError(
+            "OpenFOAM input fingerprint does not match its source-field hash metadata"
+        )
     log_sha = _require_sha256(record.get("foamToVTK_log_sha256"), "record.foamToVTK_log_sha256")
 
     seen_paths: set[str] = set()
@@ -281,6 +334,8 @@ def _validate_record(
         "time_name": time_name,
         "cell_count": record["cell_count"],
         "selected_times": list(record["selected_times"]),
+        "input_fingerprint_sha256": source_fingerprint,
+        "source_fields": normalized_source_fields,
         "fields": record["fields"],
         "imported_field_summary": record["imported_field_summary"],
         "native_vtk_parity": record["native_vtk_parity"],
@@ -500,10 +555,13 @@ def proofgraph_from_openfoam_sync_results(
                 "records": checked["records"],
                 "manifest_sha256": checked["manifest_sha256"],
                 "asset_hashes_verified": True,
+                "integrity_scope": "local_hash_link_consistency_not_authenticity",
+                "source_field_file_bytes_rehashed": False,
                 "scientific_validation": "BLOCKED",
                 "interpretation": (
-                    "Manifest, receipt, and result asset integrity only; "
-                    "solver convergence and physical validation are not established."
+                    "Manifest, receipt, and referenced result asset hash consistency only; "
+                    "this is not an authenticity check. Source field file bytes, solver "
+                    "convergence, and physical validation are not established by this export."
                 ),
             }
             evidence.append(
@@ -535,7 +593,7 @@ def proofgraph_from_openfoam_sync_results(
                     reference=checked["relative_path"] if checked else None,
                     scope=(f"configuration_{number}",),
                     criteria={
-                        "required": "Manifest, immutable receipts, and referenced result assets match their SHA-256 values.",
+                        "required": "Manifest, receipt, and referenced result asset hashes are locally consistent.",
                         "decision_scope": "artifact_integrity_only",
                     },
                 ),
@@ -572,7 +630,7 @@ def proofgraph_from_openfoam_sync_results(
         )
         integrity_status = "pass" if checked is not None else "not_checked"
         integrity_reason = (
-            "Manifest, immutable receipts, and every referenced result asset passed SHA-256 and size checks. This verdict covers artifact integrity only."
+            "Manifest, receipt, and every referenced result asset passed local SHA-256 and size checks. This is not a digital-signature or authenticity check."
             if checked is not None
             else f"No synchronized OpenFOAM manifest was found for configuration {number}."
         )
@@ -586,7 +644,7 @@ def proofgraph_from_openfoam_sync_results(
                     reason=integrity_reason,
                     evidence_ids=evidence_ids,
                     evidence_present=bool(evidence_ids),
-                    expected="Hash-consistent synchronized result artifacts",
+                    expected="Locally consistent manifest, receipt, and result asset hashes",
                     actual=(
                         {
                             "manifest_sha256": checked["manifest_sha256"],

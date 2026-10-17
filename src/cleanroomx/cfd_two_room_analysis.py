@@ -527,6 +527,50 @@ def _offline_dashboard(report: dict[str, Any]) -> str:
         f'<div class="metric"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
         for label, value in cards
     )
+    vtk = report["vtk_fields"]
+    if vtk["status"] == "MEASURED_DIAGNOSTIC_ONLY":
+        room_rows = []
+        for room_name in ("room_1", "room_2"):
+            room = vtk["rooms"][room_name]
+            speed = room["velocity_magnitude"]
+            pressure_stats = room["pressure_gauge"]
+            if pressure_stats.get("status") == "UNAVAILABLE":
+                mean_pressure = "Unavailable"
+                pressure_range = "Unavailable"
+            else:
+                mean_pressure = f'{pressure_stats["volume_weighted_mean"]:.5g}'
+                pressure_range = (
+                    f'{pressure_stats["volume_weighted_p05"]:.5g} to '
+                    f'{pressure_stats["volume_weighted_p95"]:.5g}'
+                )
+            values = (
+                room_name.replace("_", " ").title(),
+                str(speed["cell_count"]),
+                f'{speed["sampled_volume_m3"]:.5g}',
+                f'{speed["volume_weighted_mean"]:.5g}',
+                f'{speed["volume_weighted_p05"]:.5g} to {speed["volume_weighted_p95"]:.5g}',
+                mean_pressure,
+                pressure_range,
+            )
+            room_rows.append(
+                "<tr>" + "".join(f"<td>{escape(value)}</td>" for value in values) + "</tr>"
+            )
+        room_summary_html = (
+            '<h2>Room-by-room solver cell statistics</h2>'
+            '<p>All means and percentiles are weighted by VTK cell volume. '
+            'Gauge pressure is calculated from the declared density. These are '
+            'synthetic solver outputs, not facility measurements.</p>'
+            '<div class="table-scroll"><table><thead><tr>'
+            '<th>Room</th><th>Cells</th><th>Sampled volume (m³)</th>'
+            '<th>Mean speed (m/s)</th><th>Speed P05–P95 (m/s)</th>'
+            '<th>Mean gauge p (Pa)</th><th>Gauge p P05–P95 (Pa)</th>'
+            '</tr></thead><tbody>' + "".join(room_rows) + '</tbody></table></div>'
+        )
+    else:
+        room_summary_html = (
+            '<h2>Room-by-room solver cell statistics</h2>'
+            '<p>Unavailable: no supported, verified room-volume VTK field data.</p>'
+        )
     missing = "".join(
         f'<li><strong>{escape(k.replace("_", " ").title())}:</strong> {escape(v)}</li>'
         for k, v in report["not_derived"].items()
@@ -557,6 +601,11 @@ figcaption {{padding:14px 17px;font-weight:650}}
 img {{display:block;width:100%;height:auto;background:white}}
 a {{color:#a6d0ff}}
 li {{margin:.5rem 0}}
+.table-scroll {{overflow-x:auto}}
+table {{border-collapse:collapse;min-width:850px;width:100%;background:#152237}}
+th,td {{border:1px solid #34465d;padding:10px 12px;text-align:right;white-space:nowrap}}
+th:first-child,td:first-child {{text-align:left}}
+th {{background:#24334b}}
 footer {{font-size:.9rem;color:#a6b9cc;border-top:1px solid #293a52}}
 </style></head>
 <body><header><div class="eyebrow">CleanroomX · solver-backed evidence</div>
@@ -567,6 +616,7 @@ footer {{font-size:.9rem;color:#a6b9cc;border-top:1px solid #293a52}}
 authenticity, physical measurement correlation, cleanroom compliance, or certification.
 Pressure probes are not spatial room-average measurements.</p></div>
 <section aria-label="Run diagnostics"><div class="metrics">{metrics}</div></section>
+{room_summary_html}
 <h2>Verified CFD charts</h2><section class="plots" aria-label="Graphs">
 {''.join(figures)}</section>
 <h2>Unavailable or unsupported metrics</h2><ul>{missing}</ul>

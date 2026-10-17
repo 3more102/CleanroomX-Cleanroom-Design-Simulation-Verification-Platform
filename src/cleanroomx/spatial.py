@@ -3924,9 +3924,19 @@ class SpatialDesignWorkspace(ttk.Frame):
             # Defer labels until all geometry and devices are drawn:
             # compact chips are placed once, with viewport collision checks.
             if self._show_labels.get():
+                caption = room["name"]
+                if overlay_mode in {"ach", "airflow", "status"}:
+                    # Preserve fresh engineering fields in the room's
+                    # clickable label, but do not repeat verbose pressure
+                    # and classification paragraphs on every roof.
+                    result_caption = str(
+                        overlay_by_room[room["id"]].get("label") or ""
+                    ).strip()
+                    if result_caption:
+                        caption += " · " + result_caption
                 name_anchor_entries.append({
                     "room_id": room["id"],
-                    "text": room["name"],
+                    "text": caption,
                     "anchor": self._project_3d(
                         (x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2,
                     ),

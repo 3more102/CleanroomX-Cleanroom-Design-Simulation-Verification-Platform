@@ -109,7 +109,10 @@ Export analysis graphs…**. The GUI asks for an existing destination *parent*
 directory and creates a new **cleanroomx-two-room-analysis** subdirectory.
 Neither workflow overwrites the output directory or automatically launches a solver.
 
-The result includes **analysis.json** and self-contained SVG graphs:
+The result includes **analysis.json**, an **index.html** offline diagnostic
+review dashboard with traceable metrics, and self-contained SVG graphs.
+Open the HTML file in a browser after export; it uses no remote assets or scripts.
+
 
 - **simplefoam_residual_Ux.svg**, **simplefoam_residual_Uy.svg**,
   **simplefoam_residual_Uz.svg**, **simplefoam_residual_p.svg** (when logged):

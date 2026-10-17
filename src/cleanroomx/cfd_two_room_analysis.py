@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .cfd_proofgraph import _hash_regular_file, _read_json, proofgraph_from_two_room_receipt
+from .cfd_audit import _RESIDUAL, _CONTINUITY, _FATAL, MAX_LOG_BYTES
 from .cfd_two_room import compute_pressure_difference_pa, parse_pressure_probe_data
 from .cfd_vtk import import_vtk_case, _read_vtk, MAX_VTK_BYTES
 
@@ -166,6 +167,55 @@ def _vtk_room_fields(case: Path, vtk_assets: dict[str, str], room_length: float,
     }
 
 
+
+def _solver_residual_history(case: Path, receipt: dict[str, Any]) -> dict[str, Any]:
+    """Read actual simpleFoam linear-solver residuals; do not assert convergence."""
+    logs = [stage for stage in receipt["stages"] if stage.get("command") == "simpleFoam"]
+    if len(logs) != 1 or logs[0].get("log_path") != "simpleFoam.log":
+        raise ValueError("Receipt does not bind a unique simpleFoam log")
+    log_path = case / "simpleFoam.log"
+    digest, size = _hash_regular_file(log_path, max_bytes=MAX_LOG_BYTES)
+    if digest != logs[0]["log_sha256"]:
+        raise ValueError("simpleFoam log changed after evidence verification")
+    raw = log_path.read_bytes()
+    if len(raw) != size or hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError("simpleFoam log changed during residual ingestion")
+    content = raw.decode("utf-8", errors="strict")
+    fields: dict[str, dict[str, list[float]]] = {}
+    count = 0
+    for match in _RESIDUAL.finditer(content):
+        name = match.group(1)
+        initial = float(match.group(2))
+        final = float(match.group(3))
+        if not all(math.isfinite(v) and v >= 0 for v in (initial, final)):
+            raise ValueError("Solver log contains non-finite or negative residual")
+        values = fields.setdefault(name, {"initial": [], "final": []})
+        values["initial"].append(initial)
+        values["final"].append(final)
+        count += 1
+        if count > 16000 or len(fields) > 24:
+            raise ValueError("Solver residual history exceeds bounded chart capacity")
+    continuity = []
+    for match in _CONTINUITY.finditer(content):
+        local, global_error = map(float, match.groups())
+        if not all(math.isfinite(v) for v in (local, global_error)):
+            raise ValueError("Solver log has nonfinite reported continuity")
+        continuity.append({"sum_local": local, "global": global_error})
+        if len(continuity) > 16000:
+            raise ValueError("Continuity history exceeds bounded chart capacity")
+    return {
+        "status": "DIAGNOSTIC_ONLY" if fields else "UNAVAILABLE",
+        "solver_log_sha256": digest,
+        "fatal_or_nonfinite_marker": bool(_FATAL.search(content)),
+        "fields": fields,
+        "continuity": continuity,
+        "sequence_axis": "per-field linear solve sequence, not physical time or coupled convergence proof",
+        "solver_convergence": "NOT_ASSESSED",
+        "criteria": "NOT_SUPPLIED",
+    }
+
+
+
 def analyze_two_room_evidence(case_directory: str | Path, receipt_path: str | Path) -> dict[str, Any]:
     """Analyze only artifacts checked by the existing ProofGraph receipt gate."""
     # Performs strict input, receipt, stage-log, phi, probe, and entire VTK-set hash verification.
@@ -218,6 +268,7 @@ def analyze_two_room_evidence(case_directory: str | Path, receipt_path: str | Pa
             "acceptance_criterion": "NOT_SET",
             "meaning": "solver phi patch flux diagnostics; no independent acceptance screen",
         },
+        "residual_history": _solver_residual_history(case, receipt),
         "vtk_fields": _vtk_room_fields(
             case, receipt["vtk_assets_sha256"], _finite(spec["room_m"][0], "room_length"), density
         ),
@@ -300,6 +351,44 @@ def _bars_svg(title: str, labels: list[str], values: list[float], units: str) ->
 
 
 
+
+def _residual_svg(field: str, records: dict[str, list[float]]) -> str:
+    """Plot logarithmic per-field linear-solver residual sequence, without thresholds."""
+    initial, final = records["initial"], records["final"]
+    if not initial or len(initial) != len(final):
+        raise ValueError("Residual chart requires aligned nonempty initial and final values")
+    values = [math.log10(max(1e-16, value)) for value in initial + final]
+    minimum, maximum = min(values), max(values)
+    if maximum <= minimum:
+        maximum = minimum + 1.0
+    n = len(initial)
+    step = max(1, math.ceil(n / 1000))
+    xscale = lambda i: 75.0 + 585.0 * i / max(1, n - 1)
+    yscale = lambda value: 235.0 - 175.0 * (value - minimum) / (maximum - minimum)
+    segments = []
+    for key, color in (("initial", "#1464b4"), ("final", "#d96b27")):
+        points = " ".join(
+            f"{xscale(i):.2f},{yscale(math.log10(max(1e-16, records[key][i]))):.2f}"
+            for i in range(0, n, step)
+        )
+        segments.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="1.8"/>')
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="305" viewBox="0 0 720 305">'
+        '<rect width="720" height="305" fill="#fff"/>'
+        f'<text x="28" y="24" font-size="17">simpleFoam residual: {escape(field)}</text>'
+        + "".join(segments)
+        + '<line x1="70" y1="235" x2="670" y2="235" stroke="#333"/>'
+        + '<text x="75" y="260" font-size="12">1</text>'
+        + f'<text x="635" y="260" font-size="12">{n}</text>'
+        + f'<text x="12" y="60" font-size="12">{maximum:.3g}</text>'
+        + f'<text x="12" y="236" font-size="12">{minimum:.3g}</text>'
+        + '<text x="225" y="288" font-size="12">Per-field solve number | log10 residual (floor 1e-16)</text>'
+        + '<text x="460" y="44" font-size="12">Blue: initial  Orange: final</text>'
+        + '</svg>'
+    )
+
+
+
 def _histogram_svg(title: str, distribution: dict[str, Any]) -> str:
     """Volume-weighted histogram; bins describe samples, not an interpolated contour."""
     fractions = distribution["bin_volume_percent"]
@@ -374,6 +463,8 @@ def export_two_room_analysis(
                 graphs[f"{room}_pressure_distribution.svg"] = _histogram_svg(
                     f"{room.replace('_', ' ').title()}: gauge pressure distribution", dist["pressure_gauge"]
                 )
+    for field, samples in sorted(report["residual_history"]["fields"].items())[:8]:
+        graphs[f"simplefoam_residual_{field}.svg"] = _residual_svg(field, samples)
     report["graphs"] = sorted(graphs)
     destination.mkdir(exist_ok=False)
     (destination / "analysis.json").write_text(

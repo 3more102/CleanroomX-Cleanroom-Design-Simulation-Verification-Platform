@@ -13,6 +13,7 @@ from tkinter import filedialog, messagebox, ttk
 from .gui_theme import theme_palette
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 from .spatial_scene_finder import scene_entries
+from .spatial_camera_bookmarks import CameraBookmarkStore
 from .spatial_3d_export import save_3d_svg
 from .spatial_3d_legibility import (
     draw_device_details_hud,
@@ -1639,6 +1640,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_view_status_change = on_view_status_change
         self._on_focus_requested = on_focus_requested
         self._scene_finder_window: tk.Toplevel | None = None
+        self._camera_bookmarks = CameraBookmarkStore()
+        self._bookmark_project: Any | None = None
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1924,6 +1927,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self.open_scene_finder,
         )
         camera_menu.add_separator()
+        bookmark_menu = tk.Menu(camera_menu, tearoff=False)
+        self._camera_bookmark_menu = bookmark_menu
+        for slot in (1, 2, 3):
+            bookmark_menu.add_command(
+                label=f"Save current as View {slot}",
+                command=lambda index=slot: self.save_camera_bookmark(index),
+            )
+        bookmark_menu.add_separator()
+        for slot in (1, 2, 3):
+            bookmark_menu.add_command(
+                label=f"Recall View {slot} — empty",
+                state="disabled",
+                command=lambda index=slot: self.recall_camera_bookmark(index),
+            )
+        camera_menu.add_cascade(label="Camera bookmarks", menu=bookmark_menu)
         camera_menu.add_command(
             label="Export current 3D view…  (SVG)",
             command=self.export_3d_svg,
@@ -2553,6 +2571,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._isolated_item = None
         self._hovered_3d = None
         project = self._project_getter()
+        if project is not self._bookmark_project:
+            # A camera from an unrelated project must never be recalled
+            # into the new project's coordinate system.
+            self._camera_bookmarks.clear()
+            self._bookmark_project = project
+            if hasattr(self, "_camera_bookmark_menu"):
+                self._update_camera_bookmark_menu()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
         view = self.layout.get("view", {})
@@ -4623,6 +4648,40 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
         self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
+
+    def _update_camera_bookmark_menu(self) -> None:
+        menu = self._camera_bookmark_menu
+        for slot in (1, 2, 3):
+            present = self._camera_bookmarks.filled(slot)
+            menu.entryconfigure(
+                slot + 3,  # three Save entries, one separator, then Recall
+                label=f"Recall View {slot}" if present
+                else f"Recall View {slot} — empty",
+                state="normal" if present else "disabled",
+            )
+
+    def save_camera_bookmark(self, slot: int) -> None:
+        """Capture camera only; stored in RAM for this project/session."""
+        self._camera_bookmarks.save(slot, self.layout["view"])
+        self._update_camera_bookmark_menu()
+        self._status_setter(
+            f"3D View {slot} saved for this session (not saved to project)"
+        )
+
+    def recall_camera_bookmark(self, slot: int) -> bool:
+        """Restore view without altering geometry, results, or undo history."""
+        camera = self._camera_bookmarks.recall(slot)
+        if camera is None:
+            self._status_setter(f"3D View {slot} is empty")
+            return False
+        self.layout["view"].update(camera)
+        self._projection_mode.set(
+            "Perspective" if camera["projection_mode"] == "perspective"
+            else "Orthographic"
+        )
+        self._status_setter(f"3D View {slot} restored")
+        self._draw_3d()
+        return True
 
     def export_3d_svg(self) -> None:
         """Save a design-only vector screenshot of the currently shown canvas."""

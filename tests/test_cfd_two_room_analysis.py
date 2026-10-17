@@ -278,3 +278,35 @@ def test_signed_solver_continuity_graph_preserves_zero_line_and_record_axis():
 def test_solver_continuity_graph_rejects_unbounded_or_missing_values(records):
     with pytest.raises(ValueError):
         analysis._continuity_svg(records)
+
+
+def test_offline_dashboard_uses_verified_volume_weighted_room_statistics(tmp_path, monkeypatch):
+    case, receipt, _ = _fixture(tmp_path, monkeypatch)
+    report = analysis.analyze_two_room_evidence(case, receipt)
+    report["graphs"] = ["pressure_probe_history.svg"]
+    assert "Unavailable: no supported" in analysis._offline_dashboard(report)
+
+    room_1_speed = analysis._weighted_distribution([(1.0, 1.0)], "m/s")
+    room_2_speed = analysis._weighted_distribution([(2.0, 2.0)], "m/s")
+    room_1_p = analysis._weighted_distribution([(-2.0, 1.0)], "Pa")
+    report["vtk_fields"] = {
+        "status": "MEASURED_DIAGNOSTIC_ONLY",
+        "rooms": {
+            "room_1": {
+                "velocity_magnitude": room_1_speed,
+                "pressure_gauge": room_1_p,
+            },
+            "room_2": {
+                "velocity_magnitude": room_2_speed,
+                "pressure_gauge": {"status": "UNAVAILABLE"},
+            },
+        },
+    }
+    html = analysis._offline_dashboard(report)
+    assert "Room-by-room solver cell statistics" in html
+    assert "Sampled volume (m³)" in html
+    assert "Mean speed (m/s)" in html
+    assert "Gauge p P05–P95 (Pa)" in html
+    assert "Room 1" in html and "Room 2" in html
+    assert "Unavailable</td>" in html
+    assert "<script" not in html

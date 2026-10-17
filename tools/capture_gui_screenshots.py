@@ -170,6 +170,7 @@ def capture(output: Path) -> None:
             _select_tab(app, "Start")
             _capture(root, output, "gui-start-center")
 
+            app.set_focus_workspace(True)
             app.spatial_workspace.set_workspace_mode("2d")
             _select_tab(app, "Design")
             _capture(root, output, "gui-design-2d")

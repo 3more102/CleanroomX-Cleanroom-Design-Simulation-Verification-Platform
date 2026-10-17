@@ -29,6 +29,15 @@ restarted with the same simulation ID and result directory. Unchanged scan
 reports are suppressed, so the command console shows imports and status changes
 instead of a line for every poll.
 
+To start from the active CleanroomX design, select one room in the **Design**
+workspace and choose **Create spec from selected room…**. The action saves a new
+specification from the loaded template, copies the room's length/width/height,
+and records the project and room IDs in `project_geometry`. It deliberately
+does not map room placement, neighboring rooms, doors, supply/return/FFU
+geometry, measured airflow, pressure, or boundary conditions. The remaining
+template values require review; this rectangular envelope is not a CAD/IFC mesh
+and is not scientific validation.
+
 For an existing `foamToVTK` export, select its VTK directory, the generated
 case bundle's `manifest.json`, a result directory, and a simulation ID. Use
 **Sync VTK once** for a single scan or **Start live sync** to keep importing
@@ -58,11 +67,33 @@ marks it `not_checked` even when snapshot integrity passes. Incomplete sync
 records produce a warning verdict; missing snapshots or mismatched digests fail
 closed and do not produce a graph.
 
-The tab is a software workflow integration. It does not yet derive OpenFOAM
-boundary geometry from the active CAD/IFC project or attach solver snapshots
-automatically to project requirements. Scientific validation remains
-`BLOCKED` pending physical cleanroom measurements, defined acceptance
-criteria, and independent engineering review.
+**View mapped-field time series…** runs the same retained-snapshot integrity
+audit before opening a descriptive plot. Choose a case and explicitly mapped
+field to inspect cell-volume-weighted component means; hovering a sample shows
+its exact solver-time label, mean, minimum, and maximum. **Export CSV…** writes
+the selected means and bounds with declared units, the source VTK hash recorded
+at import, and the retained snapshot SHA-256. Numeric solver-time labels are used
+only for ordering and plotting, without inferred units. The view does not
+establish mesh equivalence, convergence, or scientific validity. Field coverage
+is shown against all verified snapshots for the selected case, and CSV exports
+carry that coverage, snapshot-integrity status, and `BLOCKED` scientific status.
+
+When at least two verified snapshots for a case contain explicit mapped-field
+summaries, the graph also records a descriptive series for each mapped field.
+It preserves solver-time labels, per-snapshot cell-volume-weighted component
+means and bounds, the observed range, and the first-to-last change, with links
+back to the exact snapshot evidence. The adapter does not verify mesh identity,
+interpret solver-time labels as seconds, apply project thresholds, or create a
+temporal verdict. These records remain descriptive and `BLOCKED` for scientific
+validation; use the ProofGraph viewer's **OpenFOAM** filter to inspect them.
+
+The tab is a software workflow integration. The selected-room handoff carries
+only one room's rectangular dimensions into a reviewable case-spec draft; it
+does not derive OpenFOAM boundary geometry from CAD/IFC or map supply/exhaust
+devices to patches. Solver snapshots are not attached automatically to project
+requirements. Scientific validation remains `BLOCKED` pending physical
+cleanroom measurements, defined acceptance criteria, and independent
+engineering review.
 
 ## Educational source and limits
 
@@ -88,6 +119,17 @@ In Python 3.11+:
 Generate all three cases without OpenFOAM installed:
 
     cleanroomx-cfd-pipeline generate examples/cfd_openfoam_spec.example.json ./cfd_cases
+
+Create a reviewable spec from a room in a saved CleanroomX project while keeping
+the template's explicit mesh, flow, viscosity, and solver settings:
+
+    cleanroomx-cfd-pipeline project-room-spec ./project.cleanroomx.json \
+      examples/cfd_openfoam_spec.example.json --room-id process-room \
+      --output ./process-room-openfoam-spec.json
+
+The generated spec hashes its `project_geometry` provenance with the other
+inputs. It maps only length, width, and height to the rectangular envelope;
+patch layout and flow values still come from the chosen template.
 
 Each case manifest includes an input-only boundary audit. It reads the
 generated `blockMeshDict` face coordinates, derives the complete exterior-face

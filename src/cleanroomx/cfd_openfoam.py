@@ -17,6 +17,14 @@ import uuid
 from .cfd_study import CONFIGURATIONS
 
 SCHEMA = "cleanroomx.openfoam.v1"
+PROJECT_GEOMETRY_SCHEMA = "cleanroomx.spatial-room-bounds.v1"
+PROJECT_GEOMETRY_OMISSIONS = (
+    "room placement and adjacency",
+    "doors and transfer openings",
+    "supply, return, exhaust, and FFU geometry",
+    "equipment and internal obstacles",
+    "measured flow and pressure boundary conditions",
+)
 MAX_CELLS = 20_000
 FOUNDATION_RELEASE = "10"
 
@@ -30,8 +38,10 @@ def validate_openfoam_spec(spec):
         raise ValueError("specification must be an object")
     keys = {"schema_version","name","room_m","mesh_cells","supply_flow_m3_s",
             "kinematic_viscosity_m2_s","max_iterations","output_interval"}
-    if set(spec) != keys or spec.get("schema_version") != SCHEMA:
-        raise ValueError(f"expected {SCHEMA} and precisely {sorted(keys)}")
+    if set(spec) not in (keys, keys | {"project_geometry"}) or spec.get("schema_version") != SCHEMA:
+        raise ValueError(
+            f"expected {SCHEMA} and precisely {sorted(keys)} with optional project_geometry"
+        )
     if type(spec["name"]) is not str or not spec["name"].strip():
         raise ValueError("name must be nonempty")
     room=spec["room_m"]; mesh=spec["mesh_cells"]
@@ -47,6 +57,30 @@ def validate_openfoam_spec(spec):
             raise ValueError(f"{k} must be an integer in [1,100000]")
     if spec["output_interval"]>spec["max_iterations"]:
         raise ValueError("output_interval cannot exceed max_iterations")
+    if "project_geometry" in spec:
+        source = spec["project_geometry"]
+        source_keys = {
+            "schema", "project_name", "room_id", "room_name", "dimensions_m",
+            "mapping", "omitted",
+        }
+        if type(source) is not dict or set(source) != source_keys:
+            raise ValueError("project_geometry has an unsupported structure")
+        if source.get("schema") != PROJECT_GEOMETRY_SCHEMA:
+            raise ValueError("project_geometry schema is unsupported")
+        for field in ("project_name", "room_id", "room_name"):
+            if type(source.get(field)) is not str or not source[field].strip():
+                raise ValueError(f"project_geometry {field} must be nonempty")
+        if source.get("mapping") != "rectangular_room_envelope_only":
+            raise ValueError("project_geometry mapping is unsupported")
+        source_dimensions = source.get("dimensions_m")
+        if type(source_dimensions) is not list or len(source_dimensions) != 3:
+            raise ValueError("project_geometry dimensions_m must contain three values")
+        for index, value in enumerate(source_dimensions):
+            _number(value, f"project_geometry.dimensions_m[{index}]")
+        if any(float(a) != float(b) for a, b in zip(source_dimensions, room)):
+            raise ValueError("project_geometry dimensions do not match room_m")
+        if source.get("omitted") != list(PROJECT_GEOMETRY_OMISSIONS):
+            raise ValueError("project_geometry omitted list does not match the schema")
     return spec
 
 def _header(cls,name,body,loc):
@@ -426,6 +460,12 @@ relaxationFactors { fields { p 0.3; } equations { U 0.7; } }"""
               "target":"OpenFOAM Foundation v10 / simpleFoam",
               "limitations":["no underfloor plenum","no scalar or particle transport",
                   "no turbulence or buoyancy","no mesh convergence proof","empty rectangular room"]}
+    if "project_geometry" in spec:
+        metadata["project_geometry"] = spec["project_geometry"]
+        metadata["limitations"][-1] = (
+            "rectangular room envelope copied from CleanroomX; omitted geometry and "
+            "boundary conditions are listed in project_geometry"
+        )
     metadata["boundary_audit"]=audit_openfoam_boundary_inputs(files,metadata)
     return files,metadata
 

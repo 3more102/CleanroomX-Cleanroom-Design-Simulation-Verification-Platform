@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import csv
 import json
 import os
 import queue
 import signal
 import subprocess
 import tkinter as tk
+from tkinter import ttk
 from types import SimpleNamespace
 
 import pytest
@@ -206,6 +208,218 @@ def test_openfoam_output_log_is_bounded_and_can_be_cleared_or_copied():
         workspace.copy_output()
         assert root.clipboard_get() == "retained command log"
         assert statuses[-1].startswith("Copied 20 characters")
+    finally:
+        root.destroy()
+
+
+def test_openfoam_time_series_window_plots_samples_and_exports_csv(
+    tmp_path, monkeypatch
+):
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    workspace = gui_openfoam.OpenFOAMWorkspace(root)
+    output = tmp_path / "velocity.csv"
+    monkeypatch.setattr(
+        gui_openfoam.filedialog,
+        "asksaveasfilename",
+        lambda **_kwargs: str(output),
+    )
+    series = {
+        "simulation_id": "sim-001",
+        "integrity_status": "pass",
+        "cases": ["room-a"],
+        "fields": ["speed"],
+        "protected_inputs": [],
+        "rows": [
+            {
+                "case_id": "room-a", "field": "speed", "array_name": "speed",
+                "components": 1, "units": "m/s", "solver_time_label": "1",
+                "solver_time_value": 1.0, "mean": [1.25],
+                "source_vtk_sha256": "a" * 64, "snapshot_sha256": "b" * 64,
+            },
+            {
+                "case_id": "room-a", "field": "speed", "array_name": "speed",
+                "components": 1, "units": "m/s", "solver_time_label": "2",
+                "solver_time_value": 2.0, "mean": [1.75],
+                "source_vtk_sha256": "c" * 64, "snapshot_sha256": "d" * 64,
+            },
+        ],
+    }
+    try:
+        window = workspace._show_time_series(series)
+        root.update()
+        descendants = [window]
+        for widget in descendants:
+            descendants.extend(widget.winfo_children())
+        chart = next(widget for widget in descendants if isinstance(widget, tk.Canvas))
+        table = next(widget for widget in descendants if isinstance(widget, ttk.Treeview))
+        export = next(
+            widget for widget in descendants
+            if isinstance(widget, ttk.Button) and widget.cget("text") == "Export CSV…"
+        )
+        assert chart.find_all()
+        assert len(table.get_children()) == 2
+
+        export.invoke()
+
+        with output.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        assert [row["solver_time_label"] for row in rows] == ["1", "2"]
+        assert rows[1]["mean_component_1"] == "1.75"
+        assert rows[1]["snapshot_sha256"] == "d" * 64
+    finally:
+        root.destroy()
+
+
+def test_openfoam_room_handoff_saves_separate_reviewable_spec(
+    tmp_path, monkeypatch
+):
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    template = {
+        "schema_version": "cleanroomx.openfoam.v1",
+        "name": "synthetic template",
+        "room_m": [3, 2, 2],
+        "mesh_cells": [12, 12, 8],
+        "supply_flow_m3_s": 0.15,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "max_iterations": 150,
+        "output_interval": 50,
+    }
+    template_path = tmp_path / "template.json"
+    template_path.write_text(json.dumps(template), encoding="utf-8")
+    output_path = tmp_path / "process-room-spec.json"
+    statuses = []
+    context = {
+        "project_name": "North Cleanroom",
+        "spatial_layout": {
+            "version": 1,
+            "rooms": [
+                {
+                    "id": "process-room",
+                    "name": "Process Room",
+                    "length_m": 8.0,
+                    "width_m": 6.0,
+                    "height_m": 3.2,
+                }
+            ],
+        },
+        "selection_kind": "room",
+        "selected_room_id": "process-room",
+    }
+    workspace = gui_openfoam.OpenFOAMWorkspace(
+        root,
+        status_setter=statuses.append,
+        project_context_getter=lambda: context,
+    )
+    try:
+        workspace.specification_var.set(str(template_path))
+        monkeypatch.setattr(
+            gui_openfoam.filedialog,
+            "asksaveasfilename",
+            lambda **_kwargs: str(output_path),
+        )
+
+        workspace._make_project_room_spec()
+
+        saved = json.loads(output_path.read_text(encoding="utf-8"))
+        assert saved["room_m"] == [8.0, 6.0, 3.2]
+        assert saved["supply_flow_m3_s"] == template["supply_flow_m3_s"]
+        assert saved["project_geometry"]["room_id"] == "process-room"
+        assert workspace.specification_var.get() == str(output_path)
+        assert statuses[-1].endswith("scientific validation remains BLOCKED.")
+    finally:
+        root.destroy()
+
+
+def test_openfoam_timeseries_view_plots_and_exports_selected_field(
+    tmp_path, monkeypatch
+):
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        if os.environ.get("DISPLAY"):
+            raise
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    workspace = gui_openfoam.OpenFOAMWorkspace(root)
+    series = {
+        "simulation_id": "demo-run",
+        "integrity_status": "pass",
+        "cases": ["case-a"],
+        "protected_inputs": [],
+        "rows": [
+            {
+                "case_id": "case-a",
+                "field": "velocity",
+                "array_name": "U",
+                "units": "m/s",
+                "components": 3,
+                "solver_time_label": "100",
+                "solver_time_value": 100.0,
+                "mean": [1.0, 0.0, 0.0],
+                "minimum": [0.5, -0.1, -0.1],
+                "maximum": [1.5, 0.1, 0.1],
+                "source_vtk_sha256": "c" * 64,
+                "snapshot_sha256": "a" * 64,
+            },
+            {
+                "case_id": "case-a",
+                "field": "velocity",
+                "array_name": "U",
+                "units": "m/s",
+                "components": 3,
+                "solver_time_label": "200",
+                "solver_time_value": 200.0,
+                "mean": [1.5, 0.1, 0.0],
+                "minimum": [1.0, 0.0, -0.1],
+                "maximum": [2.0, 0.2, 0.1],
+                "source_vtk_sha256": "d" * 64,
+                "snapshot_sha256": "b" * 64,
+            },
+        ],
+    }
+    output = tmp_path / "velocity.csv"
+    try:
+        workspace._show_time_series(series)
+        root.update()
+        window = next(
+            widget for widget in root.winfo_children()
+            if isinstance(widget, tk.Toplevel)
+        )
+
+        def descendants(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from descendants(child)
+
+        children = list(descendants(window))
+        table = next(widget for widget in children if isinstance(widget, ttk.Treeview))
+        chart = next(widget for widget in children if isinstance(widget, tk.Canvas))
+        assert len(table.get_children()) == 2
+        assert len(chart.find_all()) > 10
+        monkeypatch.setattr(
+            gui_openfoam.filedialog,
+            "asksaveasfilename",
+            lambda **_kwargs: str(output),
+        )
+        export_button = next(
+            widget for widget in children
+            if isinstance(widget, ttk.Button) and widget.cget("text") == "Export CSV…"
+        )
+        export_button.invoke()
+        assert output.is_file()
+        assert "snapshot_sha256" in output.read_text(encoding="utf-8")
     finally:
         root.destroy()
 

@@ -527,6 +527,20 @@ def _filtered_projection(
             include = node_type == "requirement"
         elif filter_key == "evidence":
             include = node_type in {"source", "evidence"}
+        elif filter_key == "openfoam":
+            raw = node.get("raw")
+            source_kind = _text(raw.get("kind")).casefold() if isinstance(raw, dict) else ""
+            source_id = _text(raw.get("source_id")).casefold() if isinstance(raw, dict) else ""
+            include = (
+                node_type == "source" and "openfoam" in source_kind
+            ) or (
+                node_type == "evidence"
+                and (
+                    "openfoam" in _text(node.get("id")).casefold()
+                    or "openfoam" in source_id
+                    or "openfoam" in _text(node.get("label")).casefold()
+                )
+            )
         elif filter_key == "calculations":
             include = node_type == "calculation" or "calculation" in flags
         elif filter_key == "ifc":
@@ -626,6 +640,7 @@ class ProofGraphViewer(ttk.Frame):
                 "All",
                 "Requirements",
                 "Evidence",
+                "OpenFOAM",
                 "Calculations",
                 "IFC",
                 "Verification",

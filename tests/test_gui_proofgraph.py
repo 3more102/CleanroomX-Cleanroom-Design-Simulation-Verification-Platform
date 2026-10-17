@@ -244,6 +244,39 @@ def test_unresolved_evidence_filter_uses_canonical_not_checked_state():
     assert "verdict:verdict-evidence" not in unresolved_keys
 
 
+def test_openfoam_filter_keeps_provenance_and_check_context():
+    projection = {
+        "nodes": [
+            {"key": "source:openfoam", "type": "source", "id": "source:openfoam",
+             "label": "sync-state.json", "status": "", "flags": [],
+             "raw": {"kind": "openfoam_result_sync"}},
+            {"key": "evidence:openfoam-series", "type": "evidence",
+             "id": "evidence:openfoam-field-series:abc", "label": "openfoam_field_time_series",
+             "status": "", "flags": [], "raw": {"source_id": "source:openfoam"}},
+            {"key": "check:integrity", "type": "check", "id": "check-integrity",
+             "label": "check-integrity", "status": "", "flags": [], "raw": {}},
+            {"key": "finding:integrity", "type": "finding", "id": "finding-integrity",
+             "label": "integrity", "status": "pass", "flags": [], "raw": {}},
+        ],
+        "edges": [
+            {"source": "source:openfoam", "target": "evidence:openfoam-series",
+             "relation": "provides"},
+            {"source": "evidence:openfoam-series", "target": "check:integrity",
+             "relation": "supports"},
+            {"source": "check:integrity", "target": "finding:integrity",
+             "relation": "produces"},
+        ],
+    }
+
+    filtered = _filtered_projection(projection, "OpenFOAM")
+
+    keys = {node["key"] for node in filtered["nodes"]}
+    assert "source:openfoam" in keys
+    assert "evidence:openfoam-series" in keys
+    assert "check:integrity" in keys
+    assert "finding:integrity" not in keys
+
+
 def test_proofgraph_evidence_summary_reports_persisted_links_and_verdicts_only():
     projection = proofgraph_projection(_sample_graph())
 

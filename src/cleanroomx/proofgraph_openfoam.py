@@ -5,8 +5,10 @@ It deliberately leaves CFD convergence and physical validation unassessed.
 """
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import math
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any
@@ -32,6 +34,8 @@ MAX_OPENFOAM_SYNC_STATE_BYTES = 64 * 1024 * 1024
 MAX_OPENFOAM_SYNC_SNAPSHOT_BYTES = 128 * 1024 * 1024
 MAX_OPENFOAM_SYNC_RECORDS = 100_000
 MAX_OPENFOAM_SYNC_GRAPH_SNAPSHOTS = 5_000
+MAX_OPENFOAM_FIELD_SERIES = 1_000
+MAX_OPENFOAM_FIELD_SERIES_POINTS = 50_000
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SIMULATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 
@@ -64,6 +68,209 @@ def _read_snapshot(path: Path, *, max_bytes: int) -> tuple[dict[str, Any], bytes
     if type(snapshot.value) is not dict:
         raise ValueError(f"{path.name} must contain a JSON object")
     return snapshot.value, snapshot.raw_bytes
+
+
+def _field_summaries(fields: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return validated, compact field statistics from an imported VTK record."""
+    field_data = fields.get("field_data", {})
+    if type(field_data) is not dict:
+        raise ValueError("Imported OpenFOAM field_data must be an object")
+
+    summaries: dict[str, dict[str, Any]] = {}
+    for semantic, item in sorted(field_data.items()):
+        if type(semantic) is not str or not semantic.strip() or type(item) is not dict:
+            raise ValueError("Imported OpenFOAM field summaries have invalid identities")
+        summary = item.get("summary")
+        if summary is None:
+            # Older or deliberately minimal stores can retain field names without
+            # the importer-generated statistics needed for a time-series view.
+            continue
+        array_name = item.get("array_name")
+        units = item.get("units")
+        components = item.get("components")
+        if type(array_name) is not str or not array_name.strip():
+            raise ValueError("Imported OpenFOAM field summary has no array name")
+        if type(units) is not str or not units.strip():
+            raise ValueError("Imported OpenFOAM field summary has no declared units")
+        if item.get("units_source") != "explicit_caller_field_map":
+            raise ValueError("Imported OpenFOAM field summary has no explicit unit declaration")
+        if type(components) is not int or components not in (1, 3):
+            raise ValueError("Imported OpenFOAM field summary has invalid components")
+
+        if type(summary) is not dict or summary.get("mean_weighting") != "cell_volume":
+            raise ValueError("Imported OpenFOAM field summary is missing cell-volume statistics")
+        values: dict[str, list[float]] = {}
+        for name in ("minimum", "maximum", "mean"):
+            raw_values = summary.get(name)
+            if type(raw_values) is not list or len(raw_values) != components:
+                raise ValueError(f"Imported OpenFOAM field {name} has invalid component coverage")
+            normalized: list[float] = []
+            for value in raw_values:
+                if type(value) not in (int, float) or not math.isfinite(value):
+                    raise ValueError(f"Imported OpenFOAM field {name} must contain finite numbers")
+                normalized.append(float(value))
+            values[name] = normalized
+        if any(
+            lower - average > 16 * math.ulp(max(1.0, abs(lower), abs(average), abs(upper)))
+            or average - upper > 16 * math.ulp(max(1.0, abs(lower), abs(average), abs(upper)))
+            for lower, average, upper in zip(
+                values["minimum"], values["mean"], values["maximum"]
+            )
+        ):
+            raise ValueError("Imported OpenFOAM field means fall outside their recorded bounds")
+
+        summaries[semantic] = {
+            "array_name": array_name,
+            "units": units,
+            "components": components,
+            "mean_weighting": "cell_volume",
+            **values,
+        }
+    return summaries
+
+
+def _time_label(value: Any) -> tuple[Decimal, str]:
+    if type(value) is not str or not value or len(value) > 64:
+        raise ValueError("Imported OpenFOAM solver_time must be a numeric time label")
+    if re.fullmatch(r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", value) is None:
+        raise ValueError("Imported OpenFOAM solver_time must be a numeric time label")
+    try:
+        numeric = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError("Imported OpenFOAM solver_time must be finite") from exc
+    if not numeric.is_finite():
+        raise ValueError("Imported OpenFOAM solver_time must be finite")
+    return numeric, value
+
+
+def _field_time_series(
+    verified: list[tuple[str, dict[str, Any]]],
+    snapshot_evidence_ids: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Build descriptive per-case field series without screening or verdicts."""
+    by_case: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    by_case_field: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
+    time_by_case: dict[str, dict[Decimal, str]] = {}
+    for path, value in verified:
+        case_id = value["case_id"]
+        numeric_time, _label = _time_label(value["solver_time"])
+        prior_sha = time_by_case.setdefault(case_id, {}).get(numeric_time)
+        if prior_sha is not None and prior_sha != value["snapshot_sha256"]:
+            raise ValueError(
+                "Multiple imported OpenFOAM snapshots claim the same case and solver time"
+            )
+        time_by_case[case_id][numeric_time] = value["snapshot_sha256"]
+        by_case.setdefault(case_id, []).append((path, value))
+        for semantic in value["field_summaries"]:
+            by_case_field.setdefault((value["case_id"], semantic), []).append((path, value))
+
+    series: list[dict[str, Any]] = []
+    point_count = 0
+    for (case_id, semantic), items in sorted(by_case_field.items()):
+        ordered = sorted(
+            items,
+            key=lambda pair: (_time_label(pair[1]["solver_time"])[0], pair[0]),
+        )
+        unique: list[tuple[str, dict[str, Any]]] = []
+        seen_times: dict[Decimal, str] = {}
+        for path, value in ordered:
+            numeric_time, _label = _time_label(value["solver_time"])
+            previous_sha = seen_times.get(numeric_time)
+            if previous_sha is not None:
+                if previous_sha != value["snapshot_sha256"]:
+                    raise ValueError(
+                        "Multiple imported OpenFOAM snapshots claim the same case and solver time"
+                    )
+                continue
+            seen_times[numeric_time] = value["snapshot_sha256"]
+            unique.append((path, value))
+        if len(unique) < 2:
+            continue
+
+        first_item = unique[0][1]["field_summaries"][semantic]
+        for _path, value in unique[1:]:
+            current = value["field_summaries"][semantic]
+            if any(current[name] != first_item[name] for name in ("array_name", "units", "components", "mean_weighting")):
+                raise ValueError("Mapped OpenFOAM field metadata changed within one result series")
+
+        samples = []
+        means_by_component = [[] for _ in range(first_item["components"])]
+        for path, value in unique:
+            item = value["field_summaries"][semantic]
+            samples.append({
+                "solver_time_label": value["solver_time"],
+                "snapshot_sha256": value["snapshot_sha256"],
+                "mesh_cells": value["mesh_cells"],
+                "minimum": item["minimum"],
+                "maximum": item["maximum"],
+                "volume_weighted_mean": item["mean"],
+            })
+            for index, number in enumerate(item["mean"]):
+                means_by_component[index].append(number)
+
+        component_metrics = []
+        for index, values in enumerate(means_by_component):
+            scale = max(abs(value) for value in values)
+            normalized = [value / scale for value in values] if scale else [0.0] * len(values)
+            normalized_minimum = min(normalized)
+            normalized_maximum = max(normalized)
+            normalized_range = normalized_maximum - normalized_minimum
+            absolute_range = scale * normalized_range
+            endpoint_delta = scale * (normalized[-1] - normalized[0])
+            if not math.isfinite(absolute_range) or not math.isfinite(endpoint_delta):
+                raise ValueError("OpenFOAM field-series comparison produced a non-finite result")
+            mean_absolute_scale = math.fsum(abs(value) for value in normalized) / len(normalized)
+            relative_range = (
+                normalized_range / mean_absolute_scale
+                if mean_absolute_scale > 0
+                else 0.0
+            )
+            if not math.isfinite(relative_range):
+                raise ValueError("OpenFOAM field-series relative range is non-finite")
+            component_metrics.append({
+                "component_index": index,
+                "volume_weighted_mean_minimum": scale * normalized_minimum,
+                "volume_weighted_mean_maximum": scale * normalized_maximum,
+                "absolute_range": absolute_range,
+                "first_to_last_delta": endpoint_delta,
+                "relative_range_over_mean_absolute_value": relative_range,
+            })
+
+        case_snapshot_count = len(time_by_case[case_id])
+        point_count += len(samples)
+        if len(series) >= MAX_OPENFOAM_FIELD_SERIES:
+            raise ValueError("OpenFOAM field-series count exceeds the configured ProofGraph limit")
+        if point_count > MAX_OPENFOAM_FIELD_SERIES_POINTS:
+            raise ValueError("OpenFOAM field-series points exceed the configured ProofGraph limit")
+        value = {
+            "case_id": case_id,
+            "semantic": semantic,
+            "array_name": first_item["array_name"],
+            "units": first_item["units"],
+            "components": first_item["components"],
+            "mean_weighting": first_item["mean_weighting"],
+            "case_snapshot_count": case_snapshot_count,
+            "available_sample_count": len(samples),
+            "coverage_status": "complete" if len(samples) == case_snapshot_count else "partial",
+            "same_mesh_verified": False,
+            "solver_time_semantics": "Numeric OpenFOAM time labels; physical-time units are not asserted.",
+            "component_metrics": component_metrics,
+            "samples": samples,
+            "interpretation": (
+                "Descriptive comparison of imported cell-volume-weighted field summaries. "
+                "Mesh equivalence, convergence, and acceptance criteria are not assessed."
+            ),
+            "scientific_validation": "BLOCKED",
+        }
+        identity = hashlib.sha256(f"{case_id}\0{semantic}".encode("utf-8")).hexdigest()[:20]
+        series.append({
+            "id": f"evidence:openfoam-field-series:{identity}",
+            "value": value,
+            "upstream_evidence_ids": tuple(
+                snapshot_evidence_ids[path] for path, _snapshot in unique
+            ),
+        })
+    return series
 
 
 def _verify_imported_snapshot(
@@ -142,10 +349,14 @@ def _verify_imported_snapshot(
         raise ValueError("Imported snapshot mesh_cells must be a positive integer")
     if type(record.get("solver_time")) is not str or not record["solver_time"]:
         raise ValueError("Imported snapshot solver_time must be a non-empty string")
+    _time_label(record["solver_time"])
+    case_id = record.get("case_id")
+    if type(case_id) is not str or not case_id.strip():
+        raise ValueError("Imported snapshot case_id must be non-empty text")
 
     evidence_value = {
         "simulation_id": simulation_id,
-        "case_id": record.get("case_id"),
+        "case_id": case_id,
         "solver_time": record["solver_time"],
         "source_relative_path": source_relative.as_posix(),
         "source_vtk_sha256_recorded_at_import": expected["source_sha256"],
@@ -156,6 +367,7 @@ def _verify_imported_snapshot(
         "field_names": sorted(fields.get("field_data", {}))
         if type(fields.get("field_data")) is dict
         else [],
+        "field_summaries": _field_summaries(fields),
         "imported_at": snapshot.get("imported_at"),
         "scientific_validation": "BLOCKED",
     }
@@ -275,6 +487,12 @@ def build_openfoam_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
         )
 
     source_id = f"source:openfoam-sync:{state_sha256[:20]}"
+    snapshot_evidence_id_by_path = {
+        key: f"evidence:openfoam-snapshot:{hashlib.sha256(key.encode('utf-8')).hexdigest()[:20]}"
+        for key, _value in verified
+    }
+    field_series = _field_time_series(verified, snapshot_evidence_id_by_path)
+
     def state_provenance(suffix: str) -> tuple[ProvenanceRecord, ...]:
         return (
             ProvenanceRecord(
@@ -293,6 +511,7 @@ def build_openfoam_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
         "record_count": len(records),
         "imported_snapshot_count": len(verified),
         "duplicate_export_count": len(duplicate_evidence),
+        "field_time_series_count": len(field_series),
         "status_counts": dict(sorted(status_counts.items())),
         "integrity_status": integrity_status,
         "scientific_validation": "BLOCKED",
@@ -327,7 +546,7 @@ def build_openfoam_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
     snapshot_evidence_ids: list[str] = [summary_id]
     for key, value in verified:
         token = hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
-        evidence_id = f"evidence:openfoam-snapshot:{token}"
+        evidence_id = snapshot_evidence_id_by_path[key]
         snapshot_evidence_ids.append(evidence_id)
         evidence.append(
             SimulationEvidence(
@@ -346,6 +565,33 @@ def build_openfoam_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
                         upstream_evidence_ids=(summary_id,),
                         originating_file=value["source_relative_path"],
                         method="snapshot sha256 and fields sha256 checked against sync-state.json",
+                    ),
+                ),
+            )
+        )
+    for series in field_series:
+        value = series["value"]
+        series_token = series["id"].rsplit(":", 1)[-1]
+        evidence.append(
+            SimulationEvidence(
+                id=series["id"],
+                property_name="openfoam_field_time_series",
+                value=value,
+                source_id=source_id,
+                version=_canonical_sha256(value),
+                timestamp=state.get("updated_at"),
+                subject_ref=value["case_id"],
+                provenance=(
+                    ProvenanceRecord(
+                        id=f"provenance:openfoam-field-series:{series_token}",
+                        source_id=source_id,
+                        origin="verified imported OpenFOAM VTK field summaries",
+                        upstream_evidence_ids=series["upstream_evidence_ids"],
+                        originating_file="sync-state.json",
+                        method=(
+                            "descriptive comparison of imported cell-volume-weighted means; "
+                            "mesh equivalence, convergence, and acceptance criteria not assessed"
+                        ),
                     ),
                 ),
             )
@@ -493,6 +739,7 @@ def build_openfoam_sync_proofgraph(result_directory: str | Path) -> ProofGraph:
                     "adapter": "openfoam_sync_result_store",
                     "integrity_status": integrity_status,
                     "scientific_validation": "BLOCKED",
+                    "field_time_series_count": len(field_series),
                     "original_vtk_sources_rehashed": False,
                     "status_counts": dict(sorted(status_counts.items())),
                 },

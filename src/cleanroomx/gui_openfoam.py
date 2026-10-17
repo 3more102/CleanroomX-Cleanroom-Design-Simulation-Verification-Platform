@@ -18,6 +18,12 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from .cfd_project_handoff import project_room_openfoam_spec
+from .cli_output import atomic_write_cli_output, dumps_strict_json
+from .cfd_openfoam_timeseries import (
+    export_openfoam_time_series_csv,
+    read_openfoam_sync_time_series,
+)
 from .gui_theme import theme_palette
 from .proofgraph_io import proofgraph_from_dict
 from .strict_json import load_strict_json_snapshot
@@ -371,13 +377,17 @@ class OpenFOAMWorkspace(ttk.Frame):
         *,
         on_proofgraph_loaded: Callable[[dict[str, Any]], None] | None = None,
         status_setter: Callable[[str], None] | None = None,
+        project_context_getter: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(master)
         self._on_proofgraph_loaded = on_proofgraph_loaded
         self._status_setter = status_setter or (lambda _message: None)
+        self._project_context_getter = project_context_getter
         self._events: queue.Queue[tuple[str, Any]] = queue.Queue(
             maxsize=_MAX_OUTPUT_EVENTS
         )
+        self._analysis_events: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+        self._timeseries_busy = False
         self._output_drop_lock = threading.Lock()
         self._dropped_output_lines = 0
         self._output_chars = 0
@@ -557,6 +567,13 @@ class OpenFOAMWorkspace(ttk.Frame):
             command=self._run,
         )
         self.run_button.pack(side="left", padx=4)
+        self.project_spec_button = ttk.Button(
+            actions,
+            text="Create spec from selected room…",
+            command=self._make_project_room_spec,
+            state="normal" if self._project_context_getter is not None else "disabled",
+        )
+        self.project_spec_button.pack(side="left", padx=4)
         self.stop_button = ttk.Button(
             actions,
             text="Stop",
@@ -564,6 +581,14 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="disabled",
         )
         self.stop_button.pack(side="left", padx=4)
+        ttk.Label(
+            settings,
+            text=(
+                "Room handoff copies length, width, and height only; devices, "
+                "boundary placement, and flow remain template inputs."
+            ),
+            wraplength=900,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         vtk = ttk.LabelFrame(
             self._workflow_content, text="Existing foamToVTK output", padding=8
@@ -650,6 +675,12 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="normal" if self._on_proofgraph_loaded is not None else "disabled",
         )
         self.build_graph_button.pack(side="left", padx=5)
+        self.time_series_button = ttk.Button(
+            evidence,
+            text="View mapped-field time series…",
+            command=self._analyze_time_series,
+        )
+        self.time_series_button.pack(side="left", padx=5)
         ttk.Label(
             evidence,
             text="Generated graphs audit retained hashes; scientific validation remains BLOCKED.",
@@ -660,11 +691,13 @@ class OpenFOAMWorkspace(ttk.Frame):
         self._action_buttons = (
             self.generate_button,
             self.run_button,
+            self.project_spec_button,
             self.sync_vtk_button,
             self.watch_vtk_button,
             self.preview_button,
             self.graph_button,
             self.build_graph_button,
+            self.time_series_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -865,7 +898,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         stopped_message: str | None = None,
         on_success: Callable[[], None] | None = None,
     ) -> None:
-        if self._busy:
+        if self._busy or self._timeseries_busy:
             return
         self._active_command_label = label
         self._stop_prompt = stop_prompt or (
@@ -933,6 +966,26 @@ class OpenFOAMWorkspace(ttk.Frame):
     def _drain_events(self) -> None:
         if self._destroyed:
             return
+        try:
+            analysis_kind, analysis_value = self._analysis_events.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            self._timeseries_busy = False
+            self._set_busy(self._busy)
+            if analysis_kind == "time_series_ready":
+                try:
+                    self._show_time_series(analysis_value)
+                except (OSError, ValueError, tk.TclError) as exc:
+                    messagebox.showerror(
+                        "OpenFOAM time-series analysis", str(exc), parent=self
+                    )
+                    self._status_setter("OpenFOAM time-series view could not be opened")
+            else:
+                messagebox.showerror(
+                    "OpenFOAM time-series analysis", str(analysis_value), parent=self
+                )
+                self._status_setter("OpenFOAM time-series analysis failed")
         visible_output: list[str] = []
         for _ in range(_MAX_EVENTS_PER_POLL):
             try:
@@ -979,9 +1032,106 @@ class OpenFOAMWorkspace(ttk.Frame):
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
+        unavailable = {
+            button
+            for button, enabled in (
+                (self.project_spec_button, self._project_context_getter is not None),
+                (self.graph_button, self._on_proofgraph_loaded is not None),
+                (self.build_graph_button, self._on_proofgraph_loaded is not None),
+            )
+            if not enabled
+        }
         for button in self._action_buttons:
-            button.configure(state="disabled" if busy else "normal")
+            button.configure(
+                state="disabled"
+                if busy or self._timeseries_busy or button in unavailable
+                else "normal"
+            )
         self.stop_button.configure(state="normal" if busy else "disabled")
+
+    def _make_project_room_spec(self) -> None:
+        if self._project_context_getter is None:
+            messagebox.showerror(
+                "OpenFOAM project handoff",
+                "The active CleanroomX project is unavailable.",
+                parent=self,
+            )
+            return
+        template_value = self.specification_var.get().strip()
+        if not template_value:
+            messagebox.showerror(
+                "OpenFOAM project handoff",
+                "Choose an OpenFOAM specification template first.",
+                parent=self,
+            )
+            return
+        template_path = Path(template_value).expanduser()
+        try:
+            if template_path.is_symlink() or not template_path.is_file():
+                raise ValueError("specification template must be a regular file")
+            template_snapshot = load_strict_json_snapshot(
+                template_path, max_bytes=_MAX_PREVIEW_BYTES
+            )
+            context = self._project_context_getter()
+            spec = project_room_openfoam_spec(
+                template_snapshot.value,
+                project_name=context.get("project_name"),
+                spatial_layout=context.get("spatial_layout"),
+                selection_kind=context.get("selection_kind"),
+                selected_room_id=context.get("selected_room_id"),
+            )
+            project_path_value = context.get("project_path")
+            room_id = spec["project_geometry"]["room_id"]
+            safe_room_id = re.sub(r"[^A-Za-z0-9._-]+", "-", room_id).strip(".-")
+            initial_file = (
+                f"{template_path.stem}-{safe_room_id or 'room'}-spec.json"
+            )
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            messagebox.showerror(
+                "OpenFOAM project handoff",
+                str(exc),
+                parent=self,
+            )
+            return
+
+        output_name = filedialog.asksaveasfilename(
+            title="Save reviewable OpenFOAM room specification",
+            initialdir=str(template_path.parent),
+            initialfile=initial_file,
+            defaultextension=".json",
+            filetypes=(("JSON files", "*.json"), ("All files", "*")),
+            confirmoverwrite=True,
+        )
+        if not output_name:
+            return
+        try:
+            output_path = Path(output_name).expanduser()
+            protected_paths = [template_path]
+            if project_path_value:
+                protected_paths.append(Path(project_path_value).expanduser())
+            atomic_write_cli_output(
+                output_path,
+                dumps_strict_json(spec, sort_keys=True) + "\n",
+                protected_inputs=protected_paths,
+            )
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "OpenFOAM project handoff",
+                f"Could not save the room specification: {exc}",
+                parent=self,
+            )
+            return
+        self.specification_var.set(str(output_path))
+        dimensions = " × ".join(f"{value:g} m" for value in spec["room_m"])
+        self._append(
+            "CleanroomX room-spec draft saved: "
+            f"{spec['project_geometry']['room_name']} ({dimensions}). "
+            "Only the rectangular room envelope was copied; other geometry and "
+            "boundary conditions remain unverified template inputs.\n"
+        )
+        self._status_setter(
+            "OpenFOAM spec draft created from room dimensions; scientific validation remains BLOCKED."
+        )
 
     def _stop(self) -> None:
         process = self._process
@@ -1028,6 +1178,325 @@ class OpenFOAMWorkspace(ttk.Frame):
             + json.dumps(previews, ensure_ascii=False, indent=2, sort_keys=True)
             + "\n"
         )
+
+    def _analyze_time_series(self) -> None:
+        if self._timeseries_busy or self._busy:
+            return
+        directory = self.result_directory_var.get().strip()
+        if not directory:
+            directory = filedialog.askdirectory(
+                title="Choose a CleanroomX OpenFOAM result store",
+                mustexist=True,
+            )
+            if not directory:
+                return
+            self.result_directory_var.set(directory)
+        self._timeseries_busy = True
+        self._set_busy(self._busy)
+        self._status_setter("Checking synchronized OpenFOAM snapshots and field summaries…")
+        self._append("Checking OpenFOAM result integrity before plotting mapped fields…\n")
+
+        def analyze() -> None:
+            try:
+                result = read_openfoam_sync_time_series(directory)
+            except (OSError, ValueError, UnicodeError) as exc:
+                event = ("time_series_error", str(exc))
+            else:
+                event = ("time_series_ready", result)
+            try:
+                self._analysis_events.put_nowait(event)
+            except queue.Full:
+                # A single analysis can be in flight, so this indicates the
+                # workbench is already closing or has not drained its prior result.
+                pass
+
+        threading.Thread(
+            target=analyze,
+            name="cleanroomx-openfoam-time-series",
+            daemon=True,
+        ).start()
+
+    def _show_time_series(self, series: dict[str, Any]) -> tk.Toplevel:
+        rows = series["rows"]
+        cases = series["cases"]
+        if not cases or not rows:
+            raise ValueError("No mapped OpenFOAM field samples are available")
+
+        window = tk.Toplevel(self)
+        window.title(f"OpenFOAM time series — {series['simulation_id']}")
+        window_width = min(920, max(640, window.winfo_screenwidth() - 60))
+        window_height = min(680, max(480, window.winfo_screenheight() - 100))
+        window.geometry(f"{window_width}x{window_height}")
+        window.minsize(min(720, window_width), min(520, window_height))
+        window.transient(self.winfo_toplevel())
+
+        ttk.Label(
+            window,
+            text=(
+                f"Snapshot integrity: {str(series['integrity_status']).upper()}  ·  "
+                "Scientific validation: BLOCKED"
+            ),
+            style="CX.Section.TLabel",
+        ).pack(anchor="w", padx=12, pady=(10, 2))
+        ttk.Label(
+            window,
+            text=(
+                "Volume-weighted means from imported, mapped VTK fields. The plot is "
+                "descriptive; OpenFOAM time labels are not assumed to be seconds."
+            ),
+            wraplength=880,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+
+        controls = ttk.Frame(window, padding=(12, 0, 12, 8))
+        controls.pack(fill="x")
+        case_var = tk.StringVar(value=cases[0])
+        field_var = tk.StringVar()
+        ttk.Label(controls, text="Case").pack(side="left")
+        case_box = ttk.Combobox(
+            controls, textvariable=case_var, values=cases, state="readonly", width=22
+        )
+        case_box.pack(side="left", padx=(5, 18))
+        ttk.Label(controls, text="Mapped field").pack(side="left")
+        field_box = ttk.Combobox(
+            controls, textvariable=field_var, state="readonly", width=28
+        )
+        field_box.pack(side="left", padx=5)
+        export_button = ttk.Button(controls, text="Export CSV…")
+        export_button.pack(side="right")
+
+        chart = tk.Canvas(
+            window,
+            background=self._theme_palette["plot"],
+            highlightthickness=1,
+            highlightbackground=self._theme_palette["border"],
+            height=320,
+        )
+        chart.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        table_frame = ttk.LabelFrame(window, text="Imported samples", padding=5)
+        table_frame.pack(fill="x", padx=12, pady=(0, 8))
+        columns = ("time", "mean1", "mean2", "mean3", "units", "snapshot")
+        table = ttk.Treeview(
+            table_frame, columns=columns, show="headings", height=7,
+        )
+        headings = {
+            "time": "Solver time label",
+            "mean1": "Mean 1",
+            "mean2": "Mean 2",
+            "mean3": "Mean 3",
+            "units": "Units",
+            "snapshot": "Snapshot SHA-256",
+        }
+        widths = {"time": 140, "mean1": 110, "mean2": 110,
+                  "mean3": 110, "units": 100, "snapshot": 145}
+        for column in columns:
+            table.heading(column, text=headings[column])
+            table.column(column, width=widths[column], anchor="w", stretch=True)
+        table_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=table.yview)
+        table.configure(yscrollcommand=table_scroll.set)
+        table.pack(side="left", fill="x", expand=True)
+        table_scroll.pack(side="right", fill="y")
+
+        detail_var = tk.StringVar()
+        ttk.Label(window, textvariable=detail_var, wraplength=880).pack(
+            fill="x", padx=12, pady=(0, 10), anchor="w"
+        )
+
+        def selected_rows() -> list[dict[str, Any]]:
+            case = case_var.get()
+            field = field_var.get()
+            return [row for row in rows
+                    if row["case_id"] == case and row["field"] == field]
+
+        def selection_summary(selected: list[dict[str, Any]]) -> str:
+            if not selected:
+                return "No imported field samples are available for this selection."
+            first = selected[0]
+            sample_count = first.get("field_sample_count", len(selected))
+            case_count = first.get("case_snapshot_count", len(selected))
+            coverage = first.get("coverage_status", "unspecified")
+            return (
+                f"{sample_count} field sample(s) · {coverage} coverage "
+                f"({sample_count}/{case_count} case snapshots) · {first['array_name']} · "
+                "hover over a sample to inspect its exact label, mean, minimum, and maximum."
+            )
+
+        def fields_for_case(case: str) -> list[str]:
+            return sorted({row["field"] for row in rows if row["case_id"] == case})
+
+        def redraw(_event=None) -> None:
+            chart.delete("all")
+            hover_rows.clear()
+            selected = selected_rows()
+            if not selected:
+                chart.create_text(
+                    max(1, chart.winfo_width() // 2),
+                    max(1, chart.winfo_height() // 2),
+                    text="No imported samples for this case and field.",
+                    fill=self._theme_palette["text"],
+                )
+                table.delete(*table.get_children())
+                return
+
+            chart.update_idletasks()
+            width = max(360, chart.winfo_width())
+            height = max(220, chart.winfo_height())
+            left, right, top, bottom = 78, width - 24, 28, height - 58
+            x_values = [row["solver_time_value"] for row in selected]
+            y_values = [number for row in selected for number in row["mean"]]
+            x_low, x_high = min(x_values), max(x_values)
+            if x_low == x_high:
+                x_low -= 0.5
+                x_high += 0.5
+            y_low, y_high = min(y_values), max(y_values)
+            if y_low == y_high:
+                padding = max(abs(y_low) * 0.05, 0.5)
+                y_low -= padding
+                y_high += padding
+            else:
+                padding = (y_high - y_low) * 0.08
+                y_low -= padding
+                y_high += padding
+
+            def x_pixel(value: float) -> float:
+                return left + (value - x_low) / (x_high - x_low) * (right - left)
+
+            def y_pixel(value: float) -> float:
+                return bottom - (value - y_low) / (y_high - y_low) * (bottom - top)
+
+            for tick in range(5):
+                ratio = tick / 4
+                y = top + ratio * (bottom - top)
+                value = y_high - ratio * (y_high - y_low)
+                chart.create_line(left, y, right, y, fill=self._theme_palette["grid"])
+                chart.create_text(
+                    left - 8, y, text=f"{value:.4g}", anchor="e",
+                    fill=self._theme_palette["muted"],
+                )
+                x = left + ratio * (right - left)
+                time_label = x_low + ratio * (x_high - x_low)
+                chart.create_line(x, top, x, bottom, fill=self._theme_palette["grid"])
+                chart.create_text(
+                    x, bottom + 15, text=f"{time_label:.4g}", anchor="n",
+                    fill=self._theme_palette["muted"],
+                )
+            chart.create_line(left, top, left, bottom, fill=self._theme_palette["text"])
+            chart.create_line(left, bottom, right, bottom, fill=self._theme_palette["text"])
+            units = selected[0]["units"]
+            chart.create_text(
+                left, 10, text=f"Volume-weighted mean ({units})", anchor="nw",
+                fill=self._theme_palette["text"],
+            )
+            chart.create_text(
+                (left + right) / 2, height - 10,
+                text="OpenFOAM time label (not assumed seconds)", anchor="s",
+                fill=self._theme_palette["text"],
+            )
+
+            colors = ("#2878b5", "#dc7042", "#39875e")
+            component_count = selected[0]["components"]
+            for row in selected:
+                hover_rows.append((x_pixel(row["solver_time_value"]), row))
+            for component in range(component_count):
+                color = colors[component]
+                points = []
+                for row in selected:
+                    points.extend((x_pixel(row["solver_time_value"]),
+                                   y_pixel(row["mean"][component])))
+                if len(selected) > 1:
+                    chart.create_line(*points, fill=color, width=2)
+                for index in range(0, len(points), 2):
+                    x, y = points[index], points[index + 1]
+                    chart.create_oval(x - 3, y - 3, x + 3, y + 3,
+                                      fill=color, outline=color)
+                label = "mean" if component_count == 1 else f"component {component + 1}"
+                chart.create_line(right - 142, top + component * 20,
+                                  right - 122, top + component * 20,
+                                  fill=color, width=2)
+                chart.create_text(right - 116, top + component * 20,
+                                  text=label, anchor="w", fill=self._theme_palette["text"])
+
+            table.delete(*table.get_children())
+            for row in selected:
+                means = [f"{number:.8g}" for number in row["mean"]]
+                means.extend([""] * (3 - len(means)))
+                table.insert("", "end", values=(
+                    row["solver_time_label"], *means, row["units"],
+                    row["snapshot_sha256"][:12],
+                ))
+            detail_var.set(selection_summary(selected))
+
+        hover_rows: list[tuple[float, dict[str, Any]]] = []
+
+        def show_hover(event: tk.Event) -> None:
+            if not hover_rows:
+                return
+            x, row = min(hover_rows, key=lambda item: abs(item[0] - event.x))
+            if abs(x - event.x) > 18:
+                return
+            values = lambda key: ", ".join(f"{value:.12g}" for value in row[key])
+            detail_var.set(
+                f"Solver time label {row['solver_time_label']} · "
+                f"mean [{values('mean')}] · min [{values('minimum')}] · "
+                f"max [{values('maximum')}] {row['units']} · "
+                f"snapshot SHA-256 {row['snapshot_sha256']} · "
+                f"{row.get('coverage_status', 'unspecified')} field coverage"
+            )
+
+        def clear_hover(_event=None) -> None:
+            detail_var.set(selection_summary(selected_rows()))
+
+        def change_case(_event=None) -> None:
+            available = fields_for_case(case_var.get())
+            field_box.configure(values=available)
+            field_var.set(available[0] if available else "")
+            redraw()
+
+        def export_csv() -> None:
+            selected = selected_rows()
+            if not selected:
+                messagebox.showerror(
+                    "Export OpenFOAM time series",
+                    "There are no samples to export for this selection.",
+                    parent=window,
+                )
+                return
+            initial = re.sub(
+                r"[^A-Za-z0-9_.-]+",
+                "_",
+                f"{case_var.get()}-{field_var.get()}-timeseries",
+            ) + ".csv"
+            destination = filedialog.asksaveasfilename(
+                title="Export mapped-field time series",
+                initialfile=initial,
+                defaultextension=".csv",
+                filetypes=(("CSV files", "*.csv"), ("All files", "*")),
+                confirmoverwrite=True,
+            )
+            if not destination:
+                return
+            try:
+                path = export_openfoam_time_series_csv(
+                    series, destination,
+                    case_id=case_var.get(), field=field_var.get(),
+                )
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("Export OpenFOAM time series", str(exc), parent=window)
+                return
+            detail_var.set(f"CSV exported: {path}")
+
+        export_button.configure(command=export_csv)
+        case_box.bind("<<ComboboxSelected>>", change_case, add="+")
+        field_box.bind("<<ComboboxSelected>>", redraw, add="+")
+        chart.bind("<Configure>", redraw, add="+")
+        chart.bind("<Motion>", show_hover, add="+")
+        chart.bind("<Leave>", clear_hover, add="+")
+        available = fields_for_case(case_var.get())
+        field_box.configure(values=available)
+        if available:
+            field_var.set(available[0])
+        redraw()
+        return window
 
     def _load_proofgraph(self) -> None:
         if self._on_proofgraph_loaded is None:

@@ -2808,6 +2808,21 @@ class CleanroomXApp:
                 self.notebook.select(self.proofgraph_viewer),
             ),
             status_setter=self.status_var.set,
+            project_context_getter=lambda: {
+                "project_name": self.project.name,
+                "spatial_layout": self.spatial_workspace.layout,
+                "selection_kind": (
+                    self.spatial_workspace.selected.kind
+                    if self.spatial_workspace.selected is not None
+                    else None
+                ),
+                "selected_room_id": (
+                    self.spatial_workspace.selected.item_id
+                    if self.spatial_workspace.selected is not None
+                    else None
+                ),
+                "project_path": self.project_path,
+            },
         )
         self.notebook.add(self.openfoam_workspace, text="OpenFOAM")
 

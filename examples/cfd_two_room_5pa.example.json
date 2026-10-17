@@ -3,7 +3,7 @@
   "name": "SYNTHETIC two-room 5 Pa integration fixture",
   "room_m": [6.0, 4.0, 3.0],
   "mesh_cells_per_room": [12, 12, 8],
-  "door_opening_m": [0.2, 0.2],
+  "door_opening_m": [0.22, 0.2],
   "supply_flow_m3_s": 0.1,
   "density_kg_m3": 1.2,
   "kinematic_viscosity_m2_s": 0.000015,

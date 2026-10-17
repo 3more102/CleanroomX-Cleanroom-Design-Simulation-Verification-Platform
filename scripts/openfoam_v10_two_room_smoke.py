@@ -47,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         screens = receipt.get("engineering_screens")
         if (
             not isinstance(screens, dict)
+            or screens.get("pressure_target_screen") != "within_declared_band"
             or screens.get("flow_balance_status") != "MEASURED_DIAGNOSTIC_ONLY"
             or screens.get("flow_balance_acceptance_criterion") != "NOT_SET"
             or screens.get("solver_convergence_status") != "NOT_ASSESSED"

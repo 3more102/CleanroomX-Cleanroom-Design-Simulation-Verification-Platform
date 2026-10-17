@@ -21,7 +21,7 @@ def _spec():
         "name": "SYNTHETIC two-room integration test",
         "room_m": [6.0, 4.0, 3.0],
         "mesh_cells_per_room": [12, 12, 8],
-        "door_opening_m": [0.2, 0.2],
+        "door_opening_m": [0.22, 0.2],
         "supply_flow_m3_s": 0.1,
         "density_kg_m3": 1.2,
         "kinematic_viscosity_m2_s": 1.5e-5,
@@ -70,7 +70,7 @@ def test_two_room_export_binds_all_inputs_and_refuses_overwrite(tmp_path):
     audited = verify_two_room_case(case)
     assert generated["status"] == audited["status"] == "verified"
     assert len(audited["input_sha256"]) == 8
-    assert audited["metadata"]["door_opening_area_m2"] == pytest.approx(0.04)
+    assert audited["metadata"]["door_opening_area_m2"] == pytest.approx(0.044)
     with pytest.raises(ValueError, match="overwrite"):
         export_two_room_case(_spec(), case)
 

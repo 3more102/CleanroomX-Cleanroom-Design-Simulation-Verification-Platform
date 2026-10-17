@@ -12,8 +12,8 @@ The example specification is
 [`cfd_two_room_5pa.example.json`](../examples/cfd_two_room_5pa.example.json).
 It describes two adjacent 6 m × 4 m × 3 m rooms, a centered 0.2 m × 0.2 m
 floor-level transfer opening, 0.1 m³/s supply, and a declared room 1 minus room
-2 pressure target of 5 Pa with a 1 Pa tolerance. The mesh is deliberately
-bounded to 2,304 cells.
+2 pressure target of 5 Pa with a 1 Pa tolerance. The opening is 0.22 m × 0.2 m;
+the mesh is deliberately bounded to 2,304 cells.
 
 Generate and inspect the eight manifest-bound OpenFOAM inputs:
 
@@ -75,8 +75,9 @@ unsigned.
 ## Continuous integration
 
 The pinned Foundation v10 CFD workflow runs this case after the existing
-three-grid and passive-scalar cases. It requires the solver-backed pressure and
-flux evidence to be present, but does not require the synthetic case to meet
-the declared 5 Pa target. Run outputs, logs, and receipt are uploaded with the
-workflow evidence artifact. A green workflow means that the software path and
-evidence parsing completed; it does not validate cleanroom performance.
+three-grid and passive-scalar cases. It requires the pressure and flux evidence
+to be present and the synthetic case's measured pressure screen to fall inside
+its declared 5 ± 1 Pa band. That band checks this pinned software fixture only;
+it is not a cleanroom pressure-cascade acceptance criterion. Run outputs, logs,
+and receipt are uploaded with the workflow evidence artifact. A green workflow
+does not validate cleanroom performance.

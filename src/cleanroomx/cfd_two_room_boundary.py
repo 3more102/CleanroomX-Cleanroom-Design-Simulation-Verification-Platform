@@ -71,7 +71,16 @@ def _phi_paths(case: Path, flow: dict[str, Any], probe: dict[str, Any]) -> tuple
         raise ValueError("Final-time phi path is not a solver index") from error
     if not math.isfinite(time) or time < 0:
         raise ValueError("Final-time phi path has invalid solver index")
-    _match_receipt(flow.get("last_solver_time"), time, "last_solver_time")
+    recorded_time = flow.get("last_solver_time")
+    if type(recorded_time) is str:
+        # The existing OpenFOAM receipt records solver times as numeric strings.
+        # Only this source field receives string conversion; engineering policy
+        # numbers stay strictly typed and non-finite strings remain forbidden.
+        try:
+            recorded_time = float(recorded_time)
+        except ValueError as error:
+            raise ValueError("Receipt has invalid final solver-time text") from error
+    _match_receipt(recorded_time, time, "last_solver_time")
     _match_receipt(probe.get("last_solver_time"), time, "probe.last_solver_time")
     return case.joinpath(*parsed.parts), case / "constant" / "polyMesh" / "boundary"
 

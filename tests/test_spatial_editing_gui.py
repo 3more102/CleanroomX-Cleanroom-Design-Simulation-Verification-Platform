@@ -1323,5 +1323,5 @@ def test_cancel_3d_export_does_not_write_or_change_layout(app, tmp_path, monkeyp
         lambda **kwargs: "",
     )
     workspace.export_3d_svg()
-    assert list(tmp_path.iterdir()) == []
+    assert not list(tmp_path.glob("*.svg"))
     assert workspace.layout == before

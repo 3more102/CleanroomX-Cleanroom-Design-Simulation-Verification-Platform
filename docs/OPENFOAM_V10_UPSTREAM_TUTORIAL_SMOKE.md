@@ -10,7 +10,9 @@ pinned `system/blockMeshDict` file and verifies its hash, then runs
 `blockMesh`, `checkMesh`, and `simpleFoam`. During the actual
 `simpleFoam` process, CleanroomX polls native result times and synchronizes
 stable velocity (`U`) and kinematic pressure (`p`) snapshots through
-`OpenFOAMResultSynchronizer`. The job retains command logs, input/configuration
+`OpenFOAMResultSynchronizer`. Surface-flux capture is disabled for this fixture
+because the check requires only `U` and `p`; the separate flux parity path remains
+covered by its dedicated tests. The job retains command logs, input/configuration
 hashes, the sync manifest, and imported VTK assets as an Actions artifact.
 
 A passing receipt means only that the pinned upstream tutorial executed and

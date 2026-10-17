@@ -38,14 +38,14 @@ a{color:var(--accent)}.note{max-width:none}
 </div>
 </header>
 <div class="summary">
-<span class="chip">9 actual application views</span>
-<span class="chip">1920 × 1080 capture target</span>
+<span class="chip">9 source filenames / 7 distinct view contents</span>
+<span class="chip">1920 px wide; 1055 / 1080 px tall</span>
 <span class="chip">Light / Dark</span>
 <span class="chip">Lossless PNG</span>
-<span class="chip">SHA-256 integrity manifest</span>
+<span class="chip">SHA-256 audit with duplicates flagged</span>
 </div>
 <main class="grid" id="gallery" aria-label="CleanroomX screenshots"></main>
-<footer class="footer"><strong>Evidence disclaimer.</strong> These are GUI demonstration captures, not evidence of solver convergence, measured cleanroom performance or validated CFD. The calculated fan plot uses a real bundled numerical example (not OpenFOAM). The ProofGraph view uses a synthetic synchronization fixture and shows scientific validation blocked. View <a href="screenshot-manifest.json">screenshot-manifest.json</a> for provenance, pixel dimensions and SHA-256 hashes.</footer>
+<footer class="footer"><strong>Evidence disclaimer.</strong> These are GUI demonstration captures, not evidence of solver convergence, measured cleanroom performance or validated CFD. The calculated fan plot uses a real bundled numerical example (not OpenFOAM). The files named OpenFOAM and ProofGraph do not visibly show those tabs and must not be treated as CFD or provenance evidence. View <a href="CleanroomX_Illustrated_GUI_Screenshot_Manifest_2026-10-17.json">the source screenshot audit</a> for provenance, pixel dimensions and SHA-256 hashes.</footer>
 </div>
 <script>
 "use strict";
@@ -55,10 +55,10 @@ const shots=[
 ["gui-design-2d","2D cleanroom plan","Scaled spatial arrangement in plan view.","Bundled demo"],
 ["gui-design-3d","3D spatial model","Three-dimensional spatial design visualization.","Bundled demo"],
 ["gui-design-split","Split workspace","2D and 3D views together in an enlarged viewport.","Bundled demo"],
-["gui-analysis-inputs","Engineering inputs","Parameters and editable source values for the fan example.","Bundled demo"],
-["gui-computed-fan-results","Calculated fan/system plot","Backend-computed numerical result; not CFD.","Computed example"],
-["gui-openfoam-workbench","OpenFOAM workbench","Controls for simulation and imported-result workflows.","UI only"],
-["gui-openfoam-proofgraph-diagnostic","ProofGraph diagnostic","Synthetic import-integrity fixture; scientific validation blocked.","Synthetic fixture"]
+["gui-analysis-inputs","Fan analysis / Results pane","Uploaded Input-named image shows Results JSON, not an input form.","Results screen"],
+["gui-computed-fan-results","Computed fan/system data","Backend-computed numeric JSON; no curve plot visible. Not CFD.","Computed example"],
+["gui-openfoam-workbench","OpenFOAM capture missing","Uploaded image duplicates fan Results screen; OpenFOAM controls are not visible.","Mislabeled duplicate"],
+["gui-openfoam-proofgraph-diagnostic","ProofGraph capture missing","Uploaded image duplicates fan Results screen; ProofGraph controls are not visible.","Mislabeled duplicate"]
 ];
 const gallery=document.getElementById("gallery");
 function filename(key,theme){return key+(theme==="dark"?"-dark":"")+".png";}

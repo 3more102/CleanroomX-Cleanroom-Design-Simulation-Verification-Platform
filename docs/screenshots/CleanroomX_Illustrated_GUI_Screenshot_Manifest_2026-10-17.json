@@ -1,0 +1,196 @@
+{
+  "schema": "cleanroomx.illustrated-manual-source.v1",
+  "date": "2026-10-17",
+  "source": "user-uploaded genuine CleanroomX screen captures",
+  "captures": 18,
+  "unique_sha256_count": 13,
+  "engineering_validation": "NOT_ESTABLISHED",
+  "notes": [
+    "Source filenames alone are not authoritative indicators of a visible tab.",
+    "Fan-system demo output is numerical, not CFD.",
+    "OpenFOAM and ProofGraph-named captures duplicate the fan Results panel.",
+    "No native image pixels were generated, altered, or upscaled for the manual."
+  ],
+  "images": [
+    {
+      "file": "gui-analysis-inputs-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 103909,
+      "sha256": "21644a587e025b3f6f47680b8e790b6c0ceedea867ede0254cde59d859b71bf8",
+      "identical_to": null
+    },
+    {
+      "file": "gui-analysis-inputs.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 71957,
+      "sha256": "5270d990a8b5daa5edf30e1e80d1f57c80aa5b7550013d690a65748ec0574d0d",
+      "identical_to": null
+    },
+    {
+      "file": "gui-computed-fan-results-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 103909,
+      "sha256": "21644a587e025b3f6f47680b8e790b6c0ceedea867ede0254cde59d859b71bf8",
+      "identical_to": "gui-analysis-inputs-dark.png"
+    },
+    {
+      "file": "gui-computed-fan-results.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 101980,
+      "sha256": "3f87079b8268e8cdc76664c8035ccad05735ef3193af4f089a1f2ebffbb9b851",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-2d-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 51203,
+      "sha256": "52d1ba7efcfaacb3a838f6893eb6e87621a2ace3bc1635e367173b04b9a47b3a",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-2d.png",
+      "dimensions_px": [
+        1920,
+        1080
+      ],
+      "bytes": 55364,
+      "sha256": "1d0bc1781a6fc789c682663e542eab5defec7b9fb7e3fbde8f35338ecd5124b0",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-3d-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 49766,
+      "sha256": "1ca4e039891ed67215ded8843cbb65e865758e1e296f4aa6667594bb39565d99",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-3d.png",
+      "dimensions_px": [
+        1920,
+        1080
+      ],
+      "bytes": 54228,
+      "sha256": "27c45bacee4df6778aabdca66d2c937ae05cff2d19aafce349151c7765d0b3d1",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-split-context-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 59766,
+      "sha256": "b4a688c436dd0fbd24da3c3f160be832db4eefa00b2f643cfd418f2ec0fd2ee1",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-split-context.png",
+      "dimensions_px": [
+        1920,
+        1080
+      ],
+      "bytes": 96134,
+      "sha256": "77bc3e7c5d27d4140fe843c7122470b4b796b4af1ecd72a911502ed6e15a63fe",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-split-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 57924,
+      "sha256": "84c6f2b693126c32c2b983db4691eb52ef6d1c535342556c10c1d68217e85336",
+      "identical_to": null
+    },
+    {
+      "file": "gui-design-split.png",
+      "dimensions_px": [
+        1920,
+        1080
+      ],
+      "bytes": 63274,
+      "sha256": "5c2af3c0677e9eba1518156e1a717bb93afdd8fe63232976d544347780ca7658",
+      "identical_to": null
+    },
+    {
+      "file": "gui-openfoam-proofgraph-diagnostic-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 103909,
+      "sha256": "21644a587e025b3f6f47680b8e790b6c0ceedea867ede0254cde59d859b71bf8",
+      "identical_to": "gui-analysis-inputs-dark.png"
+    },
+    {
+      "file": "gui-openfoam-proofgraph-diagnostic.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 101980,
+      "sha256": "3f87079b8268e8cdc76664c8035ccad05735ef3193af4f089a1f2ebffbb9b851",
+      "identical_to": "gui-computed-fan-results.png"
+    },
+    {
+      "file": "gui-openfoam-workbench-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 103909,
+      "sha256": "21644a587e025b3f6f47680b8e790b6c0ceedea867ede0254cde59d859b71bf8",
+      "identical_to": "gui-analysis-inputs-dark.png"
+    },
+    {
+      "file": "gui-openfoam-workbench.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 101980,
+      "sha256": "3f87079b8268e8cdc76664c8035ccad05735ef3193af4f089a1f2ebffbb9b851",
+      "identical_to": "gui-computed-fan-results.png"
+    },
+    {
+      "file": "gui-start-center-dark.png",
+      "dimensions_px": [
+        1920,
+        1055
+      ],
+      "bytes": 74693,
+      "sha256": "7cd63526bc19d430a174b5cfa9abcc39b94dccf7bdfcb29c684135ede30ed0f1",
+      "identical_to": null
+    },
+    {
+      "file": "gui-start-center.png",
+      "dimensions_px": [
+        1920,
+        1080
+      ],
+      "bytes": 85762,
+      "sha256": "04b3986313258c040049df56876e506ff697b56d71b8125a566c20d7d08a698d",
+      "identical_to": null
+    }
+  ]
+}

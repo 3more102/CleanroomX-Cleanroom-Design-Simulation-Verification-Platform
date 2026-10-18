@@ -7394,6 +7394,12 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if args.demo:
+        # The bundled demonstration is the dark Design Studio reference.
+        # Preserve normal project launches and the user's light-theme option.
+        # The idle layout restoration reads this session-local state.
+        app._ui_layout_state["theme"] = "dark"
+        app.set_theme("dark", persist=False)
     if not args.smoke:
         runtime_status_callback = getattr(
             getattr(app, "status_var", None),
@@ -7434,6 +7440,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
             messagebox.showerror("Open failed", str(exc), parent=root)
+
+    if args.demo and not args.smoke and not recovered_at_startup:
+        app.spatial_workspace.enter_studio_view()
 
     if args.smoke:
         try:

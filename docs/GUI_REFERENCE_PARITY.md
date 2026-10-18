@@ -32,6 +32,7 @@ totals: 62 m² floor area and 186 m³ volume.
 - Selected Room overview with dimensions, classification, area, volume,
   room placement count and **configured** design pressure, never fabricated CFD
   pressure. Placed Devices overview groups FFU, supply, return/exhaust and other.
+- Live room/device ID/name/type search that cycles real matching objects without changing geometry.
 - Real Focus Room, Isolate, Show All and Studio View actions. Studio View
   selects the existing 3D workspace, reveals the inspector, fits the model and
   requests the application's existing dark theme.

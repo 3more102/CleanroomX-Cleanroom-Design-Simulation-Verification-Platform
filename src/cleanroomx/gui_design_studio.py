@@ -213,9 +213,9 @@ class DesignStudioPanels:
         self.camera = tk.Frame(workspace._three_d_frame, bg=_PANEL,
                                highlightbackground=_BORDER, highlightthickness=1)
         for title, action in (
-            ("TOP", lambda: workspace.set_3d_view_preset("top")),
-            ("FRONT", lambda: workspace.set_3d_view_preset("front")),
-            ("ISO", lambda: workspace.set_3d_view_preset("iso")),
+            ("TOP", lambda: self._set_camera_preset("top")),
+            ("FRONT", lambda: self._set_camera_preset("front")),
+            ("ISO", lambda: self._set_camera_preset("iso")),
             ("FIT", workspace.fit_studio_3d),
         ):
             tk.Button(self.camera, text=title, command=action,
@@ -294,6 +294,10 @@ class DesignStudioPanels:
             self.workspace.after_idle(self.workspace.fit_studio_3d)
         else:
             self.workspace.fit_studio_3d()
+
+    def _set_camera_preset(self, preset: str) -> None:
+        self.workspace.set_3d_view_preset(preset)
+        self.workspace.fit_studio_3d()
 
     def balance_view(self):
         """Restore a balanced isometric view of all visible project rooms."""

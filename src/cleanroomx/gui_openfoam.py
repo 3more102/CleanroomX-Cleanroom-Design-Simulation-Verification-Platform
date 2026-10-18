@@ -40,6 +40,19 @@ _EVIDENCE_NAMES = (
 )
 
 
+def build_openfoam_sync_case_command(case_directory: str, result_directory: str, simulation_id: str, *, python_executable: str | None = None) -> list[str]:
+    """Build a native Foundation v10 sync command with validated arguments."""
+    case, destination, identifier = case_directory.strip(), result_directory.strip(), simulation_id.strip()
+    if not case or not destination:
+        raise ValueError("Native synchronization requires case and result directories")
+    if not _SYNC_SIMULATION_ID.fullmatch(identifier):
+        raise ValueError("Native synchronization requires a safe simulation ID")
+    if Path(case).resolve() == Path(destination).resolve():
+        raise ValueError("The result store must differ from the solver case directory")
+    return [python_executable or sys.executable, "-m", "cleanroomx.cfd_pipeline_cli",
+            "sync-case", case, destination, "--simulation-id", identifier]
+
+
 class OpenFOAMConsoleLog:
     """Retain the full session transcript while bounding the live Text view."""
 
@@ -691,6 +704,8 @@ class OpenFOAMWorkspace(ttk.Frame):
             command=self._run,
         )
         self.run_button.pack(side="left", padx=4)
+        self.native_sync_button = ttk.Button(actions, text="Sync native fields…", command=self._sync_native_case)
+        self.native_sync_button.pack(side="left", padx=4)
         self.stop_button = ttk.Button(
             actions,
             text="Stop",
@@ -850,6 +865,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.generate_button,
             self.verify_button,
             self.run_button,
+            self.native_sync_button,
             self.sync_vtk_button,
             self.preview_button,
             self.analysis_button,
@@ -1128,6 +1144,17 @@ class OpenFOAMWorkspace(ttk.Frame):
         if not messagebox.askyesno("Run OpenFOAM Foundation v10", prompt, parent=self):
             return
         self._start_command("OpenFOAM Foundation v10 run", command)
+
+    def _sync_native_case(self) -> None:
+        try:
+            command = build_openfoam_sync_case_command(
+                self.case_directory_var.get(), self.result_directory_var.get(),
+                self.simulation_id_var.get(),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Native OpenFOAM synchronization", str(exc), parent=self)
+            return
+        self._start_command("Synchronize native Foundation v10 fields", command)
 
     def _sync_vtk(self) -> None:
         result_directory = self.result_directory_var.get().strip()

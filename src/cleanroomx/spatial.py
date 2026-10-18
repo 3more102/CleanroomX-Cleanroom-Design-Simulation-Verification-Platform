@@ -2544,9 +2544,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._workspace_mode.set("3d")
         self._apply_workspace_mode()
         self.show_inspector()
-        # Panes have not finished resizing synchronously yet. Fitting before
-        # idle would use the old tiny output-panel-constrained canvas size.
-        self.after_idle(self.fit_views)
+        # Force pending geometry calculations before camera fitting. Otherwise
+        # fit_views can use the old, output-panel-constrained Canvas size and
+        # leave the room geometry tiny in the enlarged studio workspace.
+        self.update_idletasks()
+        self.fit_views()
 
     def focus_room(self) -> None:
         if self.selected is None or self.selected.kind != "room":

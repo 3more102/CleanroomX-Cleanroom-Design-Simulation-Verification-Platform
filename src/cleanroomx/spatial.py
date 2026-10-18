@@ -3434,7 +3434,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 canvas.create_text(
                     (x0 + x1) / 2, (y0 + y1) / 2,
                     text=(
-                        f'{room["name"][:14]}\\n'
+                        f'{room["name"][:14]}\n'
                         f'{room["floor_area_m2"]:,.0f} m²'
                     ),
                     fill="#efffff" if chosen else "#bcd6df",

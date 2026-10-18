@@ -25,12 +25,39 @@ FIELD_MAP = {
 }
 
 
-def make_store(tmp_path, *, field_map=FIELD_MAP):
+
+def write_point_velocity_vtk(path):
+    """Write the same two-cell geometry with U stored only as point data."""
+    import vtk
+
+    points = vtk.vtkPoints()
+    grid = vtk.vtkUnstructuredGrid()
+    velocity_array = vtk.vtkDoubleArray()
+    velocity_array.SetName("U")
+    velocity_array.SetNumberOfComponents(3)
+    for start, length, velocity in ((0, 1, (3.0, 4.0, 0.0)), (1, 2, (0.0, 0.0, 10.0))):
+        offset = points.GetNumberOfPoints()
+        for x, y, z in ((0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)):
+            points.InsertNextPoint(start + length*x, y, z)
+            velocity_array.InsertNextTuple(velocity)
+        cell = vtk.vtkHexahedron()
+        for index in range(8):
+            cell.GetPointIds().SetId(index, offset + index)
+        grid.InsertNextCell(cell.GetCellType(), cell.GetPointIds())
+    grid.SetPoints(points)
+    grid.GetPointData().AddArray(velocity_array)
+    writer = vtk.vtkUnstructuredGridWriter()
+    writer.SetFileName(str(path))
+    writer.SetInputData(grid)
+    writer.SetFileTypeToASCII()
+    assert writer.Write() == 1
+
+def make_store(tmp_path, *, field_map=FIELD_MAP, dataset_writer=write_vtk):
     source = tmp_path / "vtk-source"
     dataset_dir = source / "configuration_1" / "100"
     dataset_dir.mkdir(parents=True)
     dataset = dataset_dir / "internal.vtk"
-    write_vtk(dataset)
+    dataset_writer(dataset)
     configuration = tmp_path / "configuration.json"
     configuration.write_text('{"fixture":"synthetic"}\n', encoding="utf-8")
     output = tmp_path / "vtk-result-store"
@@ -83,6 +110,35 @@ def test_v3_snapshot_store_without_field_map_retains_velocity_analysis(tmp_path)
     assert set(result.report["snapshots"][0]["statistics"]) >= {"speed", "U_x", "U_y", "U_z"}
     assert result.report["snapshots"][0]["statistics"]["speed"]["mean"] == pytest.approx(25 / 3)
 
+
+
+def test_v3_snapshot_reimports_point_data_velocity_consistently(tmp_path):
+    _source, _dataset, _configuration, output, _sync_report = make_store(
+        tmp_path, field_map=None, dataset_writer=write_point_velocity_vtk
+    )
+    result = analyze_synced_results(output, RUN)
+    statistics = result.report["snapshots"][0]["statistics"]
+    assert statistics["speed"]["mean"] == pytest.approx(25 / 3)
+    assert statistics["U_x"]["mean"] == pytest.approx(1.0)
+    assert statistics["U_y"]["mean"] == pytest.approx(4 / 3)
+    assert statistics["U_z"]["mean"] == pytest.approx(20 / 3)
+
+
+def test_v3_empty_store_does_not_claim_snapshot_rehashes(tmp_path):
+    source = tmp_path / "vtk-source"
+    source.mkdir()
+    configuration = tmp_path / "configuration.json"
+    configuration.write_text('{"fixture":"empty"}\\n', encoding="utf-8")
+    output = tmp_path / "vtk-result-store"
+    synchronize_openfoam_vtk_once(
+        source, output, simulation_id=RUN, configuration_file=configuration, stable_seconds=0.0
+    )
+
+    result = analyze_synced_results(output, RUN)
+    assert result.report["snapshots"] == []
+    reproducibility = result.report["reproducibility"]
+    assert reproducibility["vtk_source_bytes_rehashed"] is False
+    assert reproducibility["snapshot_import_payload_rehashed"] is False
 
 def test_v3_snapshot_hash_or_source_tampering_fails_closed(tmp_path):
     _source, _dataset, _configuration, output, report = make_store(tmp_path)

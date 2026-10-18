@@ -3113,6 +3113,47 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("3D model fitted to visible geometry")
         self._draw_3d()
 
+    def focus_room_3d(self, room_id: str) -> bool:
+        """Fit a single canonical room in the real 3D viewport (view-only)."""
+        room = next(
+            (r for r in self.layout["rooms"] if str(r["id"]) == str(room_id)),
+            None,
+        )
+        if room is None:
+            return False
+        min_x, min_y, max_x, max_y = self._bounds()
+        cx, cy = (min_x + max_x) / 2.0, (min_y + max_y) / 2.0
+        x0, y0 = room["x_m"] - cx, room["y_m"] - cy
+        x1, y1 = x0 + room["length_m"], y0 + room["width_m"]
+        z0 = room.get("floor_elevation_m", self.layout["floor"]["elevation_m"])
+        z1 = z0 + room["height_m"]
+        points = [
+            (x, y, z)
+            for x in (x0, x1)
+            for y in (y0, y1)
+            for z in (z0, z1)
+        ]
+        zoom, pan_x, pan_y = fit_3d_view(
+            points,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
+            padding_fraction=0.24,
+            max_zoom=3.5,
+        )
+        # The Studio embeds cards on both sides of the model canvas.
+        # Keep its focused room in the central clear part of that canvas.
+        self.layout["view"]["zoom_3d"] = zoom
+        self.layout["view"]["pan_3d_x"] = pan_x
+        self.layout["view"]["pan_3d_y"] = pan_y
+        self._status_setter(f'3D focus: {room["name"]}')
+        self._draw_3d()
+        return True
+
     def fit_views(self) -> None:
         min_x, min_y, max_x, max_y = self._bounds()
         width_m = max(1.0, max_x - min_x)

@@ -3940,6 +3940,44 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
 
+    def _draw_studio_axes(self, canvas: tk.Canvas) -> None:
+        """Project genuine camera-oriented X/Y/Z axes into a fixed viewport widget."""
+        width = max(160, canvas.winfo_width())
+        height = max(160, canvas.winfo_height())
+        origin = (width - 76.0, height - 64.0)
+        projected_origin = self._project_3d(0.0, 0.0, 0.0)
+        axes = (
+            ("X", (1.0, 0.0, 0.0), "#22d3ee"),
+            ("Y", (0.0, 1.0, 0.0), "#86efac"),
+            ("Z", (0.0, 0.0, 1.0), "#facc15"),
+        )
+        for label, vector, color in axes:
+            projected = self._project_3d(*vector)
+            dx = projected[0] - projected_origin[0]
+            dy = projected[1] - projected_origin[1]
+            magnitude = math.hypot(dx, dy)
+            if magnitude <= 1e-9:
+                continue
+            end = (
+                origin[0] + 36.0 * dx / magnitude,
+                origin[1] + 36.0 * dy / magnitude,
+            )
+            canvas.create_line(
+                *origin, *end, fill=color, width=2, arrow="last",
+                tags=("studio-axis",),
+            )
+            canvas.create_text(
+                end[0] + 6.0 * dx / magnitude,
+                end[1] + 6.0 * dy / magnitude,
+                text=label, fill=color, font=("TkDefaultFont", 9, "bold"),
+                tags=("studio-axis",),
+            )
+        x, y = origin
+        canvas.create_oval(
+            x - 3, y - 3, x + 3, y + 3, fill="#e2e8f0",
+            outline="", tags=("studio-axis",),
+        )
+
     def _draw_3d(self) -> None:
         self._notify_view_status()
         canvas = self.canvas_3d
@@ -4161,6 +4199,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     )
 
         self._draw_engineering_legend(canvas, overlay)
+        self._draw_studio_axes(canvas)
 
     def _update_overlay_summary(self, overlay: dict) -> None:
         mode = str(overlay.get("mode") or "none")

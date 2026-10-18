@@ -1651,6 +1651,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         }
         self._studio_room_var = tk.StringVar(value="Select a room")
         self._studio_devices_var = tk.StringVar(value="No devices")
+        self._studio_search_var = tk.StringVar()
         self._navigator_item_to_room: dict[int, str] = {}
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
@@ -1830,14 +1831,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             card = ttk.Frame(studio_cards, style="CX.StudioCard.TFrame", padding=(10, 6))
             card.pack(side="left", fill="x", expand=True, padx=3)
             ttk.Label(card, text=heading, style="CX.StudioCardTitle.TLabel").pack(anchor="w")
-            value_row = ttk.Frame(card)
+            value_row = ttk.Frame(card, style="CX.StudioCard.TFrame")
             value_row.pack(fill="x")
             ttk.Label(
                 value_row, textvariable=self._studio_card_vars[key],
                 style="CX.StudioCardValue.TLabel",
             ).pack(side="left")
             if unit:
-                ttk.Label(value_row, text=unit).pack(side="left", padx=(5, 0))
+                ttk.Label(
+                    value_row, text=unit, style="CX.StudioCardTitle.TLabel",
+                ).pack(side="left", padx=(5, 0))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -2020,6 +2023,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._selection_var,
             wraplength=310,
         ).pack(fill="x", pady=(3, 5))
+        search_row = ttk.Frame(inspector)
+        search_row.pack(fill="x", pady=(0, 6))
+        ttk.Entry(
+            search_row, textvariable=self._studio_search_var,
+            width=19,
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            search_row, text="Find room/device", command=self.find_design_item,
+        ).pack(side="right", padx=(4, 0))
         ttk.Label(
             inspector, text="SELECTED ROOM", style="CX.Section.TLabel",
         ).pack(anchor="w")
@@ -2505,6 +2517,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
+
+    def find_design_item(self) -> bool:
+        """Search actual room/device names and IDs; select through shared state."""
+        term = self._studio_search_var.get().strip().casefold()
+        if not term:
+            self._status_setter("Enter a room or device name or ID")
+            return False
+        for kind, key in (("room", "rooms"), ("device", "devices")):
+            for item in self.layout[key]:
+                if term in str(item.get("name") or "").casefold() or term in str(
+                    item.get("id") or ""
+                ).casefold():
+                    self.select_item(kind, str(item["id"]), notify=True)
+                    self._status_setter(f'Found {kind}: {item.get("name", item["id"])}')
+                    return True
+        self._status_setter(f'No room/device matches: {term}')
+        return False
 
     def studio_view(self) -> None:
         """Bring the live 3D model, mini navigator and Inspector into view."""

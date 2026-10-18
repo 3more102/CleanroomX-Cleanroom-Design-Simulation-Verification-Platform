@@ -1,0 +1,45 @@
+{
+  "schema": "cleanroomx.gui-reference-parity.iteration",
+  "schema_version": 1,
+  "iteration": 1,
+  "date": "2026-10-19",
+  "branch": "feat/gui-reference-studio-20261019",
+  "base": "main",
+  "status": "IN_PROGRESS",
+  "source_audit": {
+    "gui_entry_point": "src/cleanroomx/gui.py:main",
+    "technology": "Tkinter/ttk plus 2D and projected 3D Canvas",
+    "demo_resource": "src/cleanroomx/demo/gui_demo.cleanroomx.json",
+    "baseline_screenshot": {
+      "captured": false,
+      "reason": "Local Windows desktop and supplied reference image not accessible as runnable files in this session"
+    }
+  },
+  "demo_expectations": {
+    "rooms": 3,
+    "floor_area_m2": 62,
+    "geometric_volume_m3": 186,
+    "placed_objects_including_openings": 10
+  },
+  "implemented_features": [
+    "four geometry-derived metric cards",
+    "embedded interactive 3D Room Navigator",
+    "selected-room/placed-objects inspector summary",
+    "Studio View dark mode",
+    "Focus/Isolate/Show All room interactions"
+  ],
+  "verification": {
+    "local_tests": "NOT_RUN",
+    "ci": "PENDING",
+    "real_screenshots": "NOT_CAPTURED",
+    "openfoam": "NOT_EXECUTED",
+    "percentages": "NOT_MEASURED"
+  },
+  "acceptance": {
+    "visual_parity": false,
+    "all_tests_verified": false,
+    "openfoam_verified": false,
+    "release_ready": false
+  },
+  "next": "Run Linux Tk/Xvfb CI and real Windows 1920x1080 screenshot comparison; fix observed defects; perform genuine OpenFOAM verification."
+}

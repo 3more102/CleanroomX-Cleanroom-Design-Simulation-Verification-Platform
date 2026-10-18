@@ -331,6 +331,43 @@ def layout_metrics(value: Any) -> dict:
     }
 
 
+def design_studio_snapshot(value: Any, selected_room_id: str | None = None) -> dict:
+    """Read-only Design Studio facts derived exclusively from spatial metadata.
+
+    Every persisted placed object, including doors and openings, counts as one
+    device for the studio card. This does not assert that openings are HVAC
+    equipment or that configured design pressure is a CFD result.
+    """
+    layout = normalize_layout(value)
+    metrics = layout_metrics(layout)
+    selected_room = next(
+        (room for room in layout["rooms"] if room["id"] == selected_room_id),
+        None,
+    )
+    selected_devices = [
+        device for device in layout["devices"]
+        if selected_room is not None and device["room_id"] == selected_room["id"]
+    ]
+    device_counts = metrics["device_counts"]
+    return {
+        **metrics,
+        "placed_devices": len(layout["devices"]),
+        "other_devices": len(layout["devices"]) - sum(
+            device_counts[kind] for kind in ("ffu", "supply", "return", "exhaust")
+        ),
+        "selected_room": selected_room,
+        "selected_room_area_m2": (
+            selected_room["length_m"] * selected_room["width_m"]
+            if selected_room is not None else None
+        ),
+        "selected_room_volume_m3": (
+            selected_room["length_m"] * selected_room["width_m"]
+            * selected_room["height_m"] if selected_room is not None else None
+        ),
+        "selected_room_device_count": len(selected_devices),
+    }
+
+
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
@@ -1606,6 +1643,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_theme_requested: Callable[[str], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1620,6 +1658,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_theme_requested = on_theme_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1644,6 +1683,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
+        self._studio_card_vars = {
+            key: tk.StringVar(value="—")
+            for key in ("rooms", "area", "volume", "devices")
+        }
+        self._selected_room_summary_var = tk.StringVar(
+            value="Select a room in the viewport or Room Navigator"
+        )
+        self._placed_devices_summary_var = tk.StringVar(value="No placed devices")
+        self._studio_search_var = tk.StringVar(value="")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -1738,6 +1786,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
+        ttk.Button(modebar, text="Studio View", command=self.studio_view).pack(
+            side="left", padx=2
+        )
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
@@ -1804,6 +1855,32 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+        ttk.Button(
+            overlaybar, text="Find", command=self.find_studio_item,
+        ).pack(side="right", padx=(3, 0))
+        studio_search_entry = ttk.Entry(
+            overlaybar, textvariable=self._studio_search_var, width=23,
+        )
+        studio_search_entry.pack(side="right", padx=(5, 0))
+        studio_search_entry.bind("<Return>", lambda event: self.find_studio_item())
+        ttk.Label(overlaybar, text="Room/device search").pack(side="right")
+
+        studio_cards = ttk.Frame(self, padding=(8, 2, 8, 5))
+        studio_cards.pack(fill="x")
+        for index, (key, heading) in enumerate((
+            ("rooms", "ROOMS"),
+            ("area", "FLOOR AREA"),
+            ("volume", "GEOMETRIC VOLUME"),
+            ("devices", "PLACED DEVICES"),
+        )):
+            studio_cards.columnconfigure(index, weight=1, uniform="studio")
+            card = ttk.Frame(studio_cards, padding=(9, 4), style="CX.Toolbar.TFrame")
+            card.grid(row=0, column=index, sticky="ew", padx=2)
+            ttk.Label(card, text=heading, style="CX.Section.TLabel").pack(anchor="w")
+            ttk.Label(
+                card, textvariable=self._studio_card_vars[key],
+                style="CX.ViewTitle.TLabel",
+            ).pack(anchor="w")
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -1949,6 +2026,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             highlightbackground=self._theme_palette["border"],
         )
         self.canvas_3d.pack(fill="both", expand=True)
+        self.room_navigator = tk.Canvas(
+            self.canvas_3d,
+            width=238, height=154,
+            background=self._theme_palette["panel"],
+            highlightthickness=1,
+            highlightbackground=self._theme_palette["accent"],
+            takefocus=1,
+        )
+        self.room_navigator.place(relx=0.02, rely=0.98, anchor="sw")
+        self.room_navigator.bind("<Button-1>", self._on_room_navigator_click)
 
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
@@ -1976,6 +2063,29 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._selection_var,
             wraplength=310,
         ).pack(fill="x", pady=(3, 8))
+        selected_room_group = ttk.LabelFrame(inspector, text="SELECTED ROOM", padding=5)
+        selected_room_group.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            selected_room_group, textvariable=self._selected_room_summary_var,
+            justify="left", wraplength=290,
+        ).pack(fill="x")
+        device_group = ttk.LabelFrame(inspector, text="PLACED DEVICES", padding=5)
+        device_group.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            device_group, textvariable=self._placed_devices_summary_var,
+            justify="left", wraplength=290,
+        ).pack(fill="x")
+        studio_actions = ttk.Frame(inspector)
+        studio_actions.pack(fill="x", pady=(0, 5))
+        ttk.Button(
+            studio_actions, text="Focus Room", command=self.focus_selected_room,
+        ).pack(side="left", padx=(0, 2))
+        ttk.Button(
+            studio_actions, text="Isolate", command=self.isolate_selected,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            studio_actions, text="Show All", command=self.show_all,
+        ).pack(side="left", padx=2)
 
         property_groups = (
             (
@@ -2046,7 +2156,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._apply_workspace_mode()
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
-        self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
+        self.canvas_3d.bind(
+            "<Configure>", lambda event: (self._draw_3d(), self._draw_room_navigator())
+        )
         self.canvas_2d.bind("<Motion>", self._on_motion)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
         self.canvas_2d.bind("<Escape>", self._on_escape)
@@ -2121,6 +2233,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             background=palette["canvas_3d"],
             highlightbackground=palette["border"],
         )
+        self.room_navigator.configure(
+            background=palette["panel"],
+            highlightbackground=palette["accent"],
+        )
         if redraw:
             self.redraw()
 
@@ -2151,6 +2267,65 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def show_inspector(self) -> None:
         self.set_inspector_visible(True)
+
+    def studio_view(self) -> None:
+        """Use the actual 3D workspace with its live navigator and inspector."""
+        if self._on_theme_requested is not None:
+            self._on_theme_requested("studio")
+        self.show_all()
+        self.show_inspector()
+        self.set_workspace_mode("3d")
+        self.fit_3d()
+
+    def find_studio_item(self) -> bool:
+        """Select a real model room/device by ID, name or device type.
+
+        Repeated Find advances through matches rather than returning a
+        permanently fixed result. Searching never mutates project geometry.
+        """
+        query = self._studio_search_var.get().strip().casefold()
+        if not query:
+            self._status_setter("Enter a room or device search term")
+            return False
+        matches = [
+            _Hit(kind, item["id"])
+            for kind, collection in (
+                ("room", self.layout["rooms"]), ("device", self.layout["devices"])
+            )
+            for item in collection
+            if any(
+                query in str(item.get(field) or "").casefold()
+                for field in ("id", "name", "type")
+            )
+        ]
+        if not matches:
+            self._status_setter(f"No room/device found for: {query}")
+            return False
+        index = (
+            (matches.index(self.selected) + 1) % len(matches)
+            if self.selected in matches else 0
+        )
+        match = matches[index]
+        self.select_item(match.kind, match.item_id, notify=True)
+        self._status_setter(
+            f"Found {match.kind} {index + 1}/{len(matches)}: {match.item_id}"
+        )
+        return True
+
+    def focus_selected_room(self) -> None:
+        """Focus the room represented by a room or placed-device selection."""
+        selected = self.selected
+        if selected is None:
+            self._status_setter("Select a room to focus")
+            return
+        room_id = selected.item_id if selected.kind == "room" else None
+        if selected.kind == "device":
+            item = self._selected_object()
+            room_id = str(item.get("room_id") or "") if item else None
+        if room_id and self.select_item("room", room_id, notify=True):
+            self.fit_selected()
+        else:
+            self._status_setter("Selected object has no associated room")
 
     @staticmethod
     def _hit_key(kind: str, item_id: str) -> str:
@@ -2531,6 +2706,114 @@ class SpatialDesignWorkspace(ttk.Frame):
             f"Return {counts['return']} · Exhaust {counts['exhaust']}"
         )
         self._zoom_var.set(f"Zoom {self.layout['view']['zoom_2d'] * 100:.0f}%")
+        self._update_studio_summary()
+
+    def _update_studio_summary(self) -> None:
+        selected_room_id = None
+        if self.selected is not None:
+            if self.selected.kind == "room":
+                selected_room_id = self.selected.item_id
+            elif self.selected.kind == "device":
+                item = self._selected_object()
+                selected_room_id = str(item.get("room_id") or "") if item else None
+        snapshot = design_studio_snapshot(self.layout, selected_room_id)
+        for key, label in (
+            ("rooms", str(snapshot["room_count"])),
+            ("area", f'{snapshot["total_floor_area_m2"]:,.1f} m²'),
+            ("volume", f'{snapshot["total_volume_m3"]:,.1f} m³'),
+            ("devices", str(snapshot["placed_devices"])),
+        ):
+            self._studio_card_vars[key].set(label)
+        room = snapshot["selected_room"]
+        if room is None:
+            self._selected_room_summary_var.set(
+                "Select a room in the viewport or Room Navigator"
+            )
+        else:
+            pressure = room.get("pressure_pa")
+            pressure_text = (
+                f" · Design pressure: {pressure:g} Pa (configured)"
+                if pressure is not None else " · Design pressure: not configured"
+            )
+            self._selected_room_summary_var.set(
+                f'{room["name"]} · {room.get("classification") or "Unclassified"}\n'
+                f'{room["length_m"]:g} × {room["width_m"]:g} × {room["height_m"]:g} m\n'
+                f'Area {snapshot["selected_room_area_m2"]:g} m² · '
+                f'Volume {snapshot["selected_room_volume_m3"]:g} m³ · '
+                f'{snapshot["selected_room_device_count"]} placed objects'
+                f'{pressure_text}'
+            )
+        counts = snapshot["device_counts"]
+        self._placed_devices_summary_var.set(
+            f'{snapshot["placed_devices"]} total (includes openings)\n'
+            f'FFU {counts["ffu"]} · Supply {counts["supply"]} · '
+            f'Return/exhaust {counts["return"] + counts["exhaust"]} · '
+            f'Other {snapshot["other_devices"]}'
+        )
+
+    def _draw_room_navigator(self) -> None:
+        """Live, clickable mini-plan; model geometry is never altered."""
+        canvas = self.room_navigator
+        if (
+            self.canvas_3d.winfo_width() < 300
+            or self.canvas_3d.winfo_height() < 230
+        ):
+            canvas.place_forget()
+        else:
+            canvas.place(relx=0.02, rely=0.98, anchor="sw")
+        canvas.delete("all")
+        palette = self._theme_palette
+        width = max(1, canvas.winfo_width())
+        height = max(1, canvas.winfo_height())
+        canvas.create_text(
+            8, 7, text="ROOM NAVIGATOR", anchor="nw",
+            fill=palette["text"], font=("TkDefaultFont", 9, "bold"),
+        )
+        rooms = self.layout["rooms"]
+        if not rooms:
+            canvas.create_text(
+                width / 2, height / 2, text="No rooms",
+                fill=palette["muted"],
+            )
+            return
+        min_x, min_y, max_x, max_y = self._bounds()
+        scale = min(
+            max(1, width - 24) / max(0.1, max_x - min_x),
+            max(1, height - 50) / max(0.1, max_y - min_y),
+        )
+        offset_x = (width - (max_x - min_x) * scale) / 2
+        offset_y = 38 + (height - 48 - (max_y - min_y) * scale) / 2
+        for room in rooms:
+            x0 = offset_x + (room["x_m"] - min_x) * scale
+            y0 = offset_y + (room["y_m"] - min_y) * scale
+            x1 = x0 + room["length_m"] * scale
+            y1 = y0 + room["width_m"] * scale
+            selected = self.selected == _Hit("room", room["id"])
+            tags = (f'room:{room["id"]}', "navigator_room")
+            canvas.create_rectangle(
+                x0, y0, x1, y1,
+                fill=palette["selection"] if selected else palette["surface_alt"],
+                outline=palette["accent"] if selected else palette["border"],
+                width=3 if selected else 1, tags=tags,
+            )
+            canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2,
+                text=f'{room["name"]}\n{room["length_m"] * room["width_m"]:g} m²',
+                width=max(10, x1 - x0 - 4),
+                justify="center",
+                fill=palette["selection_text"] if selected else palette["text"],
+                font=("TkDefaultFont", 8), tags=tags,
+            )
+
+    def _on_room_navigator_click(self, event: tk.Event) -> None:
+        candidates = self.room_navigator.find_overlapping(
+            event.x, event.y, event.x, event.y
+        )
+        for canvas_id in reversed(candidates):
+            hit = self._parse_hit(self.room_navigator.gettags(canvas_id))
+            if hit is not None and hit.kind == "room":
+                self.select_item("room", hit.item_id, notify=True)
+                return
 
     def edit_floor(self) -> None:
         floor = self.layout["floor"]
@@ -3173,6 +3456,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._update_metrics()
         self._draw_2d()
         self._draw_3d()
+        self._draw_room_navigator()
 
     def _pressure_relationships(
         self,

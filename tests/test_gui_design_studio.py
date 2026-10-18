@@ -119,9 +119,20 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert studio.nav.winfo_width() == 270
         assert studio.sidebar.winfo_width() == 330
         studio.toggle_advanced()
+        root.update()
         assert studio._advanced_visible is True
+        assert studio.advanced_actions_bar.winfo_ismapped()
+        commands = [w.cget("text") for w in studio.advanced_actions_bar.winfo_children()]
+        assert commands == [
+            "Reset 2D", "Floor…", "Pull from analysis", "Push to analysis",
+        ]
         studio.toggle_advanced()
+        root.update()
         assert studio._advanced_visible is False
+        assert not studio.advanced_actions_bar.winfo_ismapped()
+        studio.balance_view()
+        assert workspace._workspace_mode.get() == "3d"
+        assert workspace._isolated_item is None
         assert errors == []
     finally:
         application._autosave_manager.shutdown(wait=False)

@@ -109,7 +109,11 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         root.update()
         assert application.notebook.select() == str(workspace)
         assert application._guided_stage == "design"
-        assert workspace._workspace_mode.get() == "3d"
+        assert workspace._workspace_mode.get() == "split"
+        # The 3D Studio is still selectable independently of the legacy
+        # guided Design command's deliberate Split view.
+        workspace.set_workspace_mode("3d")
+        root.update()
         # Direct notebook navigation also synchronizes the guided step.
         application._set_guided_workflow_stage("report")
         assert application.workflow_report_button.cget("style") == "CX.Primary.TButton"

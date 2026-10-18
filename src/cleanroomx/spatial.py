@@ -3438,7 +3438,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             if x1 - x0 >= 38 and y1 - y0 >= 28:
                 canvas.create_text(
                     (x0 + x1) / 2, (y0 + y1) / 2 - 6,
-                    text=str(room["name"])[:17],
+                    text=(
+                        str(room["name"]).split("/")[0].strip()
+                        if len(str(room["name"]).split("/")[0].strip())
+                        <= max(4, int((x1 - x0 - 6) / 6.3))
+                        else (
+                            str(room["name"]).split("/")[0].strip()[
+                                :max(3, int((x1 - x0 - 6) / 6.3) - 1)
+                            ] + "…"
+                        )
+                    ),
                     fill="#ffffff",
                     font=("Segoe UI", 8, "bold"),
                     tags=(tag, "navigator_room"),
@@ -4318,17 +4327,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         mode = str(overlay.get("mode") or "none")
         if mode == "none":
             return
-        x0, y0 = 12, 12
+        # Leave room for the live cards above the real 3D canvas.
+        x0, y0 = 12, 78
         width = 188
+        legend_bg = self._theme_palette["panel"]
+        legend_text = self._theme_palette["text"]
+        legend_border = self._theme_palette["border"]
         if mode == "status":
             height = 104
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + height,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=legend_bg, outline=legend_border, tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text="Verification Status", fill="#0f172a",
+                text="Verification Status", fill=legend_text,
                 tags=("overlay_legend",),
             )
             for index, (label, fill) in enumerate(
@@ -4346,7 +4359,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
                 canvas.create_text(
                     x0 + 28, y + 5, anchor="w",
-                    text=label, fill="#334155", tags=("overlay_legend",),
+                    text=label, fill=legend_text, tags=("overlay_legend",),
                 )
         else:
             minimum = overlay.get("minimum")
@@ -4355,11 +4368,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             title = str(overlay.get("title") or mode.title())
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + 64,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=legend_bg, outline=legend_border, tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text=title, fill="#0f172a", tags=("overlay_legend",),
+                text=title, fill=legend_text, tags=("overlay_legend",),
             )
             if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
                 suffix = f" {unit}" if unit else ""
@@ -4368,7 +4381,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = "No result values available"
             canvas.create_text(
                 x0 + 8, y0 + 34, anchor="nw",
-                text=text, fill="#334155", tags=("overlay_legend",),
+                text=text, fill=legend_text, tags=("overlay_legend",),
             )
         canvas.tag_raise("overlay_legend")
 

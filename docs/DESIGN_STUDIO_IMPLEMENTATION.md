@@ -15,14 +15,18 @@ model. It does **not** replace the spatial editor or use mock engineering data.
   placed-device summaries from the **current normalized spatial layout**.
   Unset pressures display **Not specified**, never simulated values.
 - Room navigator, floor-plan rectangles and the 3D canvas all call the existing
-  `select_item(..., notify=True)` route. Focus and isolation use existing
-  `fit_selected`, `fit_3d` and `isolate_selected` actions.
+  `select_item(..., notify=True)` route. **Focus Room** uses a real
+  single-room 3D camera fit, **Isolate Room** uses the existing spatial visibility
+  filter, and **Studio View** restores the full suite and a balanced model fit.
 - Pressure relationships and engineering overlays still depend on the supplied
   project/analysis data. OpenFOAM, reporting and verification tabs remain
   accessible from the existing notebook and application menus.
 - The bundled demo now opens with **dark theme / 3D / Focus Workspace** on
-  `cleanroomx-gui --demo`. The View menu allows users to restore the external
-  navigation/output panels; the 2D/Split modes and More tools remain accessible.
+  `cleanroomx-gui --demo`. The View menu allows users to restore external
+  navigation/output panels. Default Studio chrome has **View**, **Balance**,
+  **Studio View**, **Inspector** and **More tools**, while the original 2D/Split
+  modes, floor editor, engineering sync and advanced overlays remain accessible.
+  Navigator and inspector widths adapt to smaller desktop viewports.
 
 ## Visual reference comparison
 
@@ -33,17 +37,19 @@ model. It does **not** replace the spatial editor or use mock engineering data.
 | In-view Room Navigator and selectable floor mini-map | Real room geometry and room-select callbacks |
 | Selected Room details and per-room device counts | Real room dimensions, pressure and device ownership |
 | Focus Room / Isolate Room / Inspector / Studio View | Commands wired to actual spatial/application actions |
-| 3D color-coded rooms, labels, openings and devices | Canonical canvas with room palette, wall shading and projected opening outlines |
+| 3D color-coded rooms, labels, openings and devices | Roofless architectural cutaway with real room floors, smooth blended far walls, room title chips and model-dimensioned opening outlines |
 | 2D tools, geometry edits, undo/redo, overlays | Retained through original workspace and More tools |
 | CFD/OpenFOAM, save, verification, reporting | Unmodified underlying application/backend |
 
 ### Remaining visual differences
 
-Tk Canvas polygons do not support true RGBA alpha; tinted opaque wall polygons
-and stippled roofs approximate the reference's transparent cleanroom geometry.
-The existing 3D renderer is orthographic/perspective projected polygons, not a
-GPU 3D mesh. Some typography, icons, selection outlines and room geometry
-presentation differ from the screenshot. No pixel-perfect claim is made.
+Tk Canvas polygons do not support true RGBA alpha: the Studio approximates
+the reference's see-through cutaway with **open ceilings, omitted near walls,
+model-colored opaque floors and smoothly blended far walls**. The camera-facing
+wall choice updates with azimuth. This is a 2D-canvas 3D projection, **not**
+physically correct multi-layer alpha blending or a GPU 3D mesh. A few fonts,
+icons, toolbar rows and scene details still differ. No pixel-perfect claim
+is made.
 
 Projected door/transfer outlines are display annotations, not Boolean wall
 cut-outs or proof of a manufacturable architectural model.
@@ -58,8 +64,11 @@ cut-outs or proof of a manufacturable architectural model.
   screenshot taken from the **running application** using Pillow ImageGrab.
 - `tools/capture_design_studio_ci.py`: capture helper checks that the demo
   actually drew spatial room polygons before saving a screenshot.
-- Full repository CI runs separately on the draft pull request. Do not merge
-  until it passes and the visual screenshot has been inspected.
+- The real screenshot is captured at the exact **1536×960** pixel size of
+  the user's reference. Check the pull request's latest workflow artifact.
+- Full repository CI includes Python 3.11, 3.12 and 3.13 test matrices,
+  Windows launcher smoke, and installed-wheel GUI smoke. Require all checks
+  to pass for the latest revision before merging.
 
 ## Launch from a separate Windows worktree (does not overwrite current work)
 

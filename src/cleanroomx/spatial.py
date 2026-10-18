@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
+from .gui_design_studio import (PlacedDevicesPanel, RoomNavigator, SelectedRoomPanel, StudioSummaryCards)
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1805,6 +1806,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
 
+        # The four indicators are derived from the same canonical spatial model
+        # used by the viewport, never from demonstration-project constants.
+        self._studio_cards = StudioSummaryCards(self)
+        self._studio_cards.pack(fill="x", padx=8, pady=(0, 4))
+
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
 
@@ -1949,6 +1955,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             highlightbackground=self._theme_palette["border"],
         )
         self.canvas_3d.pack(fill="both", expand=True)
+        self._room_navigator = RoomNavigator(
+            self._three_d_frame,
+            on_select=lambda room_id: self.select_item("room", room_id, notify=True),
+        )
+        self._room_navigator.pack(side="bottom", fill="x", padx=4, pady=(5, 2))
 
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
@@ -1976,6 +1987,24 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._selection_var,
             wraplength=310,
         ).pack(fill="x", pady=(3, 8))
+
+        self._studio_selected_room = SelectedRoomPanel(inspector)
+        self._studio_selected_room.pack(fill="x", pady=(0, 6))
+        self._studio_placed_devices = PlacedDevicesPanel(inspector)
+        self._studio_placed_devices.pack(fill="x", pady=(0, 6))
+        studio_actions = ttk.Frame(inspector)
+        studio_actions.pack(fill="x", pady=(0, 7))
+        for column, (label, handler) in enumerate((
+            ("Focus Room", self._focus_selected_room),
+            ("Isolate Room", self._isolate_selected_room),
+            ("Restore All Rooms", self.show_all),
+            ("Studio View", lambda: self.set_workspace_mode("3d")),
+        )):
+            ttk.Button(studio_actions, text=label, command=handler).grid(
+                row=column // 2, column=column % 2, sticky="ew", padx=2, pady=2,
+            )
+        studio_actions.columnconfigure(0, weight=1)
+        studio_actions.columnconfigure(1, weight=1)
 
         property_groups = (
             (
@@ -2121,6 +2150,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             background=palette["canvas_3d"],
             highlightbackground=palette["border"],
         )
+        self._room_navigator.apply_palette(palette)
         if redraw:
             self.redraw()
 
@@ -2214,6 +2244,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._isolated_item = None
         self._status_setter("Selection hidden from spatial views")
         self.redraw()
+
+    def _focus_selected_room(self) -> None:
+        if self.selected is None or self.selected.kind != "room":
+            self._status_setter("Select a room to focus")
+            return
+        self.fit_selected()
+
+    def _isolate_selected_room(self) -> None:
+        if self.selected is None or self.selected.kind != "room":
+            self._status_setter("Select a room to isolate")
+            return
+        self.isolate_selected()
 
     def isolate_selected(self) -> None:
         if self.selected is None:
@@ -2522,6 +2564,23 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _update_metrics(self) -> None:
         metrics = layout_metrics(self.layout)
+        self._studio_cards.update_metrics(metrics)
+        selected_id = (
+            self.selected.item_id
+            if self.selected is not None and self.selected.kind == "room"
+            else None
+        )
+        room = next(
+            (item for item in self.layout["rooms"] if item["id"] == selected_id),
+            None,
+        )
+        self._room_navigator.refresh(self.layout["rooms"], selected_id)
+        room_device_count = (
+            sum(1 for item in self.layout["devices"] if item.get("room_id") == room["id"])
+            if room is not None else 0
+        )
+        self._studio_selected_room.update_room(room, room_device_count)
+        self._studio_placed_devices.update_devices(self.layout["devices"], room)
         counts = metrics["device_counts"]
         self._metrics_var.set(
             f"{metrics['room_count']} rooms · "

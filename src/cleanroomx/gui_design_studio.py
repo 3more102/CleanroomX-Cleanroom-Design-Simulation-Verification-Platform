@@ -231,10 +231,13 @@ class DesignStudioPanels:
             # Restore all rooms after Isolate Room without modifying geometry.
             self.workspace.show_all()
         self.workspace.set_workspace_mode("3d")
-        self.workspace.fit_studio_3d()
         callback = getattr(self.workspace, "_on_studio_requested", None)
         if request_focus and callback is not None:
             callback()
+            # Refit only after the outer project/output panes have collapsed.
+            self.workspace.after_idle(self.workspace.fit_studio_3d)
+        else:
+            self.workspace.fit_studio_3d()
 
     def toggle_advanced(self):
         self._advanced_visible = not self._advanced_visible

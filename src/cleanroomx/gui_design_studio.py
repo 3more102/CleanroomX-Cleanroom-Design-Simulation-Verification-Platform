@@ -173,7 +173,7 @@ class DesignStudioPanels:
                   bg="#22415b", fg=_TEXT, relief="flat",
                   activebackground="#315a76").pack(side="right", padx=3)
 
-        self.studio_view()
+        self.studio_view(request_focus=False)
         workspace.set_inspector_visible(False)
         for row in self._advanced_rows:
             row.pack_forget()
@@ -184,9 +184,12 @@ class DesignStudioPanels:
         self.details.place(relx=0.985, rely=0.015, anchor="ne", width=250)
         self.camera.place(relx=0.52, rely=0.985, anchor="s")
 
-    def studio_view(self):
+    def studio_view(self, *, request_focus: bool = True):
         self.workspace.set_workspace_mode("3d")
         self.workspace.fit_3d()
+        callback = getattr(self.workspace, "_on_studio_requested", None)
+        if request_focus and callback is not None:
+            callback()
 
     def toggle_advanced(self):
         self._advanced_visible = not self._advanced_visible

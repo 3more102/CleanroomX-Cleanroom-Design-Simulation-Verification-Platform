@@ -1,0 +1,54 @@
+{
+  "schema": "cleanroomx.gui-reference-parity.status",
+  "date": "2026-10-19",
+  "branch": "chatgpt/design-studio-reference-parity-20261019",
+  "base_sha": "cf5506ffc5793313e023118209faafefc17e73b7",
+  "implemented": [
+    "model-backed kpi cards",
+    "navigator 2D miniature and table selection",
+    "selected room and placed devices live panels",
+    "focus/isolate/restore/studio controls",
+    "GUI acceptance tests"
+  ],
+  "run_evidence": {
+    "gui_launch": "NOT_RUN",
+    "windows_screenshot": "NOT_CAPTURED",
+    "screenshot_comparison": "NOT_PERFORMED",
+    "openfoam": "NOT_TESTED",
+    "focused_tests": "PENDING_CI",
+    "full_regression": "NOT_RUN"
+  },
+  "categories": {
+    "visual_reference_parity": {
+      "percent": null,
+      "status": "NOT_MEASURED",
+      "denominator": null
+    },
+    "gui_functional_completeness": {
+      "percent": null,
+      "status": "NOT_MEASURED",
+      "denominator": null
+    },
+    "3d_interaction_coverage": {
+      "percent": null,
+      "status": "NOT_MEASURED",
+      "denominator": null
+    },
+    "room_device_synchronization": {
+      "percent": null,
+      "status": "NOT_MEASURED",
+      "denominator": null
+    },
+    "openfoam_integration": {
+      "percent": null,
+      "status": "NOT_MEASURED",
+      "denominator": null
+    },
+    "automated_verification": {
+      "percent": null,
+      "status": "NOT_MEASURED",
+      "denominator": null
+    }
+  },
+  "notes": "Results are not verified until successful CI and screenshot inspection."
+}

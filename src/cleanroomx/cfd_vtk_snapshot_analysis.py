@@ -593,8 +593,8 @@ def analyze_vtk_snapshot_results(
         native_source_bytes_rehashed=False,
         native_source_verification_requested=False,
         native_bytes_verified=0,
-        vtk_source_bytes_rehashed=True,
-        snapshot_import_payload_rehashed=True,
+        vtk_source_bytes_rehashed=False,
+        snapshot_import_payload_rehashed=False,
         configuration_file_bytes_rehashed=False,
         configuration_sha256=configuration_sha256,
         field_map_sha256=field_map_sha256,
@@ -646,6 +646,10 @@ def analyze_vtk_snapshot_results(
             state_source=state_source,
         )
         _summarize(analysis_snapshot)
+        # _summarize re-hashes the source VTK and compares its re-imported
+        # field payload with the immutable snapshot before these flags turn true.
+        report["reproducibility"]["vtk_source_bytes_rehashed"] = True
+        report["reproducibility"]["snapshot_import_payload_rehashed"] = True
         verified_snapshots.append(analysis_snapshot)
         proof_records.append(proof_record)
         case["snapshot_count"] += 1

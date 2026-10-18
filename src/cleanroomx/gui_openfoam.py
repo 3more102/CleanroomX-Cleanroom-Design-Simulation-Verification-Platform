@@ -757,6 +757,10 @@ class OpenFOAMWorkspace(ttk.Frame):
             state="normal" if self._on_proofgraph_loaded is not None else "disabled",
         )
         self.two_room_proofgraph_button.pack(side="left", padx=4)
+        self.two_room_analysis_button = ttk.Button(
+            two_room_actions, text="Analyze results…", command=self._analyze_two_room,
+        )
+        self.two_room_analysis_button.pack(side="left", padx=4)
         ttk.Label(
             two_room,
             text="Synthetic diagnostic case; integrity can pass while validation remains BLOCKED.",
@@ -813,6 +817,10 @@ class OpenFOAMWorkspace(ttk.Frame):
             command=self._preview_evidence,
         )
         self.preview_button.pack(side="left", padx=(0, 5))
+        self.analysis_button = ttk.Button(
+            evidence, text="Analyze / graph results…", command=self._analyze_results,
+        )
+        self.analysis_button.pack(side="left", padx=5)
         self.graph_button = ttk.Button(
             evidence,
             text="Load ProofGraph JSON…",
@@ -840,14 +848,43 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.run_button,
             self.sync_vtk_button,
             self.preview_button,
+            self.analysis_button,
             self.graph_button,
             self.export_graph_button,
             self.two_room_generate_button,
             self.two_room_verify_button,
             self.two_room_run_button,
             self.two_room_proofgraph_button,
+            self.two_room_analysis_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
+
+    def _analyze_results(self) -> None:
+        from .cfd_result_analysis import analyze_synced_results
+        from .gui_cfd_analysis import open_analysis_explorer
+        result_directory = self.result_directory_var.get().strip()
+        simulation_id = self.simulation_id_var.get().strip()
+        case_directory = self.case_directory_var.get().strip() or None
+        if not result_directory or not simulation_id:
+            messagebox.showerror("Solver result analysis", "Enter a native result store and simulation ID first.", parent=self)
+            return
+        open_analysis_explorer(
+            self, lambda: analyze_synced_results(result_directory, simulation_id, case_directory=case_directory),
+            on_proofgraph_loaded=self._on_proofgraph_loaded,
+        )
+
+    def _analyze_two_room(self) -> None:
+        from .cfd_result_analysis import analyze_two_room_results
+        from .gui_cfd_analysis import open_analysis_explorer
+        case_directory = self.two_room_case_directory_var.get().strip()
+        receipt_directory = self.two_room_receipt_directory_var.get().strip()
+        if not case_directory or not receipt_directory:
+            messagebox.showerror("Two-room analysis", "Enter the two-room case and existing run receipt directory first.", parent=self)
+            return
+        open_analysis_explorer(
+            self, lambda: analyze_two_room_results(case_directory, Path(receipt_directory) / "two_room_run_receipt.json"),
+            on_proofgraph_loaded=self._on_proofgraph_loaded,
+        )
 
     def apply_theme(self, value: str) -> None:
         """Retheme native workbench surfaces without changing workflow state."""

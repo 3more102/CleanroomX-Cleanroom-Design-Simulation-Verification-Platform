@@ -49,6 +49,19 @@ codes, privacy considerations, and limitations.
 - The two-room synthetic integration case and its limits are documented in [Two-Room OpenFOAM Workflow](docs/CFD_TWO_ROOM.md).
 - Track documented Foundation v10 capabilities, measured parity scores, and open evidence gaps in the [Foundation v10 capability matrix](docs/OPENFOAM_FOUNDATION_V10_PARITY.md).
 
+### Interactive solver-result analysis
+
+- Open **Analyze / graph results…** in the OpenFOAM workspace for verified native runtime-sync stores, or **Analyze results…** in the two-room panel.
+- Inspect volume-weighted speed, kinematic pressure, kelvin temperature and other recorded scalar/vector components; select a case and solver time for 2D cell slabs or interactive 3D cell samples.
+- Compare configuration/run means at the same solver time, inspect linear residual histories and mesh warnings, and graph two-room probe pressure differences, signed boundary flow balance and whole-domain inlet supply ACH.
+- Export PNG/SVG figures, plotted-point and full selected-cell CSV, complete residual histories, JSON analysis, a Markdown report, and extended ProofGraph evidence with source hashes. Missing fields remain **not available**.
+- [Analysis guide and data requirements](docs/CFD_RESULT_ANALYSIS.md). Spatial samples are not interpolated contours; these calculations do not establish solver convergence or physical cleanroom validation.
+
+Actual Tk explorer capture using an explicitly labeled synthetic parser fixture
+(no OpenFOAM solver run):
+
+![CleanroomX solver-result analysis explorer](docs/screenshots/cfd-analysis/cfd-analysis-field-history.png)
+
 ### Source-driven CFD passive tracer and numerical audit
 
 - Localized OpenFOAM Foundation v10 passive scalar source by point-selected finite-volume cell (separate scalar case based on computed airflow).

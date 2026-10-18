@@ -601,6 +601,7 @@ def test_sync_command_runner_keeps_solver_log_and_drains_final_snapshot(tmp_path
     assert result["times"] == ["100"]
     manifest = json.loads((tmp_path / "sync" / "sync_manifest.json").read_text())
     assert manifest["errors"][0]["status"] == "recovered_after_retry"
+    assert manifest["solver_log_sha256"] == hashlib.sha256(log_path.read_bytes()).hexdigest()
 
 
 def test_sync_watcher_classifies_fatal_log_as_incomplete(tmp_path, monkeypatch):

@@ -1685,7 +1685,8 @@ def validate_vtk_field_map(field_map):
 
 def import_vtk_case(
     path, *, contaminant_array=None, temperature_array=None,
-    temperature_units=None, recirculation_array="recirculating", field_map=None
+    temperature_units=None, recirculation_array="recirculating", field_map=None,
+    require_cell_velocity=False,
 ):
     source=Path(path)
     if not source.is_file(): raise FileNotFoundError(source)
@@ -1693,7 +1694,7 @@ def import_vtk_case(
     if before.st_size>MAX_VTK_BYTES: raise ValueError("VTK file exceeds bounded input limit")
     with source.open("rb") as fp:
         source_sha=hashlib.file_digest(fp,"sha256").hexdigest()
-    grid=_read_vtk(source)
+    grid=_read_vtk(source, require_cell_velocity=require_cell_velocity)
     after=source.stat()
     if (after.st_mtime_ns,after.st_size)!=(before.st_mtime_ns,before.st_size):
         raise ValueError("VTK file changed during ingestion")

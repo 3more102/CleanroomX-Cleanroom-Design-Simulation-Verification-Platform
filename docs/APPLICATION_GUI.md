@@ -210,6 +210,39 @@ Runtime implementation provenance fingerprints the installed CleanroomX Python s
 
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
+## OpenFOAM result analysis explorer
+
+The OpenFOAM workspace's **Analyze / graph results…** action reads the native
+runtime-sync store using the entered result directory and simulation ID. Supply
+the matching case bundle to inspect its `simpleFoam.log` and `checkMesh.log`.
+The two-room panel's **Analyze results…** action uses its existing case and
+run-receipt directory. Install the `cfd` extras for VTK and Matplotlib.
+
+Choose a graph, field, case/region and solver time, then **Draw graph**. Field
+histories show volume-weighted means with minimum/maximum bands. Comparisons use
+the exact selected solver time, without substituting another run's latest
+output. **Add comparison run…** selects another simulation directory containing
+`configuration_1/…`. For spatial plots choose one case and time; the slab axis,
+position and thickness use metres. The Matplotlib toolbar provides pan, zoom,
+reset and save; the 3D view also supports mouse rotation.
+
+**Sources, statistics, mesh and warnings** contains the full analysis metadata.
+Optional fields and unsupported analyses display **Not available** when no
+matching solver data exists. Logs from older native sync manifests are labeled
+**UNVERIFIED LOG (run unknown)** if the manifest lacks a solver-log hash.
+Future completed runs record that hash; the analysis rejects a changed log.
+
+Use **Add graph to report** to retain up to 16 figures, then **Export figures +
+data + report…** and name a new directory outside the case/result stores.
+The export includes PNG/SVG, plotted data CSV/JSON, all parsed residuals, all
+selected spatial cells before display reduction, the analysis report and
+extended ProofGraph evidence. All source hashes are checked again before
+publication. The ProofGraph viewer opens the exported graph when available.
+
+See [the analysis guide](CFD_RESULT_ANALYSIS.md) for source requirements,
+engineering limits, CLI commands and genuine GUI captures. The capture fixtures
+are explicitly synthetic and do not represent an OpenFOAM run.
+
 ## Runtime diagnostics
 
 Interactive GUI startup installs a bounded per-user runtime log for unexpected Tk callback failures. The default log file is `cleanroomx-gui.log` under `%LOCALAPPDATA%\\CleanroomX\\Logs` on Windows, `~/Library/Logs/CleanroomX` on macOS, and the XDG user-state directory (or `~/.local/state/cleanroomx/logs`) on Linux. Operators may override the directory with `CLEANROOMX_LOG_DIR`.

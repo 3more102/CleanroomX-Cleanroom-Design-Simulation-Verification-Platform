@@ -76,6 +76,27 @@ ProofGraph export. The GUI's two-room panel can generate, verify, run, preview,
 and export the same evidence into the ProofGraph viewer. Hash agreement is not
 authenticity because the manifest and receipt are unsigned.
 
+## Analyze pressure, airflow and residual histories
+
+After a completed schema-v2 receipt, select **Analyze results…** in the GUI's
+two-room panel, or run:
+
+```bash
+cleanroomx-cfd-pipeline two-room-analyze \
+  ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
+  --output ./two_room_analysis
+```
+
+The analysis reparses the actual probe history and final native `phi`, checks
+their receipt hashes, and plots room-1/room-2 probe pressures and their signed
+difference. Pressure conversion uses the verified case's declared density.
+It reports whole-domain boundary flow balance and inlet supply ACH using the
+total mesh volume printed by `checkMesh`; this is neither per-room nor
+outdoor-air ACH. Internal doorway flux is not inferred from external patches.
+Residuals retain repeated linear solves and exact zero values, and mesh warnings
+remain visible. Exports contain figures, data, a report and extended ProofGraph
+evidence. See [the analysis guide](CFD_RESULT_ANALYSIS.md).
+
 ## Continuous integration
 
 The pinned Foundation v10 CFD workflow runs this case after the existing

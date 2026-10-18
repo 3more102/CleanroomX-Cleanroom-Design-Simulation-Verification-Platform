@@ -2565,7 +2565,7 @@ class CleanroomXApp:
             text="1  Design",
             width=9,
             style="CX.Compact.TButton",
-            command=lambda: self._activate_spatial_workspace("3d"),
+            command=lambda: self._activate_spatial_workspace("split"),
         )
         self.workflow_design_button.pack(side="left", padx=1)
         self.workflow_input_button = ttk.Button(

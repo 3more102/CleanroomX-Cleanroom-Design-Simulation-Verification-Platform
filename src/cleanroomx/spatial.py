@@ -3945,12 +3945,38 @@ class SpatialDesignWorkspace(ttk.Frame):
                         device["y_m"] - cy,
                         device_top_z,
                     )
-                    canvas.create_line(
-                        *bottom, *top,
-                        fill=device_outline,
-                        width=7 if (selected or hovered) else 5,
-                        tags=(tag, "device3d"),
-                    )
+                    # Show actual opening width and elevation on its host wall
+                    # without modifying the engineering geometry or cut-outs.
+                    wall = str(device.get("wall_side") or "").lower()
+                    if studio_active and wall in {"north", "south", "east", "west"}:
+                        half = max(0.02, float(device.get("width_m", 0.1))) / 2
+                        if wall in {"north", "south"}:
+                            a = (device["x_m"] - half, device["y_m"])
+                            b = (device["x_m"] + half, device["y_m"])
+                        else:
+                            a = (device["x_m"], device["y_m"] - half)
+                            b = (device["x_m"], device["y_m"] + half)
+                        corners = [
+                            self._project_3d(px - cx, py - cy, pz)
+                            for px, py, pz in (
+                                (*a, device_bottom_z),
+                                (*b, device_bottom_z),
+                                (*b, device_top_z),
+                                (*a, device_top_z),
+                            )
+                        ]
+                        canvas.create_polygon(
+                            *sum(corners, ()), fill="", outline=device_outline,
+                            width=3 if selected or hovered else 2,
+                            tags=(tag, "device3d", "opening3d"),
+                        )
+                    else:
+                        canvas.create_line(
+                            *bottom, *top,
+                            fill=device_outline,
+                            width=7 if (selected or hovered) else 5,
+                            tags=(tag, "device3d"),
+                        )
                 else:
                     x, y = self._project_3d(
                         device["x_m"] - cx,

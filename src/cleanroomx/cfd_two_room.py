@@ -489,7 +489,9 @@ def verify_two_room_case(directory: str | Path) -> dict[str, Any]:
     }
 
 
-def parse_pressure_probe_data(text: str, *, expected_probe_count: int = 2) -> dict[str, Any]:
+def parse_pressure_probe_data(
+    text: str, *, expected_probe_count: int = 2, include_history: bool = False
+) -> dict[str, Any]:
     if type(text) is not str or len(text.encode("utf-8")) > 4 * 1024 * 1024:
         raise ValueError("pressure-probe data must be bounded UTF-8 text")
     if type(expected_probe_count) is not int or not 1 <= expected_probe_count <= 16:
@@ -510,7 +512,10 @@ def parse_pressure_probe_data(text: str, *, expected_probe_count: int = 2) -> di
         samples.append(values)
     if not samples:
         raise ValueError("pressure-probe data contains no numeric samples")
-    return {"sample_count": len(samples), "last_time": samples[-1][0], "kinematic_pressure_m2_s2": samples[-1][1:]}
+    result = {"sample_count": len(samples), "last_time": samples[-1][0], "kinematic_pressure_m2_s2": samples[-1][1:]}
+    if include_history:
+        result["samples"] = samples
+    return result
 
 
 def compute_pressure_difference_pa(probe: dict[str, Any], density_kg_m3: float) -> dict[str, float]:

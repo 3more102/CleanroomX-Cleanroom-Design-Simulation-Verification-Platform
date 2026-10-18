@@ -1,0 +1,66 @@
+{
+  "capture": "real_Tk_widgets_and_Matplotlib_TkAgg",
+  "data": "SYNTHETIC parser fixtures; no OpenFOAM execution or physical validation",
+  "screenshots": [
+    {
+      "path": "cfd-analysis-field-history.png",
+      "size_px": [
+        1280,
+        900
+      ],
+      "sha256": "c2d3143a095146a7025981b6bb230dafd2addf65c1dd70725773a01c383afdd7",
+      "view": "Field history (mean and range)",
+      "source": "synthetic_test_fixture_not_solver_execution"
+    },
+    {
+      "path": "cfd-analysis-run-comparison.png",
+      "size_px": [
+        1280,
+        900
+      ],
+      "sha256": "6d5565659046ef524668d06050e9635ee0ca76fdb022ed2e83b24b287a40e1a2",
+      "view": "Compare cases / runs at selected time",
+      "source": "synthetic_test_fixture_not_solver_execution"
+    },
+    {
+      "path": "cfd-analysis-3d-temperature.png",
+      "size_px": [
+        1280,
+        900
+      ],
+      "sha256": "9cdada9376f7bb6ec25db1962eb5bdde9890a70e0a5280a76795d62a624d4487",
+      "view": "3D cell samples",
+      "source": "synthetic_test_fixture_not_solver_execution"
+    },
+    {
+      "path": "cfd-analysis-room-pressure.png",
+      "size_px": [
+        1280,
+        900
+      ],
+      "sha256": "d4a7bd7afbf4465b1e120dfb18d6d5b4658b16731d24b7d7be82d30c2129b8c5",
+      "view": "Two-room probe pressure history",
+      "source": "synthetic_test_fixture_not_solver_execution"
+    },
+    {
+      "path": "cfd-analysis-flow-balance.png",
+      "size_px": [
+        1280,
+        900
+      ],
+      "sha256": "abd1043827513869c660d2698e50b095ecbdf94eb816554841ca8eae66413e91",
+      "view": "Boundary airflow balance",
+      "source": "synthetic_test_fixture_not_solver_execution"
+    },
+    {
+      "path": "cfd-analysis-residuals.png",
+      "size_px": [
+        1280,
+        900
+      ],
+      "sha256": "12a191f685c516b19801b24078a1ab514ac79b68d280aeb43d1f71ee4b0269dc",
+      "view": "Solver residual history",
+      "source": "synthetic_test_fixture_not_solver_execution"
+    }
+  ]
+}

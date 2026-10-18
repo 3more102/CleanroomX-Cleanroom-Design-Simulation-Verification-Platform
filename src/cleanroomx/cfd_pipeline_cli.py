@@ -154,11 +154,43 @@ def build_parser():
     two_room_proofgraph.add_argument("case_directory")
     two_room_proofgraph.add_argument("receipt")
     two_room_proofgraph.add_argument("destination")
+    analysis=sub.add_parser("analyze-results",help="Analyze verified runtime-sync or standalone sync-case results")
+    analysis.add_argument("result_directory")
+    analysis.add_argument("--simulation-id",required=True)
+    analysis.add_argument("--case-directory",help="Matching native case (sync-case) or three-configuration case bundle for log diagnostics")
+    analysis.add_argument("--comparison-simulation-id",help="Another run in the same result store")
+    analysis.add_argument("--output",required=True,help="New export directory outside the source results")
+    analysis.add_argument("--field",default="speed")
+    analysis.add_argument("--time",help="Exact solver time for a comparison chart")
+    two_room_analysis=sub.add_parser("two-room-analyze",help="Export pressure, flux and residual graphs from a verified receipt")
+    two_room_analysis.add_argument("case_directory")
+    two_room_analysis.add_argument("receipt")
+    two_room_analysis.add_argument("--output",required=True)
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
 def main():
     args=build_parser().parse_args()
+    if args.command in ("analyze-results", "two-room-analyze"):
+        from .cfd_result_analysis import analyze_synced_results, analyze_two_room_results, build_analysis_graph
+        from .cfd_analysis_export import export_analysis_bundle
+        if args.command == "analyze-results":
+            sessions=[analyze_synced_results(args.result_directory,args.simulation_id,case_directory=args.case_directory)]
+            if args.comparison_simulation_id:
+                sessions.append(analyze_synced_results(args.result_directory,args.comparison_simulation_id))
+            graphs=[build_analysis_graph(sessions,field_name=args.field)]
+            if args.time:
+                graphs.append(build_analysis_graph(sessions,kind="comparison",field_name=args.field,time_name=args.time))
+            if args.case_directory:
+                graphs.append(build_analysis_graph(sessions,kind="residual_history",field_name="all"))
+        else:
+            sessions=[analyze_two_room_results(args.case_directory,args.receipt)]
+            graphs=[build_analysis_graph(sessions,kind=kind,field_name="all")
+                    for kind in ("pressure_history","flow_balance","air_change_rate","residual_history")]
+        destination=export_analysis_bundle(sessions,graphs,args.output)
+        print(dumps_strict_json({"status":"analysis_exported_diagnostic_only","directory":str(destination),
+                                "graph_count":len(graphs),"scientific_validation":"BLOCKED"}))
+        return 0
     if args.command=="generate":
         result=export_openfoam_cases(load_cli_input(load_strict_json,args.spec),args.directory)
         print(dumps_strict_json(result))

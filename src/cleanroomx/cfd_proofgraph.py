@@ -365,8 +365,9 @@ def _read_sync_manifest(
     manifest_path: Path,
     *,
     simulation_id: str,
-    configuration_number: int,
+    configuration_number: int | None,
     total_bytes: list[int],
+    expected_case_id: str | None = None,
 ) -> dict[str, Any]:
     manifest, raw = _read_json(manifest_path, max_bytes=MAX_MANIFEST_BYTES)
     manifest_sha = _sha256(raw)
@@ -383,10 +384,11 @@ def _read_sync_manifest(
     case_id = manifest.get("case_id")
     if type(case_id) is not str or not case_id.strip():
         raise ValueError("OpenFOAM sync manifest case_id must be a non-empty string")
-    expected_case_id = f"configuration_{configuration_number}"
+    if expected_case_id is None:
+        expected_case_id = f"configuration_{configuration_number}"
     if case_id != expected_case_id:
         raise ValueError(
-            "OpenFOAM sync manifest case_id does not match its configuration directory: "
+            "OpenFOAM sync manifest case_id does not match its configuration directory or selected case: "
             f"expected {expected_case_id!r}, received {case_id!r}"
         )
     configuration_hash = _require_sha256(
@@ -440,6 +442,9 @@ def _read_sync_manifest(
     solver_log_status = manifest.get("solver_log_status")
     if solver_log_status is not None and type(solver_log_status) is not str:
         raise ValueError("manifest.solver_log_status must be a string or null")
+    solver_log_sha = manifest.get("solver_log_sha256")
+    if solver_log_sha is not None:
+        _require_sha256(solver_log_sha, "manifest.solver_log_sha256")
     return {
         "configuration_number": configuration_number,
         "relative_path": manifest_path.name,
@@ -452,6 +457,7 @@ def _read_sync_manifest(
         "status": manifest["status"],
         "solver_returncode": solver_returncode,
         "solver_log_status": solver_log_status,
+        "solver_log_sha256": solver_log_sha,
         "record_count": len(checked_records),
         "error_count": len(errors),
         # Drop free-form error messages because they can contain machine-local paths.
@@ -482,12 +488,56 @@ def proofgraph_from_openfoam_sync_results(
     if not simulation_root.exists():
         raise ValueError(f"No synchronized results were found for simulation {simulation_id!r}")
 
-    manifests: dict[int, dict[str, Any]] = {}
+    return _proofgraph_from_sync_directories(simulation_id, [
+        (f"configuration_{number}", simulation_root / f"configuration_{number}",
+         f"{simulation_id}/configuration_{number}/sync_manifest.json", number)
+        for number in (1, 2, 3)
+    ])
+
+
+def proofgraph_from_openfoam_case_results(
+    result_directory: str | Path,
+    simulation_id: str,
+) -> ProofGraph:
+    """Verify a standalone ``sync-case`` store without renaming its case.
+
+    The output directory is chosen by sync-case and need not match case_id.
+    The manifest, receipts, assets and declared simulation identity are still
+    checked using the same verification code as three-configuration stores.
+    """
+    if type(simulation_id) is not str or _SIMULATION_ID.fullmatch(simulation_id) is None:
+        raise ValueError("Simulation ID contains unsupported characters")
+    candidate = Path(result_directory).expanduser()
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("Result directory must be a regular directory")
+    root = candidate.resolve(strict=True)
+    manifest, raw = _read_json(root / "sync_manifest.json", max_bytes=MAX_MANIFEST_BYTES)
+    case_id = manifest.get("case_id")
+    if (type(case_id) is not str or not 1 <= len(case_id) <= 256 or "\\" in case_id
+            or PurePosixPath(case_id).is_absolute()
+            or any(part in ("", ".", "..") for part in case_id.split("/"))
+            or any(ord(char) < 32 or ord(char) == 127 for char in case_id)):
+        raise ValueError("Standalone sync manifest case_id must be a safe relative identifier")
+    graph = _proofgraph_from_sync_directories(simulation_id, [
+        (case_id, root, f"{root.name}/sync_manifest.json", None),
+    ])
+    # The initial identity read must belong to the verified manifest as well.
+    if graph.evidence[0].value["manifest_sha256"] != _sha256(raw):
+        raise ValueError("Standalone sync manifest changed during verification")
+    return graph
+
+
+def _proofgraph_from_sync_directories(
+    simulation_id: str,
+    cases: list[tuple[str, Path, str, int | None]],
+) -> ProofGraph:
+    """Shared receipt/asset verification and graph construction for native sync."""
+
+    manifests: dict[str, dict[str, Any]] = {}
     total_bytes = [0]
     manifest_hashes: list[str] = []
     referenced_asset_hashes: list[dict[str, str]] = []
-    for number in (1, 2, 3):
-        case_directory = simulation_root / f"configuration_{number}"
+    for case_id, case_directory, relative_path, number in cases:
         manifest_path = case_directory / "sync_manifest.json"
         if case_directory.is_symlink():
             raise ValueError(f"Configuration {number} result directory cannot be a symbolic link")
@@ -504,15 +554,14 @@ def proofgraph_from_openfoam_sync_results(
             simulation_id=simulation_id,
             configuration_number=number,
             total_bytes=total_bytes,
+            expected_case_id=case_id,
         )
-        checked["relative_path"] = (
-            Path(simulation_id) / f"configuration_{number}" / "sync_manifest.json"
-        ).as_posix()
-        manifests[number] = checked
+        checked["relative_path"] = relative_path
+        manifests[case_id] = checked
         manifest_hashes.append(checked["manifest_sha256"])
         referenced_asset_hashes.extend(
             {
-                "configuration": str(number),
+                "configuration": str(number) if number is not None else case_id,
                 "path": asset["path"],
                 "sha256": asset["sha256"],
             }
@@ -521,7 +570,7 @@ def proofgraph_from_openfoam_sync_results(
         )
         referenced_asset_hashes.extend(
             {
-                "configuration": str(number),
+                "configuration": str(number) if number is not None else case_id,
                 "path": record["receipt"]["path"],
                 "sha256": record["receipt"]["sha256"],
             }
@@ -536,20 +585,22 @@ def proofgraph_from_openfoam_sync_results(
     checks: list[ComplianceCheck] = []
     findings: list[ComplianceFinding] = []
     verdicts: list[ComplianceVerdict] = []
-    for number in (1, 2, 3):
-        integrity_requirement_id = f"REQ-OPENFOAM-CFG-{number}-ARTIFACT-INTEGRITY"
-        validation_requirement_id = f"REQ-OPENFOAM-CFG-{number}-SCIENTIFIC-VALIDATION"
-        integrity_check_id = f"CHECK-OPENFOAM-CFG-{number}-ARTIFACT-INTEGRITY"
-        validation_check_id = f"CHECK-OPENFOAM-CFG-{number}-SCIENTIFIC-VALIDATION"
-        integrity_finding_id = f"FIND-OPENFOAM-CFG-{number}-ARTIFACT-INTEGRITY"
-        validation_finding_id = f"FIND-OPENFOAM-CFG-{number}-SCIENTIFIC-VALIDATION"
-        integrity_verdict_id = f"VERDICT-OPENFOAM-CFG-{number}-ARTIFACT-INTEGRITY"
-        validation_verdict_id = f"VERDICT-OPENFOAM-CFG-{number}-SCIENTIFIC-VALIDATION"
-        checked = manifests.get(number)
+    for case_id, _directory, _relative, number in cases:
+        case_key = f"CFG-{number}" if number is not None else "CASE-" + _sha256(case_id.encode())
+        case_label = f"Configuration {number}" if number is not None else f"Case {case_id}"
+        integrity_requirement_id = f"REQ-OPENFOAM-{case_key}-ARTIFACT-INTEGRITY"
+        validation_requirement_id = f"REQ-OPENFOAM-{case_key}-SCIENTIFIC-VALIDATION"
+        integrity_check_id = f"CHECK-OPENFOAM-{case_key}-ARTIFACT-INTEGRITY"
+        validation_check_id = f"CHECK-OPENFOAM-{case_key}-SCIENTIFIC-VALIDATION"
+        integrity_finding_id = f"FIND-OPENFOAM-{case_key}-ARTIFACT-INTEGRITY"
+        validation_finding_id = f"FIND-OPENFOAM-{case_key}-SCIENTIFIC-VALIDATION"
+        integrity_verdict_id = f"VERDICT-OPENFOAM-{case_key}-ARTIFACT-INTEGRITY"
+        validation_verdict_id = f"VERDICT-OPENFOAM-{case_key}-SCIENTIFIC-VALIDATION"
+        checked = manifests.get(case_id)
         evidence_ids: tuple[str, ...] = ()
         if checked is not None:
-            source_id = f"SOURCE-OPENFOAM-CFG-{number}-{checked['manifest_sha256'][:12]}"
-            evidence_id = f"EVIDENCE-OPENFOAM-CFG-{number}-{checked['manifest_sha256'][:12]}"
+            source_id = f"SOURCE-OPENFOAM-{case_key}-{checked['manifest_sha256'][:12]}"
+            evidence_id = f"EVIDENCE-OPENFOAM-{case_key}-{checked['manifest_sha256'][:12]}"
             evidence_ids = (evidence_id,)
             sources.append(
                 EvidenceSource(
@@ -568,6 +619,7 @@ def proofgraph_from_openfoam_sync_results(
                 "sync_status": checked["status"],
                 "solver_returncode": checked["solver_returncode"],
                 "solver_log_status": checked["solver_log_status"],
+                "solver_log_sha256": checked["solver_log_sha256"],
                 "record_count": checked["record_count"],
                 "error_count": checked["error_count"],
                 "errors": checked["errors"],
@@ -590,10 +642,10 @@ def proofgraph_from_openfoam_sync_results(
                     value=value,
                     source_id=source_id,
                     version=checked["manifest_sha256"],
-                    subject_ref=f"{simulation_id}/configuration_{number}",
+                    subject_ref=f"{simulation_id}/{case_id}",
                     provenance=(
                         ProvenanceRecord(
-                            id=f"PROV-OPENFOAM-CFG-{number}-{checked['manifest_sha256'][:12]}",
+                            id=f"PROV-OPENFOAM-{case_key}-{checked['manifest_sha256'][:12]}",
                             source_id=source_id,
                             origin="OpenFOAM Foundation v10 synchronized result manifest",
                             originating_file=checked["relative_path"],
@@ -607,10 +659,10 @@ def proofgraph_from_openfoam_sync_results(
             (
                 Requirement(
                     id=integrity_requirement_id,
-                    title=f"Configuration {number} synchronized result artifact integrity",
+                    title=f"{case_label} synchronized result artifact integrity",
                     source="CleanroomX OpenFOAM result synchronization evidence",
                     reference=checked["relative_path"] if checked else None,
-                    scope=(f"configuration_{number}",),
+                    scope=(case_id,),
                     criteria={
                         "required": "Manifest, receipt, and referenced result asset hashes are locally consistent.",
                         "decision_scope": "artifact_integrity_only",
@@ -618,9 +670,9 @@ def proofgraph_from_openfoam_sync_results(
                 ),
                 Requirement(
                     id=validation_requirement_id,
-                    title=f"Configuration {number} independent CFD validation",
+                    title=f"{case_label} independent CFD validation",
                     source="Independent measurements and engineering review",
-                    scope=(f"configuration_{number}",),
+                    scope=(case_id,),
                     criteria={
                         "required": [
                             "OpenFOAM solver execution and convergence review",

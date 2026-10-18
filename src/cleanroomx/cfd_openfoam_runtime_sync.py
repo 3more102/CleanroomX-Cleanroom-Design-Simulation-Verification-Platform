@@ -1235,6 +1235,13 @@ class OpenFOAMResultSynchronizer:
         self._manifest["status"] = status
         self._manifest["solver_returncode"] = solver_returncode
         self._manifest["solver_log_status"] = log_status
+        # Optional additive provenance for result-analysis residual plots. Older
+        # v2 manifests remain readable, but cannot establish a log-to-run link.
+        self._manifest.pop("solver_log_sha256", None)
+        if solver_log is not None and Path(solver_log).is_file() and Path(solver_log).stat().st_size > 0:
+            self._manifest["solver_log_sha256"] = _stable_file_record(
+                Path(solver_log), max_bytes=64 * 1024 * 1024
+            )["sha256"]
         self._manifest["record_count"] = records_count
         self._manifest["failed_times"] = sorted(name for name in failed_times if isinstance(name, str))
         self._manifest["finished_at_utc"] = _utc_now()

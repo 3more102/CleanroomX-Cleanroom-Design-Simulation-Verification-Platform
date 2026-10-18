@@ -240,11 +240,13 @@ def _validate_snapshot(
         or len(snapshot_raw) != record["snapshot_size_bytes"]
     ):
         raise ValueError("VTK result snapshot hash or size differs from sync-state.json")
+    if snapshot.get("field_map_sha256") != field_map_sha256:
+        raise ValueError("VTK snapshot field-map identity differs from sync-state.json")
+    if snapshot.get("configuration_sha256") != configuration_sha256:
+        raise ValueError("VTK snapshot configuration identity differs from sync-state.json")
     if (
         snapshot.get("schema_version") != SNAPSHOT_SCHEMA
         or snapshot.get("simulation_id") != simulation_id
-        or snapshot.get("configuration_sha256") != configuration_sha256
-        or snapshot.get("field_map_sha256") != field_map_sha256
         or snapshot.get("case_id") != case_id
         or snapshot.get("solver_time") != time_name
         or snapshot.get("source_relative_path") != relative

@@ -11,6 +11,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
+from .gui_design_studio import (
+    DesignStudioPanels, STUDIO_ROOM_COLORS, studio_blend, studio_shade,
+)
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1606,6 +1609,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_studio_requested: Callable[[], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1620,6 +1624,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_studio_requested = on_studio_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -1677,7 +1682,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         ttk.Label(
             commandbar,
-            text="DESIGN",
+            text="DESIGN STUDIO",
             style="CX.Section.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
@@ -1723,7 +1728,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
         modebar.pack(fill="x")
-        ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
+        ttk.Label(modebar, text="View").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
             ttk.Radiobutton(
                 modebar,
@@ -1735,9 +1740,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Separator(modebar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            modebar, text="Fit", width=6,
+            command=lambda: (
+                self.fit_studio_3d()
+                if self._workspace_mode.get() == "3d"
+                else self.fit_views()
+            ),
+        ).pack(side="left", padx=2)
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
@@ -2086,6 +2096,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+        self._studio = DesignStudioPanels(
+            self, commandbar=commandbar, modebar=modebar,
+            viewbar=viewbar, overlaybar=overlaybar,
+        )
 
     def _apply_workspace_mode(self) -> None:
         mode = self._workspace_mode.get()
@@ -3106,6 +3121,73 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("3D model fitted to visible geometry")
         self._draw_3d()
 
+    def fit_studio_3d(self) -> None:
+        """Frame all visible room geometry inside the Studio's inset panels."""
+        points = self._visible_3d_points()
+        if not points:
+            self._status_setter("No visible 3D geometry to fit")
+            return
+        zoom, pan_x, pan_y = fit_3d_view(
+            points,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
+            # Original Fit uses 10% padding; reserve more space for the
+            # model-backed navigator and selected-room inspector.
+            padding_fraction=0.19,
+            max_zoom=5.0,
+        )
+        self.layout["view"]["zoom_3d"] = zoom
+        self.layout["view"]["pan_3d_x"] = pan_x
+        self.layout["view"]["pan_3d_y"] = pan_y
+        self._status_setter("Design Studio: model fitted")
+        self._draw_3d()
+
+    def focus_room_3d(self, room_id: str) -> bool:
+        """Fit a single canonical room in the real 3D viewport (view-only)."""
+        room = next(
+            (r for r in self.layout["rooms"] if str(r["id"]) == str(room_id)),
+            None,
+        )
+        if room is None:
+            return False
+        min_x, min_y, max_x, max_y = self._bounds()
+        cx, cy = (min_x + max_x) / 2.0, (min_y + max_y) / 2.0
+        x0, y0 = room["x_m"] - cx, room["y_m"] - cy
+        x1, y1 = x0 + room["length_m"], y0 + room["width_m"]
+        z0 = room.get("floor_elevation_m", self.layout["floor"]["elevation_m"])
+        z1 = z0 + room["height_m"]
+        points = [
+            (x, y, z)
+            for x in (x0, x1)
+            for y in (y0, y1)
+            for z in (z0, z1)
+        ]
+        zoom, pan_x, pan_y = fit_3d_view(
+            points,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
+            padding_fraction=0.24,
+            max_zoom=3.5,
+        )
+        # The Studio embeds cards on both sides of the model canvas.
+        # Keep its focused room in the central clear part of that canvas.
+        self.layout["view"]["zoom_3d"] = zoom
+        self.layout["view"]["pan_3d_x"] = pan_x
+        self.layout["view"]["pan_3d_y"] = pan_y
+        self._status_setter(f'3D focus: {room["name"]}')
+        self._draw_3d()
+        return True
+
     def fit_views(self) -> None:
         min_x, min_y, max_x, max_y = self._bounds()
         width_m = max(1.0, max_x - min_x)
@@ -3173,6 +3255,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._update_metrics()
         self._draw_2d()
         self._draw_3d()
+        studio = getattr(self, "_studio", None)
+        if studio is not None:
+            studio.update()
 
     def _pressure_relationships(
         self,
@@ -3732,6 +3817,25 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._notify_view_status()
         canvas = self.canvas_3d
         canvas.delete("all")
+        studio = getattr(self, "_studio", None)
+        studio_active = getattr(studio, "enabled", False)
+        if studio_active:
+            studio.zoom_percent.set(
+                f'{self.layout["view"]["zoom_3d"] * 100:.0f}%'
+            )
+            # Scene backdrop is display-only; room/model coordinates remain canonical.
+            cw, ch = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
+            for band in range(24):
+                portion = band / 23.0
+                color = "#{:02x}{:02x}{:02x}".format(
+                    round(19 - 7 * portion),
+                    round(43 - 21 * portion),
+                    round(66 - 34 * portion),
+                )
+                canvas.create_rectangle(
+                    0, band * ch / 24, cw + 1, (band + 1) * ch / 24 + 1,
+                    fill=color, outline=color, tags=("studio_backdrop",),
+                )
         if not self.layout["rooms"]:
             canvas.create_text(
                 max(1, canvas.winfo_width()) / 2,
@@ -3756,6 +3860,43 @@ class SpatialDesignWorkspace(ttk.Frame):
             *sum(floor_points, ()),
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
+        if studio_active:
+            # A bounded architectural reference grid/height ruler:
+            # purely display coordinates, never CFD/mesh or solver results.
+            x_span = max(1e-9, max_x - min_x + 2 * pad)
+            y_span = max(1e-9, max_y - min_y + 2 * pad)
+            for index in range(1, 15):
+                x = min_x - pad + x_span * index / 15
+                start = self._project_3d(x - cx, min_y - cy - pad, floor_z)
+                end = self._project_3d(x - cx, max_y - cy + pad, floor_z)
+                canvas.create_line(
+                    *start, *end, fill="#31465b", width=1,
+                    tags=("studio_grid3d",),
+                )
+            for index in range(1, 7):
+                y = min_y - pad + y_span * index / 7
+                start = self._project_3d(min_x - cx - pad, y - cy, floor_z)
+                end = self._project_3d(max_x - cx + pad, y - cy, floor_z)
+                canvas.create_line(
+                    *start, *end, fill="#31465b", width=1,
+                    tags=("studio_grid3d",),
+                )
+            max_room_height = max(float(r["height_m"]) for r in self.layout["rooms"])
+            axis_x, axis_y = min_x - cx - pad, min_y - cy - pad
+            tick_limit = min(6, math.ceil(max_room_height))
+            canvas.create_line(
+                *self._project_3d(axis_x, axis_y, floor_z),
+                *self._project_3d(axis_x, axis_y, floor_z + max_room_height),
+                fill="#5d91b0", dash=(2, 5), width=1,
+                tags=("studio_axis3d",),
+            )
+            for level in range(tick_limit + 1):
+                px, py = self._project_3d(axis_x, axis_y, floor_z + level)
+                canvas.create_text(
+                    px - 10, py, text=str(level), fill="#83a9c3",
+                    font=("Segoe UI", 8),
+                    tags=("studio_axis3d",),
+                )
 
         section_height = self._active_section_height()
         if section_height is not None:
@@ -3784,6 +3925,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
         warning_ids = self._warning_item_ids()
+        studio_active = getattr(getattr(self, "_studio", None), "enabled", False)
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
@@ -3825,6 +3967,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if overlay_mode != "none"
                 else "#dfe7ef"
             )
+            if studio_active:
+                room_index = next((i for i, item in enumerate(self.layout["rooms"])
+                                   if item["id"] == room["id"]), 0)
+                fill = STUDIO_ROOM_COLORS[room_index % len(STUDIO_ROOM_COLORS)]
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
@@ -3833,53 +3979,113 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else (
                     "#38bdf8"
                     if hovered
-                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                    else ("#fb7185" if room["id"] in warning_ids else ("#78c1dc" if studio_active else "#c8d5e3"))
                 )
             )
             tag = f"room:{room['id']}"
             stipple = "gray50" if self._xray_3d.get() else ""
             polygon_width = 3 if selected else (2 if hovered else 1)
-            canvas.create_polygon(
-                *sum(top, ()),
-                fill=fill,
-                outline=outline,
-                width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
-            )
-            canvas.create_polygon(
-                *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
-                outline=outline,
-                width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
-            )
-            canvas.create_polygon(
-                *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
-                outline=outline,
-                width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
-            )
-            for start, end in zip(base, top):
-                canvas.create_line(
-                    *start, *end, fill=outline, width=1, tags=(tag, "room3d")
+            if studio_active:
+                # Roofless architectural cutaway. Render real room floors plus
+                # the two FAR walls, picked from the current camera azimuth.
+                # Near walls are omitted so openings/devices remain visible.
+                # This is a display choice, never a spatial-model mutation.
+                canvas.create_polygon(
+                    *sum(base, ()), fill=studio_shade(fill, 0.36),
+                    outline=outline, width=polygon_width,
+                    tags=(tag, "room3d", "studio_floor3d"),
                 )
-            if self._show_labels.get():
-                overlay_room = overlay_by_room[room["id"]]
-                overlay_text = (
-                    ""
-                    if overlay_mode == "none"
-                    else "\n" + str(overlay_room.get("label") or "")
+                azimuth = math.radians(self.layout["view"]["azimuth_deg"])
+                x_wall = (
+                    (base[0], base[3], top[3], top[0])
+                    if math.sin(azimuth) >= 0
+                    else (base[1], base[2], top[2], top[1])
                 )
-                canvas.create_text(
-                    *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"] + overlay_text,
-                    fill="#f0f6fc",
+                y_wall = (
+                    (base[0], base[1], top[1], top[0])
+                    if math.cos(azimuth) >= 0
+                    else (base[3], base[2], top[2], top[3])
+                )
+                for wall_index, wall in enumerate((x_wall, y_wall)):
+                    canvas.create_polygon(
+                        *sum(wall, ()),
+                        fill=studio_blend(
+                            studio_shade(fill, 1.0 if wall_index == 0 else 0.96),
+                            "#152a40", 0.87,
+                        ),
+                        outline=outline, width=polygon_width,
+                        stipple="gray50" if self._xray_3d.get() else "",
+                        tags=(tag, "room3d", "studio_wall3d"),
+                    )
+                for index, (start, end) in enumerate(zip(base, top)):
+                    canvas.create_line(
+                        *start, *end,
+                        fill=outline if selected or index == 0 else "#667b8d",
+                        dash=() if selected or index == 0 else (2, 5),
+                        width=2 if selected else 1, tags=(tag, "room3d"),
+                    )
+                for index in range(4):
+                    canvas.create_line(
+                        *top[index], *top[(index + 1) % 4],
+                        fill=outline if selected else "#7196ad",
+                        dash=() if selected else (2, 5),
+                        width=2 if selected else 1,
+                        tags=(tag, "room3d", "studio_top_rim"),
+                    )
+            else:
+                canvas.create_polygon(
+                    *sum(top, ()), fill=fill, outline=outline,
+                    width=polygon_width, stipple=stipple,
                     tags=(tag, "room3d"),
                 )
+                canvas.create_polygon(
+                    *sum((base[1], base[2], top[2], top[1]), ()),
+                    fill="#6c7f92", outline=outline, width=polygon_width,
+                    stipple=stipple, tags=(tag, "room3d"),
+                )
+                canvas.create_polygon(
+                    *sum((base[2], base[3], top[3], top[2]), ()),
+                    fill="#53687c", outline=outline, width=polygon_width,
+                    stipple=stipple, tags=(tag, "room3d"),
+                )
+                for start, end in zip(base, top):
+                    canvas.create_line(
+                        *start, *end, fill=outline, width=1,
+                        tags=(tag, "room3d"),
+                    )
+            if self._show_labels.get():
+                if studio_active:
+                    # Dark title chip anchored to a model-space wall edge.
+                    label_x, label_y = (
+                        self._project_3d((x0 + x1) / 2, y0, z1 + 0.10)
+                    )
+                    text_id = canvas.create_text(
+                        label_x, label_y, text=room["name"],
+                        fill="#f0f6fc", font=("Segoe UI", 10, "bold"),
+                        tags=(tag, "room3d", "studio_room_label"),
+                    )
+                    bbox = canvas.bbox(text_id)
+                    if bbox is not None:
+                        bg_id = canvas.create_rectangle(
+                            bbox[0] - 5, bbox[1] - 3,
+                            bbox[2] + 5, bbox[3] + 3,
+                            fill="#112134", outline="#507e98", width=1,
+                            tags=(tag, "room3d", "studio_label_background"),
+                        )
+                        canvas.tag_lower(bg_id, text_id)
+                else:
+                    overlay_room = overlay_by_room[room["id"]]
+                    overlay_text = (
+                        "" if overlay_mode == "none"
+                        else "\n" + str(overlay_room.get("label") or "")
+                    )
+                    canvas.create_text(
+                        *self._project_3d(
+                            (x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2
+                        ),
+                        text=room["name"] + overlay_text, fill="#f0f6fc",
+                        tags=(tag, "room3d"),
+                    )
 
         self._draw_relationships_3d(
             center_x_m=cx,
@@ -3929,12 +4135,38 @@ class SpatialDesignWorkspace(ttk.Frame):
                         device["y_m"] - cy,
                         device_top_z,
                     )
-                    canvas.create_line(
-                        *bottom, *top,
-                        fill=device_outline,
-                        width=7 if (selected or hovered) else 5,
-                        tags=(tag, "device3d"),
-                    )
+                    # Show actual opening width and elevation on its host wall
+                    # without modifying the engineering geometry or cut-outs.
+                    wall = str(device.get("wall_side") or "").lower()
+                    if studio_active and wall in {"north", "south", "east", "west"}:
+                        half = max(0.02, float(device.get("width_m", 0.1))) / 2
+                        if wall in {"north", "south"}:
+                            a = (device["x_m"] - half, device["y_m"])
+                            b = (device["x_m"] + half, device["y_m"])
+                        else:
+                            a = (device["x_m"], device["y_m"] - half)
+                            b = (device["x_m"], device["y_m"] + half)
+                        corners = [
+                            self._project_3d(px - cx, py - cy, pz)
+                            for px, py, pz in (
+                                (*a, device_bottom_z),
+                                (*b, device_bottom_z),
+                                (*b, device_top_z),
+                                (*a, device_top_z),
+                            )
+                        ]
+                        canvas.create_polygon(
+                            *sum(corners, ()), fill="", outline=device_outline,
+                            width=3 if selected or hovered else 2,
+                            tags=(tag, "device3d", "opening3d"),
+                        )
+                    else:
+                        canvas.create_line(
+                            *bottom, *top,
+                            fill=device_outline,
+                            width=7 if (selected or hovered) else 5,
+                            tags=(tag, "device3d"),
+                        )
                 else:
                     x, y = self._project_3d(
                         device["x_m"] - cx,
@@ -3942,13 +4174,27 @@ class SpatialDesignWorkspace(ttk.Frame):
                         device_bottom_z,
                     )
                     radius = 5 if (selected or hovered) else 4
-                    canvas.create_oval(
-                        x - radius, y - radius, x + radius, y + radius,
-                        fill="#fbbf24", outline=device_outline,
-                        width=2, tags=(tag, "device3d"),
-                    )
+                    if studio_active:
+                        marker_color = (
+                            "#fbbf24"
+                            if device["type"] in {"sensor", "equipment"}
+                            else "#55c2d3"
+                        )
+                        canvas.create_rectangle(
+                            x - radius, y - radius, x + radius, y + radius,
+                            fill="#143345", outline=marker_color,
+                            width=2 if (selected or hovered) else 1,
+                            tags=(tag, "device3d", "studio_device3d"),
+                        )
+                    else:
+                        canvas.create_oval(
+                            x - radius, y - radius, x + radius, y + radius,
+                            fill="#fbbf24", outline=device_outline,
+                            width=2, tags=(tag, "device3d"),
+                        )
 
-        self._draw_engineering_legend(canvas, overlay)
+        if not getattr(getattr(self, "_studio", None), "enabled", False):
+            self._draw_engineering_legend(canvas, overlay)
 
     def _update_overlay_summary(self, overlay: dict) -> None:
         mode = str(overlay.get("mode") or "none")

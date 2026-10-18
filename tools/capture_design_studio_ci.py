@@ -17,6 +17,8 @@ def main() -> int:
     root = tk.Tk()
     root.geometry("1480x920+0+0")
     app = CleanroomXApp(root, autosave_interval_seconds=0)
+    # Match the 1536 x 960 reference capture for meaningful visual comparison.
+    root.geometry("1536x960+0+0")
     try:
         app.load_project_path(bundled_demo_project_path())
         # Complete pending saved-layout restoration before enabling focus.

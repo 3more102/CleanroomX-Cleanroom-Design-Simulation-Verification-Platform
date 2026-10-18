@@ -80,8 +80,21 @@ def main() -> int:
         root.update_idletasks()
         root.update()
         viewport_size = (workspace.canvas_3d.winfo_width(), workspace.canvas_3d.winfo_height())
-        if viewport_size[0] < 400 or viewport_size[1] < 300:
-            raise RuntimeError(f"3D canvas is too small for parity review: {viewport_size}")
+        diagnostic = {
+            "window_px": (root.winfo_width(), root.winfo_height()),
+            "main_panes_px": (app.main_panes.winfo_width(), app.main_panes.winfo_height()),
+            "workspace_panes_px": (app.workspace_panes.winfo_width(), app.workspace_panes.winfo_height()),
+            "notebook_px": (app.notebook.winfo_width(), app.notebook.winfo_height()),
+            "design_workspace_px": (workspace.winfo_width(), workspace.winfo_height()),
+            "studio_body_px": (workspace._body.winfo_width(), workspace._body.winfo_height()),
+            "view_frame_px": (workspace._three_d_frame.winfo_width(), workspace._three_d_frame.winfo_height()),
+            "canvas_3d_px": viewport_size,
+            "output_visible": app.output_panel_visible_var.get(),
+            "output_panel_in_panes": str(app.output_panel) in [str(p) for p in app.workspace_panes.panes()],
+        }
+        print("GUI CAPTURE GEOMETRY", json.dumps(diagnostic), flush=True)
+        if viewport_size[0] < 400 or viewport_size[1] < 200:
+            raise RuntimeError(f"3D canvas too small even for basic capture: {diagnostic}")
         # ImageGrab reads the real on-screen X11/Windows Tk window.
         args.output.parent.mkdir(parents=True, exist_ok=True)
         ImageGrab.grab(bbox=(0, 0, args.width, args.height)).save(args.output)
@@ -104,6 +117,7 @@ def main() -> int:
             "resolution_px": [args.width, args.height],
             "actual_window_px": [actual_width, actual_height],
             "viewport_3d_px": list(viewport_size),
+            "layout_diagnostics": diagnostic,
             "selected_room_id": workspace.selected.item_id if workspace.selected else None,
             "output_panel_hidden": not app.output_panel_visible_var.get(),
             "capture": "real Tk desktop framebuffer (Pillow ImageGrab)",

@@ -27,7 +27,7 @@ def main() -> int:
         app.spatial_workspace._studio.studio_view()
         root.update_idletasks()
         root.update()
-        app.spatial_workspace.fit_3d()
+        app.spatial_workspace.fit_studio_3d()
         root.update_idletasks()
         root.update()
         output = Path(args.output)

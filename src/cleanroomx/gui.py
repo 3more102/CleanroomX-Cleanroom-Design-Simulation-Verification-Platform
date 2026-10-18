@@ -7526,11 +7526,11 @@ def main(argv: list[str] | None = None) -> int:
             messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.demo and not args.smoke and not recovered_at_startup:
-        # The Design Studio takes the main viewport in demo presentation,
-        # while all diagnostics remain available through the Problems control.
-        app.hide_output_panel()
-        app.notebook.select(app.spatial_workspace)
+        # Run after the asynchronous persisted-layout restoration; hiding
+        # Output earlier gets undone by that callback.
         def _activate_demo_studio() -> None:
+            app.hide_output_panel()
+            app.notebook.select(app.spatial_workspace)
             workspace = app.spatial_workspace
             rooms = workspace.layout.get("rooms", [])
             if rooms:

@@ -52,9 +52,12 @@ codes, privacy considerations, and limitations.
 ### Interactive solver-result analysis
 
 - Open **Analyze / graph results…** in the OpenFOAM workspace for verified native runtime-sync stores, or **Analyze results…** in the two-room panel.
+- Load a complete nine-case OpenFOAM grid run with its configuration/resolution identities. Select the matching grid family and **Verify original OpenFOAM field files** to check native time/field bytes and attach hash-bound solver/mesh diagnostics.
 - Inspect volume-weighted speed, kinematic pressure, kelvin temperature and other recorded scalar/vector components; select a case and solver time for 2D cell slabs or interactive 3D cell samples.
+- Select signed `U_x`/`U_y`/`U_z`, choose a comparison run explicitly, or limit field statistics and spatial plots to a custom cell-center box. The **Region & statistics** tab reports selected cells, full-cell volume, mesh-volume coverage, means and ranges.
 - Compare configuration/run means at the same solver time, inspect linear residual histories and mesh warnings, and graph two-room probe pressure differences, signed boundary flow balance and whole-domain inlet supply ACH.
 - Export PNG/SVG figures, plotted-point and full selected-cell CSV, complete residual histories, JSON analysis, a Markdown report, and extended ProofGraph evidence with source hashes. Missing fields remain **not available**.
+- Region exports include `selections.csv`, exact box bounds and selected-cell identity hashes; an empty box remains unavailable. Box selection does not establish per-room airflow or ACH.
 - [Analysis guide and data requirements](docs/CFD_RESULT_ANALYSIS.md). Spatial samples are not interpolated contours; these calculations do not establish solver convergence or physical cleanroom validation.
 
 Actual Tk explorer capture using an explicitly labeled synthetic parser fixture

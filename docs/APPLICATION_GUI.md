@@ -221,10 +221,27 @@ run-receipt directory. Install the `cfd` extras for VTK and Matplotlib.
 Choose a graph, field, case/region and solver time, then **Draw graph**. Field
 histories show volume-weighted means with minimum/maximum bands. Comparisons use
 the exact selected solver time, without substituting another run's latest
-output. **Add comparison run…** selects another simulation directory containing
-`configuration_1/…`. For spatial plots choose one case and time; the slab axis,
+output. **Add comparison…** selects another simulation directory containing
+`configuration_1/…` or a standalone native store. Use **Run** to choose the data
+source; case, field and recorded time choices follow that run. For spatial plots
+choose one run, case and time; the slab axis,
 position and thickness use metres. The Matplotlib toolbar provides pan, zoom,
 reset and save; the 3D view also supports mouse rotation.
+
+Choose **Cell selection → Custom box** to open **Region & statistics**. Enter a
+label and x/y/z minimum and maximum in mesh coordinates, or start with **Use
+selected case mesh bounds**. **Apply box and draw graph** selects cells whose
+centers satisfy `minimum <= coordinate < maximum` on every axis. Full selected
+cell volumes are used; cut cells are not clipped to the box. Adjacent boxes do
+not double-count centers on a shared face. Labels do not verify room identity.
+
+The summary and table show selected cells, volume, volume as a percentage of
+the whole mesh, volume-weighted mean and range. These statistics use all selected
+cells before plot sampling. Empty selections have zero selected volume and an
+unavailable mean. `U_x`, `U_y` and `U_z` retain signed native velocity; `speed` is
+the magnitude. Boxes apply to field and spatial plots, not probe histories,
+boundary flux or ACH. **Refresh solver data** clears graphs and statistics
+before rechecking files; a failed recheck removes stale sessions.
 
 **Sources, statistics, mesh and warnings** contains the full analysis metadata.
 Optional fields and unsupported analyses display **Not available** when no
@@ -232,11 +249,12 @@ matching solver data exists. Logs from older native sync manifests are labeled
 **UNVERIFIED LOG (run unknown)** if the manifest lacks a solver-log hash.
 Future completed runs record that hash; the analysis rejects a changed log.
 
-Use **Add graph to report** to retain up to 16 figures, then **Export figures +
-data + report…** and name a new directory outside the case/result stores.
+Use **Add graph to report** to retain up to 16 figures, then **Export report +
+data…** and name a new directory outside the case/result stores.
 The export includes PNG/SVG, plotted data CSV/JSON, all parsed residuals, all
 selected spatial cells before display reduction, the analysis report and
-extended ProofGraph evidence. All source hashes are checked again before
+`selections.csv` with selected-cell statistics, and extended ProofGraph evidence.
+All source hashes are checked again before
 publication. The ProofGraph viewer opens the exported graph when available.
 
 See [the analysis guide](CFD_RESULT_ANALYSIS.md) for source requirements,

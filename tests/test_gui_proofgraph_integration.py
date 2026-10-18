@@ -215,7 +215,13 @@ def test_proofgraph_search_and_evidence_readiness_update_live(app):
     assert "calculation:pressure_solver" in keys
     assert "evidence:EVID-GUI-PRESSURE" in keys
     assert "verdict:VERDICT-GUI-PRESSURE" not in keys
-    assert app.proofgraph_viewer.summary_var.get().startswith("View: 2/")
+    # Search retains immediate trace context around the two textual matches.
+    assert keys == {
+        "calculation:pressure_solver", "evidence:EVID-GUI-PRESSURE",
+        "check:CHECK-GUI-PRESSURE", "ifc:IFC-GUI-ROOM",
+        f"model_object:{room['id']}", "source:SRC-GUI-IFC",
+    }
+    assert app.proofgraph_viewer.summary_var.get() == "View: 6/10 nodes · 6 links"
 
     app.proofgraph_viewer._clear_search_and_filter()
     app.root.update()

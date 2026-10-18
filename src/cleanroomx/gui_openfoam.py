@@ -40,6 +40,19 @@ _EVIDENCE_NAMES = (
 )
 
 
+def build_openfoam_sync_case_command(case_directory: str, result_directory: str, simulation_id: str, *, python_executable: str | None = None) -> list[str]:
+    """Build a native Foundation v10 sync command with validated arguments."""
+    case, destination, identifier = case_directory.strip(), result_directory.strip(), simulation_id.strip()
+    if not case or not destination:
+        raise ValueError("Native synchronization requires case and result directories")
+    if not _SYNC_SIMULATION_ID.fullmatch(identifier):
+        raise ValueError("Native synchronization requires a safe simulation ID")
+    if Path(case).resolve() == Path(destination).resolve():
+        raise ValueError("The result store must differ from the solver case directory")
+    return [python_executable or sys.executable, "-m", "cleanroomx.cfd_pipeline_cli",
+            "sync-case", case, destination, "--simulation-id", identifier]
+
+
 class OpenFOAMConsoleLog:
     """Retain the full session transcript while bounding the live Text view."""
 
@@ -524,6 +537,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.specification_var = tk.StringVar()
         self.case_directory_var = tk.StringVar()
         self.result_directory_var = tk.StringVar()
+        self.verify_native_fields_var = tk.BooleanVar(value=False)
         self.simulation_id_var = tk.StringVar(value=f"cleanroomx-openfoam-{uuid.uuid4().hex[:10]}")
         self.vtk_source_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
@@ -691,6 +705,8 @@ class OpenFOAMWorkspace(ttk.Frame):
             command=self._run,
         )
         self.run_button.pack(side="left", padx=4)
+        self.native_sync_button = ttk.Button(actions, text="Sync native fields…", command=self._sync_native_case)
+        self.native_sync_button.pack(side="left", padx=4)
         self.stop_button = ttk.Button(
             actions,
             text="Stop",
@@ -761,6 +777,10 @@ class OpenFOAMWorkspace(ttk.Frame):
             two_room_actions, text="Analyze results…", command=self._analyze_two_room,
         )
         self.two_room_analysis_button.pack(side="left", padx=4)
+        self.two_room_verified_button = ttk.Button(two_room_actions, text="Export verified diagnostics…", command=self._export_verified_diagnostics)
+        self.two_room_verified_button.pack(side="left", padx=4)
+        self.two_room_audit_button = ttk.Button(two_room_actions, text="Audit diagnostics…", command=self._audit_verified_diagnostics)
+        self.two_room_audit_button.pack(side="left", padx=4)
         ttk.Label(
             two_room,
             text="Synthetic diagnostic case; integrity can pass while validation remains BLOCKED.",
@@ -839,16 +859,20 @@ class OpenFOAMWorkspace(ttk.Frame):
             evidence,
             text="Hash consistency only; CFD validation stays BLOCKED.",
         ).pack(side="left", padx=(10, 0))
-
-
-
+        self.verify_native_fields_check = ttk.Checkbutton(
+            self._workflow_content, text="Verify original OpenFOAM field files (requires matching native case / grid family)",
+            variable=self.verify_native_fields_var,
+        )
+        self.verify_native_fields_check.pack(anchor="w", pady=(0, 5))
         self._action_buttons = (
             self.generate_button,
             self.verify_button,
             self.run_button,
+            self.native_sync_button,
             self.sync_vtk_button,
             self.preview_button,
             self.analysis_button,
+            self.verify_native_fields_check,
             self.graph_button,
             self.export_graph_button,
             self.two_room_generate_button,
@@ -856,6 +880,8 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.two_room_run_button,
             self.two_room_proofgraph_button,
             self.two_room_analysis_button,
+            self.two_room_verified_button,
+            self.two_room_audit_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -865,11 +891,16 @@ class OpenFOAMWorkspace(ttk.Frame):
         result_directory = self.result_directory_var.get().strip()
         simulation_id = self.simulation_id_var.get().strip()
         case_directory = self.case_directory_var.get().strip() or None
+        verify_native_sources = self.verify_native_fields_var.get()
         if not result_directory or not simulation_id:
             messagebox.showerror("Solver result analysis", "Enter a native result store and simulation ID first.", parent=self)
             return
+        if verify_native_sources and not case_directory:
+            messagebox.showerror("Solver result analysis", "Select the matching native case or grid family to verify original fields.", parent=self)
+            return
         open_analysis_explorer(
-            self, lambda: analyze_synced_results(result_directory, simulation_id, case_directory=case_directory),
+            self, lambda: analyze_synced_results(result_directory, simulation_id, case_directory=case_directory,
+                                                verify_native_sources=verify_native_sources),
             on_proofgraph_loaded=self._on_proofgraph_loaded,
         )
 
@@ -885,6 +916,30 @@ class OpenFOAMWorkspace(ttk.Frame):
             self, lambda: analyze_two_room_results(case_directory, Path(receipt_directory) / "two_room_run_receipt.json"),
             on_proofgraph_loaded=self._on_proofgraph_loaded,
         )
+
+    def _export_verified_diagnostics(self) -> None:
+        case = self.two_room_case_directory_var.get().strip()
+        receipts = self.two_room_receipt_directory_var.get().strip()
+        if not case or not receipts:
+            messagebox.showerror("Two-room diagnostics", "Choose the case and receipt directory first.", parent=self)
+            return
+        parent = filedialog.askdirectory(title="Choose parent directory for new diagnostic export", parent=self)
+        if not parent:
+            return
+        output = Path(parent) / "two-room-verified-diagnostics"
+        if output.exists():
+            messagebox.showerror("Two-room diagnostics", "Output folder already exists; choose another parent.", parent=self)
+            return
+        command = [sys.executable, "-m", "cleanroomx.cfd_pipeline_cli", "two-room-verified-bundle",
+                   case, str(Path(receipts) / "two_room_run_receipt.json"), str(output)]
+        self._start_command("Export verified two-room diagnostics", command)
+
+    def _audit_verified_diagnostics(self) -> None:
+        directory = filedialog.askdirectory(title="Select diagnostic export to verify", parent=self)
+        if not directory:
+            return
+        command = [sys.executable, "-m", "cleanroomx.cfd_pipeline_cli", "two-room-bundle-audit", directory]
+        self._start_command("Audit diagnostic export hashes", command)
 
     def apply_theme(self, value: str) -> None:
         """Retheme native workbench surfaces without changing workflow state."""
@@ -1098,6 +1153,17 @@ class OpenFOAMWorkspace(ttk.Frame):
         if not messagebox.askyesno("Run OpenFOAM Foundation v10", prompt, parent=self):
             return
         self._start_command("OpenFOAM Foundation v10 run", command)
+
+    def _sync_native_case(self) -> None:
+        try:
+            command = build_openfoam_sync_case_command(
+                self.case_directory_var.get(), self.result_directory_var.get(),
+                self.simulation_id_var.get(),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Native OpenFOAM synchronization", str(exc), parent=self)
+            return
+        self._start_command("Synchronize native Foundation v10 fields", command)
 
     def _sync_vtk(self) -> None:
         result_directory = self.result_directory_var.get().strip()

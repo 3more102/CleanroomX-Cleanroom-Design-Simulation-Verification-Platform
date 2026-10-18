@@ -859,7 +859,9 @@ class ProofGraphViewer(ttk.Frame):
         if not selection:
             return
         key = self._tree_key_by_iid.get(selection[0])
-        if key:
+        # Rebuilding the tree queues another selection event. Do not rebuild it
+        # again for the same node, or Tk's event queue never becomes idle.
+        if key and key != self._selected_key:
             self._select_key(key)
 
     def _on_canvas_selected(self, _event=None) -> None:

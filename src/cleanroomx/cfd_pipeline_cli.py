@@ -154,33 +154,58 @@ def build_parser():
     two_room_proofgraph.add_argument("case_directory")
     two_room_proofgraph.add_argument("receipt")
     two_room_proofgraph.add_argument("destination")
-    analysis=sub.add_parser("analyze-results",help="Analyze verified runtime-sync or standalone sync-case results")
+    analysis=sub.add_parser("analyze-results",help="Analyze verified native sync-case, three-case or nine-case grid results")
     analysis.add_argument("result_directory")
     analysis.add_argument("--simulation-id",required=True)
-    analysis.add_argument("--case-directory",help="Matching native case (sync-case) or three-configuration case bundle for log diagnostics")
+    analysis.add_argument("--case-directory",help="Matching native case, three-configuration bundle or nine-case grid family for log diagnostics")
+    analysis.add_argument("--verify-native-fields",action="store_true",
+                          help="Rehash original time/field files against sync receipts; requires --case-directory")
     analysis.add_argument("--comparison-simulation-id",help="Another run in the same result store")
     analysis.add_argument("--output",required=True,help="New export directory outside the source results")
     analysis.add_argument("--field",default="speed")
     analysis.add_argument("--time",help="Exact solver time for a comparison chart")
+    analysis.add_argument("--region-bounds", type=float, nargs=6, metavar=("XMIN", "XMAX", "YMIN", "YMAX", "ZMIN", "ZMAX"),
+                          help="Select cell centers inside a mesh-coordinate box in metres; upper bounds are excluded")
+    analysis.add_argument("--region-label", default="Selected box", help="Descriptive label for --region-bounds")
     two_room_analysis=sub.add_parser("two-room-analyze",help="Export pressure, flux and residual graphs from a verified receipt")
     two_room_analysis.add_argument("case_directory")
     two_room_analysis.add_argument("receipt")
     two_room_analysis.add_argument("--output",required=True)
+    verified_bundle=sub.add_parser("two-room-verified-bundle",help="Export receipt-bound two-room SVG diagnostics (separate from explorer graphs)")
+    verified_bundle.add_argument("case_directory")
+    verified_bundle.add_argument("receipt")
+    verified_bundle.add_argument("output_directory")
+    bundle_audit=sub.add_parser("two-room-bundle-audit",help="Verify exported two-room diagnostic bundle file hashes")
+    bundle_audit.add_argument("directory")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
 def main():
     args=build_parser().parse_args()
+    if args.command=="two-room-verified-bundle":
+        from .cfd_two_room_analysis import export_two_room_analysis
+        report=export_two_room_analysis(args.case_directory,args.receipt,args.output_directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-bundle-audit":
+        from .cfd_analysis_bundle import verify_analysis_bundle
+        report=verify_analysis_bundle(args.directory)
+        print(dumps_strict_json(report))
+        return 0
     if args.command in ("analyze-results", "two-room-analyze"):
         from .cfd_result_analysis import analyze_synced_results, analyze_two_room_results, build_analysis_graph
         from .cfd_analysis_export import export_analysis_bundle
         if args.command == "analyze-results":
-            sessions=[analyze_synced_results(args.result_directory,args.simulation_id,case_directory=args.case_directory)]
+            from .cfd_cell_regions import REGION_SCHEMA, validate_cell_region
+            region = validate_cell_region({"schema_version": REGION_SCHEMA, "label": args.region_label,
+                                           "bounds_m": args.region_bounds}) if args.region_bounds is not None else None
+            sessions=[analyze_synced_results(args.result_directory,args.simulation_id,case_directory=args.case_directory,
+                                            verify_native_sources=args.verify_native_fields)]
             if args.comparison_simulation_id:
                 sessions.append(analyze_synced_results(args.result_directory,args.comparison_simulation_id))
-            graphs=[build_analysis_graph(sessions,field_name=args.field)]
+            graphs=[build_analysis_graph(sessions,field_name=args.field,region=region)]
             if args.time:
-                graphs.append(build_analysis_graph(sessions,kind="comparison",field_name=args.field,time_name=args.time))
+                graphs.append(build_analysis_graph(sessions,kind="comparison",field_name=args.field,time_name=args.time,region=region))
             if args.case_directory:
                 graphs.append(build_analysis_graph(sessions,kind="residual_history",field_name="all"))
         else:

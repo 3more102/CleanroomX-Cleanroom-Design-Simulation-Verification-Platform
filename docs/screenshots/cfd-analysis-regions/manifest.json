@@ -1,0 +1,30 @@
+{
+  "fixture": "SYNTHETIC parser data; no solver execution",
+  "scientific_validation": "BLOCKED",
+  "files": [
+    {
+      "path": "region-3d.png",
+      "sha256": "b33ef08d58283d1b6947f81803b8453c67fcf27a9cbf370300ad8f8a4e910f4b",
+      "width": 1180,
+      "height": 820,
+      "canvas_width": 1160,
+      "canvas_height": 434
+    },
+    {
+      "path": "region-statistics.png",
+      "sha256": "14b86dc2516d5c4ffdd0855df1261c7d09506ce9888ea4fce02b8f0735f9bad3",
+      "width": 1180,
+      "height": 820,
+      "canvas_width": 1160,
+      "canvas_height": 434
+    },
+    {
+      "path": "region-laptop.png",
+      "sha256": "65a94d1ee1c90db670840d3b2742e688b338c157b3cfd0a8b5371c8571ca695c",
+      "width": 780,
+      "height": 560,
+      "canvas_width": 760,
+      "canvas_height": 174
+    }
+  ]
+}

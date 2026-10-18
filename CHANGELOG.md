@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased Release 3 — native OpenFOAM grid analysis integration — 2026-10-18
+
+- Load complete nine-case Foundation v10 grid runs through the GUI, comparison picker and CLI, retaining configuration/resolution identities and missing-case findings.
+- Bind grid results to the runner's eight generated inputs per case, excluding subsequently generated polyMesh files from that configuration hash. Match optional execution receipts to synchronized manifests before attaching mesh/solver logs.
+- Add GUI original-field verification and CLI `--verify-native-fields`; rehash native time/field bytes against recorded hashes/sizes, preserve verification scope, and recheck originals before export.
+- Keep selected residual equations after drawing; use horizontal bars for comparisons with more than six entries so complete grid-case labels remain readable.
+- Exercise the complete adapter against fresh Foundation v10 CI outputs and export field, comparison and residual diagnostics. Scientific validation and convergence acceptance remain blocked.
+
+## Unreleased Release 3 — spatial selection and solver analysis workspace — 2026-10-18
+
+- Add explicit mesh-coordinate box selections for field histories, exact-time comparisons, slabs and 3D cell samples, with half-open bounds and selected-cell identity hashes.
+- Show selected cell count, full-cell volume, whole-mesh volume coverage, volume-weighted mean and range in a GUI summary and scrollable statistics table; add signed native velocity components U_x/U_y/U_z.
+- Filter case/field/time choices by run and use the selected run for spatial analysis. Retain actual mesh proportions, selected-box edges and full-selection color limits.
+- Add reproducible `selections.csv`, cell-volume columns and report tables; replay graph selections and recheck sources before export. Empty selections remain unavailable and never inherit whole-mesh values.
+- Clear plots, statistics and report selections before source refresh; failed verification removes stale sessions. Keep the compact graph readable when the window resizes.
+- Fix two baseline GUI blockers exposed by display-enabled regression: repeated ProofGraph tree-selection events now settle, and Fit selected returns an explicit success result while preserving geometry.
+- Region names are user labels; boxes do not verify room boundaries or provide doorway transfer/per-room ACH. Scientific validation remains blocked.
+
 ## Unreleased Release 3 — bind two-room VTK outputs into evidence — 2026-10-17
 
 - Upgrades two-room run receipts to v2 and records SHA-256 digests for every regular file emitted under `VTK/`, with bounded file count, byte limits, stable-file checks, and symlink rejection.

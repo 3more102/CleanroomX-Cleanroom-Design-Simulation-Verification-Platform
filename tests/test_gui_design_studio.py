@@ -7,7 +7,7 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui_design_studio import studio_snapshot, STUDIO_ROOM_COLORS
+from cleanroomx.gui_design_studio import studio_snapshot, STUDIO_ROOM_COLORS, studio_shade
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 
 
@@ -36,6 +36,7 @@ def test_studio_snapshot_real_geometry_and_device_ownership():
         "ffu": 1, "supply": 1, "return_exhaust": 1, "other": 0,
     }
     assert data["rooms"][0]["color"] == STUDIO_ROOM_COLORS[0]
+    assert studio_shade("#ff8040", 0.5) == "#804020"
     assert studio_snapshot(layout, "r2")["selected_room"]["devices"] == 1
     assert layout == before
 
@@ -69,6 +70,8 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert set(studio.nav_buttons) == {str(r["id"]) for r in workspace.layout["rooms"]}
         assert workspace.canvas_3d.winfo_ismapped()
         assert workspace.canvas_3d.find_withtag("room3d")
+        assert workspace.canvas_3d.find_withtag("opening3d")
+        assert studio.mini_plan.find_withtag("floorplan:" + str(workspace.layout["rooms"][0]["id"]))
         before = copy.deepcopy(application.project.to_dict())
         room = workspace.layout["rooms"][-1]
         studio.nav_buttons[str(room["id"])].invoke()

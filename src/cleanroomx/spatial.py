@@ -2506,6 +2506,110 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._update_history_controls()
         self.redraw()
 
+    def studio_view(self) -> None:
+        """Bring the live 3D model, mini navigator and Inspector into view."""
+        self._workspace_mode.set("3d")
+        self._apply_workspace_mode()
+        self.show_inspector()
+        self.fit_views()
+
+    def focus_room(self) -> None:
+        if self.selected is None or self.selected.kind != "room":
+            self._status_setter("Select a room to focus")
+            return
+        self.fit_selected()
+
+    def isolate_room(self) -> None:
+        if self.selected is None or self.selected.kind != "room":
+            self._status_setter("Select a room to isolate")
+            return
+        self.isolate_selected()
+
+    def _update_studio_summary(self) -> None:
+        selected_room_id = (
+            self.selected.item_id
+            if self.selected is not None and self.selected.kind == "room"
+            else None
+        )
+        snapshot = dashboard_snapshot(self.layout, selected_room_id)
+        for key, value in (
+            ("rooms", str(snapshot["room_count"])),
+            ("area", f'{snapshot["floor_area_m2"]:,.1f}'),
+            ("volume", f'{snapshot["volume_m3"]:,.1f}'),
+            ("devices", str(snapshot["placed_devices"])),
+        ):
+            self._studio_card_vars[key].set(value)
+        groups = snapshot["device_groups"]
+        self._studio_devices_var.set(
+            f'FFU {groups["ffu"]}  ·  Supply {groups["supply"]}  ·  '
+            f'Return/Exhaust {groups["return_exhaust"]}  ·  Other {groups["other"]}'
+        )
+        room = snapshot["selected_room"]
+        if room is None:
+            self._studio_room_var.set("Select a room in the navigator, 2D or 3D view")
+        else:
+            pressure = room["pressure_setpoint_pa"]
+            pressure_text = (
+                "Design pressure: not set"
+                if pressure is None
+                else f'Design pressure setpoint: {pressure:g} Pa (configured)'
+            )
+            self._studio_room_var.set(
+                f'{room["name"]} · {room["classification"]}\n'
+                f'{room["length_m"]:g} × {room["width_m"]:g} × {room["height_m"]:g} m '
+                f'· {room["floor_area_m2"]:g} m² · {room["volume_m3"]:g} m³\n'
+                f'{room["device_count"]} devices/openings · {pressure_text}'
+            )
+
+    def _draw_room_navigator(self) -> None:
+        """Draw a clickable scaled top-down plan from live model coordinates."""
+        canvas = self.navigator_canvas
+        canvas.delete("all")
+        self._navigator_item_to_room.clear()
+        p = self._theme_palette
+        canvas.configure(
+            background=p["panel"],
+            highlightbackground=p["accent"],
+        )
+        canvas.create_text(
+            10, 12, text="ROOM NAVIGATOR", anchor="w",
+            fill=p["accent"], font=("TkDefaultFont", 9, "bold"),
+        )
+        if not self.layout["rooms"]:
+            canvas.create_text(120, 85, text="No rooms", fill=p["muted"])
+            return
+        selected_id = (
+            self.selected.item_id
+            if self.selected is not None and self.selected.kind == "room"
+            else None
+        )
+        for room in navigator_rectangles(self.layout):
+            is_selected = room["id"] == selected_id
+            rect_id = canvas.create_rectangle(
+                *room["rect"],
+                fill=p["selection"] if is_selected else p["surface_alt"],
+                outline=p["accent"] if is_selected else p["border"],
+                width=2 if is_selected else 1,
+            )
+            x0, y0, x1, y1 = room["rect"]
+            label_id = canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2,
+                text=room["name"][:14],
+                fill=p["selection_text"] if is_selected else p["text"],
+                font=("TkDefaultFont", 8),
+                width=max(1, x1 - x0 - 4),
+            )
+            self._navigator_item_to_room[rect_id] = room["id"]
+            self._navigator_item_to_room[label_id] = room["id"]
+
+    def _on_navigator_room_click(self, _event: tk.Event) -> None:
+        current = self.navigator_canvas.find_withtag("current")
+        if not current:
+            return
+        room_id = self._navigator_item_to_room.get(current[0])
+        if room_id:
+            self.select_item("room", room_id, notify=True)
+
     def set_3d_projection(self, value: str) -> None:
         mode = str(value or "orthographic").strip().lower()
         if mode not in {"orthographic", "perspective"}:

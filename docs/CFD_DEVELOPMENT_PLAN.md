@@ -1,5 +1,21 @@
 # CFD development checkpoint — 18 October 2026
 
+## Native doorway transfer continuation
+
+- New two-room runs bind native topology and face `phi` in the receipt, replay
+  room-cell/doorway geometry and signed fluxes through ProofGraph, and display
+  gross transfer in both directions plus net transfer and room balances.
+- Legacy receipts retain an explicit unavailable doorway view. The new graph
+  is included in two-room CLI exports and exercised through real Tk widgets.
+- Offline replay of the hash-verified Foundation v10 archive produced the
+  diagnostic values documented in [CFD_NATIVE_ROOM_FLUX.md](CFD_NATIVE_ROOM_FLUX.md).
+- This closes the missing interface-face diagnostic for the supported generated
+  fixture. General room-mask ingestion, per-room ventilation ACH, convergence,
+  mesh independence and independent physical validation remain outstanding.
+- Final display-enabled Python 3.12 regression: **2,836 passed, 1 skipped**
+  (optional native IFC/BIM dependency), 166.85 seconds. The original archive
+  receipt and full ZIP digest were verified before the offline native replay.
+
 ## Manifest-derived two-room field analysis
 
 - The two-room result analyzer imports the unique receipt-hash-bound main VTK volume dataset and checks its solver time against the native phi receipt.
@@ -101,7 +117,7 @@ Continues `work/cfd-integration-reconciliation-20261018` from `6ff519a` (PR #134
 ## Next implementation steps
 
 1. Re-run native-to-VTK numerical parity and complete generated-mesh audits against fresh Foundation v10 outputs.
-2. Add independently sourced room-cell masks and per-room boundary-flux evidence before enabling per-room airflow/ACH views.
+2. Extend the generated fixture's native room-face analysis to independently sourced room geometries and explicit ventilation allocations before enabling per-room ventilation ACH.
 3. Add a bounded adapter that joins v3 VTK snapshots to native solver receipts only when the run/configuration identities match; never infer a native link from matching time labels alone.
 4. Keep independent measured-data correlation and competent engineering review as the release gate for physical validation.
 

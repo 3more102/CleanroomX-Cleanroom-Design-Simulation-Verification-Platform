@@ -947,6 +947,12 @@ def proofgraph_from_two_room_receipt(
     expected_paths = {stage["log_path"] for stage in stages}
     expected_paths.add(probe["path"])
     expected_paths.update((flux["phi_path"], "constant/polyMesh/boundary"))
+    room_flux = receipt_document.get("room_flux")
+    if "room_flux" in receipt_document:
+        from .cfd_room_flux import MESH_PATHS
+        if type(room_flux) is not dict or room_flux.get("phi_path") != flux["phi_path"]:
+            raise ValueError("Two-room room-flux evidence must use the receipt's exact phi source")
+        expected_paths.update(MESH_PATHS)
     if set(result_hashes) != expected_paths:
         raise ValueError("Two-room receipt does not bind every stage log and pressure-probe file")
 
@@ -967,6 +973,19 @@ def proofgraph_from_two_room_receipt(
         raise ValueError("Two-room final-time phi hash disagrees with the receipt artifact map")
     if flux.get("poly_mesh_boundary_sha256") != verified_results.get("constant/polyMesh/boundary"):
         raise ValueError("Two-room polyMesh boundary hash disagrees with the receipt artifact map")
+    if room_flux is not None:
+        from .cfd_room_flux import diagnose_two_room_face_flux
+        expected_sources = {"manifest.json": checked_case["manifest_sha256"],
+                            **{path: verified_results[path] for path in (*MESH_PATHS, flux["phi_path"])}}
+        recomputed = diagnose_two_room_face_flux(case_root, flux["phi_path"], expected_sources=expected_sources)
+        if recomputed != room_flux:
+            raise ValueError("Two-room room-flux diagnostics differ from native face replay")
+        from decimal import Decimal, InvalidOperation
+        try:
+            if Decimal(recomputed["time_name"]) != Decimal(str(probe.get("last_solver_time"))):
+                raise ValueError("Two-room room-flux time differs from the pressure-probe receipt")
+        except InvalidOperation as exc:
+            raise ValueError("Two-room pressure-probe receipt has an invalid solver time") from exc
     recorded_vtk_assets = receipt_document.get("vtk_assets_sha256")
     if type(recorded_vtk_assets) is not dict or not recorded_vtk_assets:
         raise ValueError("Two-room receipt does not bind foamToVTK result assets")
@@ -1007,6 +1026,7 @@ def proofgraph_from_two_room_receipt(
         "stages": clean_stages,
         "pressure_probe": probe,
         "solver_flux": flux,
+        **({"room_flux": room_flux} if room_flux is not None else {}),
         "engineering_screens": screens,
         "receipt_status": receipt_document["status"],
         "asset_hashes_verified": True,

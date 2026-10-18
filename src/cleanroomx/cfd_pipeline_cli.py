@@ -211,7 +211,7 @@ def main():
         else:
             sessions=[analyze_two_room_results(args.case_directory,args.receipt)]
             graphs=[build_analysis_graph(sessions,kind=kind,field_name="all")
-                    for kind in ("pressure_history","flow_balance","air_change_rate","residual_history")]
+                    for kind in ("pressure_history","flow_balance","doorway_flow","air_change_rate","residual_history")]
         destination=export_analysis_bundle(sessions,graphs,args.output)
         print(dumps_strict_json({"status":"analysis_exported_diagnostic_only","directory":str(destination),
                                 "graph_count":len(graphs),"scientific_validation":"BLOCKED"}))

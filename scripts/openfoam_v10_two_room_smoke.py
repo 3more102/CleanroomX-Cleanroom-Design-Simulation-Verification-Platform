@@ -88,12 +88,29 @@ def main(argv: list[str] | None = None) -> int:
         )
         if field_graph.get("status") != "computed_diagnostic" or len(field_graph.get("series", [])) != 2:
             raise ValueError("two-room field comparison graph is unavailable")
+        room_flux = analysis_session.report.get("room_flux")
+        doorway_graph = build_analysis_graph([analysis_session], kind="doorway_flow")
+        if (not isinstance(room_flux, dict) or room_flux != receipt.get("room_flux")
+                or doorway_graph.get("status") != "computed_diagnostic"
+                or len(doorway_graph["series"][0]["points"]) != 5
+                or room_flux.get("per_room_ach") != "NOT_ASSESSED"
+                or room_flux["doorway"]["face_count"] <= 0):
+            raise ValueError("two-room analysis lacks receipt-bound native doorway and room-balance evidence")
+        from cleanroomx.cfd_analysis_export import export_analysis_bundle
+        export_analysis_bundle([analysis_session], [field_graph, doorway_graph], output / "analysis")
         proofgraph_summary = {
             "path": graph_path.name,
             "graph_sha256": graph["graph_sha256"],
             "artifact_integrity": verdicts["VERDICT-TWO-ROOM-ARTIFACT-INTEGRITY"],
             "scientific_validation": verdicts["VERDICT-TWO-ROOM-SCIENTIFIC-VALIDATION"],
             "vtk_asset_count": len(receipt["vtk_assets_sha256"]),
+            "native_room_flux": {
+                "doorway": room_flux["doorway"],
+                "room_balances_m3_s": [room["net_outward_m3_s"] for room in room_flux["rooms"]],
+                "source_count": len(room_flux["source_sha256"]),
+                "graph_status": doorway_graph["status"],
+                "per_room_ach": room_flux["per_room_ach"],
+            },
             "room_field_analysis": {
                 "solver_time": room_regions["time_name"],
                 "room_cell_counts": [room["cell_count"] for room in room_regions["regions"]],

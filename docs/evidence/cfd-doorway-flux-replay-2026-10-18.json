@@ -1,0 +1,69 @@
+{
+  "scope": "OFFLINE_REPLAY_OF_ARCHIVED_NATIVE_OUTPUTS_NO_NEW_SOLVER_EXECUTION",
+  "workflow_url": "https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39159459313",
+  "artifact_id": 12147773372,
+  "archive_sha256": "0677736cdb33c8bae366ed8a58cdf63c804b7bafda403e6f11912bf64d905412",
+  "archive_sha256_verified": true,
+  "original_receipt_verified": true,
+  "original_receipt_sha256": "ef4ce47e951b11d2c189f35be3430b2b8544619b8b9a58bdc93dba674ee290f0",
+  "original_receipt_contains_room_flux": false,
+  "topology_binding_scope": "whole-archive digest, not a new execution receipt",
+  "diagnostic": {
+    "schema_version": "cleanroomx.two-room-face-flux.v1",
+    "status": "MEASURED_DIAGNOSTIC_ONLY",
+    "time_name": "150",
+    "phi_path": "150/phi",
+    "source_sha256": {
+      "manifest.json": "7c7be3f54856b7713e3fe43f6f9b69d54aed91de2e95637018ee1267ecd5d44f",
+      "constant/polyMesh/points": "483f86724da96d985f782f97cb4c6cadc92d773a1335f312af0177b889db3cf9",
+      "constant/polyMesh/faces": "d24c490e9507f4a27cee474f94944d8fe3d192c74802d7abf355eaa74b9bcfba",
+      "constant/polyMesh/owner": "44e62524c368a073bb28660ab940df9386832da80820449d635a06735c6f198b",
+      "constant/polyMesh/neighbour": "48dfd61cafa2155063bff943b9bb07e32dc45482ddb2d399c1a223beb1de8c1d",
+      "constant/polyMesh/boundary": "0c166319598104cf3036539ad848a192842c9409cfc5bd82626b5b7ff965dbd1",
+      "150/phi": "728256bc7da068296c35670a650edcd665c9c32c9191bcbca7d4436dcb19dc53"
+    },
+    "doorway": {
+      "face_count": 2,
+      "area_m2": 0.044,
+      "face_indices_sha256": "f673704c0fe9e3e2db7566e4195bc7f26aa61edfbd970122bdc6b0eea2d8af6d",
+      "net_room_1_to_room_2_m3_s": 0.10020442338999999,
+      "gross_room_1_to_room_2_m3_s": 0.10020442338999999,
+      "gross_room_2_to_room_1_m3_s": 0.0
+    },
+    "rooms": [
+      {
+        "label": "Room 1",
+        "cell_count": 1152,
+        "volume_m3": 72.0,
+        "external_patch_net_outward_m3_s": {
+          "inlet": -0.1000000000004,
+          "outlet": 0.0,
+          "walls": 0.0,
+          "partition": 0.0
+        },
+        "external_net_outward_m3_s": -0.1000000000004,
+        "doorway_net_outward_m3_s": 0.10020442338999999,
+        "net_outward_m3_s": 0.0002044233895999864
+      },
+      {
+        "label": "Room 2",
+        "cell_count": 1152,
+        "volume_m3": 72.0,
+        "external_patch_net_outward_m3_s": {
+          "inlet": 0.0,
+          "outlet": 0.09882509132318999,
+          "walls": 0.0,
+          "partition": 0.0
+        },
+        "external_net_outward_m3_s": 0.09882509132318999,
+        "doorway_net_outward_m3_s": -0.10020442338999999,
+        "net_outward_m3_s": -0.001379332066809999
+      }
+    ],
+    "geometry_scope": "native_closed_axis_aligned_cells_and_complete_room_tiling",
+    "method": "Native phi in mesh face order; positive leaves owner, negative leaves neighbour; doorway sign is Room 1 to Room 2",
+    "acceptance": "NO_PROJECT_ACCEPTANCE_CRITERION",
+    "per_room_ach": "NOT_ASSESSED",
+    "scientific_validation": "BLOCKED"
+  }
+}

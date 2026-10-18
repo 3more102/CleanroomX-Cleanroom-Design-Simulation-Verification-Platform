@@ -815,6 +815,14 @@ def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Pat
                     _source(case / "constant/polyMesh/boundary", flux["poly_mesh_boundary_sha256"],
                             role="boundary_patches", case_id="two_room_case")],
     }
+    if "room_flux" in evidence:
+        report["room_flux"] = evidence["room_flux"]
+        report["flow_balance"]["region"] = "whole two-room domain (separate native doorway-flow diagnostic available)"
+    else:
+        report["availability"].append({
+            "analysis": "doorway_flow", "status": "not_available",
+            "reason": "Receipt predates native room-face flux binding; rerun the two-room case",
+        })
     solver_stage = next(stage for stage in evidence["stages"] if stage["command"] == "simpleFoam")
     diagnosis = _diagnostics(case, "two_room_case", solver_stage["log_sha256"])
     diagnosis["log_execution_binding"] = "hash_bound_two_room_run_receipt"
@@ -846,7 +854,7 @@ def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Pat
             raise ValueError("Two-room stage log changed during analysis")
     report["availability"] += [
         {"analysis": "room_airflow_ach", "status": "not_available",
-         "reason": "Room cell masks provide field statistics only; per-room ACH requires verified interface-face flux and room-specific ventilation evidence"},
+         "reason": "Doorway transfer is not a room outdoor/fresh-air supply allocation; per-room ventilation ACH is not assessed"},
         {"analysis": "temperature_contaminant", "status": "not_available",
          "reason": "The isothermal two-room case does not solve temperature or contaminant transport"},
     ]
@@ -1102,6 +1110,24 @@ def build_analysis_graph(
                                    ("inlet", -flow["inlet_net_inward_m3_s"]), ("outlet", flow["outlet_net_outward_m3_s"]),
                                    ("walls + partition", flow["walls_net_outward_m3_s"]),
                                    ("net boundary", flow["net_boundary_outward_m3_s"]))]})
+                sources.extend(report["sources"])
+        elif kind == "doorway_flow":
+            flow = report.get("room_flux")
+            if flow and case_id in (None, "two_room_case") and (
+                    time_name is None or _numeric_time(time_name) == _numeric_time(flow["time_name"])):
+                door = flow["doorway"]
+                graph.update(title=f"Native doorway transfer | solver time {flow['time_name']}",
+                             x_label="Doorway transfer / room balance", y_label="Volumetric flow (m^3/s)",
+                             method=flow["method"] + "; room balance is net outward, with no acceptance threshold")
+                series.append({"label": run_id, "run_id": run_id, "case_id": "two_room_case",
+                               "region": "native doorway faces and both room boundaries",
+                               "points": [{"x": label, "y": value, "time_name": flow["time_name"]}
+                                          for label, value in (
+                                              ("Gross 1 → 2", door["gross_room_1_to_room_2_m3_s"]),
+                                              ("Gross 2 → 1", door["gross_room_2_to_room_1_m3_s"]),
+                                              ("Net 1 → 2", door["net_room_1_to_room_2_m3_s"]),
+                                              *[(room["label"] + " balance", room["net_outward_m3_s"])
+                                                for room in flow["rooms"]]) ]})
                 sources.extend(report["sources"])
         elif kind == "air_change_rate":
             ventilation = report.get("ventilation")

@@ -16,12 +16,13 @@ import tempfile
 import tkinter as tk
 
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
-from cleanroomx.studio_summary import dashboard_snapshot
+from cleanroomx.spatial import layout_metrics
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--baseline", action="store_true")
     args = parser.parse_args()
 
     # Pillow is a screenshot-only dependency, deliberately not in production.
@@ -42,7 +43,8 @@ def main() -> int:
         # hides external navigator/output panels and keeps room Inspector open.
         root.update_idletasks()
         root.update()
-        app.spatial_workspace.studio_view()
+        if not args.baseline:
+            app.spatial_workspace.studio_view()
         app.spatial_workspace.select_item("room", "process", notify=True)
         root.geometry("1920x1080+0+0")
         root.update_idletasks()
@@ -55,17 +57,18 @@ def main() -> int:
         if image.size != (1920, 1080):
             raise RuntimeError(f"Unexpected screenshot dimensions: {image.size!r}")
         image.save(args.output, format="PNG")
-        snapshot = dashboard_snapshot(app.spatial_workspace.layout)
+        snapshot = layout_metrics(app.spatial_workspace.layout)
         manifest = {
             "capture_type": "real_desktop_screenshot",
+            "baseline": args.baseline,
             "platform": platform.platform(),
             "git_commit": os.environ.get("GITHUB_SHA"),
             "resolution": [1920, 1080],
             "image_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
             "room_count": snapshot["room_count"],
-            "floor_area_m2": snapshot["floor_area_m2"],
-            "volume_m3": snapshot["volume_m3"],
-            "placed_devices": snapshot["placed_devices"],
+            "floor_area_m2": snapshot["total_floor_area_m2"],
+            "volume_m3": snapshot["total_volume_m3"],
+            "placed_devices": sum(snapshot["device_counts"].values()),
             "canvas_3d_pixels": [
                 app.spatial_workspace.canvas_3d.winfo_width(),
                 app.spatial_workspace.canvas_3d.winfo_height(),

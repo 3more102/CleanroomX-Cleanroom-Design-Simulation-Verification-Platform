@@ -8,7 +8,8 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui_design_studio import (
-    studio_snapshot, STUDIO_ROOM_COLORS, studio_shade, studio_blend,
+    studio_snapshot, studio_navigator_signature,
+    STUDIO_ROOM_COLORS, studio_shade, studio_blend,
 )
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 
@@ -46,11 +47,40 @@ def test_studio_snapshot_real_geometry_and_device_ownership():
     assert layout == before
 
 
+def test_navigator_signature_detects_geometry_change_even_when_area_is_constant():
+    layout = {
+        "rooms": [
+            {"id": "r1", "name": "Process", "x_m": 0, "y_m": 0,
+             "length_m": 6, "width_m": 5, "height_m": 3},
+            {"id": "r2", "name": "Preparation", "x_m": 6, "y_m": 0,
+             "length_m": 5, "width_m": 4, "height_m": 3},
+        ],
+        "devices": [],
+    }
+    baseline = studio_navigator_signature(studio_snapshot(layout, "r1"))
+    assert baseline == studio_navigator_signature(studio_snapshot(layout, "r1"))
+
+    # Room translation changes the miniature plan, not its area or volume.
+    layout["rooms"][1]["x_m"] += 2
+    moved = studio_navigator_signature(studio_snapshot(layout, "r1"))
+    assert moved != baseline
+
+    # The floor area is still 30 m², but the plan's aspect ratio changed.
+    layout["rooms"][0]["length_m"] = 10
+    layout["rooms"][0]["width_m"] = 3
+    reshaped = studio_navigator_signature(studio_snapshot(layout, "r1"))
+    assert reshaped != moved
+    assert studio_snapshot(layout, "r1")["selected_room"]["area_m2"] == 30
+
+    # Clicking a different room also changes navigator highlighting.
+    assert studio_navigator_signature(studio_snapshot(layout, "r2")) != reshaped
+
+
 def test_studio_snapshot_empty_and_missing_selection():
     assert studio_snapshot({"rooms": [], "devices": []})["selected_room"] is None
 
 
-def test_live_studio_selection_metrics_and_real_3d(tmp_path):
+def test_live_studio_selection_metrics_and_real_3d(tmp_path, monkeypatch):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -94,6 +124,7 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.selected.kind == "room"
         assert workspace.selected.item_id == str(room["id"])
         assert studio.room_name.get() == room["name"]
+        assert studio.room_pressure.get().startswith("Configured pressure: ")
         assert application.project.to_dict() == before
         original_rooms = copy.deepcopy(workspace.layout["rooms"])
         original_devices = copy.deepcopy(workspace.layout["devices"])
@@ -105,10 +136,25 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert "3D focus:" in application.status_var.get()
         studio.isolate_room()
         assert workspace._isolated_item.item_id == str(room["id"])
+        studio.restore_all_rooms()
+        assert workspace._isolated_item is None
+        studio.isolate_room()
+        assert workspace._isolated_item.item_id == str(room["id"])
         other = workspace.layout["rooms"][0]
         studio.nav_buttons[str(other["id"])].invoke()
         root.update()
         assert workspace.selected.item_id == str(other["id"])
+        assert workspace._isolated_item is None
+        # Finding a room while another one is isolated must reveal the hit.
+        studio.isolate_room()
+        assert workspace._isolated_item.item_id == str(other["id"])
+        monkeypatch.setattr(
+            "cleanroomx.gui_design_studio.simpledialog.askstring",
+            lambda *_args, **_kwargs: room["name"],
+        )
+        studio.find_item()
+        root.update()
+        assert workspace.selected.item_id == str(room["id"])
         assert workspace._isolated_item is None
         studio.studio_view()
         root.update()

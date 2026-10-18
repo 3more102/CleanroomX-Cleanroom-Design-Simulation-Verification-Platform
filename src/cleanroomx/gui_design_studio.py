@@ -90,6 +90,23 @@ def studio_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[s
     }
 
 
+def studio_navigator_signature(snapshot: dict[str, Any]) -> tuple:
+    """Track every model attribute that affects the navigator's geometry.
+
+    Floor area alone cannot identify a room move or a shape edit where
+    length and width change while preserving the product.
+    """
+    rooms = tuple(
+        (
+            room["id"], room["name"], room["x_m"], room["y_m"],
+            room["length_m"], room["width_m"], room["color"],
+        )
+        for room in snapshot["rooms"]
+    )
+    selected = snapshot["selected_room"]
+    return rooms, selected["id"] if selected is not None else None
+
+
 class DesignStudioPanels:
     """Integrated dashboard, navigator and selection surfaces for the real canvas."""
 
@@ -209,6 +226,11 @@ class DesignStudioPanels:
         tk.Button(actions, text="Isolate room", command=self.isolate_room,
                   bg="#22415b", fg=_TEXT, relief="flat",
                   activebackground="#315a76").pack(side="left", expand=True, fill="x", padx=2)
+        tk.Button(
+            self.device_panel, text="Restore all rooms", command=self.restore_all_rooms,
+            bg="#22415b", fg=_TEXT, relief="flat",
+            activebackground="#315a76",
+        ).pack(fill="x", pady=(7, 0))
 
         self.camera = tk.Frame(workspace._three_d_frame, bg=_PANEL,
                                highlightbackground=_BORDER, highlightthickness=1)
@@ -369,6 +391,11 @@ class DesignStudioPanels:
             canvas.tag_bind(tag, "<Button-1>",
                             lambda _event, rid=room["id"]: self._select_room(rid))
 
+    def restore_all_rooms(self):
+        """Clear the visibility filter without modifying or saving room geometry."""
+        self.workspace.show_all()
+        self.update()
+
     def focus_room(self):
         snapshot = studio_snapshot(self.workspace.layout, self._active_room_id())
         row = snapshot["selected_room"]
@@ -407,6 +434,10 @@ class DesignStudioPanels:
                                  ("device", self.workspace.layout["devices"])):
             for item in collection:
                 if text in str(item.get("name", "")).casefold():
+                    # Search must not select something still hidden by a
+                    # previous room/device isolation filter.
+                    if self.workspace._isolated_item is not None:
+                        self.workspace.show_all()
                     self.workspace.select_item(kind, str(item["id"]), notify=True)
                     return
         self.workspace._status_setter("No matching room or device")
@@ -424,10 +455,7 @@ class DesignStudioPanels:
             self.metric_vars[key].set(value)
         current = snapshot["selected_room"]
         selected_id = current["id"] if current else None
-        signature = (
-            tuple((r["id"], r["name"], r["area_m2"]) for r in snapshot["rooms"]),
-            selected_id,
-        )
+        signature = studio_navigator_signature(snapshot)
         if signature != self._nav_signature:
             self._nav_signature = signature
             for child in self.nav_list.winfo_children():
@@ -471,7 +499,7 @@ class DesignStudioPanels:
             f'Volume {current["volume_m3"]:.1f} m³\n'
             f'Placed devices: {current["devices"]}'
         )
-        self.room_pressure.set(f'Pressure: {pressure_text}')
+        self.room_pressure.set(f'Configured pressure: {pressure_text}')
         counts = current["device_counts"]
         self.room_devices.set(
             f'{counts["ffu"]} FFU           {counts["supply"]} Supply\n'

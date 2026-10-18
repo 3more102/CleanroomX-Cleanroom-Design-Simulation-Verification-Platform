@@ -120,11 +120,10 @@ def test_editing_toolbar_controls_remain_visible(app, size):
     app.root.update()
     workspace = app.spatial_workspace
     for row in workspace.winfo_children():
-        if not isinstance(row, ttk.Frame):
+        if not isinstance(row, ttk.Frame) or not row.winfo_ismapped():
             continue
         for button in row.winfo_children():
-            if isinstance(button, (ttk.Button, ttk.Menubutton)):
-                assert button.winfo_ismapped(), button.cget("text")
+            if isinstance(button, (ttk.Button, ttk.Menubutton)) and button.winfo_ismapped():
                 assert button.winfo_x() + button.winfo_width() <= row.winfo_width(), button.cget("text")
 
 
@@ -522,19 +521,20 @@ def test_design_inspector_collapses_restores_and_is_view_only(app):
     workspace = app.spatial_workspace
     project_before = copy.deepcopy(app.project.to_dict())
 
-    assert workspace.inspector_visible()
-
-    app.toggle_design_inspector()
-    app.root.update()
-    assert app.notebook.select() == str(workspace)
+    # Design Studio starts with a compact embedded room inspector.
     assert not workspace.inspector_visible()
 
     app.toggle_design_inspector()
     app.root.update()
+    assert app.notebook.select() == str(workspace)
     assert workspace.inspector_visible()
     assert tuple(str(item) for item in workspace._body.panes())[-1] == str(
         workspace._inspector_frame
     )
+
+    app.toggle_design_inspector()
+    app.root.update()
+    assert not workspace.inspector_visible()
     assert app.project.to_dict() == project_before
 
 

@@ -69,23 +69,29 @@ class CFDAnalysisExplorer(tk.Toplevel):
         slab = ttk.Frame(self, padding=(8, 2))
         slab.pack(fill="x")
         ttk.Label(slab, text="Slab axis").pack(side="left")
-        axis_combo = ttk.Combobox(slab, textvariable=self.axis_var, values=list("xyz"), state="readonly", width=3)
-        axis_combo.pack(side="left", padx=5)
-        self._combos.append(axis_combo)
-        self.axis_combo = axis_combo
+        self.axis_combo = ttk.Combobox(slab, textvariable=self.axis_var, values=list("xyz"), state="readonly", width=3)
+        self.axis_combo.pack(side="left", padx=5)
+        self._combos.append(self.axis_combo)
         self._entries = []
-        self.azimuth_var = tk.DoubleVar(value=-60.0)
-        self.elevation_var = tk.DoubleVar(value=25.0)
-        ttk.Label(slab, text="3D azimuth").pack(side="left", padx=(12, 3))
-        ttk.Scale(slab, from_=-180, to=180, variable=self.azimuth_var, command=self._rotate_3d).pack(side="left")
-        ttk.Label(slab, text="Elevation").pack(side="left", padx=(8, 3))
-        ttk.Scale(slab, from_=-90, to=90, variable=self.elevation_var, command=self._rotate_3d).pack(side="left")
         for label, variable in (("Position (m)", self.position_var), ("Thickness (m)", self.thickness_var)):
             ttk.Label(slab, text=label).pack(side="left", padx=(10, 4))
             entry = ttk.Entry(slab, textvariable=variable, width=9)
             entry.pack(side="left")
             self._entries.append(entry)
-        ttk.Label(slab, text="Spatial plots: choose one case and time; at most 5,000 displayed cells.").pack(side="left", padx=12)
+        ttk.Label(slab, text="Spatial plots use verified cell centers; max 5,000 samples").pack(side="left", padx=12)
+
+        navigation = ttk.Frame(self, padding=(8, 2))
+        navigation.pack(fill="x")
+        self.previous_time_button = ttk.Button(navigation, text="◀ Previous time", command=lambda: self._step_time(-1))
+        self.previous_time_button.pack(side="left")
+        self.next_time_button = ttk.Button(navigation, text="Next time ▶", command=lambda: self._step_time(1))
+        self.next_time_button.pack(side="left", padx=(4, 14))
+        self.azimuth_var = tk.DoubleVar(value=-60.0)
+        self.elevation_var = tk.DoubleVar(value=25.0)
+        ttk.Label(navigation, text="3D azimuth").pack(side="left")
+        ttk.Scale(navigation, from_=-180, to=180, variable=self.azimuth_var, command=self._rotate_3d).pack(side="left", padx=(5, 14))
+        ttk.Label(navigation, text="Elevation").pack(side="left")
+        ttk.Scale(navigation, from_=-90, to=90, variable=self.elevation_var, command=self._rotate_3d).pack(side="left", padx=5)
 
         toolbar = ttk.Frame(self, padding=(8, 4))
         toolbar.pack(fill="x")
@@ -148,6 +154,25 @@ class CFDAnalysisExplorer(tk.Toplevel):
                 self._events.put((event, value))
 
         threading.Thread(target=work, name="cleanroomx-cfd-analysis", daemon=True).start()
+
+    def _step_time(self, direction: int) -> None:
+        """Navigate recorded solver times without inventing intermediate steps."""
+        if self._busy or direction not in (-1, 1):
+            return
+        times = list(self.time_combo["values"])
+        if not times:
+            return
+        from decimal import Decimal
+        times.sort(key=Decimal)
+        current = self.time_var.get()
+        if current not in times:
+            target = 0 if direction > 0 else len(times) - 1
+        else:
+            target = min(len(times) - 1, max(0, times.index(current) + direction))
+        if times[target] == current:
+            return
+        self.time_var.set(times[target])
+        self.draw_graph()
 
     def _rotate_3d(self, _value=None):
         """Orbit existing 3D solver samples without modifying their source data."""

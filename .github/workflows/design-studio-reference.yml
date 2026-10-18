@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "src/cleanroomx/spatial.py"
+      - "src/cleanroomx/gui.py"
       - "src/cleanroomx/studio_summary.py"
       - "src/cleanroomx/gui_theme.py"
       - "tests/test_design_studio_reference.py"
@@ -40,6 +41,13 @@ jobs:
           xvfb-run -a -s "-screen 0 1920x1080x24"
           python scripts/capture_design_studio.py
           --output reports/gui_reference_parity/linux_virtual_display_after.png
+      - name: Capture unmodified main baseline at the same 1920x1080 resolution
+        run: |
+          git fetch --no-tags --depth=1 origin cf5506ffc5793313e023118209faafefc17e73b7
+          git worktree add --detach /tmp/cleanroomx-base cf5506ffc5793313e023118209faafefc17e73b7
+          PYTHONPATH=/tmp/cleanroomx-base/src xvfb-run -a -s "-screen 0 1920x1080x24" \
+            python scripts/capture_design_studio.py --baseline \
+            --output reports/gui_reference_parity/linux_virtual_display_before.png
       - name: Publish screenshot with source manifest
         if: always()
         uses: actions/upload-artifact@v4

@@ -93,11 +93,33 @@ def studio_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[s
 class DesignStudioPanels:
     """Integrated dashboard, navigator and selection surfaces for the real canvas."""
 
-    def __init__(self, workspace, *, commandbar, viewbar, overlaybar):
+    def __init__(self, workspace, *, commandbar, modebar, viewbar, overlaybar):
         self.workspace = workspace
         self.enabled = True
         self._advanced_rows = (viewbar, overlaybar)
         self._extra_actions = []
+        # Existing commands remain available in More tools. Hiding them is
+        # a layout-only change; no editor or backend callbacks are replaced.
+        for widget in modebar.winfo_children():
+            if widget.winfo_class() == "TButton" and widget.cget("text") in (
+                "Reset 2D", "Floor…", "Pull from analysis", "Push to analysis",
+            ):
+                widget.pack_forget()
+        self.advanced_actions_bar = tk.Frame(workspace, bg=_BG)
+        for title, command in (
+            ("Reset 2D", workspace.reset_2d),
+            ("Floor…", workspace.edit_floor),
+            ("Pull from analysis", workspace._on_pull_requested),
+            ("Push to analysis", workspace._on_sync_requested),
+        ):
+            tk.Button(
+                self.advanced_actions_bar, text=title,
+                command=command if command is not None else lambda: None,
+                state="normal" if command is not None else "disabled",
+                bg="#22415b", fg=_TEXT, relief="flat",
+                activebackground="#315a76", padx=8, pady=4,
+            ).pack(side="left", padx=(2, 4))
+
         for widget in commandbar.winfo_children():
             if isinstance(widget, (tk.Button,)):
                 continue
@@ -201,18 +223,28 @@ class DesignStudioPanels:
                       activebackground="#25465e", activeforeground=_TEXT,
                       font=("Segoe UI", 8, "bold"), padx=9, pady=5).pack(side="left")
 
-        tk.Button(commandbar, text="More tools ▾", command=self.toggle_advanced,
-                  bg="#22415b", fg=_TEXT, relief="flat",
-                  activebackground="#315a76").pack(side="right", padx=3)
-        tk.Button(commandbar, text="Inspector", command=workspace.toggle_inspector,
-                  bg="#22415b", fg=_TEXT, relief="flat",
-                  activebackground="#315a76").pack(side="right", padx=3)
-        tk.Button(commandbar, text="Studio view", command=self.studio_view,
-                  bg="#22415b", fg=_TEXT, relief="flat",
-                  activebackground="#315a76").pack(side="right", padx=3)
-        tk.Button(commandbar, text="Find room / device", command=self.find_item,
-                  bg="#22415b", fg=_TEXT, relief="flat",
-                  activebackground="#315a76").pack(side="right", padx=3)
+        # Match the reference: search belongs on the design command strip,
+        # while Studio/View/Inspector actions belong on the second row.
+        tk.Button(
+            commandbar, text="Find room / device", command=self.find_item,
+            bg="#22415b", fg=_TEXT, relief="flat",
+            activebackground="#315a76",
+        ).pack(side="right", padx=3)
+        for title, action in (
+            ("Balance", self.balance_view),
+            ("Studio view", self.studio_view),
+            ("Inspector", workspace.toggle_inspector),
+        ):
+            tk.Button(
+                modebar, text=title, command=action, bg="#22415b",
+                fg=_TEXT, relief="flat", activebackground="#315a76",
+                padx=9, pady=5,
+            ).pack(side="left", padx=3)
+        tk.Button(
+            modebar, text="More tools ▾", command=self.toggle_advanced,
+            bg="#22415b", fg=_TEXT, relief="flat",
+            activebackground="#315a76", padx=9, pady=5,
+        ).pack(side="right", padx=3)
 
         self._compact_layout = None
         self.studio_view(request_focus=False)
@@ -263,8 +295,21 @@ class DesignStudioPanels:
         else:
             self.workspace.fit_studio_3d()
 
+    def balance_view(self):
+        """Restore a balanced isometric view of all visible project rooms."""
+        self.workspace.show_all()
+        self.workspace.set_workspace_mode("3d")
+        self.workspace.set_3d_view_preset("iso")
+        self.workspace.fit_studio_3d()
+
     def toggle_advanced(self):
         self._advanced_visible = not self._advanced_visible
+        if self._advanced_visible:
+            self.advanced_actions_bar.pack(
+                before=self.metrics_frame, fill="x", padx=8, pady=(2, 4),
+            )
+        else:
+            self.advanced_actions_bar.pack_forget()
         for widget in self._extra_actions:
             if self._advanced_visible:
                 widget.pack(side="left", padx=2)

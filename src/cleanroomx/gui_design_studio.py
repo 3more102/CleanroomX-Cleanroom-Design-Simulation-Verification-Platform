@@ -157,12 +157,16 @@ class DesignStudioPanels:
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
         self.room_name = tk.StringVar(value="No room")
         self.room_details = tk.StringVar(value="Add or select a room")
+        self.room_pressure = tk.StringVar(value="")
         self.room_devices = tk.StringVar(value="")
         tk.Label(self.details, textvariable=self.room_name, bg=_PANEL, fg=_TEXT,
                  anchor="w", font=("Segoe UI", 10, "bold")).pack(fill="x", pady=(4, 3))
         tk.Label(self.details, textvariable=self.room_details, bg=_PANEL,
-                 fg=_MUTED, anchor="w", justify="left", wraplength=215,
+                 fg=_MUTED, anchor="w", justify="left", wraplength=295,
                  font=("Segoe UI", 9)).pack(fill="x")
+        tk.Label(self.details, textvariable=self.room_pressure,
+                 bg=_PANEL, fg="#e7c17a", anchor="w", justify="left",
+                 font=("Segoe UI", 9)).pack(fill="x", pady=(3, 0))
         self.device_panel = tk.Frame(
             self.sidebar, bg=_PANEL,
             highlightbackground=_BORDER, highlightthickness=1,
@@ -217,8 +221,8 @@ class DesignStudioPanels:
         self._place_overlays()
 
     def _place_overlays(self):
-        self.nav.place(relx=0.015, rely=0.985, anchor="sw", width=230)
-        self.sidebar.place(relx=0.985, rely=0.015, anchor="ne", width=250)
+        self.nav.place(relx=0.01, rely=0.985, anchor="sw", width=270)
+        self.sidebar.place(relx=0.985, rely=0.015, anchor="ne", width=330)
         self.camera.place(relx=0.52, rely=0.985, anchor="s")
         tk.Label(self.workspace._three_d_frame,
                  text="Length X (m)\nWidth Y (m)\nHeight Z (m)",
@@ -266,7 +270,7 @@ class DesignStudioPanels:
         span_y = max(r["y_m"] + r["width_m"] for r in rooms) - min_y
         span_x = max(1.0, span_x)
         span_y = max(1.0, span_y)
-        scale = min(204.0 / span_x, 78.0 / span_y)
+        scale = min(230.0 / span_x, 78.0 / span_y)
         for index, room in enumerate(rooms, 1):
             x0 = 7 + (room["x_m"] - min_x) * scale
             y0 = 10 + (room["y_m"] - min_y) * scale
@@ -366,6 +370,7 @@ class DesignStudioPanels:
         if current is None:
             self.room_name.set("No room selected")
             self.room_details.set("Add a room to start your design.")
+            self.room_pressure.set("")
             self.room_devices.set("")
             return
         self.room_name.set(current["name"])
@@ -381,9 +386,9 @@ class DesignStudioPanels:
             f'H {current["height_m"]:g} m\n'
             f'Floor area {current["area_m2"]:.1f} m² · '
             f'Volume {current["volume_m3"]:.1f} m³\n'
-            f'Placed devices: {current["devices"]}\n'
-            f'Pressure: {pressure_text}'
+            f'Placed devices: {current["devices"]}'
         )
+        self.room_pressure.set(f'Pressure: {pressure_text}')
         counts = current["device_counts"]
         self.room_devices.set(
             f'{counts["ffu"]} FFU           {counts["supply"]} Supply\n'

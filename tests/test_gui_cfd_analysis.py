@@ -173,3 +173,32 @@ def test_3d_orbit_controls_reorient_existing_solver_samples(tmp_path):
     finally:
         explorer._close()
         root.destroy()
+
+
+def test_solver_time_navigation_uses_only_recorded_steps(tmp_path, monkeypatch):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    write_sync_store(tmp_path / "store")
+    explorer = CFDAnalysisExplorer(root, lambda: analyze_synced_results(tmp_path / "store", "SYNTHETIC-run-a"))
+    try:
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy)
+        explorer.time_combo.configure(values=("1", "2.5", "10"))
+        explorer.time_var.set("1")
+        calls = []
+        monkeypatch.setattr(explorer, "draw_graph", lambda: calls.append(explorer.time_var.get()))
+        explorer._step_time(1)
+        assert explorer.time_var.get() == "2.5"
+        explorer._step_time(1)
+        assert explorer.time_var.get() == "10"
+        explorer._step_time(1)
+        assert calls == ["2.5", "10"]
+        explorer._step_time(-1)
+        assert explorer.time_var.get() == "2.5"
+    finally:
+        explorer._close()
+        root.destroy()

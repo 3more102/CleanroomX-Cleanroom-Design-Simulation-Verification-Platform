@@ -126,3 +126,16 @@ def test_gui_focus_isolate_restore_and_studio_view(gui):
     gui.root.update()
     assert ws._workspace_mode.get() == "3d"
     assert ws.inspector_visible()
+
+
+def test_room_device_search_uses_shared_selection(gui):
+    ws = gui.spatial_workspace
+    ws._studio_search_var.set("Ante")
+    assert ws.find_design_item()
+    assert ws.selected is not None
+    assert ws.selected.kind == "room"
+    assert ws.selected.item_id == "ante"
+    assert "Ante / Airlock" in ws._studio_room_var.get()
+    ws._studio_search_var.set("no such device")
+    assert not ws.find_design_item()
+    assert ws.selected.item_id == "ante"

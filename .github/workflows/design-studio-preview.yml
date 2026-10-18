@@ -3,6 +3,7 @@ name: Design Studio Real Tk Preview
 on:
   pull_request:
     paths:
+      - "src/cleanroomx/gui.py"
       - "src/cleanroomx/gui_design_studio.py"
       - "src/cleanroomx/spatial.py"
       - "tests/test_gui_design_studio.py"

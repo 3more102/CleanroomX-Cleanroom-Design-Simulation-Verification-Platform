@@ -211,6 +211,9 @@ class DesignStudioPanels:
                      relx=0.987, rely=0.985, anchor="se")
 
     def studio_view(self, *, request_focus: bool = True):
+        if request_focus:
+            # Restore all rooms after Isolate Room without modifying geometry.
+            self.workspace.show_all()
         self.workspace.set_workspace_mode("3d")
         self.workspace.fit_3d()
         callback = getattr(self.workspace, "_on_studio_requested", None)
@@ -267,8 +270,7 @@ class DesignStudioPanels:
         row = snapshot["selected_room"]
         if row is not None:
             self._select_room(row["id"])
-            self.workspace.fit_selected()
-            self.workspace.fit_3d()
+            self.workspace.focus_room_3d(row["id"])
 
     def isolate_room(self):
         row = studio_snapshot(self.workspace.layout, self._active_room_id())["selected_room"]

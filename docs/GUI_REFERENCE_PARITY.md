@@ -38,6 +38,11 @@ reported before that evidence exists.
   does not imply that OpenFOAM solved the pressure field.
 - Regression tests cover both cases using the real Tk navigator, and confirm
   the pressure label for the bundled demonstration.
+- The real-Tk capture helper accepts an explicit width and height and rejects
+  output whose actual window size differs from the requested size.
+- Design Studio preview CI requests both 1536×960 reference-scale and
+  1920×1080 captures, using a large enough Xvfb display. These files become
+  evidence only after the corresponding workflow completes successfully.
 
 ## Reproduction commands
 
@@ -47,6 +52,7 @@ From a checkout of the change branch, with the project installed:
 python -m pytest -q tests/test_gui_design_studio.py tests/test_spatial_editing_gui.py
 python -m pytest -q
 cleanroomx-gui --demo
+python tools/capture_design_studio_ci.py --width 1920 --height 1080 --output studio-1080p.png
 ```
 
 Do not treat a headless-only test as a GUI acceptance test: the real Tk tests
@@ -55,8 +61,8 @@ repository's real-GUI capture script in `tools/capture_design_studio_ci.py`.
 
 ## Outstanding evidence
 
-- Capture an unchanged **1920×1080** Windows GUI baseline/reference comparison.
-  The existing CI preview uses the reference's historical 1536×960 framing.
+- Obtain and review both **1920×1080** and reference-scale CI screenshots;
+  independently verify the Windows GUI layout against the reference.
 - Verify all stage controls, room/device editing and persistence end-to-end.
 - Verify supported OpenFOAM capabilities against real solver output; separate
   configured/analytical, computed, sample and unsupported results.

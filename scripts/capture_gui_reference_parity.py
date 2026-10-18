@@ -53,21 +53,24 @@ def main() -> int:
         app.set_theme("dark", persist=False)
         app.load_project_path(bundled_demo_project_path())
         app.notebook.select(app.spatial_workspace)
-        # Output / Verification is independently accessible, but the Design
-        # Studio should own the majority of the frame in reference captures.
-        app.hide_output_panel()
         workspace = app.spatial_workspace
         workspace.set_workspace_mode("3d")
         workspace.show_inspector()
+        root.geometry(f"{args.width}x{args.height}+0+0")
+        root.update_idletasks()
+        root.update()
+        # The application restores the saved panel state via root.after_idle.
+        # Hide the output panel AFTER that callback, otherwise it reappears.
+        # Both before and after checkouts use identical capture configuration.
+        app.hide_output_panel()
         rooms = workspace.layout.get("rooms", [])
         if rooms:
             workspace.select_item("room", rooms[0]["id"], notify=True)
         root.geometry(f"{args.width}x{args.height}+0+0")
         root.update_idletasks()
         root.update()
-        # A pending GUI layout callback may change panel geometry after idle.
-        root.update_idletasks()
-        root.update()
+        if app.output_panel_visible_var.get():
+            raise RuntimeError("Output panel restoration overrode reference capture layout")
         actual_width = root.winfo_width()
         actual_height = root.winfo_height()
         if (actual_width, actual_height) != (args.width, args.height):

@@ -43,7 +43,8 @@ def main() -> int:
                 f"Actual display {screen_width}x{screen_height} is smaller "
                 f"than requested capture {args.width}x{args.height}"
             )
-        root.geometry(f"{args.width}x{args.height}+0+0")
+        # CleanroomXApp loads persisted GUI dimensions in its constructor.
+        # Set the requested capture size AFTER that initialization.
         app = CleanroomXApp(
             root,
             autosave_interval_seconds=0,
@@ -52,15 +53,35 @@ def main() -> int:
         app.set_theme("dark", persist=False)
         app.load_project_path(bundled_demo_project_path())
         app.notebook.select(app.spatial_workspace)
+        # Output / Verification is independently accessible, but the Design
+        # Studio should own the majority of the frame in reference captures.
+        app.hide_output_panel()
         workspace = app.spatial_workspace
         workspace.set_workspace_mode("3d")
         workspace.show_inspector()
+        rooms = workspace.layout.get("rooms", [])
+        if rooms:
+            workspace.select_item("room", rooms[0]["id"], notify=True)
+        root.geometry(f"{args.width}x{args.height}+0+0")
         root.update_idletasks()
         root.update()
+        # A pending GUI layout callback may change panel geometry after idle.
+        root.update_idletasks()
+        root.update()
+        actual_width = root.winfo_width()
+        actual_height = root.winfo_height()
+        if (actual_width, actual_height) != (args.width, args.height):
+            raise RuntimeError(
+                f"Real Tk window size {(actual_width, actual_height)} does not "
+                f"equal requested {(args.width, args.height)}"
+            )
         workspace.fit_3d()
         root.lift()
         root.update_idletasks()
         root.update()
+        viewport_size = (workspace.canvas_3d.winfo_width(), workspace.canvas_3d.winfo_height())
+        if viewport_size[0] < 400 or viewport_size[1] < 300:
+            raise RuntimeError(f"3D canvas is too small for parity review: {viewport_size}")
         # ImageGrab reads the real on-screen X11/Windows Tk window.
         args.output.parent.mkdir(parents=True, exist_ok=True)
         ImageGrab.grab(bbox=(0, 0, args.width, args.height)).save(args.output)
@@ -81,6 +102,10 @@ def main() -> int:
             "git_commit": sha,
             "filename": args.output.name,
             "resolution_px": [args.width, args.height],
+            "actual_window_px": [actual_width, actual_height],
+            "viewport_3d_px": list(viewport_size),
+            "selected_room_id": workspace.selected.item_id if workspace.selected else None,
+            "output_panel_hidden": not app.output_panel_visible_var.get(),
             "capture": "real Tk desktop framebuffer (Pillow ImageGrab)",
             "theme": "dark",
             "view_mode": "3d",

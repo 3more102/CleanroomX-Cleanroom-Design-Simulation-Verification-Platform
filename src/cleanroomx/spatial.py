@@ -1830,6 +1830,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Separator(modebar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
+        ttk.Button(
+            modebar, text="Studio View", command=self.enter_studio_view,
+        ).pack(side="left", padx=(3, 2))
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
@@ -1998,6 +2001,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda p=preset: self.set_3d_view_preset(p),
             )
         camera_button.pack(side="left", padx=(5, 2))
+        ttk.Button(
+            header3, text="Inspector", command=self.toggle_inspector,
+        ).pack(side="left", padx=(4, 2))
         ttk.Button(header3, text="Fit", width=4, command=self.fit_3d).pack(
             side="left", padx=2
         )
@@ -2134,6 +2140,44 @@ class SpatialDesignWorkspace(ttk.Frame):
             wraplength=310,
         ).pack(fill="x", pady=(3, 8))
 
+        # Keep the entire editor accessible at 1920x1080 and smaller windows:
+        # summary panels stay visible while the existing field groups scroll.
+        editor_shell = ttk.Frame(inspector)
+        editor_shell.pack(fill="both", expand=True, pady=(0, 4))
+        editor_canvas = tk.Canvas(
+            editor_shell, highlightthickness=0, borderwidth=0,
+            background=self._theme_palette["panel"],
+        )
+        editor_scroll = ttk.Scrollbar(
+            editor_shell, orient="vertical", command=editor_canvas.yview,
+        )
+        editor_canvas.configure(yscrollcommand=editor_scroll.set)
+        editor_scroll.pack(side="right", fill="y")
+        editor_canvas.pack(side="left", fill="both", expand=True)
+        properties_body = ttk.Frame(editor_canvas)
+        editor_window = editor_canvas.create_window(
+            (0, 0), window=properties_body, anchor="nw",
+        )
+        properties_body.bind(
+            "<Configure>",
+            lambda _event: editor_canvas.configure(
+                scrollregion=editor_canvas.bbox("all"),
+            ),
+        )
+        editor_canvas.bind(
+            "<Configure>",
+            lambda event: editor_canvas.itemconfigure(
+                editor_window, width=event.width,
+            ),
+        )
+        editor_canvas.bind(
+            "<MouseWheel>",
+            lambda event: editor_canvas.yview_scroll(
+                -1 if event.delta > 0 else 1, "units",
+            ),
+        )
+        self._property_editor_canvas = editor_canvas
+
         property_groups = (
             (
                 "Geometry",
@@ -2172,7 +2216,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for group_name, fields in property_groups:
-            section = ttk.LabelFrame(inspector, text=group_name, padding=(8, 6))
+            section = ttk.LabelFrame(properties_body, text=group_name, padding=(8, 6))
             section.pack(fill="x", pady=(0, 7))
             for key, label, unit in fields:
                 row = ttk.Frame(section)
@@ -2243,6 +2287,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+    def enter_studio_view(self) -> None:
+        """Expand the real 3D view and show the live room/device inspector."""
+        self.set_workspace_mode("3d")
+        self.set_inspector_visible(True)
 
     def focus_selected_room(self) -> None:
         if self.selected is None or self.selected.kind != "room":
@@ -2387,6 +2436,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         if hasattr(self, "_navigator_canvas"):
             self._navigator_canvas.configure(background=palette["canvas_3d"])
+        if hasattr(self, "_property_editor_canvas"):
+            self._property_editor_canvas.configure(background=palette["panel"])
         if redraw:
             self.redraw()
 

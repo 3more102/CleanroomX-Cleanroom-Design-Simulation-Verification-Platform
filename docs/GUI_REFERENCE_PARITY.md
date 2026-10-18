@@ -35,7 +35,7 @@ totals: 62 m² floor area and 186 m³ volume.
 - Live room/device ID/name/type search that cycles real matching objects without changing geometry.
 - Real Focus Room, Isolate, Show All and Studio View actions. Studio View
   selects the existing 3D workspace, reveals the inspector, fits the model and
-  requests the application's existing dark theme.
+  applies a dedicated navy/cyan Studio theme without altering existing light/dark presets.
 - Real widget contract tests added to `tests/test_gui_reference_studio.py`
   and linked into the Tk/Xvfb CI stage. The existing project persistence,
   validation, 2D/3D renderer and solver APIs were not replaced.

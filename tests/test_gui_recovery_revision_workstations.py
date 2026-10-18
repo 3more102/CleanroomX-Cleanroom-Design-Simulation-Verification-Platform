@@ -51,6 +51,8 @@ def _revision(
         application_version=version,
         artifact_size=1400,
         artifact_sha256=digest_char.upper() * 64,
+        # Display-only fixture; this browser test never restores an artifact.
+        artifact_identity=("test-fixture", 0, 0),
     )
 
 

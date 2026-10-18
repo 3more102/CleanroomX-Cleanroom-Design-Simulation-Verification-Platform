@@ -22,28 +22,57 @@ from .proofgraph_models import (
 )
 
 
-def draw_analysis_graph(figure, graph: dict) -> None:
+def draw_analysis_graph(figure, graph: dict, *, include_provenance: bool = True) -> None:
     """Render exactly graph.points, sharing the renderer between Tk and file exports."""
     figure.clear()
     kind = graph["kind"]
     ax = figure.add_subplot(111, projection="3d" if kind == "cell_3d" else None)
-    figure.subplots_adjust(bottom=0.28, top=0.87, left=0.12, right=0.93)
+    compact = not include_provenance and figure.get_figheight() < 3
+    figure.subplots_adjust(bottom=0.28 if include_provenance else 0.2, top=0.87, left=0.12, right=0.93)
     ax.set_title(graph["title"], fontsize=11)
     if graph["status"] == "not_available":
-        ax.text(0.5, 0.5, graph["reason"], ha="center", va="center", transform=ax.transAxes, wrap=True)
+        text = ax.text2D if kind == "cell_3d" else ax.text
+        text(0.5, 0.5, graph["reason"], ha="center", va="center", transform=ax.transAxes, wrap=True)
     elif kind in ("cell_slab", "cell_3d"):
         points = graph["series"][0]["points"]
+        stats = graph.get("selections", [{}])[0].get("statistics") or {}
+        colors = {"cmap": "viridis", "vmin": stats.get("minimum"), "vmax": stats.get("maximum")}
         if kind == "cell_3d":
             dots = ax.scatter([p["x"] for p in points], [p["y"] for p in points], [p["z"] for p in points],
-                              c=[p["value"] for p in points], s=10)
+                              c=[p["value"] for p in points], s=14, **colors)
             ax.set(xlabel="x (m)", ylabel="y (m)", zlabel="z (m)")
+            bounds = graph.get("mesh_bounds_m")
+            if bounds:
+                ax.set(xlim=bounds[:2], ylim=bounds[2:4], zlim=bounds[4:])
+                ax.set_box_aspect([bounds[i + 1] - bounds[i] for i in (0, 2, 4)])
+            region = graph["filters"].get("region")
+            if region:
+                bounds = region["bounds_m"]
+                for axis in range(3):
+                    others = [i for i in range(3) if i != axis]
+                    for a in (0, 1):
+                        for b in (0, 1):
+                            edge = [[bounds[2 * i], bounds[2 * i + 1]] if i == axis
+                                    else [bounds[2 * i + (a if i == others[0] else b)]] * 2 for i in range(3)]
+                            ax.plot(*edge, color="#087e8b", linewidth=0.8, alpha=0.55)
         else:
             axes = [a for a in "xyz" if a != graph["filters"]["axis"]]
             dots = ax.scatter([p[axes[0]] for p in points], [p[axes[1]] for p in points],
-                              c=[p["value"] for p in points], s=18)
+                              c=[p["value"] for p in points], s=22, **colors)
             ax.set(xlabel=axes[0] + " (m)", ylabel=axes[1] + " (m)")
             ax.set_aspect("equal", adjustable="box")
-        figure.colorbar(dots, ax=ax, label=graph["color_label"], shrink=0.75)
+        colorbar = figure.colorbar(dots, ax=ax, label=graph["color_label"], shrink=0.75, pad=0.08)
+        ax.set_anchor("C")
+        if compact:
+            from matplotlib.ticker import MaxNLocator
+            ax.tick_params(labelsize=7, pad=1)
+            ax.xaxis.set_major_locator(MaxNLocator(3))
+            ax.yaxis.set_major_locator(MaxNLocator(3))
+            if kind == "cell_3d":
+                ax.zaxis.set_major_locator(MaxNLocator(3))
+                ax.zaxis.labelpad = 1
+            ax.xaxis.labelpad = ax.yaxis.labelpad = 1
+            colorbar.ax.tick_params(labelsize=7)
     elif kind in ("comparison", "flow_balance", "air_change_rate"):
         labels, values = [], []
         for series in graph["series"]:
@@ -74,6 +103,8 @@ def draw_analysis_graph(figure, graph: dict) -> None:
         ax.set(xlabel=graph["x_label"], ylabel=graph["y_label"])
         ax.grid(alpha=0.2)
         ax.legend(fontsize=7, loc="best")
+    if not include_provenance:
+        return  # The Tk explorer shows provenance beside the plot and in its source tab.
     sources = graph["sources"]
     hashes = ", ".join(source["sha256"][:12] for source in sources[:4])
     if len(sources) > 4:
@@ -95,7 +126,7 @@ def _csv_safe(value):
 def graph_csv(graphs: list[dict]) -> str:
     output = io.StringIO(newline="")
     columns = ["graph", "kind", "status", "run_id", "case_id", "region", "series", "time_name", "x", "y", "z",
-               "value", "minimum", "maximum", "cell_index", "line", "linear_iterations", "units",
+               "value", "volume_m3", "minimum", "maximum", "cell_index", "line", "linear_iterations", "units",
                "source_paths", "source_sha256", "log_execution_binding"]
     writer = csv.DictWriter(output, fieldnames=columns)
     writer.writeheader()
@@ -111,6 +142,23 @@ def graph_csv(graphs: list[dict]) -> str:
                 if graph["kind"] in ("field_history", "comparison"):
                     row["x"] = point["time_name"]
                 writer.writerow({k: _csv_safe(v) for k, v in row.items() if k in columns})
+    return output.getvalue()
+
+
+def selection_csv(graphs: list[dict]) -> str:
+    """All selected-cell statistics, including empty selections, before plot sampling."""
+    output = io.StringIO(newline="")
+    columns = ["graph", "run_id", "case_id", "time_name", "region", "field", "status", "cell_count",
+               "mesh_cell_count", "volume_m3", "mesh_volume_m3", "volume_fraction_of_mesh", "mean",
+               "minimum", "maximum", "units", "selection_rule", "vtk_sha256", "cell_indices_sha256"]
+    writer = csv.DictWriter(output, fieldnames=columns)
+    writer.writeheader()
+    for index, graph in enumerate(graphs, 1):
+        for selection in graph.get("selections", []):
+            stats = selection.get("statistics") or {}
+            row = {**selection, **{key: stats.get(key, "") for key in ("mean", "minimum", "maximum", "units")},
+                   "graph": index}
+            writer.writerow({key: _csv_safe(row.get(key, "")) for key in columns})
     return output.getvalue()
 
 
@@ -200,10 +248,22 @@ def _report_markdown(sessions: list[AnalysisSession], graphs: list[dict]) -> str
         if "ventilation" in report:
             lines += ["", "Inlet supply ACH (whole domain): `" + json.dumps(report["ventilation"], sort_keys=True) + "`", ""]
         lines += ["", "Full source paths, SHA-256 values, native field metadata, calculation methods, and execution status are in analysis.json.", ""]
-    lines += ["## Figures and data", "", "graphs.csv contains every plotted point. graphs.json records filters, source hashes, methods, and unavailable states. residuals.csv contains all parsed linear solves. cell-data-NN.csv contains all selected cells before display sampling, when a spatial graph is exported.", ""]
+    lines += ["## Figures and data", "", "graphs.csv contains every plotted point. graphs.json records filters, source hashes, methods, and unavailable states. selections.csv contains all selected-cell statistics and mesh-volume coverage, including empty selections. residuals.csv contains all parsed linear solves. cell-data-NN.csv contains all selected cells before display sampling, when a spatial graph is exported.", ""]
     for i, graph in enumerate(graphs, 1):
         lines += [f"### Figure {i}: " + markdown_text(graph["title"]), "", markdown_text(graph["method"]), "",
                   f"![Figure {i}](figure-{i:02d}.png)", ""]
+        if graph.get("selections"):
+            lines += ["| Case / time | Selected cells | Selected volume (m³) | Mesh volume coverage | Mean | Range |",
+                      "| --- | ---: | ---: | ---: | ---: | --- |"]
+            for selection in graph["selections"]:
+                stats = selection["statistics"]
+                mean = f"{stats['mean']:.6g} {stats['units']}" if stats else "unavailable"
+                limits = f"{stats['minimum']:.6g} to {stats['maximum']:.6g}" if stats else "unavailable"
+                label = markdown_text(selection["run_id"] + " / " + selection["case_id"] + " / " + selection["time_name"])
+                lines.append(f"| {label} | {selection['cell_count']} / {selection['mesh_cell_count']} | "
+                             f"{selection['volume_m3']:.6g} | {100 * selection['volume_fraction_of_mesh']:.3g}% | "
+                             f"{markdown_text(mean)} | {limits} |")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -243,6 +303,7 @@ def export_analysis_bundle(sessions: list[AnalysisSession], graphs: list[dict], 
         write_json("analysis.json", [session.report for session in sessions])
         write_json("graphs.json", graphs)
         (stage / "graphs.csv").write_text(graph_csv(graphs), encoding="utf-8", newline="")
+        (stage / "selections.csv").write_text(selection_csv(graphs), encoding="utf-8", newline="")
         (stage / "residuals.csv").write_text(_residual_csv(sessions), encoding="utf-8", newline="")
         (stage / "report.md").write_text(_report_markdown(sessions, graphs), encoding="utf-8")
         for i, graph in enumerate(graphs, 1):
@@ -255,7 +316,7 @@ def export_analysis_bundle(sessions: list[AnalysisSession], graphs: list[dict], 
                                 and Decimal(s["time_name"]) == Decimal(filters["time_name"]))
                 full_graph["series"][0]["points"] = spatial_samples(
                     snapshot, filters["field"], kind=graph["kind"], axis=filters["axis"],
-                    position_m=filters["position_m"], thickness_m=filters["thickness_m"])
+                    position_m=filters["position_m"], thickness_m=filters["thickness_m"], region=filters.get("region"))
                 (stage / f"cell-data-{i:02d}.csv").write_text(graph_csv([full_graph]), encoding="utf-8", newline="")
             figure = Figure(figsize=(11, 7), dpi=120)
             FigureCanvasAgg(figure)

@@ -85,6 +85,51 @@ def write_sync_store(root: Path, run="SYNTHETIC-run-a", *, times=("2", "10"), th
     return case
 
 
+def write_dense_sync_store(root: Path, run="SYNTHETIC-room-grid"):
+    """576 uniform volume cells for sampling/export and GUI review; never solver evidence."""
+    import vtk
+    case = write_sync_store(root, run=run)
+    manifest_path = case / "sync_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for record in manifest["records"].values():
+        mesh = vtk.vtkImageData()
+        mesh.SetDimensions(13, 9, 7)
+        mesh.SetSpacing(.5, .5, .5)
+        conversion = vtk.vtkAppendFilter()
+        conversion.AddInputData(mesh)
+        conversion.Update()
+        grid = conversion.GetOutput()
+        centers = vtk.vtkCellCenters()
+        centers.SetInputData(grid)
+        centers.Update()
+        for name, components in (("U", 3), ("p", 1), ("T", 1)):
+            array = vtk.vtkDoubleArray()
+            array.SetName(name)
+            array.SetNumberOfComponents(components)
+            for i in range(grid.GetNumberOfCells()):
+                x, y, z = centers.GetOutput().GetPoint(i)
+                value = {"U": (.2 + .01 * x, -.03 * y, .1 * z),
+                         "p": (3 + .1 * x - .1 * y,), "T": (300 + x + y + z,)}[name]
+                array.InsertNextTuple(value)
+            grid.GetCellData().AddArray(array)
+        asset = next(a for a in record["assets"] if a["path"].endswith(".vtk"))
+        path = case / asset["path"]
+        writer = vtk.vtkUnstructuredGridWriter()
+        writer.SetFileName(str(path))
+        writer.SetInputData(grid)
+        writer.SetFileTypeToASCII()
+        assert writer.Write() == 1
+        asset.update(sha256=sha(path.read_bytes()), size_bytes=path.stat().st_size)
+        record["cell_count"] = grid.GetNumberOfCells()
+        receipt_path = case / record["receipt"]["path"]
+        receipt = json.loads(receipt_path.read_text())
+        receipt["record"] = {k: v for k, v in record.items() if k != "receipt"}
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True))
+        record["receipt"]["sha256"] = sha(receipt_path.read_bytes())
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+    return case
+
+
 def write_two_room_analysis_fixture(root: Path):
     from cleanroomx.cfd_two_room import export_two_room_case, _write_json
     from test_cfd_two_room import _spec

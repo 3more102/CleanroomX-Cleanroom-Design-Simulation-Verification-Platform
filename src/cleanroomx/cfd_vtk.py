@@ -1686,7 +1686,7 @@ def validate_vtk_field_map(field_map):
 def import_vtk_case(
     path, *, contaminant_array=None, temperature_array=None,
     temperature_units=None, recirculation_array="recirculating", field_map=None,
-    require_cell_velocity=False,
+    require_cell_velocity=False, include_geometry=False,
 ):
     source=Path(path)
     if not source.is_file(): raise FileNotFoundError(source)
@@ -1829,6 +1829,20 @@ def import_vtk_case(
                                   "units_source":"explicit_caller_declaration"}
                                  if temp is not None else None),
             "has_recirculation_labels":mask is not None}
+    if include_geometry:
+        import vtk
+        centers = vtk.vtkCellCenters()
+        centers.SetInputData(grid)
+        centers.Update()
+        points = centers.GetOutput().GetPoints()
+        if points is None or points.GetNumberOfPoints() != cell_count:
+            raise ValueError("VTK cell-center count differs from the volume mesh")
+        coordinates = [list(points.GetPoint(i)) for i in range(cell_count)]
+        bounds = list(grid.GetBounds())
+        if not all(math.isfinite(v) for row in coordinates for v in row) or not all(math.isfinite(v) for v in bounds):
+            raise ValueError("Non-finite VTK cell geometry")
+        result["cell_centers_m"] = coordinates
+        result["mesh_bounds_m"] = bounds
     if map_data is not None:
         result["field_map_schema"] = map_data["schema_version"]
         result["field_data"] = imported_fields

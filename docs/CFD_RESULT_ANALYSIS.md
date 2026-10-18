@@ -24,7 +24,7 @@ which contains the runtime synchronization and ProofGraph stack. The default
 
 | Analysis / graph | Required source | Units and interpretation |
 |---|---|---|
-| Field history and run comparison | Native runtime-sync schema v2; verified internal VTK U and positive cell volumes | Speed is mean **of magnitudes**, weighted by cell volume; it is not magnitude of the mean velocity. Field histories include all-cell min/max. |
+| Field history and run comparison | Native runtime-sync schema v2; verified internal VTK U and positive cell volumes | Speed is mean **of magnitudes**, weighted by cell volume; it is not magnitude of the mean velocity. U_x/U_y/U_z are signed native velocity components in m/s. Histories include min/max over all selected cells. |
 | Kinematic pressure | Recorded native p dimensions `[0 2 -2 0 0 0 0]` and the matching VTK array | `m^2/s^2`; never relabeled Pa in the field explorer. |
 | Temperature | Recorded T dimensions `[0 0 0 1 0 0 0]`, positive kelvin values | K. A dimensionless passive-scalar T retains its native label/dimensions. |
 | Other solved scalar/vector components | Recorded field metadata with explicit units and matching VTK cell arrays | Native name/units retained; vector components have separate identities. No array name alone establishes contaminant concentration. |
@@ -50,8 +50,9 @@ original case/region identifier, including nested identifiers; the output
 directory can have a different name. Both native layouts use the same strict
 manifest, receipt, VTK asset and simulation-identity verification. An explicitly
 present malformed standalone manifest fails loading rather than falling back
-to another layout. Standalone `sync-vtk` v3 snapshot stores, room cell masks and
-per-room boundary flux assignment are not yet imported by this explorer. Missing
+to another layout. Standalone `sync-vtk` v3 snapshot stores, verified room cell masks and
+per-room boundary flux assignment are not yet imported by this explorer. Explicit
+user box selections are supported as described below. Missing
 per-room ACH/doorway transfer and contaminant acceptance are explicitly recorded
 as unavailable. Existing scalar transport execution remains in its current
 workflow; this change does not add particle tracking or concentration criteria.
@@ -70,9 +71,10 @@ workflow; this change does not add particle tracking or concentration criteria.
    uses field **all** or a specific solver equation such as p/Ux.
 4. Use the Matplotlib toolbar for pan, zoom, reset and save. Rotate 3D samples
    with the mouse. Set slab axis/position/thickness for 2D selection.
-5. **Add comparison run…** selects another simulation directory inside a result
+5. **Add comparison…** selects another simulation directory inside a result
    store or a standalone native store. The latter's run ID is read from its
-   verified manifest. Comparison bars use the exact selected solver time.
+   verified manifest. Comparison bars use the exact selected solver time. Choose
+   **Run** for spatial plots when several runs contain the same case/time.
 6. Inspect **Sources, statistics, mesh and warnings**. Each snapshot records
    case/region, raw solver time, import/execution status, native field hash
    metadata, selected VTK source and receipt hashes.
@@ -85,6 +87,30 @@ VTK limits (100,000 cells and 256 MiB per dataset). Spatial display uses at most
 5,000 deterministic samples, while calculations use all cells. Long histories
 retain endpoints and bucket minima/maxima for display; complete parsed linear
 solves remain in JSON/CSV. Requested data beyond resource limits fails clearly.
+
+## Explicit spatial regions
+
+Choose **Cell selection → Custom box** and edit **Region & statistics**. The
+six bounds are `xmin xmax ymin ymax zmin zmax`, in the synchronized mesh's metre
+coordinate frame. The rule is `minimum <= cell_center < maximum` on each axis.
+Statistics include the **full volumes** of selected cells; this is not geometric
+cell clipping or a verified room mask. A region name is a user label. Across runs,
+the same bounds use the same coordinates without automatic geometry registration.
+
+The GUI summary/table and `selections.csv` record the selected count and volume,
+whole-mesh count and volume, selected volume / whole-mesh volume, weighted mean,
+minimum, maximum and units. A zero-cell selection retains a zero count/volume and
+unavailable statistics. A field not present at that time remains unavailable.
+Slabs intersect the box. Display sampling never changes these statistics or the
+full selected-cell export. Color limits use full-selection extrema.
+
+`graphs.json` preserves the canonical box, selection rule, source VTK hash and a
+SHA-256 over the ordered selected cell indices. Export reconstructs the selection
+before publication; modified bounds, statistics or sources fail the replay.
+Box selection is supported for field histories/comparisons and spatial plots.
+It cannot turn whole-domain boundary flux, probe pressure or supply ACH into a
+per-room result. Internal doorway flow and per-room ACH still need room-specific
+boundary-flux evidence.
 
 ## CLI
 
@@ -99,6 +125,11 @@ cleanroomx-cfd-pipeline analyze-results ./native_results \
 cleanroomx-cfd-pipeline analyze-results ./standalone-sync-output \
   --simulation-id my-native-run --case-directory ./my-native-case \
   --field speed --output ./standalone-analysis
+
+cleanroomx-cfd-pipeline analyze-results ./standalone-sync-output \
+  --simulation-id my-native-run --field U_z \
+  --region-label "Selected west volume" --region-bounds 0 3 0 4 0 3 \
+  --output ./west-volume-analysis
 
 cleanroomx-cfd-pipeline two-room-analyze \
   ./two_room_case ./two_room_receipt/two_room_run_receipt.json \
@@ -116,7 +147,8 @@ logs remain clearly marked in graph series and exported CSV.
 | `analysis.json` | All computed field summaries, execution metadata, full parsed residuals, pressure histories, mesh diagnostics, availability states, methods and source hashes. |
 | `graphs.json`, `graphs.csv` | Exact displayed graph data, units, run/case/region, solver times, field/slice filters and source paths/digests. |
 | `residuals.csv` | Every parsed linear solve before display reduction, including line number, initial/final values, linear iterations and log-to-run binding. |
-| `cell-data-NN.csv` | Every spatially selected cell before display sampling, with cell-array index, coordinates, time, value and source digests. |
+| `selections.csv` | Every selected-cell summary, including empty boxes, mesh-volume coverage, units, full-selection statistics, cell-index hash and VTK digest. |
+| `cell-data-NN.csv` | Every spatially selected cell before display sampling, with cell-array index, coordinates, full-cell volume, time, value and source digests. |
 | `figure-NN.png`, `figure-NN.svg` | Shared-renderer figures with labels, run/region and source hash references. |
 | `report.md` | Field tables, mesh/warning and availability details, calculation methods and figures. |
 | `proofgraph-NN.json` | Original verified result evidence extended with the derived analysis/graphs and export SHA-256 links. Integrity pass remains artifact-only; physical validation stays not checked. |
@@ -167,3 +199,54 @@ xvfb-run -a python tools/capture_cfd_analysis_screenshots.py
 The screenshot manifest records file dimensions, SHA-256 digests and fixture
 provenance. OpenFOAM was unavailable in the implementation environment; tests
 and captures use reproducible fixture files, with no live solver claim.
+
+### Region analysis continuation
+
+The region screenshots below were captured from actual Tk widgets using a
+576-cell **SYNTHETIC** grid. The west-half selection contains 288 cells and
+36 m³, covering 50% of the mesh; its synthetic T field has a 305 K mean.
+The fixture is a parser/UI check, not a simulated temperature result.
+
+```bash
+xvfb-run -a python scripts/capture_cfd_region_explorer.py \
+  --output-dir ./region-ui-review
+```
+
+![Region 3D view](screenshots/cfd-analysis-regions/region-3d.png)
+![Region statistics](screenshots/cfd-analysis-regions/region-statistics.png)
+![Compact 780 by 560 explorer](screenshots/cfd-analysis-regions/region-laptop.png)
+
+`tests/test_cfd_cell_regions.py` checks independent unequal-volume calculations,
+half-open boundaries, empty regions, units, changed sources, CLI/export replay,
+and preservation of all 288 cells when only ten are displayed. Real Tk tests
+cover selection controls, comparison-run data, recorded-time filtering and
+failed-refresh recovery.
+
+### Recorded Foundation v10 field replay
+
+The new region workflow was also exercised against actual synchronized solver
+outputs from [CI run 39118048747](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39118048747),
+whose source branch head was `6ff519a1608edae61523fb1b8009dedf06562186`.
+Artifact `12133700252` matched its published archive digest:
+`90b6150d313ad550a519904ee5b709c84305574decf0f0f7cc6bcea0e81945b2`.
+This session post-processed that existing run; it did not start a new solver.
+
+The imported `configuration_1/coarse` store retained times `50`, `100`, `150`.
+At time `150`, the box `0 1.5 0 2 0 2` selected 108 of 216 cells, 6 of 12 m³,
+and 50% of whole-mesh volume. Mean native U_z was -0.02691447064199798 m/s,
+with a range of -0.22252799570560455 to 0.038921598345041275 m/s. Selection
+and export replay passed using the recorded VTK/receipt/manifest hashes.
+
+The optional native-case log join was refused because its configuration hash
+did not match the synchronized identity. No residuals or mesh logs were added
+to this replay. Native source-field bytes remain represented by recorded hash
+metadata; the synchronized VTK assets were rehashed. No convergence, mesh
+independence, per-room ventilation or physical-validation claim follows.
+
+![Recorded Foundation v10 region view](screenshots/cfd-analysis-native-v10/actual-v10-region-3d.png)
+![Recorded Foundation v10 region statistics](screenshots/cfd-analysis-native-v10/actual-v10-region-statistics.png)
+
+`screenshots/cfd-analysis-native-v10/replay-evidence.json` records the CI archive,
+source asset hashes, exact box, selection statistics, screenshot hashes and
+limits. Full display-enabled regression after the GUI/test-fixture fixes:
+**2,778 passed, 1 optional BIM skip, 0 failures**.

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — spatial selection and solver analysis workspace — 2026-10-18
+
+- Add explicit mesh-coordinate box selections for field histories, exact-time comparisons, slabs and 3D cell samples, with half-open bounds and selected-cell identity hashes.
+- Show selected cell count, full-cell volume, whole-mesh volume coverage, volume-weighted mean and range in a GUI summary and scrollable statistics table; add signed native velocity components U_x/U_y/U_z.
+- Filter case/field/time choices by run and use the selected run for spatial analysis. Retain actual mesh proportions, selected-box edges and full-selection color limits.
+- Add reproducible `selections.csv`, cell-volume columns and report tables; replay graph selections and recheck sources before export. Empty selections remain unavailable and never inherit whole-mesh values.
+- Clear plots, statistics and report selections before source refresh; failed verification removes stale sessions. Keep the compact graph readable when the window resizes.
+- Fix two baseline GUI blockers exposed by display-enabled regression: repeated ProofGraph tree-selection events now settle, and Fit selected returns an explicit success result while preserving geometry.
+- Region names are user labels; boxes do not verify room boundaries or provide doorway transfer/per-room ACH. Scientific validation remains blocked.
+
 ## Unreleased Release 3 — bind two-room VTK outputs into evidence — 2026-10-17
 
 - Upgrades two-room run receipts to v2 and records SHA-256 digests for every regular file emitted under `VTK/`, with bounded file count, byte limits, stable-file checks, and symlink rejection.

@@ -80,6 +80,7 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert len(workspace.canvas_3d.find_withtag("studio_room_label")) == len(workspace.layout["rooms"])
         assert len(workspace.canvas_3d.find_withtag("studio_backdrop")) == 24
         assert workspace.canvas_3d.find_withtag("opening3d")
+        assert workspace.canvas_3d.find_withtag("studio_device3d")
         assert studio.mini_plan.find_withtag("floorplan:" + str(workspace.layout["rooms"][0]["id"]))
         before = copy.deepcopy(application.project.to_dict())
         room = workspace.layout["rooms"][-1]
@@ -133,6 +134,10 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         studio.balance_view()
         assert workspace._workspace_mode.get() == "3d"
         assert workspace._isolated_item is None
+        studio._set_camera_preset("front")
+        assert workspace.layout["rooms"] == original_rooms
+        assert workspace.layout["devices"] == original_devices
+        assert workspace.canvas_3d.find_withtag("studio_wall3d")
         assert errors == []
     finally:
         application._autosave_manager.shutdown(wait=False)

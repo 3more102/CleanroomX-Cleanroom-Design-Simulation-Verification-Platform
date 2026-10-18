@@ -11,7 +11,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
-from .gui_design_studio import DesignStudioPanels, STUDIO_ROOM_COLORS, studio_shade
+from .gui_design_studio import (
+    DesignStudioPanels, STUDIO_ROOM_COLORS, studio_blend, studio_shade,
+)
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -3904,7 +3906,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else (
                     "#38bdf8"
                     if hovered
-                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                    else ("#fb7185" if room["id"] in warning_ids else ("#78c1dc" if studio_active else "#c8d5e3"))
                 )
             )
             tag = f"room:{room['id']}"
@@ -3933,10 +3935,13 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
                 for wall_index, wall in enumerate((x_wall, y_wall)):
                     canvas.create_polygon(
-                        *sum(wall, ()), fill=studio_shade(
-                            fill, 1.0 if wall_index == 0 else 0.94
-                        ), outline=outline, width=polygon_width,
-                        stipple="gray75" if not self._xray_3d.get() else "gray50",
+                        *sum(wall, ()),
+                        fill=studio_blend(
+                            studio_shade(fill, 1.0 if wall_index == 0 else 0.96),
+                            "#152a40", 0.87,
+                        ),
+                        outline=outline, width=polygon_width,
+                        stipple="gray50" if self._xray_3d.get() else "",
                         tags=(tag, "room3d", "studio_wall3d"),
                     )
                 for index, (start, end) in enumerate(zip(base, top)):

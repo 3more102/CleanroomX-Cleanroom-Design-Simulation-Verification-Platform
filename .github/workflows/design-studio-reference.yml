@@ -1,0 +1,49 @@
+name: Design Studio Reference Evidence
+
+on:
+  pull_request:
+    paths:
+      - "src/cleanroomx/spatial.py"
+      - "src/cleanroomx/studio_summary.py"
+      - "src/cleanroomx/gui_theme.py"
+      - "tests/test_design_studio_reference.py"
+      - "scripts/capture_design_studio.py"
+      - ".github/workflows/design-studio-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-design-studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install GUI and screenshot runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk
+          python -m pip install -e ".[dev]" pillow
+      - name: Run actual Tk desktop and model tests
+        run: >-
+          xvfb-run -a -s "-screen 0 1920x1080x24"
+          python -m pytest -q
+          tests/test_design_studio_reference.py
+          tests/test_gui_theme.py
+          tests/test_spatial.py
+      - name: Capture live 1920x1080 dark Design Studio
+        run: >-
+          xvfb-run -a -s "-screen 0 1920x1080x24"
+          python scripts/capture_design_studio.py
+          --output reports/gui_reference_parity/linux_virtual_display_after.png
+      - name: Publish screenshot with source manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-studio-linux-1920x1080
+          path: reports/gui_reference_parity/
+          if-no-files-found: warn

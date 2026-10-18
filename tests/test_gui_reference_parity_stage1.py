@@ -124,3 +124,19 @@ def test_focus_and_studio_restore_visibility(studio):
     assert work._isolated_item is None
     assert work.inspector_visible()
     assert work._workspace_mode.get() == "3d"
+
+
+def test_bundled_demo_enters_dark_integrated_studio_without_project_edits(studio):
+    before = studio.project.to_dict()
+    studio.activate_reference_demo_studio()
+    studio.root.update()
+
+    work = studio.spatial_workspace
+    assert studio.theme_var.get() == "dark"
+    assert work._workspace_mode.get() == "3d"
+    assert not studio.navigator_panel_visible_var.get()
+    assert not studio.output_panel_visible_var.get()
+    assert work.inspector_visible()
+    assert work.selected == _Hit("room", work.layout["rooms"][0]["id"])
+    assert work.layout["rooms"][0]["name"] in work._selected_room_summary_var.get()
+    assert studio.project.to_dict() == before

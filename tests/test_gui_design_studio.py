@@ -82,6 +82,28 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.canvas_3d.find_withtag("opening3d")
         assert workspace.canvas_3d.find_withtag("studio_device3d")
         assert studio.mini_plan.find_withtag("floorplan:" + str(workspace.layout["rooms"][0]["id"]))
+        # A relocation or changed aspect ratio must invalidate the mini-plan
+        # even when room identifiers, labels and floor areas do not change.
+        plan_room = workspace.layout["rooms"][1]
+        plan_tag = "floorplan:" + str(plan_room["id"])
+        original_plan_box = studio.mini_plan.coords(plan_tag)
+        assert len(original_plan_box) == 4
+        plan_room["x_m"] += 0.5
+        studio.update()
+        assert studio.mini_plan.coords(plan_tag) != original_plan_box
+        plan_room["x_m"] -= 0.5
+        studio.update()
+        assert studio.mini_plan.coords(plan_tag) == original_plan_box
+        plan_room["length_m"], plan_room["width_m"] = (
+            plan_room["width_m"], plan_room["length_m"],
+        )
+        studio.update()
+        assert studio.mini_plan.coords(plan_tag) != original_plan_box
+        plan_room["length_m"], plan_room["width_m"] = (
+            plan_room["width_m"], plan_room["length_m"],
+        )
+        studio.update()
+        assert studio.mini_plan.coords(plan_tag) == original_plan_box
         before = copy.deepcopy(application.project.to_dict())
         room = workspace.layout["rooms"][-1]
         studio.nav_buttons[str(room["id"])].invoke()
@@ -89,6 +111,7 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.selected.kind == "room"
         assert workspace.selected.item_id == str(room["id"])
         assert studio.room_name.get() == room["name"]
+        assert studio.room_pressure.get() == "Configured pressure: +8 Pa"
         assert application.project.to_dict() == before
         original_rooms = copy.deepcopy(workspace.layout["rooms"])
         original_devices = copy.deepcopy(workspace.layout["devices"])

@@ -143,7 +143,7 @@ def _load_cells(snapshot: dict, *, include_geometry: bool = False) -> dict:
     )
     if imported["source_sha256"] != expected or imported["mesh_cells"] != snapshot["cell_count"]:
         raise ValueError("Imported VTK identity/cell count differs from the verified snapshot")
-    if imported["unavailable_fields"] and not snapshot.get("allow_unavailable_fields", False):
+    if imported.get("unavailable_fields", []) and not snapshot.get("allow_unavailable_fields", False):
         raise ValueError("Recorded native fields are missing from the synchronized VTK")
     if "stored_import_sha256" in snapshot:
         import_payload = {

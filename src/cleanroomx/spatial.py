@@ -4133,11 +4133,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                         device_bottom_z,
                     )
                     radius = 5 if (selected or hovered) else 4
-                    canvas.create_oval(
-                        x - radius, y - radius, x + radius, y + radius,
-                        fill="#fbbf24", outline=device_outline,
-                        width=2, tags=(tag, "device3d"),
-                    )
+                    if studio_active:
+                        marker_color = (
+                            "#fbbf24"
+                            if device["type"] in {"sensor", "equipment"}
+                            else "#55c2d3"
+                        )
+                        canvas.create_rectangle(
+                            x - radius, y - radius, x + radius, y + radius,
+                            fill="#143345", outline=marker_color,
+                            width=2 if (selected or hovered) else 1,
+                            tags=(tag, "device3d", "studio_device3d"),
+                        )
+                    else:
+                        canvas.create_oval(
+                            x - radius, y - radius, x + radius, y + radius,
+                            fill="#fbbf24", outline=device_outline,
+                            width=2, tags=(tag, "device3d"),
+                        )
 
         if not getattr(getattr(self, "_studio", None), "enabled", False):
             self._draw_engineering_legend(canvas, overlay)

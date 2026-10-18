@@ -49,6 +49,23 @@ python -m pytest tests -q
 cleanroomx-gui --demo
 ```
 
+For an actual Windows capture (not yet run here), execute:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/capture_design_studio_parity.ps1 -OutputDir reports/gui_reference_parity/current
+```
+
+This launches the real demonstration desktop process and writes a PNG and
+SHA-256 capture receipt. It refuses a desktop smaller than the requested
+capture size. Use an independent baseline checkout/output directory for the
+before image; do not treat a single screenshot as a comparison.
+
+**Counting policy:** Placed Devices includes all normalized layout devices
+and openings, including doors, transfers, equipment and sensors. The
+Return/exhaust bucket combines those two types. Other includes all remaining
+types outside FFU, supply and return/exhaust. The Inspector buckets show the
+selected room when a room is selected, or the full project otherwise.
+
 Set the application to 1920×1080 and capture **real** GUI screenshots. Compare
 the original Design Studio reference for layout, 3D room geometry, navigator,
 colors, four metrics and the selected-room/placed-devices panels. Exercise

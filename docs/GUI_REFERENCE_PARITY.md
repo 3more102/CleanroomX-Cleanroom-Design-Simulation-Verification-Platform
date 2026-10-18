@@ -24,7 +24,7 @@ Project/analysis tabs; 2D, 3D and Split views; canvas editing, orbit/pan/zoom, s
 
 **Verified in an isolated local Python test**, before uploading the equivalent pure-model helper: three tests passed, zero failed. These exercises are **not** a full repository test run.
 
-**Not verified in this environment:** launching the Windows desktop build; `cleanroomx-gui --demo`; a true 1920×1080 baseline/after screenshot; 2D/3D and navigator interactive mouse clicks; overall regression counts; an end-to-end OpenFOAM solver run. GitHub Actions Xvfb runs should be used to validate the new Tk tests; the result must be recorded after the checks finish.
+**Verified on Linux under Xvfb:** full-size 1920×1080 real Tk baseline/after screenshots were captured with successful [GUI Reference Capture run 39170476299](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39170476299). Receipts independently record actual root-window 1920×1080, Output panel hidden in both, 3D viewport **993×688 before** / **993×619 after**, selected Process room, real demonstration geometry, and no solver execution. The difference report found **289116 of 2073600 pixels** changed at RGB threshold 10; this compares before/after builds, **not** either image against the user reference. Source-controlled capture script and 14-day CI ZIP artifacts enable independent review. **Not yet verified:** Windows desktop rendering, manual selection click tests, full reference-image parity, full regression, and end-to-end OpenFOAM execution.
 
 No exact visual-parity percentage, full GUI completeness percentage or OpenFOAM integration percentage is claimed. A denominator must be defined by a reviewed test matrix, and each criterion independently checked before calculating any percentage. "Unknown" is not equivalent to 0% or 100%.
 
@@ -36,16 +36,16 @@ The mathematical model contract test uses **three synthetic model rooms**, `Proc
 
 | Acceptance criterion | Implementation | Verification |
 | --- | --- | --- |
-| Four live model metrics | Added | Isolated model test passed; actual GUI run pending |
+| Four live model metrics | Added | Isolated model test passed; values visually confirmed in real Tk capture |
 | Room Navigator floorplan and click selection | Added | Tk integration test committed; execution pending |
-| Selected Room overview | Added | Model test passed; GUI execution pending |
+| Selected Room overview | Added | Selected Process room visible with configured pressure in genuine Tk capture |
 | Categorized device counts | Added | Isolated model test passed |
 | Focus / Isolate / Restore controls | Reuses existing real operations | Tk integration test committed; execution pending |
-| Studio View / Inspector controls | Connected | Real GUI screenshot and click acceptance pending |
+| Studio View / Inspector controls | Connected | Both shown in real GUI screenshot; manual mouse-click acceptance pending |
 | 2D / 3D / Split | Existing implementation retained | Full regression pending |
-| Visual parity with reference screenshot | Unverified | Real same-size screenshots and review required |
+| Visual parity with reference screenshot | Unverified | Genuine before/after screenshots captured; user-reference image was not available to CI |
 | OpenFOAM integration | Existing separate backend unchanged | End-to-end solver evidence required |
-| Test suite regression | Focused tests committed | CI and full suite pending |
+| Test suite regression | Focused tests committed | Screenshot CI passed; full application CI pending |
 
 ## Local reproduction (Windows PowerShell)
 
@@ -65,12 +65,19 @@ python -m pytest -q tests/test_gui_design_studio.py -k 'not real_studio and not 
 xvfb-run -a python -m pytest -q tests/test_gui_design_studio.py -k 'real_studio or studio_live'
 ```
 
-Capture genuine 1920×1080 screenshots using the existing GUI capture tooling; compare geometry, main workspace proportions, toolbar positions, cards, room navigator and selection states. Preserve source, real screenshot identifiers, commit SHA and the exact run results with the report.
+Genuine 1920×1080 screenshots have now been captured through `scripts/capture_gui_reference_parity.py` and preserved as Actions artifacts in run 39170476299. Continue with screenshot **reference** comparison and hands-on Windows acceptance; preserve image receipts with commit SHA and exact run results. Do not treat before/after pixel differences as reference parity.
 
 ## Next priorities
 
-1. Run new Tk tests and all existing spatial/GUI tests; fix failures and record actual pass/fail/skip counts.
+1. Finish new Tk and existing spatial/GUI CI checks, fix failures and record actual pass/fail/skip counts.
 2. Audit genuine 1920×1080 screenshots, especially the reference's larger 3D-first central workspace, room labels, typography and density at smaller resolutions.
 3. Add genuine device markers, wall transparency, door openings and any missing geometric behavior based on the existing model; never substitute bitmap imagery.
 4. Validate actual OpenFOAM Foundation v10 case generation/execution/results/diagnostics end to end, and only present solver-derived fields that have run receipts.
 5. After evidence, calculate completion fractions from a publicly inspectable acceptance checklist; do not infer parity from committed code alone.
+
+## Captured CI evidence (not a final reference-parity verdict)
+
+- [Genuine before/after screenshots and receipts, successful run 39170476299](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39170476299) — artifact `gui-reference-parity-before-after`.
+- Before real 3D canvas: **993×688 px**; after: **993×619 px**, at the same application window **1920×1080 px**. The 69 px reduction is occupied by the new live dashboard/Studio controls, not improved 3D viewport height.
+- Displayed project data: three rooms, 62 m², 186 m³, 10 placed objects. Pressure in the Selected Room panel is explicitly marked configured.
+- No verified human review of the user-supplied reference image; no OpenFOAM solver executed during screenshot capture.

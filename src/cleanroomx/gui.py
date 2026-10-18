@@ -2162,6 +2162,7 @@ class CleanroomXApp:
         self._configure_styles()
         self._build_menu()
         self._build_layout()
+        self.notebook.bind("<<NotebookTabChanged>>", self._sync_guided_tab_stage)
         self._apply_theme_to_native_widgets(redraw=False)
         self._refresh_analysis_list()
         self._refresh_engineering_panels()
@@ -2581,15 +2582,15 @@ class CleanroomXApp:
             text="3  Validate",
             width=10,
             style="CX.Compact.TButton",
-            command=self.validate_current,
+            command=lambda: self._guided_action("validate", self.validate_current),
         )
         self.workflow_validate_button.pack(side="left", padx=1)
         self.workflow_run_button = ttk.Button(
             workflowbar,
             text="4  Run",
             width=9,
-            style="CX.Primary.TButton",
-            command=self.run_current,
+            style="CX.Compact.TButton",
+            command=lambda: self._guided_action("run", self.run_current),
         )
         self.workflow_run_button.pack(side="left", padx=1)
         self.workflow_verify_button = ttk.Button(
@@ -2597,7 +2598,7 @@ class CleanroomXApp:
             text="5  Save & Verify",
             width=14,
             style="CX.Compact.TButton",
-            command=self._guided_save_and_verify,
+            command=lambda: self._guided_action("verify", self._guided_save_and_verify),
         )
         self.workflow_verify_button.pack(side="left", padx=1)
         self.workflow_report_button = ttk.Button(
@@ -2605,7 +2606,7 @@ class CleanroomXApp:
             text="6  Report",
             width=9,
             style="CX.Compact.TButton",
-            command=self.export_project_engineering_dossier,
+            command=lambda: self._guided_action("report", self.export_project_engineering_dossier),
         )
         self.workflow_report_button.pack(side="left", padx=1)
 
@@ -3905,6 +3906,34 @@ class CleanroomXApp:
     def _import_ifc_from_start(self) -> None:
         if self.import_ifc_spatial_layout():
             self._activate_spatial_workspace("split")
+
+    def _mark_guided_stage(self, stage: str | None) -> None:
+        """Highlight the actual selected workflow, rather than hardcoding Run."""
+        controls = (
+            ("design", self.workflow_design_button),
+            ("inputs", self.workflow_input_button),
+            ("validate", self.workflow_validate_button),
+            ("run", self.workflow_run_button),
+            ("verify", self.workflow_verify_button),
+            ("report", self.workflow_report_button),
+        )
+        for key, button in controls:
+            button.configure(
+                style="CX.Primary.TButton" if stage == key else "CX.Compact.TButton"
+            )
+
+    def _guided_action(self, stage: str, action):
+        self._mark_guided_stage(stage)
+        return action()
+
+    def _sync_guided_tab_stage(self, _event=None) -> None:
+        selected = self.notebook.select()
+        if selected == str(self.spatial_workspace):
+            self._mark_guided_stage("design")
+        elif selected == str(self.input_tab):
+            self._mark_guided_stage("inputs")
+        else:
+            self._mark_guided_stage(None)
 
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):

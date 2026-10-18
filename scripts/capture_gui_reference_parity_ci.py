@@ -32,6 +32,10 @@ def main() -> int:
         )
         app.load_project_path(bundled_demo_project_path())
         root.geometry("1920x1080+0+0")
+        # Finish deferred restoration of the saved panel state before
+        # applying the demo-specific immersive view.
+        root.update_idletasks()
+        root.update()
         app.activate_reference_demo_studio()
         work = app.spatial_workspace
         root.update_idletasks()

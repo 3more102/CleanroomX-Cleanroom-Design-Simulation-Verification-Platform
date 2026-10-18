@@ -135,6 +135,8 @@ def test_supply_ach_rejects_invalid_inputs(flow, volume):
 def test_two_room_graphs_reparse_actual_probes_phi_and_mesh(tmp_path):
     case, receipt = write_two_room_analysis_fixture(tmp_path)
     result = analyze_two_room_results(case, receipt)
+    assert any(item["analysis"] == "room_field_statistics" and item["status"] == "not_available"
+               for item in result.report["availability"])
     pressure = build_analysis_graph([result], kind="pressure_history")
     difference = next(s for s in pressure["series"] if "difference" in s["label"])
     assert [p["y"] for p in difference["points"]] == pytest.approx([1.2,4.92])

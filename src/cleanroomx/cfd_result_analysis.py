@@ -758,18 +758,30 @@ def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Pat
         raise ValueError("Recorded pressure conversion density differs from the verified case")
     if type(rho) not in (int, float) or not math.isfinite(rho) or rho <= 0:
         raise ValueError("Receipt density must be finite and positive")
-    room_vtk = _load_two_room_vtk_snapshot(
-        case, evidence, case_manifest, hashlib.sha256(case_manifest_raw).hexdigest(),
-        receipt_path, hashlib.sha256(receipt_raw).hexdigest(),
-    )
+    try:
+        room_vtk = _load_two_room_vtk_snapshot(
+            case, evidence, case_manifest, hashlib.sha256(case_manifest_raw).hexdigest(),
+            receipt_path, hashlib.sha256(receipt_raw).hexdigest(),
+        )
+        room_vtk_failure = None
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, ArithmeticError) as exc:
+        # Room-field analysis is optional; preserve valid pressure/flux diagnostics,
+        # but never publish room statistics from an unusable or mismatched VTK asset.
+        room_vtk = None
+        room_vtk_failure = f"{type(exc).__name__}: {str(exc)[:180]}"
     if room_vtk is not None:
         room_snapshot, room_regions = room_vtk
         report["snapshots"].append(room_snapshot)
         report["room_regions"] = room_regions
     else:
+        reason = (
+            "No hash-bound main volume VTK asset is present in the two-room receipt."
+            if room_vtk_failure is None
+            else "Receipt-bound VTK cannot support room field statistics: " + room_vtk_failure
+        )
         report["availability"].append({
             "analysis": "room_field_statistics", "status": "not_available",
-            "reason": "The two-room receipt does not contain a hash-bound main volume VTK asset.",
+            "reason": reason,
         })
     pressure_source = _source(probe_path, probe["sha256"], role="pressure_probes", case_id="two_room_case")
     report["pressure_history"] = {

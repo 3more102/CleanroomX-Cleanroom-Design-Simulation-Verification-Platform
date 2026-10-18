@@ -80,7 +80,7 @@ def test_studio_snapshot_empty_and_missing_selection():
     assert studio_snapshot({"rooms": [], "devices": []})["selected_room"] is None
 
 
-def test_live_studio_selection_metrics_and_real_3d(tmp_path):
+def test_live_studio_selection_metrics_and_real_3d(tmp_path, monkeypatch):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -139,6 +139,17 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         studio.nav_buttons[str(other["id"])].invoke()
         root.update()
         assert workspace.selected.item_id == str(other["id"])
+        assert workspace._isolated_item is None
+        # Finding a room while another one is isolated must reveal the hit.
+        studio.isolate_room()
+        assert workspace._isolated_item.item_id == str(other["id"])
+        monkeypatch.setattr(
+            "cleanroomx.gui_design_studio.simpledialog.askstring",
+            lambda *_args, **_kwargs: room["name"],
+        )
+        studio.find_item()
+        root.update()
+        assert workspace.selected.item_id == str(room["id"])
         assert workspace._isolated_item is None
         studio.studio_view()
         root.update()

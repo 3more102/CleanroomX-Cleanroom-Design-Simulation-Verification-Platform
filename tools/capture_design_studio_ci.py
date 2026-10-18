@@ -19,10 +19,12 @@ def main() -> int:
     app = CleanroomXApp(root, autosave_interval_seconds=0)
     try:
         app.load_project_path(bundled_demo_project_path())
+        # Complete pending saved-layout restoration before enabling focus.
+        root.update_idletasks()
+        root.update()
         app.notebook.select(app.spatial_workspace)
         app.set_theme("dark", persist=False)
-        app.spatial_workspace.set_workspace_mode("3d")
-        app.set_focus_workspace(True)
+        app.spatial_workspace._studio.studio_view()
         root.update_idletasks()
         root.update()
         app.spatial_workspace.fit_3d()

@@ -35,13 +35,18 @@
 
 ## Evidence boundary
 
-Local verification completed for this checkpoint:
+Local verification completed before the follow-on virtual-display CI change:
 
 - Full repository regression: **2,611 passed, 90 skipped, 0 failures**.
 - Exact CFD VTK workflow test command: **338 passed**.
 - Focused analysis/ProofGraph/runtime/GUI checks: **79 passed, 2 skipped**.
 - Python compilation, workflow YAML and whitespace checks passed. The six
   preserved screenshot file hashes and dimensions match their existing manifest.
+
+The follow-on CFD VTK workflow installs a virtual display and runs all explorer
+Tk tests explicitly, including standalone-store comparison through the actual
+folder picker callback. These three tests skip locally because no display is
+available; their display-enabled CI result must be checked separately.
 
 This continuation uses synthetic parser fixtures and local automated tests.
 OpenFOAM and a GUI display are unavailable in the current environment. Preserved

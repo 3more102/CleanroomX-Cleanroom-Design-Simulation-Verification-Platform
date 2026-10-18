@@ -1,6 +1,7 @@
 """Real Tk explorer smoke tests (skip only when a display is unavailable)."""
 import time
 import tkinter as tk
+import shutil
 
 import pytest
 
@@ -77,4 +78,39 @@ def test_workspace_analysis_actions_use_existing_result_and_receipt_inputs(tmp_p
         assert workspace.two_room_analysis_button in workspace._action_buttons
     finally:
         workspace.destroy()
+        root.destroy()
+
+
+def test_real_explorer_compares_standalone_store_without_renaming_case(tmp_path, monkeypatch):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    import cleanroomx.gui_cfd_analysis as module
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    write_sync_store(tmp_path / "store")
+    case_id = "Lab West/supply-region"
+    native = write_sync_store(tmp_path / "comparison", run="SYNTHETIC-standalone", case_id=case_id)
+    standalone = tmp_path / "native-output"
+    shutil.move(native, standalone)
+    monkeypatch.setattr(module.filedialog, "askdirectory", lambda **kwargs: str(standalone))
+    explorer = CFDAnalysisExplorer(root, lambda: analyze_synced_results(tmp_path / "store", "SYNTHETIC-run-a"))
+    try:
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy)
+        explorer._add_comparison()
+        _wait(root, lambda: len(explorer.sessions) == 2 and not explorer._busy)
+        assert case_id in explorer.case_combo["values"]
+        assert explorer.sessions[1].report["mode"] == "native_case_sync"
+        explorer.view_var.set("Compare cases / runs at selected time")
+        explorer.time_var.set("10")
+        explorer.draw_graph()
+        _wait(root, lambda: not explorer._busy)
+        assert explorer.current_graph["kind"] == "comparison"
+        assert {s["case_id"] for s in explorer.current_graph["series"]} == {"configuration_1", case_id}
+        assert all(p["time_name"] == "10" for s in explorer.current_graph["series"] for p in s["points"])
+        assert explorer.current_graph["scientific_validation"] == "BLOCKED"
+    finally:
+        explorer._close()
         root.destroy()

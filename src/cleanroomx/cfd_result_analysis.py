@@ -21,10 +21,12 @@ from .cfd_convergence_triage import (
 )
 from .cfd_openfoam import parse_openfoam_checkmesh_log, verify_openfoam_case_bundle
 from .cfd_proofgraph import (
-    _asset_path, _hash_regular_file, _read_json,
+    _asset_path, _hash_regular_file, _read_json, _SIMULATION_ID,
     proofgraph_from_openfoam_sync_results, proofgraph_from_openfoam_case_results,
-    proofgraph_from_two_room_receipt,
+    proofgraph_from_two_room_receipt, proofgraph_from_openfoam_grid_results,
 )
+from .cfd_native_binding import GRID_CASES, MAX_NATIVE_BYTES, bind_grid_case, bind_grid_execution
+from .cfd_native_binding import verify_native_fields as rehash_native_fields
 from .cfd_two_room import parse_pressure_probe_data
 from .cfd_cell_regions import REGION_RULE, region_contains, validate_cell_region
 from .cfd_vtk import MAX_VTK_BYTES, VTK_FIELD_MAP_SCHEMA, import_vtk_case
@@ -214,42 +216,62 @@ def read_residual_history(path: str | Path) -> dict:
             "source": _source(source, diagnosis["source_sha256"], role="solver_log", case_id=source.parent.name)}
 
 
-def _diagnostics(case: Path, case_id: str, expected_log_sha: str | None = None) -> dict:
+def _diagnostics(case: Path, case_id: str, expected_log_sha: str | None = None,
+                 expected_mesh_sha: str | None = None) -> dict:
     result = {"case_id": case_id, "residuals": None, "mesh": None, "warnings": [], "sources": []}
     log = case / "simpleFoam.log"
     if log.exists():
         history = read_residual_history(log)
         if expected_log_sha is not None and history["source"]["sha256"] != expected_log_sha:
             raise ValueError("Solver log no longer matches the run receipt")
+        history["source"]["case_id"] = case_id
         result["residuals"] = history
         result["sources"].append(history["source"])
         result["warnings"].extend(history["diagnosis"]["problems"])
     else:
+        if expected_log_sha is not None:
+            raise ValueError("Hash-bound OpenFOAM solver log is missing")
         result["warnings"].append("Residual history not available: simpleFoam.log is missing")
     mesh_log = case / "checkMesh.log"
     if mesh_log.exists():
         raw, text = _read_stable_grid_text(mesh_log, case, limit=64 * 1024 * 1024)
         sha = hashlib.sha256(raw).hexdigest()
+        if expected_mesh_sha is not None and sha != expected_mesh_sha:
+            raise ValueError("Mesh log no longer matches the grid execution receipt")
         result["mesh"] = parse_openfoam_checkmesh_log(text, sha)
         result["sources"].append(_source(mesh_log, sha, role="mesh_log", case_id=case_id))
         result["warnings"].extend(result["mesh"]["reported_check_failures"])
     else:
+        if expected_mesh_sha is not None:
+            raise ValueError("Hash-bound OpenFOAM mesh log is missing")
         result["warnings"].append("Mesh diagnostics not available: checkMesh.log is missing")
     return result
 
 
 def analyze_synced_results(
     result_directory: str | Path, simulation_id: str, *, case_directory: str | Path | None = None,
+    verify_native_sources: bool = False,
 ) -> AnalysisSession:
-    """Analyze three-configuration or standalone sync-case results without a solver."""
+    """Load native standalone, three-configuration or nine-case grid results."""
+    if type(simulation_id) is not str or _SIMULATION_ID.fullmatch(simulation_id) is None:
+        raise ValueError("Simulation ID contains unsupported characters")
+    if type(verify_native_sources) is not bool:
+        raise ValueError("verify_native_sources must be a boolean")
+    if verify_native_sources and not case_directory:
+        raise ValueError("Original field verification requires the matching native case directory")
     candidate = Path(result_directory).expanduser()
     if candidate.is_symlink() or not candidate.is_dir():
         raise ValueError("Result directory must be a regular directory")
     root = candidate.resolve(strict=True)
     standalone = (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink()
+    grid = not standalone and any((root / simulation_id / case).exists() or (root / simulation_id / case).is_symlink()
+                                  for case in GRID_CASES)
     graph = (proofgraph_from_openfoam_case_results(root, simulation_id) if standalone else
+             proofgraph_from_openfoam_grid_results(root, simulation_id) if grid else
              proofgraph_from_openfoam_sync_results(root, simulation_id))
-    report = _new_report(simulation_id, "native_case_sync" if standalone else "native_runtime_sync")
+    report = _new_report(simulation_id, "native_case_sync" if standalone else "native_grid_sync" if grid else "native_runtime_sync")
+    native_bytes = 0
+    protected_roots = {root}
     evidence_by_case = {item.value["case_id"]: item.value for item in graph.evidence}
     if sum(item["record_count"] for item in evidence_by_case.values()) > MAX_SNAPSHOTS:
         raise ValueError("Analysis exceeds 256 snapshots; select a smaller result store")
@@ -259,9 +281,10 @@ def analyze_synced_results(
         if bundle_candidate.is_symlink() or not bundle_candidate.is_dir():
             raise ValueError("Native case must be a regular directory")
         bundle = bundle_candidate.resolve(strict=True)
-        if not standalone:
+        protected_roots.add(bundle)
+        if not standalone and not grid:
             verify_openfoam_case_bundle(bundle)
-    case_ids = sorted(evidence_by_case) if standalone else [f"configuration_{n}" for n in (1, 2, 3)]
+    case_ids = sorted(evidence_by_case) if standalone else GRID_CASES if grid else [f"configuration_{n}" for n in (1, 2, 3)]
     for case_id in case_ids:
         value = evidence_by_case.get(case_id)
         if value is None:
@@ -276,6 +299,28 @@ def analyze_synced_results(
             "case_id", "configuration_hash", "solver_release", "solver_build", "sync_status",
             "solver_returncode", "solver_log_status", "error_count",
         )})
+        native_case, binding, execution = None, None, {}
+        if bundle:
+            if standalone or grid:
+                binding = _bind_native_case(bundle, case_id, value["configuration_hash"])
+                native_case = binding["case"]
+                protected_roots.add(binding["root"])
+                report["sources"].extend(binding["sources"])
+                report["cases"][-1]["native_input_scope"] = binding["input_scope"]
+                if "family_spec_sha256" in binding:
+                    execution = bind_grid_execution(binding, case_id, value["manifest_sha256"],
+                                                     value["configuration_hash"], simulation_id, value.get("solver_log_sha256"))
+                    report["sources"].extend(execution["sources"])
+            else:
+                manifest, _ = _read_json(bundle / "manifest.json", max_bytes=2 * 1024 * 1024)
+                inputs = {key.split("/", 1)[1]: sha for key, sha in manifest["files"].items()
+                          if key.startswith(case_id + "/")}
+                encoded = json.dumps(inputs, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+                if hashlib.sha256(encoded).hexdigest() != value["configuration_hash"]:
+                    raise ValueError("Selected native case inputs do not match the synchronized run")
+                report["sources"].extend(_source(bundle / relative, sha, role="case_input", case_id=case_id)
+                                         for relative, sha in manifest["files"].items() if relative.startswith(case_id + "/"))
+                native_case = bundle / case_id
         numeric_times = [_numeric_time(item["time_name"]) for item in value["records"]]
         if len(numeric_times) != len(set(numeric_times)):
             raise ValueError("Ambiguous duplicate numeric solver times in one configuration")
@@ -302,6 +347,11 @@ def analyze_synced_results(
                 "import_status": record["import_status"], "execution_status": value["sync_status"],
             }
             _summarize(snapshot)
+            if verify_native_sources:
+                original_sources, count = rehash_native_fields(native_case, snapshot, remaining_bytes=MAX_NATIVE_BYTES - native_bytes)
+                native_bytes += count
+                snapshot["native_source_fields_rehashed"] = True
+                snapshot["sources"].extend(original_sources)
             report["snapshots"].append(snapshot)
             report["sources"].extend(snapshot["sources"])
             report["sources"].extend(
@@ -315,34 +365,45 @@ def analyze_synced_results(
             report["availability"].append({"case_id": case_id, "analysis": analysis,
                                            "status": "not_available", "reason": reason})
         if bundle:
-            # Bind the selected case inputs to the synchronization configuration hash.
-            if standalone:
-                report["sources"].extend(_standalone_case_inputs(bundle, case_id, value["configuration_hash"]))
-                native_case = bundle
-            else:
-                manifest, _ = _read_json(bundle / "manifest.json", max_bytes=2 * 1024 * 1024)
-                inputs = {key.split("/", 1)[1]: sha for key, sha in manifest["files"].items()
-                          if key.startswith(case_id + "/")}
-                encoded = json.dumps(inputs, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-                if hashlib.sha256(encoded).hexdigest() != value["configuration_hash"]:
-                    raise ValueError("Selected native case inputs do not match the synchronized run")
-                report["sources"].extend(_source(bundle / relative, sha, role="case_input", case_id=case_id)
-                                         for relative, sha in manifest["files"].items() if relative.startswith(case_id + "/"))
-                native_case = bundle / case_id
-            diagnosis = _diagnostics(native_case, case_id, value.get("solver_log_sha256"))
+            expected_log_sha = value.get("solver_log_sha256") or execution.get("solver_log_sha256")
+            diagnosis = _diagnostics(native_case, case_id, expected_log_sha,
+                                     execution.get("mesh_log_sha256"))
             diagnosis["log_execution_binding"] = (
                 "hash_bound_sync_manifest" if value.get("solver_log_sha256") else
+                "hash_bound_grid_execution_receipt" if execution.get("solver_log_sha256") else
                 "unverified_same_case_inputs_only"
             )
-            if not value.get("solver_log_sha256"):
+            if not expected_log_sha:
                 diagnosis["warnings"].append("Unverified log-to-run link: legacy synchronization manifest has no solver log hash")
+            if binding and "family_spec_sha256" in binding:
+                diagnosis["mesh_execution_binding"] = ("hash_bound_grid_execution_receipt" if execution.get("mesh_log_sha256") else
+                                                         "unverified_same_generated_inputs_only")
+                if not execution.get("mesh_log_sha256") and diagnosis["mesh"]:
+                    diagnosis["warnings"].append("Mesh log is not linked to an execution receipt")
             report["diagnostics"].append(diagnosis)
             report["sources"].extend(diagnosis["sources"])
     if not bundle:
         report["availability"].append({"analysis": "residuals_mesh", "status": "not_available",
                                        "reason": "Select the matching native case or case bundle to inspect logs"})
     report["sources"] = _unique_sources(report["sources"])
-    return AnalysisSession(report, graph, (root,) + ((bundle,) if bundle else ()))
+    report["reproducibility"].update(
+        native_source_bytes_rehashed=bool(verify_native_sources and report["snapshots"]),
+        native_source_verification_requested=verify_native_sources, native_bytes_verified=native_bytes,
+    )
+    return AnalysisSession(report, graph, tuple(sorted(protected_roots)))
+
+
+def _bind_native_case(directory: Path, case_id: str, expected_hash: str) -> dict:
+    from .cfd_openfoam_runtime_sync import hash_case_configuration
+    if all((directory / name).is_dir() for name in ("system", "constant", "0")):
+        if hash_case_configuration(directory) == expected_hash:
+            return {"case": directory, "root": directory,
+                    "sources": _standalone_case_inputs(directory, case_id, expected_hash),
+                    "input_scope": "all_static_native_inputs_including_polyMesh"}
+    binding = bind_grid_case(directory, case_id, expected_hash)
+    if binding is not None:
+        return binding
+    raise ValueError("Selected native case inputs do not match the synchronized run")
 
 
 def _standalone_case_inputs(case: Path, case_id: str, expected_hash: str) -> list[dict]:
@@ -363,16 +424,20 @@ def _standalone_case_inputs(case: Path, case_id: str, expected_hash: str) -> lis
     return sources
 
 
-def analyze_selected_result_store(directory: str | Path) -> AnalysisSession:
-    """Load a GUI-selected simulation folder or standalone sync-case output."""
+def analyze_selected_result_store(
+    directory: str | Path, *, case_directory: str | Path | None = None, verify_native_sources: bool = False,
+) -> AnalysisSession:
+    """Load a selected simulation folder (including grids) or standalone store."""
     candidate = Path(directory).expanduser()
     if candidate.is_symlink() or not candidate.is_dir():
         raise ValueError("Result directory must be a regular directory")
     root = candidate.resolve(strict=True)
     if (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink():
         manifest, _ = _read_json(root / "sync_manifest.json", max_bytes=2 * 1024 * 1024)
-        return analyze_synced_results(root, manifest.get("simulation_id"))
-    return analyze_synced_results(root.parent, root.name)
+        return analyze_synced_results(root, manifest.get("simulation_id"), case_directory=case_directory,
+                                      verify_native_sources=verify_native_sources)
+    return analyze_synced_results(root.parent, root.name, case_directory=case_directory,
+                                  verify_native_sources=verify_native_sources)
 
 
 def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Path) -> AnalysisSession:

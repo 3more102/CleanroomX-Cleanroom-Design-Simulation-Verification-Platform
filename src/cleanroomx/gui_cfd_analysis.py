@@ -347,7 +347,11 @@ class CFDAnalysisExplorer(tk.Toplevel):
 
     def _view_changed(self, _event=None):
         if VIEWS[self.view_var.get()] == "residual_history":
-            self.field_var.set("all")
+            equations = {p["field"] for session in self._selected_sessions() for d in session.report["diagnostics"]
+                         if self.case_var.get() == "All cases" or d["case_id"] == self.case_var.get()
+                         if d["residuals"] for p in d["residuals"]["samples"]}
+            if self.field_var.get() not in equations | {"all"}:
+                self.field_var.set("all")
         elif self.field_var.get() == "all":
             self.field_var.set("speed")
         supports_region = VIEWS[self.view_var.get()] in ("field_history", "comparison", "cell_slab", "cell_3d")
@@ -506,7 +510,10 @@ class CFDAnalysisExplorer(tk.Toplevel):
                 region = value["filters"].get("region")
                 scope = (region["label"] + ": box selects full cells by their centers" if region else
                          "Whole mesh / recorded diagnostics")
-                self.provenance.configure(text=scope + " · exact filters and sources in the Sources tab\n" +
+                native_runs = [s for s in self._selected_sessions() if s.report["mode"].startswith("native_")]
+                verified = sum(s.report["reproducibility"]["native_source_bytes_rehashed"] for s in native_runs)
+                original_status = (f" · Original fields verified: {verified}/{len(native_runs)} runs" if native_runs else "")
+                self.provenance.configure(text=scope + original_status + " · full details in the Sources tab\n" +
                                           (source_names or value.get("reason", "")))
                 self.details.configure(state="normal")
                 self.details.delete("1.0", "end")

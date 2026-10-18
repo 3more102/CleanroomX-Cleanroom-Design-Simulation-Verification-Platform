@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — native OpenFOAM grid analysis integration — 2026-10-18
+
+- Load complete nine-case Foundation v10 grid runs through the GUI, comparison picker and CLI, retaining configuration/resolution identities and missing-case findings.
+- Bind grid results to the runner's eight generated inputs per case, excluding subsequently generated polyMesh files from that configuration hash. Match optional execution receipts to synchronized manifests before attaching mesh/solver logs.
+- Add GUI original-field verification and CLI `--verify-native-fields`; rehash native time/field bytes against recorded hashes/sizes, preserve verification scope, and recheck originals before export.
+- Keep selected residual equations after drawing; use horizontal bars for comparisons with more than six entries so complete grid-case labels remain readable.
+- Exercise the complete adapter against fresh Foundation v10 CI outputs and export field, comparison and residual diagnostics. Scientific validation and convergence acceptance remain blocked.
+
 ## Unreleased Release 3 — spatial selection and solver analysis workspace — 2026-10-18
 
 - Add explicit mesh-coordinate box selections for field histories, exact-time comparisons, slabs and 3D cell samples, with half-open bounds and selected-cell identity hashes.

@@ -43,14 +43,18 @@ boundary conditions, pressure references or physical scenarios are equivalent.
 Review those before drawing an engineering conclusion.
 
 The field explorer supports the existing three-configuration native runtime-sync
-layout, `<store>/<simulation-id>/configuration_N/sync_manifest.json`, standalone
+layout, `<store>/<simulation-id>/configuration_N/sync_manifest.json`, the nine-case
+grid layout `<store>/<simulation-id>/configuration_N/{coarse,medium,fine}/sync_manifest.json`, standalone
 `sync-case` output directories containing `sync_manifest.json`, and the separate
 two-room v2 receipt workflow. Standalone native stores retain the manifest's
 original case/region identifier, including nested identifiers; the output
-directory can have a different name. Both native layouts use the same strict
+directory can have a different name. All native layouts use the same strict
 manifest, receipt, VTK asset and simulation-identity verification. An explicitly
 present malformed standalone manifest fails loading rather than falling back
-to another layout. Standalone `sync-vtk` v3 snapshot stores, verified room cell masks and
+to another layout. Grid cases retain their full configuration/resolution identities;
+missing cases produce explicit availability findings and no invented data.
+Mixed three-case/grid layouts and linked configuration directories fail loading.
+Standalone `sync-vtk` v3 snapshot stores, verified room cell masks and
 per-room boundary flux assignment are not yet imported by this explorer. Explicit
 user box selections are supported as described below. Missing
 per-room ACH/doorway transfer and contaminant acceptance are explicitly recorded
@@ -63,8 +67,11 @@ workflow; this change does not add particle tracking or concentration criteria.
    standalone `sync-case` export, select the directory that directly contains
    `sync_manifest.json` and use its declared simulation ID. Leave the case
    directory blank for fields only; select the matching native case (standalone)
-   or case bundle (three configurations) to inspect logs. Static inputs must
+   or case bundle (three configurations / nine-case grid family) to inspect logs. Static inputs must
    match the recorded configuration hash; recorded log hashes are rechecked.
+   Enable **Verify original OpenFOAM field files** to rehash every recorded native
+   time/field file against its snapshot metadata. The graph footer reports the
+   verified run count; this option requires the matching native case directory.
 2. Select **Analyze / graph results…**. For a two-room run, enter the case and
    existing receipt directories in that panel and select **Analyze results…**.
 3. Select the graph, field, case and time, then **Draw graph**. Residual history
@@ -87,6 +94,27 @@ VTK limits (100,000 cells and 256 MiB per dataset). Spatial display uses at most
 5,000 deterministic samples, while calculations use all cells. Long histories
 retain endpoints and bucket minima/maxima for display; complete parsed linear
 solves remain in JSON/CSV. Requested data beyond resource limits fails clearly.
+Optional original-field verification is bounded to 64 MiB per field file and
+512 MiB across the analysis. Missing, renamed-time, linked or modified originals
+fail verification; they never silently downgrade to metadata-only inspection.
+
+### Native grid input and execution binding
+
+The grid runner hashes the **eight generated input files** per case, before
+`blockMesh` creates `constant/polyMesh`. The analysis loader uses that exact
+scope from the grid-family manifest, verifies all eight files, and records
+`eight_generated_inputs_excluding_generated_polyMesh`. It does not substitute
+the standalone hash that includes generated mesh files. Select the family root
+for a complete run, or the exact native case directory for a standalone coarse,
+medium or fine result store.
+
+When `grid_execution_evidence.json` is present, its family, case, simulation,
+configuration hash and synchronized manifest hash must match. Its recorded
+`simpleFoam.log` and `checkMesh.log` hashes bind the displayed diagnostics to that
+execution record. A malformed or swapped receipt fails loading. Without a grid
+execution receipt, mesh diagnostics retain an explicit unverified execution link;
+a solver-log hash in the sync manifest can still bind the solver log. These
+checks establish local hash consistency, not solver convergence or authenticity.
 
 ## Explicit spatial regions
 
@@ -126,6 +154,11 @@ cleanroomx-cfd-pipeline analyze-results ./standalone-sync-output \
   --simulation-id my-native-run --case-directory ./my-native-case \
   --field speed --output ./standalone-analysis
 
+cleanroomx-cfd-pipeline analyze-results ./cleanroomx-openfoam-runtime-sync \
+  --simulation-id grid-0752d04fc9b373e38783a23e \
+  --case-directory ./cleanroomx-cfd-grid-family --verify-native-fields \
+  --field U_z --time 150 --output ./grid-analysis
+
 cleanroomx-cfd-pipeline analyze-results ./standalone-sync-output \
   --simulation-id my-native-run --field U_z \
   --region-label "Selected west volume" --region-bounds 0 3 0 4 0 3 \
@@ -138,7 +171,9 @@ cleanroomx-cfd-pipeline two-room-analyze \
 
 These commands consume existing results and do not require an installed solver
 at post-processing time. `--case-directory` is optional; legacy unbound native
-logs remain clearly marked in graph series and exported CSV.
+logs remain clearly marked in graph series and exported CSV. `--verify-native-fields`
+requires `--case-directory`; it verifies the primary run. A comparison run loaded
+with `--comparison-simulation-id` retains its own reported verification scope.
 
 ## Export and reproducibility
 
@@ -160,10 +195,33 @@ error does not leave a partial deliverable. Sources are referenced by path/hash;
 the bundle does not copy the full solver case. Retain that case/result store
 for replay. Paths may be machine-specific; this is an engineering export, not a
 redacted public report. Hash consistency is not a signature or authenticity
-proof. Native source-field bytes in runtime sync are still represented by their
-recorded hash metadata, not independently rehashed by this post-processor.
+proof. By default native source-field bytes remain represented by recorded hash
+metadata. With original-field verification enabled, `analysis.json` records
+`native_source_bytes_rehashed: true`, the total bytes verified and per-snapshot
+status; original file paths/hashes join the sources rechecked at export.
 
 ## Verification and genuine GUI screenshots
+
+`tests/test_cfd_native_grid_analysis.py` covers all nine cases, missing cases,
+the generated-mesh hash boundary, original field bytes, changed inputs/logs,
+swapped execution receipts, field-time substitution, linked/mixed layouts and
+CLI exports. The real Tk suite opens the grid through the workspace checkbox
+and draws field and residual histories. The Foundation v10 workflow analyzes
+27 freshly solved snapshots, verifies original fields and both log bindings,
+then uploads its analysis/CSV/figures/ProofGraph bundle with execution evidence.
+
+The new complete-grid replay used the same archive from [Foundation v10 CI run
+39118048747](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39118048747)
+as the earlier coarse-only capture. Its nine cases and 27 snapshots verified
+**81 original field files (15,902,254 bytes)**, all 72 generated inputs, nine
+solver logs and nine mesh logs. The exact new CI analysis/export step also passed
+locally on those recorded outputs; no local solver was started. Screenshot and
+source provenance are in
+`docs/screenshots/cfd-analysis-native-grid-v10/replay-evidence.json`.
+
+![Nine recorded Foundation v10 cases in the actual Tk explorer](screenshots/cfd-analysis-native-grid-v10/actual-v10-grid-field-history.png)
+
+![Receipt-bound native pressure residuals in the actual Tk explorer](screenshots/cfd-analysis-native-grid-v10/actual-v10-grid-bound-residuals.png)
 
 `tests/test_cfd_sync_case_analysis.py` additionally exercises standalone named
 cases, nested identifiers, input/log binding, invalid identities, receipt/asset

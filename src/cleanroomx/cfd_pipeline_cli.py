@@ -154,10 +154,12 @@ def build_parser():
     two_room_proofgraph.add_argument("case_directory")
     two_room_proofgraph.add_argument("receipt")
     two_room_proofgraph.add_argument("destination")
-    analysis=sub.add_parser("analyze-results",help="Analyze verified runtime-sync or standalone sync-case results")
+    analysis=sub.add_parser("analyze-results",help="Analyze verified native sync-case, three-case or nine-case grid results")
     analysis.add_argument("result_directory")
     analysis.add_argument("--simulation-id",required=True)
-    analysis.add_argument("--case-directory",help="Matching native case (sync-case) or three-configuration case bundle for log diagnostics")
+    analysis.add_argument("--case-directory",help="Matching native case, three-configuration bundle or nine-case grid family for log diagnostics")
+    analysis.add_argument("--verify-native-fields",action="store_true",
+                          help="Rehash original time/field files against sync receipts; requires --case-directory")
     analysis.add_argument("--comparison-simulation-id",help="Another run in the same result store")
     analysis.add_argument("--output",required=True,help="New export directory outside the source results")
     analysis.add_argument("--field",default="speed")
@@ -197,7 +199,8 @@ def main():
             from .cfd_cell_regions import REGION_SCHEMA, validate_cell_region
             region = validate_cell_region({"schema_version": REGION_SCHEMA, "label": args.region_label,
                                            "bounds_m": args.region_bounds}) if args.region_bounds is not None else None
-            sessions=[analyze_synced_results(args.result_directory,args.simulation_id,case_directory=args.case_directory)]
+            sessions=[analyze_synced_results(args.result_directory,args.simulation_id,case_directory=args.case_directory,
+                                            verify_native_sources=args.verify_native_fields)]
             if args.comparison_simulation_id:
                 sessions.append(analyze_synced_results(args.result_directory,args.comparison_simulation_id))
             graphs=[build_analysis_graph(sessions,field_name=args.field,region=region)]

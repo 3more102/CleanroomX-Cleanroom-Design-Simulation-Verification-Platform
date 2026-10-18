@@ -172,3 +172,57 @@ def residual_log():
             "GAMG: Solving for p, Initial residual = 0.2, Final residual = 0.01, No Iterations 3\n"
             "GAMG: Solving for p, Initial residual = 0.02, Final residual = 0.001, No Iterations 3\n"
             "Time = 2\nGAMG: Solving for p, Initial residual = 0.002, Final residual = 0, No Iterations 2\nEnd\n")
+
+
+def write_grid_sync_fixture(root: Path, *, cases=None):
+    """Generated inputs plus SYNTHETIC nested sync outputs and native field bytes."""
+    from cleanroomx.cfd_grid_family import generate_grid_family
+    from cleanroomx.cfd_native_binding import GRID_CASES, GENERATED_INPUTS
+
+    run = "SYNTHETIC-grid-run"
+    family, store = root / "family", root / "store"
+    spec = json.loads((Path(__file__).parents[1] / "examples/cfd_grid_family.example.json").read_text())
+    manifest = generate_grid_family(spec, family)
+    execution = {"schema_version": "cleanroomx.openfoam-grid-execution-evidence.v1",
+                 "solver_release": "OpenFOAM Foundation v10", "solver_build": "SYNTHETIC-fixture",
+                 "family_spec_sha256": manifest["family_spec_sha256"], "cases": {}}
+    for case_id in GRID_CASES if cases is None else cases:
+        output = write_sync_store(store, run, case_id=case_id)
+        native = family / case_id
+        # blockMesh-generated files must not alter the eight-input grid hash.
+        (native / "constant/polyMesh").mkdir()
+        (native / "constant/polyMesh/boundary").write_text("SYNTHETIC generated mesh bytes\n")
+        solver = native / "simpleFoam.log"
+        solver.write_text(residual_log())
+        mesh = native / "checkMesh.log"
+        mesh.write_bytes((Path(__file__).parent / "fixtures/openfoam_foundation_v10_checkmesh.log").read_bytes())
+        path = output / "sync_manifest.json"
+        sync = json.loads(path.read_text())
+        inputs = {p: manifest["files"][f"{case_id}/{p}"] for p in GENERATED_INPUTS}
+        sync["configuration_hash"] = sha(json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode())
+        sync["solver_log_sha256"] = sha(solver.read_bytes())
+        for record in sync["records"].values():
+            for field, item in record["source_fields"].items():
+                original = native / item["path"]
+                original.parent.mkdir(exist_ok=True)
+                original.write_bytes(("SYNTHETIC original field " + field).encode())
+                item.update(sha256=sha(original.read_bytes()), size_bytes=original.stat().st_size)
+            record["input_fingerprint_sha256"] = sha(json.dumps(record["source_fields"], sort_keys=True,
+                                                                separators=(",", ":")).encode())
+            receipt_path = output / record["receipt"]["path"]
+            receipt = json.loads(receipt_path.read_text())
+            receipt["configuration_hash"] = sync["configuration_hash"]
+            receipt["record"] = {k: v for k, v in record.items() if k != "receipt"}
+            receipt_path.write_text(json.dumps(receipt, sort_keys=True))
+            record["receipt"]["sha256"] = sha(receipt_path.read_bytes())
+        path.write_text(json.dumps(sync, sort_keys=True))
+        execution["cases"][case_id] = {
+            "result_synchronization": {"case_id": case_id, "simulation_id": run,
+                "configuration_hash": sync["configuration_hash"], "manifest_sha256": sha(path.read_bytes()),
+                "scientific_validation": "BLOCKED"},
+            "stages": [{"command": command, "log": f"{case_id}/{command}.log", "returncode": 0,
+                        "log_sha256": sha((native / f"{command}.log").read_bytes())}
+                       for command in ("simpleFoam", "checkMesh")],
+        }
+    (family / "grid_execution_evidence.json").write_text(json.dumps(execution, sort_keys=True))
+    return store, run, family

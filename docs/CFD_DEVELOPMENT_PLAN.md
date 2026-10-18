@@ -1,6 +1,43 @@
 # CFD development checkpoint — 18 October 2026
 
-## Current GUI and spatial-analysis continuation
+## Native OpenFOAM grid integration continuation
+
+Continues the published GUI/region head `fdd35aa` on PR #1341.
+
+- The analysis adapter now loads all nine configuration/resolution cases from
+  the native runtime-sync grid layout, preserving missing-case findings and
+  strict manifest/receipt/VTK identity checks.
+- Reconciled the input-hash boundary: the grid runner binds eight generated
+  inputs per case, while a standalone case hash includes generated polyMesh.
+  Grid analysis verifies the original eight-input scope explicitly.
+- Matching grid execution receipts bind solver and checkMesh log bytes to the
+  selected synchronized manifests; mismatched receipts or changed logs fail.
+- GUI checkbox / CLI `--verify-native-fields` verify original time/field bytes.
+  Reports preserve verification scope, and export rechecks those original files.
+- Replayed the archived Foundation v10 run across **9 cases / 27 snapshots**:
+  **81 original fields / 15,902,254 bytes**, 72 generated inputs, nine solver logs
+  and nine mesh logs verified. The exact new CI analysis/export step passed on
+  that archive; no solver was started locally.
+- Captured the actual Tk field/residual views and source hashes under
+  `docs/screenshots/cfd-analysis-native-grid-v10/`. This supersedes the earlier
+  coarse-only replay's unavailable grid log join, without changing that
+  historical capture or its provenance.
+- Fixed residual equation selection resetting after drawing and made full
+  nine-case comparison labels readable with horizontal bars.
+- Final focused GUI/region/native-grid/result analysis: **68 passed** on a
+  virtual display. Python compilation, workflow YAML/inline Python parsing,
+  screenshot hashes and whitespace checks passed.
+- Full display-enabled Python 3.12 regression: **2,792 passed, 1 skipped**
+  (optional native IFC/BIM dependency), 173.63 seconds. The focused rerun above
+  covers the final comparison-layout and residual-filter adjustments.
+- Foundation v10 CI now analyzes 27 fresh snapshots with native field and
+  execution-log checks, then exports its diagnostic figures, CSV and ProofGraph.
+
+Convergence, mesh independence and physical cleanroom validation remain
+`BLOCKED`. The new adapter verifies original field hashes but does not rerun
+native-to-VTK numerical parity or a complete generated-mesh audit.
+
+## Earlier GUI and spatial-analysis continuation
 
 Continues `work/cfd-integration-reconciliation-20261018` from `6ff519a` (PR #1341).
 
@@ -57,12 +94,9 @@ Continues `work/cfd-integration-reconciliation-20261018` from `6ff519a` (PR #134
    boxes are descriptive cell selections, not verified room boundaries.
 3. Connect CAD room identities only through an explicit, checked transformation
    into the mesh frame; do not infer room identity from a region/case label.
-4. Execute the complete explorer workflow against real Foundation v10 outputs
-   on new runs. The existing coarse-grid output has now been replayed through
-   region selection, export and the actual Tk viewer. Optional native-case log
-   binding refused a configuration-hash mismatch; reconcile that identity before
-   joining grid-family logs. Review the overlapping two-room CLI with PR #1328
-   before integrating the feature branches.
+4. Review the overlapping two-room CLI with PR #1328 before integrating the
+   feature branches. Preserve the distinction between receipt-bound diagnostic
+   bundles and the explorer's flexible graph/report export.
 
 ## Earlier adapter verification
 
@@ -87,7 +121,7 @@ Scientific validation remains `BLOCKED`; process completion, file integrity,
 graph generation and descriptive statistics do not establish solver convergence,
 mesh independence or physical cleanroom performance.
 
-## Current verification checkpoint
+## Earlier spatial verification checkpoint
 
 - Full display-enabled repository regression on Python 3.12: **2,778 passed,
   1 skipped, 0 failures**, in 143.97 seconds. The skip is the optional native
@@ -105,5 +139,6 @@ mesh independence or physical cleanroom performance.
   physically validated room prediction. No solver was started locally.
 - Native screenshots and source/hash provenance are in
   `docs/screenshots/cfd-analysis-native-v10/replay-evidence.json`.
-- Native-case log binding was refused on configuration-hash mismatch; those
-  logs were not added to the replay. Scientific validation remains `BLOCKED`.
+- At that earlier checkpoint, native-case log binding was refused on a
+  configuration-hash mismatch and logs were excluded. The native-grid
+  continuation above resolves that identity boundary explicitly.

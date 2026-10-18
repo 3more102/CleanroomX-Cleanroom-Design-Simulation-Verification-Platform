@@ -1,0 +1,3107 @@
+{
+  "artifact_id": 12133700252,
+  "artifact_sha256": "90b6150d313ad550a519904ee5b709c84305574decf0f0f7cc6bcea0e81945b2",
+  "case_count": 9,
+  "cases": [
+    {
+      "case_id": "configuration_1/coarse",
+      "configuration_hash": "7b5aa3af95c3e4bf6018699c13a72e8b71ec5d4f36de32a6d77afc2d2c1b7bf8",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "configuration_hash": "a7a0e6eba7cc7738c3e179cc44a2df45daa9998464173506effd34f31c0002fe",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "configuration_hash": "a59954d193ce2d43023d527037d1d5f6a738b4339f807828c02d329c7f80d25e",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "configuration_hash": "3de24136bbf08786dfd5d3e4cb3e37a14768488142cf7d09a9c321a3a119ddf0",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "configuration_hash": "b94121d1e7553797e5d44a6f616350726710395e6efac7b07108d06f2ebe232c",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "configuration_hash": "7415f3e5825251c22f80c7bbd83e43fabecb366ad9379530077b7000698cb341",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "configuration_hash": "415da536e75d4e9dc8297298533ed25eeec003dfe1e5bd4b9e23d2d31a0d8bef",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "configuration_hash": "851325eac75c254dad4cc0dfbe03e3e30cb3ba0f3bed588995946f463b067173",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "configuration_hash": "e970db1d0579f244734b36f4daa84f8f4090c8c8df6d41743b72ae9d31f48aeb",
+      "error_count": 0,
+      "native_input_scope": "eight_generated_inputs_excluding_generated_polyMesh",
+      "solver_build": "10-c4cf895ad8fa",
+      "solver_log_status": "completed",
+      "solver_release": "OpenFOAM Foundation v10",
+      "solver_returncode": 0,
+      "sync_status": "results_synced"
+    }
+  ],
+  "execution": "local_post_processing_of_existing_CI_outputs_no_solver_started",
+  "limitations": [
+    "Local hash consistency does not establish authenticity",
+    "Eight-input grid hash excludes generated polyMesh; it is not a full mesh replay audit",
+    "Original field hashes are rechecked; native-to-VTK numerical parity is not rerun by this adapter",
+    "No convergence, grid-independence or physical cleanroom acceptance is granted"
+  ],
+  "log_bindings": [
+    {
+      "case_id": "configuration_1/coarse",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "log_execution_binding": "hash_bound_sync_manifest",
+      "mesh_execution_binding": "hash_bound_grid_execution_receipt"
+    }
+  ],
+  "reproducibility": {
+    "comparison": "exact numeric solver-time matching; no interpolation or mixed latest times",
+    "field_mean": "sum(cell_volume * value) / sum(cell_volume)",
+    "integrity_scope": "local_hash_link_consistency_not_authenticity",
+    "native_bytes_verified": 15902254,
+    "native_source_bytes_rehashed": true,
+    "native_source_verification_requested": true,
+    "speed": "Euclidean magnitude of native cell U; mean of magnitudes"
+  },
+  "schema_version": "cleanroomx.cfd-native-grid-replay.v1",
+  "scientific_validation": "BLOCKED",
+  "screenshots": [
+    {
+      "case_filter": null,
+      "field": "speed",
+      "height": 820,
+      "kind": "field_history",
+      "path": "actual-v10-grid-field-history.png",
+      "sha256": "8ba29d8ec1b586ce8d574630bb24b2c0250e8d488af13b8648d7ef15c227b02e",
+      "width": 1180
+    },
+    {
+      "case_filter": "configuration_1/coarse",
+      "field": "p",
+      "height": 820,
+      "kind": "residual_history",
+      "path": "actual-v10-grid-bound-residuals.png",
+      "sha256": "7a9c6848c9ea4a00d72ad53893f7714f3e29f8d51720d3cf2781f119d3800699",
+      "width": 1180
+    }
+  ],
+  "snapshot_count": 27,
+  "solver_release": "OpenFOAM Foundation v10",
+  "source_branch_head": "6ff519a1608edae61523fb1b8009dedf06562186",
+  "source_ci_run": "https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39118048747",
+  "source_role_counts": {
+    "case_input": 72,
+    "grid_execution_receipt": 9,
+    "grid_family_manifest": 9,
+    "mesh_log": 9,
+    "native_source_field": 81,
+    "snapshot_receipt": 27,
+    "solver_log": 9,
+    "sync_manifest": 9,
+    "verified_runtime_asset": 162,
+    "volume_field": 27
+  },
+  "sources": [
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "7a1826056fab0689aa049b979ef2ba35f109f4aa1fabe7c8c6d25305c4655870",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "1ea4644ed246100cdcfca5e2c687e499c1ed2eb0c3d9bd1101381b7a41db387e",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/0/U",
+      "role": "case_input",
+      "sha256": "ca7029513538786b66b0ec439c5f9ec8b8878e207d67e17cdff7d0fa4169037d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "227752acffb2388fe594637826f9df24db275d1a7879a2024f2696f11e19e634",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/VTK/coarse_50.vtk",
+      "role": "volume_field",
+      "sha256": "38fab695e9dcfede3eb77204e1b35aa42f2abf42875b414770245c597816c00b",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/50/U",
+      "role": "native_source_field",
+      "sha256": "06a76fef0ba705cc811ab7e04c9b5e8bb1aab835a7d6fd950ae9b972346f5a15",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/50/p",
+      "role": "native_source_field",
+      "sha256": "6226152d3bf18a3362dee67dcfe6f3a86f3f07a9b38fcffd23979a4075d067cb",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/50/phi",
+      "role": "native_source_field",
+      "sha256": "c8694bb0852e9f565ba459875f504bfde5a13538dc0c3faac0302eeda31f6aa1",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/VTK/coarse_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "38fab695e9dcfede3eb77204e1b35aa42f2abf42875b414770245c597816c00b",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "909b00c4081ed23b6f730c56da1ea5645d3687dee6781c440b5bd548ff5547de",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "d7eb6faf7fd79f244d348e62cff1bbfd0b1065e879a665a954a688268dbfac3d",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "10dcd6f57d6ee520fe2f0da205973a1aec8fcfb0e5f442c08012c17b1b09b405",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9b76b0ba02207bff5596b794cc62f7a3a37d06a495f6f23d5b8662f92f75e038",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "6f5da78b0bd36575763cac33b43419e8bff562e799e87dd9e83141c35ac3dcb2",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "6a45ecd90d117ccaa832fb710b2364d309e5ceddf27a1d9c847ebf065eda77ac",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/VTK/coarse_100.vtk",
+      "role": "volume_field",
+      "sha256": "8cda5cf45f0e493f606ca09795759d1b35382542ad4f359b87134fb29679bf49",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/100/U",
+      "role": "native_source_field",
+      "sha256": "5d4afc618e716e33ddb331624db94b33afa4c6bc52a2ee4e47a3947cb40cb308",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/100/p",
+      "role": "native_source_field",
+      "sha256": "d4dd462c4ad56b096ec1633e47c6eca140f90cc888f04520f4b22ff4d279b0be",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/100/phi",
+      "role": "native_source_field",
+      "sha256": "d78b489c4d126d0626ec642cf249ce76cd45f4e8c18b650bdd9382b2a5f89d5d",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/VTK/coarse_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "8cda5cf45f0e493f606ca09795759d1b35382542ad4f359b87134fb29679bf49",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5395b13991fb9c1a79a0faaa65840f58a5274da5b248a5137ca2936097713e95",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c485f35b634b3afb78bd8801313ecfda351ce96bee732fdfee24cc81f9e4b4e9",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "2eeebe859a36878edd862f492e9d15b2c80aef339b457bd8ec7b503f1c7a0747",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "bf359d71da7850e2d330f3ae6b63eeadfe87b9bba917dfd0195bec4b7daded7e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "7b5ce6e046e3229fd5516c0508ee6dd71993c766664ac41146e66e16eb59c74a",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "9ed5574ed72b9957f1032cf9df22d174101fe04e1c7f8c2f108c957212dc51b9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "volume_field",
+      "sha256": "9891175457c1a3e1a6a8771e5951b351374dc0714dd2c27235557c0d9834fb39",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/150/U",
+      "role": "native_source_field",
+      "sha256": "d440f1b54752f64b8474b296c3966f1bf56ba66efba0054fce6fd3634fc8bebb",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/150/p",
+      "role": "native_source_field",
+      "sha256": "bd311e218c61f6c4a906c893dea1f81387bec1afd02b5526ae496e3f47423063",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/150/phi",
+      "role": "native_source_field",
+      "sha256": "781acd66d3b5f3762eb8943b08f86a4c8a80c19385666cf4481d7820980157a2",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9891175457c1a3e1a6a8771e5951b351374dc0714dd2c27235557c0d9834fb39",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "2c05cdf837b978fe3746d449729e4d3529bcc3ffa1e0c3210af1b8b5392175d8",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "ea6c10580922a2f75f5225c041b93d76a4dfd1b02449fc3bde45e2a4b3d6bcfa",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "36ce71d3ea6f7f8bdd24af66d2c71a486d87cb722769acecc3f5919fb5d4c1b8",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "bb6bfd064627d16f6a0f413512902e8baa73164e03cc38f2d4fd72fee2e721a7",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/coarse/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "7422bdb2dba27df348f25faca8973ca91221bf12001fadde12824963794e88a1",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "973d935b361a27fbd5cb8b463bbcd99ab48911f5384b37d71661ec0015ed8cc9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/coarse/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "c6a90b8dc7a1207793763e6e9abbf307fdcdc1ea3cee5bd88683c1d17ce627e3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "6d923c9b613bbb3418b044848d0141b8c6959ce989c0ee43b007f3ffd9bb72dc",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "f0126c2e1ba7970a7814dd6f97541c39e678c2193042734444d023aa4259d713",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/0/U",
+      "role": "case_input",
+      "sha256": "ca7029513538786b66b0ec439c5f9ec8b8878e207d67e17cdff7d0fa4169037d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "5b7b414fbbe4bb307238d69ccdfa5aa5a9d13291a65091db989cdc517a14119a",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/VTK/medium_50.vtk",
+      "role": "volume_field",
+      "sha256": "fa06563b87a0342b9570b7188300bdea91dd40aedacc14b49e527c1d42d1092f",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/50/U",
+      "role": "native_source_field",
+      "sha256": "56f9e8a8e18a886c026b943e19de596b8e5d3187f8c5d40de40e74e7277beb2f",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/50/p",
+      "role": "native_source_field",
+      "sha256": "0512df70ec82be42a54fe2175f181a2acf3ecdb111ff460145c7b6042593db42",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/50/phi",
+      "role": "native_source_field",
+      "sha256": "e487850bbc7fbb264fd6334e10bc39187a2424a3af539d61a1e7c26c6f01cd75",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/VTK/medium_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "fa06563b87a0342b9570b7188300bdea91dd40aedacc14b49e527c1d42d1092f",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "67e09d908e9c970ce6bd645b8fb510f22b8c355d20cf3eeb95334d3c861230f2",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9c510dcfc2723618880d93aa46f6726173b9b6c5ec6e074fc4730f7289b8029c",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "e0448cb1c52f2c9ab090de48a81446d978a60fce77b9d7f47ee0c5e7f20cb1dd",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "f868d725d67d65d5e52bfc4911c8064f2823e7a966d7d0bc46ed5f24cfaccd84",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "a0f933835abd27c5e80b012966a0a88f090186b8d864689bda01b7e7ebfea15e",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "c086a67c57f737dbb1dcae2337f521766b15ffdd38de93d6a9aa9295a48bff3a",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/VTK/medium_100.vtk",
+      "role": "volume_field",
+      "sha256": "a58f378463fb9cd657bbf96b65fcdf6bbb8dac4624945736ba0c22c8b911439b",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/100/U",
+      "role": "native_source_field",
+      "sha256": "fdd9b6cb2f4da383519ebe3b2a4a0ee164a2c61d3dc13f924f1feffee8e6d48f",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/100/p",
+      "role": "native_source_field",
+      "sha256": "db0be658048e2d92be348adc217bbaa48cf3815b7ce72575f9c45b366681466a",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/100/phi",
+      "role": "native_source_field",
+      "sha256": "f51946e358c0c8e66dbfb9fc92093c409a6563cd8a28f396ab7768e4cb699760",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/VTK/medium_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "a58f378463fb9cd657bbf96b65fcdf6bbb8dac4624945736ba0c22c8b911439b",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5bf8c80a687f87da737e996378d7f5a61c09ae04c28b453392bd4896b93a5014",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "cdb82df48c04fc53b7ffcb1537d253e90cc427d1d58a93a6d17cc7aed01eccab",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "397189b7337ecbb777059caee86b9e9c1cab6a321c3c03dd395f42a5b8b946e3",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "944c5669259a4ebb093421cb5323423c97b85dade57fd5fcca702fc9b7e3e450",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "5f034acad4fa8734dd02104e61962fdfc917bfe0f5d0e9f7ccecb71e2dd85eb2",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "80568ce35b237e5f52d83c97bdd7b8170d8c30283e4e5431edd932552a0cfb33",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/VTK/medium_150.vtk",
+      "role": "volume_field",
+      "sha256": "651942d759d11f0df0782258b024001563f0f675d799711cb23bebc2bd163414",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/150/U",
+      "role": "native_source_field",
+      "sha256": "68bd021b08d3d49e1d982c03493f2fff864270fcbc6df6997213d933bc7dc959",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/150/p",
+      "role": "native_source_field",
+      "sha256": "a5f022ed5e6772eb207010679ac996c7a1e5957cb7185ecfaa362a972c8c4c24",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/150/phi",
+      "role": "native_source_field",
+      "sha256": "30923e22939945b4272a9c623e7c77f7d148054fc5fde478e5e3ea27a5d8df2d",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/VTK/medium_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "651942d759d11f0df0782258b024001563f0f675d799711cb23bebc2bd163414",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "f6f5e9e5a257b46b2246fa4b03b25167b82d551374a22a42a46474a36b86101c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "2566ee5fe065ae5e2ff653d1a786c763e3005a9c8717e2cbff01564fffd6e3c0",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "cb42d9361706f3fb17a99bf8142999e9f27cceaac2f5366f097904dfad836a68",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9eaf17cb892f1661df639a674eb0c16e1b929e34171a541b2502f2ebb165994a",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/medium/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "81ff8d92491cf226dc5be80b76d6dfb6bed9c80826bb8ff32dc267dbeeeaf5db",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "18fb09f8ac89e5f0ca922476563394552a99f2dc3c3bac3aec49ec7f826d3f45",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/medium/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "d64d0dceb35e7719bfa30744a33ae234961e01ed07e8999205fcddf672dc9179",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "c8ccc394dd3b0131ea7eaf93536f6f16166afa277b36a7c27f50b54f1e15b316",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "e174f3dec45500b60f29abe50c94689ff6eea014333f895706eda367d67ac168",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/0/U",
+      "role": "case_input",
+      "sha256": "ca7029513538786b66b0ec439c5f9ec8b8878e207d67e17cdff7d0fa4169037d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "d4e6bfa869d4ac6921b6e717a104e596bca120de85818c9cbd66e0320ed3b027",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/VTK/fine_50.vtk",
+      "role": "volume_field",
+      "sha256": "f6b57a566f74c20ea47772d564b09c7b9dce2cdd05cb2e7772b2b711528ef517",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/50/U",
+      "role": "native_source_field",
+      "sha256": "489834b00bb6a9ff4e7b592ab0b79cdedc324b05d5fe3881b965fc3fec71e760",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/50/p",
+      "role": "native_source_field",
+      "sha256": "e085733394998e4e9445fad863b77e7a5e2acd3c5c15528ad8ae4453edd1a96c",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/50/phi",
+      "role": "native_source_field",
+      "sha256": "940dd26ae039e0766695e425c57367eeeb0eaa595dc0c49d6ea9c264ed01a73a",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/VTK/fine_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "f6b57a566f74c20ea47772d564b09c7b9dce2cdd05cb2e7772b2b711528ef517",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "122a9ce69ecc3fd7ea790af1a5e644bebee634a1ab07f1786c8930ccb8582488",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "959bcdbb9c3dca850b2b6a8d45750a048ee9458294c5b9cd5b2c0404d17ebb6a",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "8319ab6a31597587af115c0166bea53f8f2d4dce11f6ffa91bc4f7414eb0adf4",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "65d9823538ce3ef6e80ae507e441ac3561bd505d90180f0786f1342f9ecc461e",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "ae92e1738c97d96b3a75088465ceb8d4ced0f59687d3cabf2b1c74c4f635ae78",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "dfb0395ed470767e6803f0351a1348d4609e21b9b0dfa695d55d57cde56b57f9",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/VTK/fine_100.vtk",
+      "role": "volume_field",
+      "sha256": "21e5a7520668a0b4c3d20fa13ae9018545137e7ec12f8e8fa8345bedbbad09b8",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/100/U",
+      "role": "native_source_field",
+      "sha256": "0231ea80945d8152b386491e73a6ac7081777d275315f755ae788a88f1da8bf5",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/100/p",
+      "role": "native_source_field",
+      "sha256": "3fdde43bf644472ca73aa78c2d2046ada73c836846eb9ebc8df6768b71f85db0",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/100/phi",
+      "role": "native_source_field",
+      "sha256": "b6e269b6ad3cc63950fa0822343dfac9617fd17ac480215b191bedd74bcf4263",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/VTK/fine_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "21e5a7520668a0b4c3d20fa13ae9018545137e7ec12f8e8fa8345bedbbad09b8",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5d26b2370071a3af4e3a86b3f4ce1ebe5cb00ffdf035b2f0225cf57fdfbbfad1",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "4143e816bd5f055a3ae12c510ef98ade1b44c5069e56650b041751a2013b1b28",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "3f082a92abbf2fe6495714804f8f6ce38ddf9504b7b1a5cae12c424b3efc3380",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "82c6724d767146dcb9d24c5742541afd809df164b35ccf06c5eb2c1f67d7a4e1",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "1b52e2b4313483a72ffcbb625e58d66f6c40de6d701d8b1f7b8ab14d1f8686ad",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "77c93be1222c3034b3c9f26df0f81adc9c9311fcdd688b50a6903b2ce902d1ca",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/VTK/fine_150.vtk",
+      "role": "volume_field",
+      "sha256": "02faa11ca08560aa6d8074d1804154aace018d5118b57bb815badf2fbf7a84a0",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/150/U",
+      "role": "native_source_field",
+      "sha256": "c2ad0dc3a570b5d2e805fe21c9eb0545635ce505b5f29269e83ae4647593fc98",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/150/p",
+      "role": "native_source_field",
+      "sha256": "8281c4be1c76b517c4b10f520b7e12a667969f75657021dc4de177ea1c3ad2c7",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/150/phi",
+      "role": "native_source_field",
+      "sha256": "d93219e2dd461089fb42a6f1f341bd10ac7f9cca54056b7de59d8ecb0072faa0",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/VTK/fine_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "02faa11ca08560aa6d8074d1804154aace018d5118b57bb815badf2fbf7a84a0",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "7b49511b5004dee028bd7d1d2334205f6e29567f069c2728843220204fa6b2f8",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "bf8119e38984380a27dc6d0e8c291315cc4733add689dd86cb43d3895d1cad68",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5e51f3fec9ff9a426829e680212574a9e01ecbbc827721f30966ebcd5b1354ba",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c2a46cc82be6816751dce392efb0ba9f003fd36c3bdc0f1c48bdd18cf19409d3",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_1/fine/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "bdea7dc6c7756c109904f49242c2913daf97fda397f149ad7d600957017a650e",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "f4260026e9d479e8a120fc9c184fa25f7624c8ae1cc77087a7a59b4ddfc660d7",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_1/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_1/fine/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "53c8d414dc29fe14622ac99f9758fcfe313421306be426037899a2b1de8a035d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "5baacd4a29115a90b0c92efa0c4fdf2f5dc91dd63d8072baa4216806816c3e96",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "95f36b76ee3e9eeef53c2fd4bf82b54f0e0df78896a95a6984c06bacbee581da",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/0/U",
+      "role": "case_input",
+      "sha256": "3cdf244ff2005b573e47a6409895c8aeaf9b3faac98f7a2f1af7e4ed29c02a4d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "e49af777bbc6738cf3af3c2d1887ef259b68e9f1527c9419833f2d866eb38c78",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/VTK/coarse_50.vtk",
+      "role": "volume_field",
+      "sha256": "c77b4ab0a30768241454ecb1cb35ae5e5a5ee6c89e52ee9dbcc2912c0906751d",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/50/U",
+      "role": "native_source_field",
+      "sha256": "84608f374958b6a3a2c4e871c07977d701d302394ea95b8c649587039a54fa82",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/50/p",
+      "role": "native_source_field",
+      "sha256": "808b2a760ed5480772812f9a4835541b3bcc101109110138f126f5bd460de5bd",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/50/phi",
+      "role": "native_source_field",
+      "sha256": "677dffa522e3b01f0f36fbf8a57e9c67a2d61658f8e96dd9ea45b45dcb5f901c",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/VTK/coarse_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c77b4ab0a30768241454ecb1cb35ae5e5a5ee6c89e52ee9dbcc2912c0906751d",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "2f9afdacfd095b4c497918c7a69570bfb37b40bcb1316787bb3ad915b8e94db0",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "0d4a8a4d116ca384af3f6e811d508b5188a6444ae2bd3f189bf88549e7220a07",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "90d6c3f1a6779f6fd2843e58dade28096eee300060f42e3eb011bb6d44cbb9d5",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "fe47945b907b80d2b13b0eec9b318c3ae70b79911e0e6234f51f0503c592088b",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "6ee194c94076aa60f5ae543c0254d3899bd06c1b32565d61f262e50a472c10b7",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "3b144aaa2a56e22030d6eeb9980ae1ec09d19392ae9e82a57d2d6d04dbb68298",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/VTK/coarse_100.vtk",
+      "role": "volume_field",
+      "sha256": "be099a165d849ac3c47aee7cfb61f578d26ae36ccc4f3c61c22a2c110f6553fa",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/100/U",
+      "role": "native_source_field",
+      "sha256": "1447c94ae141225f52a8bc36357ed2bb27fbc76d7687c99d7c77760b6996cf43",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/100/p",
+      "role": "native_source_field",
+      "sha256": "e17ce4d0ac386d1fabf900243167240e8a7c44d92cc6a8bc0f8bc3874c3383e4",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/100/phi",
+      "role": "native_source_field",
+      "sha256": "0c5cc8a51629062499288828aad0ea723eae76402e536bc2444886ce203715ec",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/VTK/coarse_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "be099a165d849ac3c47aee7cfb61f578d26ae36ccc4f3c61c22a2c110f6553fa",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "8cbb45fded20192632e486cd13f5a2d01dbdabd09138c6cb0d744150ac3b189d",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "d04637e964e2b16b0afc98b596f508d167efed64ccb85c35eeb44e12318e20a4",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "fff57caa845a1814faab68d889b0a0728471eeec9abe815ddd2dea49bd130b74",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "060ef1a911e7580480ce88c1f96eacf6cd810ad0f2ac5c337ac86e2083d29dd6",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "f7a77aa68f0452642422a048c049e9d30e35acb87c08965783f7557eca465e1e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "fad299ebe541c1308cb1cf44ecc816ed5816b73790505f34bd843aa8c9073d9c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "volume_field",
+      "sha256": "81f7bd45d29fad73529dda8a1beb6ad5340481079614e0b36a072c7df139ad8e",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/150/U",
+      "role": "native_source_field",
+      "sha256": "814bfeccd4a2c230e841e6f55e551cc7fe0062ad3c82382cfebffa2f1dd57f68",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/150/p",
+      "role": "native_source_field",
+      "sha256": "e98e3dca62bbd8eed890e2abbbbd5ec7f07e4cd7fc7863aebed441259b440da9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/150/phi",
+      "role": "native_source_field",
+      "sha256": "460ac85e7f1a182e9dfb75ae030d79988a747227958c74abfda49aeb705b7681",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "81f7bd45d29fad73529dda8a1beb6ad5340481079614e0b36a072c7df139ad8e",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "7fedf318d0fc6be490a7d3f4218490dd406e08af457cb3e596511f87b808ab3b",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "1390685ca2847b60a527b5b5abb217bf5852a912f952e3acb1cc5beb46d4bf80",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "ee10bfec2e811a73019386926bf2b77682e0c9db89601d9ba35f2f6cfcd6e07c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "a1a0c665415df253cf490416bd29104869b1c5e775c0d693aa157f1fc46e2dc5",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/coarse/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "71a9f07a427f1bb089b7b30921e97c6704ff238be100acdbfa8185b46e03dd4c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "8817726ead71ffc008ef6fd531011ae3efe43d4f2c809405b74cdae737c00d02",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/coarse/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "368fa89d7d17029698fab0bff36840b011301896e0196d02b87f6ea54357d8bf",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "80400c1b8fa3a40b01964eee137329a7679cd3bf281d68ef37743b28c75c7fba",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "7d1318157d7f0114ea0bb41404bd45807393c92c4a67caa59c3e7665c120020f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/0/U",
+      "role": "case_input",
+      "sha256": "3cdf244ff2005b573e47a6409895c8aeaf9b3faac98f7a2f1af7e4ed29c02a4d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "216ff08efbe56fa9523b40e10d56891214d22d98ed5a56749d6d27b2bcf69cf8",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/VTK/medium_50.vtk",
+      "role": "volume_field",
+      "sha256": "5e3ff542f5154cc17ef90c6c0a065f19eedf533d1abc869cbfc13807f882d6d2",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/50/U",
+      "role": "native_source_field",
+      "sha256": "1c91514d63e76f8a12bfc31728d6253f091cd51d7a27fcd59dd65abbea47fb30",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/50/p",
+      "role": "native_source_field",
+      "sha256": "29cd27011594d9f3cc478e1fb62255af8d73ac6badb2f3ab13745edccaa616ab",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/50/phi",
+      "role": "native_source_field",
+      "sha256": "51d1833e23a4e002abd9c8cd7539c2b3aba9e7deb2471ea3e31b1eb7072c8f96",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/VTK/medium_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5e3ff542f5154cc17ef90c6c0a065f19eedf533d1abc869cbfc13807f882d6d2",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "fa4ff50ba6446a23fe9df2a88da77befac3e3b67e5821cbbd736051e9d506c4d",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "cdb49cfd4608cefc9e30b9887957ca65925f6bb8c702846be7bc27811047e400",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "d9b7943cf300b93481bf7fcd6aada03825db460739bfb831baf16842f09d7c38",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "810774c53af3ce855530234f1b5bea6d178af43428cbec0bee73dda73f9ca73f",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "e7d10ac072bce538310d258492a3becc33022873854c51889507fe2fbbeba284",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "1e5b8b4fa5127099ba5edab758a598ef4739f3ade5e30607ed00b5eebf42479a",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/VTK/medium_100.vtk",
+      "role": "volume_field",
+      "sha256": "4a5e5c5e27f92b6ea8e6df90f5c2eb994a59dc3862709bc71b5b7892f09793a0",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/100/U",
+      "role": "native_source_field",
+      "sha256": "cbe9818d1c656c8660edf391267f3f669f54f7750e06284c93e44311448864f6",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/100/p",
+      "role": "native_source_field",
+      "sha256": "199a46655e0ea0c1c2c59c6e885a50705302d8b52d94413aafb448bdc692bdf4",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/100/phi",
+      "role": "native_source_field",
+      "sha256": "633550543b7405e70726a3049d7df2457cdb841505e3903050c21fbfc4573148",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/VTK/medium_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "4a5e5c5e27f92b6ea8e6df90f5c2eb994a59dc3862709bc71b5b7892f09793a0",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "140bc6fa517083fb8c9a1ebee4ca97bda4ba680dafffb946185580cc04944bb7",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "28a042b489e701bb906fc9e25e7b866cce92b8577708f12c748c9a073dbba642",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "b7bb8f3c60bae580db1f0fceded1b99a7642226095634d2f32cd65fc1ea76725",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "b7f9c263f37f59b57574f59f2550118cf34a3c4cedd12c8f764b65f87ec9c4f5",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "2c68d127914e528a9b4a3fea227bde98c3abca21e76bb275c61103d31b532c5d",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "12ac439b03de5d11d40a62ea9affbd79eaa0b2ee69388114cd176095122f4546",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/VTK/medium_150.vtk",
+      "role": "volume_field",
+      "sha256": "ff65af8c53eaa583af575e2be85c7bca1f3ef1b5b1a948f0147c8fefe10ff027",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/150/U",
+      "role": "native_source_field",
+      "sha256": "47344bc45cc4b07de73cd4120dc1e9dd9322c23f124812775a63319c98fba3ab",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/150/p",
+      "role": "native_source_field",
+      "sha256": "1de857c1629fa73b0b6b49d309b741083ef351b722a7a04e9af415aa287594de",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/150/phi",
+      "role": "native_source_field",
+      "sha256": "4213843782ce4ebdaf79baaaf8eb6fae930158062e444232abc68f8efc741620",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/VTK/medium_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "ff65af8c53eaa583af575e2be85c7bca1f3ef1b5b1a948f0147c8fefe10ff027",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "fb920866aba6b13b9545f6fc5905b05178e64122d9bd20fe3f0aa9470172b154",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "e4798fa59b2d815dfe0f6a1c43fe2ef1dfbfd20add0d8ded50121fa8215d97de",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "66b21df038a1caba6cb9835db071c6e7d26a839f16a4b5c95c31a9099b94acab",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "dfcb8c2571c080d2a0116e9df07a63dda84fa225c2c82ec5e5ed37d1cf9d3427",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/medium/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "207fecd91706bdd6535315fb2fa5b3e79c3cf62c8971d719bf1045f1dbd037c0",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "8d0ce9eb6646e7ba13d17539df0762cfe561c6c2a3c445cc7ac7679d083c4339",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/medium/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "45b00fba94f6497bdf5aee2b2ccc06f48b316f9dd5a052fd4f65289137aced5b",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "e90cb5717747b811b40c76eebf324195cb2f57f990c9fcb5e3424a865b0a4f64",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "9971291285ea77e282a796ff750593421b2a579976fb9f907d9972dc52aaf5f0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/0/U",
+      "role": "case_input",
+      "sha256": "3cdf244ff2005b573e47a6409895c8aeaf9b3faac98f7a2f1af7e4ed29c02a4d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "77873e311455ae4020617d46a1684049587c40a2a9df015172686ddc675b7e3b",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/VTK/fine_50.vtk",
+      "role": "volume_field",
+      "sha256": "3331af5fb7a2827dfce23089fb239d09b729acef012743c2953c3885a9a252f6",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/50/U",
+      "role": "native_source_field",
+      "sha256": "76814b63ab0fb3f93ead2f115be66a7585ca3bf47f26e3f042ba31b49a9f5ecd",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/50/p",
+      "role": "native_source_field",
+      "sha256": "6b15719c176432c4b54eff67a5c70f1082d8c40317bd9f0e3104cb77f65a7963",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/50/phi",
+      "role": "native_source_field",
+      "sha256": "60081f20aa95d5bf89ee6837e10efc36a3c2b9d8fa1f313b20fdc971f7d69791",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/VTK/fine_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "3331af5fb7a2827dfce23089fb239d09b729acef012743c2953c3885a9a252f6",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "3138c93a019aff7386e0cde2ce78b75b892eac6b75b862deadf449acb48c4c40",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "d6db975a145bfde542e502d99f6f54fc3ff33cb02faaef032f8b6093792a04a9",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9af99a81c8d66b7dedd026b17e669654f02e536f800f51d11fdb01638a3c8f5d",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "a8a089d81f147fcdc943a99afb1c1446b23ddb0c38a882ac165d216bfdbbd3a5",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "15a0abb8cab2c6b572cadde81878a9b3c6a0cdde896f3a579fb9bc199bf6c2fa",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "46bffea02bd3cb0ca0b95c7cb719d640fa226303b1a7c4b90992eae72761e2d0",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/VTK/fine_100.vtk",
+      "role": "volume_field",
+      "sha256": "690f5cbedc6e6b1f2ac043eea864928d20e8928050a8fa56c1935cabc14be75f",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/100/U",
+      "role": "native_source_field",
+      "sha256": "c7dac78bd42344382e92705aa6815f36d51e4963eb00b6fcce6b879e99fd63d8",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/100/p",
+      "role": "native_source_field",
+      "sha256": "0051a998a8cdfadf2f3eb3ff01431616049f4bda6485d540ed01b5ecabf32c1d",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/100/phi",
+      "role": "native_source_field",
+      "sha256": "5b494240cf61627762e97d7f670ae33734f36aac7bd741e5f7aef3eca4fc9df3",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/VTK/fine_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "690f5cbedc6e6b1f2ac043eea864928d20e8928050a8fa56c1935cabc14be75f",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "677f09342d411bedd0b16cfe0f8e9ec215ddef41924a87846cc0efff5bf055e8",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "1caecb8740c14794b4830c90f3b2080f77fb1d68e287d0eb88a34ba2604d263e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "e85a60bbc973baa59d3f07f68ba9431cf74fb15aa260dce73cab68305918adcb",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "477c7a6a344f25c1f1911666b9f486bcbb829696ac56b79a8991165ca909c751",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "2742ca67950f8e0fb154b6e2bc9a568c205cdfb85b863bb52b9473e4be2d87e6",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "bd17ce50b30916a84fef2da3e915f0da633304650d03c4723904c8499895a8d9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/VTK/fine_150.vtk",
+      "role": "volume_field",
+      "sha256": "c150aef692458224ebc4839de7fd44a4346ea740509c5ba853ccf3e3eec43149",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/150/U",
+      "role": "native_source_field",
+      "sha256": "cf37dd35b6d2200fa7e1b0b3e544d720aac326721f61e11f889f90358d5533e0",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/150/p",
+      "role": "native_source_field",
+      "sha256": "379ff480b9ea6c197d0b1a400d2831e89d79935fd80d2562773fddb712fe78dc",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/150/phi",
+      "role": "native_source_field",
+      "sha256": "312c9e006bb5d51942b5527f2381ad3bcb159c686f3b1bc10d696ff9601ac026",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/VTK/fine_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c150aef692458224ebc4839de7fd44a4346ea740509c5ba853ccf3e3eec43149",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "0b84561019968500ce8c3fd9e343371f784b63b42123ceaa27f6b523aded92f1",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "cb3880c7a3624bcaf73fc19dcef88a96c0dc79edac5a2fc2cce8f8f4c8affb80",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "3bf3767496c5d68e9a01a5c45cfda8304aa1214923d585d49d1efd1fb5fb7723",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5d66a24ba9195ab1029c111f3c6f5c36a1d37648814dcbb647b5d4c5b2705b90",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_2/fine/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "46700f8b27604f090a95a56e083735841623ed57665145bca92c260697483b8d",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "25fadc23be17d942311e907d8fc1332f97cf9321fe18bb9aaf7a2366711368cc",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_2/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_2/fine/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "d6a911eb186ed772ce4395c899943a7d2ab7c4dfc8998a9e937d006a27d4fa37",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "96c7967b40c509ee35b31aa552e17005573d3b194b52b5bf8f7995a5e4c1ef80",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "093d120d5c814404886118f040eb327fddc62ffa372bdd93e76c3eaa662108eb",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/0/U",
+      "role": "case_input",
+      "sha256": "3cdf244ff2005b573e47a6409895c8aeaf9b3faac98f7a2f1af7e4ed29c02a4d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "bdc379e4e8832cb486b68307db4013c21d090133e51e77c81589b9cd49ddc9a6",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/VTK/coarse_50.vtk",
+      "role": "volume_field",
+      "sha256": "9c475e4be7c7487b95812596200cb43413fab3b3985be64b6cb4991b9fb58688",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/50/U",
+      "role": "native_source_field",
+      "sha256": "ef82710db9dcadb0e224b06cdcb09418d5ee5276f0aa6cf391d52d8ac7eea6b3",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/50/p",
+      "role": "native_source_field",
+      "sha256": "747ed7ac1d0f5efe20f5f5b4d60cb1f8f8438228c89955ddd37fa0dd8c101f52",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/50/phi",
+      "role": "native_source_field",
+      "sha256": "bb5b70001f952ffd360025416df586768242ceb033b9e3d1281c0efa4991213c",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/VTK/coarse_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9c475e4be7c7487b95812596200cb43413fab3b3985be64b6cb4991b9fb58688",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "08805620239bae16086225b5b5e063de151af2af9b0fd982b0544cdef0bd92fd",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "97004028f42933535974c242c6200225ca099d225604624bfc48b7d818c7da71",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "eecb5006fcc89b68b53dc072e2384fdf2c4cb3ebff892f9a61d17f64ac4e3be1",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c35f9564452586063da44cc03c8f2c149f7eafa4220cc2ab56725ad9f15583a6",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "bdab663921cabfd139962f8c24d4ea9ba83771dfb386caf1dadcd605151951b8",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "340db11f1337dab048d3cc78468652a5fff71d5eea65c78ce83843e72f95fdc8",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/VTK/coarse_100.vtk",
+      "role": "volume_field",
+      "sha256": "a3c798f9f06511d28bc3d857fe1e2ee7b9c29bdc3ea5f7c1e44ab90d55ec6b9c",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/100/U",
+      "role": "native_source_field",
+      "sha256": "8884e0629a74bc1fa386838bb99cdd1e1e4a53d743d22c19fbae45a7de59ecbd",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/100/p",
+      "role": "native_source_field",
+      "sha256": "09424f164d8136104468538589f08042173b244fa72d14a7a183d954d410c99b",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/100/phi",
+      "role": "native_source_field",
+      "sha256": "0bbc6ea6a610193d27b6ee1e8d59a74e70afd4ab8e5a4a62101d54c9d7649a5a",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/VTK/coarse_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "a3c798f9f06511d28bc3d857fe1e2ee7b9c29bdc3ea5f7c1e44ab90d55ec6b9c",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "4dc844e7e7de1d0934b6b2bc33de4a99cb9619d43ca1d97faaa8ba50f2d34218",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "09f1a16cf21a9a7f10d7a6266d134769135ecd2697fcac95a67bb3c8c101527b",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "cb0465a8baba0891bbf4921356fe2a0e46d05013a131cba245d798fb9a26d726",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "da0a010c12ea32bcdeb9d1875caa373bd9e6b268590d14bf21e0caf40c0abb52",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "873063a5517549372aa10be723f8375355f5331cacfe7f7b53aedb4fd7199a68",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "aade26a96f4039e47b6a398cf3a3f75947064cdf6fd0015259afe7ca6385a0e1",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "volume_field",
+      "sha256": "c9f4ba72e1d8f5bd7346491d0b0938113e0a644561606c5ce71900c6f9566b9d",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/150/U",
+      "role": "native_source_field",
+      "sha256": "221dab422037be5cda0bd0e149675160899635b8858ee89c5794b8e75eac3cb9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/150/p",
+      "role": "native_source_field",
+      "sha256": "6985a3a23fc747a05d8795196ad4cc5ef24c1f78fcbec320f1decc6cfda74be1",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/150/phi",
+      "role": "native_source_field",
+      "sha256": "c1c995300d25e1e87f9637e9a25720be202d8643eecf3319d687b2df5604aa6e",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/VTK/coarse_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c9f4ba72e1d8f5bd7346491d0b0938113e0a644561606c5ce71900c6f9566b9d",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "4d6d3b8c82c8bd650f8855d4f5e3b9c1692f076057b7725d363debf7cc4a7987",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "92f30760e05974da8885ce9196b51126ee360cbb268a74625bdf8ce694bf9b36",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "57ece549d1414014012e3796b944dd2e30f2b0c8ce0285a9eb8340c4aaf0ad73",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "b0bcba764a24106029c17625c6cf55129ce3c925e023dac230c60980062849b2",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/coarse/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "bcb79338e959d363b2895b5d5c06638137f929d5d6bb28c21c3e38447d7f0de2",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "0b63d065fdd2a0f370442f09b9c2ef0fd5f7f06045a4445a28c6448c38d1c338",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/coarse",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/coarse/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "3e65e27f60e9be5df24ec4f711426cb962bfedf163bec919e679dcd8712bbbde",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "247a75b431cb7b8c79ece658cee32e82ae9a243bf8beaae719f0ba7efe58c6d8",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "7c1de8a5665a4e09ff993a822a1b4b55303565ef102ea7dba45f4d2e92962232",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/0/U",
+      "role": "case_input",
+      "sha256": "3cdf244ff2005b573e47a6409895c8aeaf9b3faac98f7a2f1af7e4ed29c02a4d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "b9c2118b9f991e591f72902997d41bad50f133d6aaa8c3b9526f3685b2753dd3",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/VTK/medium_50.vtk",
+      "role": "volume_field",
+      "sha256": "a5791117f660520b1ca76987afc6ee2d389434202da83efcc43e6c59218270ac",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/50/U",
+      "role": "native_source_field",
+      "sha256": "bdfcef9aa14716a0cdf2869a1fdc382f7305f809e2c528496195d0c0793ec2ef",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/50/p",
+      "role": "native_source_field",
+      "sha256": "2427bef357311f895203f6ad29327acd6076b2a286b1a98f21a4a65c9cbe698b",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/50/phi",
+      "role": "native_source_field",
+      "sha256": "b02692ff67b2c825556b575ab06f28746cb011f365fd90abbfdb08e707af6a0b",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/VTK/medium_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "a5791117f660520b1ca76987afc6ee2d389434202da83efcc43e6c59218270ac",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5c7373c7900b44bdab7c47718e51c6426e513235d5ef54f1260e43411d381ddf",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "7039954ddf0220fbd76c4cad806b2a939eff1a411f74c9b77c33775057377f7c",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "b6bfebbbedbd5af5059b7962ec398a32e4921675d3d69d0aad2a16b31be5c54f",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "204b25ebd6a12ab9cdbd5198d3232721ae017b28bf205b7548aa85447da61bad",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "bffbea725fe78bfb614e4ea91b55f22087ab4368523f75b0c9406a6b2b9349b9",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "6632dac7fdd8ab9a8544d9d0830b6a320da54479f740007e1dbda8222e502b7e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/VTK/medium_100.vtk",
+      "role": "volume_field",
+      "sha256": "c2ad71c598379bf9575391de6aefd6709cbbc205b26cc9142104084e69eb047e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/100/U",
+      "role": "native_source_field",
+      "sha256": "6dc25a357dc023e10f5f4f57a95615bd3446ecdd0e935e15afef43a9047462e6",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/100/p",
+      "role": "native_source_field",
+      "sha256": "69ea520c26953dd18709fd1a95e2cba0c1928c517250f4dc4eda1b846acc2da7",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/100/phi",
+      "role": "native_source_field",
+      "sha256": "27c4978df76bc5aa85aef9c112a20ae1cfeebcc830b3bab1d4ee5d2b7bcf1695",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/VTK/medium_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "c2ad71c598379bf9575391de6aefd6709cbbc205b26cc9142104084e69eb047e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "51f1061337d8fad64590724c910ebfb450bbefadd58226fd9e2b2451d2a030d8",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "4c3b342bf092a860974879a0b8f3177885eb23d551a616b40838468166dff095",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "02eedff270ee72ac4b2972a592ff6941d8ed625418fb36ca80597a185727980a",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "bacf4c5b676a6cdb08dea26d5a2498d6604c034e3474b866e6a49de7291df45d",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "8d57879add0d63722584e3dc5b0dcb5113c7a40526acc5530aad8e4e1770444e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "bb6a715db5084c8bddb153713478f8ee785a7668a1d9e283f18b9782b5224769",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/VTK/medium_150.vtk",
+      "role": "volume_field",
+      "sha256": "7e263c12e44f5ff91c5caffb5acdf13cb454495e7f7a779ee21472d91811c273",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/150/U",
+      "role": "native_source_field",
+      "sha256": "873f478a3ce7bdd1bc0562aafa2906786a047bcc48fd735255255d6886c888dd",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/150/p",
+      "role": "native_source_field",
+      "sha256": "0e491540674f8305d8d45b1352a34d99811b9a0596f16b02b03ee69672da773b",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/150/phi",
+      "role": "native_source_field",
+      "sha256": "e4891062861de88b4ac92dc2bb0b27d307d56fee3def74989607e430b37236a7",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/VTK/medium_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "7e263c12e44f5ff91c5caffb5acdf13cb454495e7f7a779ee21472d91811c273",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "e3bdf32981de1d45b9b2b00e7d36b9921a92b6800b7710202a21f9f6a7c350d8",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "69a330e027aa588f71b78c605a7a8fd87bab18e900b1963fbf8751e8c2ba49e9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "5e5e0c699b193b4c1c1b1d0e7d431c23ef62af90448df97bd56a5c64e7b7070c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "d2569fa85181696a7433984ec674ead6194a18ef8ea218948c181ced975a465c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/medium/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "78de74da33a85adac45f678bb12cdee27b99a3d3f6308e1ecd54236f4f9d884c",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "0ba64cc7c7d552fb22e58ac99d5d11d666ba05943ed02da71476b52081586c25",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/medium",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/medium/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "4cd25fe826ea133a7b357b40a7efdcf4b2f010fc8bf7866aac324e19eda4c2a4",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/sync_manifest.json",
+      "role": "sync_manifest",
+      "sha256": "6d5bc0550ca38396236f23b97b8e23014c2dd675432e76984354a3ca17da4a7b",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/manifest.json",
+      "role": "grid_family_manifest",
+      "sha256": "3be0622ead4e52fd552d0229508438fb948430573645e2b473c340f3a46079e0",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/system/blockMeshDict",
+      "role": "case_input",
+      "sha256": "4a0c2106c07cd548f305aba6a6ad72c3db738fbb086ef0bda0a82cddfde16cfc",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/system/controlDict",
+      "role": "case_input",
+      "sha256": "092e1e0acd0b9c2eafeecef07f8602056d2902e60fde6bdb225dca3ed726ef2a",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/system/fvSchemes",
+      "role": "case_input",
+      "sha256": "014d970a7eca0e98775950b35017bcbd42b9a25fbae2e2c4ad536db4e92c5561",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/system/fvSolution",
+      "role": "case_input",
+      "sha256": "bdea0d8fe85b87700144ff6e4fcf32dda8a949abdbac62f3c7f681962a7a535f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/constant/physicalProperties",
+      "role": "case_input",
+      "sha256": "ae4b9f4f1f7c0b035f129dbb9b22817fcf11d8ce40158ceb15267729d41ac2e9",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/constant/momentumTransport",
+      "role": "case_input",
+      "sha256": "1722b130a47151863fead1272d43562b504e41483be231ad8b4d02845287fee3",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/0/U",
+      "role": "case_input",
+      "sha256": "3cdf244ff2005b573e47a6409895c8aeaf9b3faac98f7a2f1af7e4ed29c02a4d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/0/p",
+      "role": "case_input",
+      "sha256": "3ac6cada3b9a03d97f0063fef2a180a5c1b1196c4dbc97e8321d16fc13d5e46d",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/grid_execution_evidence.json",
+      "role": "grid_execution_receipt",
+      "sha256": "5e847bb46b4d19e81f8daf7b6decb7116849d27a4ccf93fdb0ec84cbfc46d52f",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "dd648c01dfc6894db6e1314c2289136a09412a4f1d770f68935f2ae053e21392",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/VTK/fine_50.vtk",
+      "role": "volume_field",
+      "sha256": "28d8648d1a3b7eff61e4b072f1d2acf1d78f4b42c4d408b280fe05f4c24b716a",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/50/U",
+      "role": "native_source_field",
+      "sha256": "3d92a645cdb3511bbb5e4430fbab9f131c4cb52811ea75df7e888805535eb9ea",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/50/p",
+      "role": "native_source_field",
+      "sha256": "0f45eb53922804213ff6c8d3b93c259bb382933a3417c6230f5d2f57cb91715d",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/50/phi",
+      "role": "native_source_field",
+      "sha256": "1663a288e77619fe230952c21fa71da67d5f4b84e9c1fe5b48e767d2bbf1c7c8",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/VTK/fine_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "28d8648d1a3b7eff61e4b072f1d2acf1d78f4b42c4d408b280fe05f4c24b716a",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/VTK/inlet/inlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "181bcfefa98559935ba62fe26ac7be5fcadbf0bd7ec1947f990cfff837e1ba6c",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/VTK/outlet/outlet_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "9c689351969e4d83b6dc2acb9943b4ccf0c0023bbf478db0a72ca9713a73e8fa",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/VTK/surfaceFields/surfaceFields_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "73f952ff6a72ef61798a1a8b5b7b37336397e201a91e6c7e7124a4cf8c565d33",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/VTK/walls/walls_50.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "fb27d71d29daf1dd87368f39ada33b40741ba73e084ee59e31f32752ec5dce3a",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_50/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "1b8dc1921407b17ff6c99770707de1007b2b8e744833f8bc4539118ee4ab0726",
+      "time_name": "50"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "373f56a76f2868bee55605b8ae5ba51b1b54637c15447d4028d8c4002be407b6",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/VTK/fine_100.vtk",
+      "role": "volume_field",
+      "sha256": "ca6cf4710c08ff7f4c6871d2e22b82e1596e0472e76bac4492548006fb702503",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/100/U",
+      "role": "native_source_field",
+      "sha256": "6c2c5a6bdaa8e3095e6c60a7ab5a162450a5f73d50e3ac5bd4b6859c89bc95a3",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/100/p",
+      "role": "native_source_field",
+      "sha256": "599fe834a7ec92a79a5240651b1c16b3dcf0f20a1dd166502b8c31b13e5655e3",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/100/phi",
+      "role": "native_source_field",
+      "sha256": "246b90ca0993e4c93e326b43b121e26318ae29b9229939a950905fb162bc24ad",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/VTK/fine_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "ca6cf4710c08ff7f4c6871d2e22b82e1596e0472e76bac4492548006fb702503",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/VTK/inlet/inlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "319c21c39c24d2f42d33ccc6bbfb970b0915a97b56a27ce7152f8ac4faec5a2e",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/VTK/outlet/outlet_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "8fd5a163aed89d87b10fc6323d2076da1afb70971af09986a9facce52cb6e9aa",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/VTK/surfaceFields/surfaceFields_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "300f608b2cca108e571e93fd57b8a36c3f9a884d47b2f06ad0f2dbe745f28bb7",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/VTK/walls/walls_100.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "97e6c3bb522b82e098c9faaedf5681cb7d566794efb6bef1ec29c099056fdf77",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_100/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "d9949e1f9d5af54a0eaa285fc4cfd6db7538111774969e2a88c28e27a896cdf2",
+      "time_name": "100"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/receipt.json",
+      "role": "snapshot_receipt",
+      "sha256": "d5bb2134d108cd54844e84eaff58ba8d96e24a61274bf87b5b8213accac439f8",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/VTK/fine_150.vtk",
+      "role": "volume_field",
+      "sha256": "f8e7db16005cb7b54048709caf794452a2945b2045e366d2f60b9bd313095e41",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/150/U",
+      "role": "native_source_field",
+      "sha256": "93a8c20dcf17affd5a3f7da1b9eec4a624b70739f6ff8a2af8ff15df0ee8e409",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/150/p",
+      "role": "native_source_field",
+      "sha256": "c7fcb57d3cbb8540d2d2206c6a859d87129d454e16dac0c87965280e3b7c0a9e",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/150/phi",
+      "role": "native_source_field",
+      "sha256": "1ce46c9f2105b5d5f741daa74fec98e7cf565ca3a2e721651d499519180e612f",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/VTK/fine_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "f8e7db16005cb7b54048709caf794452a2945b2045e366d2f60b9bd313095e41",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/VTK/inlet/inlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "e8574f620ec5079059c562734670c9599dba80894ca6ace1e6c88c1d5fc30aa7",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/VTK/outlet/outlet_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "740baa9706e93c07a7e50299bc63606ac842642b083d5009066fa47d7369c5e8",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/VTK/surfaceFields/surfaceFields_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "474b73ba43b8fa388e1581c66a69349b224461e70e45e2b2605f537b3006cf22",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/VTK/walls/walls_150.vtk",
+      "role": "verified_runtime_asset",
+      "sha256": "37a40e321b67ef3867f480355edb2d76c74ba9e16a6592b6762abccba57fbeb9",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-openfoam-runtime-sync/grid-0752d04fc9b373e38783a23e/configuration_3/fine/results/time_150/foamToVTK.log",
+      "role": "verified_runtime_asset",
+      "sha256": "88fc01187cfc4d9afbfcb2b6cced6d13a3b9351c1ad738625bac8784b1e3a640",
+      "time_name": "150"
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/simpleFoam.log",
+      "role": "solver_log",
+      "sha256": "ed4b1e07079534fc153f7434996abf1273da4f500b358066a811fdeb514cd56b",
+      "time_name": null
+    },
+    {
+      "case_id": "configuration_3/fine",
+      "path": "cleanroomx-cfd-grid-family/configuration_3/fine/checkMesh.log",
+      "role": "mesh_log",
+      "sha256": "4593f52c119c4c2abed378b424e3a1eab37bebb6b03e1855670146801103bb95",
+      "time_name": null
+    }
+  ]
+}

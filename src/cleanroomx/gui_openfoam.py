@@ -537,6 +537,7 @@ class OpenFOAMWorkspace(ttk.Frame):
         self.specification_var = tk.StringVar()
         self.case_directory_var = tk.StringVar()
         self.result_directory_var = tk.StringVar()
+        self.verify_native_fields_var = tk.BooleanVar(value=False)
         self.simulation_id_var = tk.StringVar(value=f"cleanroomx-openfoam-{uuid.uuid4().hex[:10]}")
         self.vtk_source_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
@@ -858,9 +859,11 @@ class OpenFOAMWorkspace(ttk.Frame):
             evidence,
             text="Hash consistency only; CFD validation stays BLOCKED.",
         ).pack(side="left", padx=(10, 0))
-
-
-
+        self.verify_native_fields_check = ttk.Checkbutton(
+            self._workflow_content, text="Verify original OpenFOAM field files (requires matching native case / grid family)",
+            variable=self.verify_native_fields_var,
+        )
+        self.verify_native_fields_check.pack(anchor="w", pady=(0, 5))
         self._action_buttons = (
             self.generate_button,
             self.verify_button,
@@ -869,6 +872,7 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.sync_vtk_button,
             self.preview_button,
             self.analysis_button,
+            self.verify_native_fields_check,
             self.graph_button,
             self.export_graph_button,
             self.two_room_generate_button,
@@ -887,11 +891,16 @@ class OpenFOAMWorkspace(ttk.Frame):
         result_directory = self.result_directory_var.get().strip()
         simulation_id = self.simulation_id_var.get().strip()
         case_directory = self.case_directory_var.get().strip() or None
+        verify_native_sources = self.verify_native_fields_var.get()
         if not result_directory or not simulation_id:
             messagebox.showerror("Solver result analysis", "Enter a native result store and simulation ID first.", parent=self)
             return
+        if verify_native_sources and not case_directory:
+            messagebox.showerror("Solver result analysis", "Select the matching native case or grid family to verify original fields.", parent=self)
+            return
         open_analysis_explorer(
-            self, lambda: analyze_synced_results(result_directory, simulation_id, case_directory=case_directory),
+            self, lambda: analyze_synced_results(result_directory, simulation_id, case_directory=case_directory,
+                                                verify_native_sources=verify_native_sources),
             on_proofgraph_loaded=self._on_proofgraph_loaded,
         )
 

@@ -1385,6 +1385,42 @@ jobs:
           )
           PY
 
+      - name: Analyze nine native cases with original field verification
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          from cleanroomx.cfd_result_analysis import analyze_synced_results, build_analysis_graph
+          from cleanroomx.cfd_analysis_export import export_analysis_bundle
+
+          root = Path(sys.argv[1])
+          family = root / "cleanroomx-cfd-grid-family"
+          manifest = json.loads((family / "manifest.json").read_text(encoding="utf-8"))
+          simulation_id = "grid-" + manifest["family_spec_sha256"][:24]
+          session = analyze_synced_results(root / "cleanroomx-openfoam-runtime-sync", simulation_id,
+                                           case_directory=family, verify_native_sources=True)
+          report = session.report
+          assert report["mode"] == "native_grid_sync"
+          assert len(report["cases"]) == 9 and len(report["snapshots"]) == 27
+          assert report["reproducibility"]["native_source_bytes_rehashed"] is True
+          assert report["reproducibility"]["native_bytes_verified"] > 0
+          assert len(report["diagnostics"]) == 9
+          assert all(d["log_execution_binding"] == "hash_bound_sync_manifest" for d in report["diagnostics"])
+          assert all(d["mesh_execution_binding"] == "hash_bound_grid_execution_receipt" for d in report["diagnostics"])
+          graphs = [build_analysis_graph([session], field_name="speed"),
+                    build_analysis_graph([session], kind="comparison", field_name="U_z", time_name="150"),
+                    build_analysis_graph([session], kind="residual_history", field_name="p")]
+          assert all(g["status"] != "not_available" for g in graphs)
+          assert [len(g["series"]) for g in graphs] == [9, 9, 18]
+          destination = export_analysis_bundle([session], graphs, root / "cleanroomx-openfoam-grid-analysis")
+          assert report["scientific_validation"] == "BLOCKED"
+          print(json.dumps({"directory": str(destination), "cases": 9, "snapshots": 27,
+                            "native_bytes_verified": report["reproducibility"]["native_bytes_verified"],
+                            "scientific_validation": "BLOCKED"}, sort_keys=True))
+          PY
+
       - name: Render synchronized OpenFOAM airflow comparison
         run: |
           set -euo pipefail
@@ -1459,5 +1495,6 @@ jobs:
             ${{ runner.temp }}/cleanroomx-openfoam-two-room
             ${{ runner.temp }}/cleanroomx-cfd-vtk-sync
             ${{ runner.temp }}/cleanroomx-openfoam-visualization
+            ${{ runner.temp }}/cleanroomx-openfoam-grid-analysis
           if-no-files-found: warn
           retention-days: 14

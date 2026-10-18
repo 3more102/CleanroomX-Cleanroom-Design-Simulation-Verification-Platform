@@ -75,21 +75,32 @@ def draw_analysis_graph(figure, graph: dict, *, include_provenance: bool = True)
             colorbar.ax.tick_params(labelsize=7)
     elif kind in ("comparison", "flow_balance", "air_change_rate"):
         labels, values = [], []
+        single_run = len({s["run_id"] for s in graph["series"]}) == 1
         for series in graph["series"]:
             for point in series["points"]:
                 short_run = series["run_id"] if len(series["run_id"]) <= 28 else series["run_id"][:25] + "..."
                 if kind == "comparison":
-                    label = series["case_id"] + "\n" + short_run
+                    label = series["case_id"] + ("\n" + short_run if not single_run else "")
                 else:
                     label = str(point["x"]) + ("\n" + short_run if len(graph["series"]) > 1 else "")
                 labels.append(label)
                 values.append(point["y"])
         positions = list(range(len(labels)))
-        ax.bar(positions, values, color="#087e8b")
-        ax.set_xticks(positions, labels, fontsize=8)
-        ax.axhline(0, color="grey", linewidth=0.6)
-        ax.set_ylabel(graph["y_label"])
-        ax.set_xlabel("Run / case at selected solver time" if kind == "comparison" else graph["x_label"])
+        if kind == "comparison" and len(labels) > 6:
+            # A nine-case grid needs room for full configuration/resolution names.
+            ax.barh(positions, values, color="#087e8b")
+            ax.set_yticks(positions, labels, fontsize=7)
+            ax.invert_yaxis()
+            ax.axvline(0, color="grey", linewidth=0.6)
+            ax.set_xlabel(graph["y_label"])
+            ax.set_ylabel("Run / case at selected solver time")
+            figure.subplots_adjust(left=0.32)
+        else:
+            ax.bar(positions, values, color="#087e8b")
+            ax.set_xticks(positions, labels, fontsize=8)
+            ax.axhline(0, color="grey", linewidth=0.6)
+            ax.set_ylabel(graph["y_label"])
+            ax.set_xlabel("Run / case at selected solver time" if kind == "comparison" else graph["x_label"])
     else:
         for series in graph["series"]:
             points = series["points"]
@@ -230,6 +241,7 @@ def _report_markdown(sessions: list[AnalysisSession], graphs: list[dict]) -> str
         report = session.report
         lines += ["## " + markdown_text(report["simulation_id"]), "",
                   "Execution metadata: `" + json.dumps(report["cases"], sort_keys=True) + "`", "",
+                  "Original OpenFOAM field bytes rehashed: " + str(report["reproducibility"]["native_source_bytes_rehashed"]) + ".", "",
                   "| Case | Solver time | Field | Units | Minimum | Volume-weighted mean | Maximum |",
                   "|---|---|---|---|---:|---:|---:|"]
         for snapshot in report["snapshots"]:

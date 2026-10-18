@@ -81,6 +81,60 @@ def test_workspace_analysis_actions_use_existing_result_and_receipt_inputs(tmp_p
         root.destroy()
 
 
+def test_workspace_opens_complete_grid_and_verifies_original_fields(tmp_path, monkeypatch):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    from cleanroomx.gui_openfoam import OpenFOAMWorkspace
+    from cleanroomx.cfd_native_binding import GRID_CASES
+    from cfd_analysis_fixtures import write_grid_sync_fixture
+    import cleanroomx.gui_cfd_analysis as module
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    store, run, family = write_grid_sync_fixture(tmp_path)
+    opened = []
+    open_explorer = module.open_analysis_explorer
+    def capture(*args, **kwargs):
+        explorer = open_explorer(*args, **kwargs)
+        opened.append(explorer)
+        return explorer
+    monkeypatch.setattr(module, "open_analysis_explorer", capture)
+    workspace = OpenFOAMWorkspace(root)
+    try:
+        workspace.result_directory_var.set(str(store))
+        workspace.simulation_id_var.set(run)
+        workspace.case_directory_var.set(str(family))
+        assert workspace.verify_native_fields_var.get() is False
+        workspace.verify_native_fields_check.invoke()
+        workspace.analysis_button.invoke()
+        explorer = opened[0]
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy, seconds=15)
+        assert set(explorer.case_combo["values"]) == {"All cases", *GRID_CASES}
+        assert len(explorer.figure.axes[0].lines) == 9
+        assert explorer.sessions[0].report["reproducibility"]["native_source_bytes_rehashed"] is True
+        assert "Original fields verified: 1/1 runs" in explorer.provenance.cget("text")
+        explorer.case_var.set(GRID_CASES[0])
+        explorer.view_var.set("Solver residual history")
+        explorer.field_var.set("p")
+        explorer.draw_graph()
+        _wait(root, lambda: not explorer._busy)
+        assert explorer.current_graph["kind"] == "residual_history"
+        assert {s["case_id"] for s in explorer.current_graph["series"]} == {GRID_CASES[0]}
+        assert explorer.field_var.get() == "p"
+        explorer.draw_graph()
+        _wait(root, lambda: not explorer._busy)
+        assert explorer.current_graph["filters"]["field"] == "p"
+        assert len(explorer.current_graph["series"]) == 2  # Initial and final p residuals.
+        assert "hash_bound_grid_execution_receipt" in explorer.details.get("1.0", "end")
+    finally:
+        for explorer in opened:
+            explorer._close()
+        workspace.destroy()
+        root.destroy()
+
+
 def test_real_explorer_compares_standalone_store_without_renaming_case(tmp_path, monkeypatch):
     pytest.importorskip("vtk")
     pytest.importorskip("matplotlib")

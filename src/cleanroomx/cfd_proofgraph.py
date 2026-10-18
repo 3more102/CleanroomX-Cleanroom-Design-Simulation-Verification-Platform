@@ -495,6 +495,30 @@ def proofgraph_from_openfoam_sync_results(
     ])
 
 
+def proofgraph_from_openfoam_grid_results(result_directory: str | Path, simulation_id: str) -> ProofGraph:
+    """Verify the fixed nine-case native runtime-sync layout, including missing cases."""
+    from .cfd_native_binding import GRID_CASES
+    if type(simulation_id) is not str or _SIMULATION_ID.fullmatch(simulation_id) is None:
+        raise ValueError("Simulation ID contains unsupported characters")
+    candidate = Path(result_directory).expanduser()
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("Result directory must be a regular directory")
+    root = candidate.resolve(strict=True)
+    simulation = root / simulation_id
+    if simulation.is_symlink() or not simulation.is_dir():
+        raise ValueError("Grid simulation must be a regular directory")
+    for number in (1, 2, 3):
+        folder = simulation / f"configuration_{number}"
+        if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+            raise ValueError("Grid configuration must be a regular directory")
+        if (folder / "sync_manifest.json").exists() or (folder / "sync_manifest.json").is_symlink():
+            raise ValueError("Cannot mix grid and three-configuration result layouts")
+    return _proofgraph_from_sync_directories(simulation_id, [
+        (case_id, simulation.joinpath(*case_id.split("/")), f"{simulation_id}/{case_id}/sync_manifest.json", None)
+        for case_id in GRID_CASES
+    ])
+
+
 def proofgraph_from_openfoam_case_results(
     result_directory: str | Path,
     simulation_id: str,
@@ -538,13 +562,14 @@ def _proofgraph_from_sync_directories(
     manifest_hashes: list[str] = []
     referenced_asset_hashes: list[dict[str, str]] = []
     for case_id, case_directory, relative_path, number in cases:
+        case_label = f"Configuration {number}" if number is not None else f"Case {case_id}"
         manifest_path = case_directory / "sync_manifest.json"
         if case_directory.is_symlink():
-            raise ValueError(f"Configuration {number} result directory cannot be a symbolic link")
+            raise ValueError(f"{case_label} result directory cannot be a symbolic link")
         if not case_directory.exists():
             continue
         if not case_directory.is_dir():
-            raise ValueError(f"Configuration {number} result directory is not a regular directory")
+            raise ValueError(f"{case_label} result directory is not a regular directory")
         if manifest_path.is_symlink():
             raise ValueError("OpenFOAM sync manifest cannot be a symbolic link")
         if not manifest_path.exists():

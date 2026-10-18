@@ -151,11 +151,11 @@ def test_gauge_pressure_graph_supports_negative_values():
 
 
 def test_cli_parser_exposes_analysis_command():
-    args = build_parser().parse_args(["two-room-analyze", "case", "receipt.json", "graphs"])
-    assert args.command == "two-room-analyze"
+    args = build_parser().parse_args(["two-room-verified-bundle", "case", "receipt.json", "graphs"])
+    assert args.command == "two-room-verified-bundle"
     assert args.output_directory == "graphs"
-    audit = build_parser().parse_args(["two-room-analysis-audit", "graphs"])
-    assert audit.command == "two-room-analysis-audit"
+    audit = build_parser().parse_args(["two-room-bundle-audit", "graphs"])
+    assert audit.command == "two-room-bundle-audit"
     assert audit.directory == "graphs"
 
 

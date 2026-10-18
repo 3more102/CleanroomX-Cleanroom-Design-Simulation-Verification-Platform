@@ -3919,11 +3919,15 @@ class CleanroomXApp:
             self._activate_spatial_workspace("split")
 
     def _set_guided_workflow_stage(self, stage: str) -> None:
-        """Highlight the operator's actual workflow stage, not a fixed Run CTA."""
-        if stage not in self._guided_stage_buttons:
+        """Highlight the stage when UI chrome exists; support headless project loads."""
+        buttons = getattr(self, "_guided_stage_buttons", None)
+        if not buttons:
+            # Project migration and nonvisual callers can use an unbuilt app.
+            return
+        if stage not in buttons:
             raise ValueError(f"Unsupported guided workflow stage: {stage}")
         self._guided_stage = stage
-        for name, button in self._guided_stage_buttons.items():
+        for name, button in buttons.items():
             button.configure(
                 style="CX.Primary.TButton" if name == stage else "CX.Compact.TButton"
             )

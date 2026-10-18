@@ -1767,23 +1767,6 @@ class SpatialDesignWorkspace(ttk.Frame):
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
-        # These are live model-derived values; they are never CFD solver results.
-        summarybar = ttk.Frame(self, padding=(8, 1, 8, 5))
-        summarybar.pack(fill="x")
-        for title, key in (
-            ("ROOMS", "rooms"),
-            ("FLOOR AREA", "area"),
-            ("GEOMETRIC VOLUME", "volume"),
-            ("PLACED DEVICES", "devices"),
-        ):
-            card = ttk.LabelFrame(summarybar, text=title, padding=(8, 3))
-            card.pack(side="left", fill="x", expand=True, padx=3)
-            ttk.Label(
-                card,
-                textvariable=self._studio_summary_vars[key],
-                font=("Segoe UI", 14, "bold"),
-            ).pack(anchor="center")
-
         viewbar = ttk.Frame(self, padding=(8, 0, 8, 4))
         viewbar.pack(fill="x")
         ttk.Checkbutton(
@@ -1978,6 +1961,26 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
+        # These are live model-derived values; they are never CFD solver results.
+        summarybar = ttk.Frame(
+            self.canvas_3d, padding=(3, 3), style="CX.PanelHeader.TFrame"
+        )
+        summarybar.place(relx=0.02, rely=0.02, relwidth=0.96, height=54)
+        for title, key in (
+            ("ROOMS", "rooms"),
+            ("FLOOR AREA", "area"),
+            ("GEOMETRIC VOLUME", "volume"),
+            ("PLACED DEVICES", "devices"),
+        ):
+            card = ttk.LabelFrame(summarybar, text=title, padding=(8, 3))
+            card.pack(side="left", fill="x", expand=True, padx=3)
+            ttk.Label(
+                card,
+                textvariable=self._studio_summary_vars[key],
+                font=("Segoe UI", 14, "bold"),
+            ).pack(anchor="center")
+
+
         # A genuine, clickable 2D mini-plan floating over the live 3D canvas.
         # It is rendered from the same room geometry as the full 2D view.
         self._room_navigator_frame = ttk.Frame(
@@ -2034,39 +2037,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self._inspector_selection_label.pack(fill="x", pady=(3, 8))
 
-        room_info = ttk.LabelFrame(inspector, text="SELECTED ROOM", padding=(8, 6))
-        room_info.pack(fill="x", pady=(0, 6))
-        ttk.Label(
-            room_info,
-            textvariable=self._selected_room_summary_var,
-            justify="left",
-            wraplength=245,
-        ).pack(fill="x", anchor="w")
-        room_actions = ttk.Frame(room_info)
-        room_actions.pack(fill="x", pady=(6, 0))
-        ttk.Button(
-            room_actions, text="Focus Room", command=self.focus_selected_room
-        ).pack(side="left", fill="x", expand=True, padx=(0, 3))
-        ttk.Button(
-            room_actions, text="Isolate Room", command=self.isolate_selected
-        ).pack(side="left", fill="x", expand=True, padx=(3, 0))
-        ttk.Button(
-            room_info, text="Restore All Rooms", command=self.show_all
-        ).pack(fill="x", pady=(5, 0))
-
-        devices_info = ttk.LabelFrame(
-            inspector, text="PLACED DEVICES", padding=(8, 6)
-        )
-        devices_info.pack(fill="x", pady=(0, 6))
-        ttk.Label(
-            devices_info,
-            textvariable=self._placed_devices_summary_var,
-            justify="left",
-        ).pack(anchor="w")
-        ttk.Button(
-            devices_info, text="Studio View", command=self.studio_view
-        ).pack(side="left", fill="x", expand=True, pady=(6, 0))
-
         inspector_footer = ttk.Frame(inspector)
         inspector_footer.pack(side="bottom", fill="x", pady=(4, 0))
         self._apply_properties_button = ttk.Button(
@@ -2106,6 +2076,42 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._inspector_canvas.bind(
             "<Configure>", self._resize_inspector_content, add="+"
         )
+
+        # Keep summary/actions inside the scrollable inspector so compact
+        # windows retain a usable property editor and its fixed Apply button.
+        room_info = ttk.LabelFrame(self._inspector_content, text="SELECTED ROOM", padding=(8, 6))
+        room_info.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            room_info,
+            textvariable=self._selected_room_summary_var,
+            justify="left",
+            wraplength=245,
+        ).pack(fill="x", anchor="w")
+        room_actions = ttk.Frame(room_info)
+        room_actions.pack(fill="x", pady=(6, 0))
+        ttk.Button(
+            room_actions, text="Focus Room", command=self.focus_selected_room
+        ).pack(side="left", fill="x", expand=True, padx=(0, 3))
+        ttk.Button(
+            room_actions, text="Isolate Room", command=self.isolate_selected
+        ).pack(side="left", fill="x", expand=True, padx=(3, 0))
+        ttk.Button(
+            room_info, text="Restore All Rooms", command=self.show_all
+        ).pack(fill="x", pady=(5, 0))
+
+        devices_info = ttk.LabelFrame(
+            self._inspector_content, text="PLACED DEVICES", padding=(8, 6)
+        )
+        devices_info.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            devices_info,
+            textvariable=self._placed_devices_summary_var,
+            justify="left",
+        ).pack(anchor="w")
+        ttk.Button(
+            devices_info, text="Studio View", command=self.studio_view
+        ).pack(side="left", fill="x", expand=True, pady=(6, 0))
+
 
         property_groups = (
             (

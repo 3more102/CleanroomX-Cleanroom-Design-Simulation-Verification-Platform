@@ -139,7 +139,7 @@ def _load_cells(snapshot: dict, *, include_geometry: bool = False) -> dict:
         temperature_array=options.get("temperature_array"),
         temperature_units=options.get("temperature_units"),
         recirculation_array=options.get("recirculation_array"),
-        require_cell_velocity=True,
+        require_cell_velocity=False,
         include_geometry=include_geometry,
     )
     if imported["source_sha256"] != expected or imported["mesh_cells"] != snapshot["cell_count"]:

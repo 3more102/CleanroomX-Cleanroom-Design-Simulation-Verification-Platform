@@ -125,3 +125,18 @@ def test_snapshot_never_mislabels_configured_pressure_as_solver_output(app):
     app.spatial_workspace.select_item("room", "process")
     assert "Design pressure" in app.spatial_workspace._selected_room_summary_var.get()
     assert "(configured)" in app.spatial_workspace._selected_room_summary_var.get()
+
+
+def test_room_device_search_cycles_real_objects_without_mutating_geometry(app):
+    workspace = app.spatial_workspace
+    before = app.project.to_dict()
+    workspace.selected = None
+    workspace._studio_search_var.set("process")
+    assert workspace.find_studio_item()
+    assert workspace.selected == _Hit("room", "process")
+    assert workspace.find_studio_item()
+    assert workspace.selected.kind == "device"
+    assert "process" in workspace.selected.item_id
+    workspace._studio_search_var.set("not-an-object-123")
+    assert not workspace.find_studio_item()
+    assert app.project.to_dict() == before

@@ -43,6 +43,8 @@ def main() -> int:
         assert (width, height) == (args.width, args.height), (
             "Screenshot window was resized by the host display", width, height,
         )
+        assert app._guided_stage == "design", app._guided_stage
+        assert app.workflow_design_button.cget("style") == "CX.Primary.TButton"
         assert app.spatial_workspace.canvas_3d.find_withtag("room3d")
         ImageGrab.grab(bbox=(x, y, x + width, y + height)).save(output)
         print(f"REAL TK SCREENSHOT: {output} ({width}x{height})")

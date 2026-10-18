@@ -62,7 +62,9 @@ def main() -> int:
             "capture_type": "real_desktop_screenshot",
             "baseline": args.baseline,
             "platform": platform.platform(),
-            "git_commit": os.environ.get("GITHUB_SHA"),
+            "git_commit": os.environ.get(
+                "CLEANROOMX_CAPTURE_SOURCE_SHA", os.environ.get("GITHUB_SHA")
+            ),
             "resolution": [1920, 1080],
             "image_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
             "room_count": snapshot["room_count"],

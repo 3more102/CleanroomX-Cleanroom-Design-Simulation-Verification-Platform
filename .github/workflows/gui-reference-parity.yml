@@ -27,7 +27,7 @@ jobs:
       - name: Install Tk and virtual framebuffer
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth python3-tk
+          sudo apt-get install -y xvfb xauth python3-tk scrot
       - name: Install CleanroomX and tests
         run: python -m pip install -e ".[dev]"
       - name: Exercise actual Tk widgets under Xvfb
@@ -36,3 +36,14 @@ jobs:
             tests/test_gui_reference_parity_stage1.py \
             tests/test_spatial_editing_gui.py \
             tests/test_gui_theme.py
+      - name: Capture genuine Dark Studio screenshot (1920x1080)
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" \
+            python scripts/capture_gui_reference_parity_ci.py \
+            --output reports/gui_reference_parity/ci_dark_studio_1920x1080.png
+      - name: Publish unmodified screenshot evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroomx-reference-parity-gui
+          path: reports/gui_reference_parity/ci_dark_studio_1920x1080.png
+          if-no-files-found: error

@@ -119,7 +119,7 @@ def draw_analysis_graph(figure, graph: dict, *, include_provenance: bool = True)
                     lines = [
                         f"{item['run_id']}: Δ mean (Room 2 − Room 1) = "
                         f"{item['difference_room_2_minus_room_1']:+.4g} {item['units']}"
-                        for item in comparisons[:3]
+                        for item in comparisons[:2]
                     ]
                     if len(comparisons) > 3:
                         lines.append(f"+{len(comparisons) - 3} more run(s) in analysis details")

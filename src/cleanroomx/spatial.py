@@ -3794,6 +3794,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         self._update_overlay_summary(overlay)
         warning_ids = self._warning_item_ids()
+        studio_active = getattr(getattr(self, "_studio", None), "enabled", False)
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
@@ -3835,7 +3836,6 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if overlay_mode != "none"
                 else "#dfe7ef"
             )
-            studio_active = getattr(getattr(self, "_studio", None), "enabled", False)
             if studio_active:
                 room_index = next((i for i, item in enumerate(self.layout["rooms"])
                                    if item["id"] == room["id"]), 0)

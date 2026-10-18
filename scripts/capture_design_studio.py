@@ -43,6 +43,7 @@ def main() -> int:
         root.update_idletasks()
         root.update()
         app.spatial_workspace.studio_view()
+        app.spatial_workspace.select_item("room", "process", notify=True)
         root.geometry("1920x1080+0+0")
         root.update_idletasks()
         root.update()

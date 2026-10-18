@@ -66,6 +66,11 @@ def main() -> int:
             "floor_area_m2": snapshot["floor_area_m2"],
             "volume_m3": snapshot["volume_m3"],
             "placed_devices": snapshot["placed_devices"],
+            "canvas_3d_pixels": [
+                app.spatial_workspace.canvas_3d.winfo_width(),
+                app.spatial_workspace.canvas_3d.winfo_height(),
+            ],
+            "camera_zoom_3d": app.spatial_workspace.layout["view"]["zoom_3d"],
             "visual_reference_comparison": "NOT PERFORMED",
             "openfoam_execution": "NOT PERFORMED",
         }

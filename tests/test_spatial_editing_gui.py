@@ -858,7 +858,8 @@ def test_manual_panel_toggle_exits_focus_workspace_cleanly(app):
     assert app.focus_workspace_var.get() is False
     assert app._paned_contains(app.main_panes, app.navigator_panel)
     assert app._paned_contains(app.workspace_panes, app.output_panel)
-    assert workspace.inspector_visible()
+    # Focus restoration respects the Studio default: advanced inspector hidden.
+    assert not workspace.inspector_visible()
 
 def test_status_bar_uses_human_readable_spatial_selection_context(app):
     workspace = app.spatial_workspace

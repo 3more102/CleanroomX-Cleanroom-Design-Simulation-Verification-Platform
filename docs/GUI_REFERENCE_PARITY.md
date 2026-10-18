@@ -37,15 +37,15 @@ The mathematical model contract test uses **three synthetic model rooms**, `Proc
 | Acceptance criterion | Implementation | Verification |
 | --- | --- | --- |
 | Four live model metrics | Added | Isolated model test passed; values visually confirmed in real Tk capture |
-| Room Navigator floorplan and click selection | Added | Tk integration test committed; execution pending |
+| Room Navigator floorplan and click selection | Added | Focused Tk test suite passed in run 39171024414; full manual selection audit pending |
 | Selected Room overview | Added | Selected Process room visible with configured pressure in genuine Tk capture |
 | Categorized device counts | Added | Isolated model test passed |
-| Focus / Isolate / Restore controls | Reuses existing real operations | Tk integration test committed; execution pending |
+| Focus / Isolate / Restore controls | Reuses existing real operations | Focused Tk test suite passed in run 39171024414 |
 | Studio View / Inspector controls | Connected | Both shown in real GUI screenshot; manual mouse-click acceptance pending |
 | 2D / 3D / Split | Existing implementation retained | Full regression pending |
 | Visual parity with reference screenshot | Unverified | Genuine before/after screenshots captured; user-reference image was not available to CI |
 | OpenFOAM integration | Existing separate backend unchanged | End-to-end solver evidence required |
-| Test suite regression | Focused tests committed | Screenshot CI passed; full application CI pending |
+| Test suite regression | Focused tests committed | Screenshot CI passed; full application CI still pending |
 
 ## Local reproduction (Windows PowerShell)
 
@@ -81,3 +81,7 @@ Genuine 1920×1080 screenshots have now been captured through `scripts/capture_g
 - Before real 3D canvas: **993×688 px**; after: **993×619 px**, at the same application window **1920×1080 px**. The 69 px reduction is occupied by the new live dashboard/Studio controls, not improved 3D viewport height.
 - Displayed project data: three rooms, 62 m², 186 m³, 10 placed objects. Pressure in the Selected Room panel is explicitly marked configured.
 - No verified human review of the user-supplied reference image; no OpenFOAM solver executed during screenshot capture.
+
+## Focused actual-Tk acceptance result
+
+GitHub Actions [GUI Reference Capture run 39171024414](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39171024414) executed `xvfb-run -a -s "-screen 0 1920x1080x24" python -m pytest -q after/tests/test_gui_design_studio.py` and reported **5 passed in 1.25 seconds; 0 failed; 0 skipped**. This includes the pure model contract and Tk workspace cards/selection/isolation/visibility tests. The same workflow then captured genuine full-size GUI screenshots. These checks do not establish all required visual and engineering acceptance criteria.

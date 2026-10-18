@@ -27,6 +27,22 @@ def studio_shade(color: str, factor: float) -> str:
     )
 
 
+def studio_blend(color: str, background: str, opacity: float) -> str:
+    """Approximate translucency without Tk's visibly stippled polygons.
+
+    Each channel is composited in sRGB for a static, smooth view color.
+    The underlying room model remains unchanged.
+    """
+    if not 0.0 <= opacity <= 1.0:
+        raise ValueError("opacity must be between zero and one")
+    if any(len(value) != 7 or not value.startswith("#") for value in (color, background)):
+        raise ValueError("expected #RRGGBB colors")
+    return "#" + "".join(
+        f"{round(opacity * int(color[i:i+2], 16) + (1.0 - opacity) * int(background[i:i+2], 16)):02x}"
+        for i in (1, 3, 5)
+    )
+
+
 def studio_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[str, Any]:
     """Produce display-only figures from current model geometry and devices."""
     rooms = layout.get("rooms", ())

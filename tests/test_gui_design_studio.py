@@ -99,10 +99,25 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert "3D focus:" in application.status_var.get()
         studio.isolate_room()
         assert workspace._isolated_item.item_id == str(room["id"])
+        other = workspace.layout["rooms"][0]
+        studio.nav_buttons[str(other["id"])].invoke()
+        root.update()
+        assert workspace.selected.item_id == str(other["id"])
+        assert workspace._isolated_item is None
         studio.studio_view()
         root.update()
-        assert workspace._isolated_item is None
         assert application.focus_workspace_var.get()
+        # Responsive overlays must remain usable at minimum desktop size.
+        root.geometry("1050x680")
+        root.update()
+        assert studio._compact_layout is True
+        assert studio.nav.winfo_width() == 230
+        assert studio.sidebar.winfo_width() == 250
+        root.geometry("1536x960")
+        root.update()
+        assert studio._compact_layout is False
+        assert studio.nav.winfo_width() == 270
+        assert studio.sidebar.winfo_width() == 330
         studio.toggle_advanced()
         assert studio._advanced_visible is True
         studio.toggle_advanced()

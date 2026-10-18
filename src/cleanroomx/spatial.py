@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
+from .gui_design_studio import DesignStudioPanels, STUDIO_ROOM_COLORS
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1677,7 +1678,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         ttk.Label(
             commandbar,
-            text="DESIGN",
+            text="DESIGN STUDIO",
             style="CX.Section.TLabel",
         ).pack(side="left", padx=(0, 8))
         ttk.Button(commandbar, text="+ Room", width=8, command=self.add_room).pack(
@@ -2086,6 +2087,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+        self._studio = DesignStudioPanels(
+            self, commandbar=commandbar, viewbar=viewbar, overlaybar=overlaybar,
+        )
 
     def _apply_workspace_mode(self) -> None:
         mode = self._workspace_mode.get()
@@ -3173,6 +3178,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._update_metrics()
         self._draw_2d()
         self._draw_3d()
+        studio = getattr(self, "_studio", None)
+        if studio is not None:
+            studio.update()
 
     def _pressure_relationships(
         self,
@@ -3825,6 +3833,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if overlay_mode != "none"
                 else "#dfe7ef"
             )
+            studio_active = getattr(getattr(self, "_studio", None), "enabled", False)
+            if studio_active:
+                room_index = next((i for i, item in enumerate(self.layout["rooms"])
+                                   if item["id"] == room["id"]), 0)
+                fill = STUDIO_ROOM_COLORS[room_index % len(STUDIO_ROOM_COLORS)]
             selected = self.selected == _Hit("room", room["id"])
             hovered = self._hovered_3d == _Hit("room", room["id"])
             outline = (
@@ -3837,7 +3850,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
             )
             tag = f"room:{room['id']}"
-            stipple = "gray50" if self._xray_3d.get() else ""
+            stipple = "gray50" if (self._xray_3d.get() or studio_active) else ""
             polygon_width = 3 if selected else (2 if hovered else 1)
             canvas.create_polygon(
                 *sum(top, ()),
@@ -3849,7 +3862,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92",
+                fill=fill if studio_active else "#6c7f92",
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3857,7 +3870,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c",
+                fill=fill if studio_active else "#53687c",
                 outline=outline,
                 width=polygon_width,
                 stipple=stipple,
@@ -3948,7 +3961,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                         width=2, tags=(tag, "device3d"),
                     )
 
-        self._draw_engineering_legend(canvas, overlay)
+        if not getattr(getattr(self, "_studio", None), "enabled", False):
+            self._draw_engineering_legend(canvas, overlay)
 
     def _update_overlay_summary(self, overlay: dict) -> None:
         mode = str(overlay.get("mode") or "none")

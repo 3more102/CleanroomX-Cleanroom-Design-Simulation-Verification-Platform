@@ -33,6 +33,7 @@ class CFDAnalysisExplorer(tk.Toplevel):
         self._events = queue.Queue()
         self._alive = True
         self._busy = False
+        self._loader = loader
         self.sessions = []
         self.current_graph = None
         self.pinned_graphs = []
@@ -85,11 +86,13 @@ class CFDAnalysisExplorer(tk.Toplevel):
         self.draw_button.pack(side="left")
         self.compare_button = ttk.Button(toolbar, text="Add comparison run...", command=self._add_comparison)
         self.compare_button.pack(side="left", padx=5)
+        self.refresh_button = ttk.Button(toolbar, text="Refresh solver data", command=self.refresh_solver_data)
+        self.refresh_button.pack(side="left", padx=5)
         self.pin_button = ttk.Button(toolbar, text="Add graph to report", command=self._pin)
         self.pin_button.pack(side="left", padx=5)
         self.export_button = ttk.Button(toolbar, text="Export figures + data + report...", command=self._export)
         self.export_button.pack(side="left", padx=5)
-        self._buttons = [self.draw_button, self.compare_button, self.pin_button, self.export_button]
+        self._buttons = [self.draw_button, self.compare_button, self.refresh_button, self.pin_button, self.export_button]
 
         # Reserve the status/provenance area before letting the canvas expand.
         ttk.Label(self, textvariable=self.status_var, padding=8).pack(side="bottom", fill="x")
@@ -181,6 +184,13 @@ class CFDAnalysisExplorer(tk.Toplevel):
         self.status_var.set("Reading selected solver data…")
         self._start("graph", lambda: build_analysis_graph(sessions, **filters))
 
+    def refresh_solver_data(self):
+        """Reverify native solver sources in a worker, without blocking Tk."""
+        if self._busy:
+            return
+        self.status_var.set("Rechecking solver manifests and source hashes…")
+        self._start("refreshed", self._loader)
+
     def _add_comparison(self):
         folder = filedialog.askdirectory(parent=self, title="Select a simulation folder or standalone sync-case result store")
         if not folder:
@@ -237,6 +247,19 @@ class CFDAnalysisExplorer(tk.Toplevel):
                         self.view_var.set("Two-room probe pressure history")
                     self.status_var.set(f"{len(self.sessions)} run(s) loaded; select a graph and draw")
                     self.draw_graph()
+            elif event == "refreshed":
+                if not self.sessions:
+                    self.sessions = [value]
+                else:
+                    self.sessions[0] = value
+                # Previously rendered figures may refer to old source hashes.
+                self.current_graph = None
+                self.pinned_graphs.clear()
+                self.figure.clear()
+                self.canvas.draw_idle()
+                self.provenance.configure(text="Source data refreshed; old plots and report selections cleared.")
+                self._refresh_choices()
+                self.status_var.set("Solver sources reverified; redraw graphs to inspect updated data")
             elif event == "graph":
                 self.current_graph = value
                 draw_analysis_graph(self.figure, value)

@@ -114,3 +114,34 @@ def test_real_explorer_compares_standalone_store_without_renaming_case(tmp_path,
     finally:
         explorer._close()
         root.destroy()
+
+
+def test_refresh_rechecks_sources_and_invalidates_stale_figures(tmp_path):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    write_sync_store(tmp_path / "store")
+    loaded = []
+    def loader():
+        loaded.append(True)
+        return analyze_synced_results(tmp_path / "store", "SYNTHETIC-run-a")
+    explorer = CFDAnalysisExplorer(root, loader)
+    try:
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy)
+        explorer._pin()
+        assert len(explorer.pinned_graphs) == 1
+        explorer.refresh_button.invoke()
+        _wait(root, lambda: len(loaded) >= 2 and not explorer._busy)
+        assert explorer.current_graph is None
+        assert explorer.pinned_graphs == []
+        assert len(explorer.sessions) == 1
+        assert "reverified" in explorer.status_var.get()
+        explorer.draw_graph()
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy)
+    finally:
+        explorer._close()
+        root.destroy()

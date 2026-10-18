@@ -214,21 +214,41 @@ class DesignStudioPanels:
                   bg="#22415b", fg=_TEXT, relief="flat",
                   activebackground="#315a76").pack(side="right", padx=3)
 
+        self._compact_layout = None
         self.studio_view(request_focus=False)
         workspace.set_inspector_visible(False)
         for row in self._advanced_rows:
             row.pack_forget()
         self._place_overlays()
+        workspace.canvas_3d.bind(
+            "<Configure>", lambda _event: self._place_overlays(), add="+",
+        )
 
     def _place_overlays(self):
-        self.nav.place(relx=0.01, rely=0.985, anchor="sw", width=270)
-        self.sidebar.place(relx=0.985, rely=0.015, anchor="ne", width=330)
+        # Preserve both reference proportions on desktop and usable viewport
+        # area on smaller engineering displays.
+        compact = self.workspace.canvas_3d.winfo_width() < 1200
+        self.nav.place(
+            relx=0.01, rely=0.985, anchor="sw",
+            width=230 if compact else 270,
+        )
+        self.sidebar.place(
+            relx=0.985, rely=0.015, anchor="ne",
+            width=250 if compact else 330,
+        )
         self.camera.place(relx=0.52, rely=0.985, anchor="s")
-        tk.Label(self.workspace._three_d_frame,
-                 text="Length X (m)\nWidth Y (m)\nHeight Z (m)",
-                 bg="#0d1117", fg=_MUTED, justify="right",
-                 font=("Segoe UI", 8, "bold")).place(
-                     relx=0.987, rely=0.985, anchor="se")
+        if not hasattr(self, "_axis_hint"):
+            self._axis_hint = tk.Label(
+                self.workspace._three_d_frame,
+                text="Length X (m)\nWidth Y (m)\nHeight Z (m)",
+                bg="#0d1117", fg=_MUTED, justify="right",
+                font=("Segoe UI", 8, "bold"),
+            )
+        self._axis_hint.place(relx=0.987, rely=0.985, anchor="se")
+        if compact != self._compact_layout:
+            self._compact_layout = compact
+            self._nav_signature = None
+            self.workspace.after_idle(self.update)
 
     def studio_view(self, *, request_focus: bool = True):
         if request_focus:
@@ -270,7 +290,7 @@ class DesignStudioPanels:
         span_y = max(r["y_m"] + r["width_m"] for r in rooms) - min_y
         span_x = max(1.0, span_x)
         span_y = max(1.0, span_y)
-        scale = min(230.0 / span_x, 78.0 / span_y)
+        scale = min((192.0 if self._compact_layout else 230.0) / span_x, 78.0 / span_y)
         for index, room in enumerate(rooms, 1):
             x0 = 7 + (room["x_m"] - min_x) * scale
             y0 = 10 + (room["y_m"] - min_y) * scale

@@ -38,11 +38,11 @@ def main() -> int:
         app.load_project_path(bundled_demo_project_path())
         app.notebook.select(app.spatial_workspace)
         app.set_theme("dark", persist=False)
-        app.spatial_workspace.studio_view()
-        # Initialization restores persisted geometry on an after_idle callback.
-        # Flush that callback first, then enforce capture dimensions.
+        # First flush the original saved-layout restoration. Studio View then
+        # hides external navigator/output panels and keeps room Inspector open.
         root.update_idletasks()
         root.update()
+        app.spatial_workspace.studio_view()
         root.geometry("1920x1080+0+0")
         root.update_idletasks()
         root.update()

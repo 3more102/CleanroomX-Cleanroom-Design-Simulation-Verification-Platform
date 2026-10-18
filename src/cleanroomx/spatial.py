@@ -1607,6 +1607,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_studio_requested: Callable[[], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1621,6 +1622,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_studio_requested = on_studio_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -2536,11 +2538,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         return False
 
     def studio_view(self) -> None:
-        """Bring the live 3D model, mini navigator and Inspector into view."""
+        """Maximize the model in the actual application, retaining Inspector."""
+        if self._on_studio_requested is not None:
+            self._on_studio_requested()
         self._workspace_mode.set("3d")
         self._apply_workspace_mode()
         self.show_inspector()
-        self.fit_views()
+        # Panes have not finished resizing synchronously yet. Fitting before
+        # idle would use the old tiny output-panel-constrained canvas size.
+        self.after_idle(self.fit_views)
 
     def focus_room(self) -> None:
         if self.selected is None or self.selected.kind != "room":

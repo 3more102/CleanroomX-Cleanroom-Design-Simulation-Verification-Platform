@@ -7530,7 +7530,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             app.load_project_path(project_path)
             if args.demo and not args.smoke:
-                app.activate_reference_demo_studio()
+                # Apply the immersive demo after the startup layout restore.
+                root.after_idle(app.activate_reference_demo_studio)
             if args.demo_results:
                 if args.smoke:
                     app.select_demo_plot_analysis()

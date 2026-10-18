@@ -19,6 +19,14 @@ _CYAN = "#39c4df"
 _MUTED = "#a4b8ca"
 
 
+def studio_shade(color: str, factor: float) -> str:
+    """Deterministic opaque wall shading; Tk Canvas has no polygon alpha."""
+    return "#" + "".join(
+        f"{min(255, max(0, round(int(color[i:i+2], 16) * factor))):02x}"
+        for i in (1, 3, 5)
+    )
+
+
 def studio_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[str, Any]:
     """Produce display-only figures from current model geometry and devices."""
     rooms = layout.get("rooms", ())
@@ -188,6 +196,11 @@ class DesignStudioPanels:
         self.nav.place(relx=0.015, rely=0.985, anchor="sw", width=230)
         self.details.place(relx=0.985, rely=0.015, anchor="ne", width=250)
         self.camera.place(relx=0.52, rely=0.985, anchor="s")
+        tk.Label(self.workspace._three_d_frame,
+                 text="Length X (m)\nWidth Y (m)\nHeight Z (m)",
+                 bg="#0d1117", fg=_MUTED, justify="right",
+                 font=("Segoe UI", 8, "bold")).place(
+                     relx=0.987, rely=0.985, anchor="se")
 
     def studio_view(self, *, request_focus: bool = True):
         self.workspace.set_workspace_mode("3d")

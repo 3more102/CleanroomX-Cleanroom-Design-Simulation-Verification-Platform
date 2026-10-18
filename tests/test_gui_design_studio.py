@@ -79,6 +79,11 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert len(workspace.canvas_3d.find_withtag("studio_wall3d")) == 2 * len(workspace.layout["rooms"])
         assert len(workspace.canvas_3d.find_withtag("studio_room_label")) == len(workspace.layout["rooms"])
         assert len(workspace.canvas_3d.find_withtag("studio_backdrop")) == 24
+        assert workspace.canvas_3d.find_withtag("studio_grid3d")
+        assert workspace.canvas_3d.find_withtag("studio_axis3d")
+        assert studio.zoom_percent.get() == (
+            f'{workspace.layout["view"]["zoom_3d"] * 100:.0f}%'
+        )
         assert workspace.canvas_3d.find_withtag("opening3d")
         assert workspace.canvas_3d.find_withtag("studio_device3d")
         assert studio.mini_plan.find_withtag("floorplan:" + str(workspace.layout["rooms"][0]["id"]))

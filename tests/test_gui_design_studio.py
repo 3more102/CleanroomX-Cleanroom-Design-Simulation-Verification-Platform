@@ -7,7 +7,9 @@ import tkinter as tk
 
 import pytest
 
-from cleanroomx.gui_design_studio import studio_snapshot, STUDIO_ROOM_COLORS, studio_shade
+from cleanroomx.gui_design_studio import (
+    studio_snapshot, STUDIO_ROOM_COLORS, studio_shade, studio_blend,
+)
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 
 
@@ -37,6 +39,9 @@ def test_studio_snapshot_real_geometry_and_device_ownership():
     }
     assert data["rooms"][0]["color"] == STUDIO_ROOM_COLORS[0]
     assert studio_shade("#ff8040", 0.5) == "#804020"
+    assert studio_blend("#ffffff", "#000000", 0.5) == "#808080"
+    with pytest.raises(ValueError, match="opacity"):
+        studio_blend("#ffffff", "#000000", -0.1)
     assert studio_snapshot(layout, "r2")["selected_room"]["devices"] == 1
     assert layout == before
 
@@ -70,6 +75,10 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert set(studio.nav_buttons) == {str(r["id"]) for r in workspace.layout["rooms"]}
         assert workspace.canvas_3d.winfo_ismapped()
         assert workspace.canvas_3d.find_withtag("room3d")
+        assert len(workspace.canvas_3d.find_withtag("studio_floor3d")) == len(workspace.layout["rooms"])
+        assert len(workspace.canvas_3d.find_withtag("studio_wall3d")) == 2 * len(workspace.layout["rooms"])
+        assert len(workspace.canvas_3d.find_withtag("studio_room_label")) == len(workspace.layout["rooms"])
+        assert len(workspace.canvas_3d.find_withtag("studio_backdrop")) == 24
         assert workspace.canvas_3d.find_withtag("opening3d")
         assert studio.mini_plan.find_withtag("floorplan:" + str(workspace.layout["rooms"][0]["id"]))
         before = copy.deepcopy(application.project.to_dict())
@@ -80,9 +89,20 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.selected.item_id == str(room["id"])
         assert studio.room_name.get() == room["name"]
         assert application.project.to_dict() == before
+        original_rooms = copy.deepcopy(workspace.layout["rooms"])
+        original_devices = copy.deepcopy(workspace.layout["devices"])
+        original_view = copy.deepcopy(workspace.layout["view"])
+        studio.focus_room()
+        assert workspace.layout["view"] != original_view
+        assert workspace.layout["rooms"] == original_rooms
+        assert workspace.layout["devices"] == original_devices
+        assert "3D focus:" in application.status_var.get()
         studio.isolate_room()
         assert workspace._isolated_item.item_id == str(room["id"])
-        workspace.show_all()
+        studio.studio_view()
+        root.update()
+        assert workspace._isolated_item is None
+        assert application.focus_workspace_var.get()
         studio.toggle_advanced()
         assert studio._advanced_visible is True
         studio.toggle_advanced()

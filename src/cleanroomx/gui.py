@@ -7472,7 +7472,7 @@ def main(argv: list[str] | None = None) -> int:
             app.set_theme("dark", persist=False)
             app.spatial_workspace.set_workspace_mode("3d")
             app.set_focus_workspace(True)
-            app.spatial_workspace.fit_3d()
+            app.spatial_workspace.fit_studio_3d()
 
         root.after_idle(open_demo_studio)
 

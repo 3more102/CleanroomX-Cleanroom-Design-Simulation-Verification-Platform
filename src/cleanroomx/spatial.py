@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
+from .gui_design_studio import design_studio_snapshot
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1667,6 +1668,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._section_enabled = tk.BooleanVar(value=False)
         self._section_height_var = tk.StringVar(value="2.40")
         self._theme_palette = theme_palette("light")
+        self._studio_metric_vars = {
+            key: tk.StringVar(value="—")
+            for key in ("rooms", "floor_area", "volume", "devices")
+        }
+        self._studio_selected_text = tk.StringVar(value="Select a room")
+        self._studio_device_text = tk.StringVar(value="No placed devices")
+        self._studio_snapshot: dict[str, Any] = {}
 
         self._build()
         self.refresh()
@@ -1804,6 +1812,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+        ttk.Button(
+            overlaybar, text="Inspector", command=self.toggle_inspector
+        ).pack(side="right", padx=(3, 0))
+        ttk.Button(
+            overlaybar, text="Studio View", command=self.studio_view
+        ).pack(side="right", padx=(3, 0))
+
+        # Four read-only, live summaries derived from canonical spatial metadata.
+        studio_cards = ttk.Frame(self, padding=(8, 1, 8, 4))
+        studio_cards.pack(fill="x")
+        for column, (key, heading) in enumerate((
+            ("rooms", "ROOMS"),
+            ("floor_area", "FLOOR AREA"),
+            ("volume", "GEOMETRIC VOLUME"),
+            ("devices", "PLACED DEVICES"),
+        )):
+            studio_cards.columnconfigure(column, weight=1, uniform="studio-cards")
+            card = ttk.LabelFrame(studio_cards, text=heading, padding=(10, 4))
+            card.grid(row=0, column=column, sticky="ew", padx=3)
+            ttk.Label(
+                card,
+                textvariable=self._studio_metric_vars[key],
+                style="CX.ViewTitle.TLabel",
+            ).pack(anchor="w")
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -1950,6 +1982,26 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_3d.pack(fill="both", expand=True)
 
+        # A real miniature floor plan, drawn from the same room geometry and
+        # selection used by both canvases. Clicks select actual model rooms.
+        navigator_overlay = ttk.Frame(self._three_d_frame, padding=3)
+        navigator_overlay.place(x=14, y=54)
+        ttk.Label(
+            navigator_overlay, text="ROOM NAVIGATOR", style="CX.Section.TLabel"
+        ).pack(anchor="w")
+        self._studio_room_canvas = tk.Canvas(
+            navigator_overlay,
+            width=218,
+            height=132,
+            background="#0c1b29",
+            highlightbackground="#3b6374",
+            highlightthickness=1,
+        )
+        self._studio_room_canvas.pack()
+        self._studio_room_canvas.bind(
+            "<Configure>", lambda _event: self._draw_studio_navigator()
+        )
+
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
         self._body.add(inspector, weight=2)
@@ -1977,6 +2029,39 @@ class SpatialDesignWorkspace(ttk.Frame):
             wraplength=260,
         )
         self._inspector_selection_label.pack(fill="x", pady=(3, 8))
+
+        selected_overview = ttk.LabelFrame(inspector, text="SELECTED ROOM", padding=6)
+        selected_overview.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            selected_overview,
+            textvariable=self._studio_selected_text,
+            justify="left",
+            wraplength=265,
+        ).pack(anchor="w", fill="x")
+        room_actions = ttk.Frame(selected_overview)
+        room_actions.pack(fill="x", pady=(5, 0))
+        self._studio_focus_button = ttk.Button(
+            room_actions, text="Focus Room", command=self.fit_selected,
+            style="CX.Compact.TButton",
+        )
+        self._studio_focus_button.pack(side="left", padx=(0, 4))
+        self._studio_isolate_button = ttk.Button(
+            room_actions, text="Isolate Room", command=self.isolate_selected,
+            style="CX.Compact.TButton",
+        )
+        self._studio_isolate_button.pack(side="left")
+        ttk.Button(
+            selected_overview, text="Restore All Rooms", command=self.show_all,
+            style="CX.Compact.TButton",
+        ).pack(anchor="w", pady=(4, 0))
+        placed_overview = ttk.LabelFrame(inspector, text="PLACED DEVICES", padding=6)
+        placed_overview.pack(fill="x", pady=(0, 7))
+        ttk.Label(
+            placed_overview,
+            textvariable=self._studio_device_text,
+            justify="left",
+            wraplength=265,
+        ).pack(anchor="w", fill="x")
 
         inspector_footer = ttk.Frame(inspector)
         inspector_footer.pack(side="bottom", fill="x", pady=(4, 0))
@@ -3246,8 +3331,118 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._refresh_validation()
         self._update_sync_summary()
         self._update_metrics()
+        self._refresh_studio_panels()
         self._draw_2d()
         self._draw_3d()
+        self._draw_studio_navigator()
+
+    def studio_view(self) -> None:
+        """Open the genuine 3D canvas, rather than a demonstration image."""
+        self.set_workspace_mode("3d")
+        self.show_inspector()
+        self.fit_3d()
+
+    def _refresh_studio_panels(self) -> None:
+        selected_id = (
+            self.selected.item_id
+            if self.selected is not None and self.selected.kind == "room"
+            else None
+        )
+        snapshot = design_studio_snapshot(self.layout, selected_room_id=selected_id)
+        self._studio_snapshot = snapshot
+        metric_text = {
+            "rooms": str(snapshot["room_count"]),
+            "floor_area": f'{snapshot["floor_area_m2"]:,.1f} m²',
+            "volume": f'{snapshot["volume_m3"]:,.1f} m³',
+            "devices": str(snapshot["placed_device_count"]),
+        }
+        for key, value in metric_text.items():
+            self._studio_metric_vars[key].set(value)
+
+        selected = snapshot["selected_room"]
+        has_room = selected is not None
+        for button in (self._studio_focus_button, self._studio_isolate_button):
+            button.state(["!disabled"] if has_room else ["disabled"])
+        if selected is None:
+            self._studio_selected_text.set("Select a room in 2D, 3D or Room Navigator.")
+        else:
+            classification = selected["classification"] or "Not specified"
+            pressure = selected["configured_pressure_pa"]
+            pressure_label = (
+                f"{pressure:g} Pa (configured)"
+                if pressure is not None else "Not configured"
+            )
+            self._studio_selected_text.set(
+                f'{selected["name"]}\n'
+                f'Classification: {classification}\n'
+                f'Dimensions: {selected["length_m"]:g} × '
+                f'{selected["width_m"]:g} × {selected["height_m"]:g} m\n'
+                f'Area: {selected["floor_area_m2"]:,.2f} m²\n'
+                f'Volume: {selected["volume_m3"]:,.2f} m³\n'
+                f'Placed objects: {selected["device_count"]}\n'
+                f'Design pressure: {pressure_label}'
+            )
+        counts = snapshot["device_categories"]
+        self._studio_device_text.set(
+            f'FFU: {counts["FFU"]}  ·  Supply: {counts["Supply"]}\n'
+            f'Return / exhaust: {counts["Return / exhaust"]}\n'
+            f'Other (including openings): {counts["Other"]}'
+        )
+
+    def _draw_studio_navigator(self) -> None:
+        canvas = getattr(self, "_studio_room_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        rooms = self._studio_snapshot.get("rooms", [])
+        if not rooms:
+            canvas.create_text(
+                109, 65, text="No rooms in project", fill="#9cb8c7"
+            )
+            return
+        left = min(room["x_m"] for room in rooms)
+        top = min(room["y_m"] for room in rooms)
+        right = max(room["x_m"] + room["length_m"] for room in rooms)
+        bottom = max(room["y_m"] + room["width_m"] for room in rooms)
+        w = max(1, canvas.winfo_width())
+        h = max(1, canvas.winfo_height())
+        margin = 12
+        scale = min(
+            max(1, w - 2 * margin) / max(right - left, 1e-6),
+            max(1, h - 2 * margin) / max(bottom - top, 1e-6),
+        )
+        dx = (w - (right - left) * scale) / 2.0
+        dy = (h - (bottom - top) * scale) / 2.0
+        for room in rooms:
+            x0 = dx + (room["x_m"] - left) * scale
+            y0 = dy + (room["y_m"] - top) * scale
+            x1 = x0 + room["length_m"] * scale
+            y1 = y0 + room["width_m"] * scale
+            chosen = bool(
+                self.selected
+                and self.selected.kind == "room"
+                and self.selected.item_id == room["id"]
+            )
+            tag = f'studio-room:{room["id"]}'
+            canvas.create_rectangle(
+                x0, y0, x1, y1,
+                outline="#50f0df" if chosen else "#528999",
+                fill="#23616b" if chosen else "#183845",
+                width=3 if chosen else 1, tags=(tag,),
+            )
+            if x1 - x0 >= 36 and y1 - y0 >= 17:
+                canvas.create_text(
+                    (x0 + x1) / 2, (y0 + y1) / 2,
+                    text=room["name"][:16],
+                    fill="#efffff" if chosen else "#bcd6df",
+                    font=("TkDefaultFont", 7), tags=(tag,),
+                )
+            canvas.tag_bind(
+                tag, "<Button-1>",
+                lambda _event, room_id=room["id"]: self.select_item(
+                    "room", room_id, notify=True
+                ),
+            )
 
     def _pressure_relationships(
         self,

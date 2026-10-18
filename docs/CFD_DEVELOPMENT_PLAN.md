@@ -1,5 +1,19 @@
 # CFD development checkpoint — 18 October 2026
 
+## Manifest-derived two-room field analysis
+
+- The two-room result analyzer imports the unique receipt-hash-bound main VTK volume dataset and checks its solver time against the native phi receipt.
+- Room masks are derived from the verified generated case dimensions, not freehand labels; the actual VTK domain bounds, each room's summed cell volume, and exactly-once cell assignment must pass before room field statistics are exposed.
+- The analysis GUI has a dedicated per-room field comparison view for the final recorded time. This provides volume-weighted speed, velocity-component and kinematic-pressure diagnostics.
+- Per-room flux and ACH remain unavailable: cell-center masks are not interface-face flux evidence. Scientific/physical validation remains BLOCKED.
+
+## sync-vtk v3 snapshot analysis adapter
+
+- Added an analysis adapter for the separate `sync-vtk` v3 state/snapshot schema, routed through the existing GUI selection path and `analyze-results` CLI.
+- The adapter verifies state/snapshot/source hashes, reconstructs explicit field-map identity, re-imports VTK and compares the imported payload hash with the immutable snapshot before calculating diagnostics.
+- The original VTK tree must remain available for geometry; native OpenFOAM fields, solver logs, convergence and physical cleanroom validation are not established by this VTK-only store.
+- Synthetic regression coverage and the focused GitHub Actions gate are added with this checkpoint; results are pending CI.
+
 ## Native OpenFOAM grid integration continuation
 
 Continues the published GUI/region head `fdd35aa` on PR #1341.
@@ -86,17 +100,10 @@ Continues `work/cfd-integration-reconciliation-20261018` from `6ff519a` (PR #134
 
 ## Next implementation steps
 
-1. Add an adapter for `sync-vtk` v3 snapshot stores. Validate their distinct
-   state/snapshot schemas and field metadata; do not treat them as native v2
-   manifests or claim native source-field verification.
-2. Bind verified room masks and per-room boundary-flux assignments to solver
-   geometry before computing doorway transfer or per-room ACH. Current user
-   boxes are descriptive cell selections, not verified room boundaries.
-3. Connect CAD room identities only through an explicit, checked transformation
-   into the mesh frame; do not infer room identity from a region/case label.
-4. Review the overlapping two-room CLI with PR #1328 before integrating the
-   feature branches. Preserve the distinction between receipt-bound diagnostic
-   bundles and the explorer's flexible graph/report export.
+1. Re-run native-to-VTK numerical parity and complete generated-mesh audits against fresh Foundation v10 outputs.
+2. Add independently sourced room-cell masks and per-room boundary-flux evidence before enabling per-room airflow/ACH views.
+3. Add a bounded adapter that joins v3 VTK snapshots to native solver receipts only when the run/configuration identities match; never infer a native link from matching time labels alone.
+4. Keep independent measured-data correlation and competent engineering review as the release gate for physical validation.
 
 ## Earlier adapter verification
 

@@ -16,6 +16,7 @@ from .gui_windowing import fit_window_to_display
 VIEWS = {
     "Field history (mean and range)": "field_history",
     "Compare cases / runs at selected time": "comparison",
+    "Two-room field comparison (manifest-derived)": "room_field_comparison",
     "2D cell slab": "cell_slab",
     "3D cell samples": "cell_3d",
     "Solver residual history": "residual_history",
@@ -277,7 +278,10 @@ class CFDAnalysisExplorer(tk.Toplevel):
             candidates = [s for s in selections if Decimal(s["time_name"]) == latest]
         if len(candidates) != 1:
             if candidates:
-                self.metric_vars["Selected cells"].set(f"{len(candidates)} cases / runs")
+                if all("(manifest-derived room mask)" in s.get("region", "") for s in candidates):
+                    self.metric_vars["Selected cells"].set(f"{len(candidates)} room regions")
+                else:
+                    self.metric_vars["Selected cells"].set(f"{len(candidates)} cases / runs")
             return
         selection = candidates[0]
         self.metric_vars["Selected cells"].set(f"{selection['cell_count']} / {selection['mesh_cell_count']}")
@@ -508,8 +512,12 @@ class CFDAnalysisExplorer(tk.Toplevel):
                 source_names = "; ".join(Path(source["path"]).name + " #" + source["sha256"][:12]
                                          for source in value["sources"][:2])
                 region = value["filters"].get("region")
-                scope = (region["label"] + ": box selects full cells by their centers" if region else
-                         "Whole mesh / recorded diagnostics")
+                if region:
+                    scope = region["label"] + ": box selects full cells by their centers"
+                elif value.get("kind") == "room_field_comparison":
+                    scope = "Manifest-derived Room 1 / Room 2 masks; mesh bounds and room cell volumes verified"
+                else:
+                    scope = "Whole mesh / recorded diagnostics"
                 native_runs = [s for s in self._selected_sessions() if s.report["mode"].startswith("native_")]
                 verified = sum(s.report["reproducibility"]["native_source_bytes_rehashed"] for s in native_runs)
                 original_status = (f" · Original fields verified: {verified}/{len(native_runs)} runs" if native_runs else "")

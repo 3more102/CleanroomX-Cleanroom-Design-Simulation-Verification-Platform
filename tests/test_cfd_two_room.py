@@ -260,3 +260,13 @@ def test_two_room_field_comparison_graph_uses_room_statistics_not_user_boxes():
         "interpretation": "Room 2 volume-weighted mean minus Room 1 volume-weighted mean; diagnostic only",
     }]
     assert graph["scientific_validation"] == "BLOCKED"
+
+    pytest.importorskip("matplotlib")
+    from matplotlib.container import ErrorbarContainer
+    from matplotlib.figure import Figure
+    from cleanroomx.cfd_analysis_export import draw_analysis_graph
+
+    figure = Figure(figsize=(7, 4))
+    draw_analysis_graph(figure, graph, include_provenance=False)
+    assert any(isinstance(container, ErrorbarContainer) for container in figure.axes[0].containers)
+    assert "Δ mean" in figure.axes[0].get_title()

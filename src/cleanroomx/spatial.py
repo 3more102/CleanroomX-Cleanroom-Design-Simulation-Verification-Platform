@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
+from .studio_summary import dashboard_snapshot, navigator_rectangles
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -1644,6 +1645,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
+        self._studio_card_vars = {
+            key: tk.StringVar(value="—")
+            for key in ("rooms", "area", "volume", "devices")
+        }
+        self._studio_room_var = tk.StringVar(value="Select a room")
+        self._studio_devices_var = tk.StringVar(value="No devices")
+        self._navigator_item_to_room: dict[int, str] = {}
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -1738,6 +1746,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
             side="left", padx=2
         )
+        ttk.Button(modebar, text="Studio View", command=self.studio_view).pack(
+            side="left", padx=2
+        )
+        ttk.Button(modebar, text="Inspector", command=self.toggle_inspector).pack(
+            side="left", padx=2
+        )
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
@@ -1804,6 +1818,26 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+
+        studio_cards = ttk.Frame(self, padding=(8, 2, 8, 5))
+        studio_cards.pack(fill="x")
+        for key, heading, unit in (
+            ("rooms", "ROOMS", ""),
+            ("area", "FLOOR AREA", "m²"),
+            ("volume", "GEOMETRIC VOLUME", "m³"),
+            ("devices", "PLACED DEVICES", ""),
+        ):
+            card = ttk.Frame(studio_cards, style="CX.Toolbar.TFrame", padding=(10, 6))
+            card.pack(side="left", fill="x", expand=True, padx=3)
+            ttk.Label(card, text=heading, style="CX.Section.TLabel").pack(anchor="w")
+            value_row = ttk.Frame(card)
+            value_row.pack(fill="x")
+            ttk.Label(
+                value_row, textvariable=self._studio_card_vars[key],
+                style="CX.ViewTitle.TLabel",
+            ).pack(side="left")
+            if unit:
+                ttk.Label(value_row, text=unit).pack(side="left", padx=(5, 0))
 
         self._body = ttk.Panedwindow(self, orient="horizontal")
         self._body.pack(fill="both", expand=True, padx=8, pady=(2, 6))
@@ -1949,6 +1983,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             highlightbackground=self._theme_palette["border"],
         )
         self.canvas_3d.pack(fill="both", expand=True)
+        self.navigator_canvas = tk.Canvas(
+            self.canvas_3d,
+            width=240,
+            height=150,
+            background=self._theme_palette["panel"],
+            highlightthickness=1,
+            highlightbackground=self._theme_palette["accent"],
+        )
+        self.navigator_canvas.place(relx=0.015, rely=0.985, anchor="sw")
+        self.navigator_canvas.bind("<Button-1>", self._on_navigator_room_click)
 
         inspector = ttk.Frame(self._body, padding=(10, 8))
         self._inspector_frame = inspector
@@ -1975,7 +2019,32 @@ class SpatialDesignWorkspace(ttk.Frame):
             inspector,
             textvariable=self._selection_var,
             wraplength=310,
-        ).pack(fill="x", pady=(3, 8))
+        ).pack(fill="x", pady=(3, 5))
+        ttk.Label(
+            inspector, text="SELECTED ROOM", style="CX.Section.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            inspector, textvariable=self._studio_room_var, wraplength=310,
+            justify="left",
+        ).pack(fill="x", pady=(2, 5))
+        ttk.Label(
+            inspector, text="PLACED DEVICES", style="CX.Section.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            inspector, textvariable=self._studio_devices_var, wraplength=310,
+            justify="left",
+        ).pack(fill="x", pady=(2, 5))
+        room_actions = ttk.Frame(inspector)
+        room_actions.pack(fill="x", pady=(0, 8))
+        ttk.Button(
+            room_actions, text="Focus Room", command=self.focus_room,
+        ).pack(side="left", padx=(0, 2))
+        ttk.Button(
+            room_actions, text="Isolate Room", command=self.isolate_room,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            room_actions, text="Restore All", command=self.show_all,
+        ).pack(side="left", padx=2)
 
         property_groups = (
             (
@@ -3171,8 +3240,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._refresh_validation()
         self._update_sync_summary()
         self._update_metrics()
+        self._update_studio_summary()
         self._draw_2d()
         self._draw_3d()
+        self._draw_room_navigator()
 
     def _pressure_relationships(
         self,

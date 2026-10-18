@@ -132,9 +132,11 @@ class DesignStudioPanels:
         tk.Label(self.nav, text="Click a room to select", bg=_PANEL,
                  fg=_MUTED, font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
 
-        self.details = tk.Frame(workspace._three_d_frame, bg=_PANEL,
+        self.sidebar = tk.Frame(workspace._three_d_frame, bg="#0d1c2b")
+        self.details = tk.Frame(self.sidebar, bg=_PANEL,
                                 highlightbackground=_CYAN, highlightthickness=2,
                                 padx=10, pady=9)
+        self.details.pack(fill="x", pady=(0, 12))
         tk.Label(self.details, text="SELECTED ROOM", bg=_PANEL, fg=_CYAN,
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
         self.room_name = tk.StringVar(value="No room")
@@ -145,13 +147,19 @@ class DesignStudioPanels:
         tk.Label(self.details, textvariable=self.room_details, bg=_PANEL,
                  fg=_MUTED, anchor="w", justify="left", wraplength=215,
                  font=("Segoe UI", 9)).pack(fill="x")
-        tk.Label(self.details, text="PLACED IN THIS ROOM", bg=_PANEL,
+        self.device_panel = tk.Frame(
+            self.sidebar, bg=_PANEL,
+            highlightbackground=_BORDER, highlightthickness=1,
+            padx=10, pady=9,
+        )
+        self.device_panel.pack(fill="x")
+        tk.Label(self.device_panel, text="PLACED IN THIS ROOM", bg=_PANEL,
                  fg=_CYAN, font=("Segoe UI", 9, "bold")).pack(
-                     anchor="w", pady=(10, 3))
-        tk.Label(self.details, textvariable=self.room_devices, bg=_PANEL,
+                     anchor="w", pady=(0, 7))
+        tk.Label(self.device_panel, textvariable=self.room_devices, bg=_PANEL,
                  fg=_TEXT, anchor="w", justify="left",
                  font=("Segoe UI", 9)).pack(fill="x")
-        actions = tk.Frame(self.details, bg=_PANEL)
+        actions = tk.Frame(self.device_panel, bg=_PANEL)
         actions.pack(fill="x", pady=(10, 0))
         tk.Button(actions, text="Focus room", command=self.focus_room,
                   bg="#22415b", fg=_TEXT, relief="flat",
@@ -194,7 +202,7 @@ class DesignStudioPanels:
 
     def _place_overlays(self):
         self.nav.place(relx=0.015, rely=0.985, anchor="sw", width=230)
-        self.details.place(relx=0.985, rely=0.015, anchor="ne", width=250)
+        self.sidebar.place(relx=0.985, rely=0.015, anchor="ne", width=250)
         self.camera.place(relx=0.52, rely=0.985, anchor="s")
         tk.Label(self.workspace._three_d_frame,
                  text="Length X (m)\nWidth Y (m)\nHeight Z (m)",

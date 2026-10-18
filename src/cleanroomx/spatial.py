@@ -1607,6 +1607,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_redo_requested: Callable[[], bool] | None = None,
         on_selection_change: Callable[[str, str], None] | None = None,
         on_view_status_change: Callable[[str], None] | None = None,
+        on_studio_requested: Callable[[], None] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -1621,6 +1622,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_redo_requested = on_redo_requested
         self._on_selection_change = on_selection_change
         self._on_view_status_change = on_view_status_change
+        self._on_studio_requested = on_studio_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None

@@ -24,9 +24,12 @@ unless an independently valid simulation result says otherwise.
 - Existing spatial code supports 2D/3D/split, selection, editing, fit,
   projection presets, camera orbit/pan/zoom, section plane, hiding and isolation.
 - Existing engineering overlay code distinguishes analysis and solver result data.
-- An unmodified 1920×1080 Windows screenshot **has not been captured** here.
-  The remote GitHub connection cannot open the user's Windows desktop or inspect
-  uncommitted local changes, so pixel parity is **unverified**.
+- Genuine 1920×1080 before/after captures **have been obtained in Linux/Xvfb**
+  from actual Tk widgets and the bundled demo; these are not generated images.
+- An unmodified **Windows** screenshot has not been captured here. The remote
+  GitHub connection cannot open the user's Windows desktop or inspect uncommitted
+  local changes, so Windows-specific behavior and target pixel parity remain
+  **unverified**.
 
 ## Current implementation
 
@@ -62,7 +65,42 @@ unless an independently valid simulation result says otherwise.
 | Create/edit/save/reload | Existing editor/persistence preserved | Pending full regression |
 | OpenFOAM CFD fields and residuals | No change to solver integration | Not tested for this iteration |
 | No high-severity regression | Unknown | Full suite not yet executed |
+| Linux virtual desktop before/after captures | Both captured 1920×1080 | Genuine PNG + SHA-256 JSON manifests in CI artifact |
 | Actual Windows before/after captures | Not available remotely | Required before acceptance |
+
+## Recorded Linux visual evidence — first measured iteration
+
+- [Successful before/after capture workflow](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39170276297)
+- Baseline exact source commit: `cf5506ffc5793313e023118209faafefc17e73b7` (unchanged main).
+- Both screenshots: real Tk application, dark theme, same bundled demonstration,
+  1920 × 1080 Xvfb desktop.
+- Original 3D canvas size: **896 × 249 pixels**.
+- Integrated Studio View 3D canvas size: **1509 × 616 pixels**.
+- Baseline selected-room geometry and overlay: display is cramped in a split
+  workspace with external navigator and output panel.
+- New Studio uses a model-backed miniature navigator, Inspector, four live
+  cards, 3D-only focus and a camera refit after Tk computes the new geometry.
+- Geometry/dashboard project totals in both captures: 3 rooms, 62 m²,
+  186 m³, 10 placed devices/openings.
+- Automated focused tests on the newly introduced GUI branch: 46 passed in
+  the verified earlier run. Later workflow suites may contain more tests.
+- Linux screenshot evidence validates rendered presence, not complete event
+  coverage, visual similarity to an unavailable original reference file,
+  Windows parity or actual OpenFOAM solver correctness.
+- GitHub screenshot CI captures are portable reproducibility checks, not a
+  substitute for a manual review of the Windows desktop application.
+
+## Highest remaining priorities
+
+1. Inspect genuine Windows screenshots against the user's exact reference
+   and revise dimensions/typography/3D styling accordingly.
+2. Finish and audit all GUI regression suites across Python versions.
+3. Validate editable geometry, room selection, focus/isolate and save/reload
+   against real user interaction, not only implementation inspection.
+4. Verify real OpenFOAM Foundation v10 supported execution independently,
+   with clean receipts and no demonstration outputs presented as solver data.
+5. Confirm stage navigation/selection behavior and responsive use at the
+   supported minimum resolution.
 
 ## Evidence-based completion policy
 

@@ -72,7 +72,14 @@ class CFDAnalysisExplorer(tk.Toplevel):
         axis_combo = ttk.Combobox(slab, textvariable=self.axis_var, values=list("xyz"), state="readonly", width=3)
         axis_combo.pack(side="left", padx=5)
         self._combos.append(axis_combo)
+        self.axis_combo = axis_combo
         self._entries = []
+        self.azimuth_var = tk.DoubleVar(value=-60.0)
+        self.elevation_var = tk.DoubleVar(value=25.0)
+        ttk.Label(slab, text="3D azimuth").pack(side="left", padx=(12, 3))
+        ttk.Scale(slab, from_=-180, to=180, variable=self.azimuth_var, command=self._rotate_3d).pack(side="left")
+        ttk.Label(slab, text="Elevation").pack(side="left", padx=(8, 3))
+        ttk.Scale(slab, from_=-90, to=90, variable=self.elevation_var, command=self._rotate_3d).pack(side="left")
         for label, variable in (("Position (m)", self.position_var), ("Thickness (m)", self.thickness_var)):
             ttk.Label(slab, text=label).pack(side="left", padx=(10, 4))
             entry = ttk.Entry(slab, textvariable=variable, width=9)
@@ -141,6 +148,18 @@ class CFDAnalysisExplorer(tk.Toplevel):
                 self._events.put((event, value))
 
         threading.Thread(target=work, name="cleanroomx-cfd-analysis", daemon=True).start()
+
+    def _rotate_3d(self, _value=None):
+        """Orbit existing 3D solver samples without modifying their source data."""
+        if self.current_graph is None or self.current_graph.get("kind") != "cell_3d":
+            return
+        if not self.figure.axes:
+            return
+        axes = self.figure.axes[0]
+        if not hasattr(axes, "view_init"):
+            return
+        axes.view_init(elev=self.elevation_var.get(), azim=self.azimuth_var.get())
+        self.canvas.draw_idle()
 
     def _view_changed(self, _event=None):
         if VIEWS[self.view_var.get()] == "residual_history":
@@ -263,6 +282,7 @@ class CFDAnalysisExplorer(tk.Toplevel):
             elif event == "graph":
                 self.current_graph = value
                 draw_analysis_graph(self.figure, value)
+                self._rotate_3d()
                 self.canvas.draw_idle()
                 source_names = "; ".join(Path(source["path"]).name + " #" + source["sha256"][:12]
                                          for source in value["sources"][:3])

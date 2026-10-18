@@ -994,6 +994,7 @@ def build_analysis_graph(
                 continue
             if _numeric_time(room_regions["time_name"]) != _numeric_time(time_name):
                 continue
+            room_statistics_by_label = {}
             for room in room_regions["regions"]:
                 stats = room["statistics"].get(field_name)
                 if stats is None:
@@ -1015,6 +1016,7 @@ def build_analysis_graph(
                 }
                 graph["selections"].append({"run_id": run_id, **selection})
                 units.add(stats["units"])
+                room_statistics_by_label[room["label"]] = stats
                 series.append({
                     "label": f"{run_id} / {room['label']}",
                     "run_id": run_id,
@@ -1027,6 +1029,23 @@ def build_analysis_graph(
                         "maximum": stats["maximum"],
                         "time_name": room_regions["time_name"],
                     }],
+                })
+            room_1 = room_statistics_by_label.get("Room 1")
+            room_2 = room_statistics_by_label.get("Room 2")
+            if room_1 is not None and room_2 is not None:
+                if room_1["units"] != room_2["units"]:
+                    raise ValueError("Per-room field comparison has mismatched units")
+                graph.setdefault("room_comparisons", []).append({
+                    "run_id": run_id,
+                    "time_name": room_regions["time_name"],
+                    "field": field_name,
+                    "units": room_1["units"],
+                    "room_1_mean": room_1["mean"],
+                    "room_2_mean": room_2["mean"],
+                    "difference_room_2_minus_room_1": room_2["mean"] - room_1["mean"],
+                    "room_1_range": [room_1["minimum"], room_1["maximum"]],
+                    "room_2_range": [room_2["minimum"], room_2["maximum"]],
+                    "interpretation": "Room 2 volume-weighted mean minus Room 1 volume-weighted mean; diagnostic only",
                 })
             sources.extend(room_regions.get("sources", report.get("sources", [])))
             graph.update(

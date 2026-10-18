@@ -12,6 +12,7 @@
 - Derive Room 1 / Room 2 masks from verified case dimensions and require VTK bounds, per-room cell volumes and exactly-once cell assignment to match the manifest.
 - Add a GUI field-comparison view and extend the live Foundation v10 smoke test to verify both room masks and graph generation.
 - If the optional VTK volume cannot be matched to the solver receipt or imported, retain other verified probe/flux diagnostics and explicitly mark room field statistics unavailable.
+- Add observed cell-level min/max error bars and an explicit Room 2 minus Room 1 volume-weighted mean delta to the per-room comparison graph; the range is not an uncertainty interval.
 - Keep per-room flux/ACH and scientific validation blocked until interface-face flux evidence and independent physical correlation are available.
 
 ## Unreleased Release 3 — native OpenFOAM grid analysis integration — 2026-10-18

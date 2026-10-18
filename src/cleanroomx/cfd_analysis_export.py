@@ -96,11 +96,34 @@ def draw_analysis_graph(figure, graph: dict, *, include_provenance: bool = True)
             ax.set_ylabel("Run / case at selected solver time")
             figure.subplots_adjust(left=0.32)
         else:
-            ax.bar(positions, values, color="#087e8b")
+            ax.bar(positions, values, color="#087e8b", zorder=2)
             ax.set_xticks(positions, labels, fontsize=8)
-            ax.axhline(0, color="grey", linewidth=0.6)
+            ax.axhline(0, color="grey", linewidth=0.6, zorder=1)
             ax.set_ylabel(graph["y_label"])
             ax.set_xlabel("Run / case at selected solver time" if kind == "comparison" else graph["x_label"])
+            if kind == "room_field_comparison":
+                # Error bars are the observed cell-level minimum/maximum, not a
+                # confidence interval or an uncertainty estimate.
+                points = [point for series_item in graph["series"] for point in series_item["points"]]
+                lower = [max(0.0, point["y"] - point.get("minimum", point["y"])) for point in points]
+                upper = [max(0.0, point.get("maximum", point["y"]) - point["y"]) for point in points]
+                if points:
+                    ax.errorbar(
+                        positions, values, yerr=[lower, upper], fmt="none",
+                        ecolor="#202124", elinewidth=1.0, capsize=4, capthick=1.0, zorder=3,
+                    )
+                ax.set_axisbelow(True)
+                ax.grid(axis="y", alpha=0.2)
+                comparisons = graph.get("room_comparisons", [])
+                if comparisons:
+                    lines = [
+                        f"{item['run_id']}: Δ mean (Room 2 − Room 1) = "
+                        f"{item['difference_room_2_minus_room_1']:+.4g} {item['units']}"
+                        for item in comparisons[:3]
+                    ]
+                    if len(comparisons) > 3:
+                        lines.append(f"+{len(comparisons) - 3} more run(s) in analysis details")
+                    ax.set_title(graph["title"] + "\n" + " · ".join(lines), fontsize=9)
     else:
         for series in graph["series"]:
             points = series["points"]

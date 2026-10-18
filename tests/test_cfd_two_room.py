@@ -247,4 +247,16 @@ def test_two_room_field_comparison_graph_uses_room_statistics_not_user_boxes():
     assert graph["status"] == "computed_diagnostic"
     assert [item["points"][0]["x"] for item in graph["series"]] == ["Room 1", "Room 2"]
     assert [item["points"][0]["y"] for item in graph["series"]] == pytest.approx([3.5, 9.5])
+    assert graph["room_comparisons"] == [{
+        "run_id": "synthetic-two-room",
+        "time_name": "100",
+        "field": "speed",
+        "units": "m/s",
+        "room_1_mean": 3.5,
+        "room_2_mean": 9.5,
+        "difference_room_2_minus_room_1": 6.0,
+        "room_1_range": [1.0, 6.0],
+        "room_2_range": [7.0, 12.0],
+        "interpretation": "Room 2 volume-weighted mean minus Room 1 volume-weighted mean; diagnostic only",
+    }]
     assert graph["scientific_validation"] == "BLOCKED"

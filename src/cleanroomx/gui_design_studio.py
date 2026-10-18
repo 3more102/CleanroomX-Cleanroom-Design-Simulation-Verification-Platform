@@ -71,6 +71,16 @@ class DesignStudioPanels:
         self.workspace = workspace
         self.enabled = True
         self._advanced_rows = (viewbar, overlaybar)
+        self._extra_actions = []
+        for widget in commandbar.winfo_children():
+            if isinstance(widget, (tk.Button,)):
+                continue
+            if widget.winfo_class() == "TSeparator" or (
+                widget.winfo_class() == "TButton" and
+                widget.cget("text") in ("Duplicate", "Delete", "Undo", "Redo")
+            ):
+                self._extra_actions.append(widget)
+                widget.pack_forget()
         self._advanced_visible = False
         self._nav_signature = None
         self.nav_buttons = {}
@@ -180,6 +190,11 @@ class DesignStudioPanels:
 
     def toggle_advanced(self):
         self._advanced_visible = not self._advanced_visible
+        for widget in self._extra_actions:
+            if self._advanced_visible:
+                widget.pack(side="left", padx=2)
+            else:
+                widget.pack_forget()
         for row in self._advanced_rows:
             if self._advanced_visible:
                 row.pack(before=self.metrics_frame, fill="x")

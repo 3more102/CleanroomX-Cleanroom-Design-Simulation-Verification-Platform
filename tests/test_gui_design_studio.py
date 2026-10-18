@@ -8,7 +8,8 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui_design_studio import (
-    studio_snapshot, STUDIO_ROOM_COLORS, studio_shade, studio_blend,
+    studio_snapshot, studio_navigator_signature,
+    STUDIO_ROOM_COLORS, studio_shade, studio_blend,
 )
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 
@@ -44,6 +45,35 @@ def test_studio_snapshot_real_geometry_and_device_ownership():
         studio_blend("#ffffff", "#000000", -0.1)
     assert studio_snapshot(layout, "r2")["selected_room"]["devices"] == 1
     assert layout == before
+
+
+def test_navigator_signature_detects_geometry_change_even_when_area_is_constant():
+    layout = {
+        "rooms": [
+            {"id": "r1", "name": "Process", "x_m": 0, "y_m": 0,
+             "length_m": 6, "width_m": 5, "height_m": 3},
+            {"id": "r2", "name": "Preparation", "x_m": 6, "y_m": 0,
+             "length_m": 5, "width_m": 4, "height_m": 3},
+        ],
+        "devices": [],
+    }
+    baseline = studio_navigator_signature(studio_snapshot(layout, "r1"))
+    assert baseline == studio_navigator_signature(studio_snapshot(layout, "r1"))
+
+    # Room translation changes the miniature plan, not its area or volume.
+    layout["rooms"][1]["x_m"] += 2
+    moved = studio_navigator_signature(studio_snapshot(layout, "r1"))
+    assert moved != baseline
+
+    # The floor area is still 30 m², but the plan's aspect ratio changed.
+    layout["rooms"][0]["length_m"] = 10
+    layout["rooms"][0]["width_m"] = 3
+    reshaped = studio_navigator_signature(studio_snapshot(layout, "r1"))
+    assert reshaped != moved
+    assert studio_snapshot(layout, "r1")["selected_room"]["area_m2"] == 30
+
+    # Clicking a different room also changes navigator highlighting.
+    assert studio_navigator_signature(studio_snapshot(layout, "r2")) != reshaped
 
 
 def test_studio_snapshot_empty_and_missing_selection():
@@ -89,6 +119,7 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.selected.kind == "room"
         assert workspace.selected.item_id == str(room["id"])
         assert studio.room_name.get() == room["name"]
+        assert studio.room_pressure.get().startswith("Configured pressure: ")
         assert application.project.to_dict() == before
         original_rooms = copy.deepcopy(workspace.layout["rooms"])
         original_devices = copy.deepcopy(workspace.layout["devices"])
@@ -98,6 +129,10 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.layout["rooms"] == original_rooms
         assert workspace.layout["devices"] == original_devices
         assert "3D focus:" in application.status_var.get()
+        studio.isolate_room()
+        assert workspace._isolated_item.item_id == str(room["id"])
+        studio.restore_all_rooms()
+        assert workspace._isolated_item is None
         studio.isolate_room()
         assert workspace._isolated_item.item_id == str(room["id"])
         other = workspace.layout["rooms"][0]

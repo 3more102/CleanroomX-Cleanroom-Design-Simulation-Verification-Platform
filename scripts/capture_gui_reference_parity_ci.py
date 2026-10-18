@@ -31,11 +31,9 @@ def main() -> int:
             ui_state_path=Path(temp_dir) / "layout-state.json",
         )
         app.load_project_path(bundled_demo_project_path())
-        app.set_theme("dark", persist=False)
-        app.notebook.select(app.spatial_workspace)
-        work = app.spatial_workspace
-        work.studio_view()
         root.geometry("1920x1080+0+0")
+        app.activate_reference_demo_studio()
+        work = app.spatial_workspace
         root.update_idletasks()
         root.update()
         work.fit_3d()
@@ -50,6 +48,8 @@ def main() -> int:
             raise RuntimeError("Embedded Room Navigator did not draw any rooms")
         if work._studio_summary_vars["rooms"].get() != "3":
             raise RuntimeError("Demo room count did not update from project model")
+        if not work.inspector_visible() or work.selected is None:
+            raise RuntimeError("Live selected-room inspector is missing")
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(

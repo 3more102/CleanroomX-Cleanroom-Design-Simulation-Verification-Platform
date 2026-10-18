@@ -156,3 +156,15 @@ def test_guided_stage_tracks_design_and_inputs_instead_of_highlighting_run(gui):
     gui.notebook.select(gui.spatial_workspace)
     gui.root.update()
     assert gui.workflow_design_button.cget("style") == "CX.Primary.TButton"
+
+def test_real_3d_scene_renders_camera_oriented_xyz_axis_widget(gui):
+    ws = gui.spatial_workspace
+    ws.studio_view()
+    gui.root.update()
+    axes = ws.canvas_3d.find_withtag("studio-axis")
+    assert len(axes) >= 7  # lines + labels for X/Y/Z, and origin marker
+    before = [ws.canvas_3d.coords(item) for item in axes[:2]]
+    ws.rotate_3d(15)
+    gui.root.update()
+    after = [ws.canvas_3d.coords(item) for item in ws.canvas_3d.find_withtag("studio-axis")[:2]]
+    assert before != after

@@ -2271,7 +2271,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def studio_view(self) -> None:
         """Use the actual 3D workspace with its live navigator and inspector."""
         if self._on_theme_requested is not None:
-            self._on_theme_requested("dark")
+            self._on_theme_requested("studio")
         self.show_all()
         self.show_inspector()
         self.set_workspace_mode("3d")

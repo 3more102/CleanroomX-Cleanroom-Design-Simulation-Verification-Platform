@@ -45,7 +45,8 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin cf5506ffc5793313e023118209faafefc17e73b7
           git worktree add --detach /tmp/cleanroomx-base cf5506ffc5793313e023118209faafefc17e73b7
-          PYTHONPATH=/tmp/cleanroomx-base/src xvfb-run -a -s "-screen 0 1920x1080x24" \
+          CLEANROOMX_CAPTURE_SOURCE_SHA=cf5506ffc5793313e023118209faafefc17e73b7 \
+            PYTHONPATH=/tmp/cleanroomx-base/src xvfb-run -a -s "-screen 0 1920x1080x24" \
             python scripts/capture_design_studio.py --baseline \
             --output reports/gui_reference_parity/linux_virtual_display_before.png
       - name: Publish screenshot with source manifest

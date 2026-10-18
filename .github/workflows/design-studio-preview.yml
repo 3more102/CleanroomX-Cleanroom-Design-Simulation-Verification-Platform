@@ -31,14 +31,16 @@ jobs:
           python -m pip install Pillow
       - name: Verify real Tk design studio and spatial regressions
         run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -q tests/test_gui_design_studio.py tests/test_spatial_editing_gui.py
-      - name: Capture actual Tk demonstration
+      - name: Capture actual Tk demonstration at reference and 1080p
         if: always()
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" python tools/capture_design_studio_ci.py --output reports/studio-preview/cleanroomx-design-studio.png
+        run: |
+          xvfb-run -a -s "-screen 0 2000x1200x24" python tools/capture_design_studio_ci.py --width 1536 --height 960 --output reports/studio-preview/cleanroomx-design-studio-reference.png
+          xvfb-run -a -s "-screen 0 2000x1200x24" python tools/capture_design_studio_ci.py --width 1920 --height 1080 --output reports/studio-preview/cleanroomx-design-studio-1920x1080.png
       - name: Publish real screenshot and verification output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: real-cleanroomx-design-studio
-          path: reports/studio-preview/cleanroomx-design-studio.png
+          path: reports/studio-preview/*.png
           if-no-files-found: warn
           retention-days: 14

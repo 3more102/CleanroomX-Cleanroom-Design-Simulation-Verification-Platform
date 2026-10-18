@@ -1,0 +1,89 @@
+name: GUI Reference Capture
+
+on:
+  pull_request:
+    paths:
+      - 'src/cleanroomx/gui.py'
+      - 'src/cleanroomx/spatial.py'
+      - 'src/cleanroomx/gui_design_studio.py'
+      - 'scripts/capture_gui_reference_parity.py'
+      - '.github/workflows/gui-reference-capture.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-tk-before-after:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout proposed GUI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: after
+      - name: Checkout stable comparison base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: work/cfd-integration-reconciliation-20261018
+          path: before
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install real GUI capture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb tk
+          python -m pip install -e './after[dev,cfd]' pillow
+      - name: Verify live Design Studio model and actual Tk interactions
+        run: >-
+          xvfb-run -a -s "-screen 0 1920x1080x24"
+          python -m pytest -q after/tests/test_gui_design_studio.py
+      - name: Capture pre-change real GUI at 1920x1080
+        run: >-
+          xvfb-run -a -s "-screen 0 1920x1080x24"
+          python after/scripts/capture_gui_reference_parity.py
+          --checkout before --output artifacts/gui-before.png
+      - name: Capture post-change real GUI at 1920x1080
+        run: >-
+          xvfb-run -a -s "-screen 0 1920x1080x24"
+          python after/scripts/capture_gui_reference_parity.py
+          --checkout after --output artifacts/gui-after.png
+      - name: Create quantitative before/after difference (not reference parity)
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from PIL import Image, ImageChops
+          before = Image.open('artifacts/gui-before.png').convert('RGB')
+          after = Image.open('artifacts/gui-after.png').convert('RGB')
+          if before.size != (1920, 1080) or after.size != before.size:
+              raise SystemExit('GUI framebuffer size mismatch')
+          diff = ImageChops.difference(before, after)
+          diff.save('artifacts/gui-before-after-diff.png')
+          changed = sum(
+              1 for pixel in diff.getdata()
+              if max(pixel) >= 10
+          )
+          manifest = {
+              'schema': 'cleanroomx.gui-before-after-difference',
+              'pixels_changed_at_least_10': changed,
+              'total_pixels': before.width * before.height,
+              'fraction_changed': changed / (before.width * before.height),
+              'measures_reference_parity': False,
+              'reference_image_supplied_to_ci': False,
+          }
+          Path('artifacts/image-difference.json').write_text(
+              json.dumps(manifest, indent=2) + '\n', encoding='utf-8'
+          )
+          PY
+      - name: Preserve genuine screenshots and capture receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gui-reference-parity-before-after
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14

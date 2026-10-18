@@ -7475,6 +7475,10 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    # The reference demonstration opens in its own dark, 3D-first presentation.
+    # Never overwrite an operator's persisted GUI theme preference.
+    if args.demo and not args.smoke:
+        app.set_theme("dark", persist=False)
     if not args.smoke:
         runtime_status_callback = getattr(
             getattr(app, "status_var", None),
@@ -7520,6 +7524,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
             messagebox.showerror("Open failed", str(exc), parent=root)
+
+    if args.demo and not args.smoke and not recovered_at_startup:
+        # Run after the asynchronous persisted-layout restoration; hiding
+        # Output earlier gets undone by that callback.
+        def _activate_demo_studio() -> None:
+            app.hide_output_panel()
+            app.notebook.select(app.spatial_workspace)
+            workspace = app.spatial_workspace
+            rooms = workspace.layout.get("rooms", [])
+            if rooms:
+                workspace.select_item("room", rooms[0]["id"], notify=True)
+            workspace.studio_view()
+        root.after_idle(_activate_demo_studio)
 
     if args.smoke:
         try:

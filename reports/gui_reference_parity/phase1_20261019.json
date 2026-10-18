@@ -1,0 +1,125 @@
+{
+  "schema": "cleanroomx.gui-reference-parity",
+  "version": 1,
+  "phase": "phase1",
+  "date": "2026-10-19",
+  "base_branch": "work/cfd-integration-reconciliation-20261018",
+  "change_branch": "chatgpt/gui-reference-parity-phase1-20261019",
+  "verified_local": {
+    "scope": "isolated pure metrics helper prototype, not full repository",
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "screenshots": {
+    "baseline_1920x1080": "GitHub Actions artifact gui-reference-parity-before-after / gui-before.png",
+    "after_1920x1080": "GitHub Actions artifact gui-reference-parity-before-after / gui-after.png",
+    "comparison_status": "genuine before/after captured; visual parity with supplied reference not assessed",
+    "run_url": "https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/39170476299",
+    "run_status": "success",
+    "window_size_px": [
+      1920,
+      1080
+    ],
+    "before_3d_viewport_px": [
+      993,
+      688
+    ],
+    "after_3d_viewport_px": [
+      993,
+      619
+    ],
+    "before_output_panel_hidden": true,
+    "after_output_panel_hidden": true,
+    "before_after_pixels_different_threshold_10": 289116,
+    "total_pixels": 2073600,
+    "difference_does_not_measure_reference_parity": true,
+    "review_observations": [
+      "Original output panel occupied excessive vertical space; demo layout now hides it after GUI state restoration",
+      "Native 3D render and model-backed dashboard visible with selected Process room",
+      "Overall reference parity unverified"
+    ]
+  },
+  "integrations": {
+    "openfoam_end_to_end": "not_run",
+    "gui_runtime": "real Linux/Xvfb Tk UI captured on CI; Windows UI not run",
+    "full_regression": "pending"
+  },
+  "completion_measurements": {
+    "visual_reference_parity": {
+      "passed": null,
+      "total": null,
+      "percent": null,
+      "status": "unmeasured"
+    },
+    "gui_functional_completeness": {
+      "passed": null,
+      "total": null,
+      "percent": null,
+      "status": "unmeasured"
+    },
+    "three_d_interaction_coverage": {
+      "passed": null,
+      "total": null,
+      "percent": null,
+      "status": "unmeasured"
+    },
+    "room_device_synchronization": {
+      "passed": null,
+      "total": null,
+      "percent": null,
+      "status": "unmeasured"
+    },
+    "openfoam_integration": {
+      "passed": null,
+      "total": null,
+      "percent": null,
+      "status": "unmeasured"
+    },
+    "automated_verification": {
+      "passed": null,
+      "total": null,
+      "percent": null,
+      "status": "unmeasured"
+    }
+  },
+  "modifications": [
+    "src/cleanroomx/gui_design_studio.py",
+    "src/cleanroomx/spatial.py",
+    "tests/test_gui_design_studio.py",
+    ".github/workflows/ci.yml",
+    "docs/GUI_REFERENCE_PARITY.md",
+    "src/cleanroomx/gui.py",
+    "scripts/capture_gui_reference_parity.py",
+    ".github/workflows/gui-reference-capture.yml"
+  ],
+  "blockers": [
+    "No Windows desktop screenshot from user machine in this session",
+    "Original user reference image not supplied to screenshot CI; no reference-based similarity score",
+    "Full main CI and physical click acceptance not complete at report time",
+    "No end-to-end OpenFOAM solver execution on this branch"
+  ],
+  "release_readiness": "not_approved",
+  "verified_ci": {
+    "capture": {
+      "passed": 1,
+      "failed": 0,
+      "workflow_run_id": 39170476299
+    },
+    "cfd_vtk": {
+      "passed_workflows": 1,
+      "reference_run": 39170476368
+    },
+    "main_ci": {
+      "status": "in_progress_at_report_time",
+      "workflow_run_id": 39170476376
+    }
+  },
+  "modified_files": [
+    "src/cleanroomx/gui_design_studio.py",
+    "src/cleanroomx/spatial.py",
+    "tests/test_gui_design_studio.py",
+    ".github/workflows/ci.yml",
+    "docs/GUI_REFERENCE_PARITY.md"
+  ]
+}

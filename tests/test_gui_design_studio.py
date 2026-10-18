@@ -8,7 +8,8 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui_design_studio import (
-    studio_snapshot, STUDIO_ROOM_COLORS, studio_shade, studio_blend,
+    studio_snapshot, studio_navigator_signature, STUDIO_ROOM_COLORS,
+    studio_shade, studio_blend,
 )
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 
@@ -50,7 +51,27 @@ def test_studio_snapshot_empty_and_missing_selection():
     assert studio_snapshot({"rooms": [], "devices": []})["selected_room"] is None
 
 
-def test_live_studio_selection_metrics_and_real_3d(tmp_path):
+def test_navigator_signature_tracks_movement_and_equal_area_resize():
+    layout = {
+        "rooms": [{"id": "r1", "name": "Process", "x_m": 0, "y_m": 0,
+                   "length_m": 6, "width_m": 5, "height_m": 3}],
+        "devices": [],
+    }
+    original = studio_snapshot(layout, "r1")
+    before = studio_navigator_signature(original["rooms"], "r1")
+    layout["rooms"][0]["x_m"] = 2
+    moved = studio_snapshot(layout, "r1")
+    assert moved["floor_area_m2"] == original["floor_area_m2"]
+    assert studio_navigator_signature(moved["rooms"], "r1") != before
+    layout["rooms"][0]["x_m"] = 0
+    layout["rooms"][0]["length_m"] = 5
+    layout["rooms"][0]["width_m"] = 6
+    rotated_footprint = studio_snapshot(layout, "r1")
+    assert rotated_footprint["floor_area_m2"] == original["floor_area_m2"]
+    assert studio_navigator_signature(rotated_footprint["rooms"], "r1") != before
+
+
+def test_live_studio_selection_metrics_and_real_3d(tmp_path, monkeypatch):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -95,6 +116,23 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.selected.item_id == str(room["id"])
         assert studio.room_name.get() == room["name"]
         assert application.project.to_dict() == before
+        assert studio.room_pressure.get().startswith("Configured pressure:")
+        # A relocation with unchanged area must invalidate and redraw the mini-plan.
+        moved_room = workspace.layout["rooms"][0]
+        plan_tag = "floorplan:" + str(moved_room["id"])
+        old_rect = studio.mini_plan.find_withtag(plan_tag)[0]
+        old_coords = tuple(studio.mini_plan.coords(old_rect))
+        old_signature = studio._nav_signature
+        old_x = moved_room["x_m"]
+        try:
+            moved_room["x_m"] = old_x + 9.0
+            studio.update()
+            new_rect = studio.mini_plan.find_withtag(plan_tag)[0]
+            assert studio._nav_signature != old_signature
+            assert tuple(studio.mini_plan.coords(new_rect)) != old_coords
+        finally:
+            moved_room["x_m"] = old_x
+            studio.update()
         original_rooms = copy.deepcopy(workspace.layout["rooms"])
         original_devices = copy.deepcopy(workspace.layout["devices"])
         original_view = copy.deepcopy(workspace.layout["view"])
@@ -105,10 +143,37 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert "3D focus:" in application.status_var.get()
         studio.isolate_room()
         assert workspace._isolated_item.item_id == str(room["id"])
+        studio.restore_button.invoke()
+        assert workspace._isolated_item is None
+        assert workspace.layout["rooms"] == original_rooms
+        studio.isolate_room()
         other = workspace.layout["rooms"][0]
         studio.nav_buttons[str(other["id"])].invoke()
         root.update()
         assert workspace.selected.item_id == str(other["id"])
+        assert workspace._isolated_item is None
+        # Search should reveal a room that is hidden by an earlier isolate.
+        studio.isolate_room()
+        monkeypatch.setattr(
+            "cleanroomx.gui_design_studio.simpledialog.askstring",
+            lambda *_args, **_kwargs: room["name"],
+        )
+        studio.find_item()
+        assert workspace.selected.kind == "room"
+        assert workspace.selected.item_id == str(room["id"])
+        assert workspace._isolated_item is None
+        # The same guarantee applies when a device belongs to another room.
+        studio.isolate_room()
+        target_device = next(
+            d for d in workspace.layout["devices"] if d["name"] == "Process Tool"
+        )
+        monkeypatch.setattr(
+            "cleanroomx.gui_design_studio.simpledialog.askstring",
+            lambda *_args, **_kwargs: target_device["name"],
+        )
+        studio.find_item()
+        assert workspace.selected.kind == "device"
+        assert workspace.selected.item_id == str(target_device["id"])
         assert workspace._isolated_item is None
         studio.studio_view()
         root.update()

@@ -96,6 +96,31 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         workspace = application.spatial_workspace
         studio = workspace._studio
         assert studio.enabled
+        # Guided stage must represent the actual workspace, not a fixed Run CTA.
+        assert application._guided_stage == "design"
+        assert application.workflow_design_button.cget("style") == "CX.Primary.TButton"
+        assert application.workflow_run_button.cget("style") == "CX.Compact.TButton"
+        application.workflow_input_button.invoke()
+        root.update()
+        assert application.notebook.select() == str(application.input_tab)
+        assert application._guided_stage == "inputs"
+        assert application.workflow_input_button.cget("style") == "CX.Primary.TButton"
+        application.workflow_design_button.invoke()
+        root.update()
+        assert application.notebook.select() == str(workspace)
+        assert application._guided_stage == "design"
+        assert workspace._workspace_mode.get() == "3d"
+        # Direct notebook navigation also synchronizes the guided step.
+        application._set_guided_workflow_stage("report")
+        assert application.workflow_report_button.cget("style") == "CX.Primary.TButton"
+        application.notebook.select(application.input_tab)
+        root.update()
+        assert application._guided_stage == "inputs"
+        application.notebook.select(workspace)
+        root.update()
+        assert application._guided_stage == "design"
+        with pytest.raises(ValueError, match="Unsupported guided workflow stage"):
+            application._set_guided_workflow_stage("unknown")
         assert studio.metric_vars["rooms"].get() == str(len(workspace.layout["rooms"]))
         assert studio.metric_vars["devices"].get() == str(len(workspace.layout["devices"]))
         assert set(studio.nav_buttons) == {str(r["id"]) for r in workspace.layout["rooms"]}

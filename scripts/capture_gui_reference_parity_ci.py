@@ -50,6 +50,10 @@ def main() -> int:
             raise RuntimeError("Demo room count did not update from project model")
         if not work.inspector_visible() or work.selected is None:
             raise RuntimeError("Live selected-room inspector is missing")
+        if app._paned_contains(app.main_panes, app.navigator_panel):
+            raise RuntimeError("External project navigator obscures immersive studio")
+        if app._paned_contains(app.workspace_panes, app.output_panel):
+            raise RuntimeError("Output panel obscures immersive studio")
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(

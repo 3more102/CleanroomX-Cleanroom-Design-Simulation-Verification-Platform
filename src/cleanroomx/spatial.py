@@ -1728,7 +1728,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         modebar = ttk.Frame(self, padding=(8, 0, 8, 4))
         modebar.pack(fill="x")
-        ttk.Label(modebar, text="Workspace").pack(side="left", padx=(0, 6))
+        ttk.Label(modebar, text="View").pack(side="left", padx=(0, 6))
         for value, label in (("2d", "2D"), ("3d", "3D"), ("split", "Split")):
             ttk.Radiobutton(
                 modebar,
@@ -1740,9 +1740,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Separator(modebar, orient="vertical").pack(
             side="left", fill="y", padx=8
         )
-        ttk.Button(modebar, text="Fit", width=6, command=self.fit_views).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            modebar, text="Fit", width=6,
+            command=lambda: (
+                self.fit_studio_3d()
+                if self._workspace_mode.get() == "3d"
+                else self.fit_views()
+            ),
+        ).pack(side="left", padx=2)
         ttk.Button(modebar, text="Reset 2D", width=9, command=self.reset_2d).pack(
             side="left", padx=2
         )
@@ -2093,7 +2098,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
 
         self._studio = DesignStudioPanels(
-            self, commandbar=commandbar, viewbar=viewbar, overlaybar=overlaybar,
+            self, commandbar=commandbar, modebar=modebar,
+            viewbar=viewbar, overlaybar=overlaybar,
         )
 
     def _apply_workspace_mode(self) -> None:

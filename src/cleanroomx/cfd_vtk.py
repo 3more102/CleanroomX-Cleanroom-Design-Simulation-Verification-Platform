@@ -476,6 +476,7 @@ def _read_openfoam_mesh_faces(path, point_count, mesh_root):
         point_ids = [int(token) for token in re.findall(r"[+-]?\d+", match.group(2))]
         if (
             len(point_ids) != face_count
+            or re.sub(r"[+-]?\d+", "", match.group(2)).strip()
             or face_count < 3
             or len(set(point_ids)) != face_count
             or any(point_id < 0 for point_id in point_ids)

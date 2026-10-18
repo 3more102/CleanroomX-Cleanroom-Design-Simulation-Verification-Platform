@@ -741,6 +741,15 @@ def execute_two_room_case(
         result_hashes[phi_relative] = _sha256(phi_path.read_bytes())
         boundary_relative = "constant/polyMesh/boundary"
         result_hashes[boundary_relative] = _sha256((case / boundary_relative).read_bytes())
+        from .cfd_room_flux import diagnose_two_room_face_flux
+        room_flux = diagnose_two_room_face_flux(case, phi_relative)
+        if (room_flux["source_sha256"]["manifest.json"] != verified["manifest_sha256"]
+                or any(room_flux["source_sha256"][path] != sha
+                       for path, sha in result_hashes.items() if path in room_flux["source_sha256"])):
+            raise ValueError("room face-flux sources changed after solver evidence was recorded")
+        receipt["room_flux"] = room_flux
+        result_hashes.update({path: sha for path, sha in room_flux["source_sha256"].items()
+                              if path != "manifest.json"})
         receipt["vtk_assets_sha256"] = _hash_two_room_vtk_assets(case)
         receipt["result_sha256"] = result_hashes
         receipt["status"] = "executed_requires_engineering_review"

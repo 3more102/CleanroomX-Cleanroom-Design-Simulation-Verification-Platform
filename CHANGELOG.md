@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — native doorway flux and room balances — 2026-10-18
+
+- Reconstruct the generated two-room native mesh, verify complete room-cell tiling and doorway geometry, and sum original face `phi` with owner/neighbour orientation.
+- Bind topology/phi/manifest hashes in a new optional v2 run-receipt extension; recompute diagnostics during ProofGraph ingestion and reject changed or forged evidence. Older receipts keep doorway flow unavailable.
+- Add gross bidirectional transfer, signed net flow and both room balances to the GUI and CLI exports. Preserve nonzero imbalances without inventing acceptance criteria.
+- Test native mesh corruption, reversed numbering, source changes, receipt replay, exports and actual Tk rendering; extend the live Foundation v10 smoke gate. Per-room ventilation ACH and physical validation remain unassessed/blocked.
+
 ## Unreleased Release 3 — sync-vtk v3 analysis adapter — 2026-10-18
 
 - Route v3 snapshot stores through the shared solver-result analysis and export workflow, including GUI selection and the existing `analyze-results` CLI.

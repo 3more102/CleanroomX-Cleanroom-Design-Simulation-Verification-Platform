@@ -22,6 +22,7 @@ VIEWS = {
     "Solver residual history": "residual_history",
     "Two-room probe pressure history": "pressure_history",
     "Boundary airflow balance": "flow_balance",
+    "Two-room doorway transfer and balances": "doorway_flow",
     "Whole-domain inlet supply ACH": "air_change_rate",
 }
 
@@ -382,7 +383,11 @@ class CFDAnalysisExplorer(tk.Toplevel):
                            if d["residuals"] for p in d["residuals"]["samples"]}
         self.field_combo.configure(values=fields + sorted(residual_fields - set(fields)) + ["all"])
         from decimal import Decimal
-        times = sorted({s["time_name"] for s in snapshots}, key=lambda value: (Decimal(value), value))
+        recorded_times = {s["time_name"] for s in snapshots}
+        if self.case_var.get() in ("All cases", "two_room_case"):
+            recorded_times.update(session.report["room_flux"]["time_name"] for session in sessions
+                                  if "room_flux" in session.report)
+        times = sorted(recorded_times, key=lambda value: (Decimal(value), value))
         self.time_combo.configure(values=times)
         if self.time_var.get() not in times:
             self.time_var.set(times[-1] if times else "")
@@ -516,6 +521,8 @@ class CFDAnalysisExplorer(tk.Toplevel):
                     scope = region["label"] + ": box selects full cells by their centers"
                 elif value.get("kind") == "room_field_comparison":
                     scope = "Manifest-derived Room 1 / Room 2 masks; mesh bounds and room cell volumes verified"
+                elif value.get("kind") == "doorway_flow":
+                    scope = "Native face phi; positive net transfer is Room 1 → Room 2; balances are net outward"
                 else:
                     scope = "Whole mesh / recorded diagnostics"
                 native_runs = [s for s in self._selected_sessions() if s.report["mode"].startswith("native_")]

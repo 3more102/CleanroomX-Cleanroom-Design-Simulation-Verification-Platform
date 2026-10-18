@@ -20,6 +20,35 @@ def _wait(root, condition, seconds=8):
     pytest.fail("Timed out waiting for the real Tk analysis worker")
 
 
+def test_real_explorer_draws_native_doorway_transfer_with_signed_room_balances(tmp_path):
+    from test_cfd_room_flux import write_native_two_room_fixture, bind_fixture_receipt
+    from cleanroomx.cfd_result_analysis import analyze_two_room_results
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    case, _ = write_native_two_room_fixture(tmp_path)
+    receipt = tmp_path / "receipts/two_room_run_receipt.json"
+    bind_fixture_receipt(case, receipt)
+    explorer = CFDAnalysisExplorer(root, lambda: analyze_two_room_results(case, receipt))
+    try:
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy)
+        explorer.view_var.set("Two-room doorway transfer and balances")
+        explorer.draw_graph()
+        _wait(root, lambda: not explorer._busy)
+        assert explorer.current_graph["kind"] == "doorway_flow"
+        assert explorer.time_var.get() == "2"
+        assert explorer.current_graph["status"] == "computed_diagnostic"
+        assert len(explorer.figure.axes[0].patches) == 5
+        assert [p.get_height() for p in explorer.figure.axes[0].patches] == pytest.approx([.12,.02,.1,0,0], abs=1e-12)
+        assert "Native face phi" in explorer.provenance.cget("text")
+        assert "room_flux" in explorer.details.get("1.0", "end")
+    finally:
+        explorer._close()
+        root.destroy()
+
+
 def test_real_explorer_loads_async_draws_filters_and_shows_missing_data(tmp_path):
     pytest.importorskip("vtk")
     pytest.importorskip("matplotlib")

@@ -1,0 +1,28 @@
+{
+  "source": "SYNTHETIC native mesh and phi parser fixtures",
+  "capture": "actual Tk widgets and Matplotlib TkAgg",
+  "solver_executed": false,
+  "scientific_validation": "BLOCKED",
+  "source_sha256": {
+    "src/cleanroomx/cfd_room_flux.py": "678c35b107df0d26afd4476f33e0ae52fbef5680d94611577b62fba302571c35",
+    "src/cleanroomx/cfd_result_analysis.py": "df147674c09024b01852cdb3d5b40526293a6b419868ea0ca57e1587bdb9a257",
+    "src/cleanroomx/gui_cfd_analysis.py": "15addb42766d69713daa36c48746293f68412baa7c13427dfed5da3585216047",
+    "src/cleanroomx/cfd_analysis_export.py": "8a81969d229ae2a93ff6f60a6b2f6e8ff12f3b7c50c2ff2011a7c777a07d57a7",
+    "tests/test_cfd_room_flux.py": "d3cb4a58473bd7ba7aadba1c1693c50099df22b9803a2f430e7d099140ebc58b",
+    "scripts/capture_cfd_doorway_explorer.py": "5c1107eef09f96a6ee9c03adca9ac034bc1e844c9293e65e730595e0e18595df"
+  },
+  "captures": [
+    {
+      "path": "synthetic-native-doorway-1180x820.png",
+      "sha256": "6569914ca12f96eeb8ef9565701dc35d9e6de5b5bb3e5ef57c35fc29bab93882",
+      "width": 1180,
+      "height": 820
+    },
+    {
+      "path": "synthetic-native-doorway-1050x680.png",
+      "sha256": "a18491d48add84f2adc221321e5e250f0583025dbbfcea6563dc4690941f7195",
+      "width": 1050,
+      "height": 680
+    }
+  ]
+}

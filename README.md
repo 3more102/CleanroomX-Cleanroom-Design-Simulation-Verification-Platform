@@ -52,6 +52,7 @@ codes, privacy considerations, and limitations.
 ### Interactive solver-result analysis
 
 - Open **Analyze / graph results…** in the OpenFOAM workspace for verified native runtime-sync stores, or **Analyze results…** in the two-room panel.
+- Load `sync-vtk` v3 snapshot stores into the same analysis workspace while the original VTK source tree remains available; state, snapshot and VTK payload hashes are checked, but native OpenFOAM fields and solver execution are not verified. See [VTK snapshot analysis](docs/CFD_VTK_SNAPSHOT_ANALYSIS.md).
 - Load a complete nine-case OpenFOAM grid run with its configuration/resolution identities. Select the matching grid family and **Verify original OpenFOAM field files** to check native time/field bytes and attach hash-bound solver/mesh diagnostics.
 - Inspect volume-weighted speed, kinematic pressure, kelvin temperature and other recorded scalar/vector components; select a case and solver time for 2D cell slabs or interactive 3D cell samples.
 - Select signed `U_x`/`U_y`/`U_z`, choose a comparison run explicitly, or limit field statistics and spatial plots to a custom cell-center box. The **Region & statistics** tab reports selected cells, full-cell volume, mesh-volume coverage, means and ranges.

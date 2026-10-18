@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — sync-vtk v3 analysis adapter — 2026-10-18
+
+- Route v3 snapshot stores through the shared solver-result analysis and export workflow, including GUI selection and the existing `analyze-results` CLI.
+- Recheck state, snapshot, field-payload and source-VTK hashes; reconstruct explicit field-map identity and fail closed on source/snapshot mismatch.
+- Preserve volume-weighted field and spatial analysis while reporting missing mapped fields as unavailable. Solver execution, original native-field parity, residual/checkMesh evidence and physical validation remain unverified or `BLOCKED`.
+
 ## Unreleased Release 3 — native OpenFOAM grid analysis integration — 2026-10-18
 
 - Load complete nine-case Foundation v10 grid runs through the GUI, comparison picker and CLI, retaining configuration/resolution identities and missing-case findings.

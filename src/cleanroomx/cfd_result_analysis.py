@@ -121,16 +121,40 @@ def _load_cells(snapshot: dict, *, include_geometry: bool = False) -> dict:
     if sha != expected:
         raise ValueError("Synchronized VTK changed since verification")
     definitions = snapshot["field_definitions"]
-    field_map = {"schema_version": VTK_FIELD_MAP_SCHEMA, "fields": {
-        name: {"semantic": item["semantic"], "units": item["units"]}
-        for name, item in definitions.items()
-    }}
-    imported = import_vtk_case(source, field_map=field_map, recirculation_array=None,
-                               require_cell_velocity=True, include_geometry=include_geometry)
+    if "vtk_field_map" in snapshot:
+        field_map = snapshot["vtk_field_map"]
+    else:
+        field_map = {"schema_version": VTK_FIELD_MAP_SCHEMA, "fields": {
+            name: {"semantic": item["semantic"], "units": item["units"]}
+            for name, item in definitions.items()
+        }}
+    options = snapshot.get("vtk_import_options", {})
+    if type(options) is not dict:
+        raise ValueError("Recorded VTK import options must be an object")
+    imported = import_vtk_case(
+        source,
+        field_map=field_map,
+        contaminant_array=options.get("contaminant_array"),
+        temperature_array=options.get("temperature_array"),
+        temperature_units=options.get("temperature_units"),
+        recirculation_array=options.get("recirculation_array"),
+        require_cell_velocity=True,
+        include_geometry=include_geometry,
+    )
     if imported["source_sha256"] != expected or imported["mesh_cells"] != snapshot["cell_count"]:
         raise ValueError("Imported VTK identity/cell count differs from the verified snapshot")
-    if imported["unavailable_fields"]:
+    if imported["unavailable_fields"] and not snapshot.get("allow_unavailable_fields", False):
         raise ValueError("Recorded native fields are missing from the synchronized VTK")
+    if "stored_import_sha256" in snapshot:
+        import_payload = {
+            key: value for key, value in imported.items()
+            if key not in ("cell_centers_m", "mesh_bounds_m")
+        }
+        encoded = json.dumps(
+            import_payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        if hashlib.sha256(encoded).hexdigest() != snapshot["stored_import_sha256"]:
+            raise ValueError("Re-imported VTK fields differ from the hash-verified v3 snapshot payload")
     volumes = [cell["volume_m3"] for cell in imported["cells"]]
     values = {"speed": [math.hypot(*cell["velocity_m_s"]) for cell in imported["cells"]]}
     labels = {"speed": {"label": "Speed", "units": "m/s", "array_name": "U"}}
@@ -150,6 +174,14 @@ def _load_cells(snapshot: dict, *, include_geometry: bool = False) -> dict:
         else:
             values[name] = data["values"]
             labels[name] = definition
+    if imported["cells"] and "temperature_K" in imported["cells"][0]:
+        if "temperature_K" in values:
+            raise ValueError("A mapped field conflicts with the reserved temperature_K analysis key")
+        values["temperature_K"] = [cell["temperature_K"] for cell in imported["cells"]]
+        labels["temperature_K"] = {
+            "label": "Temperature", "units": "K",
+            "array_name": options.get("temperature_array"), "semantic": "declared_temperature_kelvin",
+        }
     for name, column in values.items():
         if not all(math.isfinite(value) for value in column):
             raise ValueError(f"Non-finite derived field {name}")
@@ -263,6 +295,14 @@ def analyze_synced_results(
     if candidate.is_symlink() or not candidate.is_dir():
         raise ValueError("Result directory must be a regular directory")
     root = candidate.resolve(strict=True)
+    if (root / "sync-state.json").exists() or (root / "sync-state.json").is_symlink():
+        if (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink():
+            raise ValueError("Result directory cannot mix native sync manifests with sync-vtk v3 state")
+        from .cfd_vtk_snapshot_analysis import analyze_vtk_snapshot_results
+        return analyze_vtk_snapshot_results(
+            root, simulation_id, case_directory=case_directory,
+            verify_native_sources=verify_native_sources,
+        )
     standalone = (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink()
     grid = not standalone and any((root / simulation_id / case).exists() or (root / simulation_id / case).is_symlink()
                                   for case in GRID_CASES)
@@ -432,6 +472,10 @@ def analyze_selected_result_store(
     if candidate.is_symlink() or not candidate.is_dir():
         raise ValueError("Result directory must be a regular directory")
     root = candidate.resolve(strict=True)
+    if (root / "sync-state.json").exists() or (root / "sync-state.json").is_symlink():
+        state, _ = _read_json(root / "sync-state.json", max_bytes=64 * 1024 * 1024)
+        return analyze_synced_results(root, state.get("simulation_id"), case_directory=case_directory,
+                                      verify_native_sources=verify_native_sources)
     if (root / "sync_manifest.json").exists() or (root / "sync_manifest.json").is_symlink():
         manifest, _ = _read_json(root / "sync_manifest.json", max_bytes=2 * 1024 * 1024)
         return analyze_synced_results(root, manifest.get("simulation_id"), case_directory=case_directory,

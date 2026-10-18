@@ -154,7 +154,7 @@ def build_parser():
     two_room_proofgraph.add_argument("case_directory")
     two_room_proofgraph.add_argument("receipt")
     two_room_proofgraph.add_argument("destination")
-    analysis=sub.add_parser("analyze-results",help="Analyze verified native sync-case, three-case or nine-case grid results")
+    analysis=sub.add_parser("analyze-results",help="Analyze native sync-case/grid results or sync-vtk v3 snapshots")
     analysis.add_argument("result_directory")
     analysis.add_argument("--simulation-id",required=True)
     analysis.add_argument("--case-directory",help="Matching native case, three-configuration bundle or nine-case grid family for log diagnostics")

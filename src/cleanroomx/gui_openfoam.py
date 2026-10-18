@@ -761,6 +761,10 @@ class OpenFOAMWorkspace(ttk.Frame):
             two_room_actions, text="Analyze results…", command=self._analyze_two_room,
         )
         self.two_room_analysis_button.pack(side="left", padx=4)
+        self.two_room_verified_button = ttk.Button(two_room_actions, text="Export verified diagnostics…", command=self._export_verified_diagnostics)
+        self.two_room_verified_button.pack(side="left", padx=4)
+        self.two_room_audit_button = ttk.Button(two_room_actions, text="Audit diagnostics…", command=self._audit_verified_diagnostics)
+        self.two_room_audit_button.pack(side="left", padx=4)
         ttk.Label(
             two_room,
             text="Synthetic diagnostic case; integrity can pass while validation remains BLOCKED.",
@@ -856,6 +860,8 @@ class OpenFOAMWorkspace(ttk.Frame):
             self.two_room_run_button,
             self.two_room_proofgraph_button,
             self.two_room_analysis_button,
+            self.two_room_verified_button,
+            self.two_room_audit_button,
         )
         self._bind_workflow_scroll(self._workflow_canvas)
 
@@ -885,6 +891,30 @@ class OpenFOAMWorkspace(ttk.Frame):
             self, lambda: analyze_two_room_results(case_directory, Path(receipt_directory) / "two_room_run_receipt.json"),
             on_proofgraph_loaded=self._on_proofgraph_loaded,
         )
+
+    def _export_verified_diagnostics(self) -> None:
+        case = self.two_room_case_directory_var.get().strip()
+        receipts = self.two_room_receipt_directory_var.get().strip()
+        if not case or not receipts:
+            messagebox.showerror("Two-room diagnostics", "Choose the case and receipt directory first.", parent=self)
+            return
+        parent = filedialog.askdirectory(title="Choose parent directory for new diagnostic export", parent=self)
+        if not parent:
+            return
+        output = Path(parent) / "two-room-verified-diagnostics"
+        if output.exists():
+            messagebox.showerror("Two-room diagnostics", "Output folder already exists; choose another parent.", parent=self)
+            return
+        command = [sys.executable, "-m", "cleanroomx.cfd_pipeline_cli", "two-room-verified-bundle",
+                   case, str(Path(receipts) / "two_room_run_receipt.json"), str(output)]
+        self._start_command("Export verified two-room diagnostics", command)
+
+    def _audit_verified_diagnostics(self) -> None:
+        directory = filedialog.askdirectory(title="Select diagnostic export to verify", parent=self)
+        if not directory:
+            return
+        command = [sys.executable, "-m", "cleanroomx.cfd_pipeline_cli", "two-room-bundle-audit", directory]
+        self._start_command("Audit diagnostic export hashes", command)
 
     def apply_theme(self, value: str) -> None:
         """Retheme native workbench surfaces without changing workflow state."""

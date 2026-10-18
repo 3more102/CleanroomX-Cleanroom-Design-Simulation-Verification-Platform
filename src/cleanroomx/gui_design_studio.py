@@ -190,7 +190,7 @@ class DesignStudioPanels:
             ("TOP", lambda: workspace.set_3d_view_preset("top")),
             ("FRONT", lambda: workspace.set_3d_view_preset("front")),
             ("ISO", lambda: workspace.set_3d_view_preset("iso")),
-            ("FIT", workspace.fit_3d),
+            ("FIT", workspace.fit_studio_3d),
         ):
             tk.Button(self.camera, text=title, command=action,
                       bg=_PANEL, fg=_CYAN, relief="flat",
@@ -231,7 +231,7 @@ class DesignStudioPanels:
             # Restore all rooms after Isolate Room without modifying geometry.
             self.workspace.show_all()
         self.workspace.set_workspace_mode("3d")
-        self.workspace.fit_3d()
+        self.workspace.fit_studio_3d()
         callback = getattr(self.workspace, "_on_studio_requested", None)
         if request_focus and callback is not None:
             callback()

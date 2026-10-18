@@ -173,8 +173,8 @@ class DesignStudioPanels:
         self.sidebar = tk.Frame(workspace._three_d_frame, bg="#0d1c2b")
         self.details = tk.Frame(self.sidebar, bg=_PANEL,
                                 highlightbackground=_CYAN, highlightthickness=2,
-                                padx=10, pady=9)
-        self.details.pack(fill="x", pady=(0, 12))
+                                padx=10, pady=11)
+        self.details.pack(fill="x", pady=(0, 18))
         tk.Label(self.details, text="SELECTED ROOM", bg=_PANEL, fg=_CYAN,
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
         self.room_name = tk.StringVar(value="No room")
@@ -185,7 +185,7 @@ class DesignStudioPanels:
                  anchor="w", font=("Segoe UI", 10, "bold")).pack(fill="x", pady=(4, 3))
         tk.Label(self.details, textvariable=self.room_details, bg=_PANEL,
                  fg=_MUTED, anchor="w", justify="left", wraplength=295,
-                 font=("Segoe UI", 9)).pack(fill="x")
+                 font=("Segoe UI", 9)).pack(fill="x", pady=(3, 8))
         tk.Label(self.details, textvariable=self.room_pressure,
                  bg=_PANEL, fg="#e7c17a", anchor="w", justify="left",
                  font=("Segoe UI", 9)).pack(fill="x", pady=(3, 0))
@@ -265,7 +265,7 @@ class DesignStudioPanels:
             width=230 if compact else 270,
         )
         self.sidebar.place(
-            relx=0.985, rely=0.015, anchor="ne",
+            relx=0.985, y=52 if compact else 120, anchor="ne",
             width=250 if compact else 330,
         )
         self.camera.place(relx=0.52, rely=0.985, anchor="s")

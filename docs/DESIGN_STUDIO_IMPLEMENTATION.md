@@ -64,8 +64,10 @@ cut-outs or proof of a manufacturable architectural model.
   screenshot taken from the **running application** using Pillow ImageGrab.
 - `tools/capture_design_studio_ci.py`: capture helper checks that the demo
   actually drew spatial room polygons before saving a screenshot.
-- The real screenshot is captured at the exact **1536×960** pixel size of
-  the user's reference. Check the pull request's latest workflow artifact.
+- The follow-up preview captures a **1920×1080** Full HD running application screenshot,
+  as required by the acceptance campaign. The original supplied reference can
+  have a different resolution; visual comparison must account for that rather
+  than claiming pixel-exact correspondence. Review the latest workflow artifact.
 - Full repository CI includes Python 3.11, 3.12 and 3.13 test matrices,
   Windows launcher smoke, and installed-wheel GUI smoke. Require all checks
   to pass for the latest revision before merging.
@@ -85,3 +87,12 @@ py -3.12 -m venv .venv
 
 If the separate worktree path already exists, select a different unused path.
 Do not reset, stash or overwrite the original checkout to review this branch.
+
+## Navigator parity follow-up
+
+The navigator cache now uses room position, length and width as well as identity,
+name and selection. Movement and equal-area aspect-ratio edits therefore refresh
+the miniature plan. An explicit **Restore all rooms** action clears isolation,
+and inspector pressure is labeled **Configured pressure** to avoid implying
+OpenFOAM-computed evidence. Acceptance status and verification gates are tracked
+in [`GUI_REFERENCE_PARITY.md`](GUI_REFERENCE_PARITY.md).

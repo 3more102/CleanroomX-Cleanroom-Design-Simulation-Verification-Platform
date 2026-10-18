@@ -168,3 +168,12 @@ def test_real_3d_scene_renders_camera_oriented_xyz_axis_widget(gui):
     gui.root.update()
     after = [ws.canvas_3d.coords(item) for item in ws.canvas_3d.find_withtag("studio-axis")[:2]]
     assert before != after
+
+def test_dark_engineering_legend_respects_studio_palette(gui):
+    gui.set_theme("dark", persist=False)
+    ws = gui.spatial_workspace
+    ws.redraw()
+    gui.root.update()
+    legend = ws.canvas_3d.find_withtag("overlay_legend")
+    assert legend
+    assert ws.canvas_3d.itemcget(legend[0], "fill") == ws._theme_palette["panel"]

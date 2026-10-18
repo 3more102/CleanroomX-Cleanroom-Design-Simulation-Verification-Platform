@@ -3979,6 +3979,26 @@ class CleanroomXApp:
             label = {"2d": "2D", "3d": "3D", "split": "Split"}[mode]
             self.workspace_status_var.set(f"Workspace: {label}")
 
+    def activate_reference_demo_studio(self) -> None:
+        """Present the bundled demonstration as an integrated Design Studio.
+
+        This method changes only in-memory presentation/selection. It does not
+        mutate the engineering project or permanently replace user UI settings.
+        The ordinary project-opening path keeps existing panel preferences.
+        """
+        self.set_theme("dark", persist=False)
+        self._activate_spatial_workspace("3d")
+        self.hide_navigator_panel()
+        self.hide_output_panel()
+        studio = self.spatial_workspace
+        studio.show_inspector()
+        studio.show_all()
+        rooms = studio.layout.get("rooms", [])
+        if rooms:
+            studio.select_item("room", str(rooms[0]["id"]), notify=True)
+        studio.set_3d_view_preset("iso")
+        self.root.after_idle(studio.fit_3d)
+
     def _activate_analysis_input_workspace(self) -> None:
         """Open the current analysis input editor without changing engineering data."""
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
@@ -7509,6 +7529,9 @@ def main(argv: list[str] | None = None) -> int:
     if project_path and not recovered_at_startup:
         try:
             app.load_project_path(project_path)
+            if args.demo and not args.smoke:
+                # Apply the immersive demo after the startup layout restore.
+                root.after_idle(app.activate_reference_demo_studio)
             if args.demo_results:
                 if args.smoke:
                     app.select_demo_plot_analysis()

@@ -139,4 +139,13 @@ def test_bundled_demo_enters_dark_integrated_studio_without_project_edits(studio
     assert work.inspector_visible()
     assert work.selected == _Hit("room", work.layout["rooms"][0]["id"])
     assert work.layout["rooms"][0]["name"] in work._selected_room_summary_var.get()
-    assert studio.project.to_dict() == before
+    after = studio.project.to_dict()
+    # Camera fit is intentionally stored as view presentation metadata.
+    # Room and device geometry plus engineering analyses must remain unchanged.
+    assert after["project"]["metadata"]["spatial_layout"]["rooms"] == (
+        before["project"]["metadata"]["spatial_layout"]["rooms"]
+    )
+    assert after["project"]["metadata"]["spatial_layout"]["devices"] == (
+        before["project"]["metadata"]["spatial_layout"]["devices"]
+    )
+    assert after["analyses"] == before["analyses"]

@@ -3457,18 +3457,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 return
 
     def focus_selected_room(self) -> bool:
-        """Fit the selected room in 3D without silently isolating other rooms."""
+        """Fit the selected room in both views and enter 3D studio mode."""
         if self.selected is None or self.selected.kind != "room":
             self._status_setter("Select a room to focus")
             return False
+        # Reuse the existing dual-camera fit rather than changing isolation
+        # state, which must remain under explicit user control.
         self.set_workspace_mode("3d")
-        previous_isolation = self._isolated_item
-        try:
-            self._isolated_item = _Hit("room", self.selected.item_id)
-            self.fit_3d()
-        finally:
-            self._isolated_item = previous_isolation
-        self.redraw()
+        if not self.fit_selected():
+            return False
         self._status_setter("Focused selected room in 3D")
         return True
 

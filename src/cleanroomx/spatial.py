@@ -3742,6 +3742,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._notify_view_status()
         canvas = self.canvas_3d
         canvas.delete("all")
+        studio_active = getattr(getattr(self, "_studio", None), "enabled", False)
+        if studio_active:
+            # Scene backdrop is display-only; room/model coordinates remain canonical.
+            cw, ch = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
+            for band in range(24):
+                portion = band / 23.0
+                color = "#{:02x}{:02x}{:02x}".format(
+                    round(19 - 7 * portion),
+                    round(43 - 21 * portion),
+                    round(66 - 34 * portion),
+                )
+                canvas.create_rectangle(
+                    0, band * ch / 24, cw + 1, (band + 1) * ch / 24 + 1,
+                    fill=color, outline=color, tags=("studio_backdrop",),
+                )
         if not self.layout["rooms"]:
             canvas.create_text(
                 max(1, canvas.winfo_width()) / 2,
@@ -3852,50 +3867,106 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
             )
             tag = f"room:{room['id']}"
-            stipple = "gray50" if (self._xray_3d.get() or studio_active) else ""
-            wall_stipple = "gray50" if self._xray_3d.get() else ""
+            stipple = "gray50" if self._xray_3d.get() else ""
             polygon_width = 3 if selected else (2 if hovered else 1)
-            canvas.create_polygon(
-                *sum(top, ()),
-                fill=fill,
-                outline=outline,
-                width=polygon_width,
-                stipple=stipple,
-                tags=(tag, "room3d"),
-            )
-            canvas.create_polygon(
-                *sum((base[1], base[2], top[2], top[1]), ()),
-                fill=studio_shade(fill, 0.88) if studio_active else "#6c7f92",
-                outline=outline,
-                width=polygon_width,
-                stipple=wall_stipple if studio_active else stipple,
-                tags=(tag, "room3d"),
-            )
-            canvas.create_polygon(
-                *sum((base[2], base[3], top[3], top[2]), ()),
-                fill=studio_shade(fill, 0.76) if studio_active else "#53687c",
-                outline=outline,
-                width=polygon_width,
-                stipple=wall_stipple if studio_active else stipple,
-                tags=(tag, "room3d"),
-            )
-            for start, end in zip(base, top):
-                canvas.create_line(
-                    *start, *end, fill=outline, width=1, tags=(tag, "room3d")
+            if studio_active:
+                # Roofless architectural cutaway. Render real room floors plus
+                # the two FAR walls, picked from the current camera azimuth.
+                # Near walls are omitted so openings/devices remain visible.
+                # This is a display choice, never a spatial-model mutation.
+                canvas.create_polygon(
+                    *sum(base, ()), fill=studio_shade(fill, 0.36),
+                    outline=outline, width=polygon_width,
+                    tags=(tag, "room3d", "studio_floor3d"),
                 )
-            if self._show_labels.get():
-                overlay_room = overlay_by_room[room["id"]]
-                overlay_text = (
-                    ""
-                    if overlay_mode == "none"
-                    else "\n" + str(overlay_room.get("label") or "")
+                azimuth = math.radians(self.layout["view"]["azimuth_deg"])
+                x_wall = (
+                    (base[0], base[3], top[3], top[0])
+                    if math.sin(azimuth) >= 0
+                    else (base[1], base[2], top[2], top[1])
                 )
-                canvas.create_text(
-                    *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"] + overlay_text,
-                    fill="#f0f6fc",
+                y_wall = (
+                    (base[0], base[1], top[1], top[0])
+                    if math.cos(azimuth) >= 0
+                    else (base[3], base[2], top[2], top[3])
+                )
+                for wall_index, wall in enumerate((x_wall, y_wall)):
+                    canvas.create_polygon(
+                        *sum(wall, ()), fill=studio_shade(
+                            fill, 1.0 if wall_index == 0 else 0.94
+                        ), outline=outline, width=polygon_width,
+                        stipple="gray75" if not self._xray_3d.get() else "gray50",
+                        tags=(tag, "room3d", "studio_wall3d"),
+                    )
+                for index, (start, end) in enumerate(zip(base, top)):
+                    canvas.create_line(
+                        *start, *end,
+                        fill=outline if selected or index == 0 else "#667b8d",
+                        dash=() if selected or index == 0 else (2, 5),
+                        width=2 if selected else 1, tags=(tag, "room3d"),
+                    )
+                for index in range(4):
+                    canvas.create_line(
+                        *top[index], *top[(index + 1) % 4],
+                        fill=outline if selected else "#7196ad",
+                        dash=() if selected else (2, 5),
+                        width=2 if selected else 1,
+                        tags=(tag, "room3d", "studio_top_rim"),
+                    )
+            else:
+                canvas.create_polygon(
+                    *sum(top, ()), fill=fill, outline=outline,
+                    width=polygon_width, stipple=stipple,
                     tags=(tag, "room3d"),
                 )
+                canvas.create_polygon(
+                    *sum((base[1], base[2], top[2], top[1]), ()),
+                    fill="#6c7f92", outline=outline, width=polygon_width,
+                    stipple=stipple, tags=(tag, "room3d"),
+                )
+                canvas.create_polygon(
+                    *sum((base[2], base[3], top[3], top[2]), ()),
+                    fill="#53687c", outline=outline, width=polygon_width,
+                    stipple=stipple, tags=(tag, "room3d"),
+                )
+                for start, end in zip(base, top):
+                    canvas.create_line(
+                        *start, *end, fill=outline, width=1,
+                        tags=(tag, "room3d"),
+                    )
+            if self._show_labels.get():
+                if studio_active:
+                    # Dark title chip anchored to a model-space wall edge.
+                    label_x, label_y = (
+                        self._project_3d((x0 + x1) / 2, y0, z1 + 0.10)
+                    )
+                    text_id = canvas.create_text(
+                        label_x, label_y, text=room["name"],
+                        fill="#f0f6fc", font=("Segoe UI", 10, "bold"),
+                        tags=(tag, "room3d", "studio_room_label"),
+                    )
+                    bbox = canvas.bbox(text_id)
+                    if bbox is not None:
+                        bg_id = canvas.create_rectangle(
+                            bbox[0] - 5, bbox[1] - 3,
+                            bbox[2] + 5, bbox[3] + 3,
+                            fill="#112134", outline="#507e98", width=1,
+                            tags=(tag, "room3d", "studio_label_background"),
+                        )
+                        canvas.tag_lower(bg_id, text_id)
+                else:
+                    overlay_room = overlay_by_room[room["id"]]
+                    overlay_text = (
+                        "" if overlay_mode == "none"
+                        else "\n" + str(overlay_room.get("label") or "")
+                    )
+                    canvas.create_text(
+                        *self._project_3d(
+                            (x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2
+                        ),
+                        text=room["name"] + overlay_text, fill="#f0f6fc",
+                        tags=(tag, "room3d"),
+                    )
 
         self._draw_relationships_3d(
             center_x_m=cx,

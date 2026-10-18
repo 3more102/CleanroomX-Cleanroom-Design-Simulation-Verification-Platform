@@ -39,6 +39,11 @@ def main() -> int:
         app.notebook.select(app.spatial_workspace)
         app.set_theme("dark", persist=False)
         app.spatial_workspace.studio_view()
+        # Initialization restores persisted geometry on an after_idle callback.
+        # Flush that callback first, then enforce capture dimensions.
+        root.update_idletasks()
+        root.update()
+        root.geometry("1920x1080+0+0")
         root.update_idletasks()
         root.update()
         dims = (root.winfo_width(), root.winfo_height())

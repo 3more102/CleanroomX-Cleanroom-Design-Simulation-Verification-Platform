@@ -141,3 +141,18 @@ def test_room_device_search_uses_shared_selection(gui):
     ws._studio_search_var.set("no such device")
     assert not ws.find_design_item()
     assert ws.selected.item_id == "ante"
+
+def test_guided_stage_tracks_design_and_inputs_instead_of_highlighting_run(gui):
+    gui.notebook.select(gui.spatial_workspace)
+    gui.root.update()
+    assert gui.workflow_design_button.cget("style") == "CX.Primary.TButton"
+    assert gui.workflow_run_button.cget("style") == "CX.Compact.TButton"
+
+    gui.notebook.select(gui.input_tab)
+    gui.root.update()
+    assert gui.workflow_input_button.cget("style") == "CX.Primary.TButton"
+    assert gui.workflow_design_button.cget("style") == "CX.Compact.TButton"
+
+    gui.notebook.select(gui.spatial_workspace)
+    gui.root.update()
+    assert gui.workflow_design_button.cget("style") == "CX.Primary.TButton"

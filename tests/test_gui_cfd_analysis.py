@@ -145,3 +145,31 @@ def test_refresh_rechecks_sources_and_invalidates_stale_figures(tmp_path):
     finally:
         explorer._close()
         root.destroy()
+
+
+def test_3d_orbit_controls_reorient_existing_solver_samples(tmp_path):
+    pytest.importorskip("vtk")
+    pytest.importorskip("matplotlib")
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display unavailable: {exc}")
+    root.withdraw()
+    write_sync_store(tmp_path / "store")
+    explorer = CFDAnalysisExplorer(root, lambda: analyze_synced_results(tmp_path / "store", "SYNTHETIC-run-a"))
+    try:
+        _wait(root, lambda: explorer.current_graph is not None and not explorer._busy)
+        explorer.view_var.set("3D cell samples")
+        explorer.case_var.set("configuration_1")
+        explorer.time_var.set("10")
+        explorer.draw_graph()
+        _wait(root, lambda: not explorer._busy)
+        assert explorer.current_graph["kind"] == "cell_3d"
+        explorer.azimuth_var.set(35)
+        explorer.elevation_var.set(42)
+        explorer._rotate_3d()
+        assert explorer.figure.axes[0].azim == pytest.approx(35)
+        assert explorer.figure.axes[0].elev == pytest.approx(42)
+    finally:
+        explorer._close()
+        root.destroy()

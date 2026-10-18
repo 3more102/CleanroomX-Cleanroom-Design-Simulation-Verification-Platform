@@ -4223,16 +4223,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         if mode == "none":
             return
         x0, y0 = 12, 12
+        palette = self._theme_palette
         width = 188
         if mode == "status":
             height = 104
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + height,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=palette["panel"], outline=palette["border"], tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text="Verification Status", fill="#0f172a",
+                text="Verification Status", fill=palette["text"],
                 tags=("overlay_legend",),
             )
             for index, (label, fill) in enumerate(
@@ -4250,7 +4251,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
                 canvas.create_text(
                     x0 + 28, y + 5, anchor="w",
-                    text=label, fill="#334155", tags=("overlay_legend",),
+                    text=label, fill=palette["muted"], tags=("overlay_legend",),
                 )
         else:
             minimum = overlay.get("minimum")
@@ -4259,11 +4260,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             title = str(overlay.get("title") or mode.title())
             canvas.create_rectangle(
                 x0, y0, x0 + width, y0 + 64,
-                fill="#ffffff", outline="#94a3b8", tags=("overlay_legend",),
+                fill=palette["panel"], outline=palette["border"], tags=("overlay_legend",),
             )
             canvas.create_text(
                 x0 + 8, y0 + 8, anchor="nw",
-                text=title, fill="#0f172a", tags=("overlay_legend",),
+                text=title, fill=palette["text"], tags=("overlay_legend",),
             )
             if isinstance(minimum, (int, float)) and isinstance(maximum, (int, float)):
                 suffix = f" {unit}" if unit else ""
@@ -4272,7 +4273,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = "No result values available"
             canvas.create_text(
                 x0 + 8, y0 + 34, anchor="nw",
-                text=text, fill="#334155", tags=("overlay_legend",),
+                text=text, fill=palette["muted"], tags=("overlay_legend",),
             )
         canvas.tag_raise("overlay_legend")
 

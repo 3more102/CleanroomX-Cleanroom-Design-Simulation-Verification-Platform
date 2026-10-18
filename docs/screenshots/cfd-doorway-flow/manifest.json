@@ -8,7 +8,7 @@
     "src/cleanroomx/cfd_result_analysis.py": "df147674c09024b01852cdb3d5b40526293a6b419868ea0ca57e1587bdb9a257",
     "src/cleanroomx/gui_cfd_analysis.py": "15addb42766d69713daa36c48746293f68412baa7c13427dfed5da3585216047",
     "src/cleanroomx/cfd_analysis_export.py": "8a81969d229ae2a93ff6f60a6b2f6e8ff12f3b7c50c2ff2011a7c777a07d57a7",
-    "tests/test_cfd_room_flux.py": "d3cb4a58473bd7ba7aadba1c1693c50099df22b9803a2f430e7d099140ebc58b",
+    "tests/test_cfd_room_flux.py": "809c57cfade79741a7200e99d417eb6586e8319bfaf77249f92eea238f435386",
     "scripts/capture_cfd_doorway_explorer.py": "5c1107eef09f96a6ee9c03adca9ac034bc1e844c9293e65e730595e0e18595df"
   },
   "captures": [

@@ -223,6 +223,7 @@ def test_self_rehashed_receipt_cannot_forge_room_flux(tmp_path, mutation):
 
 
 def test_room_flux_analysis_graph_and_export_keep_exact_native_sources(tmp_path):
+    pytest.importorskip("matplotlib")
     from cleanroomx.cfd_analysis_export import export_analysis_bundle
     from cleanroomx.cfd_result_analysis import analyze_two_room_results, build_analysis_graph
     case, _ = write_native_two_room_fixture(tmp_path)

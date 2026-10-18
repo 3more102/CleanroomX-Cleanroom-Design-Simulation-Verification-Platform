@@ -105,7 +105,8 @@ def test_studio_view_and_focus_are_real_camera_and_selection_commands(app):
     app.root.update()
     assert workspace.inspector_visible()
     assert workspace._workspace_mode.get() == "3d"
-    assert app.theme_var.get() == "dark"
+    assert app.theme_var.get() == "studio"
+    assert workspace.canvas_3d.cget("background") == "#061b2b"
     assert workspace.canvas_3d.winfo_ismapped()
     assert workspace.room_navigator.winfo_ismapped()
     assert workspace.select_item("device", "ffu-process")

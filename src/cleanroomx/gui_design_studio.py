@@ -212,16 +212,21 @@ class DesignStudioPanels:
 
         self.camera = tk.Frame(workspace._three_d_frame, bg=_PANEL,
                                highlightbackground=_BORDER, highlightthickness=1)
+        self.zoom_percent = tk.StringVar(value="100%")
         for title, action in (
             ("TOP", lambda: self._set_camera_preset("top")),
             ("FRONT", lambda: self._set_camera_preset("front")),
             ("ISO", lambda: self._set_camera_preset("iso")),
-            ("FIT", workspace.fit_studio_3d),
         ):
             tk.Button(self.camera, text=title, command=action,
                       bg=_PANEL, fg=_CYAN, relief="flat",
                       activebackground="#25465e", activeforeground=_TEXT,
                       font=("Segoe UI", 8, "bold"), padx=9, pady=5).pack(side="left")
+        tk.Label(
+            self.camera, textvariable=self.zoom_percent,
+            bg=_PANEL, fg=_CYAN,
+            font=("Segoe UI", 8, "bold"), padx=9, pady=5,
+        ).pack(side="left")
 
         # Match the reference: search belongs on the design command strip,
         # while Studio/View/Inspector actions belong on the second row.

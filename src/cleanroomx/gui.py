@@ -2736,6 +2736,7 @@ class CleanroomXApp:
             on_redo_requested=self.redo_project_edit,
             on_selection_change=self._on_workspace_selection_change,
             on_view_status_change=self.view_status_var.set,
+            on_studio_requested=lambda: self.set_focus_workspace(True),
         )
         self.notebook.add(self.spatial_workspace, text="Design")
 
@@ -7461,6 +7462,19 @@ def main(argv: list[str] | None = None) -> int:
         root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0
+
+    if args.demo and not recovered_at_startup:
+        # Apply after the per-user sash restore scheduled during application init.
+        # Studio is the initial presentation for the bundled demo, without
+        # changing any analysis/project content or removing advanced controls.
+        def open_demo_studio() -> None:
+            app.notebook.select(app.spatial_workspace)
+            app.set_theme("dark", persist=False)
+            app.spatial_workspace.set_workspace_mode("3d")
+            app.set_focus_workspace(True)
+            app.spatial_workspace.fit_3d()
+
+        root.after_idle(open_demo_studio)
 
     root.mainloop()
     return 0

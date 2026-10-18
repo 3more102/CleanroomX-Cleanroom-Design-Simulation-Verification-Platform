@@ -2565,7 +2565,7 @@ class CleanroomXApp:
             text="1  Design",
             width=9,
             style="CX.Compact.TButton",
-            command=lambda: self._activate_spatial_workspace("split"),
+            command=lambda: self._activate_spatial_workspace("3d"),
         )
         self.workflow_design_button.pack(side="left", padx=1)
         self.workflow_input_button = ttk.Button(
@@ -2588,7 +2588,7 @@ class CleanroomXApp:
             workflowbar,
             text="4  Run",
             width=9,
-            style="CX.Primary.TButton",
+            style="CX.Compact.TButton",
             command=self.run_current,
         )
         self.workflow_run_button.pack(side="left", padx=1)
@@ -2605,9 +2605,19 @@ class CleanroomXApp:
             text="6  Report",
             width=9,
             style="CX.Compact.TButton",
-            command=self.export_project_engineering_dossier,
+            command=self._guided_report,
         )
         self.workflow_report_button.pack(side="left", padx=1)
+        self._guided_stage_buttons = {
+            "design": self.workflow_design_button,
+            "inputs": self.workflow_input_button,
+            "validate": self.workflow_validate_button,
+            "run": self.workflow_run_button,
+            "verify": self.workflow_verify_button,
+            "report": self.workflow_report_button,
+        }
+        self._guided_stage = ""
+        self._set_guided_workflow_stage("design")
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.main_panes = panes
@@ -2710,6 +2720,8 @@ class CleanroomXApp:
         self.workspace_panes.add(workspace_host, weight=5)
         self.notebook = ttk.Notebook(workspace_host)
         self.notebook.pack(fill="both", expand=True)
+        self.notebook.bind("<<NotebookTabChanged>>",
+                           self._on_guided_workspace_changed, add="+")
 
         self.start_center = StartCenter(
             self.notebook,
@@ -3906,7 +3918,26 @@ class CleanroomXApp:
         if self.import_ifc_spatial_layout():
             self._activate_spatial_workspace("split")
 
+    def _set_guided_workflow_stage(self, stage: str) -> None:
+        """Highlight the operator's actual workflow stage, not a fixed Run CTA."""
+        if stage not in self._guided_stage_buttons:
+            raise ValueError(f"Unsupported guided workflow stage: {stage}")
+        self._guided_stage = stage
+        for name, button in self._guided_stage_buttons.items():
+            button.configure(
+                style="CX.Primary.TButton" if name == stage else "CX.Compact.TButton"
+            )
+
+    def _on_guided_workspace_changed(self, _event=None) -> None:
+        """Keep direct notebook navigation and guided workflow state consistent."""
+        active = self.notebook.select()
+        if active == str(self.spatial_workspace):
+            self._set_guided_workflow_stage("design")
+        elif active == str(self.input_tab):
+            self._set_guided_workflow_stage("inputs")
+
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:
+        self._set_guided_workflow_stage("design")
         if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
             self.notebook.select(self.spatial_workspace)
         if mode is not None and hasattr(self, "spatial_workspace"):
@@ -3916,12 +3947,14 @@ class CleanroomXApp:
 
     def _activate_analysis_input_workspace(self) -> None:
         """Open the current analysis input editor without changing engineering data."""
+        self._set_guided_workflow_stage("inputs")
         if hasattr(self, "notebook") and hasattr(self, "input_tab"):
             self.notebook.select(self.input_tab)
             self.workspace_status_var.set("Workspace: Analysis Inputs")
 
     def _guided_save_and_verify(self) -> None:
         """Save the exact project state required by canonical verification, then verify."""
+        self._set_guided_workflow_stage("verify")
         if self._running:
             messagebox.showwarning(
                 "Analysis running",
@@ -3937,6 +3970,11 @@ class CleanroomXApp:
             self.status_var.set("Save required before verification")
             return
         self.run_project_requirements_verification()
+
+    def _guided_report(self) -> None:
+        """Keep the report step visible while invoking the existing dossier export."""
+        self._set_guided_workflow_stage("report")
+        self.export_project_engineering_dossier()
 
     def _add_text_tab(
         self,
@@ -6906,6 +6944,7 @@ class CleanroomXApp:
             )
 
     def validate_current(self) -> None:
+        self._set_guided_workflow_stage("validate")
         try:
             analysis = self._commit_editor()
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
@@ -6920,6 +6959,7 @@ class CleanroomXApp:
     def run_current(self) -> None:
         if self._running:
             return
+        self._set_guided_workflow_stage("run")
         try:
             analysis = self._commit_editor()
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())

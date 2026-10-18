@@ -277,6 +277,13 @@ class DesignStudioPanels:
                 row.pack_forget()
 
     def _select_room(self, room_id: str):
+        isolated = self.workspace._isolated_item
+        if isolated is not None and (
+            isolated.kind != "room" or isolated.item_id != room_id
+        ):
+            # Selecting a different room should not leave it invisible because
+            # an earlier isolation filter is still active.
+            self.workspace.show_all()
         self.workspace.select_item("room", room_id, notify=True)
 
     def _draw_mini_plan(self, rooms, selected_id):
@@ -312,6 +319,8 @@ class DesignStudioPanels:
         snapshot = studio_snapshot(self.workspace.layout, self._active_room_id())
         row = snapshot["selected_room"]
         if row is not None:
+            if self.workspace._isolated_item is not None:
+                self.workspace.show_all()
             self._select_room(row["id"])
             self.workspace.focus_room_3d(row["id"])
 

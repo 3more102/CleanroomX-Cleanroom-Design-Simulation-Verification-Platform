@@ -1691,6 +1691,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             value="Select a room in the viewport or Room Navigator"
         )
         self._placed_devices_summary_var = tk.StringVar(value="No placed devices")
+        self._studio_search_var = tk.StringVar(value="")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -1854,6 +1855,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             overlaybar,
             textvariable=self._overlay_summary_var,
         ).pack(side="left", padx=(12, 0))
+        ttk.Button(
+            overlaybar, text="Find", command=self.find_studio_item,
+        ).pack(side="right", padx=(3, 0))
+        studio_search_entry = ttk.Entry(
+            overlaybar, textvariable=self._studio_search_var, width=23,
+        )
+        studio_search_entry.pack(side="right", padx=(5, 0))
+        studio_search_entry.bind("<Return>", lambda event: self.find_studio_item())
+        ttk.Label(overlaybar, text="Room/device search").pack(side="right")
 
         studio_cards = ttk.Frame(self, padding=(8, 2, 8, 5))
         studio_cards.pack(fill="x")
@@ -2266,6 +2276,41 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.show_inspector()
         self.set_workspace_mode("3d")
         self.fit_3d()
+
+    def find_studio_item(self) -> bool:
+        """Select a real model room/device by ID, name or device type.
+
+        Repeated Find advances through matches rather than returning a
+        permanently fixed result. Searching never mutates project geometry.
+        """
+        query = self._studio_search_var.get().strip().casefold()
+        if not query:
+            self._status_setter("Enter a room or device search term")
+            return False
+        matches = [
+            _Hit(kind, item["id"])
+            for kind, collection in (
+                ("room", self.layout["rooms"]), ("device", self.layout["devices"])
+            )
+            for item in collection
+            if any(
+                query in str(item.get(field) or "").casefold()
+                for field in ("id", "name", "type")
+            )
+        ]
+        if not matches:
+            self._status_setter(f"No room/device found for: {query}")
+            return False
+        index = (
+            (matches.index(self.selected) + 1) % len(matches)
+            if self.selected in matches else 0
+        )
+        match = matches[index]
+        self.select_item(match.kind, match.item_id, notify=True)
+        self._status_setter(
+            f"Found {match.kind} {index + 1}/{len(matches)}: {match.item_id}"
+        )
+        return True
 
     def focus_selected_room(self) -> None:
         """Focus the room represented by a room or placed-device selection."""
@@ -2709,6 +2754,13 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _draw_room_navigator(self) -> None:
         """Live, clickable mini-plan; model geometry is never altered."""
         canvas = self.room_navigator
+        if (
+            self.canvas_3d.winfo_width() < 300
+            or self.canvas_3d.winfo_height() < 230
+        ):
+            canvas.place_forget()
+        else:
+            canvas.place(relx=0.02, rely=0.98, anchor="sw")
         canvas.delete("all")
         palette = self._theme_palette
         width = max(1, canvas.winfo_width())

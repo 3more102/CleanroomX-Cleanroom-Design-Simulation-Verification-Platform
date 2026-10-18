@@ -357,6 +357,7 @@ class DesignStudioPanels:
             # Selecting a different room should not leave it invisible because
             # an earlier isolation filter is still active.
             self.workspace.show_all()
+            self.workspace.fit_studio_3d()
         self.workspace.select_item("room", room_id, notify=True)
 
     def _draw_mini_plan(self, rooms, selected_id):
@@ -426,7 +427,15 @@ class DesignStudioPanels:
                                  ("device", self.workspace.layout["devices"])):
             for item in collection:
                 if text in str(item.get("name", "")).casefold():
-                    self.workspace.select_item(kind, str(item["id"]), notify=True)
+                    if kind == "room":
+                        self._select_room(str(item["id"]))
+                    else:
+                        # A device search must reveal targets outside a previous
+                        # isolation filter before selecting their canvas markers.
+                        if self.workspace._isolated_item is not None:
+                            self.workspace.show_all()
+                            self.workspace.fit_studio_3d()
+                        self.workspace.select_item("device", str(item["id"]), notify=True)
                     return
         self.workspace._status_setter("No matching room or device")
 

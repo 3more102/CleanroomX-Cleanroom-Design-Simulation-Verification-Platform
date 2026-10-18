@@ -3931,9 +3931,11 @@ class CleanroomXApp:
     def _on_guided_workspace_changed(self, _event=None) -> None:
         """Keep direct notebook navigation and guided workflow state consistent."""
         active = self.notebook.select()
-        if active == str(self.spatial_workspace):
+        spatial = getattr(self, "spatial_workspace", None)
+        inputs = getattr(self, "input_tab", None)
+        if spatial is not None and active == str(spatial):
             self._set_guided_workflow_stage("design")
-        elif active == str(self.input_tab):
+        elif inputs is not None and active == str(inputs):
             self._set_guided_workflow_stage("inputs")
 
     def _activate_spatial_workspace(self, mode: str | None = None) -> None:

@@ -126,6 +126,8 @@ def test_gui_focus_isolate_restore_and_studio_view(gui):
     gui.root.update()
     assert ws._workspace_mode.get() == "3d"
     assert ws.inspector_visible()
+    assert not gui.navigator_panel_visible_var.get()
+    assert not gui.output_panel_visible_var.get()
 
 
 def test_room_device_search_uses_shared_selection(gui):

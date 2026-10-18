@@ -136,6 +136,8 @@ def test_bundled_demo_enters_dark_integrated_studio_without_project_edits(studio
     assert work._workspace_mode.get() == "3d"
     assert not studio.navigator_panel_visible_var.get()
     assert not studio.output_panel_visible_var.get()
+    assert not studio._paned_contains(studio.main_panes, studio.navigator_panel)
+    assert not studio._paned_contains(studio.workspace_panes, studio.output_panel)
     assert work.inspector_visible()
     assert work.selected == _Hit("room", work.layout["rooms"][0]["id"])
     assert work.layout["rooms"][0]["name"] in work._selected_room_summary_var.get()

@@ -8,7 +8,8 @@ import tkinter as tk
 import pytest
 
 from cleanroomx.gui_design_studio import (
-    studio_snapshot, STUDIO_ROOM_COLORS, studio_shade, studio_blend,
+    studio_snapshot, studio_nav_signature, STUDIO_ROOM_COLORS,
+    studio_shade, studio_blend,
 )
 from cleanroomx.gui import CleanroomXApp, bundled_demo_project_path
 
@@ -48,6 +49,31 @@ def test_studio_snapshot_real_geometry_and_device_ownership():
 
 def test_studio_snapshot_empty_and_missing_selection():
     assert studio_snapshot({"rooms": [], "devices": []})["selected_room"] is None
+
+
+def test_navigator_signature_detects_translation_and_area_preserving_resize():
+    layout = {
+        "rooms": [
+            {"id": "r1", "name": "Process", "x_m": 0, "y_m": 0,
+             "length_m": 6, "width_m": 5, "height_m": 3},
+            {"id": "r2", "name": "Ante", "x_m": 7, "y_m": 0,
+             "length_m": 4, "width_m": 3, "height_m": 3},
+        ],
+        "devices": [],
+    }
+    rooms = studio_snapshot(layout)["rooms"]
+    initial = studio_nav_signature(rooms, "r1")
+    assert initial == studio_nav_signature(rooms, "r1")
+    assert initial != studio_nav_signature(rooms, "r2")
+    assert initial != studio_nav_signature(list(reversed(rooms)), "r1")
+    moved = copy.deepcopy(rooms)
+    moved[0]["x_m"] += 1.0
+    assert studio_nav_signature(moved, "r1") != initial
+    resized = copy.deepcopy(rooms)
+    resized[0]["length_m"] = 10.0
+    resized[0]["width_m"] = 3.0  # same 30 m², different geometry
+    assert resized[0]["length_m"] * resized[0]["width_m"] == 30
+    assert studio_nav_signature(resized, "r1") != initial
 
 
 def test_live_studio_selection_metrics_and_real_3d(tmp_path):
@@ -90,6 +116,17 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.selected.item_id == str(room["id"])
         assert studio.room_name.get() == room["name"]
         assert application.project.to_dict() == before
+        assert studio.room_pressure.get().startswith("Layout pressure (not CFD):")
+        # Moving a room must invalidate the mini-map even when floor area stays fixed.
+        moved_room = workspace.layout["rooms"][0]
+        previous_x = moved_room["x_m"]
+        old_signature = studio._nav_signature
+        moved_room["x_m"] = previous_x + 0.25
+        studio.update()
+        assert studio._nav_signature != old_signature
+        moved_room["x_m"] = previous_x
+        studio.update()
+        assert studio._nav_signature == old_signature
         original_rooms = copy.deepcopy(workspace.layout["rooms"])
         original_devices = copy.deepcopy(workspace.layout["devices"])
         original_view = copy.deepcopy(workspace.layout["view"])
@@ -98,6 +135,10 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         assert workspace.layout["rooms"] == original_rooms
         assert workspace.layout["devices"] == original_devices
         assert "3D focus:" in application.status_var.get()
+        studio.isolate_room()
+        assert workspace._isolated_item.item_id == str(room["id"])
+        studio.restore_all_rooms()
+        assert workspace._isolated_item is None
         studio.isolate_room()
         assert workspace._isolated_item.item_id == str(room["id"])
         other = workspace.layout["rooms"][0]

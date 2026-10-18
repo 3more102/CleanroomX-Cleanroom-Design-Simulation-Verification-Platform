@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .gui_theme import theme_palette
-from .gui_design_studio import DesignStudioPanels, STUDIO_ROOM_COLORS
+from .gui_design_studio import DesignStudioPanels, STUDIO_ROOM_COLORS, studio_shade
 from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
@@ -3853,6 +3853,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             tag = f"room:{room['id']}"
             stipple = "gray50" if (self._xray_3d.get() or studio_active) else ""
+            wall_stipple = "gray50" if self._xray_3d.get() else ""
             polygon_width = 3 if selected else (2 if hovered else 1)
             canvas.create_polygon(
                 *sum(top, ()),
@@ -3864,18 +3865,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill=fill if studio_active else "#6c7f92",
+                fill=studio_shade(fill, 0.88) if studio_active else "#6c7f92",
                 outline=outline,
                 width=polygon_width,
-                stipple=stipple,
+                stipple=wall_stipple if studio_active else stipple,
                 tags=(tag, "room3d"),
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill=fill if studio_active else "#53687c",
+                fill=studio_shade(fill, 0.76) if studio_active else "#53687c",
                 outline=outline,
                 width=polygon_width,
-                stipple=stipple,
+                stipple=wall_stipple if studio_active else stipple,
                 tags=(tag, "room3d"),
             )
             for start, end in zip(base, top):

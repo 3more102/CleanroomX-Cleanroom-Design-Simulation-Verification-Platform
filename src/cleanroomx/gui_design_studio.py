@@ -44,6 +44,8 @@ def studio_snapshot(layout: dict, selected_room_id: str | None = None) -> dict[s
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "x_m": float(room.get("x_m", 0.0)),
+            "y_m": float(room.get("y_m", 0.0)),
             "area_m2": length * width,
             "volume_m3": length * width * height,
             "pressure_pa": room.get("pressure_pa"),
@@ -114,6 +116,9 @@ class DesignStudioPanels:
         tk.Label(self.nav, text="ROOM NAVIGATOR", bg=_PANEL,
                  fg=_CYAN, font=("Segoe UI", 9, "bold")).pack(
                      fill="x", anchor="w")
+        self.mini_plan = tk.Canvas(self.nav, height=100, bg="#102133",
+                                   highlightthickness=0, cursor="hand2")
+        self.mini_plan.pack(fill="x", pady=(6, 1))
         self.nav_list = tk.Frame(self.nav, bg=_PANEL)
         self.nav_list.pack(fill="both", expand=True, pady=(8, 2))
         tk.Label(self.nav, text="Click a room to select", bg=_PANEL,
@@ -207,6 +212,35 @@ class DesignStudioPanels:
     def _select_room(self, room_id: str):
         self.workspace.select_item("room", room_id, notify=True)
 
+    def _draw_mini_plan(self, rooms, selected_id):
+        canvas = self.mini_plan
+        canvas.delete("all")
+        if not rooms:
+            return
+        min_x = min(r["x_m"] for r in rooms)
+        min_y = min(r["y_m"] for r in rooms)
+        span_x = max(r["x_m"] + r["length_m"] for r in rooms) - min_x
+        span_y = max(r["y_m"] + r["width_m"] for r in rooms) - min_y
+        span_x = max(1.0, span_x)
+        span_y = max(1.0, span_y)
+        scale = min(204.0 / span_x, 78.0 / span_y)
+        for index, room in enumerate(rooms, 1):
+            x0 = 7 + (room["x_m"] - min_x) * scale
+            y0 = 10 + (room["y_m"] - min_y) * scale
+            x1 = x0 + room["length_m"] * scale
+            y1 = y0 + room["width_m"] * scale
+            tag = "floorplan:" + room["id"]
+            canvas.create_rectangle(
+                x0, y0, x1, y1, fill=room["color"],
+                outline="#f0f8ff" if room["id"] == selected_id else "#3c6981",
+                width=3 if room["id"] == selected_id else 1, tags=(tag,),
+            )
+            canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2,
+                               text=str(index), fill="#172235",
+                               font=("Segoe UI", 10, "bold"), tags=(tag,))
+            canvas.tag_bind(tag, "<Button-1>",
+                            lambda _event, rid=room["id"]: self._select_room(rid))
+
     def focus_room(self):
         snapshot = studio_snapshot(self.workspace.layout, self._active_room_id())
         row = snapshot["selected_room"]
@@ -270,6 +304,7 @@ class DesignStudioPanels:
             for child in self.nav_list.winfo_children():
                 child.destroy()
             self.nav_buttons.clear()
+            self._draw_mini_plan(snapshot["rooms"], selected_id)
             for index, room in enumerate(snapshot["rooms"], 1):
                 chosen = room["id"] == selected_id
                 color = room["color"]

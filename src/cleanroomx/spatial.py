@@ -3115,6 +3115,32 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter("3D model fitted to visible geometry")
         self._draw_3d()
 
+    def fit_studio_3d(self) -> None:
+        """Frame all visible room geometry inside the Studio's inset panels."""
+        points = self._visible_3d_points()
+        if not points:
+            self._status_setter("No visible 3D geometry to fit")
+            return
+        zoom, pan_x, pan_y = fit_3d_view(
+            points,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            projection_mode=self.layout["view"].get(
+                "projection_mode", "orthographic"
+            ),
+            # Original Fit uses 10% padding; reserve more space for the
+            # model-backed navigator and selected-room inspector.
+            padding_fraction=0.19,
+            max_zoom=5.0,
+        )
+        self.layout["view"]["zoom_3d"] = zoom
+        self.layout["view"]["pan_3d_x"] = pan_x
+        self.layout["view"]["pan_3d_y"] = pan_y
+        self._status_setter("Design Studio: model fitted")
+        self._draw_3d()
+
     def focus_room_3d(self, room_id: str) -> bool:
         """Fit a single canonical room in the real 3D viewport (view-only)."""
         room = next(

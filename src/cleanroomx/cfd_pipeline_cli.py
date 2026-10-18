@@ -166,11 +166,27 @@ def build_parser():
     two_room_analysis.add_argument("case_directory")
     two_room_analysis.add_argument("receipt")
     two_room_analysis.add_argument("--output",required=True)
+    verified_bundle=sub.add_parser("two-room-verified-bundle",help="Export receipt-bound two-room SVG diagnostics (separate from explorer graphs)")
+    verified_bundle.add_argument("case_directory")
+    verified_bundle.add_argument("receipt")
+    verified_bundle.add_argument("output_directory")
+    bundle_audit=sub.add_parser("two-room-bundle-audit",help="Verify exported two-room diagnostic bundle file hashes")
+    bundle_audit.add_argument("directory")
     return parser
 
 @cli_error_boundary("cleanroomx-cfd-pipeline")
 def main():
     args=build_parser().parse_args()
+    if args.command=="two-room-verified-bundle":
+        from .cfd_two_room_analysis import export_two_room_analysis
+        report=export_two_room_analysis(args.case_directory,args.receipt,args.output_directory)
+        print(dumps_strict_json(report))
+        return 0
+    if args.command=="two-room-bundle-audit":
+        from .cfd_analysis_bundle import verify_analysis_bundle
+        report=verify_analysis_bundle(args.directory)
+        print(dumps_strict_json(report))
+        return 0
     if args.command in ("analyze-results", "two-room-analyze"):
         from .cfd_result_analysis import analyze_synced_results, analyze_two_room_results, build_analysis_graph
         from .cfd_analysis_export import export_analysis_bundle

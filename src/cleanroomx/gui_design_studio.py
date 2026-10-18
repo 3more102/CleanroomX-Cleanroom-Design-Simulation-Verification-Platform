@@ -420,7 +420,12 @@ class DesignStudioPanels:
         current = snapshot["selected_room"]
         selected_id = current["id"] if current else None
         signature = (
-            tuple((r["id"], r["name"], r["area_m2"]) for r in snapshot["rooms"]),
+            # Movement or resizing can preserve floor area; include full
+            # plan geometry so the miniature navigator is never left stale.
+            tuple((
+                r["id"], r["name"], r["x_m"], r["y_m"],
+                r["length_m"], r["width_m"], r["color"],
+            ) for r in snapshot["rooms"]),
             selected_id,
         )
         if signature != self._nav_signature:
@@ -466,7 +471,7 @@ class DesignStudioPanels:
             f'Volume {current["volume_m3"]:.1f} m³\n'
             f'Placed devices: {current["devices"]}'
         )
-        self.room_pressure.set(f'Pressure: {pressure_text}')
+        self.room_pressure.set(f'Configured pressure: {pressure_text}')
         counts = current["device_counts"]
         self.room_devices.set(
             f'{counts["ffu"]} FFU           {counts["supply"]} Supply\n'

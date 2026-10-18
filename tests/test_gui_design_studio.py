@@ -71,7 +71,7 @@ def test_navigator_signature_tracks_movement_and_equal_area_resize():
     assert studio_navigator_signature(rotated_footprint["rooms"], "r1") != before
 
 
-def test_live_studio_selection_metrics_and_real_3d(tmp_path):
+def test_live_studio_selection_metrics_and_real_3d(tmp_path, monkeypatch):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -146,6 +146,29 @@ def test_live_studio_selection_metrics_and_real_3d(tmp_path):
         studio.nav_buttons[str(other["id"])].invoke()
         root.update()
         assert workspace.selected.item_id == str(other["id"])
+        assert workspace._isolated_item is None
+        # Search should reveal a room that is hidden by an earlier isolate.
+        studio.isolate_room()
+        monkeypatch.setattr(
+            "cleanroomx.gui_design_studio.simpledialog.askstring",
+            lambda *_args, **_kwargs: room["name"],
+        )
+        studio.find_item()
+        assert workspace.selected.kind == "room"
+        assert workspace.selected.item_id == str(room["id"])
+        assert workspace._isolated_item is None
+        # The same guarantee applies when a device belongs to another room.
+        studio.isolate_room()
+        target_device = next(
+            d for d in workspace.layout["devices"] if d["name"] == "Process Tool"
+        )
+        monkeypatch.setattr(
+            "cleanroomx.gui_design_studio.simpledialog.askstring",
+            lambda *_args, **_kwargs: target_device["name"],
+        )
+        studio.find_item()
+        assert workspace.selected.kind == "device"
+        assert workspace.selected.item_id == str(target_device["id"])
         assert workspace._isolated_item is None
         studio.studio_view()
         root.update()

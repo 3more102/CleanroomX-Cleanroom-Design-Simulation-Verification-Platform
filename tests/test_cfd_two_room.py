@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from cleanroomx.cfd_result_analysis import AnalysisSession, _derive_two_room_region_statistics, build_analysis_graph
 from cleanroomx.cfd_two_room import (
     SCHEMA,
     build_two_room_files,
@@ -157,3 +158,93 @@ def test_two_room_execution_without_foundation_v10_writes_blocked_receipt(tmp_pa
     receipt_path.write_text(json.dumps(original), encoding="utf-8")
     with pytest.raises(ValueError, match="digest mismatch|cannot promote"):
         verify_two_room_receipt(receipt_path)
+
+
+def _synthetic_two_room_cells():
+    centers = [[index + 0.5, 0.5, 0.5] for index in range(12)]
+    volumes = [1.0] * 12
+    speed = [float(index + 1) for index in range(12)]
+    return {
+        "centers": centers,
+        "volumes": volumes,
+        "bounds_m": [0.0, 12.0, 0.0, 1.0, 0.0, 1.0],
+        "values": {
+            "speed": speed,
+            "U_x": [float(index - 5) for index in range(12)],
+            "p": [float(index) / 10 for index in range(12)],
+        },
+        "labels": {
+            "speed": {"label": "Speed", "units": "m/s", "array_name": "U"},
+            "U_x": {"label": "Velocity x", "units": "m/s", "array_name": "U"},
+            "p": {"label": "Kinematic pressure", "units": "m^2/s^2", "array_name": "p"},
+        },
+    }
+
+
+def test_manifest_derived_two_room_masks_check_geometry_and_volume():
+    result = _derive_two_room_region_statistics(
+        _synthetic_two_room_cells(), [6.0, 1.0, 1.0],
+        time_name="100", case_manifest_sha256="a" * 64, vtk_sha256="b" * 64,
+    )
+    assert result["integrity_checks"] == {
+        "domain_bounds_match_manifest": True,
+        "room_volumes_match_manifest": True,
+        "all_cells_assigned_exactly_once": True,
+        "room_identity_source": "verified_two_room_case_manifest_and_hash-bound_VTK_asset",
+    }
+    room1, room2 = result["regions"]
+    assert [room1["cell_count"], room2["cell_count"]] == [6, 6]
+    assert [room1["volume_m3"], room2["volume_m3"]] == [6.0, 6.0]
+    assert room1["statistics"]["speed"]["mean"] == pytest.approx(3.5)
+    assert room2["statistics"]["speed"]["mean"] == pytest.approx(9.5)
+
+
+def test_manifest_derived_two_room_masks_reject_wrong_bounds_or_volume():
+    cells = _synthetic_two_room_cells()
+    cells["bounds_m"] = [0.0, 13.0, 0.0, 1.0, 0.0, 1.0]
+    with pytest.raises(ValueError, match="bounds differ"):
+        _derive_two_room_region_statistics(
+            cells, [6.0, 1.0, 1.0], time_name="100",
+            case_manifest_sha256="a" * 64, vtk_sha256="b" * 64,
+        )
+    cells = _synthetic_two_room_cells()
+    cells["volumes"][0] = 2.0
+    with pytest.raises(ValueError, match="cell volume does not match"):
+        _derive_two_room_region_statistics(
+            cells, [6.0, 1.0, 1.0], time_name="100",
+            case_manifest_sha256="a" * 64, vtk_sha256="b" * 64,
+        )
+
+
+def test_manifest_derived_two_room_masks_reject_interface_center():
+    cells = _synthetic_two_room_cells()
+    cells["centers"][5][0] = 6.0
+    with pytest.raises(ValueError, match="room interface"):
+        _derive_two_room_region_statistics(
+            cells, [6.0, 1.0, 1.0], time_name="100",
+            case_manifest_sha256="a" * 64, vtk_sha256="b" * 64,
+        )
+
+
+def test_two_room_field_comparison_graph_uses_room_statistics_not_user_boxes():
+    regions = _derive_two_room_region_statistics(
+        _synthetic_two_room_cells(), [6.0, 1.0, 1.0],
+        time_name="100", case_manifest_sha256="a" * 64, vtk_sha256="b" * 64,
+    )
+    report = {
+        "simulation_id": "synthetic-two-room",
+        "mode": "two_room_receipt",
+        "snapshots": [],
+        "diagnostics": [],
+        "sources": [],
+        "room_regions": regions,
+    }
+    session = AnalysisSession(report, None, ())
+    graph = build_analysis_graph(
+        [session], kind="room_field_comparison", field_name="speed",
+        case_id="two_room_case", time_name="100",
+    )
+    assert graph["status"] == "computed_diagnostic"
+    assert [item["points"][0]["x"] for item in graph["series"]] == ["Room 1", "Room 2"]
+    assert [item["points"][0]["y"] for item in graph["series"]] == pytest.approx([3.5, 9.5])
+    assert graph["scientific_validation"] == "BLOCKED"

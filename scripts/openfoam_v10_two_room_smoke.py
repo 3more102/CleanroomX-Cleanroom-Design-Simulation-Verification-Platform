@@ -13,6 +13,7 @@ from cleanroomx.cfd_two_room import (
     verify_two_room_receipt,
 )
 from cleanroomx.cfd_proofgraph import export_two_room_proofgraph
+from cleanroomx.cfd_result_analysis import analyze_two_room_results, build_analysis_graph
 from cleanroomx.cli_output import load_cli_input
 from cleanroomx.strict_json import load_strict_json
 
@@ -71,12 +72,35 @@ def main(argv: list[str] | None = None) -> int:
             or graph["evidence"][0]["value"].get("vtk_assets_sha256") != receipt["vtk_assets_sha256"]
         ):
             raise ValueError("two-room smoke ProofGraph did not preserve the VTK-bound integrity verdicts")
+        analysis_session = analyze_two_room_results(case, receipt_directory / "two_room_run_receipt.json")
+        room_regions = analysis_session.report.get("room_regions")
+        if (
+            len(analysis_session.report.get("snapshots", [])) != 1
+            or not isinstance(room_regions, dict)
+            or len(room_regions.get("regions", [])) != 2
+            or room_regions.get("integrity_checks", {}).get("all_cells_assigned_exactly_once") is not True
+            or room_regions.get("integrity_checks", {}).get("room_volumes_match_manifest") is not True
+        ):
+            raise ValueError("two-room analysis did not produce two manifest-derived, volume-checked room masks")
+        field_graph = build_analysis_graph(
+            [analysis_session], kind="room_field_comparison", field_name="speed",
+            case_id="two_room_case", time_name=room_regions["time_name"],
+        )
+        if field_graph.get("status") != "computed_diagnostic" or len(field_graph.get("series", [])) != 2:
+            raise ValueError("two-room field comparison graph is unavailable")
         proofgraph_summary = {
             "path": graph_path.name,
             "graph_sha256": graph["graph_sha256"],
             "artifact_integrity": verdicts["VERDICT-TWO-ROOM-ARTIFACT-INTEGRITY"],
             "scientific_validation": verdicts["VERDICT-TWO-ROOM-SCIENTIFIC-VALIDATION"],
             "vtk_asset_count": len(receipt["vtk_assets_sha256"]),
+            "room_field_analysis": {
+                "solver_time": room_regions["time_name"],
+                "room_cell_counts": [room["cell_count"] for room in room_regions["regions"]],
+                "room_volumes_m3": [room["volume_m3"] for room in room_regions["regions"]],
+                "field_graph_status": field_graph["status"],
+                "scientific_validation": analysis_session.report["scientific_validation"],
+            },
         }
     print(json.dumps({
         "receipt": receipt,

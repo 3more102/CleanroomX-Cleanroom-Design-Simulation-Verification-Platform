@@ -16,6 +16,7 @@ from .gui_windowing import fit_window_to_display
 VIEWS = {
     "Field history (mean and range)": "field_history",
     "Compare cases / runs at selected time": "comparison",
+    "Two-room field comparison (manifest-derived)": "room_field_comparison",
     "2D cell slab": "cell_slab",
     "3D cell samples": "cell_3d",
     "Solver residual history": "residual_history",

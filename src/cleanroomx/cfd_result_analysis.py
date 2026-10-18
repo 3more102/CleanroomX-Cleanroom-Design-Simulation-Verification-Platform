@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 from typing import Any
 
 from . import __version__
@@ -193,8 +194,8 @@ def _load_cells(snapshot: dict, *, include_geometry: bool = False) -> dict:
     return result
 
 
-def _summarize(snapshot: dict) -> None:
-    cells = _load_cells(snapshot, include_geometry=True)
+def _summarize(snapshot: dict, *, loaded_cells: dict | None = None) -> None:
+    cells = loaded_cells if loaded_cells is not None else _load_cells(snapshot, include_geometry=True)
     volume = math.fsum(cells["volumes"])
     if not math.isfinite(volume) or volume <= 0:
         raise ValueError("Invalid total mesh volume")
@@ -484,6 +485,256 @@ def analyze_selected_result_store(
                                   verify_native_sources=verify_native_sources)
 
 
+def _derive_two_room_region_statistics(
+    cells: dict,
+    room_dimensions_m: list[float],
+    *,
+    time_name: str,
+    case_manifest_sha256: str,
+    vtk_sha256: str,
+) -> dict:
+    """Derive per-room cell masks from the verified two-room case geometry.
+
+    The x-plane split comes from the generated case manifest. The actual VTK
+    bounds and each room's summed cell volume must match that geometry before
+    any per-room field statistics are emitted. This does not measure doorway
+    transfer, room-specific ventilation, or ACH.
+    """
+    for label, value in (
+        ("case manifest SHA-256", case_manifest_sha256),
+        ("VTK SHA-256", vtk_sha256),
+    ):
+        if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError(f"{label} must be a lowercase SHA-256 digest")
+    if type(time_name) is not str or _numeric_time(time_name) <= 0:
+        raise ValueError("Room field analysis requires a positive solver time")
+    if (
+        type(room_dimensions_m) is not list
+        or len(room_dimensions_m) != 3
+        or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
+               for value in room_dimensions_m)
+    ):
+        raise ValueError("Verified two-room dimensions must contain three finite positive lengths")
+    length, width, height = (float(value) for value in room_dimensions_m)
+    expected_bounds = [0.0, 2.0 * length, 0.0, width, 0.0, height]
+    tolerance = max(1e-9, max(length, width, height) * 1e-8)
+    actual_bounds = cells.get("bounds_m")
+    if type(actual_bounds) not in (list, tuple) or len(actual_bounds) != 6:
+        raise ValueError("VTK cell geometry is missing the six mesh bounds")
+    if any(
+        type(actual) not in (int, float)
+        or not math.isfinite(actual)
+        or abs(float(actual) - expected) > tolerance
+        for actual, expected in zip(actual_bounds, expected_bounds)
+    ):
+        raise ValueError("VTK mesh bounds differ from the verified two-room case manifest")
+
+    centers = cells.get("centers")
+    volumes = cells.get("volumes")
+    values = cells.get("values")
+    labels = cells.get("labels")
+    if (
+        type(centers) is not list or type(volumes) is not list or not centers
+        or len(centers) != len(volumes) or type(values) is not dict or type(labels) is not dict
+    ):
+        raise ValueError("Imported two-room cell geometry, volumes and fields have inconsistent shapes")
+    if not values or set(values) != set(labels):
+        raise ValueError("Imported two-room fields lack matching explicit labels")
+    for name, column in values.items():
+        if type(name) is not str or type(column) is not list or len(column) != len(centers):
+            raise ValueError(f"Two-room field {name!r} does not match the mesh cell count")
+        if type(labels[name]) is not dict or type(labels[name].get("units")) is not str:
+            raise ValueError(f"Two-room field {name!r} lacks explicit units")
+        if any(type(value) not in (int, float) or not math.isfinite(value) for value in column):
+            raise ValueError(f"Two-room field {name!r} contains a non-finite value")
+
+    assignments: list[list[int]] = [[], []]
+    for index, (center, volume) in enumerate(zip(centers, volumes)):
+        if (
+            type(center) not in (list, tuple) or len(center) != 3
+            or any(type(value) not in (int, float) or not math.isfinite(value) for value in center)
+        ):
+            raise ValueError(f"Two-room cell {index} has invalid center coordinates")
+        if type(volume) not in (int, float) or not math.isfinite(volume) or volume <= 0:
+            raise ValueError(f"Two-room cell {index} has invalid volume")
+        x, y, z = (float(value) for value in center)
+        if (
+            x < expected_bounds[0] - tolerance or x > expected_bounds[1] + tolerance
+            or y < expected_bounds[2] - tolerance or y > expected_bounds[3] + tolerance
+            or z < expected_bounds[4] - tolerance or z > expected_bounds[5] + tolerance
+        ):
+            raise ValueError(f"Two-room cell {index} lies outside the verified domain bounds")
+        if abs(x - length) <= tolerance:
+            raise ValueError("A VTK cell center lies on the room interface; room assignment is ambiguous")
+        assignments[0 if x < length else 1].append(index)
+
+    expected_room_volume = length * width * height
+    total_mesh_volume = math.fsum(float(value) for value in volumes)
+    if not math.isfinite(total_mesh_volume) or total_mesh_volume <= 0:
+        raise ValueError("Two-room VTK mesh has invalid total cell volume")
+    regions = []
+    for room_index, indices in enumerate(assignments):
+        if not indices:
+            raise ValueError(f"Verified room {room_index + 1} contains no VTK cells")
+        room_volume = math.fsum(float(volumes[index]) for index in indices)
+        if not math.isclose(
+            room_volume, expected_room_volume,
+            rel_tol=1e-6, abs_tol=max(1e-9, expected_room_volume * 1e-8),
+        ):
+            raise ValueError(
+                f"Room {room_index + 1} cell volume does not match the manifest geometry"
+            )
+        room_statistics = {}
+        for name, column in values.items():
+            mean = math.fsum(
+                float(column[index]) * (float(volumes[index]) / room_volume)
+                for index in indices
+            )
+            if not math.isfinite(mean):
+                raise ValueError(f"Room {room_index + 1} field {name!r} has a non-finite weighted mean")
+            room_statistics[name] = {
+                **labels[name],
+                "minimum": min(float(column[index]) for index in indices),
+                "maximum": max(float(column[index]) for index in indices),
+                "mean": mean,
+                "mean_weighting": "cell_volume",
+                "volume_coverage_fraction": 1.0,
+            }
+        x_min, x_max = (0.0, length) if room_index == 0 else (length, 2.0 * length)
+        regions.append({
+            "room_id": f"room_{room_index + 1}",
+            "label": f"Room {room_index + 1}",
+            "bounds_m": [x_min, x_max, 0.0, width, 0.0, height],
+            "selection_rule": (
+                f"cell-center x in [{x_min:g}, {x_max:g}) m, "
+                "with y/z inside the manifest-derived room bounds"
+            ),
+            "cell_count": len(indices),
+            "mesh_cell_count": len(centers),
+            "volume_m3": room_volume,
+            "expected_volume_m3": expected_room_volume,
+            "mesh_volume_m3": total_mesh_volume,
+            "volume_fraction_of_mesh": room_volume / total_mesh_volume,
+            "statistics": room_statistics,
+            "status": "computed_diagnostic",
+        })
+    if sum(item["cell_count"] for item in regions) != len(centers):
+        raise ValueError("Manifest-derived room masks did not assign every mesh cell exactly once")
+    if not math.isclose(
+        total_mesh_volume, 2.0 * expected_room_volume,
+        rel_tol=1e-6, abs_tol=max(1e-9, 2.0 * expected_room_volume * 1e-8),
+    ):
+        raise ValueError("Total VTK cell volume does not match the two-room manifest geometry")
+    return {
+        "schema_version": "cleanroomx.openfoam.two-room-region-analysis.v1",
+        "time_name": time_name,
+        "source_case_manifest_sha256": case_manifest_sha256,
+        "source_vtk_sha256": vtk_sha256,
+        "mesh_bounds_m": [float(value) for value in actual_bounds],
+        "expected_room_volume_m3": expected_room_volume,
+        "mesh_volume_m3": total_mesh_volume,
+        "selection_rule": (
+            "Manifest-derived split at x=L; Room 1 uses cell centers x<L, Room 2 uses x>=L. "
+            "Each cell is assigned once; each room's cell-volume sum must match its manifest volume."
+        ),
+        "integrity_checks": {
+            "domain_bounds_match_manifest": True,
+            "room_volumes_match_manifest": True,
+            "all_cells_assigned_exactly_once": True,
+            "room_identity_source": "verified_two_room_case_manifest_and_hash-bound_VTK_asset",
+        },
+        "regions": regions,
+    }
+
+
+def _load_two_room_vtk_snapshot(
+    case: Path,
+    evidence: dict,
+    case_manifest: dict,
+    case_manifest_sha256: str,
+    receipt_path: Path,
+    receipt_sha256: str,
+) -> tuple[dict, dict] | None:
+    """Load the unique receipt-bound internal volume VTK and derive two room masks."""
+    assets = evidence.get("vtk_assets_sha256")
+    if not assets:
+        return None
+    if type(assets) is not dict:
+        raise ValueError("Two-room receipt VTK assets must be a path-to-SHA-256 object")
+    candidates = [
+        relative for relative in assets
+        if type(relative) is str
+        and relative.startswith("VTK/")
+        and Path(relative).suffix.lower() == ".vtk"
+        and Path(relative).name.startswith("case_")
+    ]
+    if len(candidates) != 1:
+        raise ValueError("Two-room receipt must bind exactly one main case_*.vtk volume dataset")
+    relative = candidates[0]
+    filename_time = Path(relative).stem[len("case_"):]
+    solver_time = str(evidence.get("solver_flux", {}).get("last_solver_time", ""))
+    if _numeric_time(filename_time) != _numeric_time(solver_time):
+        raise ValueError("Main VTK filename time does not match the receipt-bound native solver time")
+    source_path, normalized_relative = _asset_path(case, relative)
+    if normalized_relative != relative:
+        raise ValueError("Two-room VTK asset path is not canonical")
+    source_sha256, _ = _hash_regular_file(source_path, max_bytes=MAX_VTK_BYTES)
+    if source_sha256 != assets[relative]:
+        raise ValueError("Two-room VTK asset changed since the run receipt")
+    field_map = {
+        "schema_version": VTK_FIELD_MAP_SCHEMA,
+        "fields": {"p": {"semantic": "kinematic_pressure", "units": "m^2/s^2"}},
+    }
+    vtk_source = _source(
+        source_path, source_sha256, role="two_room_volume_vtk",
+        case_id="two_room_case", time_name=solver_time,
+    )
+    manifest_source = _source(
+        case / "manifest.json", case_manifest_sha256,
+        role="two_room_case_manifest", case_id="two_room_case",
+    )
+    receipt_source = _source(
+        receipt_path, receipt_sha256, role="two_room_run_receipt", case_id="two_room_case",
+    )
+    imported = import_vtk_case(
+        source_path, field_map=field_map, require_cell_velocity=True, include_geometry=True,
+    )
+    if imported["source_sha256"] != source_sha256:
+        raise ValueError("Imported two-room VTK identity differs from the verified receipt")
+    snapshot = {
+        "case_id": "two_room_case",
+        "region": "whole two-room domain (manifest-derived room masks available)",
+        "time_name": solver_time,
+        "cell_count": imported["mesh_cells"],
+        "vtk_source": vtk_source,
+        "sources": [vtk_source, manifest_source, receipt_source],
+        "field_definitions": {
+            "p": {
+                "array_name": "p",
+                "label": "Kinematic pressure",
+                "units": "m^2/s^2",
+                "dimensions": "[0 2 -2 0 0 0 0]",
+                "semantic": "kinematic_pressure",
+            },
+        },
+        "vtk_field_map": field_map,
+        "vtk_import_options": {},
+        "import_status": "PASS_DIAGNOSTIC_ONLY",
+        "execution_status": "hash_bound_two_room_run_receipt",
+    }
+    cells = _load_cells(snapshot, include_geometry=True)
+    _summarize(snapshot, loaded_cells=cells)
+    room_regions = _derive_two_room_region_statistics(
+        cells,
+        case_manifest["spec"]["room_m"],
+        time_name=solver_time,
+        case_manifest_sha256=case_manifest_sha256,
+        vtk_sha256=source_sha256,
+    )
+    room_regions["sources"] = [vtk_source, manifest_source, receipt_source]
+    return snapshot, room_regions
+
+
 def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Path) -> AnalysisSession:
     case = Path(case_directory).expanduser().resolve(strict=True)
     receipt_path = Path(receipt_path).expanduser().resolve(strict=True)
@@ -507,6 +758,19 @@ def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Pat
         raise ValueError("Recorded pressure conversion density differs from the verified case")
     if type(rho) not in (int, float) or not math.isfinite(rho) or rho <= 0:
         raise ValueError("Receipt density must be finite and positive")
+    room_vtk = _load_two_room_vtk_snapshot(
+        case, evidence, case_manifest, hashlib.sha256(case_manifest_raw).hexdigest(),
+        receipt_path, hashlib.sha256(receipt_raw).hexdigest(),
+    )
+    if room_vtk is not None:
+        room_snapshot, room_regions = room_vtk
+        report["snapshots"].append(room_snapshot)
+        report["room_regions"] = room_regions
+    else:
+        report["availability"].append({
+            "analysis": "room_field_statistics", "status": "not_available",
+            "reason": "The two-room receipt does not contain a hash-bound main volume VTK asset.",
+        })
     pressure_source = _source(probe_path, probe["sha256"], role="pressure_probes", case_id="two_room_case")
     report["pressure_history"] = {
         "samples": [{"time": row[0], "room_1": rho * row[1], "room_2": rho * row[2],
@@ -561,13 +825,14 @@ def analyze_two_room_results(case_directory: str | Path, receipt_path: str | Pat
            for path, sha in evidence["input_sha256"].items()]
         + [_source(case / path, sha, role="verified_run_artifact", case_id="two_room_case")
            for path, sha in {**evidence["result_sha256"], **evidence["vtk_assets_sha256"]}.items()]
+        + (report.get("room_regions", {}).get("sources", []))
     )
     for source in diagnosis["sources"]:
         if source["sha256"] != evidence["result_sha256"][Path(source["path"]).relative_to(case).as_posix()]:
             raise ValueError("Two-room stage log changed during analysis")
     report["availability"] += [
         {"analysis": "room_airflow_ach", "status": "not_available",
-         "reason": "External inlet/outlet phi do not measure internal doorway flow or per-room ventilation"},
+         "reason": "Room cell masks provide field statistics only; per-room ACH requires verified interface-face flux and room-specific ventilation evidence"},
         {"analysis": "temperature_contaminant", "status": "not_available",
          "reason": "The isothermal two-room case does not solve temperature or contaminant transport"},
     ]
@@ -707,6 +972,60 @@ def build_analysis_graph(
                                        "time_name": snapshot["time_name"]})
             graph.update(title=f"{field_name}: volume-weighted {'history' if kind == 'field_history' else 'comparison at t=' + str(time_name)}",
                          method=(REGION_RULE if region else "All volume cells") + "; volume-weighted mean, minimum and maximum; exact solver-time selection")
+        elif kind == "room_field_comparison":
+            if time_name is None:
+                raise ValueError("Per-room field comparison requires an explicit solver time")
+            if case_id not in (None, "two_room_case"):
+                continue
+            room_regions = report.get("room_regions")
+            if not room_regions:
+                continue
+            if _numeric_time(room_regions["time_name"]) != _numeric_time(time_name):
+                continue
+            for room in room_regions["regions"]:
+                stats = room["statistics"].get(field_name)
+                if stats is None:
+                    continue
+                selection = {
+                    "case_id": "two_room_case",
+                    "time_name": room_regions["time_name"],
+                    "field": field_name,
+                    "region": room["label"] + " (manifest-derived room mask)",
+                    "selection_rule": room["selection_rule"],
+                    "cell_count": room["cell_count"],
+                    "mesh_cell_count": room["mesh_cell_count"],
+                    "volume_m3": room["volume_m3"],
+                    "mesh_volume_m3": room["mesh_volume_m3"],
+                    "volume_fraction_of_mesh": room["volume_fraction_of_mesh"],
+                    "vtk_sha256": room_regions["source_vtk_sha256"],
+                    "statistics": dict(stats),
+                    "status": room["status"],
+                }
+                graph["selections"].append({"run_id": run_id, **selection})
+                units.add(stats["units"])
+                series.append({
+                    "label": f"{run_id} / {room['label']}",
+                    "run_id": run_id,
+                    "case_id": "two_room_case",
+                    "region": selection["region"],
+                    "points": [{
+                        "x": room["label"],
+                        "y": stats["mean"],
+                        "minimum": stats["minimum"],
+                        "maximum": stats["maximum"],
+                        "time_name": room_regions["time_name"],
+                    }],
+                })
+            sources.extend(room_regions.get("sources", report.get("sources", [])))
+            graph.update(
+                title=f"{field_name}: per-room comparison at t={room_regions['time_name']}",
+                x_label="Manifest-derived room",
+                method=(
+                    room_regions["selection_rule"]
+                    + " Volume-weighted field means/minimum/maximum; cell-center masks are checked against "
+                    "the generated room dimensions and cell-volume totals. This is not a per-room flux or ACH result."
+                ),
+            )
         elif kind == "residual_history":
             graph.update(title="Linear solver residual history", y_label="Linear residual (dimensionless)",
                          method="Each logged solve; repeated correctors retained. Zero values preserved; symlog axis.", scale="symlog")

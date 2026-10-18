@@ -73,7 +73,7 @@ def draw_analysis_graph(figure, graph: dict, *, include_provenance: bool = True)
                 ax.zaxis.labelpad = 1
             ax.xaxis.labelpad = ax.yaxis.labelpad = 1
             colorbar.ax.tick_params(labelsize=7)
-    elif kind in ("comparison", "flow_balance", "air_change_rate"):
+    elif kind in ("comparison", "flow_balance", "air_change_rate", "room_field_comparison"):
         labels, values = [], []
         single_run = len({s["run_id"] for s in graph["series"]}) == 1
         for series in graph["series"]:

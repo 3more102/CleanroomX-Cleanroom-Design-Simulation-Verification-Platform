@@ -1,5 +1,12 @@
 # CFD development checkpoint — 18 October 2026
 
+## Manifest-derived two-room field analysis
+
+- The two-room result analyzer imports the unique receipt-hash-bound main VTK volume dataset and checks its solver time against the native phi receipt.
+- Room masks are derived from the verified generated case dimensions, not freehand labels; the actual VTK domain bounds, each room's summed cell volume, and exactly-once cell assignment must pass before room field statistics are exposed.
+- The analysis GUI has a dedicated per-room field comparison view for the final recorded time. This provides volume-weighted speed, velocity-component and kinematic-pressure diagnostics.
+- Per-room flux and ACH remain unavailable: cell-center masks are not interface-face flux evidence. Scientific/physical validation remains BLOCKED.
+
 ## sync-vtk v3 snapshot analysis adapter
 
 - Added an analysis adapter for the separate `sync-vtk` v3 state/snapshot schema, routed through the existing GUI selection path and `analyze-results` CLI.

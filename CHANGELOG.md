@@ -6,6 +6,13 @@
 - Recheck state, snapshot, field-payload and source-VTK hashes; reconstruct explicit field-map identity and fail closed on source/snapshot mismatch.
 - Preserve volume-weighted field and spatial analysis while reporting missing mapped fields as unavailable. Solver execution, original native-field parity, residual/checkMesh evidence and physical validation remain unverified or `BLOCKED`.
 
+## Unreleased Release 3 — manifest-derived two-room field analysis — 2026-10-18
+
+- Add a receipt-bound two-room VTK field snapshot and per-room, volume-weighted field diagnostics.
+- Derive Room 1 / Room 2 masks from verified case dimensions and require VTK bounds, per-room cell volumes and exactly-once cell assignment to match the manifest.
+- Add a GUI field-comparison view and extend the live Foundation v10 smoke test to verify both room masks and graph generation.
+- Keep per-room flux/ACH and scientific validation blocked until interface-face flux evidence and independent physical correlation are available.
+
 ## Unreleased Release 3 — native OpenFOAM grid analysis integration — 2026-10-18
 
 - Load complete nine-case Foundation v10 grid runs through the GUI, comparison picker and CLI, retaining configuration/resolution identities and missing-case findings.
